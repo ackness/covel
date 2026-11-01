@@ -143,6 +143,8 @@ stateDiagram-v2
 
 内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单作为 `submit_actions` 里的行动提交。
 
+已启用的准备 runtime 返回 `pending` 时仍会挡住开场，框架不把缺少前置数据当作完成。尝试后既无消息也无待答交互时，界面同样显示未完成提示，可继续准备或关闭对应插件。还没执行过的会话只显示“开始冒险”。没有 setup 的组合不会仅因世界数据而增加准备步骤，见[数据接收规则](../reference/world-data.md#data-receivers)。
+
 失败时的规则：
 
 - 失败但还有重试次数：保持 `pending`，记下 `lastError`。再发一次 `start_session` 只重跑没完成的 runtime，不新建会话，也不记录玩家消息。
@@ -419,7 +421,7 @@ flowchart LR
 
 内核输入还包括 `operations@1`：绑定时冻结本次执行已完成上游的暂存操作，不增加调度依赖，但读者在提交时依赖它读到的暂存操作，也不能用于 detached runtime。重试或恢复失败 runtime 时，输入还包含来源回合及已提交重试的种子结果中 `committed` 的操作，供下游识别已处理的变化。这些操作只读，不重复提交写入，也不建立本次执行的提交依赖；失败、丢弃或仍暂存的种子操作不提供给下游。字段和可见性见[插件输入](../reference/plugins.md#内核输入-operations1)。
 
-提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。只因自身失败而被丢弃的故事附带操作不再发 `proposal.failed`，回合不显示执行失败。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。子 agent 发起的操作记的是子 agent 的 runtime ID，这个子 agent 下次被调用时在自己的上下文里收到通知。定向重试不显示。读取随会话状态每次执行只做一次，不增加持久状态。
+提交成功但有操作失败时，action 流发出一次 `operation.failed`，玩家立即看到数量提示。只因自身失败而被丢弃的故事附带操作不再发 `proposal.failed`，回合不显示执行失败。agent 的下一次玩家或续行执行读取最新一条已提交的 `player` / `continuation` 回合记录；只给 `invokedBy.runtimeId` 对应的 agent 显示 `operations-not-applied`，位于输入和导出块之后，最多十条摘要。子 agent 发起的操作记的是子 agent 的 runtime ID，这个子 agent 下次被调用时在自己的上下文里收到通知。定向重试不显示。模型提示的读取随会话状态每次执行只做一次，不另存通知状态。 对应故事另有持久的宿主提示，刷新与历史恢复后仍可见；它在操作结算事务中定稿，只存在显示消息 metadata，不改变正文、prompt journal 或上述 `operations-not-applied` 模型上下文。见[消息 API](../reference/api.md#get-apisessionsidmessages)与[事务](../reference/transactions.md#写服务的操作)。
 
 如果后续尝试没有提交，最新的已提交记录没有改变，下次尝试仍显示同一通知。任意更晚的玩家或续行执行一旦提交，旧通知便消失。通知放在每回合变化的上下文段，不改变缓存前缀。
 
@@ -729,6 +731,8 @@ io:
 `schedule.subagentOnly` 的 runtime 不在这棵树里：自动、手动点名、批量重跑和 `recursiveCall` 都不选中它。
 
 ### 4.4 子 agent
+
+`delegate-batch` 在任何等待前捕获待定父范围，逐项校验后，先按输入顺序为所有合格子项认领名额，再启动提供方，不等待池容量。结果按索引汇合，单项失败不提前终止其他项；发布前再次检查外层工具寿命，再接受读取和操作。准备/加载也受取消与剩余时限约束。见[工具契约](../reference/tools.md#delegate-batch)。
 
 子 agent 由另一个 runtime 在自己的执行里运行：函数用 `ctx.agents.run`，agent 用 `delegate` 工具。
 

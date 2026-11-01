@@ -31,6 +31,8 @@ Whole-list refresh retries entries republished by another package’s awaited ac
 
 A segment template’s `CharacterAvatar` displays only the host-projected speaker’s public portrait. `characterId` must match; it does not query arbitrary sessions or character slots. Host-local enlargement and dismissal grant no plugin action, data-read or write capability and add no approval. Settings, hidden namespaces, concealed output, private actor briefs, continuation and reasoning remain excluded. Departure pixels stay in the renderer, outside snapshots, the bridge and model context. See [Segment templates](../reference/ui-panels.md#segment-templates).
 
+A story operation failure notice projects only a validated positive safe integer `count`; live receipts additionally identify the durable target message. They contain no operation requests, results, summaries, errors, private intent, character notes, provider or child-call breakdown. Concealed and private delegation still permit content-free failure status and aggregate counts without widening content visibility. Public message projections never return arbitrary metadata. Imported content is rendered as data, never HTML or instructions to replay operations. Whole checkpoints retain their broader trusted-owner restore contract; this does not claim they contain no host-private data. See [Message API](../reference/api.md#get-apisessionsidmessages).
+
 ## Host profile
 
 The server decides once, at startup: it combines the deployment tier, the storage it actually uses and a few switches into a host profile (`apps/server/src/host-profile.ts`) and puts it in every request. Route permission checks, the media routes, the server settings, a request's own model settings and the trace retention all ask it, and no longer read environment variables themselves. `@covel/ai-provider` receives its own part at startup (`configureProviderHostPolicy`). The desktop app always passes `DEPLOYMENT_TIER=self` when it starts the server.
@@ -466,6 +468,8 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 
 A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry>` into one `sandbox="allow-scripts"` iframe. It has no `srcdoc` or outer host. The [page contract](../reference/ui-panels.md#multi-file-pages) defines its CSP, file types and limits.
 
+`/plugin-assets` and its child paths serve only published assets. Requests that match no asset route return `404 { "error": "File not found" }` with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. Even when encoded dot segments normalize away the plugin ID or digest, these paths never reach public static files or the app's index fallback.
+
 <!-- prettier-ignore -->
 | Threat | Boundary |
 | --- | --- |
@@ -535,11 +539,15 @@ A `bridge: session` view in `contributes.ui.view` can additionally read a valida
 
 ## Importing third-party content: data conversion only
 
+Fixed character tokens receive literal substitutions: embedded books use their owner, while standalone books use a sanitized card name only when the same request contains exactly one card. With no cards or multiple cards, standalone character tokens are removed and reported. Replacement text is never expanded as macros again, and results still pass through sanitizing and length limits. This provides no SillyTavern extension or macro execution compatibility.
+
 SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).
 
 ## Character perspective and private delegation
 
 Witnessed history and name-addressed calls are bounded context capabilities, not security isolation for approved server code. This helper reads committed presence-bearing stories only for characters in the current world. Existing tool/service approvals and read permissions remain unchanged. Callers remain responsible for their brief and instruction. Sub-agents inherit the already authorized server-side world snapshot at admission, without inheriting parent KV, history or transcript, adding browser capabilities or granting server-code exemptions. This does not filter visibility by seat. Child character-read baselines join the caller at the same success boundary and are discarded on failure or cancellation; they remain private host evidence. World provenance and recorders stay in host memory; see [World Model](../reference/world-model.md).
+
+Private delegation provenance is learned from every `delegate-batch` target before parent response/tool traces, including a known private target in an otherwise malformed entry. One private entry redacts the whole container in persisted traces, tool records, later transcript copies, native continuations, reasoning and compacted digests. Final authorization refusals retain this projection when recorded. The live authorized parent retains accepted results; sibling briefs do not inherit them. A private batch completing through `completeAfterTools` projects to a content-free object. Detection uses host-resolved providers, not plugin flags or arbitrary JSON field names.
 
 Delegation privacy uses kernel-recorded provider and call identity to project streams, persisted traces, parent tool records and trace copies of later requests. It trusts neither plugin-supplied redaction flags nor global key-name deletion. The actual parent model still uses intent. Settings routes retain host-profile, session-owner, settle and lock checks; choosing a service grants no execution permission. See [protocol](../reference/protocol.md#private-delegation-projections).
 

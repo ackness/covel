@@ -267,6 +267,7 @@ async function resolvePluginDataInject(
   );
 
   const tagName = validateTagName(parseTagName(inject.as));
+  params.onSelfDataRead?.(inject.namespace, entries);
 
   const zh = instructionLocaleFor(params.turnInput.locale) === "zh";
   if (entries.length === 0) {

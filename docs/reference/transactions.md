@@ -108,7 +108,9 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 
 先读一条记录，再根据它计算替换值时，内核自动保护这次计算的依据。`ctx.pluginData`、`ctx.store`、工具和服务中的显式 `get` / `list` 都会记录读取基线。具体键的缺失和存储的 JSON `null` 不同；列表只记录返回的键，不记录假想的缺失键。数据集写工具为校验而做的内部读取不算作者读取。
 
-同一作用域读过的同一个插件数据键，随后通过 `plugin.data`、batch 条目、delete，或含 `set`、`merge`、`upsertItem`、`delete` 的 `plugin.data.update` 改写时，内核给 proposal 信封加上私有前提条件。例如 `[inc +15, merge {bar: 125}]` 的整个列表一起受保护。只含 `inc`、`append`、`insert`、`remove` 的列表继续作用于提交时的最新值。没有相同键的显式读取就是盲写，沿用覆盖或操作语义。
+Agent 通过 `io.selfData` 收到自有数据、且持有该 namespace 的写工具时，注入的行也算读取。基线来自同一次提示词读取的完整存储值，在模型投影和摘要截断之前记录；只保护实际注入窗口里的键，不保护未展示的键或列表幻影。键随后被删除也算变化，JSON `null` 仍不同于缺失。没有对应写工具的 runtime 不为注入记录基线。数据集按所选写工具和允许操作确定 namespace；能暂存 proposal 的插件入口工具可以写任意自有 namespace，因此其注入的自有数据都计入读取。
+
+同一作用域读过的同一个插件数据键，随后通过 `plugin.data`、batch 条目、delete，或含 `set`、`merge`、`upsertItem`、`delete` 的 `plugin.data.update` 改写时，内核给 proposal 信封加上私有前提条件。例如 `[inc +15, merge {bar: 125}]` 的整个列表一起受保护。只含 `inc`、`append`、`insert`、`remove` 的列表继续作用于提交时的最新值。没有相同键的显式读取或上述注入读取就是盲写，沿用覆盖或操作语义。
 
 插件数据目标由宿主重绑定后的来源插件和 payload 的 `namespace` / `key` 确定；payload 或 batch 条目里额外的 `pluginId` / `kind` 字段不能改变保护目标。格式错误的 payload 交给普通 proposal 校验，以 `proposal-invalid` 拒绝，沿用所属单元的回滚边界，不会在提取目标时中止有效故事的提交。
 
@@ -436,6 +438,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 角色和角色 schema 的属性读取也使用同一个记录器，跨插件保留生产者身份。工具和服务的读取归调用 runtime；宿主复制不算读取。粒度见 [World Model](./world-model.md)。子 agent 的世界属性读取在成功且调用仍有效时归调用方真实 `runId`，不建立子 agent 提交单元。失败子 agent 的观察和操作一起撤回；父方已有观察不变。记录器只在内核的执行提交计划中传递，不写进公开结果或挂起载荷。
 
+[`delegate-batch`](./tools.md#delegate-batch) 先把成功子项归入待定的 batch 范围。外层取消或失败时，已完成子项的证据和暂存操作也丢弃。成功操作仍按原提供方锁和序号附带在故事提交单元上；提交时拒绝某个操作仍保留故事及无关操作。
+
 - `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set`、删除，或含有其中之一的操作列表）再读，就没有依赖。
 - `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
 - 提交时，辅助单元里任一成员读过单元外、已被丢弃的上游，这个单元就一起丢弃，错误是 `read data of <上游 runtime> that did not commit`。
@@ -463,6 +467,12 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - store 没有 savepoint 时，故事所在单元的操作不尝试提交，记 `failed` / `store-unsupported`；故事照常提交。
 - 被拒操作的 proposal 列在 `failedProposals` 里，和被丢弃单元的一样。
 - 提供者的数据集在调用时由 `TurnExecutorDeps.loadPluginDatasets` 载入，随提交计划（`providerDatasets`）进入提交，没有 runtime 在本次执行里运行的提供者也一样检查。载入不了时，这次调用在 handler 运行前就以 `unavailable` 失败。
+
+故事消息的 `metadata.operationFailures: { count }` 在同一个事务中定稿。内核暂存一个提交单元正常接受的显示消息，先按原有 savepoint 顺序结算操作，再按原插入顺序一次性写入消息。事务视图的读取包含暂存消息，savepoint 回滚同时丢弃该层暂存；消息在后续单元、结算读取、额外事务写入、导出和快照捕获前已落入事务。存储错误回滚整个执行，不会留下故事与提示只保存一半的情况。
+
+每个含故事的受保护单元，按承载结果统计最终 `failed` 的操作，每个操作只计一次（包括 `rejected`、`conflict`、`store-unsupported`）。已提交、仍暂存、已丢弃、暂存前拒绝和辅助单元的失败不增加故事计数。只标记该单元根结果最后一条已接受的公开故事，否则选成员结果最后一条公开故事；没有目标就不写提示。身份来自捕获的宿主清单和实际消息 ID，按 run / unit 归属，不能按共享 turn 或被委托子 agent 的 `invokedBy` 猜测。concealed runtime 的消息不能作为目标。
+
+这是一条不可变的历史说明，不是当前状态或修复标记。重试和后续成功不改写它；正文、prompt journal、操作状态、读取依赖和 savepoint 规则都不变。玩家、续写、恢复和产出故事的手动提交共用这条边界；无故事的执行不标记旧消息。对外字段见[消息 API](./api.md#get-apisessionsidmessages)。
 
 #### 操作记录
 

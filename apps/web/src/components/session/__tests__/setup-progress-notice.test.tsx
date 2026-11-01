@@ -104,7 +104,7 @@ describe("setupProgress", () => {
       },
     });
     expect(
-      setupProgress({ ...idle, session: failing, messages: [] }),
+      setupProgress({ ...idle, session: session({}), messages: [] }),
     ).toBeNull();
     expect(
       setupProgress({ ...idle, session: failing, messages: [form] }),
@@ -128,6 +128,64 @@ describe("setupProgress", () => {
       setupProgress({ ...idle, session: session({}, "playing") }),
     ).toBeNull();
   });
+
+  it("explains a setup attempt that left no messages or interaction", () => {
+    const progress = setupProgress({
+      ...idle,
+      messages: [],
+      session: session({
+        "rules/allocation": {
+          state: "pending",
+          pluginVersion: "1.0.0",
+          generation: 1,
+          attempts: 1,
+        },
+      }),
+    });
+    expect(progress).toEqual({
+      kind: "unfinished",
+      blocked: [],
+      waitingOn: ["rules"],
+    });
+  });
+
+  it("explains a completed setup execution that could not select any runtime", () => {
+    expect(
+      setupProgress({
+        ...idle,
+        messages: [],
+        session: session({}),
+        recovery: {
+          sessionId: "s",
+          hydrating: false,
+          checking: false,
+          status: { state: "completed", turnId: "empty-setup" },
+        },
+      }),
+    ).toEqual({ kind: "unfinished", blocked: [] });
+  });
+
+  it("reports a failed setup attempt even before the first message", () => {
+    expect(
+      setupProgress({
+        ...idle,
+        messages: [],
+        session: session({
+          "rules/allocation": {
+            state: "pending",
+            pluginVersion: "1.0.0",
+            generation: 1,
+            attempts: 1,
+            lastError: "Setup needs a character",
+          },
+        }),
+      }),
+    ).toEqual({
+      kind: "failed",
+      blocked: [],
+      error: "Setup needs a character",
+    });
+  });
 });
 
 describe("SetupProgressNotice", () => {
@@ -138,6 +196,42 @@ describe("SetupProgressNotice", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+  });
+
+  it("renders an explanation after a setup attempt produced no messages", () => {
+    render(
+      <SetupProgressNotice
+        progress={setupProgress({
+          ...idle,
+          messages: [],
+          plugins: [
+            {
+              id: "rules",
+              displayName: { "en-US": "Optional Rules", "zh-CN": "可选规则" },
+            },
+          ],
+          locale: "en-US",
+          session: session({
+            "rules/allocation": {
+              state: "pending",
+              pluginVersion: "1.0.0",
+              generation: 1,
+              attempts: 1,
+            },
+          }),
+        })}
+        onRearm={vi.fn()}
+        onRun={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(1500));
+    expect(screen.getByRole("status")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("A setup step is still waiting"),
+    );
+    expect(screen.getByRole("button", { name: "Continue setup" })).toBeTruthy();
+    expect(screen.getByText("Waiting on: Optional Rules")).toBeTruthy();
   });
 
   it("re-arms every blocked step, then runs setup again", async () => {

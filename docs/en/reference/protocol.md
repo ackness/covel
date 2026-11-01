@@ -611,7 +611,7 @@ For Gemini native thinking effort, `providerOptions.google.thinkingConfig`, `cac
 | `turn.suspended` | S→C  | The runtime creates a suspension artifact. It is sent only after `finalizeExecution` commits the record together with the writes of the same execution. On a rollback, no record is kept and no event is sent. An older item of the same runtime is voided in this commit without an event of its own; the client drops it on receipt. It is also sent when a resumed runtime suspends again, and then `turn.resumed` is not sent | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
 | `turn.resumed`   | S→C  | Sent by the route after the `resume` action on the suspension resource succeeds                                                                                                                                                                                                                                                                                                                                                   | `{ sessionId, turnId, suspensionId }`                                                         |
 
-A subscription receiving `turn.resumed` also reads the authoritative session snapshot. This updates the committed turn count even when the resume made no character or dimension writes. Delayed reads cannot overwrite a later session visit or newer committed state.
+A subscription receiving `turn.suspended` or `turn.resumed` also reads the authoritative session snapshot. This loads stories and operation failure notices saved in that execution even without character or dimension writes. A suspension remains open and does not mean the turn completed; the read after resume also updates the committed turn count. Reads reuse refresh coalescing, recovery generation and execution ownership checks, preserving a healthy local action stream without replaying operations. Delayed reads cannot overwrite a later session visit or newer committed state.
 
 ### Snapshot / Fork events
 
@@ -666,8 +666,12 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 | `dimensions.settlement.changed` | Receipt commit                                     | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
 | `plugin-data.changed`           | Commit of the owning plugin's data                 | pluginId, namespace, and the affected keys                                                                                              |
 | `proposal.failed`               | Proposal commit failure                            | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
-| `operation.failed`              | Operations did not take effect in a committed turn | `{sessionId,turnId,count}`                                                                                                              |
+| `operation.failed`              | Operations did not take effect in a committed turn | `{sessionId,turnId,count,messages: readonly {messageId,count}[]}`                                                                       |
 | `context.compacted`             | Compaction summary saved                           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
+
+`operation.failed.messages` is a required safe receipt list containing only the IDs of saved, annotated story messages and positive safe integer counts. The event follows the successful transaction and the corresponding `narrative.completed` publications. Each committed execution still emits one event and one immediate toast; direct action routing and `forwardToActionStream: false` are unchanged. `count` retains its execution-wide failure total. Auxiliary unit failures or the absence of a public story can leave `messages` empty, and targeted counts may sum to less than the total. Each auto-advance round uses its own turn and message receipts.
+
+Clients set or replace counts by session, turn and durable message ID. Duplicate receipts never add counts; clients neither guess the latest story nor annotate streaming placeholders. Unknown or unloaded IDs wait for ordinary history recovery. A lost event recovers through the [persisted message field](./api.md#get-apisessionsidmessages), without rerunning operations. Non-action commits retain their existing session-view and subscription recovery and never reopen a stream. Server and Web must update together; the old event shape is not accepted.
 
 A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state. Read-baseline `conflict` uses these same proposal and operation boundaries, with no new event or client fingerprint argument; see [Transactions](./transactions.md#read-baselines).
 
@@ -897,6 +901,8 @@ The names in the "Command" column of the tables below (`session.create`, `turn.s
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
 Each item of `SessionSnapshot.messages` is a `SnapshotMessage`. A player message carries `actions`: the resolved actions it submitted (`metadata.actions` in storage, in the same shape as `actions` on `GET /messages`), and a story message carries `segments`. Other messages have neither field.
+
+A story message may also carry validated `operationFailures: { count }`, projected identically to message history; same-ID recovery fills a missing notice. Full field rules: [Message history](./api.md#get-apisessionsidmessages).
 
 The top-level `dimensions` of `SessionSnapshot` is the [public snapshot of current values](./world-model.md#dynamic-dimension-snapshot). The optional `dimensionSettlements` is a summary of receipts. The provider and recovery metadata is bound and validated by the host.
 
@@ -1385,6 +1391,8 @@ Privacy boundary:
 
 ### Sub-agent events
 
+`delegate-batch` uses the existing tool/subagent event families. Every attempted entry has a unique `subagentCallId`, points `parentCallId` at the enclosing batch tool, and carries content-free zero-based `batchIndex` on its child events, including refusals. Completion order can interleave; a completed child remains speculative until the enclosing tool succeeds, and outer cancellation does not emit a second child terminal event. Claims, not event totals, determine root delegation usage. Billable totals count reported leaf `llm.responded` / gateway usage once, including steps before a later failure; child summaries and tool results add no billable calls.
+
 One run of a [sub-agent](./plugins.md#sub-agents) emits `subagent.*`. Like `recursive.*`, they go to the trace only (`forwardToActionStream: false`).
 
 <!-- prettier-ignore -->
@@ -1517,6 +1525,8 @@ When the web client submits new input, it stops the old request and waits for th
 The root, setup and opening each emit their own round completion. Automatic rounds start at `round: 1`. Ordering is: root started → round completed → advance waiting → next round started → advance running → runtime/story events → round completed; repeat as permitted, then advance stopped → one request-terminal `execution.completed`. The opening handoff retains its existing stopped-before-start marker. Infrastructure failures retain `error.occurred`; started requests still terminate. Rejections before execution create no round event.
 
 Stop reasons form a finite enum: `yielded-to-player`, `no-eligible-story`, `ambiguous-story`, `limit`, `disabled`, `player-stop`, `new-input`, `pending-input`, `session-unavailable`, `execution-failed`, `prerequisite-unavailable`. Reasons contain no model content. Reaching the cap or yielding to the player is a normal end. A later failure discards only that round's uncommitted content; terminal `resync: true` aggregates post-commit publication failures from any round.
+
+After a setup execution, `no-eligible-story` does not prove setup is complete. The client still checks the session clock; an attempted but unfinished setup with no unanswered interaction shows the [setup notice](./api.md#setup-runtime-control-retry--skip), even when the message list is empty.
 
 Recovery's optional `advance` uses the same payload; `unknown` does not establish completion. Clients handle events under request ownership and ignore old request cleanup and regressive progress. New events contain no prompts, tool arguments, operation summaries or concealed content. Foreground rounds share one fault identity: faults count immediately once, while clean verdicts reset only when the group closes; a newer background verdict survives old group cleanup. Setup is excluded and background jobs retain separate accounting.
 

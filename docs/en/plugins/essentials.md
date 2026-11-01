@@ -227,6 +227,8 @@ Each plugin has its own area of data. It is read and written by "namespace + key
 
 There are two ways to write: in a function, call `ctx.pluginData.set(namespace, key, value)`, or have a tool submit a request saying "I want to write this" (a proposal). Both are saved together at the end of the turn. When a runtime fails, none of its writes are left behind. When the new value is computed from the old one (3 gold less, for example), submit a list of operations with `ctx.pluginData.update`; see [change data](./local-code.md#change-data).
 
+When an agent also has write tools for the corresponding namespace, keys injected through `io.selfData` count as reads. A replacement calculated from stale injected values fails with `conflict` after a concurrent change, preserving the accompanying story; an explicit retry recomputes from current values. No extra read-tool call is needed. Keys outside the window still require explicit reads. See [`io.selfData`](../reference/plugins.md#ioselfdata).
+
 Limits to remember:
 
 - A value can be at most 256 KiB once it is converted to JSON. When it is larger, the write fails. The error states the plugin, the `namespace/key`, the actual size and the limit. The original value does not change, and nothing is cut short. A list that keeps growing must be split across several keys, or trimmed by your code.

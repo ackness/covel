@@ -1,10 +1,10 @@
 name: CI
 
-# Verify PRs and main, and reuse the same gates for release packaging.
+# Verify PRs, main, nightly and manual runs; reuse the gates for releases.
 #
 # This owns verification. The local pre-push hook runs the static gate, adding
 # docs tests for docs-only pushes; check:push adds affected suites for source.
-# Source CI runs all suites in `verify`, `web`, and `server`.
+# Full-scope CI runs all unit, PostgreSQL and browser suites.
 #
 # Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
@@ -18,6 +18,9 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
   workflow_call:
     inputs:
       commit:
@@ -381,12 +384,17 @@ jobs:
       - name: Test PostgreSQL integration
         run: pnpm test:pg
 
-  browser:
-    name: Browser smoke and community plugins
+  e2e:
+    name: Full browser suite (${{ matrix.shard }}/4)
     needs: scope
     if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout
@@ -408,8 +416,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Collect browser tests
-        run: pnpm e2e --list
+      - name: Collect shard tests
+        run: |
+          echo "Full browser shard ${{ matrix.shard }}/4 (both default projects)"
+          pnpm e2e --shard=${{ matrix.shard }}/4 --list
 
       # The browser download is cached by Playwright version (from the
       # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
@@ -437,21 +447,135 @@ jobs:
         if: steps.chromium-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
+      - name: Select allowed CPUs
+        id: setup
+        run: |
+          cpus="$(node scripts/e2e-cpu-list.mjs)"
+          echo "Browser CPU affinity: $cpus"
+          if [[ "$cpus" != *,* ]]; then
+            echo "::notice::Only one allowed CPU is available."
+          fi
+          echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
+
+      - name: Test full browser shard
+        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e --shard=${{ matrix.shard }}/4 --workers=1
+
+      - name: Upload full browser failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: covel-e2e-shard-${{ matrix.shard }}-failure-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            tests/e2e/artifacts
+            tests/e2e/report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Save Chromium
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.chromium-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.chromium-cache.outputs.cache-primary-key }}
+
+  browser:
+    name: Browser smoke and community plugins
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Collect browser tests
+        run: |
+          pnpm e2e --list
+          pnpm e2e:extensions --list
+
+      # The browser download is cached by Playwright version (from the
+      # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
+      # downloads a build per distribution release and ubuntu-latest moves to a
+      # new release. The system packages are not part of it and are installed
+      # on every run.
+      - name: Read Playwright version
+        id: playwright
+        run: |
+          echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Chromium
+        id: chromium-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Chromium system packages
+        if: steps.chromium-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Select allowed CPUs
+        id: setup
+        run: |
+          cpus="$(node scripts/e2e-cpu-list.mjs)"
+          echo "Browser CPU affinity: $cpus"
+          if [[ "$cpus" != *,* ]]; then
+            echo "::notice::Only one allowed CPU is available."
+          fi
+          echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
+
       - name: Test browser smoke
-        run: pnpm e2e:smoke
+        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e:smoke
 
       - name: Test community plugin acceptance
-        run: pnpm e2e:extensions
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: taskset -c "${{ steps.setup.outputs.cpus }}" pnpm e2e:extensions
+
+      - name: Repeat timing-sensitive sandbox acceptance
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: tests/e2e/report/extensions-stress
+        run: >-
+          taskset -c "${{ steps.setup.outputs.cpus }}"
+          pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts
+          --grep 'a delayed runtime approval|independent sandbox regions'
+          --repeat-each=3 --workers=1 --retries=0
+          --output=tests/e2e/artifacts/extensions-stress
 
       - name: Upload browser failure artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: covel-browser-smoke-failure
+          name: covel-browser-failure-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             tests/e2e/artifacts/ci-smoke
             tests/e2e/report/ci-smoke
             tests/e2e/artifacts/extensions
+            tests/e2e/report/extensions
+            tests/e2e/artifacts/extensions-stress
+            tests/e2e/report/extensions-stress
           if-no-files-found: ignore
           retention-days: 7
 
@@ -464,7 +588,7 @@ jobs:
 
   result:
     name: Verification
-    needs: [scope, verify, tests, site, web, server, postgres, browser]
+    needs: [scope, verify, tests, site, web, server, postgres, browser, e2e]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

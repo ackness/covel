@@ -363,7 +363,7 @@ describe("public orchestration guide", () => {
       await writeFile(path.join(dir, files.story), block(document, "agent"));
       const agent = await loadRuntime(discovery!, "conversation/story");
       expect(agent.manifest.tools).toMatchObject({
-        builtin: ["delegate"],
+        builtin: ["delegate", "delegate-batch"],
         services: [{ contract: "turn-policy@1", name: "choose-speakers" }],
       });
     } finally {

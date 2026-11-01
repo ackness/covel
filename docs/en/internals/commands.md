@@ -40,7 +40,7 @@ pnpm db:studio        # Drizzle Studio
 ```bash
 pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm test:coverage          # Vitest workspaces plus the desktop Node tests, reports under each package's coverage/
-pnpm e2e                    # all Playwright specs
+pnpm e2e                    # all default Playwright specs across both projects
 pnpm e2e:ui                 # the same in the Playwright UI
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
@@ -158,6 +158,8 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 The full release checklist is in [`desktop-packaging.md`](./desktop-packaging.md#release-checklist).
 
+Relative links and image paths in changelog fragments start from `docs/changelog.d/`. `pnpm check:changelog` checks that their target files exist; preview and release assembly rebase the paths for `docs/CHANGELOG.md`, preserving queries and anchors. See the [fragment conventions](../../changelog.d/README.md).
+
 ## Git hooks and CI scope
 
 A change goes through three checks: when you commit, when you push, and on the pull request.
@@ -166,7 +168,7 @@ A change goes through three checks: when you commit, when you push, and on the p
 | ------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | Commit (pre-commit)       | Prettier and Oxlint on the changed files                                                            | Type checking, tests                       |
 | Push (pre-push, optional) | Install in a clean checkout, then `pnpm check`; docs-only also runs documentation tests             | Source test suites                         |
-| `pnpm check:push`         | The same as the pre-push hook, plus affected package tests and `pnpm e2e --list`                    | Unaffected packages                        |
+| `pnpm check:push`         | The same as the pre-push hook, plus affected package tests and `pnpm e2e --list`                    | Unaffected packages, browser execution     |
 | Pull request (CI)         | `pnpm check` and Site/docs build; documentation tests for docs-only, all tests and builds otherwise | Full suites and other builds for docs-only |
 
 ### When committing and pushing
@@ -175,6 +177,8 @@ A change goes through three checks: when you commit, when you push, and on the p
 - `pnpm hooks:install` installs the pre-push hook. For each pushed commit, it makes a clean checkout, installs dependencies, and runs `pnpm check`. Source pushes run no test suite; docs-only pushes also run the documentation tests below. CI runs all tests in parallel for source pull requests, and `main` accepts only pull requests.
 - `pnpm check:push` checks HEAD in the same way. It also adds the parts this change may affect: the packages changed since the remote main branch, the tests of the packages that depend on them, and `pnpm e2e --list`.
 - `COVEL_PUSH_CHECK=affected git push` makes the hook do this too.
+
+Workflow, script and E2E/config-only changes can select no package unit tests locally. Static checks and collection cover them here; source CI still requires full browser and extension execution. Local push checks never launch browsers or install Chromium.
 
 ### When all tests run
 
@@ -196,11 +200,13 @@ Checkouts use the Turbo cache shared by all worktrees, so a task that ran with t
 
 ### On pull requests
 
-CI (`.github/workflows/ci.yml`) handles documentation, source, and mixed changes in one workflow and always runs the complete `pnpm check`. Docs-only changes then run documentation tests; source changes, unknown scope, and releases run every suite. On the full path, static checks in `verify` run in parallel with the remaining package tests and build in `tests`; each has a separate cache key and both are required. Web unit tests, server tests with the runtime coverage floor, PostgreSQL integration, and browser smoke continue as independent parallel jobs. Every non-release CI run calls Site to build the showcase and documentation once; the remaining full-path build excludes those targets, while standalone `pnpm build` is unchanged. Releases skip Site, run release preflight, and build through platform packaging jobs. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+CI (`.github/workflows/ci.yml`) handles documentation, source, and mixed changes in one workflow and always runs the complete `pnpm check`. Docs-only changes then run documentation tests; source changes, unknown scope, and releases run every suite. On the full path, static checks in `verify` run in parallel with the remaining package tests and build in `tests`; each has a separate cache key and both are required. Web unit tests, server tests with the runtime coverage floor, PostgreSQL integration, four full browser shards, and smoke/all extensions run as independent parallel jobs. Every non-release CI run calls Site to build the showcase and documentation once; the remaining full-path build excludes those targets, while standalone `pnpm build` is unchanged. Releases skip Site, run release preflight, and build through platform packaging jobs. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 Site uses the Turbo command above to run the two independent builds in parallel; matching inputs restore `dist/`, and the required job must still succeed. Inputs include site configuration, `docs/**`, `SITE_BASE`, build environment files, lockfile, and toolchain; copying documentation output into the showcase happens after caching. Each task restores its cache once. Normal PR/main runs save under the restore step's original key only after success and an exact-key miss, with PR caches retaining GitHub's ref isolation. Releases and explicit-commit requests only restore Turbo, Electron, and Chromium caches, and disable setup-node's pnpm cache; Site builds of explicit commits follow the same rule. Desktop backends use bundled Electron RunAsNode, so standalone Node is no longer downloaded or cached. Electron caches are keyed by OS, architecture, and lockfile; release misses download again without saving. Scope selection uses shallow checkouts for release and explicit-commit requests because they need no diff; PR/main comparisons retain full commit and tree history. Control-script jobs use sparse checkout and blob filtering without materializing unrelated working-tree contents.
 
 `main` accepts only pull requests (the `Protect main` ruleset: no direct push, force push, or deletion). CI's `Verification` aggregates the selected jobs, including Site on non-release runs: missing, skipped, failed, or cancelled required jobs cannot pass. `.github/workflows/gate.yml` supplies `All checks pass` for every pull request. It requires successful `Verification` and preserves failures from other checks. Rerun this gate after rerunning a failed check.
+
+Full scope also applies to mixed changes, explicit commits, and every daily (03:17 UTC) or manual run, even at a docs-only commit. Manual runs use the selected ref; neither scheduled nor manual CI publishes Pages. The four one-worker shards cover both default projects on at most two allowed CPUs. Ordinary extensions remain required; only scheduled/manual runs add three repetitions of the timing-sensitive sandbox cases with zero retries. Budgets are 40 minutes per shard, 25 for smoke/extensions and 65 for `All checks pass`. See [browser testing](./e2e-testing.md#ci-execution-and-failure-evidence) for timings, seven-day artifacts and sequential local reproduction.
 
 ### Documentation-only changes
 

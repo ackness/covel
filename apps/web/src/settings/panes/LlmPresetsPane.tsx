@@ -221,9 +221,22 @@ export function LlmPresetsPane() {
         ? prepared.firstModelRef
         : undefined,
       state.presets,
-      Object.keys(state.llmConfig?.slots ?? {}),
+      state.llmConfig?.slots ?? {},
     );
     if (!(await commit(prepared.profiles, nextSlots))) return;
+    const boundSlots = Object.keys(nextSlots).filter(
+      (slotId) => !currentSlots[slotId],
+    );
+    if (boundSlots.length > 0) {
+      show({
+        tone: "success",
+        message: t("settings.providerRolesAssigned", {
+          roles: boundSlots
+            .map((slotId) => t(`session.modelUse.${slotId}`))
+            .join(", "),
+        }),
+      });
+    }
     setSelectedProviderId(providerId);
     setMobileDetailsOpen(true);
     setProviderDraft(EMPTY_PROVIDER_DRAFT);

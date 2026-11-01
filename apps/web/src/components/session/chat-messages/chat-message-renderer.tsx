@@ -1,3 +1,5 @@
+import { projectStoryOperationFailures } from "@covel/shared";
+import { StoryOperationFailureNotice } from "./story-operation-failure-notice.js";
 import { memo } from "react";
 import type { TFunction } from "i18next";
 import { ImageIcon } from "lucide-react";
@@ -75,6 +77,7 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
               content: msg.content,
               turnId: msg.turnId,
               segments: msg.segments,
+              ...projectStoryOperationFailures(msg),
             },
             null,
             2,
@@ -163,6 +166,8 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
           content={msg.content}
         />
       )}
+
+      <StoryOperationFailureNotice message={msg} />
 
       {showImageButton && (
         <div className="flex items-center gap-1.5">

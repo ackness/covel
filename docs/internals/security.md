@@ -31,6 +31,8 @@
 
 段落模板中的 `CharacterAvatar` 只显示宿主已投影的说话人公开头像；`characterId` 必须匹配，组件不查任意会话或角色槽位。宿主本地放大与关闭不授予插件操作、数据读取或写入能力，也不增加审批。模板仍不接收设置、隐藏 namespace、concealed 输出、私人角色说明、续写或推理内容。退场画面只保存在渲染器内，不进入 snapshot、桥接或模型上下文。见[段落模板](../reference/ui-panels.md#段落模板)。
 
+故事的操作失败提示只投影经校验的正安全整数 `count`；实时回执另带目标持久消息 ID。不投影操作请求、结果、摘要、错误、私密意图、角色笔记、提供方或子调用明细。concealed 和私有委托继续允许不含内容的失败状态与汇总次数，不扩大其内容可见性。公开消息投影不返回任意 metadata；导入内容只作数据渲染，不作为 HTML 或操作重放指令。完整 checkpoint 仍遵守更广的可信所有者恢复契约，这不表示其中没有宿主私有数据。见[消息 API](../reference/api.md#get-apisessionsidmessages)。
+
 ## Host profile
 
 服务端在启动时只做一次判断：把部署档位、实际用的存储和几个开关合成一份宿主配置（host profile，`apps/server/src/host-profile.ts`），放进每个请求。路由的权限检查、媒体路由、服务端设置、请求自带的模型设置和 trace 保留期都问它，不再各自读环境变量。`@covel/ai-provider` 在启动时拿到属于它的那部分（`configureProviderHostPolicy`）。桌面客户端启动服务端时固定传 `DEPLOYMENT_TIER=self`。
@@ -466,6 +468,8 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 多文件视图从 `/plugin-assets/<pluginId>/<digest>/<entry>` 直接加载进一层 `sandbox="allow-scripts"` iframe，没有 `srcdoc` 或外层宿主。[页面契约](../reference/ui-panels.md#多文件页面)定义 CSP、文件类型和大小限制。
 
+`/plugin-assets` 及其子路径只提供已发布资源。未匹配资源路由的请求统一返回 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`；即使编码的点路径段规范化后移除了插件 ID 或摘要，也不会进入公共静态文件或应用首页的回退路由。
+
 <!-- prettier-ignore -->
 | 威胁 | 边界 |
 | --- | --- |
@@ -535,11 +539,15 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 ## 导入第三方内容：只做数据转换
 
+固定角色令牌只做文字替换：卡内世界书使用所属角色，独立世界书只在同次请求恰好包含一张角色卡时使用该卡清理后的名字；没有卡或多张卡时删除并报告。替换文本不再展开宏，结果仍经过清理和长度限制。这不提供 SillyTavern 扩展或宏执行兼容性。
+
 SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查剩余长度）、有上限并经 Zod 校验的 JSON、固定输出路径、文本清理和固定宏替换。PNG 封面会移除文本及其他元数据。不执行扩展、脚本、卡片正则或可执行宏，不能映射的字段和转换损失都会报告。预览不写入；导入由 `host.files` 与 `world.write` 保护，复用 ZIP 世界的校验及世界锁内的激活流程。清理不代表提示词可信：资料和叙事备注仍进入模型上下文，信任程度与其他第三方世界包相同。见[导入指南](../worlds/import-sillytavern.md)。
 
 ## 角色视角与私有委托
 
 亲历历史和按名字调用是受约束的上下文能力，不是对已批准服务端代码的安全隔离。角色只能通过此 helper 读取当前 world 中角色的已提交在场故事；工具与服务原有的批准和读取权限不变。调用方仍负责简报和 instruction 的内容。子 agent 继承调用准入时已有授权的服务端世界读快照，不继承父方 KV、历史或对话，不增加浏览器能力或服务端代码豁免；这不是席位可见性过滤。子 agent 的角色读取基线在同一成功边界归入调用方，失败或取消时丢弃；基线仍只属于宿主私有证据。世界来源与记录器始终留在宿主内存中，见 [World Model](../reference/world-model.md)。
+
+宿主在父方回复/工具 trace 前识别 `delegate-batch` 每项目标的私密来源，包括其他字段无效但目标已知的项。一项私密就隐去持久 trace、工具记录、后续对话副本、原生续调、思考及压缩摘要中的整个容器。最终授权拒绝的调用在记录时也沿用这份投影。获授权的实时父方保留已接受结果，兄弟简报不会继承。私密 batch 经 `completeAfterTools` 完成时只投影无内容对象。识别依据是宿主解析的提供方，不是插件标记或任意 JSON 字段名。
 
 委托隐私使用内核记录的提供方和调用 ID，过滤实时流、持久 trace、父方工具记录及后续请求的 trace 副本；不信任插件自报的隐藏标志，也不按字段名全局删数据。实际父模型仍能使用 intent。设置接口继续使用 host-profile、会话 owner、settle 和锁；选服务不授予执行权。详见[协议](../reference/protocol.md#委托的私有投影)。
 

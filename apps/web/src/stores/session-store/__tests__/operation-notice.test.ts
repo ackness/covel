@@ -1,3 +1,5 @@
+import { toFrontendMessage } from "@/services/data-service/mappers.js";
+import { toStreamMessages } from "../restore-session.js";
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
@@ -34,7 +36,12 @@ describe("operation failure notice", () => {
       try {
         handler({
           type: "operation.failed",
-          payload: { sessionId: "session", turnId: "turn", count },
+          payload: {
+            sessionId: "session",
+            turnId: "turn",
+            count,
+            messages: [],
+          },
           sessionId: "session",
           turnId: "turn",
           requestId: "request",
@@ -109,7 +116,10 @@ describe("operation failure notice", () => {
       ["tool.completed", { ...story, toolName: "change", success: true }],
       ["tool.completed", { ...story, toolName: "change", success: true }],
       ["runtime.completed", { ...story, status: "success" }],
-      ["operation.failed", { sessionId: "session", turnId: "turn", count: 1 }],
+      [
+        "operation.failed",
+        { sessionId: "session", turnId: "turn", count: 1, messages: [] },
+      ],
       ["execution.completed", { committed: true }],
     ];
     try {
@@ -141,4 +151,142 @@ describe("operation failure notice", () => {
       unsubscribe();
     }
   });
+});
+
+describe("durable operation failure receipts", () => {
+  const row = (
+    id: string,
+    extra: Partial<import("../types.js").StreamMessage> = {},
+  ): import("../types.js").StreamMessage => ({
+    id,
+    role: "assistant",
+    kind: "story",
+    turnId: "turn",
+    content: "Unchanged story.",
+    timestamp: "2026-10-31T00:00:00Z",
+    ...extra,
+  });
+  it("sets counts by durable ID, is idempotent and rejects foreign ownership and malformed counts", () => {
+    let state = {
+      ...initialState,
+      session: { id: "session" } as NonNullable<typeof initialState.session>,
+      messages: [
+        row("story"),
+        row("other-unit"),
+        row("old", { turnId: "old-turn" }),
+        row("user", { role: "user" }),
+        row("system", { role: "system" }),
+        row("plugin", { kind: "plugin" }),
+        row("stream_story"),
+      ],
+    };
+    const handler = createSseEventHandler({
+      dispatch: (action) => {
+        state = reducer(state, action) as typeof state;
+      },
+      ds: {} as SseEventHandlerDeps["ds"],
+      stateRef: { current: state },
+      sessionIdRef: { current: "session" },
+      deltaBufferRef: { current: new Map() },
+      deltaRafRef: { current: null },
+      lastBackfilledTurnIdRef: { current: null },
+    });
+    const send = (messages: unknown[], extra: Record<string, unknown> = {}) =>
+      handler({
+        type: "operation.failed",
+        payload: {
+          sessionId: "session",
+          turnId: "turn",
+          count: 1,
+          messages,
+          ...extra,
+        },
+        sessionId: "session",
+        turnId: "turn",
+        requestId: "request",
+        traceId: "trace",
+        flowId: "flow",
+        seq: 0,
+        timestamp: "now",
+      } as SseEnvelope);
+    const targets = state.messages.map((message) => ({
+      messageId: message.id,
+      count: 2,
+    }));
+    send(targets, { sessionId: "foreign" });
+    send(targets, { turnId: "foreign-turn" });
+    expect(state.messages.every((message) => !message.operationFailures)).toBe(
+      true,
+    );
+    send([{ messageId: "story", count: 1 }]);
+    send([{ messageId: "story", count: 1 }]);
+    expect(state.messages[0]?.operationFailures).toEqual({ count: 1 });
+    for (const count of [
+      0,
+      -1,
+      1.5,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+      "4",
+    ])
+      send([{ messageId: "story", count }]);
+    send(
+      targets.filter(
+        (target) =>
+          target.messageId !== "other-unit" && target.messageId !== "story",
+      ),
+    );
+    send([{ messageId: "unknown", count: 1 }]);
+    expect(state.messages.map((message) => message.operationFailures)).toEqual([
+      { count: 1 },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(state.messages).toHaveLength(7);
+    expect(state.executionError).toBeNull();
+    send([{ messageId: "story", count: 3 }]);
+    expect(state.messages[0]?.operationFailures).toEqual({ count: 3 });
+    expect(state.messages[0]?.content).toBe("Unchanged story.");
+  });
+});
+
+it("projects only validated notices through local checkpoints and Web restore inputs", () => {
+  const record = {
+    id: "saved",
+    sessionId: "session",
+    role: "assistant",
+    content: "Story.",
+    metadata: {
+      kind: "story",
+      operationFailures: { count: 2 },
+      operations: [{ summary: "PRIVATE-SUMMARY" }],
+    },
+    createdAt: "now",
+  };
+  const frontend = toFrontendMessage(record);
+  expect(frontend.operationFailures).toEqual({ count: 2 });
+  expect(JSON.stringify(frontend)).not.toContain("PRIVATE-SUMMARY");
+  expect(toStreamMessages([frontend])[0]?.operationFailures).toEqual({
+    count: 2,
+  });
+  for (const operationFailures of [
+    { count: 0 },
+    { count: 1.5 },
+    { count: 1, summary: "PRIVATE-SUMMARY" },
+  ]) {
+    expect(
+      toFrontendMessage({
+        ...record,
+        metadata: { ...record.metadata, operationFailures },
+      }).operationFailures,
+    ).toBeUndefined();
+    expect(
+      toStreamMessages([{ ...frontend, operationFailures }])[0]
+        ?.operationFailures,
+    ).toBeUndefined();
+  }
 });

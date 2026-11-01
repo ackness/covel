@@ -611,7 +611,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件。同一个 runtime 的旧挂起项在这次提交里作废，不另发事件，客户端收到后去掉它。恢复的 runtime 再次挂起时也发出，这时不发 `turn.resumed` | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
 | `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                                                                                    | `{ sessionId, turnId, suspensionId }`                                                         |
 
-收到 `turn.resumed` 的订阅客户端还会读取权威会话快照，即使这次恢复没有角色或维度写入，也能更新已提交回合数。切换会话后或较新状态发布前发起的迟到读取不会覆盖当前状态。
+收到 `turn.suspended` 或 `turn.resumed` 的订阅客户端还会读取权威会话快照，即使没有角色或维度写入，也能看到同次执行已保存的故事及其操作失败提示。挂起仍保持打开，不表示回合完成；恢复后读取还会更新已提交回合数。读取沿用合并刷新、恢复代次和执行归属检查，不覆盖健康的本地动作流，也不重跑操作。切换会话后或较新状态发布前发起的迟到读取不会覆盖当前状态。
 
 ### Snapshot / Fork 事件
 
@@ -666,8 +666,12 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `dimensions.settlement.changed` | 回执提交               | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
 | `plugin-data.changed`           | 所属插件数据提交       | pluginId、namespace 和受影响 key                                                                                                        |
 | `proposal.failed`               | proposal 提交失败      | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
-| `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count}`                                                                                                              |
+| `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count,messages: readonly {messageId,count}[]}`                                                                       |
 | `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
+
+`operation.failed.messages` 是必填的安全回执列表，只含已保存提示的故事消息 ID 和正的安全整数计数。事件在事务成功、对应的 `narrative.completed` 发布之后发送，每次已提交执行仍只发一次并显示一个即时通知；直接 action 路由规则和 `forwardToActionStream: false` 不变。`count` 保持整次执行的失败操作总数，辅助单元失败或没有公开故事时 `messages` 可以为空，各消息计数之和也可以小于总数。自动推进每轮用自己的 turn 和消息回执。
+
+客户端按会话、turn 和持久消息 ID 设置或替换计数；重复回执不累加，不猜测最新故事，不标记流式占位。未知或未加载的 ID 等普通历史恢复。丢失事件时通过[保存的消息字段](./api.md#get-apisessionsidmessages)恢复提示，不重跑操作。非 action 提交沿用会话视图和订阅恢复，不重开流。服务端和 Web 必须一起更新，不接收旧事件形状。
 
 提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。 读取基线的 `conflict` 沿用这些提案和操作边界，不新增事件或客户端指纹参数，见[事务](./transactions.md#read-baselines)。
 
@@ -897,6 +901,8 @@ data: {
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
 `SessionSnapshot.messages` 的每一项是 `SnapshotMessage`。玩家消息带 `actions`：这条消息提交的解析后行动（存储里 `metadata.actions`，形状同 `GET /messages` 的 `actions`），故事消息带 `segments`。其他消息没有这两个字段。
+
+故事消息还可带经过校验的 `operationFailures: { count }`，与消息历史使用相同投影；同 ID 的恢复可补齐提示。完整字段规则见[消息历史](./api.md#get-apisessionsidmessages)。
 
 `SessionSnapshot` 顶层的 `dimensions` 是[当前值的公开快照](./world-model.md#动态维度快照)。可选的 `dimensionSettlements` 是回执摘要。provider 和 recovery 的元数据由宿主绑定并校验。
 
@@ -1385,6 +1391,8 @@ runtime 的终态：
 
 ### 子 agent 事件
 
+`delegate-batch` 沿用现有工具/子 agent 事件。每个尝试项都有唯一 `subagentCallId`，`parentCallId` 指向外层 batch 工具，并在子事件中携带无内容的零起始 `batchIndex`，拒绝项也一样。完成顺序可以交错；子项完成仍须等外层工具成功才能接受，其终态事件不会因外层取消而重复发出。根执行委托用量按名额认领计数，不按事件总数。费用只累计已报告的叶子 `llm.responded` / gateway 用量一次，包括后来失败前已完成的步骤；子 agent 摘要与工具结果不增加计费调用。
+
 [子 agent](./plugins.md#子-agent) 的一次运行发出 `subagent.*`。它们和 `recursive.*` 一样只进 trace（`forwardToActionStream: false`）。
 
 <!-- prettier-ignore -->
@@ -1517,6 +1525,8 @@ runtime 的终态：
 根执行和 setup/开场也各发出一条 round 完成事件，自动轮从 `round: 1` 开始。顺序为：根执行 started → round completed → advance waiting → 下一轮 started → advance running → runtime/故事事件 → round completed；可重复下一轮，最后 advance stopped → 唯一一条请求终态 `execution.completed`。开场接力仍保留原来的未开始即停止标记。基础设施错误保留 `error.occurred` 路径；已开始请求仍收尾。没有开始执行的拒绝不产生 round 事件。
 
 停止原因是有限枚举：`yielded-to-player`、`no-eligible-story`、`ambiguous-story`、`limit`、`disabled`、`player-stop`、`new-input`、`pending-input`、`session-unavailable`、`execution-failed`、`prerequisite-unavailable`。原因不携带模型内容。到达上限或交还玩家是正常结束。后续失败只丢弃该轮未提交内容；终态 `resync: true` 汇总任意一轮的提交后发布失败。
+
+setup 执行后的 `no-eligible-story` 不证明准备完成。客户端仍检查会话时钟；已尝试但未完成且没有待答交互时，即使消息列表为空，也显示[准备提示](./api.md#setup-runtime-控制重试--跳过)。
 
 恢复状态的可选 `advance` 使用同一载荷；`unknown` 不证明完成。客户端按请求所有权处理事件，忽略旧请求收尾和倒退的进度。新事件不包含提示词、工具参数、操作摘要或 concealed 内容。前台所有轮共用一个故障计数身份：故障立即去重计数，干净结果等组关闭才清零；较新的后台结果不会被旧组清零。setup 不参与，后台任务继续独立计数。
 

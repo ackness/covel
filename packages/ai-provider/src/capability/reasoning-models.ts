@@ -113,6 +113,8 @@ export interface ReasoningControls {
   format: ReasoningFormat;
   /** The model thinks when a request carries no reasoning field. */
   thinksByDefault: boolean;
+  /** Chat requires reasoning on every assistant message in the current user turn. */
+  reasoningContentRequired?: boolean;
   /**
    * The tool choices the model accepts while it thinks. Absent: only
    * `auto`.
@@ -149,6 +151,8 @@ const behaviourFields = {
   format: z.enum(REASONING_FORMATS).optional(),
   /** The model thinks when a request carries no reasoning field. */
   thinksByDefault: z.boolean().optional(),
+  /** Chat assistant steps in the current user turn need a reasoning field, even empty. */
+  reasoningContentRequired: z.boolean().optional(),
   /** The tool choices accepted while the model thinks. Default: `auto` only. */
   toolChoiceWhileThinking: z.array(z.enum(TOOL_CHOICE_KINDS)).min(1).optional(),
   sampling: z
@@ -166,9 +170,9 @@ const ruleSchema = z.strictObject({
   /** Protocols the rule applies to; `""` is "no protocol stated". */
   protocols: z.array(z.string()).optional(),
   /**
-   * Patterns the lower-cased provider name of the slot must match: a rule
-   * about one vendor's own endpoint, which a relay of the same models may not
-   * share. Absent: any provider.
+   * Patterns the lower-cased provider name of the slot must match. Only for
+   * differences in the provider's endpoint API; model/protocol constraints
+   * also apply through relays and must not use this filter. Absent: any provider.
    */
   providers: z.array(pattern).optional(),
   /** Applies only to a model whose thinking is always on. */
@@ -221,6 +225,7 @@ export type ReasoningModelsFile = z.infer<typeof reasoningModelsFileSchema>;
 interface Behaviour {
   format?: ReasoningFormat;
   thinksByDefault?: boolean;
+  reasoningContentRequired?: boolean;
   toolChoiceWhileThinking?: ToolChoiceKind[];
   sampling?: ReasoningSampling;
 }
@@ -259,6 +264,9 @@ function behaviour(
     ...(entry.format ? { format: entry.format } : {}),
     ...(entry.thinksByDefault !== undefined
       ? { thinksByDefault: entry.thinksByDefault }
+      : {}),
+    ...(entry.reasoningContentRequired !== undefined
+      ? { reasoningContentRequired: entry.reasoningContentRequired }
       : {}),
     ...(entry.toolChoiceWhileThinking
       ? { toolChoiceWhileThinking: entry.toolChoiceWhileThinking }
@@ -616,8 +624,14 @@ function settled(
   variant: ModelsDevVariant | undefined,
 ): Pick<
   ReasoningControls,
-  "format" | "thinksByDefault" | "toolChoiceWhileThinking" | "sampling"
+  | "format"
+  | "thinksByDefault"
+  | "reasoningContentRequired"
+  | "toolChoiceWhileThinking"
+  | "sampling"
 > {
+  const reasoningContentRequired =
+    rule?.reasoningContentRequired ?? family.reasoningContentRequired;
   const toolChoices =
     rule?.toolChoiceWhileThinking ??
     family.toolChoiceWhileThinking ??
@@ -640,6 +654,9 @@ function settled(
       family.thinksByDefault ??
       catalog?.thinksByDefault ??
       false,
+    ...(reasoningContentRequired !== undefined
+      ? { reasoningContentRequired }
+      : {}),
     ...(toolChoices ? { toolChoiceWhileThinking: toolChoices } : {}),
     ...(Object.keys(sampling).length > 0 ? { sampling } : {}),
   };

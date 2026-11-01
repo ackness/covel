@@ -142,6 +142,8 @@ A setup runtime reports "I am done" with one of three clear signals:
 
 The kernel records the result in `setupRuntimes`. The player can move setup forward by submitting a form or a message several times. For example, the form of `char-creator` is submitted as an action of `submit_actions`.
 
+An enabled setup runtime returning `pending` still blocks the opening; missing prerequisite data does not count as completion. After an attempt with neither messages nor an unanswered interaction, the UI also shows the unfinished notice, allowing the player to continue setup or disable the corresponding plugin. A session that has never run only shows Begin Adventure. World data alone cannot add preparation to a composition without setup; see [receiver selection](../reference/world-data.md#data-receivers).
+
 Rules for failure:
 
 - Failed, but retries are left: the runtime stays `pending`, and `lastError` is recorded. Sending `start_session` again reruns only the runtimes that are not done. It does not create a new session and does not record a player message again.
@@ -418,7 +420,7 @@ When the player retries on purpose, a new jobId is created.
 
 Kernel inputs also include `operations@1`: it freezes staged operations from completed upstream runs at binding time, adds no scheduling dependency, makes the reader depend at commit on the staged operations it saw, and is unavailable to detached runtimes. Retrying or recovering a failed runtime also includes `committed` operations from seed results of the source turn and committed retries, so downstream consumers can recognize changes already handled. These operations are read-only: their writes are not replayed and they add no commit dependencies to this execution. Failed, discarded or still-staged seed operations are excluded. See [plugin inputs](../reference/plugins.md#the-kernel-input-operations1) for its fields and visibility.
 
-When a turn commits with failed operations, the action stream emits one `operation.failed` and the player immediately sees a count notice. A story-attached operation dropped only for its own failure emits no `proposal.failed`, and the turn shows no execution failure. The next player or continuation execution reads the newest committed `player` / `continuation` turn result. Only the agent named by `invokedBy.runtimeId` receives `operations-not-applied`, after the input and export blocks, with at most ten summaries. An operation a sub-agent made records the sub-agent's runtime ID; that sub-agent receives the notice in its own context the next time it is called. Scoped retries omit it. This read happens once per execution with session state and adds no persistent state.
+When a turn commits with failed operations, the action stream emits one `operation.failed` and the player immediately sees a count notice. A story-attached operation dropped only for its own failure emits no `proposal.failed`, and the turn shows no execution failure. The next player or continuation execution reads the newest committed `player` / `continuation` turn result. Only the agent named by `invokedBy.runtimeId` receives `operations-not-applied`, after the input and export blocks, with at most ten summaries. An operation a sub-agent made records the sub-agent's runtime ID; that sub-agent receives the notice in its own context the next time it is called. Scoped retries omit it. This model-notice read happens once per execution with session state and saves no separate notification state. The corresponding story also retains a host notice through reload and history recovery. It is finalized in the operation-settlement transaction and exists only in display-message metadata, leaving text, the prompt journal and the `operations-not-applied` model context above unchanged. See [Message API](../reference/api.md#get-apisessionsidmessages) and [Transactions](../reference/transactions.md#write-service-operations).
 
 If a later attempt does not commit, the newest committed row stays unchanged, so the next attempt repeats the notice. Once any later player or continuation execution commits, the old notice disappears. The block lives in the context that varies per turn and leaves cached prefixes unchanged.
 
@@ -730,6 +732,8 @@ In one line for each trigger type:
 A `schedule.subagentOnly` runtime is not in this tree: neither the automatic path, a manual target, a batch re-run nor `recursiveCall` selects it.
 
 ### 4.4 Sub-agents
+
+`delegate-batch` captures one speculative parent scope before any await, validates entries independently, then claims all eligible children in input order before starting providers. It never waits for pool capacity. Results join by index without fail-fast behavior; publication rechecks the enclosing tool lifetime before accepting reads and operations. Loading/preparation also races cancellation and its remaining time limit. See the [tool contract](../reference/tools.md#delegate-batch).
 
 Another runtime runs a sub-agent inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool.
 

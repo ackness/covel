@@ -43,6 +43,13 @@ describe(`${PLUGIN_ID} package`, () => {
       .join("---");
   });
 
+  it("requires an offered tool and actor target before following a contribution plan", () => {
+    expect(english).toContain("Only if the planned tool is offered");
+    expect(english).toContain("Otherwise narrate alone and yield user");
+    expect(chinese).toContain("只有计划所需的工具可用");
+    expect(chinese).toContain("否则独自叙事并交回 user");
+  });
+
   it("is the story runtime of the narrative stage and provides the narrative engine", () => {
     expect(manifest).toMatchObject({
       name: `${PLUGIN_ID}/narrate`,
@@ -221,6 +228,7 @@ describe(`${PLUGIN_ID} package`, () => {
       "memory-search",
       "emit-event",
       "delegate",
+      "delegate-batch",
     ]);
     expect(english).toContain('target: { contract: "character-actor@1" }');
     expect(chinese).toContain('target: { contract: "character-actor@1" }');

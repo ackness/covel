@@ -144,6 +144,7 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
     runtimes: readonly RuntimeManifest[],
     handlers: Record<string, FunctionHandler>,
     concurrentGold: number,
+    extraInTx?: Parameters<typeof commitExecution>[0]["extraInTx"],
   ) {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await store.createSession({
@@ -191,6 +192,7 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
       store,
       execution,
       completion: { kind: "turn", turnId: `${session}-turn`, durationMs: 0 },
+      ...(extraInTx ? { extraInTx } : {}),
     });
     const items = async () =>
       (await store.listPluginData(session, "bank", "items"))
@@ -282,6 +284,49 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
     },
   );
 
+  it("rolls back a story notice and successful sibling operation after a late transaction failure", async () => {
+    const session = "pg-story-notice-rollback";
+    const narrator = fn("narrator", "story", {
+      stage: "narrative",
+      outputKind: "story",
+    });
+    const { outcome, items, gold, persisted } = await run(
+      session,
+      [narrator],
+      {
+        [narrator.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          await trade(ctx, "b", 10);
+          await ctx.pluginData!.set("notes", "told", true);
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "You shop." },
+          };
+        },
+      },
+      12,
+      async (tx) => {
+        const messages = await tx.listMessages(session);
+        expect(messages[0]?.metadata).toMatchObject({
+          operationFailures: { count: 1 },
+        });
+        throw new Error("Synthetic failure after annotated message insertion");
+      },
+    );
+    expect(outcome.status).toBe("failed");
+    expect(outcome.operationFailureMessages).toBeUndefined();
+    expect(await store.listMessages(session)).toEqual([]);
+    expect(await store.listPluginData(session, "narrator", "notes")).toEqual(
+      [],
+    );
+    expect(await items()).toEqual([]);
+    expect(await gold()).toBe(12);
+    expect((await persisted()).map((operation) => operation.status)).toEqual([
+      "discarded",
+      "discarded",
+    ]);
+  });
+
   it("drops a story's conflicting operation whole and commits the others and the story", async () => {
     const narrator = fn("narrator", "story", {
       stage: "narrative",
@@ -311,6 +356,14 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
       ["committed", null],
       ["failed", "conflict"],
       ["committed", null],
+    ]);
+    const messages = await store.listMessages("pg-write-story");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.metadata).toMatchObject({
+      operationFailures: { count: 1 },
+    });
+    expect(outcome.operationFailureMessages).toEqual([
+      { messageId: messages[0]!.id, count: 1 },
     ]);
     expect(await items()).toEqual(["a", "c"]);
     expect(await gold()).toBe(6);

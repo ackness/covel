@@ -487,6 +487,10 @@ io:
     recordAs: latest-facts
 ```
 
+#### `io.selfData`
+
+`io.selfData` 把指定 namespace 中有界的一页自有数据放进 agent 提示词。`maxEntries` 决定窗口，`format` 决定显示方式。若 runtime 同时持有该 namespace 的写工具，注入的键也计入读取基线：模型请求期间同一个键变化后，依赖旧值的替换以 `conflict` 拒绝。无需为了启用保护再调用一次读取工具。没有对应写工具时不记录注入基线；窗口外的键仍需显式读取。完整值、缺失和提交隔离的规则见[读取基线前提条件](./transactions.md#read-baselines)。
+
 #### 输入怎样读取
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
@@ -663,6 +667,10 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 `manualTrigger.runtimeId` 点名一个 `schedule.subagentOnly` runtime 时报错，改用 `ctx.agents.run`。
 
 #### 子 agent
+
+agent 调用方也可声明 [`delegate-batch`](./tools.md#delegate-batch)，并发处理独立请求。它共用原有根执行名额、深度和并发池，子 agent 能力边界相同。函数仍使用 `ctx.agents.run`。
+
+在 `agent.tools.builtin` 声明委托工具不会强制它出现：没有可用目标时工具省略，有目标时 schema 只列出可达项。提示词必须允许工具或目标缺席时独立完成，具体解析规则见[委托工具](./tools.md#子-agentdelegate)。
 
 子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生自己的 proposal、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。允许改数据时，它可以通过写服务暂存操作，随委托它的 run 提交；子 agent 失败时这些操作撤回。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
 
@@ -984,7 +992,7 @@ homepage: https://example.com/tidefall
 
 提交规则见[回合级单事务](./transactions.md#回合级单事务)。
 
-**读后计算的替换。** 显式读取同一个键后，后续替换自动受保护，包括带派生值的 `inc` + `merge` 列表。盲写和纯相对操作保持原有语义。放行 agent 的 guard 不把自己的读取作用域交给 agent。见[读取基线前提条件](./transactions.md#read-baselines)。
+**读后计算的替换。** 显式读取同一个键后，后续替换自动受保护，包括带派生值的 `inc` + `merge` 列表。持有对应写工具的 agent 收到 `io.selfData` 注入时也一样。盲写和纯相对操作保持原有语义。放行 agent 的 guard 不把自己的读取作用域交给 agent。见[读取基线前提条件](./transactions.md#read-baselines)。
 
 ### 动态维度
 
@@ -1233,6 +1241,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 内置插件里模型会读的提示词（agent 正文和固定段）必须有中文变体。function runtime 的正文是说明文档，只写 English。社区插件只需要 English。
 - 两种语言必须提到同一组工具、注入块和 `runtime-inputs.<name>`。`pnpm check:prompts` 检查这一点，并用 `plugins/prompt-variants.lock.json` 发现“英文改了、中文没跟”的情况。两边都更新后运行 `pnpm prompts:lock`。
+- 提示词拆句与译文核对见[提示词写法](../plugins/prompt-style.md)。文风提醒不阻止插件通过检查。
 - 完整规则见 [i18n](./i18n.md#内置语言与扩展边界)。
 
 静态提示词和 runtime 正文的各语言版本，都在加载定义（definition / generation）时捕获。执行时按有效的 locale 从这份快照里选正文，不重新读取正在热更新的文件。语言选择不能改变主清单的权限或执行合同。

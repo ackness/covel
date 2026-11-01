@@ -35,8 +35,9 @@ Conventions, the same as in the released sections of the changelog:
 - A `Breaking` entry says what no longer works and what the author, operator or owner of an existing development session must do. Covel supports the current contract only, so say plainly when data must be recreated.
 - A change with several effects puts each under its section in the same file (often `Breaking` and `Added`).
 - A change nobody outside the repository can notice (tests, a refactor, CI) needs no fragment. Nothing fails when a pull request has none; the reviewer decides.
+- Write relative Markdown links and images from this directory: `[slots](../reference/slots.md)` or `[English guide](../en/plugins/testing.md#validation)`. Preview and release assembly rebase these destinations for `docs/CHANGELOG.md`, preserving queries, anchors and titles. This also applies to reference-style link and image definitions. Absolute URLs, root-relative paths, anchor-only links and `mailto:` links stay unchanged. Code examples stay unchanged.
 
-`pnpm check` runs `pnpm check:changelog`, which fails on an unknown section, a section without an entry, text outside a section, text that is not a list item, and a file in this directory that is not a fragment.
+`pnpm check` runs `pnpm check:changelog`, which fails on an unknown section, a section without an entry, text outside a section, text that is not a list item, a file in this directory that is not a fragment, and a relative link or image whose target does not exist relative to its fragment. Queries and anchors are excluded from the file check; heading anchors and external URLs are not checked.
 
 ## Reading what is pending
 

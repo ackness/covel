@@ -61,6 +61,8 @@ When there is an error, it gives the path of the file and the field:
 .../my-plugin/runtimes/analyst/RUNTIME.md: schedule.stage: Invalid option: expected one of "setup"|"pre-turn"|"narrative"|"post-turn"|"audit"; correct this field using the current plugin manifest reference
 ```
 
+The CLI writes errors from the first failing stage to stderr and collected warnings to stdout, including warnings from packages with errors. The exit code is `1` for errors, `0` for warnings alone, and `2` for no path arguments or unsupported options. The app can show other independently checkable errors; see [in-app validation](../reference/plugin-installation.md#in-app-validation).
+
 What it does not do: it does not run the entry file, the guards, or the functions. So it cannot find "a tool is declared, but the code never registers it". The two kinds of test below are needed for that.
 
 ## Unit tests

@@ -1,4 +1,7 @@
-import { resolveAutoAdvanceLimit } from "@covel/shared";
+import {
+  projectStoryOperationFailures,
+  resolveAutoAdvanceLimit,
+} from "@covel/shared";
 import type { I18nText } from "@covel/shared";
 import type {
   MessageRecord as StoreMessageRecord,
@@ -44,16 +47,26 @@ export function toFrontendSession(s: StoreSessionRecord): SessionRecord {
 }
 
 export function toFrontendMessage(m: StoreMessageRecord): MessageRecord {
+  const meta = (m.metadata ?? {}) as Record<string, unknown>;
   return {
     id: m.id,
     sessionId: m.sessionId,
     role: m.role as MessageRecord["role"],
     content: m.content,
-    ...(m.metadata as {
-      turnId?: string;
-      runtimeId?: string;
-      kind?: string;
-      block?: Record<string, unknown>;
+    turnId: meta.turnId as string | undefined,
+    runtimeId: meta.runtimeId as string | undefined,
+    kind: meta.kind as string | undefined,
+    block: meta.block as Record<string, unknown> | undefined,
+    ...(Array.isArray(meta.segments)
+      ? { segments: meta.segments as MessageRecord["segments"] }
+      : {}),
+    ...(Array.isArray(meta.actions)
+      ? { actions: meta.actions as MessageRecord["actions"] }
+      : {}),
+    ...projectStoryOperationFailures({
+      role: m.role,
+      kind: meta.kind,
+      operationFailures: meta.operationFailures,
     }),
     createdAt: m.createdAt,
   };

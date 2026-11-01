@@ -437,6 +437,7 @@ The settings screen stores connection info and model IDs separately:
 **Adding the first provider**
 
 - The first time you create a provider and a model by hand, if `story` and `plugin` have no explicit assignment, the settings page binds both roles to this model. This way, story and plugin tasks can run right away.
+- When no valid `llm.toml` is loaded, a built-in default role without server credentials also counts as unassigned. Existing local choices, roles from `llm.toml`, and built-in defaults with usable server credentials keep their assignments. After saving, the page reports which roles were assigned.
 - When you add a provider, you can pick one of the [built-in providers](#built-in-providers-and-protocols) from the list. The dialog fills in its ID and official address, and it uses that provider's own protocol. Choose "Custom provider" to fill in everything by hand.
 - A built-in provider uses the framework's built-in official address and protocol even if you leave `baseUrl` empty. An address that the user fills in always takes priority.
 
@@ -465,7 +466,7 @@ When Covel looks up model capabilities, it tries these matches in order. A match
 
 ## Thinking strength
 
-The thinking levels on the "Generation" page come from the [models.dev](https://models.dev) catalog and Covel's vendor rules (see [Level data](#level-data)). How a request turns thinking on and off follows the upstream vendor name in the model ID: if the provider is `openai` and the model ID is `deepseek/deepseek-v4-flash`, thinking is still switched the DeepSeek way. The options depend on the model's capabilities. The page does not assume that every vendor's strength levels are equivalent.
+The thinking levels on the "Generation" page come from the [models.dev](https://models.dev) catalog and Covel's vendor rules (see [Level data](#level-data)). How a request turns thinking on and off follows the upstream vendor name in the model ID and the protocol: if the provider is `openai` and the model ID is `deepseek/deepseek-v4-flash`, thinking is still switched the DeepSeek way. Vendor rules for the same model and protocol also apply to custom providers, `default`, and gateways, regardless of the connection's name. The options depend on the model's capabilities. The page does not assume that every vendor's strength levels are equivalent.
 
 In `llm.toml`, use `reasoningEffort` to set the default level of a model:
 
@@ -530,6 +531,7 @@ The shared `reasoningEffort` is converted according to the API protocol:
 Some models reject certain parameters while they think. Covel adjusts the request from data, not from vendor checks in code:
 
 - **Tool choice**: a thinking model may refuse to be forced to call a tool. DeepSeek returns 400 for both `required` and a named tool while thinking and accepts only `auto`; the Kimi K3 series accepts only `auto` and `required`. When a task default forces a tool call, it steps back to the choices the rule or catalog allows: a named tool becomes `required`, or `auto` where that is not allowed. Requests with thinking off are not affected.
+- **Reasoning pass-back**: OpenAI Chat follows the model family's `reasoningContentRequired` rule to send reasoning on every assistant message in the current user turn, including text-only answers after tool calls. DeepSeek enables this rule. Empty or missing reasoning is sent as an empty string, so a repair or steering continuation does not return 400 for missing `reasoning_content`. System nudges converted to user messages by `lateSystemAsUser` still belong to the same user turn. Families without this rule keep their existing request format.
 - **Fixed sampling parameters**: when the catalog says a model sets its own temperature or Top P (GPT-5 and later, Kimi K3), requests do not send them. If a value is configured, the server logs one warning per model and parameter.
 - **Sampling ignored while thinking**: DeepSeek ignores temperature, Top P, frequency penalty, and presence penalty while thinking. Requests still send them, and the settings page shows a hint.
 
@@ -537,14 +539,14 @@ Some models reject certain parameters while they think. Covel adjusts the reques
 
 The models.dev catalog gives the levels per provider endpoint, so the same model can differ between relays. The table shows the part Covel maintains itself:
 
-| Vendor    | Levels                                                                                    |
-| --------- | ----------------------------------------------------------------------------------------- |
-| OpenAI    | GPT-5 / o series by model; on OpenAI's own Chat endpoint GPT-6 must use `none` with tools |
-| Anthropic | `low/medium/high/xhigh/max`, depending on the model                                       |
-| Gemini    | A subset limited by model and protocol, see above                                         |
-| xAI       | `low/medium/high`; Grok 4.20 / multi-agent adds `xhigh`                                   |
-| DeepSeek  | off / `high/max`, plus the catalog's levels (such as `low`) for models it lists           |
-| Qwen      | off / on, native levels, or budget presets                                                |
+| Vendor    | Levels                                                                           |
+| --------- | -------------------------------------------------------------------------------- |
+| OpenAI    | GPT-5 / o series by model; GPT-6 with tools on the Chat protocol must use `none` |
+| Anthropic | `low/medium/high/xhigh/max`, depending on the model                              |
+| Gemini    | A subset limited by model and protocol, see above                                |
+| xAI       | `low/medium/high`; Grok 4.20 / multi-agent adds `xhigh`                          |
+| DeepSeek  | off / `high/max`, plus the catalog's levels (such as `low`) for models it lists  |
+| Qwen      | off / on, native levels, or budget presets                                       |
 
 The interface lists only the subset that the target model is known to support. A model that is not recognized keeps the provider's default behavior. The Gemini levels follow [Google's thinking guide](https://ai.google.dev/gemini-api/docs/generate-content/thinking) and the [OpenAI compatibility mapping](https://ai.google.dev/gemini-api/docs/openai).
 
@@ -582,18 +584,19 @@ Fields of each family:
 
 Families and rules can both carry these behaviour fields; the rule's value wins:
 
-| Field                     | Meaning                                                                                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`                  | How the request is written: `effort` (default, the level only), `thinking-type` (also `thinking.type`), `enable-thinking` (`enable_thinking`)                                                                       |
-| `thinksByDefault`         | The model thinks when the request has no thinking field. When absent, the catalog's default level decides                                                                                                           |
-| `toolChoiceWhileThinking` | Tool choices accepted while thinking: `auto`, `required`, `named`. When absent, the catalog's (only for always-thinking models), else `auto` only                                                                   |
-| `sampling`                | `ignoredWhileThinking`: the model ignores temperature and similar parameters while thinking (only a settings hint); `fixed`: parameters the model sets itself and that are never sent, from the catalog when absent |
+| Field                      | Meaning                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`                   | How the request is written: `effort` (default, the level only), `thinking-type` (also `thinking.type`), `enable-thinking` (`enable_thinking`)                                                                       |
+| `thinksByDefault`          | The model thinks when the request has no thinking field. When absent, the catalog's default level decides                                                                                                           |
+| `reasoningContentRequired` | OpenAI Chat requires a reasoning field on every assistant message in the current user turn; empty or missing reasoning is sent as an empty string. Off by default                                                   |
+| `toolChoiceWhileThinking`  | Tool choices accepted while thinking: `auto`, `required`, `named`. When absent, the catalog's (only for always-thinking models), else `auto` only                                                                   |
+| `sampling`                 | `ignoredWhileThinking`: the model ignores temperature and similar parameters while thinking (only a settings hint); `fixed`: parameters the model sets itself and that are never sent, from the catalog when absent |
 
 - An item in `levels` is a level name, or `{ "value", "budget", "protocols" }`. `budget` means this level is sent as a thinking token budget. `protocols` means it is offered only on these protocols.
 - `parameterStyle` picks one of several styles in a family: Anthropic's `adaptive` (also sends `thinking.type: "adaptive"`) and `effort` (sends `reasoning_effort` beside the switch). Rules read from the catalog that list levels use `effort`.
 - `whenUnlisted` limits a rule to models the catalog has no levels for: it covers new models the catalog has not listed yet without overriding the catalog's data. The bundled data uses it to give unlisted GPT-6 and later models `none` to `max`.
-- `providers` makes a rule apply only to one provider's own endpoint. When the same model goes through a relay, the relay's limits may differ. So such rules are told apart by the provider ID the slot declares, not by model name.
-- `withTools` lists the only levels this target accepts on a request that carries function tools, with the first one preferred. If a request with tools picks another level, or picks no level (then the provider uses the model's default level), the first one is sent. For example, OpenAI's own Chat endpoint requires `reasoning_effort` to be `none` when GPT-6 models get function tools, so the bundled data gives GPT-6 with `provider` `openai` and protocol `openai-chat-v1` `"withTools": ["none"]`. To keep reasoning with tools, use `openai-responses-v1` for OpenAI slots. When the server loads `llm.toml`, it logs a warning for each slot such a rule affects.
+- `providers` is only for differences in a provider's endpoint API, matched by the provider ID the slot declares. Model and protocol constraints should not use it, or renaming a connection would skip the rule. No bundled rule currently uses this filter.
+- `withTools` lists the only levels this target accepts on a request that carries function tools, with the first one preferred. If a request with tools picks another level, or picks no level (then the provider uses the model's default level), the first one is sent. For example, GPT-6 requests with function tools over `openai-chat-v1` send `reasoning_effort: "none"`. The bundled rule matches the model and protocol without filtering provider IDs, so it applies to `openai`, custom relays, `default`, OpenRouter, and Vercel alike. Requests without tools keep the chosen level. To keep reasoning with tools, use `openai-responses-v1` if the provider supports it. When the server loads `llm.toml`, it logs a warning for each slot such a rule affects.
 
 **Refreshing the catalog**
 

@@ -487,6 +487,10 @@ io:
     recordAs: latest-facts
 ```
 
+#### `io.selfData`
+
+`io.selfData` puts a bounded page of own data from the named namespace into the agent prompt. `maxEntries` sets the window and `format` sets its display. If the runtime also holds write tools for that namespace, injected keys count toward its read baseline: a replacement based on an old value fails with `conflict` if the same key changes during the model request. An extra read-tool call is not needed to enable protection. Without corresponding write tools, injection records no baseline; keys outside the window still need explicit reads. See [read-baseline preconditions](./transactions.md#read-baselines) for full-value, absence and commit-isolation rules.
+
 #### How inputs are read
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
@@ -663,6 +667,10 @@ Use [services](./plugin-extensions.md#registering-and-calling-public-functions) 
 A `manualTrigger.runtimeId` that names a `schedule.subagentOnly` runtime is an error; use `ctx.agents.run` instead.
 
 #### Sub-agents
+
+Agent callers can also declare [`delegate-batch`](./tools.md#delegate-batch) for independent concurrent requests. It shares the existing root allowance, depth and pool, and retains the same child capabilities. Function callers continue to use `ctx.agents.run`.
+
+Declaring delegation tools in `agent.tools.builtin` does not guarantee they are offered: with no eligible target they are omitted, and otherwise their schemas list only reachable targets. Prompts must allow independent completion when a tool or target is absent. See [delegation tools](./tools.md#sub-agents-delegate) for resolution rules.
 
 A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no proposals of its own, emits no events and forms no top-level runtime result, so it is never a commit unit. When writes are allowed, it can stage operations through write services that commit with the delegating run; those operations are discarded if the sub-agent fails. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
 
@@ -984,7 +992,7 @@ Upstream writes are only read. They never enter the reader's own buffer, so noth
 
 The commit rules are under [Turn-level single transaction](./transactions.md#turn-level-single-transaction).
 
-**Read-derived replacements.** Explicit same-key reads automatically guard later replacements, including derived `inc` + `merge` lists. Blind writes and pure relative lists keep their existing semantics. Guards and the agent they allow to run have separate scopes. See [read-baseline preconditions](./transactions.md#read-baselines).
+**Read-derived replacements.** Explicit same-key reads automatically guard later replacements, including derived `inc` + `merge` lists. The same applies to `io.selfData` injected into agents holding corresponding write tools. Blind writes and pure relative lists keep their existing semantics. Guards and the agent they allow to run have separate scopes. See [read-baseline preconditions](./transactions.md#read-baselines).
 
 ### Dynamic dimensions
 
@@ -1233,6 +1241,7 @@ These checks do not run plugin code, and they cannot replace the registration co
 
 - For a built-in plugin, the prompts the model reads (agent bodies and fixed sections) must have a Chinese variant. The body of a function runtime is documentation, so it is written only in English. A community plugin needs only English.
 - Both languages must mention the same set of tools, injected blocks, and `runtime-inputs.<name>`. `pnpm check:prompts` checks this. It also uses `plugins/prompt-variants.lock.json` to catch the case where the English text changed but the Chinese was not updated. After you update both, run `pnpm prompts:lock`.
+- See [prompt style](../plugins/prompt-style.md) for splitting instructions and reviewing translations. Style warnings do not prevent a plugin from passing the check.
 - For the full rules, see [i18n](./i18n.md#built-in-languages-and-the-extension-boundary).
 
 The language versions of static prompts and runtime bodies are all captured when the definition (definition / generation) is loaded. At execution time, the body is picked from this snapshot using the effective locale. It does not reread files that are being hot-reloaded. A language choice cannot change the permissions or the execution contract of the main manifest.

@@ -17,7 +17,11 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 
 function setup(
-  options: { failModel?: string; apiKeys?: Record<string, string> } = {},
+  options: {
+    failModel?: string;
+    apiKeys?: Record<string, string>;
+    configSource?: { kind: "file" | "builtin"; path: string };
+  } = {},
 ) {
   const requests: Array<{ model: string; metadata?: Record<string, unknown> }> =
     [];
@@ -97,6 +101,7 @@ function setup(
       gateway,
       llmConfig: null,
       modelDb: null,
+      configSource: options.configSource,
     },
     createPluginRegistry(),
     createMemoryStore(),
@@ -372,6 +377,35 @@ describe("explicit ping model identity", () => {
 });
 
 describe("LLM settings and connectivity", () => {
+  it.each(["self", "demo", "commercial"])(
+    "publishes built-in slot provenance without diagnostic paths on %s",
+    async (tier) => {
+      vi.stubEnv("DEPLOYMENT_TIER", tier);
+      vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-operator");
+      for (const kind of ["builtin", "file"] as const) {
+        for (const keyed of [false, true]) {
+          const { app } = setup({
+            configSource: { kind, path: "/private/synthetic-host/llm.toml" },
+            apiKeys: keyed ? { fixture: "synthetic-key" } : {},
+          });
+          const response = await app.request("/api/llm-config");
+          expect(response.status).toBe(200);
+          const config = await response.json();
+          expect(config.slots.story).toMatchObject({
+            builtinDefault: kind === "builtin",
+            serverKeyConfigured: keyed,
+          });
+          if (tier !== "self") {
+            expect(config).not.toHaveProperty("source");
+            expect(JSON.stringify(config)).not.toContain(
+              "/private/synthetic-host",
+            );
+          }
+        }
+      }
+    },
+  );
+
   it("publishes the native Google endpoint and protocol when a preset inherits connection defaults", async () => {
     const { app, presetRegistry } = setup();
     presetRegistry.addPreset({

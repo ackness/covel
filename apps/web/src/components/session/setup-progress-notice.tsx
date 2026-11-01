@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText, type PluginSummary } from "@covel/shared";
 import { ProviderFailureNotice } from "./provider-failure-notice.js";
 import type { SessionRecord, SetupRuntimeState } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
@@ -25,6 +26,7 @@ export interface SetupProgress {
   readonly error?: string;
   readonly errorKind?: string;
   readonly failureTarget?: ExecutionStep["failureTarget"];
+  readonly waitingOn?: readonly string[];
 }
 
 function setupError(state: SetupRuntimeState): string | undefined {
@@ -40,16 +42,22 @@ export function setupProgress(input: {
   readonly executing: boolean;
   readonly recovery?: ExecutionRecovery | null;
   readonly steps?: readonly ExecutionStep[];
+  readonly plugins?: readonly Pick<PluginSummary, "id" | "displayName">[];
+  readonly locale?: string;
 }): SetupProgress | null {
   const { session, messages, submittedBlockIds, executing } = input;
   if (session.status !== "active" || session.phase !== "setup") return null;
-  // No messages yet: the "begin adventure" hero is the way forward.
-  if (
-    executing ||
-    messages.length === 0 ||
-    executionRecoveryNoticeVisible(input.recovery)
-  )
-    return null;
+  if (executing || executionRecoveryNoticeVisible(input.recovery)) return null;
+  const states = Object.entries(session.setupRuntimes ?? {});
+  // Keep the initial hero clear, but an attempted setup can leave no chat
+  // messages at all (for example a function waiting on unavailable state).
+  const attempted =
+    states.some(
+      ([, state]) => state.state !== "pending" || state.attempts > 0,
+    ) ||
+    input.steps?.some((step) => step.stage === "setup") ||
+    input.recovery?.status?.state === "completed";
+  if (messages.length === 0 && !attempted) return null;
   // A form or choice on screen is what setup waits for.
   if (
     messages.some((message) =>
@@ -57,7 +65,6 @@ export function setupProgress(input: {
     )
   )
     return null;
-  const states = Object.entries(session.setupRuntimes ?? {});
   const blocked = states
     .filter(([, state]) => state.state === "blocked")
     .map(([runtimeId]) => runtimeId);
@@ -75,6 +82,19 @@ export function setupProgress(input: {
             step.detail === error,
         )
     : undefined;
+  const waitingOn = [
+    ...new Set(
+      states
+        .filter(([, state]) => state.state === "pending")
+        .map(([runtimeId]) => {
+          const pluginId = runtimeId.split("/")[0] ?? runtimeId;
+          const plugin = input.plugins?.find(
+            (plugin) => plugin.id === pluginId,
+          );
+          return resolveI18nText(plugin?.displayName, input.locale) || pluginId;
+        }),
+    ),
+  ];
   return blocked.length > 0 || error !== undefined
     ? {
         kind: "failed",
@@ -84,7 +104,11 @@ export function setupProgress(input: {
           ? { errorKind: step.errorKind, failureTarget: step.failureTarget }
           : {}),
       }
-    : { kind: "unfinished", blocked };
+    : {
+        kind: "unfinished",
+        blocked,
+        ...(waitingOn.length > 0 ? { waitingOn } : {}),
+      };
 }
 
 /** The session record trails the end of a run by one request; wait it out. */
@@ -170,6 +194,13 @@ export function SetupProgressNotice({
           {rearmFailed && (
             <p className="mt-1 text-xs text-destructive">
               {t("session.setupRetryFailed")}
+            </p>
+          )}
+          {!failed && progress.waitingOn && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("session.setupWaitingOn", {
+                plugins: progress.waitingOn.join(", "),
+              })}
             </p>
           )}
         </div>

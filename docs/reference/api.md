@@ -337,6 +337,7 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 | 字段                           | 说明                                                                                                    |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | 各槽位的 `serverKeyConfigured` | 布尔值，服务器是否为它配置了 key                                                                        |
+| 各槽位的 `builtinDefault`      | 布尔值，当前模型配置是否来自内置默认；公开目录也返回，不包含配置路径                                    |
 | `source`                       | `{ kind: "file" \| "builtin", path }`，配置来自文件还是内置默认                                         |
 | `error`                        | 可选。加载配置时的错误                                                                                  |
 | `envKeyOverrides`              | provider ID 列表。桌面端在“设置”里保存的 key 被服务器环境变量盖住时列在这里，“设置”会为它们显示一条提示 |
@@ -980,7 +981,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 已保存的表单提交照常被读取。
 - 玩家提交表单之后、后续动作发出之前关掉了页面，回来后也用它继续。
 
-Web 在这三个条件同时成立时显示提示和按钮：会话处于 setup、屏幕上没有待填的表单、没有执行在跑。有 runtime 记录了 `lastError` 时，提示为失败并显示错误。
+Web 在准备已尝试、会话仍处于 setup、屏幕上没有待答交互且没有执行在跑时显示提示和按钮，即使尝试没有生成任何消息也会显示。玩家可继续准备，或在「已加载插件」中关闭仍在等待的步骤所属插件。有 runtime 记录了 `lastError` 时，提示为失败并显示错误。未执行过的会话仍显示「开始冒险」。数据推导不会给没有 setup 的组合增加准备步骤，见[数据接收规则](./world-data.md#data-receivers)。
 
 setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 `blocked`：
 
@@ -1170,7 +1171,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 
 - `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` 的 `.zip`（`package.json` 可选，多 runtime 布局也可以），或者只有一个顶层文件夹、`PLUGIN.md` 在那个文件夹里的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`。
 - `POST /api/install/world`：接受根目录有 `world.yaml` + `WORLD.md` 的 `.zip`。返回 `201 { ok, kind: "world", id, restartRequired: false }`。
-- `POST /api/install/st-import`：`preview=true` 返回 `200`，否则返回 `201`，响应为 `{ ok: true, preview, kind: "world", id, restartRequired: false, report }`。需要 `host.files` 和 `world.write`。`locale` 是规范化的 BCP 47（默认 `DEFAULT_LOCALE`）；`name` 可选。报告含 `sources`、`world: { id, name, locale, summary }`、`counts: { characters, loreEntries, hasCover }` 和 `items: [{ level, code, source?, field?, count?, message }]`。说明为英文，客户端翻译已知代码。上限：8 个文件、6 张卡、每文件 8 MiB、请求体 20 MiB、解码后的角色卡 JSON 3 MiB、PNG 4096 块、资料条目总计 2000 条（超出部分报告并略过）、单条正文 20000 字符、生成的资料库 YAML 2 MiB。无效内容返回 `400`，单文件超限返回 `413`，ID 候选耗尽返回 `409`；转换错误带 `details: { code }`。复用 ZIP 的清单校验和原子世界激活；并发 ID 冲突返回 `409`，可重试。见[导入指南](../worlds/import-sillytavern.md)。
+- `POST /api/install/st-import`：`preview=true` 返回 `200`，否则返回 `201`，响应为 `{ ok: true, preview, kind: "world", id, restartRequired: false, report }`。需要 `host.files` 和 `world.write`。`locale` 是规范化的 BCP 47（默认 `DEFAULT_LOCALE`）；`name` 可选。报告含 `sources`、`world: { id, name, locale, summary }`、`counts: { characters, loreEntries, hasCover }` 和 `items: [{ level, code, source?, field?, count?, message }]`。说明为英文，客户端翻译已知代码。上限：8 个文件、6 张卡、每文件 8 MiB、请求体 20 MiB、解码后的角色卡 JSON 3 MiB、PNG 4096 块、资料条目总计 2000 条（超出部分报告并略过）、单条正文 20000 字符、生成的资料库 YAML 2 MiB。无效内容返回 `400`，单文件超限返回 `413`，ID 候选耗尽返回 `409`；转换错误带 `details: { code }`。复用 ZIP 的清单校验和原子世界激活；并发 ID 冲突返回 `409`，可重试。预览和导入均仅在恰好有一张角色卡时为独立世界书替换角色名；卡内世界书始终使用所属角色，无卡或多卡的独立世界书删除并报告角色宏。上传顺序不影响关联，详见[导入指南](../worlds/import-sillytavern.md#世界书怎样转换)。
 - `POST /api/install/plugin/github/preview`：返回固定的提交、摘要和签名预览。
 - `.../github/update/preview`：返回 `{ status: "current" }`、`{ status: "pinned" }`，或 `{ status: "available", ... }` 加预览。更新端点的完整契约见[插件安装](./plugin-installation.md#http-契约)和[世界安装](./world-installation.md)。
 - `POST /api/install/plugin/github`：返回 `201 { ok, kind: "plugin", id, restartRequired: true }`。
@@ -1640,6 +1641,8 @@ fork 和社区插件的授权：
 #### GET /plugin-assets/:pluginId/:digest/*
 
 所有宿主配置中均公开，不验证会话、令牌或 cookie。只读取当前非错误插件的已索引 UI 根目录。依次检查 ID 和摘要、原始及解码路径段、发布清单和读取时的真实路径边界。隐藏路径、遍历、编码分隔符、链接、未发布文件、大小或内容哈希变化和过期摘要都返回同一份 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。
+
+`/plugin-assets` 及其子路径中不匹配资源路由的请求也返回相同的 404，包括编码点路径段规范化后缺少插件 ID 或摘要的路径；不会进入公共静态文件或应用首页的回退路由。
 
 成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
 
@@ -4252,6 +4255,10 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 故事消息还带 `segments`：提交时记下的故事段落 `{ kind, speaker?, speakerId?, text }`。解析成角色的段落有 `speakerId`，`speaker` 是角色的当前名字；没解析的名字原样保留，旁白没有 `speaker`。`content` 是各段正文用空行连接的结果。纯文本故事的每个段落是一段 `narration`；这个改动之前创建的消息没有 `segments`。规则见[故事输出](./plugins.md#故事输出)。`/messages/page` 和 `/view` 的 `messages` 用同样的形状。
 
+故事消息还可带 `operationFailures: { count: number }`，对应存储里的 `metadata.operationFailures`。它只用于 `assistant` 的 `kind: "story"` 消息，`count` 必须是正的安全整数，对象不能带其他字段；非法值和其他种类的消息不投影这个字段。完整历史、`/messages/page` 和 `/view` 用同一校验规则，只返回这个计数，不返回操作记录或任意 metadata。没有该字段表示没有记录提示，旧消息不会补写。
+
+提示描述这条故事提交时未生效的附带操作；之后成功的操作或重试不会清除它。物化快照仍只捕获显示消息的边界，分叉只复制边界内的消息及其提示，并分配新消息 ID。完整 checkpoint 的导出、校验与替换保留 metadata；恢复不会重播操作或通知。重连合并同 ID 消息时补齐缺失的提示，保留实时正文和已加载的历史；较旧响应缺少字段不会清掉已有提示。恢复回执中迟到的 `narrative.completed` 若缺少提示，也保留同一持久消息 ID 已恢复的有效提示，并合并对应的流式占位，避免重复故事。完整状态替换按恢复内容替换消息。提示不进入模型对话日志。归属和计数见[事务](./transactions.md#写服务的操作)，实时传递见[协议](./protocol.md)。
+
 ```json
 {
   "id": "msg-002",
@@ -4341,6 +4348,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 规则：
 
+- `operationFailures`、`kind` 和任意 `metadata` 不属于客户端同步输入，发送这些字段会被忽略；此端点不能写入或覆盖宿主提示。完整 checkpoint 恢复继续遵守原有的所有者和校验规则。
 - 同一个会话里，重复提交相同的 `id` 会被跳过。所以恢复存档或网络重试不会把整段历史再追加一遍。
 - 不带 `id` 的消息每次都会得到新 ID，重复提交就会重复追加。
 - 整批写入在会话锁和一个存储事务内执行。任何一条新消息写入失败，整批回滚。

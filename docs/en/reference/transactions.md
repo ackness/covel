@@ -108,7 +108,9 @@ A new storage backend **must** pass this suite.
 
 When code reads a record and calculates a replacement from it, the kernel automatically protects that calculation's basis. Explicit `get` / `list` calls through `ctx.pluginData`, `ctx.store`, tools and services record a read baseline. A missing concrete key differs from stored JSON `null`. Lists record returned keys, without hypothetical absent keys. Internal dataset mutation checks are not author reads.
 
-A same-key write after such a read is guarded for `plugin.data`, each relevant batch item, delete, and `plugin.data.update` lists containing `set`, `merge`, `upsertItem` or `delete`. For example, the whole `[inc +15, merge {bar: 125}]` list is guarded together. Lists containing only `inc`, `append`, `insert` and `remove` retain latest-value semantics. Without an explicit read of the same key, writes remain blind replacements or operations.
+An agent's own rows injected through `io.selfData` also count as reads when it holds write tools for that namespace. Baselines capture the complete stored values from that same prompt read, before model projection and summary truncation. Only keys in the injected window are protected; unshown keys and list phantoms are excluded. Later deletion counts as a change, and JSON `null` remains distinct from absence. Runtimes without corresponding write tools record no injection baselines. Dataset namespaces follow the selected write tools and allowed operations. Entry-registered plugin tools that stage proposals can write any own namespace, so all their injected own data counts as reads.
+
+A same-key write after such a read is guarded for `plugin.data`, each relevant batch item, delete, and `plugin.data.update` lists containing `set`, `merge`, `upsertItem` or `delete`. For example, the whole `[inc +15, merge {bar: 125}]` list is guarded together. Lists containing only `inc`, `append`, `insert` and `remove` retain latest-value semantics. Without an explicit same-key read or the injection read described above, writes remain blind replacements or operations.
 
 Plugin-data targets use the source plugin rebound by the host and the payload's explicit `namespace` / `key`. Extra `pluginId` / `kind` fields in payloads or batch items cannot change the guarded target. Malformed payloads reach ordinary proposal validation and fail with `proposal-invalid` within their unit's rollback boundary. Target extraction does not abort a valid story's commit.
 
@@ -436,6 +438,8 @@ Who calls it:
 
 Character and character-schema property reads use the same recorder, retaining producers across plugins. Tool and service reads belong to the calling runtime; host copying does not count. See [World Model](./world-model.md) for granularity. Successful child world-property reads join the caller's real `runId` while the invocation is still live; no child commit unit is created. Failed children discard their observations and operations without changing existing parent observations. The recorder travels only in the kernel's execution commit plan, never in public results or suspension payloads.
 
+For [`delegate-batch`](./tools.md#delegate-batch), child acceptance first joins a speculative batch scope. Outer cancellation/failure discards even completed children’s evidence and staged operations. Successful operations still attach to the story’s commit unit with the original provider locks and sequence; a commit-time operation refusal preserves the story and unrelated operations.
+
 - `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set`, a delete, or an operation list containing either) and then read it, there is no dependency.
 - `list` depends on every upstream that wrote that namespace. A list without a namespace depends on every upstream that wrote plugin data.
 - At commit, an auxiliary unit with any member that read a dropped upstream outside the unit is dropped too, with the error `read data of <upstream runtime> that did not commit`.
@@ -463,6 +467,12 @@ At commit, a unit's operations commit **after all its members' own writes**, in 
 - Without savepoint support, the operations of the story's unit are not attempted and end `failed` / `store-unsupported`; the story still commits.
 - The proposals of a rejected operation are listed in `failedProposals`, as for a dropped unit.
 - A provider's datasets are loaded at call time through `TurnExecutorDeps.loadPluginDatasets` and reach the commit in the commit plan (`providerDatasets`), so they are checked even when none of the provider's runtimes ran. When they cannot be loaded, the call fails `unavailable` before the handler runs.
+
+A story's `metadata.operationFailures: { count }` is finalized in this same transaction. The kernel buffers the display messages normally accepted in a commit unit, settles operations in their existing savepoint order, then inserts messages once in their original insertion order. Reads through the transaction view include buffered messages; savepoint rollback discards that level's buffer too. Messages are flushed before later units, settlement readers, extra transaction writes, exports and snapshot capture. A store error rolls back the execution, leaving neither a partial story nor a partial notice.
+
+For each protected unit containing a story, count final `failed` operations by their carrying results, once per operation (`rejected`, `conflict` and `store-unsupported` included). Committed, staged, discarded, refused-before-staging and auxiliary-unit failures do not increase a story's count. Annotate only the root result's last accepted public story, otherwise the last public story of a member; without a target, write no notice. Identity comes from captured host manifests and actual message IDs, using run/unit membership rather than a shared turn or the delegated child's `invokedBy`. Concealed runtimes cannot supply targets.
+
+This is an immutable historical annotation, not current state or a repair flag. Later successes and retries never rewrite it. Story text, the prompt journal, operation status, read dependencies and savepoint rules remain unchanged. Player, continuation, resume and story-producing manual commits share this boundary; a storyless execution never annotates an older message. Public field: [Message API](./api.md#get-apisessionsidmessages).
 
 #### Operation records
 

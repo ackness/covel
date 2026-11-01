@@ -193,6 +193,7 @@ contributes:
               return prose(
                 JSON.stringify({
                   segments: [{ kind: "dialogue", text: `${name} answers.` }],
+                  intent: `PRIVATE-ACTOR-INTENT-${name}`,
                 }),
               );
             }
@@ -313,6 +314,21 @@ contributes:
           (message) => message.role === "assistant",
         );
         expect(stories).toHaveLength(1);
+        expect(
+          ((stories[0]?.metadata ?? {}) as { operationFailures?: unknown })
+            .operationFailures,
+        ).toEqual(mode === "commit-rejection" ? { count: 1 } : undefined);
+        const targets = events
+          .filter((event) => event.type === "operation.failed")
+          .map((event) => event.payload.messages);
+        const safeArtifacts = JSON.stringify([stories[0]?.metadata, targets]);
+        for (const secret of [
+          "PRIVATE-REJECTION-DETAIL",
+          "PRIVATE-ACTOR-INTENT-Mara",
+          "PRIVATE-ACTOR-INTENT-Ivo",
+        ])
+          expect(safeArtifacts).not.toContain(secret);
+
         expect(stories[0]!.content).toContain("Mara answers.");
         expect(stories[0]!.content).toContain("The bell grows quiet.");
         if (mode === "commit-rejection")
@@ -484,7 +500,12 @@ contributes:
             ? [
                 {
                   type: "operation.failed",
-                  payload: { sessionId: "scene", turnId, count: 1 },
+                  payload: {
+                    sessionId: "scene",
+                    turnId,
+                    count: 1,
+                    messages: [{ messageId: expect.any(String), count: 1 }],
+                  },
                 },
               ]
             : []),

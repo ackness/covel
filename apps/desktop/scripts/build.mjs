@@ -25,6 +25,7 @@ import {
   verifyBundledNotices,
 } from "./staging-files.mjs";
 import { compileStagedServer } from "./compile-server.mjs";
+import { assertMainBundle } from "./main-bundle.mjs";
 import {
   BACKEND_RUNTIME_MODE,
   probeBackendRuntime,
@@ -80,6 +81,8 @@ console.log("\n[2/4] Bundling main process and preload...");
 const bundleOptions = { metafile: true, legalComments: "inline" };
 const mainBundle = await bundleDesktopEntry(desktopRoot, "main", bundleOptions);
 assertDesktopBundle(mainBundle.metafile);
+const mainFile = path.join(desktopRoot, "dist/main.mjs");
+assertMainBundle(fs.readFileSync(mainFile, "utf8"), mainFile);
 
 const preloadBundle = await bundleDesktopEntry(
   desktopRoot,

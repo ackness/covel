@@ -126,7 +126,7 @@ const expectedUI: Record<string, unknown> = {
   },
 };
 // Suspend is consumed before model rendering; delegate and search-tools have dedicated executor paths.
-const excluded = ["suspend", "delegate", "search-tools"];
+const excluded = ["suspend", "delegate", "delegate-batch", "search-tools"];
 
 describe("builtin tool envelopes", () => {
   it("covers every reserved builtin", () => {
@@ -169,7 +169,7 @@ describe("builtin tool envelopes", () => {
       for (const module of createMemoryTools({ search: async () => [] }))
         registry.registerBuiltin(module);
       expect([...registry.builtinTools.keys()].sort()).toEqual(
-        [...Object.keys(cases), "suspend", "delegate"].sort(),
+        [...Object.keys(cases), "suspend", "delegate", "delegate-batch"].sort(),
       );
       const module = registry.find(name, "p");
       if (!module) throw new Error(`Missing builtin: ${name}`);

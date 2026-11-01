@@ -509,6 +509,10 @@ export type CovelEvent =
         readonly sessionId: string;
         readonly turnId: string;
         readonly count: number;
+        readonly messages: readonly {
+          readonly messageId: string;
+          readonly count: number;
+        }[];
       };
     }
   // System
@@ -928,6 +932,8 @@ export interface SnapshotMessage {
   readonly runtimeId?: string;
   readonly kind?: string;
   readonly block?: Readonly<Record<string, unknown>>;
+  /** Immutable notice about attached operations at this story's commit. */
+  readonly operationFailures?: import("../schemas/story-operation-failures.js").StoryOperationFailures;
   /** A story message's segments; see `Message.segments`. */
   readonly segments?: readonly StoryMessageSegment[];
   /** A player's message: the resolved actions it carried; see `Message.actions`. */

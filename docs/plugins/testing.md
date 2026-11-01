@@ -61,6 +61,8 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 .../my-plugin/runtimes/analyst/RUNTIME.md: schedule.stage: Invalid option: expected one of "setup"|"pre-turn"|"narrative"|"post-turn"|"audit"; correct this field using the current plugin manifest reference
 ```
 
+CLI 把首个失败阶段的错误写入 stderr，把已收集的警告写入 stdout；有错误的包也会显示这些警告。有错误时退出码为 `1`，只有警告时为 `0`，未提供路径参数或传入不支持的选项时为 `2`。应用内可以查看其他可独立检查的错误，见[应用内校验](../reference/plugin-installation.md#应用内校验)。
+
 它不做的事：不运行入口文件、guard 和函数。所以“声明了一个工具，但代码里没有注册”它查不出来。这要靠下面两种测试。
 
 ## 单元测试

@@ -45,3 +45,138 @@ describe("reload hydration order", () => {
     ]);
   });
 });
+
+it("recovers a missing marker without losing live text, loaded pages, segments or actions", () => {
+  const story: StreamMessage = {
+    ...row("story", "assistant", "story", "turn", "now"),
+    content: "Live text.",
+    segments: [{ kind: "narration", text: "Live text." }],
+  };
+  const old = row("older-page", "user", undefined, "old-turn", "before");
+  const recovered = {
+    ...story,
+    content: "Older response text.",
+    operationFailures: { count: 1 },
+  };
+  const state = reducer(
+    {
+      ...initialState,
+      olderMessagesCursor: "page-anchor",
+      messages: [old, story],
+    },
+    { type: "MERGE_RECOVERED_MESSAGES", messages: [recovered] },
+  );
+  expect(state.messages).toEqual([
+    old,
+    { ...story, operationFailures: { count: 1 } },
+  ]);
+  expect(state.olderMessagesCursor).toBe("page-anchor");
+  const stale = reducer(state, {
+    type: "MERGE_RECOVERED_MESSAGES",
+    messages: [story],
+  });
+  expect(stale.messages).toEqual(state.messages);
+  const reset = reducer(stale, { type: "RESET_SESSION" });
+  expect(reset.messages).toEqual([]);
+});
+
+it("replaces a closed stream with its durable annotated row after losing the notice event", () => {
+  const story = {
+    ...row("saved", "assistant", "story", "turn", "now"),
+    runtimeId: "teller",
+    operationFailures: { count: 1 },
+  };
+  const state = reducer(
+    {
+      ...initialState,
+      messages: [
+        {
+          ...story,
+          id: "stream_turn_teller",
+          content: "",
+          operationFailures: undefined,
+        },
+      ],
+    },
+    { type: "MERGE_RECOVERED_MESSAGES", messages: [story] },
+  );
+  expect(state.messages).toEqual([story]);
+});
+
+it("fills a missing notice on a page overlap while retaining the loaded window and cursor", () => {
+  const story = row("story", "assistant", "story", "turn", "now");
+  const result = reducer(
+    { ...initialState, messages: [story] },
+    {
+      type: "PREPEND_MESSAGES",
+      messages: [
+        {
+          ...story,
+          content: "Stale response text",
+          operationFailures: { count: 2 },
+        },
+      ],
+      cursor: "next-page",
+    },
+  );
+  expect(result.messages).toEqual([
+    { ...story, operationFailures: { count: 2 } },
+  ]);
+  expect(result.olderMessagesCursor).toBe("next-page");
+});
+
+it.each([false, true])(
+  "completes a recovered durable story once even with a placeholder: %s",
+  (withPlaceholder) => {
+    const story: StreamMessage = {
+      ...row("saved", "assistant", "story", "turn", "now"),
+      runtimeId: "teller",
+      content: "Final story.",
+      segments: [{ kind: "narration", text: "Final story." }],
+    };
+    const saved = { ...story, operationFailures: { count: 1 } };
+    const placeholder = {
+      ...story,
+      id: "stream_turn_teller",
+      content: "Partial",
+      segments: undefined,
+    };
+    const state = reducer(
+      {
+        ...initialState,
+        messages: withPlaceholder ? [saved, placeholder] : [saved],
+      },
+      {
+        type: "COMPLETE_MESSAGE",
+        turnId: "turn",
+        runtimeId: "teller",
+        message: story,
+      },
+    );
+    expect(state.messages).toEqual([saved]);
+    const replaced = reducer(reducer(state, { type: "RESET_SESSION" }), {
+      type: "MERGE_RECOVERED_MESSAGES",
+      messages: [story],
+    });
+    expect(replaced.messages).toEqual([story]);
+  },
+);
+
+it.each([
+  { role: "user" as const, operationFailures: { count: 1 } },
+  { kind: "plugin", operationFailures: { count: 1 } },
+  { operationFailures: { count: 0 } },
+  { operationFailures: { count: 1, privateDetail: "hidden" } },
+])("does not preserve an invalid host notice on completion: %j", (extra) => {
+  const story = row("saved", "assistant", "story", "turn", "now");
+  const state = reducer(
+    { ...initialState, messages: [{ ...story, ...extra }] },
+    {
+      type: "COMPLETE_MESSAGE",
+      turnId: "turn",
+      runtimeId: "teller",
+      message: story,
+    },
+  );
+  expect(state.messages).toEqual([story]);
+});

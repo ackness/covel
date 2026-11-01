@@ -42,6 +42,7 @@
 | **suspend** | builtin | — | auto-allow | 用表单字段声明答案，挂起等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
 | **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；可通过写服务暂存操作 | `stagesWrites` |
+| **delegate-batch** | builtin | — | auto-allow | 有界并发委托独立子 agent，准入和结果保持输入顺序 | `stagesWrites` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
 | **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
@@ -100,7 +101,7 @@ runtime 声明的 `tools.plugin` 中有工具未注册时，即使它被 `tools.
 
 agent 的一条模型回复可以包含多个工具调用。调用经过 `PreToolUse` 改写后，只有在 runtime 已授权、工具声明 `readOnly: true` 且 `concurrencySafe: true` 时才进入并行池。连续满足条件的调用组成一池，最多同时执行 8 个。`concurrencySafe` 是作者的承诺：工具与其他只读调用并发时不会通过共享状态产生副作用；内核会拒绝只读工具返回的写入和事件，但不能检查外部副作用。
 
-其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 没有声明安全并发，始终串行。
+其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 和 `delegate-batch` 都是屏障。只有一次 batch 内部的子 agent 并发运行。
 
 工具消息、调用记录、proposal 和事件都按模型给出的顺序汇总，不按完成时间排序。池中某个工具触发自己的 `timeoutMs` 时，它返回 `timeout` 并计入失败调用；其他调用和后续循环继续。没有默认的单工具超时，省略时仍受 runtime 总时限约束；会等待网络读取的并发工具应自行设置 `timeoutMs`。
 
@@ -608,7 +609,9 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 校验和可用 topic 的列举交给一个事件目录（`EventDirectoryLike`；服务端的实现在 `apps/server/src/routes/api/bootstrap/event-directory.ts`）。它汇总当前会话里已启用插件的声明。一个 topic 在一个会话里只有一个声明它的插件（见 [plugins.md § 会话插件选择](./plugins.md#会话插件选择)），所以 payload 总是按这唯一的一份 schema 校验。
 
-模型看到的 `topic` schema 是本会话公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。包含 `$ref` / `$defs` 或无法读取的 schema 只展示普通对象。没有公开 topic 时使用通用定义。
+模型看到的 `topic` schema 是本会话可描述的公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `type: "object"` 的 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。框架只在给模型的副本中，为缺少 `type` 的同类型 `enum`、`const`、对象和数组结构补上类型；同类型的组合分支也补上类型。`default`、`examples` 和枚举内的对象仍是数据，不按 schema 改写。作者仍应显式写出类型，例如 `{ "type": "string", "enum": ["day", "night"] }`。
+
+无法安全描述的 topic 从工具的 topic enum 和 payload 分支中一起省略，服务端告警写明 topic 和原因，不阻止故事继续。例如 schema 无法读取、含未展开的引用，或无类型的枚举混用不同类型、字段没有足够信息推导类型。所有公开 topic 都无法描述时，该会话不提供 `emit-event`；没有公开 topic 的会话仍使用通用定义。模型侧的整理不修改作者 schema，执行时仍由原始 schema 校验。
 
 每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保留 topic、描述和必填字段摘要；工具定义已包含的 payload schema 不再重复。schema 在任意深度含 `$ref` / `$defs` 时，目录仍显示完整 payload schema；读取失败时只标注 `(schema unavailable)`。事件发射说明指向工具定义中的 topic 和 payload 格式。
 
@@ -744,6 +747,8 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 
 agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另一个 agent runtime 在这次执行里拿着简报运行，交回输出。在 `agent.tools.builtin` 里列出 `delegate` 才能调用。
 
+`delegate` 和 `delegate-batch` 只在本次执行冻结的会话注册表中有可用目标时提供给模型；没有目标时两个工具都不出现，runtime 照常运行。目标必须是活动的 `subagentOnly` agent，不能是 function 或呈现 runtime。`target` schema 只列出能唯一解析的契约和调用方自己包里的 runtime ID；缺失、暂停或有歧义的契约不列出，暂停提供方仍参与歧义检查。预载和延迟搜索使用同一规则。提示词应先检查工具及所需目标是否可用，否则自行完成任务。实际调用仍重新解析目标；目标消失时返回 `not-found`，不抛出异常。
+
 | 参数        | 类型   | 必需 | 描述                                                                             |
 | ----------- | ------ | ---- | -------------------------------------------------------------------------------- |
 | target      | object | ✓    | `{ contract }`（契约的提供方，任何包）或 `{ runtimeId }`（本包），只能写其中一个 |
@@ -763,6 +768,18 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 - 注解为 `readOnly: false`、`stagesWrites: true`、`idempotent: false`、`concurrencySafe: false`。
 
 契约声明在 `packages/tools/src/builtin/delegate.ts`，执行逻辑在 `packages/runtime/src/agent-loop/subagent-delegate.ts` 和 `subagent-runner.ts`。
+
+#### delegate-batch
+
+在 `agent.tools.builtin` 显式声明 `delegate-batch`，传入 `{requests: [<delegate request>, ...]}`，共 1–32 项。每项沿用上面的 delegate 参数和 brief/data 大小限制。外层未知字段、无效 JSON、空数组或超长数组使整个工具失败，不启动子 agent；单项无效只产生该索引的 `invalid-input` 结果。
+
+成功返回 `{data:{results:[...]}}`，每个输入索引恰有一项：`{ok:true,output}` 或 `{ok:false,error:{code,message}}`。即使全部失败，batch 工具仍成功；父方取消则调用失败，迟到结果丢弃。用量与路由身份只进 trace，不进入回执。staged 提示只统计本次调用保留的操作。
+
+执行沿用同一个 runner，在启动提供方之前按输入顺序认领名额，与其他调用方共享深度、不同演员、调用次数和并发上限。超限项立即返回 `unavailable`，不消耗调用次数，不排队、补位或重试。已准入的失败与取消仍消耗名额。每个子 agent 从同一准入快照独立分叉，兄弟不会获得彼此的回复或 intent。提供方失败只影响该项；父方停止或截止会取消全部活跃子 agent，包括准备与加载。
+
+成功读取、基线和写服务操作仍须等外层工具成功且有效后才接受。失败子项不贡献证据；外层取消时，已成功子项的证据和操作也丢弃。原有的调用方/提供方服务锁和操作序号仍有效，计划顺序不保证服务效果顺序。两个委托工具都保持 `readOnly:false`、`stagesWrites:true`、`idempotent:false`、`concurrencySafe:false`，子 agent 和呈现上下文都不能调用。
+
+任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。`completeAfterTools` 在输出校验前把私密 batch 投影为 `{}`。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
 
 ## Character 管理工具
 
@@ -2085,7 +2102,7 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 
 ## 故事内的演员委托
 
-故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事按计划顺序逐个调用，只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。
+故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事的 parallel 计划使用一次 `delegate-batch`，sequential 计划逐个 `delegate`，按计划顺序只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。
 
 ## 呈现函数的调用边界
 

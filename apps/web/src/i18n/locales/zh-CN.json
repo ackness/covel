@@ -393,7 +393,8 @@
     "setupFailedDetail": "某个准备步骤失败了，重试可继续未完成的步骤。",
     "setupRetry": "重试开局准备",
     "setupUnfinishedTitle": "开局准备尚未完成",
-    "setupUnfinishedDetail": "继续准备，沿用你已填写的内容。",
+    "setupUnfinishedDetail": "某个准备步骤仍在等待，但没有可回答的问题。你可以继续准备，或在「已加载插件」中关闭提供该步骤的插件。",
+    "setupWaitingOn": "等待插件：{{plugins}}",
     "setupContinue": "继续开局准备",
     "setupRetryFailed": "无法重新开始准备，请检查网络后再试。",
     "memoryIndex": {
@@ -1474,6 +1475,7 @@
     "description": "调整外观、模型、扩展包和本地数据。",
     "desktopRefreshFailed": "无法刷新桌面信息，请重试。",
     "providerImportSucceeded": "已导入服务商和模型。",
+    "providerRolesAssigned": "已分配模型用途：{{roles}}",
     "numberExample": "例如 {{value}}",
     "pricePerImageValue": "{{price}}/张",
     "pricePerMillionValue": "{{price}}/百万 token",

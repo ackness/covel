@@ -508,6 +508,17 @@ describe("bundled inventory services through the action API", () => {
         payload: expect.objectContaining({ count: 1 }),
       }),
     ]);
+    const savedStory = (await store.listMessages(sessionId)).find(
+      (message) =>
+        (message.metadata as { turnId?: string }).turnId === row.turnId &&
+        (message.metadata as { kind?: string }).kind === "story",
+    );
+    expect(savedStory?.metadata).toMatchObject({
+      operationFailures: { count: 1 },
+    });
+    expect(
+      events.find(({ type }) => type === "operation.failed")?.payload,
+    ).toMatchObject({ messages: [{ messageId: savedStory!.id, count: 1 }] });
     const messages = await store.listTurnMessages(sessionId);
     expect(
       messages.some(

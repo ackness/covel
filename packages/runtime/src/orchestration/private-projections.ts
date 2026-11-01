@@ -7,6 +7,7 @@ import {
 } from "@covel/shared";
 import {
   DELEGATE_TOOL_NAME,
+  DELEGATE_BATCH_TOOL_NAME,
   delegateParametersSchema,
   parseJsonText,
 } from "@covel/tools";
@@ -63,7 +64,9 @@ export class PrivateDelegationProjection {
         arguments?: unknown;
       };
       if (
-        call.name !== DELEGATE_TOOL_NAME ||
+        ![DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(
+          String(call.name),
+        ) ||
         typeof call.id !== "string" ||
         typeof call.arguments !== "string"
       )
@@ -71,25 +74,35 @@ export class PrivateDelegationProjection {
       try {
         const args: unknown = parseJsonText(call.arguments);
         if (!args || typeof args !== "object") return;
-        // A known private target stays private even when other arguments fail.
-        const parsed = delegateParametersSchema.shape.target.safeParse(
-          (args as { target?: unknown }).target,
-        );
-        if (!parsed.success) return;
-        const target = parsed.data;
-        const providers = privateProviders.filter((provider) =>
-          "contract" in target
-            ? provider.outputContract === target.contract
-            : provider.name === target.runtimeId &&
-              provider.pluginId === callerPluginId,
-        );
-        if (providers.length)
-          this.mark(
-            call.id,
-            providers.some((provider) => provider.concealed)
-              ? "concealed"
-              : "actor",
+        const entries: unknown[] =
+          call.name === DELEGATE_BATCH_TOOL_NAME
+            ? Array.isArray((args as { requests?: unknown }).requests)
+              ? (args as { requests: unknown[] }).requests
+              : []
+            : [args];
+        for (const entry of entries) {
+          // A known private target stays private even when other arguments fail.
+          const parsed = delegateParametersSchema.shape.target.safeParse(
+            entry && typeof entry === "object"
+              ? (entry as { target?: unknown }).target
+              : undefined,
           );
+          if (!parsed.success) continue;
+          const target = parsed.data;
+          const providers = privateProviders.filter((provider) =>
+            "contract" in target
+              ? provider.outputContract === target.contract
+              : provider.name === target.runtimeId &&
+                provider.pluginId === callerPluginId,
+          );
+          if (providers.length)
+            this.mark(
+              call.id,
+              providers.some((provider) => provider.concealed)
+                ? "concealed"
+                : "actor",
+            );
+        }
       } catch {
         /* Invalid JSON has no resolved provider. */
       }

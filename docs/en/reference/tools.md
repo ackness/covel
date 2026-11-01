@@ -42,6 +42,7 @@ Dataset tools write only datasets declared by the caller's package. Arguments st
 | **suspend** | builtin | — | auto-allow | Describe answers with form fields and suspend the runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
 | **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; it can stage operations through write services | `stagesWrites` |
+| **delegate-batch** | builtin | — | auto-allow | Run independent sub-agent requests concurrently, with bounded ordered admission and results | `stagesWrites` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
 | **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
@@ -100,7 +101,7 @@ If a declared `tools.plugin` tool is not registered, even when deferred by `tool
 
 One model reply can contain several agent tool calls. After `PreToolUse` rewrites a call, it joins the parallel pool only when the runtime authorizes its name and the tool declares both `readOnly: true` and `concurrencySafe: true`. Consecutive eligible calls form one pool, with at most 8 running at once. `concurrencySafe` is the author's promise that concurrent reads do not cause side effects through shared state. The kernel rejects writes and events returned by a read-only tool, but cannot inspect external side effects.
 
-Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` does not declare concurrency safety and always runs serially.
+Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` and `delegate-batch` are barriers. Only the children inside one batch run concurrently.
 
 Tool messages, call records, proposals and events are collected in model order, regardless of completion order. A pooled call that exceeds its own `timeoutMs` returns `timeout` and counts as a failed call; its siblings and the loop continue. There is no default per-tool timeout. Omitting it keeps the runtime deadline as the limit; concurrent tools that wait on network reads should set `timeoutMs`.
 
@@ -610,7 +611,9 @@ Emit a domain event. The event must be declared in `events` by an enabled plugin
 
 Validation, and the list of available topics, are handled by an event directory (`EventDirectoryLike`; the server implementation is in `apps/server/src/routes/api/bootstrap/event-directory.ts`). It collects the declarations of the enabled plugins in the current session. In one session, a topic has only one plugin that declares it (see [plugins.md § Session plugin selection](./plugins.md#session-plugin-selection)). So the payload is always checked against that single schema.
 
-The model-facing `topic` schema is an enum of this session's advertised topics. `data` carries the topic's payload schema, or an `anyOf` with one titled branch per topic when several topics are available. A single topic uses its schema directly under `data`; `$schema` and `$id` are omitted. Schemas containing `$ref` or `$defs`, and unreadable schemas, are advertised as plain objects. With no advertised topics, the generic definition is used.
+The model-facing `topic` schema is an enum of this session's advertised topics that can be described. `data` carries the topic's payload schema, or an `anyOf` with `type: "object"` and one titled branch per topic when several topics are available. A single topic uses its schema directly under `data`; `$schema` and `$id` are omitted. In the model-facing copy only, the framework adds a missing `type` to homogeneous `enum` values, `const` values, and object and array structures. Compositions whose branches share a type also receive that type. `default`, `examples`, and objects inside enums remain data and are not rewritten as schemas. Authors should still write explicit types, such as `{ "type": "string", "enum": ["day", "night"] }`.
+
+A topic that cannot be described safely is omitted from both the topic enum and payload branches. A server warning names the topic and reason, and the story can continue. Examples include unreadable schemas, unresolved references, untyped enums mixing types, and fields without enough information to infer a type. If none of the advertised topics can be described, that session does not offer `emit-event`; sessions without advertised topics still use the generic definition. Model-facing normalization leaves the author schema unchanged; execution still validates against the original schema.
 
 Session preparation refreshes this definition every turn, including sessions without a character schema. Execution still accepts a string topic and delegates payload validation to the directory's Ajv validator: an unknown topic remains `refused`, not `invalid-input`. The prompt catalogue keeps the topic, description and required-field summary. It no longer repeats payload schemas carried by the tool definition. Schemas with `$ref` or `$defs` at any depth still appear in full in the catalogue; unreadable schemas only show `(schema unavailable)`. The event-emission instruction points to the topics and payload shapes in the tool definition.
 
@@ -746,6 +749,8 @@ The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the
 
 An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents): another agent runtime runs with the brief inside this execution and returns its output. List `delegate` in `agent.tools.builtin` to call it.
 
+`delegate` and `delegate-batch` are offered only when this execution's frozen session registry has an eligible target. With none, both tools are absent and the runtime continues normally. Targets must be active `subagentOnly` agents, excluding functions and presentation runtimes. Their `target` schemas list only uniquely resolved contracts and runtime IDs in the caller's own package. Missing, paused or ambiguous contracts are omitted; paused providers still participate in ambiguity checks. Preloading and deferred search use the same rule. Prompts should check that the tool and required target are offered, otherwise complete the task themselves. Calls still resolve their targets again: a target that disappears returns `not-found` without throwing.
+
 | Parameter   | Type   | Required | Description                                                                                           |
 | ----------- | ------ | -------- | ----------------------------------------------------------------------------------------------------- |
 | target      | object | ✓        | `{ contract }` (the contract's provider, any package) or `{ runtimeId }` (own package), never both    |
@@ -765,6 +770,18 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 - Its annotations are `readOnly: false`, `stagesWrites: true`, `idempotent: false` and `concurrencySafe: false`.
 
 The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execution logic is in `packages/runtime/src/agent-loop/subagent-delegate.ts` and `subagent-runner.ts`.
+
+#### delegate-batch
+
+Declare `delegate-batch` explicitly in `agent.tools.builtin`. Pass `{requests: [<delegate request>, ...]}` with 1–32 entries. Each entry uses the delegate parameters above and the same brief/data limits. Unknown outer fields, invalid JSON, and an empty or oversized array fail the whole tool before any child starts. An invalid individual entry produces only its own indexed `invalid-input` result.
+
+Success returns `{data:{results:[...]}}`, one result per input index: `{ok:true,output}` or `{ok:false,error:{code,message}}`. Even an entirely failed batch succeeds as a tool; parent cancellation fails the invocation and discards late results. Usage and routing identities stay in trace, outside these receipts. A staged notice counts only operations retained by this invocation.
+
+The execution's existing runner claims requests in input order before starting providers. It shares depth, distinct-actor, call and concurrent caps with other callers. Excess attempts receive `unavailable` immediately, consume no call, and never queue, refill or retry. Admitted failures and cancellations consume their claims. Each child gets an independent fork of the same admission snapshot; siblings never receive each other's reply or intent. Provider failures affect only that entry; a parent stop or deadline cancels all active children, including preparation and loading.
+
+Successful reads, baselines and write-service operations remain speculative until the enclosing live tool succeeds. Failed children contribute none; a cancelled outer tool discards even successful children's evidence and operations. The existing per-caller/provider service lock and operation sequence still apply; plan order does not promise service effect order. Both delegation tools keep `readOnly:false`, `stagesWrites:true`, `idempotent:false`, `concurrencySafe:false`, and are unavailable to sub-agents and presentation contexts.
+
+If any entry resolves to a private actor or concealed provider, the whole batch's arguments and results are redacted from persisted/public copies, including malformed entries with known targets. The authorized live parent can use accepted outputs. `completeAfterTools` projects a private batch to `{}` before output validation. See [trace correlation and privacy](./protocol.md#sub-agent-events).
 
 ## Character management tools
 
@@ -2087,7 +2104,7 @@ Actor output contains dialogue/action segments without a speaker, plus optional 
 
 ## Delegating actors inside a story
 
-A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator calls once per actor in plan order, combines successful public segments and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.
+A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator uses one `delegate-batch` for a parallel plan and individual `delegate` calls for a sequential plan, combines successful public segments in plan order and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.
 
 ## Presentation call boundaries
 

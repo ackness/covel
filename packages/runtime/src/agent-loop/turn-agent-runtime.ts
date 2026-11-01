@@ -10,6 +10,7 @@ import type {
   RuntimeActivation,
   ExecutionContext,
   InputSlot,
+  ProposalReadPrecondition,
 } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
@@ -36,6 +37,8 @@ import {
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
 import { createStorySegmentStream } from "./story-stream.js";
 import { attachReadDependencies } from "../read-dependencies.js";
+import { selfDataReadObserver } from "./selfdata-read-baselines.js";
+import { baselinesFor, createReadBaselineRecorder } from "../read-baselines.js";
 import type { RootOperationStage } from "../operations/operation-stage.js";
 import {
   createPluginDataVisibility,
@@ -151,6 +154,31 @@ export async function executeAgentRuntime({
     runId,
   });
 
+  // The agent owns this recorder from prompt assembly onward. A guard that
+  // allowed it to run kept none of its reads.
+  const pluginDataVisibility = createPluginDataVisibility({
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    runId,
+    writes: upstreamPluginData,
+    ...(upstreamOf ? { upstreamOf } : {}),
+    ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
+  });
+  const toolExecutor = deps.toolExecutor
+    ? withAgentToolSurface(
+        deps.toolExecutor,
+        await prepareAgentToolSurface({
+          manifest,
+          input,
+          deps,
+          loaded,
+          canWrite: operations !== undefined,
+        }),
+        deps.services,
+        operations,
+      )
+    : undefined;
+
   // Every agent applies the actual target budget immediately before calling it.
   const budgetEligible =
     deps.estimator !== undefined && deps.contextBudget !== undefined;
@@ -199,6 +227,7 @@ export async function executeAgentRuntime({
   const visibleStory = filterRuntimeHistory(executionStory, manifest.name);
 
   let includedSegments: readonly IncludedPromptSegment[] = [];
+  let injectedReads: readonly ProposalReadPrecondition[] = [];
   const assembleContext = async () => {
     const promptSegments =
       (
@@ -253,7 +282,24 @@ export async function executeAgentRuntime({
         : {}),
     } as const;
 
-    return buildContext({ ...buildParams, store: deps.store });
+    const reads = createReadBaselineRecorder();
+    const context = await buildContext({
+      ...buildParams,
+      store: deps.store,
+      onSelfDataRead: selfDataReadObserver(
+        manifest,
+        toolExecutor,
+        {
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+        },
+        reads,
+      ),
+    });
+    injectedReads = reads.snapshot();
+    return context;
   };
 
   let assembled = await assembleContext();
@@ -273,6 +319,11 @@ export async function executeAgentRuntime({
       assembled = await assembleContext();
     }
   }
+
+  // A compaction preview is never delivered to the model. Only the final
+  // assembly contributes reads to this invocation's earliest external basis.
+  for (const read of injectedReads)
+    baselinesFor(pluginDataVisibility.recorder).observe(read);
 
   // ── PostContextAssembly hook ─────────────────────────────────
   // Turn-level, once per runtime: lets plugins rewrite the assembled system
@@ -314,15 +365,6 @@ export async function executeAgentRuntime({
     ...shapedContext.messages,
   ];
 
-  // The agent's own recorder; a guard that let it run kept none.
-  const pluginDataVisibility = createPluginDataVisibility({
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    runId,
-    writes: upstreamPluginData,
-    ...(upstreamOf ? { upstreamOf } : {}),
-    ...(deps.pluginDataReadProbe ? { probe: deps.pluginDataReadProbe } : {}),
-  });
   const worldBase = deps.store
     ? await createWorldModelView(
         deps.worldModelReads ?? deps.store,
@@ -340,22 +382,6 @@ export async function executeAgentRuntime({
       ? createStorySegmentStream(deps.onDelta)
       : deps.onDelta;
   const streamDeps = onDelta === deps.onDelta ? deps : { ...deps, onDelta };
-  // Imported services become tools for this run; the surface wraps the raw
-  // executor, then `delegate` (which runs a sub-agent) wraps that.
-  const toolExecutor = deps.toolExecutor
-    ? withAgentToolSurface(
-        deps.toolExecutor,
-        await prepareAgentToolSurface({
-          manifest,
-          input,
-          deps,
-          loaded,
-          canWrite: operations !== undefined,
-        }),
-        deps.services,
-        operations,
-      )
-    : undefined;
   const loopDeps =
     deps.subagents && toolExecutor
       ? {

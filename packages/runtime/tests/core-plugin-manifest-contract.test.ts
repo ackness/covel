@@ -176,6 +176,7 @@ describe("core plugin manifest contract", () => {
       "memory-search",
       "emit-event",
       "delegate",
+      "delegate-batch",
     ]);
 
     const guide = requireRuntime(manifests, "guide");

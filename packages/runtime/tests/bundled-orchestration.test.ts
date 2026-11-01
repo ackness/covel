@@ -17,7 +17,12 @@ import {
 import { characterActorOutputJsonSchema } from "@covel/shared";
 import type { LLMAdapter, StorySegment, RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import { delegateTool, tool, z, withPendingProposals } from "@covel/tools";
+import {
+  createDefaultToolRegistry,
+  tool,
+  z,
+  withPendingProposals,
+} from "@covel/tools";
 import { loadRuntimeBundle } from "../../test-runtime/src/runtime-loading.js";
 import {
   PluginServiceRegistry,
@@ -27,7 +32,7 @@ import {
   createToolExecutor,
   createTurnEmitter,
 } from "../src/index.js";
-import { prose, toolCall } from "./_helpers/agent-loop-fixture.js";
+import { prose, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
 import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runtime-gateway.js";
 
 const root = path.resolve(import.meta.dirname, "../../../plugins");
@@ -38,6 +43,9 @@ describe("bundled orchestration", () => {
     "inherited-world-failure",
     "concealed-actor",
     "director",
+    "director-parallel",
+    "director-parallel-one-fails",
+    "director-parallel-all-fail",
     "director-no-slot",
     "director-no-gateway",
     "one-fails",
@@ -53,6 +61,8 @@ describe("bundled orchestration", () => {
     "commits the real dialogue pipeline with isolated contributions: %s",
     async (mode) => {
       const directorMode = mode.startsWith("director");
+      const parallel = mode.startsWith("director-parallel");
+      const rendezvous = latch(2);
       const inherited = mode.startsWith("inherited-world");
       const store = createMemoryStore();
       const active = [
@@ -137,6 +147,7 @@ describe("bundled orchestration", () => {
       });
       const actorRequests: string[] = [];
       const parentRequests: string[] = [];
+      const parentToolNames: string[][] = [];
       const directorRequests: string[] = [];
       const adapter: ModelProviderAdapter = {
         generateText: async () => {
@@ -150,7 +161,7 @@ describe("bundled orchestration", () => {
           return {
             object: request.schema.parse({
               actors: [{ character: "Mara" }, { character: "Ivo" }],
-              order: "sequential",
+              order: parallel ? "parallel" : "sequential",
               narrator: "after",
               yieldHint: "user",
             }),
@@ -302,6 +313,7 @@ describe("bundled orchestration", () => {
         generate: async (request) => {
           const text = JSON.stringify(request.messages);
           if (text.includes("Play only the character assigned")) {
+            if (parallel) await rendezvous();
             if (!inherited || !request.messages.some((m) => m.role === "tool"))
               actorRequests.push(text);
             const name =
@@ -325,8 +337,9 @@ describe("bundled orchestration", () => {
               return toolCall(actorRead.name, {}, `read-${name}`);
             if (inherited) expect(text).toContain("staged profile");
             if (
-              mode === "all-fail" ||
-              (["one-fails", "inherited-world-failure"].includes(mode) &&
+              mode.endsWith("all-fail") ||
+              ((mode.endsWith("one-fails") ||
+                mode === "inherited-world-failure") &&
                 name === "Ivo")
             )
               throw new Error("Actor model unavailable");
@@ -338,6 +351,7 @@ describe("bundled orchestration", () => {
             );
           }
           parentRequests.push(text);
+          parentToolNames.push((request.tools ?? []).map((tool) => tool.name));
           const block = request.messages
             .map((message) =>
               typeof message.content === "string" ? message.content : "",
@@ -354,6 +368,7 @@ describe("bundled orchestration", () => {
                 plan?: {
                   value?: {
                     actors: { character: string }[];
+                    order: "parallel" | "sequential";
                     cast: string[];
                     brief: string;
                     status?: string;
@@ -366,7 +381,9 @@ describe("bundled orchestration", () => {
           const delegateIds = new Set(
             request.messages
               .flatMap((message) => message.toolCalls ?? [])
-              .filter((call) => call.name === "delegate")
+              .filter((call) =>
+                ["delegate", "delegate-batch"].includes(call.name),
+              )
               .map((call) => call.id),
           );
           const receipts = request.messages.filter(
@@ -375,7 +392,25 @@ describe("bundled orchestration", () => {
               message.toolCallId !== undefined &&
               delegateIds.has(message.toolCallId),
           );
-          const next = plan?.actors[receipts.length];
+          if (parallel && !receipts.length && plan?.actors.length) {
+            expect(
+              request.tools?.some((t) => t.name === "delegate-batch"),
+            ).toBe(true);
+            expect(text).toContain("delegate-batch");
+            delegates.push(...plan.actors.map((a) => a.character));
+            return toolCall(
+              "delegate-batch",
+              {
+                requests: plan.actors.map((a) => ({
+                  target: { contract: "character-actor@1" },
+                  character: a.character,
+                  brief: "Respond to the bell in the room.",
+                })),
+              },
+              "actor-batch",
+            );
+          }
+          const next = parallel ? undefined : plan?.actors[receipts.length];
           if (next) {
             delegates.push(next.character);
             return toolCall(
@@ -395,6 +430,22 @@ describe("bundled orchestration", () => {
                   segments?: { kind: "dialogue" | "action"; text: string }[];
                 };
               };
+              if (parallel) {
+                const batch = result.data as {
+                  results: {
+                    ok: boolean;
+                    output?: {
+                      segments: { kind: "dialogue" | "action"; text: string }[];
+                    };
+                  }[];
+                };
+                return batch.results.flatMap((entry, i) =>
+                  (entry.output?.segments ?? []).map((segment) => ({
+                    ...segment,
+                    speaker: plan!.actors[i]!.character,
+                  })),
+                );
+              }
               return (result.data?.segments ?? []).map((segment) => ({
                 ...segment,
                 speaker: plan!.actors[index]!.character,
@@ -419,6 +470,13 @@ describe("bundled orchestration", () => {
           );
         },
       };
+      const builtin = createDefaultToolRegistry({
+        store,
+        eventDirectory: {
+          listTopics: async () => [],
+          validate: async () => ({ ok: true }),
+        },
+      });
       try {
         const execution = await executeTurn(
           {
@@ -451,7 +509,7 @@ describe("bundled orchestration", () => {
             store,
             llm,
             gateway:
-              mode === "director"
+              mode === "director" || parallel
                 ? gateway
                 : mode === "director-no-slot"
                   ? createPluginRuntimeGateway(fullGateway)
@@ -482,11 +540,9 @@ describe("bundled orchestration", () => {
             toolExecutor: createToolExecutor({
               store,
               findTool: (name) =>
-                name === "delegate"
-                  ? delegateTool
-                  : name === actorRead.name
-                    ? actorRead
-                    : undefined,
+                name === actorRead.name
+                  ? actorRead
+                  : builtin.find(name, "chat-mode-narrator"),
             }),
             loadRuntime: async (manifest) => {
               if (manifest === worldProducer)
@@ -561,6 +617,14 @@ describe("bundled orchestration", () => {
         const content = JSON.stringify(stories);
         expect(content).toContain("The bell falls silent.");
         expect(content).not.toContain("PRIVATE-INTENT");
+        if (
+          parallel &&
+          !mode.endsWith("all-fail") &&
+          !mode.endsWith("one-fails")
+        )
+          expect(content.indexOf("Mara answers.")).toBeLessThan(
+            content.indexOf("Ivo answers."),
+          );
         if (mode === "invalid-selection") {
           expect(
             execution.result.runtimeResults.find(
@@ -570,7 +634,7 @@ describe("bundled orchestration", () => {
           expect(content).toContain("Correct the actor names.");
         }
         if (
-          directorMode ||
+          (directorMode && !mode.endsWith("all-fail")) ||
           [
             "success",
             "concealed-actor",
@@ -581,13 +645,15 @@ describe("bundled orchestration", () => {
         )
           expect(content).toContain("Mara answers.");
         if (
-          directorMode ||
+          (directorMode &&
+            !mode.endsWith("all-fail") &&
+            !mode.endsWith("one-fails")) ||
           ["success", "concealed-actor", "inherited-world"].includes(mode)
         )
           expect(content).toContain("Ivo answers.");
         else expect(content).not.toContain("Ivo answers.");
         if (
-          mode === "all-fail" ||
+          mode.endsWith("all-fail") ||
           mode === "missing-actor" ||
           mode === "ambiguous-actor" ||
           mode === "missing-policy" ||
@@ -597,6 +663,13 @@ describe("bundled orchestration", () => {
           mode === "zero-caps"
         )
           expect(content).toContain('"yield":"user"');
+        if (mode === "missing-actor") {
+          expect(parentToolNames.length).toBeGreaterThan(0);
+          for (const offered of parentToolNames) {
+            expect(offered).not.toContain("delegate");
+            expect(offered).not.toContain("delegate-batch");
+          }
+        }
         expect(delegates).toEqual(
           [
             "missing-policy",
@@ -627,7 +700,7 @@ describe("bundled orchestration", () => {
         });
         expect(JSON.stringify(trace)).not.toContain("PRIVATE-INTENT");
         if (
-          directorMode ||
+          (directorMode && !mode.endsWith("all-fail")) ||
           [
             "success",
             "concealed-actor",
@@ -644,7 +717,7 @@ describe("bundled orchestration", () => {
         expect(
           parentRequests.some((request) => request.includes("SABLE-WITNESS")),
         ).toBe(true);
-        if (mode === "director") {
+        if (mode === "director" || parallel) {
           expect(directorRequests).toHaveLength(1);
           expect(directorRequests[0]).toContain("Mara");
           expect(directorRequests[0]).toContain("MARA-PRIVATE-EXCHANGE");
@@ -654,7 +727,7 @@ describe("bundled orchestration", () => {
             /private-a|private-b|characterId|seatId|actorId/,
           );
         } else expect(directorRequests).toHaveLength(0);
-        if (directorMode && mode !== "director") {
+        if (directorMode && mode !== "director" && !parallel) {
           const note = "Director unavailable; mention strategy used.";
           expect(JSON.stringify(trace)).toContain(note);
           expect(

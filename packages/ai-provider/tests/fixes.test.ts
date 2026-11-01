@@ -204,7 +204,7 @@ describe("providerRequestMetadata cannot override critical fields", () => {
     expect(body["model"]).toBe("gpt-4o");
   });
 
-  it("openai-chat generateText: tools turn reasoning off only on OpenAI's own GPT-6 Chat", async () => {
+  it("openai-chat generateText: tools turn reasoning off for GPT-6 through any provider", async () => {
     const tools = [
       {
         type: "function" as const,
@@ -232,7 +232,7 @@ describe("providerRequestMetadata cannot override critical fields", () => {
     };
     expect((await send("openai", true))["reasoning_effort"]).toBe("none");
     expect(await send("openai", false)).not.toHaveProperty("reasoning_effort");
-    expect(await send("relay", true)).not.toHaveProperty("reasoning_effort");
+    expect((await send("relay", true))["reasoning_effort"]).toBe("none");
   });
 
   it("openai-chat generateText: metadata cannot override messages", async () => {

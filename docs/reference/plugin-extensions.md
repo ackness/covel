@@ -31,6 +31,8 @@
 | UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                                        |
 | 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                                       |
 
+agent 可用 [`delegate-batch`](./tools.md#delegate-batch) 并发委托独立请求。写服务仍共用调用方/提供方锁和操作序号；结果按索引排列不代表服务按该顺序取得锁。
+
 下面是表里装不下的细节。
 
 函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点和读服务的 `ctx.pluginData` 只读。别的插件要改这个插件的数据，调用它的[写服务](#写服务)。
@@ -234,6 +236,8 @@ export default function (covel) {
 
 事件 schema 在启动时和新版本准备期间读取并编译。编译结果和编译失败都按版本缓存，然后才发布新声明。同一路径的文件修正要到下一次重载才生效。已经被取用的旧版本即使还没处理过这个事件，也保持原来的校验器，不受磁盘上后续编辑的影响。
 
+给模型的事件 schema 是独立的描述副本；补全类型或省略无法描述的 topic 不改变原始校验器。作者应为枚举显式声明 `type`。类型推导、省略与告警规则见 [`emit-event`](./tools.md#emit-event)。
+
 ### 启动时就解析失败的插件
 
 启动时静态解析失败的社区插件也保留它的发现位置，并接受文件监听。
@@ -424,7 +428,7 @@ covel.registerService({
 - 同一个调用方对同一个提供者的调用一个接一个执行，包括并行的工具调用和并行的子 agent；每次调用都读得到前面调用暂存的写入。
 - 每个操作留下一条[操作记录](./transactions.md#操作记录)，提交后写明它最终提交、失败还是被撤回。
 
-故事附带的操作在提交时失败，不会让故事失败。提交后玩家立即看到固定提示，说明有多少操作没有生效；调试 trace 保留 `operation.failed`。这样的失败不算执行失败：回合流里没有它的 `proposal.failed`，回合照常显示已提交。下一次玩家或续行执行中，发起操作的 agent 收到 `operations-not-applied` 块，列出上一个已提交回合失败操作的摘要，最多十条；子 agent 发起的操作，由这个子 agent 下次被调用时收到。其他 runtime 和定向重试不显示这个通知。通知只跟随最新的已提交玩家或续行回合，详见[回合管线](../internals/flow.md)。
+故事附带的操作在提交时失败，不会让故事失败。提交后玩家立即看到固定提示，说明有多少操作没有生效；调试 trace 保留 `operation.failed`。这样的失败不算执行失败：回合流里没有它的 `proposal.failed`，回合照常显示已提交。下一次玩家或续行执行中，发起操作的 agent 收到 `operations-not-applied` 块，列出上一个已提交回合失败操作的摘要，最多十条；子 agent 发起的操作，由这个子 agent 下次被调用时收到。其他 runtime 和定向重试不显示这个通知。通知只跟随最新的已提交玩家或续行回合，详见[回合管线](../internals/flow.md)。 玩家还会在对应故事下看到持久提示，刷新、翻页、分叉或 checkpoint 恢复后仍在。提示只保存计数，按界面语言绘制，不提供重试或操作详情；后续成功不会清除旧提示。字段与归属见[消息 API](./api.md#get-apisessionsidmessages)、[事务](./transactions.md#写服务的操作)和[协议](./protocol.md)。
 
 每次提供者调用保留独立的外部读取依据，包括前面已接受的调用。过时的派生替换以 `conflict` 进入该操作既有的失败域，不增加调用方或提供者故障计数，也不重跑服务。故事附带操作失败时正文保留。见[读取基线](./transactions.md#read-baselines)。
 

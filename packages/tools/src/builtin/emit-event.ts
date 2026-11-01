@@ -15,6 +15,7 @@ import { z } from "zod";
 import { withModelView, ToolError, tool } from "@covel/plugin-handlers-utils";
 import { withEmittedEvents } from "../result.js";
 import type { ToolModule } from "../types.js";
+import { modelToolSchema } from "../model-tool-schema.js";
 
 /** Structural dep — implemented by the server's session event directory. */
 export interface EventDirectoryLike {
@@ -102,19 +103,32 @@ export function buildSessionEmitEventTool(
 ): ToolModule | undefined {
   if (topics.length === 0) return undefined;
   const base = createEmitEventTool(deps);
-  const payloads = topics.map(({ topic, schema }) => {
-    if (!schema || schemaHasReferences(schema))
-      return { type: "object", title: topic };
-    const { $schema: _schema, $id: _id, ...payload } = schema;
-    return { ...payload, title: topic };
+  const described = topics.flatMap(({ topic, schema }) => {
+    try {
+      if (!schema) throw new Error("schema unavailable");
+      const payload = modelToolSchema(schema);
+      if (payload.type !== "object")
+        throw new Error("payload must describe an object");
+      return [{ topic, payload: { ...payload, title: topic } }];
+    } catch (error) {
+      console.warn(
+        `[emit-event] topic "${topic}" omitted from model tool schema: ${error instanceof Error ? error.message : "schema cannot be described"}`,
+      );
+      return [];
+    }
   });
+  if (described.length === 0) return undefined;
+  const payloads = described.map(({ payload }) => payload);
   return {
     ...base,
     jsonSchema: {
       type: "object",
       properties: {
-        topic: { type: "string", enum: topics.map(({ topic }) => topic) },
-        data: payloads.length === 1 ? payloads[0] : { anyOf: payloads },
+        topic: { type: "string", enum: described.map(({ topic }) => topic) },
+        data:
+          payloads.length === 1
+            ? payloads[0]
+            : { type: "object", anyOf: payloads },
       },
       required: ["topic", "data"],
     },

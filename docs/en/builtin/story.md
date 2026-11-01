@@ -34,7 +34,7 @@ How to choose:
 >
 > Either narrator can run on its own. Scene Stage adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
 
-When [Inventory](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items and `change-inventory` to settle purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Inventory, the tools are absent and narration continues as usual.
+When [Inventory](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items. `change-inventory` stages purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Inventory, the tools are absent and narration continues as usual.
 
 ## Narrator (`narrator`)
 
@@ -187,7 +187,9 @@ The story interface also provides the host’s [advancement and Stop controls](.
 
 ## Ensemble dialogue and character actors
 
-Dialogue Narrator remains playable alone. With optional Character Actor (`character-agent`) and Turn Policy (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. This consumer runs sequentially even for parallel advice; each actor adds a model call and director adds another. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
+Without an eligible sub-agent target, the narrator receives no delegation tools. If the tools omit the actor target required by a plan, it also narrates alone and yields to the player.
+
+Dialogue Narrator remains playable alone. With optional Character Actor (`character-agent`) and Turn Policy (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. Parallel plans use one bounded `delegate-batch`; sequential plans retain single `delegate` calls. Successful contributions stay in plan order. Concurrent dispatch does not reduce actor model calls or token costs; director adds another model call. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
 
 Turn Policy offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).
 

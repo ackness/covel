@@ -54,12 +54,17 @@ export default defineConfig({
   testDir: "./tests/e2e",
   outputDir: "./tests/e2e/artifacts",
   fullyParallel: true,
+  timeout: process.env.CI ? 60_000 : 30_000,
+  expect: { timeout: process.env.CI ? 10_000 : 5_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: [["html", { outputFolder: "tests/e2e/report" }], ["list"]],
+  reporter: [
+    ["html", { outputFolder: "tests/e2e/report", open: "never" }],
+    ["list"],
+  ],
   use: {
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "on-first-retry",
   },
@@ -107,7 +112,7 @@ export default defineConfig({
           url: `${e2eServerOrigin}/api/health`,
           reuseExistingServer: false,
           gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-          timeout: 60_000,
+          timeout: process.env.CI ? 120_000 : 60_000,
         },
         {
           command:
@@ -116,7 +121,7 @@ export default defineConfig({
           url: e2eWebOrigin,
           reuseExistingServer: false,
           gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-          timeout: 60_000,
+          timeout: process.env.CI ? 120_000 : 60_000,
         },
         {
           command:
@@ -125,7 +130,7 @@ export default defineConfig({
           url: e2eBuildOrigin,
           reuseExistingServer: false,
           gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-          timeout: 120_000,
+          timeout: process.env.CI ? 180_000 : 120_000,
         },
       ],
 });

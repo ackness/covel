@@ -35,11 +35,11 @@ afterEach(() => {
   source?.dispose();
   vi.unstubAllGlobals();
 });
-async function setup() {
+async function setup(pack = themeFixture()) {
   const { store } = await themeStore();
   current.store = store;
-  source = await openTheme(store);
-  await source.select(choiceOf(themeFixture()));
+  source = await openTheme(store, "session-one", pack);
+  await source.select(choiceOf(pack));
   return source;
 }
 const t = i18n.t.bind(i18n) as TFunction;
@@ -60,6 +60,61 @@ const props = {
   onGenerateImage: vi.fn(),
   t,
 };
+
+function expectHostNotice() {
+  const notice = screen.getByTestId("story-operation-failure-notice");
+  expect(notice.hasAttribute("data-covel-host-controls")).toBe(true);
+  expect(notice.closest("[data-covel-theme-part]")).toBeNull();
+  expect(notice.closest("[data-covel-theme-scope]")).toBeNull();
+  const style = document.querySelector<HTMLStyleElement>(
+    "style[data-plugin-theme-style]",
+  );
+  if (style) {
+    const rules = Array.from(style.sheet?.cssRules ?? []);
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      const selector = (rule as CSSStyleRule).selectorText;
+      // No plugin rule may reach the footer, its ancestors or its children.
+      expect(notice.closest(selector)).toBeNull();
+      expect(notice.querySelector(selector)).toBeNull();
+    }
+  }
+}
+
+it.each(["parsed", "detailed"] as const)(
+  "keeps the operation footer host-owned in %s when a theme makes story colors indistinguishable",
+  async (viewMode) => {
+    const palette = {
+      "--story-color": "#ffffff",
+      "--color-background": "#ffffff",
+      "--color-muted-foreground": "#ffffff",
+      "--surface-story": "#ffffff",
+    };
+    const theme = await setup({
+      ...themeFixture(),
+      tokens: { light: palette, dark: palette },
+    });
+    const view = render(
+      <ChatMessageRenderer
+        {...props}
+        viewMode={viewMode}
+        msg={{ ...props.msg, operationFailures: { count: 1 } }}
+      />,
+    );
+    expect(
+      view.container.querySelector("[data-covel-theme-part]"),
+    ).not.toBeNull();
+    expectHostNotice();
+    const notice = screen.getByTestId("story-operation-failure-notice");
+    const before = notice.outerHTML;
+    await act(async () => theme.select(null));
+    expectHostNotice();
+    expect(notice.outerHTML).toBe(before);
+    await act(async () => theme.select(choiceOf(themeFixture())));
+    expectHostNotice();
+    expect(notice.outerHTML).toBe(before);
+  },
+);
 it.each([false, true])(
   "preserves paragraph spacing and the default markup with theme selected: %s",
   async (selected) => {
@@ -201,7 +256,13 @@ it.each([false, true])(
         updatedAt: "2026-01-01",
       },
       world: null,
-      messages: [{ ...props.msg, content: "Current narration." }],
+      messages: [
+        {
+          ...props.msg,
+          content: "Current narration.",
+          operationFailures: { count: 1 },
+        },
+      ],
       executing: false,
       executionError: null,
       executionSteps: [],
@@ -225,6 +286,7 @@ it.each([false, true])(
       </>
     );
     const view = render(stage(false));
+    expectHostNotice();
     expect(screen.getByTestId("stage-choices")).toBeDefined();
     expect(
       (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
@@ -241,6 +303,7 @@ it.each([false, true])(
         theme.scope,
       );
     view.rerender(stage(true));
+    expectHostNotice();
     expect(screen.getByTestId("stage-dialog").querySelector("p")).toBe(
       dialogue,
     );
@@ -250,6 +313,7 @@ it.each([false, true])(
       const reset = screen.getByRole("button", { name: "使用默认外观" });
       expect(reset.closest("[data-covel-theme-part]")).toBeNull();
       await act(async () => fireEvent.click(reset));
+      expectHostNotice();
       expect(document.querySelector("[data-covel-theme-part]")).toBeNull();
       expect(
         document.querySelector("style[data-plugin-theme-style]"),

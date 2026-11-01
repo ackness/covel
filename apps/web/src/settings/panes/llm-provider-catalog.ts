@@ -1,4 +1,5 @@
 import type {
+  LlmSlotInfo,
   PresetSummary,
   ProviderModelProfile,
   SlotConfigEntry,
@@ -46,14 +47,16 @@ export function bindFirstProviderModel(
   existingProfiles: readonly ProviderModelProfile[],
   modelRef: string | undefined,
   serverPresets: readonly PresetSummary[],
-  serverSlotIds: readonly string[],
+  serverSlots: Readonly<
+    Record<string, Pick<LlmSlotInfo, "builtinDefault" | "serverKeyConfigured">>
+  >,
 ): Record<string, SlotConfigEntry> {
   const alreadyHasModel = existingProfiles.some(
     (profile) => profile.models.length > 0,
   );
   if (!modelRef || alreadyHasModel) return slotConfig;
 
-  const assignedServerSlots = new Set(serverSlotIds);
+  const assignedServerSlots = new Set(Object.keys(serverSlots));
   for (const preset of serverPresets) {
     for (const slotId of preset.slotBindings ?? []) {
       assignedServerSlots.add(slotId);
@@ -62,7 +65,15 @@ export function bindFirstProviderModel(
   const binding = { modelRef };
   let nextSlots = slotConfig;
   for (const slotId of ["story", "plugin"] as const) {
-    if (slotConfig[slotId] || assignedServerSlots.has(slotId)) continue;
+    const serverSlot = serverSlots[slotId];
+    const unkeyedBuiltinDefault =
+      serverSlot?.builtinDefault === true &&
+      serverSlot.serverKeyConfigured === false;
+    if (
+      slotConfig[slotId] ||
+      (assignedServerSlots.has(slotId) && !unkeyedBuiltinDefault)
+    )
+      continue;
     if (nextSlots === slotConfig) nextSlots = { ...slotConfig };
     nextSlots[slotId] = binding;
   }

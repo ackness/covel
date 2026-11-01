@@ -46,7 +46,7 @@ describe("framework tool names", () => {
     ]) {
       // A sub-agent can stage operations through write services, and two
       // runs are neither the same answer nor safe side by side in one batch.
-      if (module.name === "delegate") {
+      if (["delegate", "delegate-batch"].includes(module.name)) {
         expect(module.annotations).toEqual({
           readOnly: false,
           stagesWrites: true,

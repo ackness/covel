@@ -88,6 +88,13 @@ export {
   DELEGATE_TOOL_NAME,
   SUBAGENT_BRIEF_MAX_CHARS,
 } from "./builtin/delegate.js";
+export {
+  delegateBatchTool,
+  delegateBatchParametersSchema,
+  delegateBatchEnvelopeSchema,
+  DELEGATE_BATCH_TOOL_NAME,
+  DELEGATE_BATCH_MAX_REQUESTS,
+} from "./builtin/delegate-batch.js";
 export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
 export {

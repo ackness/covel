@@ -143,7 +143,7 @@ describe("catalog-backed reasoning controls", () => {
   });
 
   it("uses a whenUnlisted rule only for IDs the catalog lacks", () => {
-    expect(levels("gpt-6", "custom")).toEqual([
+    expect(levels("gpt-6", "custom", "openai-responses-v1")).toEqual([
       "none",
       "low",
       "medium",
@@ -155,7 +155,7 @@ describe("catalog-backed reasoning controls", () => {
       levels(
         "gpt-6.1-sol",
         "custom",
-        "openai-chat-v1",
+        "openai-responses-v1",
         "https://api.cortecs.ai/v1",
       ),
     ).not.toContain("none");

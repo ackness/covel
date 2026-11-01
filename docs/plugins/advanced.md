@@ -713,7 +713,7 @@ export default async function compose(ctx) {
 }
 ```
 
-也可把 story 的 RUNTIME.md 换成下面的 agent 版本；不要同时安装两个故事 runtime。delegate 仍逐个执行：
+也可把 story 的 RUNTIME.md 换成下面的 agent 版本；不要同时安装两个故事 runtime。并行计划使用一次批量委托：
 
 <!-- orchestration-agent -->
 
@@ -727,12 +727,17 @@ io:
     contract: narrative-engine@2
 agent:
   tools:
-    builtin: [delegate]
+    builtin: [delegate, delegate-batch]
     services:
       - { contract: turn-policy@1, as: choose-speakers }
 ---
 Call choose-speakers with present character names and recent story segments.
-Delegate each planned reply with target contract character-actor@1 and character name.
+Only follow the plan if its delegation tool is offered and lists character-actor@1.
+Otherwise narrate alone and yield user, even with a nonempty plan.
+For a nonempty parallel plan, call delegate-batch once with requests in plan order.
+For a sequential plan, call delegate once per actor in plan order.
+Each request uses target contract character-actor@1, character name and an observable brief.
+Never share sibling replies, private cues or intent in a parallel brief.
 Combine successful segments in policy order, supply speaker names, and add narration.
 Keep intent private. If a policy or actor is unavailable, continue with a valid narrator fallback.
 ```

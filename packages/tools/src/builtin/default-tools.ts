@@ -2,6 +2,7 @@
 
 import { ToolRegistry } from "../registry.js";
 import { createCharacterTools } from "./character-tools.js";
+import { delegateBatchTool } from "./delegate-batch.js";
 import { delegateTool } from "./delegate.js";
 import { createEmitEventTool, type EventDirectoryLike } from "./emit-event.js";
 import { runtimeDoneTool } from "./runtime-done.js";
@@ -28,6 +29,7 @@ export function createDefaultToolRegistry(
   registry.registerBuiltin(suspendTool);
   registry.registerBuiltin(runtimeDoneTool);
   registry.registerBuiltin(delegateTool);
+  registry.registerBuiltin(delegateBatchTool);
   registry.registerBuiltin(worldDimensionGetTool);
   registry.registerBuiltin(worldDimensionListTool);
   registry.registerBuiltin(

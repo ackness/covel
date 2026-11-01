@@ -18,7 +18,12 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { delegateTool, tool, ToolRegistry } from "@covel/tools";
+import {
+  delegateTool,
+  delegateBatchTool,
+  tool,
+  ToolRegistry,
+} from "@covel/tools";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -212,6 +217,7 @@ const writeTool = (name: string) =>
 function makeRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   registry.registerBuiltin(delegateTool);
+  registry.registerBuiltin(delegateBatchTool);
   registry.registerBuiltin(readTool("get-character"));
   registry.registerBuiltin(writeTool("sync-characters"));
   registry.registerPlugin("actor-pkg", readTool("peek"));
@@ -992,7 +998,13 @@ describe("sub-agent caps and tool filter", () => {
     });
     const provider = actor(undefined, {
       tools: {
-        builtin: ["delegate", "get-character", "sync-characters", "suspend"],
+        builtin: [
+          "delegate",
+          "delegate-batch",
+          "get-character",
+          "sync-characters",
+          "suspend",
+        ],
         plugin: ["peek", "poke", "unknown"],
         services: [
           { contract: "inventory.items@1", name: "inventory-items" },
@@ -1051,8 +1063,10 @@ describe("delegate result envelopes", () => {
         inner,
         {
           inFlight: 0,
+          availableTargets: () => [],
           privateTargetKind: () => undefined,
           run: async () => answer,
+          runBatch: async (args) => args.map(() => answer),
         },
         {
           caller: {

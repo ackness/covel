@@ -1,3 +1,4 @@
+export * from "./schemas/story-operation-failures.js";
 export * from "./schemas/session-settings.js";
 export {
   playerInputSubmissionSchema,
@@ -174,24 +175,7 @@ export {
   DEFAULT_LLM_OUTPUT_TOKENS,
   resolveLlmTokenLimits,
 } from "./utils/llm-token-limits.js";
-export {
-  DEFAULT_FALLBACK_LOCALE,
-  DEFAULT_LOCALE,
-  LOCALE_CODE_RE,
-  LOCALE_DEFINITIONS,
-  MAX_LOCALE_CODE_LENGTH,
-  SUPPORTED_LOCALES,
-  canonicalizeLocale,
-  defineLocaleRegistry,
-  isDefaultLocale,
-  isLocaleCode,
-  localeDisplayName,
-  localeLanguage,
-  localeLookupCandidates,
-  localeRegistry,
-  localesShareLanguageAndScript,
-  normalizeLocale,
-} from "@covel/plugin-handlers-utils";
+export * from "./locale.js";
 export {
   INSTRUCTION_LOCALES,
   instructionLocaleFor,

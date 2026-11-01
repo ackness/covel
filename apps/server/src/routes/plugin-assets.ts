@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   PLUGIN_ASSETS_PATH,
   PLUGIN_ASSET_DIGEST_PATTERN,
@@ -36,7 +36,12 @@ function injectBridge(html: string, entry: string): string {
 /** Public files, limited to the registry snapshot's published listing. */
 export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
   const app = new Hono();
-  app.get(`${PLUGIN_ASSETS_PATH}/:pluginId/:digest/*`, async (c) => {
+  const missing = (c: Context) => {
+    c.header("Cache-Control", "no-store");
+    c.header("X-Content-Type-Options", "nosniff");
+    return c.json(errorBody("File not found"), 404);
+  };
+  app.use(`${PLUGIN_ASSETS_PATH}/*`, (c, next) => {
     // CORS is global; opaque frames must load classic subresources without CORS.
     for (const name of [...c.res.headers.keys()])
       if (
@@ -44,23 +49,21 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
         name.toLowerCase() === "set-cookie"
       )
         c.header(name, undefined);
-    const missing = () => {
-      c.header("Cache-Control", "no-store");
-      c.header("X-Content-Type-Options", "nosniff");
-      return c.json(errorBody("File not found"), 404);
-    };
+    return next();
+  });
+  app.get(`${PLUGIN_ASSETS_PATH}/:pluginId/:digest/*`, async (c) => {
     const pluginId = c.req.param("pluginId");
     const digest = c.req.param("digest");
     if (
       !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(pluginId) ||
       !PLUGIN_ASSET_DIGEST_PATTERN.test(digest)
     )
-      return missing();
+      return missing(c);
     const raw = c.req.path.split("/").slice(4).join("/");
-    if (/[\\\0]|%2f|%5c|%00|\/\//i.test(raw)) return missing();
+    if (/[\\\0]|%2f|%5c|%00|\/\//i.test(raw)) return missing(c);
     const segments = raw.split("/");
     if (segments.some((segment) => !segment || segment.startsWith(".")))
-      return missing();
+      return missing(c);
     let relativePath: string;
     try {
       const decoded = segments.map((segment) => decodeURIComponent(segment));
@@ -69,16 +72,16 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
           (segment) => /[/\\\0]/.test(segment) || segment.startsWith("."),
         )
       )
-        return missing();
+        return missing(c);
       relativePath = decoded.join("/");
     } catch {
-      return missing();
+      return missing(c);
     }
     const root = await findPluginAssetRoot(registry, pluginId, digest);
-    if (!root) return missing();
+    if (!root) return missing(c);
     const bridge = root.purpose === "page" && relativePath === BRIDGE_PATH;
     const metadata = root.files.get(relativePath);
-    if (!bridge && !metadata) return missing();
+    if (!bridge && !metadata) return missing(c);
     let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
     let body: Buffer | undefined;
     const entry = root.purpose === "page" && relativePath === root.entry;
@@ -134,7 +137,7 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
         console.warn(
           `[plugin-assets] ${pluginId}: ${relativePath} changed since the page was indexed`,
         );
-        return missing();
+        return missing(c);
       }
     }
     c.header(
@@ -162,7 +165,10 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
     }
     if (body)
       return new Response(new Uint8Array(body), { headers: c.res.headers });
-    return missing();
+    return missing(c);
   });
+  // Dot-segment normalization may remove the ID/digest before routing. Reserve
+  // the entire namespace so unmatched paths cannot reach public files or the SPA.
+  app.all(`${PLUGIN_ASSETS_PATH}/*`, missing);
   return app;
 }

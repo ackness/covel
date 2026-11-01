@@ -49,6 +49,8 @@ Rules:
 
 In **Settings → Install & manage**, choose character cards or lorebooks under **Import SillyTavern content**, preview the report, then import them as one world. This performs data conversion without executing scripts. The world is available immediately. See [the import guide](../worlds/import-sillytavern.md) for mapping, omissions and samples. Browser-private BrowserVault import is not supported.
 
+Standalone lorebooks use a character's name for fixed token substitutions only when the same import contains exactly one card. Embedded books use their owner. With no cards or multiple cards, standalone character tokens are removed and reported; see [lorebook conversion](../worlds/import-sillytavern.md#how-lorebooks-map).
+
 ## API
 
 These endpoints are controlled by the "allow install" switch. Writing a world also has to follow the global world write permission.
@@ -128,7 +130,7 @@ A world ZIP without `id` takes its single package folder’s name, or the ZIP fi
 
 When no valid upload ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`, without using the temporary directory name. The static validator reports manifest parsing errors separately.
 
-Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays the first failure, while the app continues collecting problems that can be checked independently.
+Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays errors from the first failing stage and any warnings already collected, while the app can also list other independently checkable errors. If a manifest cannot be parsed or loaded, warnings that need its definition are unavailable.
 
 Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.
 

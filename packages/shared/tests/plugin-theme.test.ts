@@ -247,6 +247,51 @@ it.each([
 ])("rejects forbidden story declaration %s", (declaration) =>
   expect(css(`.story{${declaration}}`).success).toBe(false),
 );
+
+describe.each(["story", "dialogue", "surface"])(
+  "%s cannot conceal host notices",
+  (part) => {
+    it.each([
+      "opacity:0",
+      "color:transparent",
+      "color:rgba(0,0,0,0)",
+      "display:none",
+      "visibility:hidden",
+      "font-size:0rem",
+      "line-height:0",
+      "position:fixed",
+      "inset:0",
+      "z-index:999999",
+      "overflow:hidden",
+      "clip-path:inset(100%)",
+      "clip:rect(0,0,0,0)",
+      "text-indent:-9999px",
+    ])(
+      "rejects hiding or overlaying with %s at both CSS boundaries",
+      (value) => {
+        expect(css(`.${part}{${value}}`).success).toBe(false);
+        expect(
+          validateCompiledPluginThemeCss(`${selector(part)}{${value}}`, context)
+            .success,
+        ).toBe(false);
+      },
+    );
+  },
+);
+
+it.each([
+  "[data-covel-host-controls]",
+  '[data-testid="story-operation-failure-notice"]',
+  '.story [data-testid="story-operation-failure-notice"]',
+])("rejects targeting the host footer with %s", (target) => {
+  expect(css(`${target}{color:var(--story-color)}`).success).toBe(false);
+  expect(
+    validateCompiledPluginThemeCss(
+      `${selector("story")} ${target}{color:var(--story-color)}`,
+      context,
+    ).success,
+  ).toBe(false);
+});
 it.each([
   '@import "x";',
   "@font-face{font-family:x;src:url(x)}",

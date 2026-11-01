@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import * as asar from "@electron/asar";
+import { assertMainBundle } from "./main-bundle.mjs";
 
 /** Check the bytes Electron will load, never the source checkout's dist tree. */
 export function verifyPackagedMain(resources, { mainSha256, preloadSha256 }) {
@@ -49,4 +50,8 @@ export function verifyPackagedMain(resources, { mainSha256, preloadSha256 }) {
       );
     }
   }
+  assertMainBundle(
+    asar.extractFile(archive, main, false).toString("utf8"),
+    `${archive}/${main}`,
+  );
 }

@@ -1,3 +1,4 @@
+import { projectStoryOperationFailures } from "@covel/shared";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
 import type { StreamMessage } from "./types.js";
 
@@ -43,8 +44,15 @@ export function mergeRecoveredMessages(
             : {};
         const actions =
           !row.actions && message.actions ? { actions: message.actions } : {};
-        if (segments.segments || actions.actions)
-          replace(existing, { ...row, ...segments, ...actions });
+        const notice =
+          !isStream(row) &&
+          row.role === "assistant" &&
+          row.kind === "story" &&
+          !row.operationFailures
+            ? projectStoryOperationFailures(message)
+            : {};
+        if (segments.segments || actions.actions || notice.operationFailures)
+          replace(existing, { ...row, ...segments, ...actions, ...notice });
       }
       // A later live completion may have arrived while the snapshot was read.
       previous = existing;

@@ -409,7 +409,8 @@
     "setupFailedDetail": "A setup step failed; retry to finish the remaining steps.",
     "setupRetry": "Retry setup",
     "setupUnfinishedTitle": "Setup is not finished yet",
-    "setupUnfinishedDetail": "Continue setup with the choices you already made.",
+    "setupUnfinishedDetail": "A setup step is still waiting, with no question to answer. Continue setup, or turn off the plugin that provides this step in Loaded Plugins.",
+    "setupWaitingOn": "Waiting on: {{plugins}}",
     "setupContinue": "Continue setup",
     "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
     "memoryIndex": {
@@ -1524,6 +1525,7 @@
     "description": "Adjust appearance, models, packages, and local data.",
     "desktopRefreshFailed": "Could not refresh desktop information. Try again.",
     "providerImportSucceeded": "Providers and models imported.",
+    "providerRolesAssigned": "Model roles assigned: {{roles}}",
     "numberExample": "e.g. {{value}}",
     "pricePerImageValue": "{{price}}/img",
     "pricePerMillionValue": "{{price}}/M",

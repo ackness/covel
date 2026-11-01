@@ -468,14 +468,6 @@ function expectSnapshotReadsOnly(views: number) {
 }
 
 it("refreshes an observer's clock when a resumed turn has no domain writes", async () => {
-  api.getSessionView.mockResolvedValue({
-    session: { ...session, completedPlayerTurns: 2 },
-    messages: [],
-    characters: [],
-    executionSteps: [],
-    submittedInteractions: [],
-    execution: { state: "idle" },
-  });
   const { streams, options } = setup();
   options.dispatch.mockImplementation((action) => {
     options.stateRef.current = reducer(options.stateRef.current, action);
@@ -489,13 +481,23 @@ it("refreshes an observer's clock when a resumed turn has no domain writes", asy
   expect(options.stateRef.current.suspensions.map((item) => item.id)).toEqual([
     "form",
   ]);
+  expectSnapshotReadsOnly(1);
+  expect(options.stateRef.current.session?.completedPlayerTurns).toBe(1);
+  api.getSessionView.mockResolvedValue({
+    session: { ...session, completedPlayerTurns: 2 },
+    messages: [],
+    characters: [],
+    executionSteps: [],
+    submittedInteractions: [],
+    execution: { state: "idle" },
+  });
   await act(async () => {
     streams[0]!.emit({
       ...event("turn.resumed"),
       payload: { suspensionId: "form", turnId: "turn", sessionId: session.id },
     });
   });
-  expectSnapshotReadsOnly(1);
+  expectSnapshotReadsOnly(2);
   expect(options.stateRef.current.session?.completedPlayerTurns).toBe(2);
   expect(options.stateRef.current.suspensions).toEqual([]);
 });
@@ -530,38 +532,48 @@ it("refreshes an observer's messages and clock when another client commits a tur
   expect(options.workspace.run).not.toHaveBeenCalled();
 });
 
-it("rereads a snapshot that predates a turn completion received during recovery", async () => {
-  const pending = deferred<unknown>();
-  const committed = {
-    session: { ...session, completedPlayerTurns: 2 },
-    messages: [historyMessage(1)],
-    characters: [],
-    executionSteps: [],
-    submittedInteractions: [],
-    execution: { state: "completed", turnId: "turn" },
-  };
-  api.getSessionView
-    .mockReturnValueOnce(pending.promise)
-    .mockResolvedValue(committed);
-  const { streams, options } = setup();
-  options.dispatch.mockImplementation((action) => {
-    options.stateRef.current = reducer(options.stateRef.current, action);
-  });
-  streams[0]!.emit(event("system.reset"));
-  streams[0]!.emit({
-    ...event("turn.completed"),
-    topic: "game",
-    payload: { sessionId: session.id, turnId: "turn", durationMs: 1 },
-  });
-  await act(async () => {
-    pending.resolve({ ...committed, session, messages: [] });
-  });
-  expect(api.getSessionView).toHaveBeenCalledTimes(2);
-  expect(
-    options.stateRef.current.messages.map((message) => message.id),
-  ).toEqual(["m1"]);
-  expect(options.stateRef.current.session?.completedPlayerTurns).toBe(2);
-});
+it.each(["turn.completed", "turn.suspended"])(
+  "rereads a snapshot that predates %s received during recovery",
+  async (type) => {
+    const pending = deferred<unknown>();
+    const committed = {
+      session: { ...session, completedPlayerTurns: 2 },
+      messages: [historyMessage(1)],
+      characters: [],
+      executionSteps: [],
+      submittedInteractions: [],
+      execution: { state: "completed", turnId: "turn" },
+    };
+    api.getSessionView
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(committed);
+    const { streams, options } = setup();
+    options.dispatch.mockImplementation((action) => {
+      options.stateRef.current = reducer(options.stateRef.current, action);
+    });
+    streams[0]!.emit(event("system.reset"));
+    streams[0]!.emit({
+      ...event(type),
+      topic: "game",
+      payload: {
+        sessionId: session.id,
+        turnId: "turn",
+        durationMs: 1,
+        ...(type === "turn.suspended"
+          ? { suspensionId: "form", runtimeId: "r" }
+          : {}),
+      },
+    });
+    await act(async () => {
+      pending.resolve({ ...committed, session, messages: [] });
+    });
+    expect(api.getSessionView).toHaveBeenCalledTimes(2);
+    expect(
+      options.stateRef.current.messages.map((message) => message.id),
+    ).toEqual(["m1"]);
+    expect(options.stateRef.current.session?.completedPlayerTurns).toBe(2);
+  },
+);
 
 it("reads only the snapshot for committed state and shows what a turn changed", async () => {
   const committed = {

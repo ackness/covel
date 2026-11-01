@@ -1,3 +1,4 @@
+import { createHookPipeline } from "@covel/runtime";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,6 +15,7 @@ export async function createPresentationBrowserFixture(
   outcome: "updated" | "exhausted" | "failed" = "updated",
   options: {
     failInline?: boolean;
+    failOperation?: boolean;
     budgetCalls?: number;
     yields?: readonly ("continue" | "user")[];
     autoAdvanceLimit?: number;
@@ -34,6 +36,7 @@ runtime:
   io:
     visibility: story
     output: { contract: narrative-engine@2 }
+  ${options.failOperation ? "agent: { tools: { services: [{ contract: purchase@1, as: purchase }] } }" : ""}
 ---
 Tell a public scene story.
 `,
@@ -125,10 +128,52 @@ runtime:
       },
     }),
   );
+  const hooks = createHookPipeline();
+  let operationRequested = false;
+  if (options.failOperation) {
+    await mkdir(join(builtin, "purchase-probe"));
+    await writeFile(
+      join(builtin, "purchase-probe", "PLUGIN.md"),
+      `---
+id: purchase-probe
+description: Scripted purchase operation
+entry: ./entry.mjs
+contributes:
+  services: [{ contract: purchase@1, access: write, modelFacing: true }]
+---
+`,
+    );
+    await writeFile(
+      join(builtin, "purchase-probe", "entry.mjs"),
+      `export default function(api) {
+      const z = api.toolkit.z;
+      api.registerService({ name: "purchase", contract: "purchase@1", access: "write", modelFacing: true, description: "Purchase a book", input: z.object({}), output: z.object({ staged: z.boolean() }), handler: async (_input, ctx) => { await ctx.pluginData.set("purchases", "book", true); return { staged: true }; } });
+    }`,
+    );
+    hooks.register<{ proposal: import("@covel/shared").Proposal }>({
+      id: "refuse-purchase",
+      pluginId: "purchase-probe",
+      event: "PreStateCommit",
+      handler: async (_ctx, { proposal }) =>
+        proposal.source.pluginId === "purchase-probe"
+          ? { action: "abort", reason: "Purchase refused" }
+          : { action: "continue" },
+    });
+  }
   const boot = await bootstrapApi({
     store,
     mediaStore,
     storeBackend: "memory",
+    ...(options.failOperation
+      ? ({
+          perRequestMiddleware: [
+            async (c, next) => {
+              c.set("hookPipeline", hooks);
+              await next();
+            },
+          ],
+        } satisfies Partial<Parameters<typeof bootstrapApi>[0]>)
+      : {}),
     pluginsDir: builtin,
     pluginsDirs: [builtin, user],
     canRunRuntimeJobWithServerServices: () => true,
@@ -166,6 +211,17 @@ runtime:
     },
     llmAdapter: {
       generate: async () => {
+        if (options.failOperation && !operationRequested) {
+          operationRequested = true;
+          return {
+            content: null,
+            toolCalls: [
+              { id: "purchase-call", name: "purchase", arguments: "{}" },
+            ],
+            finishReason: "tool_calls",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        }
         const index = ++calls;
         return {
           content: JSON.stringify({
@@ -217,6 +273,7 @@ runtime:
         "scene-stage",
         "soundtrack",
         "presentation-probe",
+        ...(options.failOperation ? ["purchase-probe"] : []),
       ],
       autoAdvanceLimit: options.autoAdvanceLimit ?? 0,
       locale: "en-US",
@@ -330,8 +387,9 @@ runtime:
 /** An isolated HTTP host for the real browser's session and streaming requests. */
 export async function startPresentationBrowserHost(
   outcome: "updated" | "exhausted" | "failed" = "updated",
+  options: Parameters<typeof createPresentationBrowserFixture>[1] = {},
 ) {
-  const fixture = await createPresentationBrowserFixture(outcome);
+  const fixture = await createPresentationBrowserFixture(outcome, options);
   const server = serve({
     fetch: fixture.app.fetch,
     port: 0,
