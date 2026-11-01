@@ -1,12 +1,21 @@
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { convertStImport } from "../../src/world-import/st/convert.js";
+import type { LoreEntry } from "../../src/world-import/st/convert-lorebook.js";
 import {
   convert,
   characterBook,
   v2Card,
   worldInfo,
 } from "../helpers/st-card-fixtures.js";
+
+function loreEntries(result: Awaited<ReturnType<typeof convert>>): LoreEntry[] {
+  return parse(
+    result.entries
+      .find((entry) => entry.relativePath === "data/lorebook.yaml")!
+      .content.toString(),
+  ) as LoreEntry[];
+}
 
 it("combines standalone object and array books with character books", async () => {
   const result = await convert([
@@ -223,12 +232,183 @@ it("reports {{char}} and <BOT> in a standalone lorebook instead of removing them
     }),
   );
 });
-it("reports unresolved character macros in a lorebook uploaded beside a card", async () => {
-  const result = await convert([
-    v2Card({ name: "Mira" }),
-    worldInfo([{ key: ["beacon"], content: "{{char}} hides a beacon." }]),
-  ]);
-  expect(result.report.items).toContainEqual(
-    expect.objectContaining({ code: "macros-removed", count: 1 }),
+it.each([true, false])(
+  "resolves standalone object and array lorebooks with one card (card first: %s)",
+  async (cardFirst) => {
+    const entry = {
+      key: ["{{char}}", "<BOT>", "Mira", "vault[1].*"],
+      content: "{{char}} keeps <BOT>'s key.",
+      comment: "{{char}} / <BOT>",
+      disable: true,
+    };
+    const objectBook = { ...worldInfo([entry]), name: "Mira" };
+    const arrayBook = {
+      name: "Mira",
+      entries: [{ ...entry, name: entry.comment, content: "<BOT> waits." }],
+    };
+    const card = v2Card();
+    const books = [objectBook, arrayBook];
+    const result = await convert(
+      cardFirst ? [card, ...books] : [...books, card],
+    );
+    const entries = loreEntries(result);
+    const embedded = "The beacon flashes blue before a storm.";
+    const external = ["Mira keeps Mira's key.", "Mira waits."];
+    expect(entries.map((item) => item.content)).toEqual(
+      cardFirst ? [embedded, ...external] : [...external, embedded],
+    );
+    expect(entries.map((item) => item.id)).toEqual([
+      "st-mira-1",
+      "st-mira-1-2",
+      "st-mira-1-3",
+    ]);
+    for (const item of entries.filter((item) => item.content !== embedded)) {
+      expect(item).toMatchObject({
+        title: "Mira / Mira",
+        keys: ["Mira", "vault[1].*"],
+        enabled: false,
+        strategy: "selective",
+      });
+      for (const output of result.entries.filter(
+        (output) => output.relativePath !== "data/lorebook.yaml",
+      ))
+        expect(output.content.toString()).not.toContain(item.content);
+      expect(result.report.world.summary).not.toContain(item.content);
+    }
+    expect(result.report.world.name).toBe("Mira");
+    expect(result.report.sources.map((source) => source.kind)).toEqual(
+      cardFirst
+        ? ["card-v2", "lorebook", "lorebook"]
+        : ["lorebook", "lorebook", "card-v2"],
+    );
+    expect(
+      result.report.items.some((item) => item.code === "macros-removed"),
+    ).toBe(false);
+  },
+);
+it.each(["Lena", "Mira"])(
+  "keeps embedded books local and external books unresolved with two cards (%s)",
+  async (secondName) => {
+    const card = (name: string) =>
+      v2Card({
+        name,
+        character_book: {
+          entries: [
+            {
+              keys: ["{{char}}", "<BOT>"],
+              content: "{{char}} meets <BOT>.",
+              name: "{{char}} / <BOT>",
+            },
+          ],
+        },
+      });
+    const result = await convert([
+      card("Mira"),
+      worldInfo([
+        {
+          key: ["beacon"],
+          content: "{{char}} meets <BOT>.",
+          comment: "{{char}} / <BOT>",
+        },
+      ]),
+      card(secondName),
+    ]);
+    expect(loreEntries(result)).toEqual([
+      expect.objectContaining({
+        content: "Mira meets Mira.",
+        title: "Mira / Mira",
+        keys: ["Mira"],
+      }),
+      expect.objectContaining({
+        content: "meets .",
+        title: "/",
+        keys: ["beacon"],
+      }),
+      expect.objectContaining({
+        content: `${secondName} meets ${secondName}.`,
+        title: `${secondName} / ${secondName}`,
+        keys: [secondName],
+      }),
+    ]);
+    expect(
+      result.report.items.filter((item) => item.code === "macros-removed"),
+    ).toEqual([expect.objectContaining({ source: "card1.json", count: 4 })]);
+  },
+);
+it.each([
+  ["en-US", "the player"],
+  ["zh-CN", "玩家"],
+])("resolves player macros without a card in %s", async (locale, player) => {
+  const result = await convert(
+    [
+      worldInfo([
+        {
+          key: ["{{user}}", "<USER>"],
+          content: "{{char}} <BOT> {{user}} <USER>",
+          comment: "{{user}} / <USER>",
+        },
+      ]),
+    ],
+    locale,
   );
+  expect(loreEntries(result)[0]).toMatchObject({
+    content: `${player} ${player}`,
+    title: `${player} / ${player}`,
+    keys: [player],
+  });
+  expect(result.report.items).toContainEqual(
+    expect.objectContaining({
+      code: "macros-removed",
+      source: "card0.json",
+      count: 2,
+    }),
+  );
+});
+it.each([0, 1, 2])(
+  "preserves a character-only selective key only with one card (cards: %s)",
+  async (count) => {
+    const result = await convert([
+      worldInfo([
+        { key: ["{{char}}"], content: "A secret held by the keeper." },
+        { constant: true, content: "A constant fallback." },
+      ]),
+      ...Array.from({ length: count }, () =>
+        v2Card({ character_book: undefined }),
+      ),
+    ]);
+    expect(loreEntries(result).map((entry) => entry.content)).toEqual(
+      count === 1
+        ? ["A secret held by the keeper.", "A constant fallback."]
+        : ["A constant fallback."],
+    );
+    expect(
+      result.report.items.some((item) => item.code === "entry-skipped-no-keys"),
+    ).toBe(count !== 1);
+    expect(
+      result.report.items.filter((item) => item.code === "macros-removed"),
+    ).toEqual(
+      count === 1
+        ? []
+        : [expect.objectContaining({ source: "card0.json", count: 1 })],
+    );
+    if (count === 1) expect(loreEntries(result)[0]?.keys).toEqual(["Mira"]);
+  },
+);
+it("keeps book names, tags and source identities outside the standalone character context", async () => {
+  const result = await convert([
+    {
+      name: "{{char}} Almanac",
+      tags: ["{{char}}"],
+      entries: [{ content: "{{char}} keeps the key.", constant: true }],
+    },
+    v2Card(),
+  ]);
+  expect(result.report.sources[0]).toMatchObject({ name: "Almanac" });
+  expect(loreEntries(result)[0]).toMatchObject({
+    id: "st-almanac-1",
+    content: "Mira keeps the key.",
+  });
+  expect(
+    result.report.items.filter((item) => item.code === "macros-removed"),
+  ).toEqual([expect.objectContaining({ source: "card0.json", count: 2 })]);
 });

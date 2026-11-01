@@ -3,6 +3,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { parse } from "yaml";
 import { createMemoryStore } from "@covel/store/memory";
 import { stImportResultSchema } from "@covel/shared";
 import { buildContext, buildSessionContextSnapshot } from "@covel/context";
@@ -179,6 +180,108 @@ it("previews without files or records", async () => {
   expect(await readdir(root)).toEqual([]);
   expect(await store.getWorld("mira")).toBeNull();
 });
+it.each([true, false])(
+  "previews and imports the same standalone macro association (card first: %s)",
+  async (cardFirst) => {
+    const book = worldInfo([
+      {
+        key: ["{{char}}", "<BOT>"],
+        comment: "{{char}} / <BOT>",
+        content: "{{char}} guards <BOT>'s hidden beacon.",
+        disable: true,
+      },
+    ]);
+    const files = cardFirst ? [v2Card(), book] : [book, v2Card()];
+    const preview = await post(files, { preview: true });
+    expect(preview.status).toBe(200);
+    const previewBody = stImportResultSchema.parse(await preview.json());
+    expect(
+      previewBody.report.items.some((item) => item.code === "macros-removed"),
+    ).toBe(false);
+    expect(await readdir(root)).toEqual([]);
+    expect(await store.getWorld(previewBody.id)).toBeNull();
+
+    const response = await post(files);
+    expect(response.status).toBe(201);
+    const body = stImportResultSchema.parse(await response.json());
+    expect(body.report).toEqual(previewBody.report);
+    const directory = path.join(root, body.id);
+    const entries = parse(
+      await readFile(path.join(directory, "data/lorebook.yaml"), "utf8"),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        title: "Mira / Mira",
+        content: "Mira guards Mira's hidden beacon.",
+        keys: ["Mira"],
+        enabled: false,
+        strategy: "selective",
+      }),
+    );
+    expect(await store.getWorld(body.id)).toMatchObject({ name: "Mira" });
+    expect(JSON.stringify(await narratorPrompt(body.id))).not.toContain(
+      "hidden beacon",
+    );
+    const validation = await validateWorldPackage({
+      worldDir: directory,
+      pluginsDirs: [path.resolve("../../plugins")],
+    });
+    expect(
+      validation.diagnostics.filter((item) => item.level === "error"),
+    ).toEqual([]);
+  },
+);
+it.each([0, 2])(
+  "keeps preview and import character macros unresolved with %s cards",
+  async (count) => {
+    const files = [
+      worldInfo([
+        {
+          key: ["beacon"],
+          content: "{{char}} <BOT> {{user}} waits.",
+        },
+      ]),
+      ...Array.from({ length: count }, () => v2Card()),
+    ];
+    const preview = await post(files, { preview: true, locale: "en-US" });
+    expect(preview.status).toBe(200);
+    const previewBody = stImportResultSchema.parse(await preview.json());
+    expect(
+      previewBody.report.items.filter((item) => item.code === "macros-removed"),
+    ).toEqual([expect.objectContaining({ source: "card0.json", count: 2 })]);
+    expect(await readdir(root)).toEqual([]);
+    expect(await store.getWorld(previewBody.id)).toBeNull();
+    const response = await post(files, { locale: "en-US" });
+    expect(response.status).toBe(201);
+    const body = stImportResultSchema.parse(await response.json());
+    expect(body.report).toEqual(previewBody.report);
+    expect(
+      parse(
+        await readFile(path.join(root, body.id, "data/lorebook.yaml"), "utf8"),
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        content: "the player waits.",
+        keys: ["beacon"],
+      }),
+    );
+  },
+);
+it.each([true, false])(
+  "rejects a later invalid card without writes (preview: %s)",
+  async (preview) => {
+    const response = await post(
+      [v2Card(), worldInfo(), v2Card({ name: "<script>bad</script>" })],
+      { preview },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      details: { code: "card-no-name" },
+    });
+    expect(await readdir(root)).toEqual([]);
+    expect(await store.getWorld("mira")).toBeNull();
+  },
+);
 it("rejects missing or non-file multipart fields", async () => {
   expect((await post([])).status).toBe(400);
   const form = new FormData();

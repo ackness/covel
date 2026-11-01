@@ -36,3 +36,12 @@ it("reports character macros that have no character in scope", () => {
     names: ["char", "BOT"],
   });
 });
+it("inserts replacement names literally without expanding their delimiters", () => {
+  expect(
+    resolveMacros("{{char}} <BOT>", "Mira {{user}} <BOT>", "en-US"),
+  ).toEqual({
+    text: "Mira {{user}} <BOT> Mira {{user}} <BOT>",
+    removed: 0,
+    names: [],
+  });
+});

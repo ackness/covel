@@ -44,13 +44,15 @@ If there is no scenario, opening or narration note, the first card's description
 | `position`                    | Reduced to before or after plugins; lost positioning semantics are reported       |
 | `scanDepth`                   | History depth clamped to Covel's supported range                                  |
 
+In standalone lore entry content, titles and literal keywords, `{{char}}` / `<BOT>` use the sanitized character name only when the import contains exactly one character card, regardless of upload order. With no cards or multiple cards, those character tokens are removed and reported; two cards with the same name still count as multiple cards. An embedded `character_book` always uses its owning character's name. `{{user}}` / `<USER>` use the import language's player label, even without a card.
+
 Alternate greetings, group-only greetings, multilingual creator notes, secondary keywords, probability, sticky entries, cooldowns, groups, recursion, vector search and other advanced matching settings are omitted. Covel has no corresponding opening selector or matching mechanism. Entry IDs are regenerated. Extensions, scripts, regex scripts, executable macros and other unmappable fields are listed in the report. The original JSON is never stored in the package.
 
 ## Report and safety
 
 The report distinguishes information, warnings and errors, with source files, fields and counts. Known codes have translated labels; unknown codes show the English server explanation. Extensions are listed by key name only, without displaying or running script values.
 
-Import performs data conversion only. SillyTavern extensions, scripts, regex expressions and macros are never executed. Only fixed substitutions such as the character and player names are applied; other macros are removed and reported. HTML tags, active elements and dangerous link targets are cleaned; ordinary safe links may remain. PNG parsing reads bounded plain text chunks and does not decompress compressed text chunks.
+Import performs data conversion without executing SillyTavern extensions, scripts, regex expressions or executable macros. Fixed character and player tokens receive literal text substitutions; replacement names are never expanded as macros again. Unsupported macros are removed and reported. Substituted text still passes through sanitizing and length limits. HTML tags, active elements and dangerous link targets are cleaned; ordinary safe links may remain. PNG parsing reads bounded plain text chunks and does not decompress compressed text chunks.
 
 Cleaning cannot decide whether prompt text is trustworthy. Scenarios, lore and narration notes are still read by models, at the same trust level as other third-party world packages. Pay particular attention to the warning that card instructions were included as plain narration notes.
 
@@ -59,6 +61,8 @@ Cleaning cannot decide whether prompt text is trustworthy. Scenarios, lore and n
 The result contains `world.yaml`, `WORLD.md`, and, when applicable, `characters/characters.json`, `data/lorebook.yaml` and `media/gallery/cover.png`. It selects the dialogue pack by default; you can change the selection before starting. It creates no portraits, `presence.json` or separate media-store records.
 
 Continue editing in world details or edit these ordinary files in your user worlds directory. See [world data](../reference/world-data.md) for character and lore formats. There is one language edition; the manifest's `defaultLocale` is the language you selected.
+
+Existing imported worlds are not rewritten automatically. Reimport into a new world to use the new character macro substitution rules.
 
 To add English or another language, switch your interface to that language and choose “Translate to 〈language〉” in world details, then review the translation. The existing translation flow adds editions without another import. See [localization](../reference/i18n.md).
 
