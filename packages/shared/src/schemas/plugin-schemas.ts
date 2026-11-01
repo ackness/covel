@@ -1340,9 +1340,8 @@ export const runtimeManifestInputSchema = z
     timeoutMs: z.number().int().positive().optional(),
     /**
      * Per-runtime cap on the agent tool-call loop. Overrides the framework
-     * default (10). Lower values prevent runaway LLMs that keep calling the
-     * same tool indefinitely after a successful result. Set to 1 or 2 for
-     * single-shot plugins that should call one tool and stop.
+     * default (20). Includes output submission and correction steps. Budget
+     * a separate submission step after required business tools.
      */
     maxSteps: z.number().int().positive().optional(),
     /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */

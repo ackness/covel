@@ -299,16 +299,16 @@ function:
 
 ### 循环的行为
 
-agent 循环的其他行为来自一个循环 profile：文字是否边写边显示给玩家、是否读玩家的插话、模型反复调用同一个工具时怎么办。profile 按 `io.visibility` 推导，一般不用写。
+agent 循环的其他行为来自一个循环 profile：是否读玩家的插话、模型反复调用同一个工具时怎么办。profile 按 `io.visibility` 推导，一般不用写。
 
-只回答一段简报、不写故事正文的 agent 可以用 `actor`。它和 `system` 的区别是：模型打转时，`actor` 关掉工具直接作答，`system` 失败。
+只回答一段简报、不写故事正文的 agent 可以用 `actor`。它和 `system` 的区别是：模型打转时，`actor` 只提供 `submit-output` 请求最终提交，`system` 失败。
 
 ```yaml
 agent:
   loop:
     profile: actor
     finalizer:
-      deadlineReserveMs: 10000 # 离时限还剩 10 秒时不再调用工具，直接作答
+      deadlineReserveMs: 10000 # with 10 seconds left, request submission if business work is complete
 ```
 
 [子 agent](#子-agent) 不写 profile 时就用 `actor`。字段、取值和检查规则见[插件参考 · 循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。

@@ -181,6 +181,7 @@ pnpm e2e:verify [options]
 | `--runtime <id>`         | None                                                     | The report and checks cover only this one runtime                                                                                    |
 | `--plugin <id>`          | None                                                     | The report and checks cover only this one plugin                                                                                     |
 | `--enable-plugins <ids>` | None                                                     | After the session is created and before the first turn, enables these plugins. Separate them with commas                             |
+| `--plugins <ids>`        | World preset                                             | Initial requested package IDs instead of the world preset; cannot combine with `--core-only`                                         |
 | `--core-only`            | None                                                     | Creates the session with only the core plugins. Does not load the plugins that the world presets                                     |
 | `--player-message <str>` | A few built-in lines, used in rotation                   | The player input for each turn                                                                                                       |
 | `--form-values <json>`   | Inferred from the field type                             | Values used when filling forms                                                                                                       |
@@ -390,6 +391,87 @@ For `pnpm e2e:replay`, the requests from the two runs are in `debugs/llm-replay/
 - The differences caused by moving to another machine (repository path, `HOME`, time zone, `LANG`, and variables in the terminal) have been verified only on one session that stops at character creation.
 - On replay, a model's answer changes from seconds to milliseconds. If the content of a prompt depends on "whether a background job or the next turn finishes first", the two runs may differ. That did not happen in the session above.
 - The repository's CI does not run `pnpm e2e:replay`.
+
+<a id="submission-acceptance"></a>
+
+## Submission acceptance
+
+A successful model tool call does not confirm persistence. Compare submission attempts, `execution.completed.committed`, saved messages and proposal readback. Complete offline tests before checking current provider specifications and the actual target’s capabilities. [Strict configuration](../reference/slots.md#tool-submission-capabilities) defaults to off; no online capability evidence ships with the repository. A compatible closed synthetic schema can test strict, while the existing narrative schema retains its optional/open fields and non-strict submission. Never rewrite schemas or switch endpoints to pass acceptance.
+
+### Fixed samples and budgets
+
+Use four separate local configurations: official `deepseek-flash`, your test relay’s `deepseek-v4.1-flash`, the same relay’s `gpt-6-luna`, and OpenAI `gpt-6-luna`. Publish only the fixed labels below, without relay identity, endpoint or credentials. Mark unavailable lanes unrun. Do not use Kimi or treat unit fixtures as online capability evidence.
+
+<!-- prettier-ignore -->
+| Label | Required observation |
+| --- | --- |
+| `official-deepseek` | Actual thinking/tool-choice restrictions, voluntary submission and in-loop correction |
+| `relay-deepseek` | Actual routed capability and continuation, without assuming official host rules |
+| `relay-luna` | Effective protocol/reasoning narrowing, without relay identity |
+| `official-openai` | Prefer configured Responses; strict on a compatible synthetic schema and non-strict on the unchanged narrative schema |
+
+Each lane uses fresh sessions, identical inputs and seed: four narrator turns in Chinese, four in English and four dialogue-narration turns, totaling 12 player inputs. Account for setup/opening separately. Pin SHA, plugin versions, locales, seed, tool/schema digests, protocol, reasoning and budgets before starting. Declare finite input, call, per-call input/output token and aggregate token ceilings; stop at a ceiling and report cancellations/infrastructure failures without replacement inputs. `--max-input-tokens` is an after-the-fact assertion; the harness has no aggregate hard call/token spend cap. Use observation, provider quotas and Stop to enforce those limits.
+
+Start the server with an uncommitted `COVEL_LLM_TOML`, `COVEL_RANDOM_SEED=20261006` and `TZ=UTC`. Configure all used model slots and disable auto-advance for the fixed primary sample. `--plugins` sets initial requested packages while retaining contract resolution; it cannot be combined with `--core-only`. `--plugin` filters reporting only, without reducing execution or spend. These commands retain sessions for readback; change the lane label and use fresh session IDs for each lane:
+
+```bash
+acceptance_lane=official-deepseek
+pnpm e2e:verify --world lantern-barrow --locale zh-CN --turns 4 \
+  --plugins pregame,world-init,char-creator,narrator,memory,world-ir,world-time,living-world-rules \
+  --require-tools submit-output,submit-world-facts --max-input-tokens 16384 --timeout 300 --keep \
+  --session-id "acceptance-${acceptance_lane}-zh" --log-dir "/tmp/covel-acceptance/${acceptance_lane}/zh"
+pnpm e2e:verify --world lantern-barrow --locale en-US --turns 4 \
+  --plugins pregame,world-init,char-creator,narrator,memory,world-ir,world-time,living-world-rules \
+  --require-tools submit-output,submit-world-facts --max-input-tokens 16384 --timeout 300 --keep \
+  --session-id "acceptance-${acceptance_lane}-en" --log-dir "/tmp/covel-acceptance/${acceptance_lane}/en"
+pnpm e2e:verify --world lantern-barrow --locale zh-CN --turns 4 \
+  --plugins pregame,world-init,char-creator,chat-mode-narrator,scene-stage,character-blueprint,memory,world-ir,world-time,living-world-rules \
+  --require-tools submit-output,submit-world-facts --max-input-tokens 16384 --timeout 300 --keep \
+  --session-id "acceptance-${acceptance_lane}-dialogue" --log-dir "/tmp/covel-acceptance/${acceptance_lane}/dialogue"
+```
+
+Verify world editions and the actual active set before counting results. Observe memory reads and required business work. Use the [submission probe](../../../tests/third-party/submission-review-probe/README.md) for additional schema-less prose and character delegation if not naturally covered; exclude them from the 12 primary inputs. The fixture requires ordinary community code approval and defaults to disabled injection. Its prose runtime uses the host schema; its delegate runtime must actually call a character child. Verify parent submission separately from child acceptance.
+
+### Correction, commit and presentation checks
+
+Run separately labelled, bounded injected samples on each lane: `review-once` rejects the first valid submission; `schema-once` replaces one story submission with an invalid empty dialogue. Use fresh sessions and the exact target runtime, allowing later normal responses to correct it. Check the correlated failed tool result, ordinary in-loop resubmission, retained budgets and no repeated successful writes. Missing submission, mixed batches, exhaustion, late refusal, actual commit failure, resume and child behavior also have deterministic fixtures; exclude those from natural model invalidity.
+
+In browsers, retain the previous story while waiting, with running/tool/Revising response and Stop visible. Before commit there must be no story text, arguments or review excerpts, and no `narrative.delta`, `session.streaming` or bridge stream messages. After commit, show one complete message; failure, refusal and cancellation add no story. Verify bridge v3 identity, permissions and private projections. Check default instant rendering, opt-in segment reveal with its first unit immediate and total delay at most two seconds, keyboard Show all, Instant text, reduced motion, hidden tabs, history/reconnect/reload/remount, replacement/deletion and new-message flush. Input, navigation, Stop and server advancement must never wait for reveal.
+
+### Safe reports and acceptance gates
+
+Existing trace and turn artifacts can produce a read-only summary. Use the exact filenames printed by the harness:
+
+```bash
+node scripts/submission-report.mjs --help
+node scripts/submission-report.mjs --traces /path/to/session-traces.json \
+  --turns /path/to/session-turns.json --sample natural --lane official-deepseek \
+  > /tmp/covel-acceptance/official-deepseek-summary.json
+```
+
+Report injected data separately with `--sample injected`. Output contains only fixed categories, counters and numeric distributions, without candidate/review text, keys, addresses or model identity. One gate response is one submission-related step: content-only counts as missing submission and a mixed batch counts once, without counting its tool failure and step note twice. Resume identities join the same logical loop. The report includes first/total rejection categories, a resubmission histogram, step/finalizer/call counts, reported usage from failed calls and cache samples, and receipt/readback disagreements. It is not acceptance certification.
+
+Supplement the `unmeasured` fields manually: per-runtime/lane denominators, exact correction-budget exhaustion, cancellation/infrastructure classification, provider TTFB, admission-to-progress/acceptance/commit/first-visible and reveal-completion latency, p50/p95/sample sizes, and token/cache cost per committed player turn including failed billed calls. A terminal `invalid-output` alone cannot prove which budget was exhausted. Semantic acceptance and tool acknowledgements never replace durable message/proposal readback.
+
+Target 12/12 primary inputs committed per available lane. Hard failures include persisted invalid/rejected/cancelled/refused candidates, duplicate proposals, unauthorized effects, unmatched tool IDs, privacy/draft leaks and quota resets. Failure to recover within budget is a lane failure; never relax validation. Small samples and historical runs with different prompts do not demonstrate statistical improvement.
+
+Refresh generated outputs, static gates and docs before full affected suites, PostgreSQL and serialized browser acceptance. Record only after tool/schema/prompt inputs settle. Recreate affected active agent suspensions/checkpoints and recordings; retain compatible committed story history.
+
+```bash
+pnpm schemas:generate
+pnpm prompts:lock
+pnpm check
+pnpm test:docs:packages
+pnpm --filter @covel/docs build
+pnpm test:pg
+flock /tmp/covel-e2e.lock pnpm e2e:smoke
+flock /tmp/covel-e2e.lock pnpm e2e
+flock /tmp/covel-e2e.lock pnpm e2e:extensions
+flock /tmp/covel-e2e.lock pnpm e2e:replay --record lantern-barrow
+flock /tmp/covel-e2e.lock pnpm e2e:replay
+```
+
+Keep recordings local and preserve exact request matching. Never edit captured replies to fabricate compatibility or commit credentials/local evidence. Record actual commands, results and gaps; this procedure itself is not evidence of execution.
 
 ## When it does not work as expected
 

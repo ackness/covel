@@ -505,7 +505,7 @@ At each runtime start the framework finds a provider for each import. The candid
 | The only provider is paused                 | The same, and the text says the provider is paused; the tool returns once a later execution clears it |
 | One active provider and one paused provider | Counted as more than one provider: the active one is never silently substituted                       |
 
-A missing import removes only its tool: the runtime starts and the story commits as usual. Imports create no scheduling edge and do not make the package require its provider; an imported tool cannot complete a runtime (`finishWith` and `completion.afterTools` cannot name it). The host tells the framework which plugins are paused through its admission interface; for an embedder without it, a paused provider is simply unknown.
+A missing import removes only its tool: the runtime starts and the story commits as usual. Imports create no scheduling edge and do not make the package require its provider; an imported tool cannot be required business work in `completion.afterTools`; the runtime always submits output through `submit-output`. The host tells the framework which plugins are paused through its admission interface; for an embedder without it, a paused provider is simply unknown.
 
 Service calls made from a tool carry its `toolCallId` in `plugin.service.completed`, and nested calls inherit it; see [Protocol](./protocol.md).
 

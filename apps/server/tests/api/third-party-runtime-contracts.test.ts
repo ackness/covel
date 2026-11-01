@@ -24,7 +24,7 @@ describe("runtime contracts through an installed community package", () => {
   let boot: ApiBootstrapResult;
   let store: ReturnType<typeof createMemoryStore>;
   let mode: "prose" | "cards" | "noop" | "record";
-  const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
+  const generate = vi.fn<LLMAdapter["generate"]>(async (params) => ({
     content:
       mode === "prose"
         ? '{"updated":true,"prompts":["Inspect the door"]}'
@@ -36,13 +36,15 @@ describe("runtime contracts through an installed community package", () => {
             {
               id: crypto.randomUUID(),
               name:
-                mode === "noop"
-                  ? "runtime-done"
+                mode === "noop" ||
+                params.messages.some((message) => message.role === "tool")
+                  ? "submit-output"
                   : mode === "cards"
                     ? "lifecycle-probe-cards"
                     : "lifecycle-probe-record",
               arguments: JSON.stringify(
-                mode === "noop"
+                mode === "noop" ||
+                  params.messages.some((message) => message.role === "tool")
                   ? {}
                   : mode === "cards"
                     ? { text: "Inspect the door" }
@@ -280,7 +282,7 @@ describe("runtime contracts through an installed community package", () => {
       runtimeResults: [
         expect.objectContaining({
           status: "failed",
-          error: expect.stringContaining("requireExplicitCompletion"),
+          error: expect.stringContaining("missing-submission"),
         }),
       ],
     });

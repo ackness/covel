@@ -7,7 +7,11 @@ import {
   createWorld,
   writeWorldPackage,
 } from "../../packages/create/src/index.js";
-import { startFakeLlmProvider } from "./helpers/fake-llm-provider.js";
+import {
+  startFakeLlmProvider,
+  submitOutputReply,
+  completedBusinessData,
+} from "./helpers/fake-llm-provider.js";
 import {
   ONBOARDING_VERSION,
   seedBrowserSettings,
@@ -46,8 +50,12 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
     path.join(tmpdir(), "covel-dimension-export-"),
   );
   const provider = await startFakeLlmProvider();
-  provider.reply = (request) =>
-    request.tools.some((tool) => tool.function.name === "submit-world-facts")
+  provider.reply = (request) => {
+    const facts = completedBusinessData(request, "submit-world-facts");
+    if (facts) return submitOutputReply(facts.facts as Record<string, unknown>);
+    return request.tools.some(
+      (tool) => tool.function.name === "submit-world-facts",
+    )
       ? {
           text: "",
           toolCalls: [
@@ -70,7 +78,7 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
           ],
         }
       : {
-          text: JSON.stringify({
+          ...submitOutputReply({
             segments: [
               {
                 kind: "narration",
@@ -80,6 +88,8 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
             cues: { present: [] },
           }),
         };
+  };
+
   const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString("base64");
   await page.route("**/api/actions", (route) =>

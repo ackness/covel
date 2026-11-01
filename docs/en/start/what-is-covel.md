@@ -38,7 +38,7 @@ Plugins cannot change the save directly. They propose changes, and the kernel sa
 
 ![Stage mode: scene background, character portraits, and dialogue box](/stage-mode.webp)
 
-- **Stage mode** is a full-screen visual novel: scene background, character portraits, a typewriter-style dialogue box, and choices.
+- **Stage mode** is a full-screen visual novel: scene background, character portraits, a dialogue box showing complete paragraphs, and choices.
 - **Text mode** is a classic text-based turn: the story text includes action suggestions and forms, and you can expand each turn to see what every plugin did.
 
 ![Text mode: story text, action suggestions, and the right-hand panel](/text-mode.webp)

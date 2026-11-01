@@ -1851,7 +1851,7 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
-                  "description": "Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops."
+                  "description": "Maximum ordinary model steps, including output submission and corrections. Budget a separate step after required business tools."
                 },
                 "timeoutMs": {
                   "type": "integer",
@@ -1916,7 +1916,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 3,
-                      "description": "Corrections for missing required tool use or explicit completion. Defaults to 1."
+                      "description": "Corrections for missing required business tool work. Defaults to 1."
                     },
                     "review": {
                       "type": "integer",
@@ -1934,7 +1934,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 3,
-                      "description": "Requests with tools off to repair invalid output. Defaults to 1."
+                      "description": "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 1."
                     }
                   },
                   "additionalProperties": false,
@@ -1945,17 +1945,17 @@
                   "properties": {
                     "maxSteps": {
                       "type": "boolean",
-                      "description": "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true."
+                      "description": "At the step limit or context overflow, offer only submit-output once if business prerequisites are met. The same validation and review apply; no extra repair follows. Defaults to true."
                     },
                     "deadlineReserveMs": {
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991,
-                      "description": "Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off."
+                      "description": "Stop starting ordinary steps this many ms before the time limit and request submission if business prerequisites are met. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off."
                     }
                   },
                   "additionalProperties": false,
-                  "description": "The final answer step, with tools off."
+                  "description": "One final submission-only step when the loop limit permits it."
                 }
               },
               "additionalProperties": false,

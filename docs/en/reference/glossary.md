@@ -28,7 +28,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
-| Finalizer step | 收尾步骤 | The one request, after an agent runs out of steps, that turns tools off and asks for the answer now. |
+| Finalizer step | 收尾步骤 | The one request at an agent limit that offers only the submission tool for its final output. |
 | Imported tool | 导入工具 | A tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`; a read service's import is read-only and a write service's import stages writes. |
 | Kernel | 内核 | The framework core that schedules work, assembles context, runs tools, validates proposals and commits writes. |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
@@ -193,9 +193,9 @@ See: [extension points](./extension-points.md), [plugin extensions and communica
 
 ## Finalizer step
 
-The one more model request the kernel sends at the step limit, deadline reserve, or context overflow when the loop profile allows it: tools off, asking for the final answer from the information already available. `finalizer.maxSteps` enables overflow rescue, which trims complete tool steps as needed under [prompt budgeting](./prompt-structure.md#budget). An unfinished overflow remains a failed runtime with its original overflow text.
+The one more model request the kernel sends at the step limit, deadline reserve, or context overflow when the loop profile allows it: only `submit-output` is offered, asking for final output from the information already available. `finalizer.maxSteps` enables overflow rescue, which trims complete tool steps as needed under [prompt budgeting](./prompt-structure.md#budget). An unfinished overflow remains a failed runtime with its original overflow text.
 
-Running out of steps is not a success by itself. The runtime succeeds only when the finalizer step writes the answer, and its result's `stop.finalizer` is `true`. No finalizer is sent when the output is handed over by a completing tool, or when a completion condition is still unmet.
+Running out of steps is not a success by itself. The runtime succeeds only when the final submission passes the same validation and review; its result's `stop.finalizer` is `true`. This still does not confirm persistence. Unmet business prerequisites prevent finalization, and rejection starts no additional repair loop.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons).
 

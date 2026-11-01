@@ -28,7 +28,7 @@
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
-| Finalizer step | 收尾步骤 | agent 用完步数后关掉工具、要求直接给出答案的那一次请求。 |
+| Finalizer step | 收尾步骤 | agent 到达界限时仅提供提交工具、请求最终输出的那一次请求。 |
 | Imported tool | 导入工具 | agent 用 `agent.tools.services` 从别的插件导入、给模型用的服务生成的工具；读服务的导入只读，写服务的导入暂存写入。 |
 | Kernel | 内核 | 负责调度、上下文、工具调用、提案校验和提交的框架核心。 |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
@@ -191,9 +191,9 @@ agent 通过**数据集工具**读写数据集：runtime 在 `agent.tools.datase
 
 ## Finalizer step
 
-agent runtime 到步数上限、时限预留或上下文超限时，循环 profile 允许内核再发的一次模型请求：关掉工具，要求根据已有的信息给出最终答案。超限收尾由 `finalizer.maxSteps` 开启，按[提示词预算](./prompt-structure.md#预算)按需裁剪完整工具步骤；没有救回时 runtime 仍以最初的超限文字失败。
+agent runtime 到步数上限、时限预留或上下文超限时，循环 profile 允许内核再发的一次模型请求：仅提供 `submit-output`，要求根据已有信息提交最终输出。超限收尾由 `finalizer.maxSteps` 开启，按[提示词预算](./prompt-structure.md#预算)按需裁剪完整工具步骤；没有救回时 runtime 仍以最初的超限文字失败。
 
-步数用完本身不算成功。只有收尾步骤写出了答案，runtime 才成功，结果的 `stop.finalizer` 为 `true`。输出由完成工具交出，或者完成条件还没满足时，不发收尾请求。
+步数用完本身不算成功。只有收尾提交通过同一校验和审查，runtime 才成功，结果的 `stop.finalizer` 为 `true`；这仍不代表已持久化。必需业务工作还没满足时不发收尾请求；收尾被拒绝后没有额外修复循环。
 
 详见：[协议参考的结束原因](./protocol.md#stop-reasons)。
 

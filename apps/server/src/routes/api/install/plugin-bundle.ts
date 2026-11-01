@@ -285,7 +285,8 @@ export function validatePluginBundle(
         const entry = entries.find(
           (candidate) => candidate.relativePath === relative,
         );
-        if (!entry) throw new Error("File not found");
+        if (!entry)
+          throw Object.assign(new Error("File not found"), { code: "ENOENT" });
         return entry.content.toString("utf8");
       },
       (absoluteDir) =>

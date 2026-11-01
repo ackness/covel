@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { startFakeLlmProvider } from "./helpers/fake-llm-provider.js";
+import {
+  startFakeLlmProvider,
+  submitOutputReply,
+  completedBusinessData,
+} from "./helpers/fake-llm-provider.js";
 import {
   ONBOARDING_VERSION,
   seedBrowserSettings,
@@ -13,8 +17,13 @@ for (const mode of ["ambiguous", "disabled"] as const) {
     page,
   }) => {
     const provider = await startFakeLlmProvider();
-    provider.reply = (request) =>
-      request.tools.some((tool) => tool.function.name === "submit-world-facts")
+    provider.reply = (request) => {
+      const facts = completedBusinessData(request, "submit-world-facts");
+      if (facts)
+        return submitOutputReply(facts.facts as Record<string, unknown>);
+      return request.tools.some(
+        (tool) => tool.function.name === "submit-world-facts",
+      )
         ? {
             text: "",
             toolCalls: [
@@ -37,7 +46,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
             ],
           }
         : {
-            text: JSON.stringify({
+            ...submitOutputReply({
               segments: [
                 {
                   kind: "narration",
@@ -47,6 +56,8 @@ for (const mode of ["ambiguous", "disabled"] as const) {
               cues: { present: [] },
             }),
           };
+    };
+
     const encode = (value: unknown) =>
       Buffer.from(JSON.stringify(value)).toString("base64");
     await seedBrowserSettings(page, {

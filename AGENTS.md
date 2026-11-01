@@ -64,6 +64,10 @@ store/database changes and `pnpm e2e` plus `pnpm e2e:extensions` for UI flows. D
 and changed packages with dependents plus E2E collection in a clean checkout;
 full browser, smoke and extension execution belongs to full-scope CI.
 
+The real-model harness accepts `--plugins <ids>` for initial package selection.
+For read-only sanitized submission metrics, see `node scripts/submission-report.mjs --help`
+and [real-model acceptance](docs/ship/real-model.md#submission-acceptance).
+
 In source development, changing bundled plugin manifests, handlers or locales
 restarts the server.
 

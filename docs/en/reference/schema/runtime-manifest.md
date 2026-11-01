@@ -214,7 +214,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field                 | Type                                 | Required | Description                                                                                                                                                                                                                                                                 |
 | --------------------- | ------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxSteps`            | integer                              | no       | Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops.                                                                                                                                                                                  |
+| `maxSteps`            | integer                              | no       | Maximum ordinary model steps, including output submission and corrections. Budget a separate step after required business tools.                                                                                                                                            |
 | `timeoutMs`           | integer                              | no       | Time limit of the runtime in ms. The time a streamed model call spends writing does not count. Defaults to 120000; 240000 with `io.visibility: story`.                                                                                                                      |
 | `callTimeoutMs`       | integer                              | no       | Time limit of one model call that is not streamed, in ms. Defaults to 60000; 120000 with `io.visibility: story`.                                                                                                                                                            |
 | `firstTokenTimeoutMs` | integer                              | no       | Time limit for the first streamed token in ms, the same for every attempt. Without it an attempt waits at most 120000, and no longer than leaves room in `timeoutMs` for the retries still allowed.                                                                         |
@@ -226,23 +226,23 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `steering`            | boolean                              | no       | Merge the player's interjections into the transcript before submission acceptance. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.                                                                                                         |
 | `fallback`            | `"submit-output"` or `"fail"`        | no       | What a repeated tool loop does: `submit-output` offers only submit-output for the final result; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `submit-output`.                                                                                       |
 | `corrections`         | object                               | no       | Independent correction budgets for one agent loop run; 0 disables that correction.                                                                                                                                                                                          |
-| `finalizer`           | object                               | no       | The final answer step, with tools off.                                                                                                                                                                                                                                      |
+| `finalizer`           | object                               | no       | One final submission-only step when the loop limit permits it.                                                                                                                                                                                                              |
 
 ## `agent.loop.corrections`
 
-| Field              | Type    | Required | Description                                                                            |
-| ------------------ | ------- | -------- | -------------------------------------------------------------------------------------- |
-| `toolUse`          | integer | no       | Corrections for missing required tool use or explicit completion. Defaults to 1.       |
-| `review`           | integer | no       | Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2. |
-| `loopPerturbation` | integer | no       | Perturbations before the repeated-tool fallback. Defaults to 1.                        |
-| `outputRepair`     | integer | no       | Requests with tools off to repair invalid output. Defaults to 1.                       |
+| Field              | Type    | Required | Description                                                                                                 |
+| ------------------ | ------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `toolUse`          | integer | no       | Corrections for missing required business tool work. Defaults to 1.                                         |
+| `review`           | integer | no       | Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2.                      |
+| `loopPerturbation` | integer | no       | Perturbations before the repeated-tool fallback. Defaults to 1.                                             |
+| `outputRepair`     | integer | no       | In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 1. |
 
 ## `agent.loop.finalizer`
 
-| Field               | Type    | Required | Description                                                                                                                                                                                                           |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxSteps`          | boolean | no       | At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.                                            |
-| `deadlineReserveMs` | integer | no       | Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off. |
+| Field               | Type    | Required | Description                                                                                                                                                                                                  |
+| ------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `maxSteps`          | boolean | no       | At the step limit or context overflow, offer only submit-output once if business prerequisites are met. The same validation and review apply; no extra repair follows. Defaults to true.                     |
+| `deadlineReserveMs` | integer | no       | Stop starting ordinary steps this many ms before the time limit and request submission if business prerequisites are met. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off. |
 
 ## `function`
 

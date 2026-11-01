@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { ExecutionOrigin, RuntimeResult } from "@covel/shared";
-import { startFakeLlmProvider } from "./helpers/fake-llm-provider.js";
+import {
+  startFakeLlmProvider,
+  submitOutputReply,
+  completedBusinessData,
+} from "./helpers/fake-llm-provider.js";
 import {
   ONBOARDING_VERSION,
   seedBrowserSettings,
@@ -14,6 +18,24 @@ test("local world selection survives preparation, hydration, the opening, the fi
 }) => {
   const provider = await startFakeLlmProvider();
   provider.reply = (request) => {
+    const facts = completedBusinessData(request, "submit-world-facts");
+    if (facts) return submitOutputReply(facts.facts as Record<string, unknown>);
+    const initialized = completedBusinessData(request, "initialize-world");
+    if (initialized)
+      return submitOutputReply(
+        Object.fromEntries(
+          [
+            "success",
+            "preGameDone",
+            "worldSchema",
+            "attributeCount",
+            "dimensionCount",
+          ].map((key) => [key, initialized[key]]),
+        ),
+      );
+    const time = completedBusinessData(request, "advance-world-time");
+    if (time) return submitOutputReply(time);
+
     const systemPrompt = request.rawMessages
       .filter(({ role }) => role === "system" || role === "developer")
       .map(({ content }) => (typeof content === "string" ? content : ""))
@@ -22,7 +44,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
       systemPrompt.includes("You are a memory manager.") ||
       systemPrompt.includes("你是一个记忆管理器。")
     )
-      return { text: "{}" };
+      return submitOutputReply({});
     if (request.tools.some((tool) => tool.function.name === "initialize-world"))
       return {
         text: "",
@@ -98,7 +120,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
         ],
       };
     return {
-      text: JSON.stringify({
+      ...submitOutputReply({
         segments: [
           {
             kind: "narration",

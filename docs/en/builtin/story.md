@@ -58,7 +58,7 @@ A world can set a default for this setting in `pluginSettings`. Your own setting
 
 ### Notes
 
-The story is shown while it is written; once it is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls: the draft shown so far is cleared and replaced by the rewrite, and what stays on screen is the text that passed the check. The omniscient narrator may not call characters "I" or "you"; the game-master perspective skips the person check.
+The story appears after submission validation, perspective review and durable turn commit. Running, tool and “Revising response” progress stays visible while waiting, without draft text. A perspective rejection can be corrected inside the loop within the review budget, two corrections by default; rejected output is never saved. The omniscient narrator may not call characters "I" or "you"; the game-master perspective skips the person check. Text is instant by default; a UI plugin can opt into whole-segment reveal without delaying the player’s next action.
 
 Possessive apostrophes in dialogue (such as `the guards’ keys`) and ambiguous single quote marks do not themselves request a perspective rewrite. Clear narration outside dialogue is still checked.
 

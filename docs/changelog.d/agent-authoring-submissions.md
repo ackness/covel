@@ -1,3 +1,0 @@
-### Changed
-
-- **Breaking: bundled agents and author scaffolds now submit output through `submit-output`.** Narrator review uses `ReviewAgentOutput`; business tools remain prerequisites and canonical-result checks belong to their plugins. Payload contract IDs stay unchanged. Update custom agent prompts, hook registrations and scripted responses, and recreate affected development suspensions/checkpoints. Reinstall changed bundled packages to use their new manifest versions; existing gameplay data does not need conversion. See the [completion contract](../en/reference/plugins.md#agent-output-submission) and [testing guide](../en/plugins/testing.md).

@@ -1,6 +1,6 @@
 ### Breaking
 
-- **Session pages use public projection version 2 and a narrow handler map.** Replace raw pending blocks with public interactions and per-frame answer handles. Session pages no longer receive panel KV/context/jobs or action/command/event RPC handlers; only individually consented player actions, interaction answers, own manual runtimes, abort and own-panel navigation are available.
+- **Session pages use public projection version 3 and a narrow handler map.** Replace raw pending blocks with public interactions and per-frame answer handles. Session pages no longer receive panel KV/context/jobs or action/command/event RPC handlers; only individually consented player actions, interaction answers, own manual runtimes, abort and own-panel navigation are available.
 
 ### Added
 

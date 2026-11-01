@@ -201,3 +201,5 @@ plugins/character-agent supplies a reusable actor and plugins/turn-policy one op
 ## Theme compilation dependencies
 
 `shared` owns pure theme schemas, CSS policy and the direct `css-tree` dependency, without filesystem access or a dependency on Web. Layout IDs are a low-level shared enum. `plugin-loader` owns file/archive adapters, bitmap checks and content identity; server caches and publishes safe DTOs/resources; web owns appearance application. See the [theme contract](../reference/theme-packages.md#restricted-themes-supplied-by-plugins).
+
+Model acceptance reuses the API harness and local trace/turn artifacts. `scripts/submission-report.mjs` reads those files and emits fixed categories and numbers; it is outside runtime/provider request paths. Steps, output acceptance and persistence are counted separately; see [real-model acceptance](../ship/real-model.md#submission-acceptance).

@@ -1,5 +1,0 @@
-### Changed
-
-- **Breaking: stories appear only after durable commit.** The SSE contract removes `narrative.delta`, its segment/reset payloads, the runtime host `onDelta` callback and narrative delta counts. Update server and clients together; no alias is supported. Previously committed story history remains valid. See [story events](../en/reference/protocol.md#narrative-events).
-- **Agent loop profiles no longer expose `stream` or `truncation`.** Remove these authored or compiled fields and reload package declarations. All agent responses require complete accepted tool arguments and a valid provider terminal result. Internal streaming, timeout heartbeats, usage, bounded retries, steering and the public gateway text-stream API remain available. See [loop profiles](../en/reference/plugins.md#loop-profile-agentloopprofile).
-- **Waiting progress stays visible without draft text.** Existing step events report safe submission-rejection categories and attempt counts. Gameplay model/tool progress omits candidate arguments and raw review details; full diagnostics stay in traces. Reconnect and resume deliver saved stories without replaying drafts.

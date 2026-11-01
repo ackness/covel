@@ -318,7 +318,7 @@ export const runtimeAuthoringManifestSchema = z
               .int()
               .positive()
               .describe(
-                "Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops.",
+                "Maximum ordinary model steps, including output submission and corrections. Budget a separate step after required business tools.",
               )
               .optional(),
             timeoutMs: z
@@ -406,7 +406,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(3)
                   .describe(
-                    "Corrections for missing required tool use or explicit completion. Defaults to 1.",
+                    "Corrections for missing required business tool work. Defaults to 1.",
                   )
                   .optional(),
                 review: z
@@ -433,7 +433,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(3)
                   .describe(
-                    "Requests with tools off to repair invalid output. Defaults to 1.",
+                    "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 1.",
                   )
                   .optional(),
               })
@@ -446,7 +446,7 @@ export const runtimeAuthoringManifestSchema = z
                 maxSteps: z
                   .boolean()
                   .describe(
-                    "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.",
+                    "At the step limit or context overflow, offer only submit-output once if business prerequisites are met. The same validation and review apply; no extra repair follows. Defaults to true.",
                   )
                   .optional(),
                 deadlineReserveMs: z
@@ -454,11 +454,13 @@ export const runtimeAuthoringManifestSchema = z
                   .int()
                   .min(0)
                   .describe(
-                    "Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off.",
+                    "Stop starting ordinary steps this many ms before the time limit and request submission if business prerequisites are met. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off.",
                   )
                   .optional(),
               })
-              .describe("The final answer step, with tools off.")
+              .describe(
+                "One final submission-only step when the loop limit permits it.",
+              )
               .optional(),
           })
           .describe(
