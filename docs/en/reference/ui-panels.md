@@ -861,7 +861,7 @@ Explicit main replaces only the story column and retains the host composer by de
 
 Selection lasts only for the current mount and session visit; content consent persists on this device. Default UI remains usable while loading or awaiting consent. Each frame owns its lease, handles and stream subscription; failure, disable or revocation in one region does not reset the other.
 
-Outside the clipped frames, a labelled host strip provides “Back to default interface”, Stop, and interactions/recovery. Global return clears both selections; region return clears only its own. The global strip remains in immersive stage and narrow layouts. Page permission menus revoke one capability or all. The `data-covel-host-controls` marker and its descendants belong to the host and must be excluded from theme selectors. Fixed positioning, high z-index and iframe focus cannot cross the clipping boundary.
+Outside the clipped frames, a labelled host strip provides “Back to default interface”, Stop, and interactions/recovery. Global return clears both selections; region return clears only its own. The global strip remains in immersive stage and narrow layouts. Page permission menus revoke one capability or all; menus stay inside the viewport horizontally when narrow layouts wrap their triggers. The `data-covel-host-controls` marker and its descendants belong to the host and must be excluded from theme selectors. Fixed positioning, high z-index and iframe focus cannot cross the clipping boundary.
 
 ### Multi-file pages
 
