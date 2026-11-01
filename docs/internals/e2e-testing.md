@@ -327,7 +327,9 @@ pnpm docker:pg:down
 
 ## 沙箱区域验收
 
-使用 `tests/e2e/third-party-stage.config.ts` 运行 `sandbox-surfaces.acceptance.ts`，它在私有社区目录加载真实包，覆盖持久写入、授权、独立区域和恢复。所有固定端口 Playwright 命令必须以 `flock /tmp/covel-e2e.lock` 串行运行；默认 e2e 不包含 acceptance 文件。例：
+使用 `tests/e2e/third-party-stage.config.ts` 运行 `sandbox-surfaces.acceptance.ts`，它在私有社区目录加载真实包，使用生产构建和严格宿主页 CSP，覆盖持久写入、授权、独立区域和恢复。正常流程收集并拒绝 CSP 违规，故意触发沙箱拒绝的测试单独运行。延迟审批测试通过工作室会话列表切换会话，保留同一文档中的旧异步调用，并对照当前会话成功提交的情形。所有固定端口 Playwright 命令必须以 `flock /tmp/covel-e2e.lock` 串行运行；默认 e2e 不包含 acceptance 文件。
+
+API 以 `NODE_ENV=development` 启动，但不启用 `tsx watch`，插件修改通过开发重载接口发布。清理也恢复并重新发布原声明，防止进程重启清空内存会话，或把变更后的插件状态留给后续用例。命令示例：
 
 ```bash
 flock /tmp/covel-e2e.lock pnpm exec playwright test --config tests/e2e/third-party-stage.config.ts tests/e2e/sandbox-surfaces.acceptance.ts

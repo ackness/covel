@@ -327,7 +327,9 @@ Record the capture's commit, scene, turn, theme, and viewport. If an image inclu
 
 ## Sandbox surface acceptance
 
-Run `sandbox-surfaces.acceptance.ts` with `tests/e2e/third-party-stage.config.ts`. It loads the real package from a private community directory and covers persisted writes, consent, independent regions and recovery. Serialize every fixed-port Playwright command under `flock /tmp/covel-e2e.lock`; default e2e does not include acceptance files. Example:
+Run `sandbox-surfaces.acceptance.ts` with `tests/e2e/third-party-stage.config.ts`. It loads the real package from a private community directory under the production build and strict host CSP, covering persisted writes, consent, independent regions and recovery. Positive flows collect and reject CSP violations; deliberate sandbox denials run in separate tests. Delayed approvals switch sessions through the studio session list, preserving the old asynchronous call in the same document, with a successful current-session commit as a control. Serialize every fixed-port Playwright command under `flock /tmp/covel-e2e.lock`; default e2e does not include acceptance files.
+
+The API runs with `NODE_ENV=development` and without `tsx watch`; plugin edits use the development reload endpoint. Cleanup also restores and republishes the original declarations, preventing process restarts from clearing memory sessions or changed plugin state from reaching later tests. Example:
 
 ```bash
 flock /tmp/covel-e2e.lock pnpm exec playwright test --config tests/e2e/third-party-stage.config.ts tests/e2e/sandbox-surfaces.acceptance.ts

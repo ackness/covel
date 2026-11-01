@@ -35,14 +35,14 @@ it("maps active views, resolves localized names, and shares the sorted discovery
     pluginName: "示例",
   });
 });
-it("keeps the last good list during a retry and exposes an empty list on failure", async () => {
+it("never reuses another session's list while discovery is loading or failed", async () => {
   mocks.fetch.mockResolvedValueOnce({
     right: [],
     view: [{ pluginId: "p", specs: [viewEntry.spec] }],
   });
   const { result, rerender } = renderHook(
-    ({ language }) => usePluginViews("s", [sessionPlugin], language),
-    { initialProps: { language: "en" } },
+    ({ sessionId }) => usePluginViews(sessionId, [sessionPlugin], "en"),
+    { initialProps: { sessionId: "s" } },
   );
   await waitFor(() => expect(result.current.status).toBe("ready"));
   let reject!: (error: Error) => void;
@@ -52,9 +52,9 @@ it("keeps the last good list during a retry and exposes an empty list on failure
         reject = fail;
       }),
   );
-  rerender({ language: "zh" });
+  rerender({ sessionId: "next" });
   expect(result.current.status).toBe("loading");
-  expect(result.current.views).toHaveLength(1);
+  expect(result.current.views).toEqual([]);
   await act(async () => reject(new Error("offline")));
   expect(result.current.status).toBe("error");
   expect(result.current.views).toEqual([]);

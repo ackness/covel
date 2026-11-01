@@ -25,6 +25,8 @@ interface UseMessageGroupingArgs {
     sourceTurnId?: string,
   ) => void;
   readonly renderMessage: (msg: StreamMessage, index: number) => ReactNode;
+  /** Preserve turn rows for public widgets without execution or asset details. */
+  readonly messagesOnly?: boolean;
   /**
    * Fold each turn's read-only plugin cards into one disclosure so the story
    * keeps most of the screen. `expandUpdates` opens it by default.
@@ -50,6 +52,7 @@ export function useMessageGrouping({
   plugins,
   onRetryRuntime,
   renderMessage,
+  messagesOnly = false,
   foldUpdates = false,
   expandUpdates = false,
   expandLatestUpdates = false,
@@ -78,6 +81,7 @@ export function useMessageGrouping({
         sequence?: number;
       }>
     >();
+    if (messagesOnly) return grouped;
     for (const step of executionSteps) {
       const turnId = getSourceTurnId(step.turnId, sources);
       const label =
@@ -102,7 +106,7 @@ export function useMessageGrouping({
           (a.sequence ?? 0) - (b.sequence ?? 0),
       );
     return grouped;
-  }, [executionSteps, plugins, i18n.language]);
+  }, [executionSteps, plugins, i18n.language, messagesOnly]);
   const pendingMessage = messages.at(-1);
   const awaitingTurnIdentity =
     executing && pendingMessage?.role === "user" && !pendingMessage.turnId;
@@ -129,9 +133,10 @@ export function useMessageGrouping({
   };
 
   for (const group of projection.turns) {
-    const updates = foldUpdates
-      ? group.messages.filter(({ message }) => isTurnUpdateMessage(message))
-      : [];
+    const updates =
+      foldUpdates && !messagesOnly
+        ? group.messages.filter(({ message }) => isTurnUpdateMessage(message))
+        : [];
     for (const entry of group.messages) {
       if (updates.includes(entry)) continue;
       addRow(
@@ -160,6 +165,7 @@ export function useMessageGrouping({
         group,
         "updates",
       );
+    if (messagesOnly) continue;
     const reasoning = reasoningByTurn.get(group.turnId);
     if (reasoning?.length)
       addRow(

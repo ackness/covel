@@ -182,10 +182,9 @@ export function GameView({
   } | null>(null);
   const composerMode =
     composerSelection?.sessionId === session.id ? composerSelection.mode : "";
-  const selectedComposer =
-    pluginViews.status === "ready"
-      ? pluginViews.composers?.find((entry) => entry.mode === composerMode)
-      : undefined;
+  const selectedComposer = pluginViews.composers?.find(
+    (entry) => entry.mode === composerMode,
+  );
   const activeComposer =
     selectedComposer && viewConsent.isAllowed(selectedComposer)
       ? selectedComposer
@@ -238,24 +237,44 @@ export function GameView({
   };
   // Once an active region loses its declaration or permission, require a new explicit choice.
   const lastActive = useRef<{
+    sessionId?: string;
     main?: PluginViewEntry;
     composer?: PluginViewEntry;
   }>({});
   useEffect(() => {
     const previous = lastActive.current;
+    // A request failure is not evidence that a provider disappeared. Cached
+    // declarations remain usable only within their session and while authorized.
+    const retired = (entry: PluginViewEntry) =>
+      pluginViews.status === "ready" ||
+      !sessionPlugins.some(
+        (plugin) => plugin.id === entry.pluginId && plugin.active,
+      ) ||
+      allViews.some(
+        (current) =>
+          current.mode === entry.mode && !viewConsent.isAllowed(current),
+      );
     if (
+      previous.sessionId === session.id &&
       previous.main &&
       !activePluginView &&
+      retired(previous.main) &&
       viewInfo.requestedMode === previous.main.mode
     )
       setViewMode(viewInfo.hostDefault);
     if (
+      previous.sessionId === session.id &&
       previous.composer &&
       !activeComposer &&
+      retired(previous.composer) &&
       composerMode === previous.composer.mode
     )
       setComposerSelection(null);
-    lastActive.current = { main: activePluginView, composer: activeComposer };
+    lastActive.current = {
+      sessionId: session.id,
+      main: activePluginView,
+      composer: activeComposer,
+    };
   }, [
     activePluginView,
     activeComposer,
@@ -263,6 +282,11 @@ export function GameView({
     setViewMode,
     viewInfo.hostDefault,
     viewInfo.requestedMode,
+    session.id,
+    sessionPlugins,
+    pluginViews.status,
+    allViews,
+    viewConsent.isAllowed,
   ]);
   const consentDialog = useRef(consentEntry);
   consentDialog.current = consentEntry;
@@ -604,7 +628,7 @@ export function GameView({
       <SessionDimensionsPanel recoveryOnly />
 
       {/* Input — always fixed at bottom */}
-      {composerRegion ?? hostComposer}
+      {!activeComposer && hostComposer}
     </>
   );
 
@@ -1022,14 +1046,13 @@ export function GameView({
                     .catch(() => emitToast("error", t("settings.saveFailed")));
                 }}
               />
-              {composerRegion ??
-                (activePluginView.spec.surface === "main"
-                  ? hostComposer
-                  : null)}
+              {!activeComposer &&
+                activePluginView.spec.surface === "main" &&
+                hostComposer}
             </div>
           ) : stageActive ? (
             <StageView
-              composerRegion={composerRegion}
+              composerReplaced={Boolean(activeComposer)}
               advancing={!!state.advance && state.advance.phase !== "stopped"}
               recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
@@ -1067,6 +1090,7 @@ export function GameView({
               {renderComposer()}
             </div>
           )}
+          {composerRegion}
         </ResizablePanel>
 
         {/* Desktop: Right panel */}

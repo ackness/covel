@@ -53,12 +53,8 @@ export function useGameViewMode(
   const entry = views?.views.find(
     (entry) => entry.mode === storedMode && entry.spec.surface !== "composer",
   );
-  const consentView =
-    views?.status === "ready" && entry && canUse && !canUse(entry)
-      ? entry
-      : undefined;
-  const available =
-    !pluginMode || (views?.status === "ready" && entry && !consentView);
+  const consentView = entry && canUse && !canUse(entry) ? entry : undefined;
+  const available = !pluginMode || (entry && !consentView);
   return [
     available ? storedMode : hostDefault(world),
     choose,
@@ -66,10 +62,7 @@ export function useGameViewMode(
       hostDefault: hostDefault(world),
       requestedMode: storedMode,
       fellBack: Boolean(
-        pluginMode &&
-        views &&
-        views.status !== "loading" &&
-        (!entry || views?.status === "error" || consentView),
+        pluginMode && views && views.status !== "loading" && !available,
       ),
       consentView,
     },

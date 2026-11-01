@@ -5,13 +5,14 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
 import { viewEntry } from "./plugin-view-fixtures.js";
-import type { SessionRecord } from "@/services/api.js";
+import type { SessionRecord, UISpecsResponse } from "@/services/api.js";
 import { SessionStateContext } from "@/stores/session-store/context.js";
 import { initialState } from "@/stores/session-store/reducer.js";
 import type { SessionState } from "@/stores/session-store/types.js";
@@ -30,6 +31,8 @@ const surfaces = vi.hoisted(() => ({
   denied: new Set<string>(),
   reload: vi.fn<() => Promise<void>>(),
   narrow: false,
+  realDiscovery: false,
+  fetch: vi.fn<typeof import("@/services/api.js").fetchUiSpecs>(),
 }));
 const actions = vi.hoisted(() => ({
   abortActiveTurn: vi.fn<() => Promise<void>>(),
@@ -65,14 +68,25 @@ vi.mock("@/theme-system/use-theme-layout.js", () => ({
 }));
 vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlot: () => undefined }));
 vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
-vi.mock("../game-view/use-plugin-views.js", () => ({
-  usePluginViews: () => ({
-    views: surfaces.views,
-    composers: surfaces.composers,
-    status: "ready",
-    reload: surfaces.reload,
-  }),
+vi.mock("@/services/api.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/api.js")>()),
+  fetchUiSpecs: surfaces.fetch,
 }));
+vi.mock("../game-view/use-plugin-views.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../game-view/use-plugin-views.js")>();
+  return {
+    usePluginViews: (...args: Parameters<typeof actual.usePluginViews>) =>
+      surfaces.realDiscovery
+        ? actual.usePluginViews(...args)
+        : {
+            views: surfaces.views,
+            composers: surfaces.composers,
+            status: "ready",
+            reload: surfaces.reload,
+          },
+  };
+});
 vi.mock("../plugin-view-consent.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../plugin-view-consent.js")>();
@@ -121,12 +135,12 @@ vi.mock("../game-view/message-composer.js", () => ({
 vi.mock("../stage/StageView.js", () => ({
   StageView: ({
     onToggleImmersive,
-    composerRegion,
+    composerReplaced,
   }: ComponentProps<typeof StageView>) => (
     <div data-testid="stage-story">
       Stage narrative
       <button onClick={onToggleImmersive}>Toggle immersive stage</button>
-      {composerRegion ?? <textarea aria-label="Stage composer" />}
+      {!composerReplaced && <textarea aria-label="Stage composer" />}
     </div>
   ),
 }));
@@ -152,6 +166,7 @@ vi.mock("../plugin-view-host.js", () => ({
   PluginViewHost: (props: ComponentProps<typeof PluginViewHost>) => (
     <section aria-label={props.entry.label}>
       <span>{props.entry.label}</span>
+      <textarea aria-label={`Draft ${props.entry.label}`} />
       {!props.entry.spec.webview && props.liveSession?.renderComposer()}
       <button onClick={() => props.onFallback("render-error")}>
         Fail {props.entry.label}
@@ -204,6 +219,7 @@ beforeEach(() => {
   surfaces.allowed = true;
   surfaces.denied.clear();
   surfaces.narrow = false;
+  surfaces.realDiscovery = false;
   surfaces.reload.mockResolvedValue();
   surfaces.grant.mockResolvedValue();
   state = { ...initialState, session, executing: false };
@@ -340,6 +356,80 @@ it("retires a disabled composer without resetting main, and session navigation d
   view.update();
   expect(screen.queryByRole("region", { name: "Story page" })).toBeNull();
 });
+
+it.each(["main", "composer"] as const)(
+  "retires only the disabled %s provider during deferred discovery",
+  async (region) => {
+    const { sessionPlugin } = await import("./plugin-view-fixtures.js");
+    surfaces.realDiscovery = true;
+    const response: UISpecsResponse = {
+      theme: [],
+      right: [],
+      view: [main, input].map((entry) => ({
+        pluginId: entry.pluginId,
+        specs: [{ ...entry.spec, label: entry.label }],
+      })),
+    };
+    surfaces.fetch.mockResolvedValueOnce(response);
+    state = {
+      ...state,
+      sessionPlugins: [sessionPlugin, { ...sessionPlugin, id: input.pluginId }],
+    };
+    const view = mount();
+    await screen.findByRole("button", { name: i18n.t("session.pluginViews") });
+    chooseMain();
+    chooseInput();
+    const removed = region === "main" ? main : input;
+    const healthy = region === "main" ? input : main;
+    const mounted = screen.getByRole("region", { name: healthy.label });
+    const draft = within(mounted).getByRole("textbox");
+    fireEvent.change(draft, {
+      target: { value: "Keep the healthy page draft" },
+    });
+    let resolve!: (value: typeof response) => void;
+    surfaces.fetch.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    state = {
+      ...state,
+      sessionPlugins: state.sessionPlugins.map((plugin) =>
+        plugin.id === removed.pluginId ? { ...plugin, active: false } : plugin,
+      ),
+    };
+    view.update();
+    expect(screen.queryByRole("region", { name: removed.label })).toBeNull();
+    expect(screen.getByRole("region", { name: healthy.label })).toBe(mounted);
+    expect((draft as HTMLTextAreaElement).value).toBe(
+      "Keep the healthy page draft",
+    );
+    await act(async () =>
+      resolve({
+        ...response,
+        view: response.view?.filter(
+          (entry) => entry.pluginId !== removed.pluginId,
+        ),
+      }),
+    );
+    expect(screen.getByRole("region", { name: healthy.label })).toBe(mounted);
+    expect((draft as HTMLTextAreaElement).value).toBe(
+      "Keep the healthy page draft",
+    );
+    surfaces.fetch.mockResolvedValueOnce(response);
+    state = {
+      ...state,
+      sessionPlugins: state.sessionPlugins.map((plugin) => ({
+        ...plugin,
+        active: true,
+      })),
+    };
+    view.update();
+    await waitFor(() => expect(surfaces.fetch).toHaveBeenCalledTimes(3));
+    expect(screen.queryByRole("region", { name: removed.label })).toBeNull();
+  },
+);
 it("does not let a deferred Retry restore a selection after global return or a session round trip", async () => {
   const view = mount();
   chooseMain();

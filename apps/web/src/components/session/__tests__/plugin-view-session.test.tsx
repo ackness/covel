@@ -15,6 +15,7 @@ import {
   type SeatRole,
 } from "@covel/shared";
 import i18n from "@/i18n/index.js";
+import type { UISpecsResponse } from "@/services/api.js";
 import {
   SessionActionsContext,
   SessionStateContext,
@@ -38,14 +39,31 @@ import {
 } from "@/stores/plugin-data-store.js";
 import { applyUiSlotEvent, clearUiSlots } from "@/stores/ui-slot-store.js";
 import consoleSpec from "../../../../../../plugins/dm-console/ui/dm-console.json";
-const mocks = vi.hoisted(() => ({ entries: [] as PluginViewEntry[] }));
-vi.mock("../game-view/use-plugin-views.js", () => ({
-  usePluginViews: () => ({
-    views: mocks.entries,
-    status: "ready",
-    reload: vi.fn(),
-  }),
+import librarySpec from "../../../../../../plugins/codex/ui/library-view.json";
+import { sessionPlugin } from "./plugin-view-fixtures.js";
+const mocks = vi.hoisted(() => ({
+  entries: [] as PluginViewEntry[],
+  realDiscovery: false,
+  fetch: vi.fn<typeof import("@/services/api.js").fetchUiSpecs>(),
 }));
+vi.mock("@/services/api.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/api.js")>()),
+  fetchUiSpecs: mocks.fetch,
+}));
+vi.mock("../game-view/use-plugin-views.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../game-view/use-plugin-views.js")>();
+  return {
+    usePluginViews: (...args: Parameters<typeof actual.usePluginViews>) =>
+      mocks.realDiscovery
+        ? actual.usePluginViews(...args)
+        : {
+            views: mocks.entries,
+            status: "ready",
+            reload: vi.fn(),
+          },
+  };
+});
 vi.mock("../use-session-bridge.js", () => ({
   useSessionBridge: () => ({ projection: null }),
 }));
@@ -200,6 +218,8 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage("en-US");
   mocks.entries = [entry, community];
+  mocks.realDiscovery = false;
+  mocks.fetch.mockReset();
   state = {
     ...initialState,
     session: {
@@ -226,6 +246,76 @@ afterEach(() => {
   clearAllStreamingText();
   clearUiSlots();
   setActiveSession(null);
+});
+
+it("keeps a bundled page, its filter and the view menu through deferred discovery and a transient failure", async () => {
+  mocks.realDiscovery = true;
+  const response: UISpecsResponse = {
+    theme: [],
+    right: [],
+    view: [{ pluginId: "codex", specs: [librarySpec] }],
+  };
+  mocks.fetch.mockResolvedValueOnce(response);
+  state = { ...state, sessionPlugins: [{ ...sessionPlugin, id: "codex" }] };
+  replaceSessionPluginData("s", {
+    codex: {
+      entries: {
+        gate: {
+          title: "Gate",
+          content: "The north gate",
+          category: "location",
+        },
+        key: { title: "Key", content: "A brass key", category: "item" },
+      },
+    },
+  });
+  const view = render(shell(<GameView session={state.session!} />));
+  await screen.findByRole("button", { name: "Plugin views" });
+  choose("Codex");
+  const filter = screen.getByPlaceholderText("Search entries…");
+  fireEvent.change(filter, { target: { value: "Gate" } });
+  expect(screen.getByText("Gate")).toBeTruthy();
+  expect(screen.queryByText("Key")).toBeNull();
+  let reject!: (error: Error) => void;
+  mocks.fetch.mockImplementationOnce(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  await act(async () => {
+    await i18n.changeLanguage("zh-CN");
+  });
+  expect(screen.getByPlaceholderText("Search entries…")).toBe(filter);
+  expect(
+    screen.getByRole("button", { name: i18n.t("session.pluginViews") }),
+  ).toBeTruthy();
+  await act(async () => reject(new Error("Temporarily offline")));
+  expect(screen.getByPlaceholderText("Search entries…")).toBe(filter);
+  expect(
+    screen.getByRole("button", { name: i18n.t("session.pluginViews") }),
+  ).toBeTruthy();
+  let resolve!: (value: typeof response) => void;
+  mocks.fetch.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  state = {
+    ...state,
+    sessionPlugins: [
+      ...state.sessionPlugins,
+      { ...sessionPlugin, id: "unrelated" },
+    ],
+  };
+  view.rerender(shell(<GameView session={state.session!} />));
+  expect(screen.getByPlaceholderText("Search entries…")).toBe(filter);
+  await act(async () => resolve(response));
+  expect(screen.getByPlaceholderText("Search entries…")).toBe(filter);
+  expect((filter as HTMLInputElement).value).toBe("Gate");
+  expect(screen.getByText("Gate")).toBeTruthy();
+  expect(screen.queryByText("Key")).toBeNull();
 });
 
 it("shares one host draft and mode through real bundled and community view renderers", () => {
@@ -441,6 +531,130 @@ it("renders public cast, a separate pending interaction and stream resets, while
     "CONTINUATION-SECRET",
   ])
     expect(document.body.textContent).not.toContain(secret);
+});
+
+it("numbers current console choices across lists and submits their selected interactions without stale choices", async () => {
+  const boxes = vi
+    .spyOn(HTMLElement.prototype, "getClientRects")
+    .mockReturnValue([{}] as unknown as DOMRectList);
+  try {
+    const choice = (
+      id: string,
+      turnId: string,
+      labels: string[],
+    ): StreamMessage => ({
+      ...message(id, "", "plugin"),
+      turnId,
+      timestamp:
+        turnId === "past" ? "2026-01-01T00:00:00Z" : "2026-01-01T00:01:00Z",
+      block: {
+        type: "interactive_choice",
+        data: {
+          interactionId: `${id}-interaction`,
+          choices: labels.map((label) => ({ id: label.toLowerCase(), label })),
+        },
+        meta: { turnId, interactionId: `${id}-interaction` },
+      },
+    });
+    state = {
+      ...state,
+      executionSteps: [
+        {
+          pluginId: "private-worker",
+          runtimeId: "private-worker/prepare",
+          turnId: "current",
+          status: "completed",
+          attemptStatus: "committed",
+          startedAt: "2026-01-01T00:01:00Z",
+          reasoning: [
+            {
+              id: "private-reasoning",
+              content: "PRIVATE-REASONING",
+              timestamp: "2026-01-01T00:01:00Z",
+            },
+          ],
+        },
+      ],
+      messages: [
+        choice("stale", "past", ["Stale route"]),
+        {
+          id: "later",
+          role: "user",
+          content: "Next turn",
+          turnId: "current",
+          timestamp: "2026-01-01T00:01:00Z",
+        },
+        choice("first", "current", ["North", "South"]),
+        choice("second", "current", ["East", "West"]),
+      ],
+    };
+    setRole("player");
+    const view = render(shell(<GameView session={state.session!} />));
+    choose("DM Console");
+    expect(screen.queryByText("Stale route")).toBeNull();
+    const currentChoices = document.querySelectorAll(
+      '[data-turn-current="true"] button.ui-choice',
+    );
+    expect([...currentChoices].map((button) => button.textContent)).toEqual([
+      "North",
+      "South",
+      "East",
+      "West",
+    ]);
+    for (const button of currentChoices) {
+      expect(button.closest(".chat-row")?.getAttribute("data-turn-id")).toBe(
+        "current",
+      );
+    }
+    vi.mocked(actions.submitInteraction).mockResolvedValueOnce({
+      rejected: [{ message: "Choose a current option" }],
+    });
+    fireEvent.keyDown(document.body, { key: "3" });
+    await waitFor(() =>
+      expect(actions.submitInteraction).toHaveBeenCalledExactlyOnceWith(
+        "second",
+        "current",
+        "second-interaction",
+        "choice",
+        { selectedId: "east", selectedLabel: "East" },
+      ),
+    );
+    expect(await screen.findByText("Choose a current option")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "East" })).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "3" });
+    await waitFor(() =>
+      expect(actions.submitInteraction).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Choose a current option")).toBeNull(),
+    );
+    fireEvent.keyDown(document.body, { key: "1" });
+    await waitFor(() =>
+      expect(actions.submitInteraction).toHaveBeenLastCalledWith(
+        "first",
+        "current",
+        "first-interaction",
+        "choice",
+        { selectedId: "north", selectedLabel: "North" },
+      ),
+    );
+    fireEvent.keyDown(document.body, { key: "5" });
+    expect(actions.submitInteraction).toHaveBeenCalledTimes(3);
+    expect(actions.upsertInteractionDraft).not.toHaveBeenCalled();
+    expect(actions.sendMessage).not.toHaveBeenCalled();
+    expect(actions.submitBlock).not.toHaveBeenCalled();
+    state = { ...state, submittedBlockIds: new Set(["first", "second"]) };
+    view.rerender(shell(<GameView session={state.session!} />));
+    expect(screen.getByText("No pending interactions.")).toBeTruthy();
+    expect(
+      document.querySelector(
+        '[data-row-kind="execution"], [data-row-kind="assets"], [data-row-kind="reasoning"]',
+      ),
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain("PRIVATE-REASONING");
+  } finally {
+    boxes.mockRestore();
+  }
 });
 
 it("masks live context in nested plugin messages and snapshot panels", () => {

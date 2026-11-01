@@ -5,6 +5,6 @@
 
 ### Changed
 
-- **An explicit main replacement retains the host composer.** Independently selected composers also work in ordinary plugin views and stage, where duplicate input controls are suppressed. Selection remains local to the current visit; device consent persists.
+- **An explicit main replacement retains the host composer.** Independently selected composers also work in ordinary plugin views and stage, where duplicate input controls are suppressed. Same-session discovery refreshes retain authorized regions and their drafts; disabling one provider retires only its region. Selection remains local to the current visit; device consent persists.
 
 - **Host view menus stay above replacement controls.** Normal document unload does not report a page error; uncaught errors and unhandled rejections still do.
