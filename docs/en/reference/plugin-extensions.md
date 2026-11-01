@@ -886,6 +886,8 @@ The bundled provider exposes one code-only read service named turn-policy, with 
 
 Presentation functions read projected public story and explicit own asset / display namespaces. Service, tool, recursion and sub-agent calls are refused at entry, including read services. UI-slot providers render committed own display state; presentation grants no private-data authority. See [presentation runtimes](./plugins.md#presentation-runtimes).
 
+Display-only [EntryList](./ui-components.md#data) and [stage.cast@1](./ui-panels.md#stagecast1) declare departures through bounded `exitTransition`, off when omitted. The renderer owns temporary display and cleanup while current values update immediately, without events, RPC or plugin timers.
+
 ## Static theme discovery
 
 `contributes.ui.theme` is static metadata read from files, without registering `ui.slot@1`, services or executable extension points, or granting session capabilities. Discovery uses the separate `theme` array on `/api/ui-specs`; see [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).

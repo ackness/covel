@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { i18nTextSchema } from "./world.js";
 
+/** Host-owned inferred departures; authors cannot supply animation code or timing. */
+export const exitTransitionSchema = z.enum(["none", "fade"]);
+export type ExitTransition = z.infer<typeof exitTransitionSchema>;
+
 /** Live declarative views use host rendering, never author-selected session data. */
 export const sessionMessagesPropsSchema = z.strictObject({
   content: z.enum(["story", "pending"]).default("story"),
@@ -46,6 +50,7 @@ export const mediaGalleryPropsSchema = z.object({
 export const entryListPropsSchema = z.object({
   items: z.unknown(),
   idField: z.string().default("id"),
+  exitTransition: exitTransitionSchema.optional(),
   titleField: z.string(),
   descriptionFields: z.array(z.string()).optional(),
   badgeFields: z.array(z.string()).optional(),

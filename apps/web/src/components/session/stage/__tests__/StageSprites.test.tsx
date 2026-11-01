@@ -51,6 +51,7 @@ const base: StageSpritesProps = {
   speakers: [],
   presence: {},
   retainWhenEmpty: false,
+  exitTransition: "fade",
 };
 const sprite = (id: string) =>
   document.querySelector<HTMLElement>(
@@ -67,6 +68,64 @@ const advance = (ms: number) =>
   });
 
 describe("stage sprite departures", () => {
+  it.each([undefined, "none"] as const)(
+    "cuts inferred disappearance with policy %s while explicit exits keep their transition",
+    (exitTransition) => {
+      const props = { ...base, exitTransition };
+      const { rerender } = render(
+        <StageSprites {...props} speakers={cast("A", "B")} />,
+      );
+      rerender(<StageSprites {...props} speakers={cast("A")} />);
+      expect(sprite("B")).toBeNull();
+      rerender(
+        <StageSprites
+          {...props}
+          speakers={[
+            { id: "A", name: "A", exiting: true, transition: "dissolve" },
+          ]}
+        />,
+      );
+      expect(sprite("A")!.dataset.transition).toBe("dissolve");
+      rerender(<StageSprites {...props} />);
+      advance(409);
+      expect(sprite("A")).not.toBeNull();
+      advance(1);
+      expect(sprite("A")).toBeNull();
+    },
+  );
+
+  it("clears only inferred departures when policy switches off", () => {
+    const { rerender } = render(
+      <StageSprites {...base} speakers={cast("A", "B", "C")} />,
+    );
+    const speakers: StageSpeaker[] = [
+      { id: "A", name: "A" },
+      { id: "B", name: "B", exiting: true, transition: "slide-left" },
+    ];
+    rerender(<StageSprites {...base} speakers={speakers} />);
+    expect(sprite("C")!.dataset.phase).toBe("exit");
+    advance(100);
+    rerender(
+      <StageSprites {...base} speakers={speakers} exitTransition="none" />,
+    );
+    expect(sprite("C")).toBeNull();
+    expect(sprite("B")!.dataset.transition).toBe("slide-left");
+    advance(269);
+    expect(sprite("B")).not.toBeNull();
+    advance(1);
+    expect(sprite("B")).toBeNull();
+  });
+
+  it("cuts ambiguous keys without retaining the previous cast", () => {
+    const { rerender } = render(
+      <StageSprites {...base} speakers={cast("A", "B")} />,
+    );
+    rerender(<StageSprites {...base} speakers={cast("C", "C", "")} />);
+    expect(document.querySelectorAll('[data-phase="present"]')).toHaveLength(3);
+    expect(document.querySelectorAll('[data-phase="exit"]')).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("keeps the last displayed portrait and lane until its own fade completes without another update", () => {
     const portrait = { id: "old-portrait", mime: "image/png", size: 1 };
     const presence = { B: { characterId: "B", avatar: portrait } };
@@ -79,6 +138,7 @@ describe("stage sprite departures", () => {
     expect(departing.dataset.phase).toBe("exit");
     expect(departing.dataset.transition).toBe("fade");
     expect(departing.getAttribute("aria-hidden")).toBe("true");
+    expect(departing.hasAttribute("inert")).toBe(true);
     expect(departing.style.zIndex).toBe("0");
     expect(departing.style.left).toBe(lane);
     expect(screen.getByAltText("B").getAttribute("src")).toBe("old-portrait");

@@ -44,6 +44,7 @@ export default function (covel) {
           ...(speaker.description ? { description: speaker.description } : {}),
         })),
         retainWhenEmpty: visible.length === selected.length,
+        exitTransition: "fade",
       };
     },
   });
@@ -137,7 +138,11 @@ export default function (covel) {
         )
       )
         return previous;
-      return { actors: actors(speakers), retainWhenEmpty: false };
+      return {
+        actors: actors(speakers),
+        retainWhenEmpty: false,
+        exitTransition: "fade",
+      };
     },
   });
 }

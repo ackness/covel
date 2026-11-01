@@ -139,6 +139,6 @@ Ensemble sessions without an eligible sub-agent target receive no delegation too
 
 Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).
 
-Scene Stage dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while the host finishes departures; see [Stage and sound](./stage.md).
+Scene Stage dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while cast and direction providers explicitly opt into host-owned departure fades; see [Stage and sound](./stage.md).
 
 Scene Stage also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly from the session theme menu and recoverable through Use default appearance.

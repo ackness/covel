@@ -1189,6 +1189,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
+- `EntryList.props.exitTransition` 只接受字面量 `none` / `fade`；其他列表数据仍可绑定状态。省略时关闭，稳定键与显示上限见[界面组件](./ui-components.md#data)。舞台提供方可声明[同一退场策略](./ui-panels.md#stagecast1)，不写入演员持久状态。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
 - `contributes.actionKinds` 的 `name` 不能是基础行动类型、不能重复；`schema` 文件必须在包里并且是 JSON 对象。
 - `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。

@@ -205,6 +205,8 @@ export type StageCastModel = {
       "none" | "fade" | "slide-left" | "slide-right" | "dissolve";
   }[];
   readonly retainWhenEmpty: boolean;
+  /** Inferred removals cut immediately unless the list opts into a host fade. */
+  readonly exitTransition?: "none" | "fade";
 };
 
 export type StageChoicesModel = {

@@ -1189,6 +1189,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
+- `EntryList.props.exitTransition` accepts only literal `none` / `fade`; list data can still bind to state. Omission disables it; see [UI components](./ui-components.md#data) for stable keys and display bounds. Stage providers can declare the [same departure policy](./ui-panels.md#stagecast1) without persisting it in actor state.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
 - A `contributes.actionKinds` `name` must not be a base action kind or repeat; its `schema` file must be in the package and be a JSON object.
 - Each `contributes.datasets` schema file must be in the package and valid JSON. `key` must be a required property in the schema's top-level `properties` (skipped when the schema has none). A name that is also in `contributes.data` must use the same schema in both.

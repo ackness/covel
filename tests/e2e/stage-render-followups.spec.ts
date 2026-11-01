@@ -177,6 +177,7 @@ test("full cast updates preserve newcomers and explicit none and reduced motion 
     const cast = (...ids: string[]) => ({
       actors: ids.map((id) => ({ characterId: id, displayName: id })),
       retainWhenEmpty: false,
+      exitTransition: "fade" as const,
     });
     await host.publishCast(cast("mira", "theo", "cam", "dev"));
     await expect(
@@ -186,6 +187,26 @@ test("full cast updates preserve newcomers and explicit none and reduced motion 
       (element) => (element as HTMLElement).style.left,
     );
     await freezeDepartures(page);
+    for (const exitTransition of [undefined, "none"] as const) {
+      await host.publishCast({
+        ...cast("mira", "theo", "cam"),
+        exitTransition,
+      });
+      await expect
+        .poll(async () => {
+          await page.clock.runFor(16);
+          return actor(page, "dev").count();
+        })
+        .toBe(0);
+      await expect(page.locator('[data-phase="exit"]')).toHaveCount(0);
+      await host.publishCast(cast("mira", "theo", "cam", "dev"));
+      await expect
+        .poll(async () => {
+          await page.clock.runFor(16);
+          return actor(page, "dev").getAttribute("data-phase");
+        })
+        .toBe("present");
+    }
     await host.publishCast(cast("mira", "theo", "cam", "eli"));
     await expect
       .poll(async () => {

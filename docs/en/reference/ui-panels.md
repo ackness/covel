@@ -1157,20 +1157,26 @@ Every field is optional. `{}` is also valid.
 
 #### `stage.cast@1`
 
-The value is `{ actors, retainWhenEmpty }`. Both fields are required.
+The value is `{ actors, retainWhenEmpty, exitTransition? }`. The first two fields are required.
 
 On an actual location change, built-in Scene Stage clears existing direction actors before applying new cues. Preview and commit use the same scene identity and ordering. Existing direction state with no new entries yields empty actors and `retainWhenEmpty: false`, preventing old-location portraits from remaining. Without direction state, the original cast provider remains in use.
 
+<!-- prettier-ignore -->
 | Field             | Type                                   | Required | Meaning                                                                                                                                                  |
 | ----------------- | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `actors`          | Array of the objects below, at most 64 | Yes      | Actors currently on stage; an empty array is valid                                                                                                       |
 | `retainWhenEmpty` | boolean                                | Yes      | When `actors` is empty, `true` keeps the previous portraits without highlights; `false` clears them after departure completes. The schema has no default |
+| `exitTransition` | `"none"` / `"fade"` | No | Policy for departures inferred from successive lists; omission or `"none"` cuts immediately, `"fade"` requests a short host fade |
 
-Removing an actor changes the authoritative slot immediately. The client retains only the previously displayed image, name, variant framing and old lane for one 300ms fade; its former entrance `transition` is not an exit instruction. A loaded image stays displayed until departure completes, without reloading or flashing a placeholder when departure begins. Up to four current actors and four outgoing images can coexist. Outgoing images do not consume current capacity or enter the new layout; they sit below current actors, are inactive, hidden from assistive technology and non-interactive. Faster replacements evict the oldest outgoing images first.
+Removing an actor changes the authoritative slot immediately. Omitted `exitTransition` or `"none"` cuts the inferred departure immediately; only `"fade"` lets the client retain the previously displayed image, name, variant framing and old lane for one 300ms fade; its former entrance `transition` is not an exit instruction. A loaded image stays displayed until departure completes, without reloading or flashing a placeholder when departure begins. Up to four current actors and four outgoing images can coexist. Outgoing images do not consume current capacity or enter the new layout; they sit below current actors, are inactive, hidden from assistive technology and non-interactive. Faster replacements evict the oldest outgoing images first.
+
+The list policy controls only inferred departures; delivered explicit exits remain independent, and switching the policy off clears only inferred departures. Built-in Scene Stage cast and direction providers both explicitly return `exitTransition: "fade"`, without a storage migration. Other providers that omit it now cut immediately instead of the former automatic fade. Stage shares its host keyed lifecycle with display-only [EntryList](./ui-components.md#data); this exposes no custom CSS, durations, scripts or callbacks.
 
 A delivered `exiting: true` uses its requested `transition`, defaulting only an omitted value to `fade`. Fade takes 300ms, slides 320ms and dissolve 360ms; `none` and reduced motion cut immediately. Committed omission preserves an ongoing explicit exit without replaying it or changing it to fade. Matching outer animation completion removes it, with cleanup within 500ms if events are lost; re-entry cancels the old departure. Instructions never delivered to the renderer cannot be recovered from cast differences.
 
-Only a still-present valid slot with `actors: []` and `retainWhenEmpty: true` retains the former current lineup without highlights; explicit exits never become that sticky lineup. An empty value with `false` finishes departures once and stays empty. A missing slot, cleared projection during recovery, session change or unmount immediately discards local memory; a fresh mount shows only current actors. Outgoing images never enter snapshots, UI slots, the session bridge or model context, delay a turn or submit writes.
+Retention requires unique nonempty character keys. Blank or duplicate keys cut immediately for that update, without guessing identity. Reordering does not trigger exits, and repeated snapshots do not renew cleanup deadlines.
+
+Only a still-present valid slot with `actors: []` and `retainWhenEmpty: true` retains the former current lineup without highlights; explicit exits never become that sticky lineup. An empty value with `false` finishes departures once or cuts immediately according to the list policy, then stays empty. A missing or invalid slot, cleared projection during recovery, session change or unmount immediately discards local memory; a fresh mount shows only current actors. Outgoing images never enter snapshots, UI slots, the session bridge or model context, delay a turn or submit writes.
 
 Each actor:
 

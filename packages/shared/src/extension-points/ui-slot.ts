@@ -3,6 +3,7 @@ import { z } from "zod";
 import { defineExtensionPoint } from "./definition.js";
 import { mediaRefSchema } from "../types/media.js";
 import { i18nTextSchema } from "../schemas/world.js";
+import { exitTransitionSchema } from "../schemas/catalog.js";
 
 const visualRequestSchema = z.strictObject({
   variantId: z.string().optional(),
@@ -70,6 +71,7 @@ export const stageCastSchema = z.strictObject({
     )
     .max(64),
   retainWhenEmpty: z.boolean(),
+  exitTransition: exitTransitionSchema.optional(),
 });
 export const stageChoicesSchema = z.strictObject({
   turnId: z.string().optional(),

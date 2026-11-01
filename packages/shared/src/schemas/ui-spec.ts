@@ -16,6 +16,7 @@ import { STORY_LIMITS, storySegmentKinds } from "./story-output.js";
 import {
   sessionMessagesPropsSchema,
   sessionComposerPropsSchema,
+  exitTransitionSchema,
 } from "./catalog.js";
 
 /** The newest `specVersion` this host understands. */
@@ -90,6 +91,17 @@ const uiViewNodeSchema: z.ZodType = z.lazy(() =>
     })
     .superRefine((node, ctx) => {
       const name = node.component ?? node.type;
+      if (name === "EntryList") {
+        const policy = exitTransitionSchema
+          .optional()
+          .safeParse(node.props?.exitTransition);
+        if (!policy.success)
+          for (const issue of policy.error.issues)
+            ctx.addIssue({
+              ...issue,
+              path: ["props", "exitTransition", ...issue.path],
+            });
+      }
       const sessionProps =
         name === "SessionMessages"
           ? sessionMessagesPropsSchema.safeParse(node.props ?? {})
