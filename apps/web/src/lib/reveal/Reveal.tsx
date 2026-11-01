@@ -104,7 +104,12 @@ function RevealGroup({
   }, [identity, controller.revealing, props.revision]);
   return (
     <ManagedReveal value={true}>
-      <div ref={root} data-reveal-group="" aria-live="off">
+      <div
+        ref={root}
+        data-reveal-group=""
+        data-reveal-active={controller.revealing ? "true" : undefined}
+        aria-live="off"
+      >
         {units.map((unit, index) => (
           <RevealUnit key={index} hidden={index >= controller.visible}>
             {unit}

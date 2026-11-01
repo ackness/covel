@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * POST /api/actions `submit_actions` and GET /api/sessions/:id/action-kinds.
  *
@@ -169,12 +170,10 @@ describe("submit_actions", () => {
         userMessages.push(
           typeof last?.content === "string" ? last.content : "",
         );
-        return {
-          content: "The story moves on.",
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+        return submittedOutput(
+          { narrativeOutput: "The story moves on." },
+          { inputTokens: 1, outputTokens: 1 },
+        );
       },
     };
     eventBus = createEventBus(store);

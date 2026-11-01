@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * A player's submitted actions come back on their message through /view (the
  * restore path) and /messages, so a restored chat can say who acted and how.
@@ -16,14 +17,12 @@ const BO_ID = "char-bo-91c2";
 
 class QuietNarrator implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
-    return {
-      content: JSON.stringify({
+    return submittedOutput(
+      {
         segments: [{ kind: "narration", text: "雨停了。" }],
-      }),
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 10, outputTokens: 10 },
-    };
+      },
+      { inputTokens: 10, outputTokens: 10 },
+    );
   }
 }
 

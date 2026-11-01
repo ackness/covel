@@ -449,7 +449,7 @@ node scripts/submission-report.mjs --traces /path/to/session-traces.json \
   > /tmp/covel-acceptance/official-deepseek-summary.json
 ```
 
-注入数据用 `--sample injected` 单独生成报告。摘要只输出固定分类、计数和数值分布，不复制候选正文、审查内容、密钥、地址或模型身份。一次 gate response 是一个提交相关步骤：纯 content 也算缺少提交，混合批次只算一次，不把工具失败和步骤 note 重复计数。恢复通过运行身份关联同一逻辑循环。报告显示首次/总拒绝分类、重提直方图、步骤/收尾/调用、失败调用的已报告用量及缓存样本、提交回执与存储状态的不一致；它不是验收通过证明。
+注入数据用 `--sample injected` 单独生成报告。摘要只输出固定分类、计数和数值分布，不复制候选正文、审查内容、密钥、地址或模型身份。一次 gate response 是一个提交相关步骤：纯 content 也算缺少提交，混合批次只算一次，不把工具失败和步骤 note 重复计数。恢复通过运行身份关联同一逻辑循环。concealed 步骤通过不含内容的 `submissionAccepted` 标记计入成功提交，不能从收尾步骤的停止原因推断是否接受。重新采集 concealed 验收 trace；旧日志缺少成功标记，不能用于成功提交的分母。报告显示首次/总拒绝分类、重提直方图、步骤/收尾/调用、agent 和函数 gateway 成功及失败调用的已报告用量及缓存样本、提交回执与存储状态的不一致；它不是验收通过证明。
 
 手工补齐报告中 `unmeasured` 的项目：按 runtime/lane 分母、实际纠正预算耗尽、取消与基础设施分类、provider TTFB、准入到进度/接受/提交/首次可见正文及渐显完成的延迟、p50/p95/样本数，以及每个已提交玩家回合的 token/cache 成本（含失败计费调用）。`invalid-output` 终态不能单独证明某类预算耗尽。语义接受和工具确认都不能替代消息及 proposal 的持久化读回。
 

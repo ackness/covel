@@ -310,6 +310,8 @@ The first unit appears immediately. Remaining units finish within two seconds; l
 
 The complete semantic content remains available once to assistive technology, with live announcements off. Copy, export and search use full committed text. Reveal state stays in the renderer, outside messages, settings exports, snapshots, prompts, proposals and bridge v3. A new story finishes any older reveal; duplicate completion, history recovery, reload and view remount do not replay it. Content replacement and unmount cancel old timers. Nested `Reveal` containers inside a host story group use that group's clock.
 
+When chat is following the bottom, its scroll anchor follows the currently revealed segment. A segment taller than the viewport starts at its beginning, keeping the transparent tail out of view. Finishing reveal or choosing Show all resumes following the full bottom. Scrolling up stops following until the player jumps to the latest content.
+
 This effect changes reading presentation after commit; it does not make generation faster or delay input, Stop, auto-advance or persistence. Story template policy selection is documented in [segment templates](./ui-panels.md#segment-templates). The override is documented in [settings storage](./settings-store.md#instant-text).
 
 ## Catalog boundaries

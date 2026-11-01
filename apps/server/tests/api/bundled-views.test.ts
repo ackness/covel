@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPluginRegistry } from "@covel/plugin-loader";
@@ -101,15 +102,15 @@ it("commits host Direct and textless Advance through normal actions while refusi
   vi.stubEnv("COVEL_USER_PLUGINS_DIR", user);
   vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "console-test-token");
   const store = createMemoryStore();
-  const generate = vi.fn(async () => ({
-    content: JSON.stringify({
-      segments: [{ kind: "narration", text: "A public bell rings." }],
-      yield: "user",
-    }),
-    toolCalls: [],
-    finishReason: "stop" as const,
-    usage: { inputTokens: 1, outputTokens: 1 },
-  }));
+  const generate = vi.fn(async () =>
+    submittedOutput(
+      {
+        segments: [{ kind: "narration", text: "A public bell rings." }],
+        yield: "user",
+      },
+      { inputTokens: 1, outputTokens: 1 },
+    ),
+  );
   const root = path.resolve(import.meta.dirname, "../../../../plugins");
   const boot = await bootstrapApi({
     pluginsDir: root,

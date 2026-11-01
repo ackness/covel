@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -36,12 +40,15 @@ const textOf = (message: LLMMessage) =>
 const reply = (
   content: string | null,
   toolCalls: LLMResponse["toolCalls"] = [],
-): LLMResponse => ({
-  content,
-  toolCalls,
-  finishReason: toolCalls.length ? "tool_calls" : "stop",
-  usage: { inputTokens: 1, outputTokens: 1 },
-});
+): LLMResponse =>
+  toolCalls.length
+    ? {
+        content,
+        toolCalls,
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      }
+    : submittedOutput(JSON.parse(content ?? "{}") as Record<string, unknown>);
 const tool = (name: string, args: unknown) =>
   reply(null, [
     {
@@ -82,6 +89,12 @@ describe("bundled inventory services through the action API", () => {
       : "narrator";
     requests.set(runtimeId, [...(requests.get(runtimeId) ?? []), request]);
     if (runtimeId === "world-ir") {
+      const output = completedBusinessOutput(
+        request.messages,
+        "submit-world-facts",
+      );
+      if (output)
+        return submittedOutput(output.facts as Record<string, unknown>);
       const input = JSON.parse(
         textOf(request.messages.findLast(({ role }) => role === "user")!),
       ) as {

@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * Read dependencies at commit on real PostgreSQL.
  *
@@ -293,12 +294,10 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
                     finishReason: "tool_calls",
                     usage: { inputTokens: 1, outputTokens: 1 },
                   }
-                : {
-                    content: "Complete",
-                    toolCalls: [],
-                    finishReason: "stop",
-                    usage: { inputTokens: 1, outputTokens: 1 },
-                  },
+                : submittedOutput(
+                    { narrativeOutput: "Complete" },
+                    { inputTokens: 1, outputTokens: 1 },
+                  ),
           },
           loadRuntime: async (runtime) => ({
             manifest: runtime,

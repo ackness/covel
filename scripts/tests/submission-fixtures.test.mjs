@@ -1,11 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import register from "../../tests/third-party/submission-review-probe/server/injections.js";
 import {
   completedBusinessData,
   submitOutputReply,
 } from "../../tests/e2e/helpers/fake-llm-provider.ts";
+
+test("bundled narrator guides require valid submissions even when invalid stories contain text", () => {
+  for (const id of ["narrator", "chat-mode-narrator"]) {
+    const readme = readFileSync(
+      new URL(`../../plugins/${id}/README.md`, import.meta.url),
+      "utf8",
+    );
+    assert.match(readme, /只通过 `submit-output` 提交/);
+    assert.match(readme, /纠正后仍不合法就失败，即使含有正文也不能提交/);
+    assert.match(readme, /`ReviewAgentOutput` Hook 检查已验证提交值/);
+    assert.match(readme, /只有提交成功才能完成 agent/);
+    assert.doesNotMatch(readme, /只有没有任何正文时才失败|缓冲模型草稿/);
+  }
+});
 
 function observer() {
   const hooks = new Map();

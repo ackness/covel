@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -25,31 +29,34 @@ async function harness() {
         const facts = request.tools?.find(
           (tool) => tool.name === "submit-world-facts",
         );
-        return {
-          content: JSON.stringify({
+        if (!facts)
+          return submittedOutput({
             segments: [
               { kind: "narration", text: "The lantern lights the path." },
             ],
             cues: { present: [] },
-          }),
-          toolCalls: facts
-            ? [
-                {
-                  id: "facts",
-                  name: facts.name,
-                  arguments: JSON.stringify({
-                    schemaVersion: 1,
-                    summary: "The lantern lights the path.",
-                    entities: [],
-                    relations: [],
-                    events: [],
-                    statements: [],
-                    objectiveAssessments: [],
-                  }),
-                },
-              ]
-            : [],
-          finishReason: facts ? "tool_calls" : "stop",
+          });
+        const output = completedBusinessOutput(request.messages, facts.name);
+        if (output)
+          return submittedOutput(output.facts as Record<string, unknown>);
+        return {
+          content: null,
+          toolCalls: [
+            {
+              id: "facts",
+              name: facts.name,
+              arguments: JSON.stringify({
+                schemaVersion: 1,
+                summary: "The lantern lights the path.",
+                entities: [],
+                relations: [],
+                events: [],
+                statements: [],
+                objectiveAssessments: [],
+              }),
+            },
+          ],
+          finishReason: "tool_calls",
           usage: { inputTokens: 1, outputTokens: 1 },
         };
       },

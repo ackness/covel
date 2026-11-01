@@ -255,6 +255,10 @@ export {
   concealTracePayload,
 } from "./utils/concealed-runtime.js";
 export {
+  isRuntimeProgressType,
+  runtimeProgressPayload,
+} from "./utils/runtime-progress.js";
+export {
   HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
   KERNEL_PLUGIN_DATA_OWNER_PREFIX,
   hiddenPluginDataNamespace,

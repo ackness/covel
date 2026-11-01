@@ -51,7 +51,7 @@ export function finalizeAgentOutput(
   let output: Record<string, unknown> = structuredClone(acceptedOutput);
   dropModelAuthoredEffects(output, manifest.name);
   const effects: Record<string, unknown> = {};
-  if (emittedEvents.length) effects.events = [...emittedEvents];
+  const toolEvents: JsonValue[] = [];
 
   const toolResults = executedToolCalls.filter((call) =>
     isBusinessTool(call.name),
@@ -82,10 +82,13 @@ export function finalizeAgentOutput(
     }
     if (Array.isArray(result.events)) {
       const events = result.events.filter(isEffectEvent);
-      if (events.length)
-        effects.events = [...events, ...((effects.events as unknown[]) ?? [])];
+      toolEvents.push(...events);
     }
   }
+  // Tool-result events precede the explicit emit-event channel, while each
+  // channel keeps its execution order (event fan-out is first-emission-wins).
+  if (toolEvents.length || emittedEvents.length)
+    effects.events = [...toolEvents, ...emittedEvents];
 
   const completion =
     output.preGameDone === true || output.completion === "done"

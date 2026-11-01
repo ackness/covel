@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,12 +25,8 @@ vi.mock("@hono/node-server/conninfo", () => ({
 afterEach(() => vi.unstubAllEnvs());
 
 const usage = { inputTokens: 1, outputTokens: 1 };
-const prose = (content: string): LLMResponse => ({
-  content,
-  toolCalls: [],
-  finishReason: "stop",
-  usage,
-});
+const prose = (content: string): LLMResponse =>
+  submittedOutput(JSON.parse(content) as Record<string, unknown>, usage);
 const toolCall = (
   name: string,
   args: Record<string, unknown>,
@@ -429,6 +426,15 @@ contributes:
           {
             type: "tool.completed",
             payload: {
+              ...actor,
+              toolName: "submit-output",
+              toolCallId: "submission",
+              success: true,
+            },
+          },
+          {
+            type: "tool.completed",
+            payload: {
               ...narrator,
               toolName: "delegate",
               toolCallId: "delegate-Mara",
@@ -444,6 +450,19 @@ contributes:
               success: true,
             },
           },
+          ...(mode === "commit-rejection"
+            ? [
+                {
+                  type: "tool.completed",
+                  payload: {
+                    ...actor,
+                    toolName: "submit-output",
+                    toolCallId: "submission",
+                    success: true,
+                  },
+                },
+              ]
+            : []),
           {
             type: mode === "actor-failure" ? "tool.failed" : "tool.completed",
             payload: {
@@ -451,6 +470,15 @@ contributes:
               toolName: "delegate",
               toolCallId: "delegate-Ivo",
               success: mode !== "actor-failure",
+            },
+          },
+          {
+            type: "tool.completed",
+            payload: {
+              ...narrator,
+              toolName: "submit-output",
+              toolCallId: "submission",
+              success: true,
             },
           },
           {

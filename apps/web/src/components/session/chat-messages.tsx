@@ -283,6 +283,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
       <div className="relative flex-1 min-h-0 flex flex-col">
         <div
           ref={setScrollViewport}
+          data-testid="chat-scroll-viewport"
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">
