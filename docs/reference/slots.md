@@ -530,6 +530,7 @@ reasoningEffort = "disabled"
 有些模型思考时不接受某些参数，Covel 按数据调整请求，而不是在代码里写厂商判断：
 
 - **工具选择**：思考中的模型可能拒绝强制调用某个工具。DeepSeek 思考时 `required` 和指定工具都会返回 400，只能用 `auto`；Kimi K3 系列只接受 `auto` 和 `required`。任务默认要求强制调用工具时，按规则或目录给出的可选项退一步：指定工具改成 `required`，不允许时改成 `auto`。关闭思考的请求不受影响。
+- **思考回传**：OpenAI Chat 按模型系列的 `reasoningContentRequired` 规则回传当前用户回合内每条 assistant 消息的思考，包括工具调用后的纯文本回答。DeepSeek 启用此规则；思考为空或未返回时也发送空字符串，避免修复或引导回答的续调因缺少 `reasoning_content` 而返回 400。系统引导即使按 `lateSystemAsUser` 转成 user 消息，也不开始新的用户回合。未启用此规则的系列保持原有请求格式。
 - **固定的采样参数**：目录标明模型自己决定温度或 Top P 的（如 GPT-5 及之后、Kimi K3），请求不发送这些参数。配置了值时，服务端对每个模型和参数记一次警告。
 - **思考时忽略的采样参数**：DeepSeek 思考时忽略温度、Top P、频率惩罚和存在惩罚。请求照常发送，设置页给出提示。
 
@@ -582,12 +583,13 @@ reasoningEffort = "disabled"
 
 系列和规则都可以写下面这些行为字段，规则的优先：
 
-| 字段                      | 含义                                                                                                                       |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `format`                  | 请求怎么写：`effort`（默认，只发档位）、`thinking-type`（另发 `thinking.type`）、`enable-thinking`（用 `enable_thinking`） |
-| `thinksByDefault`         | 请求里没有思考字段时模型也会思考。没写时取目录的默认档位                                                                   |
-| `toolChoiceWhileThinking` | 思考时接受的工具选择：`auto`、`required`、`named`。没写时取目录（只对思考总是开启的模型），再没有就只用 `auto`             |
-| `sampling`                | `ignoredWhileThinking`：思考时忽略温度等采样参数（只用于设置页提示）；`fixed`：模型自己决定、不发送的参数，没写时取目录    |
+| 字段                       | 含义                                                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `format`                   | 请求怎么写：`effort`（默认，只发档位）、`thinking-type`（另发 `thinking.type`）、`enable-thinking`（用 `enable_thinking`） |
+| `thinksByDefault`          | 请求里没有思考字段时模型也会思考。没写时取目录的默认档位                                                                   |
+| `reasoningContentRequired` | OpenAI Chat 的当前用户回合内，每条 assistant 消息都要带思考字段；思考为空或缺失时发送空字符串。默认不启用                  |
+| `toolChoiceWhileThinking`  | 思考时接受的工具选择：`auto`、`required`、`named`。没写时取目录（只对思考总是开启的模型），再没有就只用 `auto`             |
+| `sampling`                 | `ignoredWhileThinking`：思考时忽略温度等采样参数（只用于设置页提示）；`fixed`：模型自己决定、不发送的参数，没写时取目录    |
 
 - `levels` 的一项是档位名，或者 `{ "value", "budget", "protocols" }`。`budget` 表示这一档按思考 token 预算发送，`protocols` 表示只在这些协议上提供。
 - `parameterStyle` 在一个系列有多种写法时选其中一种：Anthropic 的 `adaptive`（同时发送 `thinking.type: "adaptive"`）和 `effort`（开关之外同时发送 `reasoning_effort`）。从目录读出、列了档位的规则都是 `effort`。

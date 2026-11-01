@@ -229,17 +229,31 @@ function serializeMessages(
   messages: TextMessage[],
   model: string,
   config: ProviderConfig,
+  context: ModelRequestContext | undefined,
+  metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown>[] {
   const field = endpointReasoningField(messages, model, config);
-  return messages.map((msg) => {
+  const { reasoningContentRequired } = reasoningControlsFor(
+    context,
+    PROTOCOL,
+    model,
+  );
+  // Find the real user turn before an endpoint option rewrites system nudges
+  // as user messages. Repairs and steering still continue that same turn.
+  let lastUserIndex = -1;
+  for (const [index, msg] of messages.entries()) {
+    if (msg.role === "user") lastUserIndex = index;
+  }
+  return lateSystemOption(messages, metadata).map((msg, index) => {
     // Reasoning a model wrote inline is not sent back: models that think in
     // `<think>` blocks expect history to carry only their final replies.
     const inlineThink = continuationItems(msg, PROTOCOL, model, config)?.some(
       (item) => item.type === "reasoning" && item.field === "think",
     );
+    const reasoningContent = inlineThink ? undefined : msg.reasoningContent;
     const reasoning =
-      msg.reasoningContent && !inlineThink
-        ? { [field]: msg.reasoningContent }
+      reasoningContent || (reasoningContentRequired && index > lastUserIndex)
+        ? { [field]: reasoningContent ?? "" }
         : {};
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       return {
@@ -260,7 +274,7 @@ function serializeMessages(
         tool_call_id: msg.toolCallId,
       };
     }
-    if (msg.role === "assistant" && msg.reasoningContent) {
+    if (msg.role === "assistant") {
       return {
         role: "assistant",
         content: serializeOpenAiChatContent(msg.content),
@@ -287,9 +301,11 @@ function openAiChatTextBody(
   const body: Record<string, unknown> = {
     model: params.model,
     messages: serializeMessages(
-      lateSystemOption(messages, params.providerRequestMetadata),
+      messages,
       params.model,
       config,
+      context,
+      params.providerRequestMetadata,
     ),
     ...openAiPromptCacheKeyField(config, params),
     ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
@@ -375,9 +391,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
         messages: serializeMessages(
-          lateSystemOption(messages, params.providerRequestMetadata),
+          messages,
           params.model,
           config,
+          context,
+          params.providerRequestMetadata,
         ),
         response_format: { type: "json_object" },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),

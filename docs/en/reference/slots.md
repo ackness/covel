@@ -530,6 +530,7 @@ The shared `reasoningEffort` is converted according to the API protocol:
 Some models reject certain parameters while they think. Covel adjusts the request from data, not from vendor checks in code:
 
 - **Tool choice**: a thinking model may refuse to be forced to call a tool. DeepSeek returns 400 for both `required` and a named tool while thinking and accepts only `auto`; the Kimi K3 series accepts only `auto` and `required`. When a task default forces a tool call, it steps back to the choices the rule or catalog allows: a named tool becomes `required`, or `auto` where that is not allowed. Requests with thinking off are not affected.
+- **Reasoning pass-back**: OpenAI Chat follows the model family's `reasoningContentRequired` rule to send reasoning on every assistant message in the current user turn, including text-only answers after tool calls. DeepSeek enables this rule. Empty or missing reasoning is sent as an empty string, so a repair or steering continuation does not return 400 for missing `reasoning_content`. System nudges converted to user messages by `lateSystemAsUser` still belong to the same user turn. Families without this rule keep their existing request format.
 - **Fixed sampling parameters**: when the catalog says a model sets its own temperature or Top P (GPT-5 and later, Kimi K3), requests do not send them. If a value is configured, the server logs one warning per model and parameter.
 - **Sampling ignored while thinking**: DeepSeek ignores temperature, Top P, frequency penalty, and presence penalty while thinking. Requests still send them, and the settings page shows a hint.
 
@@ -582,12 +583,13 @@ Fields of each family:
 
 Families and rules can both carry these behaviour fields; the rule's value wins:
 
-| Field                     | Meaning                                                                                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`                  | How the request is written: `effort` (default, the level only), `thinking-type` (also `thinking.type`), `enable-thinking` (`enable_thinking`)                                                                       |
-| `thinksByDefault`         | The model thinks when the request has no thinking field. When absent, the catalog's default level decides                                                                                                           |
-| `toolChoiceWhileThinking` | Tool choices accepted while thinking: `auto`, `required`, `named`. When absent, the catalog's (only for always-thinking models), else `auto` only                                                                   |
-| `sampling`                | `ignoredWhileThinking`: the model ignores temperature and similar parameters while thinking (only a settings hint); `fixed`: parameters the model sets itself and that are never sent, from the catalog when absent |
+| Field                      | Meaning                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`                   | How the request is written: `effort` (default, the level only), `thinking-type` (also `thinking.type`), `enable-thinking` (`enable_thinking`)                                                                       |
+| `thinksByDefault`          | The model thinks when the request has no thinking field. When absent, the catalog's default level decides                                                                                                           |
+| `reasoningContentRequired` | OpenAI Chat requires a reasoning field on every assistant message in the current user turn; empty or missing reasoning is sent as an empty string. Off by default                                                   |
+| `toolChoiceWhileThinking`  | Tool choices accepted while thinking: `auto`, `required`, `named`. When absent, the catalog's (only for always-thinking models), else `auto` only                                                                   |
+| `sampling`                 | `ignoredWhileThinking`: the model ignores temperature and similar parameters while thinking (only a settings hint); `fixed`: parameters the model sets itself and that are never sent, from the catalog when absent |
 
 - An item in `levels` is a level name, or `{ "value", "budget", "protocols" }`. `budget` means this level is sent as a thinking token budget. `protocols` means it is offered only on these protocols.
 - `parameterStyle` picks one of several styles in a family: Anthropic's `adaptive` (also sends `thinking.type: "adaptive"`) and `effort` (sends `reasoning_effort` beside the switch). Rules read from the catalog that list levels use `effort`.
