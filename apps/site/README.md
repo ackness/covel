@@ -44,17 +44,19 @@ pnpm --filter @covel/site test
   moment to the responsible plugins and highlights them in the rack. Selecting a
   moment pauses autoplay. World-specific panels (routes, case board, power grid)
   are attributed to `world-init`, with storm time also supplied by `world-time`.
-  `PACKS` is a curated presentation subset of each world's preset requests, `plus`
-  and core defaults, not the complete resolved runtime registry. Recommended-only
+  `PACKS` is a curated presentation subset of each world's initial `pack:` requests,
+  explicit `plugin:` references, conventional data receivers and core defaults,
+  not the complete resolved runtime registry. The ordered `plugins` field selects
+  the initial pack first; later pack references are alternatives. Recommended-only
   plugins are not shown as enabled. Tests compare these choices with repository
-  world policies and manifests; source links open each world's `world.yaml`.
+  world selections, data and manifests; source links open each world's `world.yaml`.
   The site test task declares these root-level fixtures in `turbo.json`, so changes
-  to builtin packs, world policies or plugin manifests invalidate cached results.
+  to builtin packs, world content or plugin and runtime manifests invalidate cached results.
 - The carousel presents four curated play experiences: visual novel, tabletop
   campaign, interactive fiction and survival sandbox. These are examples built
   from plugins and world settings, not four exclusive engine modes. The survival
   scene uses Emberback Relay's storm, power and rescue setting; its plugin rack
-  follows that world's preset and additions. Language support is a shared feature
+  follows that world's initial pack, explicit plugins and data receivers. Language support is a shared feature
   in `LanguageFeature.tsx`, outside the play carousel, with text in
   `preview-copy.ts` under `languages`.
 - `authoring-copy.ts` holds the plugin/world-pack explanation, in-app world generation

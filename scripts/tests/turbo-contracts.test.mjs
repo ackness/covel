@@ -215,7 +215,11 @@ test("Site tests invalidate when their world and plugin fixtures change", () => 
     for (const file of [
       "packs/builtin.yaml",
       "worlds/haruka-academy/world.yaml",
+      "worlds/haruka-academy/data/affinity.yaml",
+      "worlds/haruka-academy/characters/characters.json",
+      "worlds/haruka-academy/media/portraits/mio.webp",
       "plugins/narrator/PLUGIN.md",
+      "plugins/scene-stage/runtimes/story-cues/RUNTIME.md",
     ]) {
       const fixture = writeFixtureFile(workspace, file, "initial fixture\n");
       const added = task(dry(workspace, args), id).hash;
@@ -225,7 +229,11 @@ test("Site tests invalidate when their world and plugin fixtures change", () => 
       assert.notEqual(changed, added, `${file}: change`);
       before = changed;
     }
-    writeFixtureFile(workspace, "packages/runtime/src/unrelated.ts", "unrelated\n");
+    writeFixtureFile(
+      workspace,
+      "packages/runtime/src/unrelated.ts",
+      "unrelated\n",
+    );
     assert.equal(task(dry(workspace, args), id).hash, before);
   } finally {
     rmSync(parent, { recursive: true, force: true });
