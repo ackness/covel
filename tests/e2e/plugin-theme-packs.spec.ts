@@ -8,7 +8,10 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
-import { PLUGIN_PAGE_READY_TIMEOUT_MS } from "@covel/shared";
+import {
+  PLUGIN_ASSET_PAGE_CSP,
+  PLUGIN_PAGE_READY_TIMEOUT_MS,
+} from "@covel/shared";
 import { startStageRenderHost } from "../../apps/server/tests/helpers/stage-render-browser.js";
 import { buildThirdPartyPluginZip } from "../../apps/server/tests/helpers/third-party-package.js";
 import {
@@ -79,12 +82,13 @@ async function connect(page: Page, host: Host) {
       url: `${host.baseUrl}${url.pathname}${url.search}`,
     });
   });
-  // Keep the real public route and bytes while routing this isolated fixture host.
-  await page.route("**/plugin-assets/**", (route) => {
+  // Retain the app origin for the page's unmodified frame-ancestors policy.
+  await page.route("**/plugin-assets/**", async (route) => {
     const url = new URL(route.request().url());
-    return route.continue({
+    const response = await route.fetch({
       url: `${host.baseUrl}${url.pathname}${url.search}`,
     });
+    await route.fulfill({ response });
   });
 }
 async function visit(page: Page, sessionId: string) {
@@ -502,6 +506,108 @@ test("installed community palette, texture and session layout survive hydration 
   } finally {
     await close(page, host);
     await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("sandbox consent preserves the frame element and asset policy at 360px with an active theme", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const host = await startStageRenderHost({
+    narration: "Public reading theme story.",
+    fixturePlugins: [sandboxThemeFixture],
+  });
+  try {
+    expect((await upload(host)).status).toBe(201);
+    await host.restart();
+    await enable(host);
+    await connect(page, host);
+    await page.setViewportSize({ width: 360, height: 900 });
+    await visit(page, host.sessionId);
+    await composerInput(page).fill("Tell the public story");
+    await composerInput(page).press("Enter");
+    await expect(page.getByTestId("story-segments")).toContainText(
+      "Public reading theme story.",
+    );
+    await waitForTurnIdle(page);
+    await select(page);
+    await expect(
+      page
+        .locator('[data-covel-theme-part="story"]')
+        .filter({ hasText: "Public reading theme story." }),
+    ).toHaveCSS("color", "rgb(245, 234, 210)");
+    await chooseSandboxReader(page);
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(
+      page.getByTestId("plugin-view-container").locator("iframe"),
+    ).toHaveCount(0);
+    const lifetime = await page.evaluateHandle(() => {
+      const center = document.querySelector('[data-testid="center-panel"]');
+      if (!center) throw new Error("Session center is missing");
+      const frames = new Set<HTMLIFrameElement>();
+      const observer = new MutationObserver((records) => {
+        for (const record of records)
+          for (const node of record.addedNodes) {
+            if (!(node instanceof Element)) continue;
+            if (node instanceof HTMLIFrameElement) frames.add(node);
+            for (const frame of node.querySelectorAll("iframe"))
+              frames.add(frame);
+          }
+      });
+      observer.observe(center, { childList: true, subtree: true });
+      return { frames, observer };
+    });
+    try {
+      const entryResponse = page.waitForResponse((response) =>
+        /\/plugin-assets\/sandbox-surface-probe\/[a-f0-9]{32}\/index\.html$/.test(
+          new URL(response.url()).pathname,
+        ),
+      );
+      await allowSandbox(page);
+      const response = await entryResponse;
+      expect(response.status()).toBe(200);
+      expect(response.headers()["content-security-policy"]).toBe(
+        PLUGIN_ASSET_PAGE_CSP,
+      );
+      const main = page.getByRole("region", {
+        name: "Bridge reader",
+        exact: true,
+      });
+      const frame = await expectSandboxStory(
+        main,
+        "Public reading theme story.",
+      );
+      expect(new URL(frame.url()).origin).toBe(new URL(page.url()).origin);
+      const current = await main.locator("iframe").elementHandle();
+      expect(
+        await lifetime.evaluate(({ frames }, current) => {
+          const first = frames.values().next().value;
+          return {
+            count: frames.size,
+            sameElement: first === current,
+            connected: first?.isConnected,
+            owner: current?.closest("section")?.getAttribute("aria-label"),
+          };
+        }, current),
+      ).toEqual({
+        count: 1,
+        sameElement: true,
+        connected: true,
+        owner: "Bridge reader",
+      });
+      await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
+        1,
+      );
+      await expect(main.locator("iframe")).toHaveAttribute(
+        "sandbox",
+        "allow-scripts",
+      );
+    } finally {
+      await lifetime.evaluate(({ observer }) => observer.disconnect());
+      await lifetime.dispose();
+    }
+  } finally {
+    await close(page, host);
   }
 });
 
