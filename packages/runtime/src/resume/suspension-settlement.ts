@@ -228,6 +228,7 @@ export async function settleAbandonedSetupAttempt(
   manifest: RuntimeManifest | undefined,
   now: string,
 ): Promise<void> {
+  if (!isPendingSuspension(suspension)) return;
   const { sessionId, runtimeId } = suspension;
   const executionId =
     suspension.pendingContinuation.executionContext.executionId;
@@ -286,6 +287,9 @@ export async function settleAbandonedSuspensionJobs(
   deps: SavedLifecycleDeps,
   suspension: SuspensionRecord,
 ): Promise<void> {
+  // Use the record read under the session lock, before its deletion. A resolved
+  // leg is history; its owner may already have committed or still be continuing.
+  if (!isPendingSuspension(suspension)) return;
   await settleSavedWork(deps, suspension, "skipped");
 }
 

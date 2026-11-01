@@ -45,6 +45,8 @@ export interface TraceRecorder {
     turnId?: string;
     /** Named stage (setup/pre-turn/…); absent for event/manual/UI-only. */
     stage?: Stage;
+    resumed?: true;
+    resumeSourceRunId?: string;
   }): Promise<void>;
   runtimeCompleted(info: {
     runtimeId: string;

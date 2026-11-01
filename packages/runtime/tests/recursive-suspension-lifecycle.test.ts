@@ -74,6 +74,7 @@ async function fixture(
     reverse?: boolean;
     rollback?: boolean;
     isolate?: boolean;
+    topSuspends?: boolean;
   } = {},
 ) {
   const store = create();
@@ -126,6 +127,7 @@ async function fixture(
       return ask;
     },
     [child.name]: async (ctx) => {
+      if (ctx.resumedFromSuspensionId) return ok;
       if (ctx.recursionDepth === 0 && !options.reverse) await barrier;
       const key = ctx.recursionDepth ? `${nestedOwner}-child` : "top";
       runs.push(key);
@@ -135,7 +137,8 @@ async function fixture(
           manualTrigger: { runtimeId: grandchild.name },
         });
       if (ctx.recursionDepth === 0 && options.reverse) release();
-      return options.isolate && ctx.recursionDepth
+      return (options.isolate && ctx.recursionDepth) ||
+        (options.topSuspends && ctx.recursionDepth === 0)
         ? ask
         : { ...ok, value: { content: key } };
     },
@@ -276,11 +279,13 @@ async function fixture(
       },
     });
   const abandon = async (saved = suspension) => {
-    const plan = await planSuspensionAbandon(store, saved);
+    const live = await store.getSuspension(saved.id);
+    if (!live) return;
+    const plan = await planSuspensionAbandon(store, live);
     await store.withTransaction((tx) =>
       applySuspensionAbandonTx(tx, plan, now),
     );
-    await settleAbandonedSuspensionJobs({ store, eventBus }, saved);
+    await settleAbandonedSuspensionJobs({ store, eventBus }, live);
   };
   return {
     store,
@@ -302,6 +307,116 @@ async function fixture(
 }
 
 describe.each(backends)("saved recursive lifecycle on %s", (_name, create) => {
+  it("persists the resumed invocation's chain while its independent saved child keeps waiting", async () => {
+    const f = await fixture(create, { topSuspends: true });
+    const top = (await f.store.listSuspensions("session")).find(
+      (row) => row.runtimeId === child.name,
+    )!;
+    const savedChild = f.suspension.pendingContinuation
+      .nestedResults!.map((entry) => entry.result as RuntimeResult)
+      .find((result) => result.runtimeId === child.name)!;
+    const resumed = await f.resume(top);
+    expect((await f.commit(resumed, top)).status).toBe("committed");
+    const identity = {
+      runId: resumed.result.runId,
+      resumeSourceRunId: top.pendingContinuation.lifecycle.runId,
+    };
+    expect(
+      f.events.find(
+        (event) =>
+          event.type === "runtime.started" &&
+          event.payload.runId === identity.runId,
+      )?.payload,
+    ).toMatchObject({
+      ...identity,
+      resumed: true,
+    });
+    expect(
+      f.events.find((event) => event.type === "turn.resumed")?.payload,
+    ).toMatchObject(identity);
+    expect(identity.resumeSourceRunId).not.toBe(savedChild.runId);
+    expect(f.lifecycle(savedChild.runId)).toEqual(["success", "suspended"]);
+    expect((await f.jobs("parent-child")).at(-1)).toBe("waiting-input");
+    expect((await f.jobs("top")).at(-1)).toBe("succeeded");
+    expect(await f.keys()).toEqual(["top"]);
+    const checkpoint = validateBrowserCheckpoint(
+      JSON.parse(
+        JSON.stringify(
+          await exportSessionCheckpoint(f.store, "session", {
+            revision: 2,
+            actionId: "resume-reload",
+          }),
+        ),
+      ),
+    );
+    await replaceSessionFromCheckpoint(f.store, checkpoint);
+    expect(
+      (await f.store.listTraceEvents("session")).find(
+        (row) =>
+          row.type === "runtime.started" &&
+          (row.payload as { runId?: string }).runId === identity.runId,
+      )?.payload,
+    ).toMatchObject(identity);
+    const parentSuspension = (await f.store.getSuspension(f.suspension.id))!;
+    expect(parentSuspension.resolvedAt).toBeUndefined();
+    expect(
+      (await f.commit(await f.resume(parentSuspension), parentSuspension))
+        .status,
+    ).toBe("committed");
+    expect(f.lifecycle(savedChild.runId)).toEqual([
+      "success",
+      "suspended",
+      "success",
+    ]);
+    expect(f.runs).toHaveLength(3);
+  });
+
+  it.each(["success", "suspended"] as const)(
+    "deletes a resolved leg after %s without changing its work",
+    async (status) => {
+      const f = await fixture(create);
+      f.handlers[parent.name] = async () => (status === "success" ? ok : ask);
+      expect((await f.commit(await f.resume())).status).toBe("committed");
+      const resolved = (await f.store.getSuspension(f.suspension.id))!;
+      expect(resolved.resolvedAt).toBeDefined();
+      expect(resolved.resolvedAt).not.toMatch(/^claimed:/);
+      const snapshot = async () => ({
+        jobs: await f.store.listJobStatus("session"),
+        traces: await f.store.listTraceEvents("session"),
+        keys: await f.keys(),
+        session: await f.store.getSession("session"),
+        events: structuredClone(f.events),
+      });
+      const before = await snapshot();
+      await f.abandon(resolved);
+      expect(await f.store.getSuspension(resolved.id)).toBeNull();
+      expect(await snapshot()).toEqual(before);
+      for (const job of ["parent", "parent-child", "parent-grandchild"])
+        expect((await f.jobs(job)).at(-1)).toBe(
+          status === "success" ? "succeeded" : "waiting-input",
+        );
+      if (status === "suspended") {
+        const successor = (await f.store.listSuspensions("session")).find(
+          (row) => !row.resolvedAt,
+        )!;
+        expect(successor.id).not.toBe(resolved.id);
+        f.handlers[parent.name] = async () => ok;
+        expect(
+          (await f.commit(await f.resume(successor), successor)).status,
+        ).toBe("committed");
+        for (const job of ["parent", "parent-child", "parent-grandchild"])
+          expect((await f.jobs(job)).at(-1)).toBe("succeeded");
+      }
+      expect(await f.keys()).toEqual([
+        "parent",
+        "parent-child",
+        "parent-grandchild",
+        "top",
+      ]);
+      expect(f.runs).toHaveLength(3);
+    },
+  );
+
   it.each([false, true])(
     "keeps independent invocation tasks separate (top first=%s)",
     async (reverse) => {

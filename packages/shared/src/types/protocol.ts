@@ -193,6 +193,8 @@ export interface RuntimeStartedPayload {
   readonly stage?: Stage;
   /** This run continues a suspended runtime; absent for a fresh dispatch. */
   readonly resumed?: true;
+  /** Original invocation of this suspension chain, assigned by the kernel. */
+  readonly resumeSourceRunId?: string;
 }
 
 /** A staged runtime was queued beyond its source turn's foreground barrier. */
@@ -365,6 +367,8 @@ export interface TurnResumedPayload {
   readonly turnId?: string;
   readonly runtimeId?: string;
   readonly pluginId?: string;
+  readonly runId?: string;
+  readonly resumeSourceRunId?: string;
 }
 
 export interface ProposalFailedPayload {

@@ -287,7 +287,7 @@ async function executeResumedRuntime(
     input.sessionId,
     manifest,
     { turnId: input.turnId, runId },
-    true,
+    pendingContinuation.lifecycle.progressRunId,
   );
 
   // Rebuild the mid-turn transcript from the suspension and append the resume

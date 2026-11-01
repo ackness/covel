@@ -128,6 +128,9 @@ export async function commitExecution(
         suspensionId: completion.suspensionId,
         pluginId: completion.pluginId,
         runtimeId: completion.runtimeId,
+        runId: plan.results.at(-1)?.runId,
+        resumeSourceRunId:
+          plan.resumedSuspension?.pendingContinuation.lifecycle.progressRunId,
       });
     } catch (error) {
       console.warn("[commit-execution] resume notification failed:", error);

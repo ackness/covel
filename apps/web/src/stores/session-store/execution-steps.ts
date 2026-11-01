@@ -451,11 +451,17 @@ export function buildResumedExecutionStep(
 ): ExecutionStep | null {
   const runtimeId =
     typeof payload.runtimeId === "string" ? payload.runtimeId : "";
-  if (!runtimeId) return null;
+  if (!runtimeId || typeof payload.runId !== "string" || !payload.runId)
+    return null;
 
   return {
     runtimeId,
     resumed: true,
+    runId: payload.runId,
+    ...(typeof payload.resumeSourceRunId === "string" &&
+    payload.resumeSourceRunId
+      ? { resumeSourceRunId: payload.resumeSourceRunId }
+      : {}),
     pluginId: typeof payload.pluginId === "string" ? payload.pluginId : "",
     status: toExecutionStepStatus(
       typeof payload.status === "string" ? payload.status : "completed",

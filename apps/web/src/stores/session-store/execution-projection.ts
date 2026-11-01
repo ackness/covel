@@ -152,12 +152,17 @@ export function projectExecutionTurns(
       timestamp(a.turnStartedAt ?? a.startedAt) -
       timestamp(b.turnStartedAt ?? b.startedAt),
   );
-  const runtimeKey = (step: ExecutionStep) =>
-    JSON.stringify([step.turnId, step.runtimeId]);
+  const chainKey = (step: ExecutionStep) =>
+    JSON.stringify([
+      step.turnId,
+      step.pluginId,
+      step.runtimeId,
+      step.resumeSourceRunId ?? step.runId,
+    ]);
   const latestResumes = new Map<string, { time: number; order: number }>();
   for (const [order, step] of orderedSteps.entries()) {
-    if (!step.resumed) continue;
-    const key = runtimeKey(step);
+    if (!step.resumed || !step.resumeSourceRunId) continue;
+    const key = chainKey(step);
     const time = timestamp(step.startedAt);
     const previous = latestResumes.get(key);
     if (!previous || time >= previous.time)
@@ -189,13 +194,10 @@ export function projectExecutionTurns(
         });
     }
     includeTime(group, step.turnStartedAt ?? step.startedAt);
-    // Resume attempts reuse the suspended turn ID. The newest attempt replaces
-    // the original suspension and every earlier attempt, whatever its outcome,
-    // so a failed resume cannot outrank a later one that completed or suspended
-    // again. Other runs of the runtime outside that chain still count.
-    const resume = latestResumes.get(runtimeKey(step));
+    // Only runs linked to the same original invocation supersede one another.
+    // Independent suspended children of this runtime must keep contributing.
+    const resume = latestResumes.get(chainKey(step));
     if (
-      (step.status === "suspended" || step.resumed) &&
       resume &&
       (timestamp(step.startedAt) < resume.time ||
         (timestamp(step.startedAt) === resume.time && order < resume.order))

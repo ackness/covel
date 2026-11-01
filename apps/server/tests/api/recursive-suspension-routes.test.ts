@@ -191,6 +191,61 @@ async function fixture() {
 }
 
 describe("recursive suspension routes", () => {
+  it.each(["success", "suspended"] as const)(
+    "deletes resolved history after %s without cancelling saved work",
+    async (status) => {
+      const f = await fixture();
+      f.handlers[parent.name] = async () =>
+        status === "success"
+          ? ok
+          : {
+              outcome: "suspended",
+              reason: "Another answer",
+              resumeSchema: { type: "object" },
+            };
+      expect((await f.resume()).status).toBe(200);
+      const snapshot = async () => ({
+        jobs: await f.store.listJobStatus("session"),
+        traces: await f.store.listTraceEvents("session"),
+        writes: await f.store.listPluginData("session", "probe", "notes"),
+        session: await f.store.getSession("session"),
+        events: structuredClone(f.events),
+      });
+      const before = await snapshot();
+      expect((await f.app.request(f.path, { method: "DELETE" })).status).toBe(
+        200,
+      );
+      expect(await f.store.getSuspension(f.suspension.id)).toBeNull();
+      expect(await snapshot()).toEqual(before);
+      expect((await f.state()).at(-1)).toBe(
+        status === "success" ? "succeeded" : "waiting-input",
+      );
+      if (status === "suspended") {
+        const successor = (await f.store.listSuspensions("session")).find(
+          (row) => !row.resolvedAt,
+        )!;
+        expect(successor.id).not.toBe(f.suspension.id);
+        f.handlers[parent.name] = async () => ok;
+        const response = await f.app.request(
+          `/api/sessions/session/suspensions/${successor.id}/resume`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: {} }),
+          },
+        );
+        expect(response.status).toBe(200);
+      }
+      for (const jobId of ["parent", "child"])
+        expect(
+          (await f.store.listJobStatus("session", { jobId })).at(-1)?.state,
+        ).toBe("succeeded");
+      expect(await f.store.listPluginData("session", "probe", "notes")).toEqual(
+        [expect.objectContaining({ key: "saved", value: "value" })],
+      );
+    },
+  );
+
   it.each(["failed", "throw", "rollback"])(
     "settles %s, releases the claim and corrects the same child after retry",
     async (failure) => {

@@ -189,7 +189,11 @@ it.each(["success", "suspended"])(
       event("runtime.started", { runId: "original" }),
       event("runtime.completed", { runId: "original", status: "suspended" }),
       {
-        ...event("runtime.started", { runId: "continuation", resumed: true }),
+        ...event("runtime.started", {
+          runId: "continuation",
+          resumed: true,
+          resumeSourceRunId: "original",
+        }),
         timestamp: "2026-09-05T04:00:01Z",
       },
       {
@@ -228,7 +232,11 @@ it("keeps the cached start of a recovered continuation when the snapshot only ca
     event("runtime.started", { runId: "original" }),
     event("runtime.completed", { runId: "original", status: "suspended" }),
     {
-      ...event("runtime.started", { runId: "continuation", resumed: true }),
+      ...event("runtime.started", {
+        runId: "continuation",
+        resumed: true,
+        resumeSourceRunId: "original",
+      }),
       timestamp: "2026-09-05T04:00:01Z",
     },
     {
@@ -270,7 +278,11 @@ it.each([
       event("runtime.started", { runId: "original" }),
       event("runtime.completed", { runId: "original", status: "suspended" }),
       {
-        ...event("runtime.started", { runId: "first-resume", resumed: true }),
+        ...event("runtime.started", {
+          runId: "first-resume",
+          resumed: true,
+          resumeSourceRunId: "original",
+        }),
         timestamp: at(1),
       },
       {
@@ -281,7 +293,11 @@ it.each([
         timestamp: at(2),
       },
       {
-        ...event("runtime.started", { runId: "second-resume", resumed: true }),
+        ...event("runtime.started", {
+          runId: "second-resume",
+          resumed: true,
+          resumeSourceRunId: "original",
+        }),
         timestamp: at(3),
       },
       {

@@ -4641,6 +4641,8 @@ Each item is a `SuspensionSummary`. It contains only the public information the 
 
 Discards a suspended item by deleting it. This is used when the player gives up the current choice, or when an admin screen cleans up. If the suspended item does not exist, it returns `404`.
 
+If the record read under the session lock is already resolved, only that historical record is deleted. Committed writes, task states and lifecycle terminals remain unchanged. A successor still waiting after another suspension, and its parent and child tasks, are not cancelled.
+
 If it was the last item of its turn still waiting, the turn counts as complete and the background jobs the turn held back are queued as usual; see [Suspensions and turn counting](#suspensions-and-turn-counting). The request may carry `X-Plugin-User-Settings`, which works as it does for a resume.
 
 **Response**
