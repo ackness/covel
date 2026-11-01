@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile, access } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, access, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -55,21 +55,10 @@ async function parity(root: string) {
   });
   expect(status).toBe(report.ok ? 0 : 1);
   expect(stderr).toBe(report.ok ? "" : `✗ ${report.cliFailure}\n`);
-  const execution =
-    `  execution: ${report.execution.mode}\n` +
-    report.execution.diagnostics
-      .map(
-        (issue) =>
-          `  ${issue.file}${issue.field ? ": " + issue.field : ""}: ${issue.message}\n`,
-      )
-      .join("");
   expect(stdout).toBe(
-    (report.issues.some((issue) => issue.code === "plugin-not-found")
-      ? ""
-      : execution) +
-      (report.ok
-        ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n`
-        : "") +
+    (report.ok
+      ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n`
+      : "") +
       report.cliWarnings.map((line) => `${line}\n`).join(""),
   );
   return report;
@@ -109,7 +98,7 @@ describe("static package validation", () => {
       "userSettings",
     ].map((field) => ({ [field]: "legacy" })),
   ])(
-    "prints validation and execution diagnostics for root declarations %#",
+    "prints static validation results for root declarations %#",
     async (fields) => {
       await parity(await fixture(fields));
     },
@@ -379,16 +368,48 @@ describe("static package validation", () => {
       result.issues.find((issue) => issue.code === "plugin-files")?.file,
     ).toBe("PLUGIN.md");
   });
-  it("never executes entry modules", async () => {
-    const root = await fixture({ entry: "./server/index.js" });
-    const sentinel = path.join(root, "executed");
-    await mkdir(path.join(root, "server"));
-    await writeFile(
-      path.join(root, "server/index.js"),
-      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(sentinel)}, 'yes'); throw new Error('imported');`,
+  it("assesses code without executing entry, function or guard modules", async () => {
+    const root = await fixture(
+      {
+        entry: "./entry.js",
+        runtime: { ...runtime, guard: "./guard.js" },
+      },
+      { "package.json": '{"type":"module"}' },
     );
-    expect((await parity(root)).ok).toBe(true);
-    await expect(access(sentinel)).rejects.toThrow();
+    for (const module of ["entry", "handler", "guard"])
+      await writeFile(
+        path.join(root, `${module}.js`),
+        `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(path.join(root, `${module}-executed`))}, 'yes'); throw new Error('imported');`,
+      );
+    const report = await parity(root);
+    expect(report.ok).toBe(true);
+    expect(report.execution.mode).toBe("code");
+    expect(report.execution.diagnostics).toContainEqual({
+      file: "PLUGIN.md",
+      field: "entry",
+      message: "entry requires server-code authorization.",
+    });
+    for (const module of ["entry", "handler", "guard"])
+      await expect(
+        access(path.join(root, `${module}-executed`)),
+      ).rejects.toThrow();
+  });
+  it("retains incomplete inspection in structured results for a linked dependency", async () => {
+    const root = await fixture();
+    await mkdir(path.join(root, "node_modules"));
+    await symlink("../PLUGIN.md", path.join(root, "node_modules/linked.md"));
+    const report = await parity(root);
+    expect(report.ok).toBe(true);
+    expect(report.execution).toEqual({
+      mode: "unknown",
+      diagnostics: [
+        {
+          file: "PLUGIN.md",
+          message:
+            "Package inspection is incomplete or changed; reload a readable, stable package.",
+        },
+      ],
+    });
   });
   it("names a removed builtin as an unknown tool", async () => {
     const result = await parity(
