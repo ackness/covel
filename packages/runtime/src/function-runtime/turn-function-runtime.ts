@@ -171,7 +171,7 @@ export async function executeFunctionRuntime({
     input.sessionId,
     manifest,
     { turnId: input.turnId, runId },
-    resumedFromSuspensionId !== undefined,
+    resumedFromSuspensionId !== undefined ? progressRunId : undefined,
   );
 
   const helperCtx = {

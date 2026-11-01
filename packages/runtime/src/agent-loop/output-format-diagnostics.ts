@@ -125,11 +125,9 @@ export async function outputFormatProblems(args: {
   } else if (/^[{["]/.test(candidate)) {
     diagnostic = syntaxProblems(syntaxError, text, candidate.startsWith("{"));
   } else {
-    return bounded([text("prose", { complete }), ...problems]);
+    return bounded([text("prose", { complete })]);
   }
-  // Prose is a misleading downstream symptom for blank or malformed JSON.
-  return bounded([
-    ...diagnostic,
-    ...problems.filter((problem) => !problem.includes("prose")),
-  ]);
+  // The gate may have validated a salvaged fragment. Its field/segment errors
+  // do not describe the original malformed candidate; diagnose syntax alone.
+  return bounded(diagnostic);
 }

@@ -170,6 +170,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     stage?: Stage;
     /** The run continues a suspended runtime. */
     resumed?: true;
+    /** Original invocation of this suspension chain, assigned by the kernel. */
+    resumeSourceRunId?: string;
   }) => Promise<void>;
 
   /**

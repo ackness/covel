@@ -11,6 +11,7 @@ import { executeTurn } from "../src/execution.js";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { settleAgentLoop } from "../src/agent-loop/settle-agent-loop.js";
 import { STORY_EMPTY_ERROR } from "../src/agent-loop/story-output.js";
+import { outputFormatProblems } from "../src/agent-loop/output-format-diagnostics.js";
 import {
   doneTool,
   input,
@@ -89,6 +90,8 @@ function expectSyntaxCorrection(correction: string) {
   expect(correction).toContain(`offset ${earlyClosedStory.indexOf(',"cues"')}`);
   expect(correction).toContain("UTF-16");
   expect(correction).toMatch(/all fields.*one complete object/i);
+  expect(correction).not.toMatch(/missing.*segments|segments.*missing/i);
+  expect(correction).not.toContain("No segments");
 }
 
 async function commitStory(replies: LLMResponse[], streaming = false) {
@@ -142,6 +145,38 @@ async function commitStory(replies: LLMResponse[], streaming = false) {
 }
 
 describe("segmented story repair", () => {
+  it.each([false, true])(
+    "retains genuine missing-segments diagnostics for valid JSON (streaming: %s)",
+    async (streaming) => {
+      const { llm, committed } = await commitStory(
+        [json({ cues: { scene: "Harbor" } }), json(completeStory)],
+        streaming,
+      );
+      expect(llm.requests).toHaveLength(2);
+      expect(lastMessage(llm, 1)).toContain("the segments array is missing");
+      expect(lastMessage(llm, 1)).not.toMatch(/JSON syntax/i);
+      expect(committed.status).toBe("committed");
+    },
+  );
+
+  it.each(["en-US", "zh-CN"])(
+    "omits fragment schema complaints from syntax feedback in %s",
+    async (locale) => {
+      const problems = await outputFormatProblems({
+        content: earlyClosedStory,
+        responseFormat: { type: "json_schema", schema: storySchema },
+        locale,
+        problems: ["the segments array is missing", "/cues must be a string"],
+      });
+      expect(problems).toHaveLength(2);
+      expect(problems[0]).toContain(
+        locale === "zh-CN" ? "JSON 语法错误" : "JSON syntax error",
+      );
+      expect(problems.join(" ")).toContain("UTF-16");
+      expect(problems.join(" ")).not.toMatch(/segments|\/cues/);
+    },
+  );
+
   it.each([false, true])(
     "explains an early root close and commits the complete replacement (streaming: %s)",
     async (streaming) => {
@@ -259,7 +294,7 @@ describe("segmented story repair", () => {
     ]);
     const { result } = await run({ llm });
     expect(llm.requests).toHaveLength(2);
-    expect(lastMessage(llm, 1)).toContain("the answer is prose");
+    expect(lastMessage(llm, 1)).toContain("plain prose");
     expect(result.status).toBe("success");
     expect(result.output).toMatchObject({
       segments: [

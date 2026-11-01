@@ -175,13 +175,15 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ----------------------- | ---- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | 回合执行开始                                                                          | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | `submit_actions` 里的交互回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | 单个 runtime 开始                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage?, resumed? }`                                                 |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage?, resumed?, resumeSourceRunId? }`                                                 |
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                             | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | 单个 runtime 完成                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
 | `runtime.failed`        | S→C  | 单个 runtime 失败                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
 | `execution.completed`   | S→C  | 请求执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
-`runtime.started.resumed` 只在从挂起中恢复的运行上出现，值为 `true`。同一个逻辑 runtime 每次运行都有自己的 `runtime.started` 和终态事件，挂起的那次以 `status: "suspended"` 结束。
+`runtime.started.resumed` 只在从挂起中恢复的运行上出现，值为 `true`，同时带上 `resumeSourceRunId`：内核从 continuation 的 `lifecycle.progressRunId` 读取的最初调用 ID。再次挂起和失败重试沿用这个来源，恢复本身仍有新的 `runId`。客户端只在同一 `(turnId, pluginId, runtimeId, resumeSourceRunId)` 链内替换旧运行；同 runtime 的其他调用及其保存的挂起子调用仍参与状态汇总。同一个逻辑 runtime 每次运行都有自己的 `runtime.started` 和终态事件，挂起的那次以 `status: "suspended"` 结束。trace、快照、浏览器 checkpoint 和本地执行历史都保留该来源身份。
+
+已有恢复历史但缺少 `resumeSourceRunId` 的开发期会话、快照、浏览器 checkpoint 和本地执行历史需重建；不按 runtime ID 和时间猜测旧记录的归属。continuation 的字段形状不变。
 
 成功的递归调用可以先结束计算，再随父调用挂起。保存挂起项之后，服务端为每个保存的成功后代追加 `runtime.completed`（`status: "suspended"`）；最后恢复提交后追加 `success`，已准入的恢复失败或回滚则追加 `runtime.failed`，放弃、过期或作废则追加 `runtime.skipped`（`reason: "suspension-abandoned"`）。这些修正始终使用原来的 `(turnId, runtimeId, runId)`，更新原始行而不新增运行；原来的 trace 行仍是历史。重试可以把内核标记的失败修正为成功或再次挂起。同 runtime 的独立成功调用不能遮住被拒绝子调用的失败。修正同时持久化并送到动作流和订阅流，客户端按 run 合并重复投递。恢复本身仍有新的 run ID。浏览器 checkpoint 对最近执行和未解决挂起项保留每个 run 最新的开始与有效终态，避免压缩诊断历史后恢复到暂时的成功。
 
@@ -614,7 +616,9 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | 事件类型         | 方向 | 描述                                                                                                                                                                                                                                                               | 负载                                                                                          |
 | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件。同一个 runtime 的旧挂起项在这次提交里作废，不另发事件，客户端收到后去掉它。恢复的 runtime 再次挂起时也发出，这时不发 `turn.resumed` | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                                                                                    | `{ sessionId, turnId, suspensionId }`                                                         |
+| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                                                                                    | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, runId, resumeSourceRunId }`                                                         |
+
+`turn.resumed` 还携带完成的恢复调用的 `runId` 和同一条链的 `resumeSourceRunId`，客户端据此更新准确的执行行。缺少 `runId` 的通知只移除挂起卡片并触发读取，不推测要更新哪次调用。
 
 收到 `turn.suspended` 或 `turn.resumed` 的订阅客户端还会读取权威会话快照，即使没有角色或维度写入，也能看到同次执行已保存的故事及其操作失败提示。挂起仍保持打开，不表示回合完成；恢复后读取还会更新已提交回合数。读取沿用合并刷新、恢复代次和执行归属检查，不覆盖健康的本地动作流，也不重跑操作。切换会话后或较新状态发布前发起的迟到读取不会覆盖当前状态。
 

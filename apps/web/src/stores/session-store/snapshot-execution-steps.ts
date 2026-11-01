@@ -113,6 +113,11 @@ export function buildSnapshotExecutionSteps(
       ...(event.type === "runtime.started" && payload.resumed === true
         ? { resumed: true }
         : {}),
+      ...(event.type === "runtime.started" &&
+      typeof payload.resumeSourceRunId === "string" &&
+      payload.resumeSourceRunId
+        ? { resumeSourceRunId: payload.resumeSourceRunId }
+        : {}),
       turnId,
       status,
       errorKind:

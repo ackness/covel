@@ -178,8 +178,14 @@ describe.each(["agent", "function"] as const)(
         expect(new Set(started.map((event) => event.runId)).size).toBe(3);
         expect(started[0]).not.toHaveProperty("resumed");
         expect(started.slice(1)).toEqual([
-          expect.objectContaining({ resumed: true }),
-          expect.objectContaining({ resumed: true }),
+          expect.objectContaining({
+            resumed: true,
+            resumeSourceRunId: started[0]!.runId,
+          }),
+          expect.objectContaining({
+            resumed: true,
+            resumeSourceRunId: started[0]!.runId,
+          }),
         ]);
         // Each invocation finalizes once. Commit-time corrections update the
         // saved invocation's lifecycle without replaying execution or hooks.

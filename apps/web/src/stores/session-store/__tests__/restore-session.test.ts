@@ -631,6 +631,7 @@ describe("restoreSessionState runtime run identities", () => {
         pluginId: "story",
         runId: "continuation",
         resumed: true,
+        resumeSourceRunId: "original",
         status: "completed",
         startedAt: "2026-10-01T00:00:01Z",
       },
