@@ -657,6 +657,8 @@ Precedence is the base builtin/imported theme, the selected restricted plugin pa
 
 Only text leaves in host Markdown get story markers; image consent, source, generation and retry buttons remain outside them. Stage marks only its narrative paragraph, beside the advance button. The decorative plane is clipped inside the story content box and receives no pointer events. Plugin json-render components, including `Prose` and segment templates, cannot assign theme markers; iframes remain separate documents. Settings, approvals, composer, Stop, navigation and recovery bars never inherit plugin colors.
 
+The story operation failure footer is a host safety notice, outside the narrative text that plugin themes may style. In chat, stage and history, it stays outside theme markers and uses `data-covel-host-controls` to identify host ownership. It neither inherits the plugin palette nor matches plugin CSS. Even when a plugin theme makes story text and background the same color, the footer retains the host appearance. Display rules: [UI panels](./ui-panels.md#segment-templates).
+
 The device SettingsStore saves `{ pluginId, themeId, contentHash }` at `ui.sessionTheme.<sessionId>`, without CSS, URLs, assets or grants. Sessions, branches and snapshots do not carry it; a new session/branch ID starts off. Only explicit device-settings export/import transfers it as an ordinary entry. Validation, read-only and conflict rules are in [SettingsStore](./settings-store.md).
 
 ### Plugin palette

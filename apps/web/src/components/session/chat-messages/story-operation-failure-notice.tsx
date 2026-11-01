@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { projectStoryOperationFailures } from "@covel/shared";
 import type { StreamMessage } from "@/stores/session-store.js";
 
-/** Host chrome; plugin story templates cannot replace this annotation. */
+/** Host safety notice; keep outside plugin theme parts and story templates. */
 export function StoryOperationFailureNotice({
   message,
 }: {
@@ -16,6 +16,7 @@ export function StoryOperationFailureNotice({
     <p
       className="flex items-start gap-2 text-sm text-muted-foreground"
       data-testid="story-operation-failure-notice"
+      data-covel-host-controls=""
     >
       <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <span>

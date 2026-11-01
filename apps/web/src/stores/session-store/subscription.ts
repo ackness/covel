@@ -689,7 +689,11 @@ export function useSessionSubscription({
       }
       // Preserve lifecycle handling above, then refresh observers even when
       // another client's committed turn made no character/dimension writes.
-      if (event.type === "turn.resumed" || event.type === "turn.completed")
+      if (
+        event.type === "turn.suspended" ||
+        event.type === "turn.resumed" ||
+        event.type === "turn.completed"
+      )
         requestStateRefresh();
     };
 
