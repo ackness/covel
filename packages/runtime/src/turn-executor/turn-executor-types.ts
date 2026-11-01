@@ -33,6 +33,12 @@ import type { MediaStoreLike } from "../function-runtime/runtime-media-context.j
  * still assignable wherever `AgentLoopDeps` is expected.
  */
 export interface AgentLoopDeps {
+  /**
+   * Sub-agent runner for dispatch and private call classification. Execution
+   * entry points create one with frozen admission and fault collection;
+   * pipelines supply a fallback when absent. Nested executions share its pool cap.
+   */
+  readonly subagents?: import("../agent-loop/subagent-runner.js").SubagentRunner;
   /** Kernel attempt identity shared by recursive progress reporters. */
   readonly progressAttemptId?: string;
   /** Host-owned delegation capabilities carried to tool invocations. */
@@ -214,13 +220,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * review the effect of that visibility; a throw is logged and ignored.
    */
   readonly pluginDataReadProbe?: import("../function-runtime/upstream-plugin-data.js").PluginDataReadProbe;
-
-  /**
-   * Sub-agent runner of the execution. Execution entry points create one
-   * with frozen admission and fault collection; pipelines supply a fallback
-   * when absent. Nested executions share its pool cap.
-   */
-  readonly subagents?: import("../agent-loop/subagent-runner.js").SubagentRunner;
 
   /**
    * A plugin's declared datasets and compiled record schemas, for a write

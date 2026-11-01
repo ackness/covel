@@ -31,6 +31,7 @@ import {
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { SubagentCaller, SubagentRunner } from "./subagent-runner.js";
 import type { OperationStage } from "../operations/operation-stage.js";
+import type { PrivateDelegationProjection } from "../orchestration/private-projections.js";
 import type {
   ToolCall,
   ToolCallContext,
@@ -102,7 +103,12 @@ export function withSubagentDelegate(
     async execute(call, context) {
       if (![DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(call.name))
         return inner.execute(call, context);
-      markPrivateDelegation(call, runner, scope);
+      markPrivateDelegation(
+        call,
+        runner,
+        scope.caller,
+        scope.deps.delegation?.privacy,
+      );
       // Refusals still use the normal final authorization boundary. Learn
       // provenance first so its persistence cannot expose private arguments.
       if (context.authorizedToolNames?.has(call.name) !== true)
@@ -114,11 +120,14 @@ export function withSubagentDelegate(
   };
 }
 
-function markPrivateDelegation(
+export function markPrivateDelegation(
   call: ToolCall,
   runner: SubagentRunner,
-  scope: SubagentDelegateScope,
+  caller: Pick<SubagentCaller, "pluginId">,
+  privacy: PrivateDelegationProjection | undefined,
 ): void {
+  if (![DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(call.name))
+    return;
   let args: unknown;
   try {
     args = parseJsonText(call.arguments);
@@ -143,9 +152,9 @@ function markPrivateDelegation(
     if (!target.success) continue;
     const kind = runner.privateTargetKind(
       { target: target.data, brief: "Private delegation" },
-      scope.caller,
+      caller,
     );
-    if (kind) scope.deps.delegation?.privacy.mark(call.toolCallId, kind);
+    if (kind) privacy?.mark(call.toolCallId, kind);
   }
 }
 

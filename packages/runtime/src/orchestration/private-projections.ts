@@ -160,6 +160,12 @@ export class PrivateDelegationProjection {
           this.calls.has(payload.toolCallId)
         )
           return inner.emit(type, concealTracePayload(payload));
+        if (
+          (payload.event === "PreToolUse" || payload.event === "PostToolUse") &&
+          typeof payload.targetId === "string" &&
+          this.calls.has(payload.targetId)
+        )
+          return inner.emit(type, concealTracePayload(payload));
         const copy = projectMessage(payload) as Record<string, unknown>;
         if (Array.isArray(payload.messages))
           copy.messages = payload.messages.map(projectMessage);
