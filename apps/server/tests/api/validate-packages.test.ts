@@ -180,6 +180,70 @@ describe("package validation endpoints", () => {
     expect(text).not.toContain("cliFailure");
     expect(text).not.toContain("cliWarnings");
   });
+  it("returns available warnings alongside an error without raw CLI data or entry execution", async () => {
+    const dir = await plugin({
+      kind: "plugin",
+      version: "1.0.0",
+      entry: "./entry.js",
+    });
+    const sentinel = path.join(dir, "executed");
+    await files(dir, {
+      "package.json": '{"type":"commonjs"}',
+      "llm.toml": "# Dummy validation fixture; no credentials.\n",
+      "entry.js": `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(sentinel)}, 'yes'); throw new Error('imported')`,
+    });
+    const response = await post("plugin", { kind: "installed", id: "probe" });
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const result = packageValidationReportSchema.parse(JSON.parse(text));
+    expect(result).toMatchObject({
+      kind: "plugin",
+      id: "probe",
+      ok: false,
+      counts: { errors: 1, warnings: 3 },
+      summary: { executionMode: "code" },
+    });
+    expect(result.issues).toEqual([
+      {
+        severity: "error",
+        code: "package-module-type",
+        file: "package.json",
+        message:
+          'package.json must declare "type": "module" (found "commonjs"); a plugin package is ESM',
+      },
+      {
+        severity: "warning",
+        code: "authoring-warning",
+        file: "PLUGIN.md",
+        field: "id",
+        message: '"probe" is the default value; remove it',
+      },
+      {
+        severity: "warning",
+        code: "authoring-warning",
+        file: "PLUGIN.md",
+        field: "kind",
+        message: '"plugin" is the default value; remove it',
+      },
+      {
+        severity: "warning",
+        code: "llm-toml-ignored",
+        file: "llm.toml",
+        message:
+          "llm.toml is ignored: a plugin cannot choose a model or an endpoint. Name the role with agent.model / function.model; the player's model settings bind it.",
+      },
+    ]);
+    for (const value of [
+      root,
+      os.tmpdir(),
+      os.homedir(),
+      "rootPath",
+      "cliFailure",
+      "cliWarnings",
+    ])
+      expect(text).not.toContain(value);
+    await expect(access(sentinel)).rejects.toThrow();
+  });
   it.each([false, true])(
     "unwraps plugin ZIP, cleans up, and reports invalid=%s",
     async (invalid) => {

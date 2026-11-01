@@ -291,7 +291,7 @@ export async function validatePluginPackage(
         code: "authoring-warning",
         ...parseIssueLocation(warning, rootPath),
       });
-      if (!cliFailure) cliWarnings.push(`  warning: ${warning}`);
+      cliWarnings.push(`  warning: ${warning}`);
     }
     if (
       await fs.stat(path.join(rootPath, "llm.toml")).then(
@@ -305,7 +305,7 @@ export async function validatePluginPackage(
         file: "llm.toml",
         message: llmWarning,
       });
-      if (!cliFailure) cliWarnings.push(`  warning: ${llmWarning}`);
+      cliWarnings.push(`  warning: ${llmWarning}`);
     }
   } catch (error) {
     fail("authoring-warning", error);
