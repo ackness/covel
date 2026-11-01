@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * Design-principle gates: removing all plugins leaves the framework functional
  * (zero-plugin gate), and one narrative plugin is enough to play
@@ -46,12 +47,12 @@ type Frame = { type: string; payload: Record<string, unknown> };
 
 describe("plugin floor gates", () => {
   let boot: Awaited<ReturnType<typeof bootstrapApi>>;
-  const generate = vi.fn(async (): Promise<LLMResponse> => ({
-    content: STORY_TEXT,
-    toolCalls: [],
-    finishReason: "stop",
-    usage: { inputTokens: 1, outputTokens: 1 },
-  }));
+  const generate = vi.fn(async (): Promise<LLMResponse> =>
+    submittedOutput(
+      { segments: [{ kind: "narration", text: STORY_TEXT }] },
+      { inputTokens: 1, outputTokens: 1 },
+    ),
+  );
 
   beforeAll(async () => {
     boot = await bootstrapApi({

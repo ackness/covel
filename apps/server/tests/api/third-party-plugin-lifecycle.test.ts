@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,21 +37,25 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
   let boot: ApiBootstrapResult;
   let zip: Buffer;
   let store: ReturnType<typeof createMemoryStore>;
-  const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-    content: null,
-    toolCalls: [
-      {
-        id: "fixture-tool-call",
-        name: "lifecycle-probe-record",
-        arguments: JSON.stringify({
-          key: "agent",
-          text: "Agent fixture record",
-        }),
-      },
-    ],
-    finishReason: "tool_calls",
-    usage: { inputTokens: 10, outputTokens: 10 },
-  }));
+  const generate = vi.fn<LLMAdapter["generate"]>(async ({ messages }) => {
+    if (completedBusinessOutput(messages, "lifecycle-probe-record"))
+      return submittedOutput({});
+    return {
+      content: null,
+      toolCalls: [
+        {
+          id: "fixture-tool-call",
+          name: "lifecycle-probe-record",
+          arguments: JSON.stringify({
+            key: "agent",
+            text: "Agent fixture record",
+          }),
+        },
+      ],
+      finishReason: "tool_calls",
+      usage: { inputTokens: 10, outputTokens: 10 },
+    };
+  });
 
   async function restart() {
     await closeTestApi(boot);
@@ -247,7 +255,7 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       kind: "agent",
       text: "Agent fixture record",
     });
-    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(generate.mock.calls[0]?.[0].messages)).toContain(
       "Test style: detailed",
     );

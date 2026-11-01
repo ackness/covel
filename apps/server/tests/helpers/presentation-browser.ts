@@ -1,3 +1,4 @@
+import { submittedOutput } from "./output-submission.js";
 import { createHookPipeline } from "@covel/runtime";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -223,18 +224,17 @@ contributes:
           };
         }
         const index = ++calls;
-        return {
-          content: JSON.stringify({
+        return submittedOutput(
+          {
+            narrativeOutput: `Public library story ${index}.`,
             segments: [
               { kind: "narration", text: `Public library story ${index}.` },
             ],
             cues: { scene: "Library", mood: "Tense", present: ["Mira"] },
             yield: options.yields?.[index - 1] ?? "user",
-          }),
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+          },
+          { inputTokens: 1, outputTokens: 1 },
+        );
       },
     },
   });

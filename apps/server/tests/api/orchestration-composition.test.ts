@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,12 +11,8 @@ import {
 } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
 
-const reply = (value: unknown): LLMResponse => ({
-  content: JSON.stringify(value),
-  toolCalls: [],
-  finishReason: "stop",
-  usage: { inputTokens: 1, outputTokens: 1 },
-});
+const reply = (value: Record<string, unknown>): LLMResponse =>
+  submittedOutput(value, { inputTokens: 1, outputTokens: 1 });
 const call = (name: string, args: unknown, id: string): LLMResponse => ({
   content: null,
   toolCalls: [{ name, arguments: JSON.stringify(args), id }],
@@ -178,6 +175,7 @@ describe("community character orchestration through the public API", () => {
                 "ivo",
               );
             return reply({
+              narrativeOutput: "I will listen.\n\nThe quiet continues.",
               segments: [
                 { kind: "dialogue", speaker: "Mara", text: "I will listen." },
                 { kind: "narration", text: "The quiet continues." },

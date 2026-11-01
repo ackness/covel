@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -46,12 +47,8 @@ async function fixture(
   const llm: LLMAdapter = {
     generate: async (request) => {
       const text = JSON.stringify(request.messages);
-      const reply = (value: unknown) => ({
-        content: JSON.stringify(value),
-        toolCalls: [],
-        finishReason: "stop" as const,
-        usage: { inputTokens: 1, outputTokens: 1 },
-      });
+      const reply = (value: Record<string, unknown>) =>
+        submittedOutput(value, { inputTokens: 1, outputTokens: 1 });
       if (text.includes("Play only the character assigned")) {
         actorRequests.push(text);
         await options.beforeActor?.(request.signal);

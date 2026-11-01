@@ -8,6 +8,7 @@ import type { HookPipeline } from "@covel/runtime";
 import type { LLMAdapter, SseEnvelope } from "@covel/shared";
 import { bootstrapApi } from "../../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../../helpers/close-api.js";
+import { submittedOutput } from "../../helpers/output-submission.js";
 
 export const gate = () => Promise.withResolvers<void>();
 export function events(text: string): SseEnvelope[] {
@@ -134,13 +135,14 @@ runtime:
         const response = await options.onGenerate?.(index, request);
         if (response) return response;
         const yieldValue = options.yields ? options.yields[index] : "continue";
+        if (!options.emptyOutput)
+          return submittedOutput({
+            narrativeOutput: `Story ${index + 1}.`,
+            segments: [{ kind: "narration", text: `Story ${index + 1}.` }],
+            ...(yieldValue ? { yield: yieldValue } : {}),
+          });
         return {
-          content: options.emptyOutput
-            ? ""
-            : JSON.stringify({
-                segments: [{ kind: "narration", text: `Story ${index + 1}.` }],
-                ...(yieldValue ? { yield: yieldValue } : {}),
-              }),
+          content: "",
           toolCalls: [],
           finishReason: "stop",
           usage: { inputTokens: 1, outputTokens: 1 },

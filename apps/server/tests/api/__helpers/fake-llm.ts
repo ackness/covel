@@ -1,9 +1,10 @@
+import { submittedOutput } from "../../helpers/output-submission.js";
 /**
  * Test helpers — fake LLMAdapter and fake LoadedRuntime factory.
  *
  * Used by tests that need to drive executeTurn() without real LLM calls.
- * The fake LLM returns a single deterministic narrative string and signals
- * 'stop' so the executor commits a narrative.append proposal.
+ * The fake LLM submits a deterministic narrative through submit-output so the
+ * executor can commit a narrative.append proposal.
  */
 
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
@@ -35,12 +36,10 @@ export function makeFakeLLM(narrative: string): FakeLLMHandle {
         messageCount: params.messages.length,
         toolCount: params.tools?.length ?? 0,
       });
-      return {
-        content: narrative,
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 10, outputTokens: 20 },
-      };
+      return submittedOutput(
+        { narrativeOutput: narrative },
+        { inputTokens: 10, outputTokens: 20 },
+      );
     },
   };
 
@@ -72,6 +71,6 @@ export function makeFakeLoadedRuntime(args: {
     manifest,
     promptTemplate:
       args.promptTemplate ??
-      "You are a test narrator. Reply with a single line.",
+      "You are a test narrator. Submit a single narrative line.",
   };
 }
