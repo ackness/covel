@@ -1215,125 +1215,158 @@ for (const width of [1280, 360]) {
   });
 }
 
-test("inline composer uses the same ready, error and opaque-origin recovery contract", async ({
-  page,
-  request,
-}, info) => {
-  test.setTimeout(90_000);
-  const root: unknown = info.config.metadata.sandboxProbeRoot;
-  if (typeof root !== "string")
-    throw new Error("Use the private community acceptance configuration");
-  const specPath = path.join(root, "ui/input.json");
-  const inlinePath = path.join(root, "ui/inline.html");
-  const original = await readFile(specPath, "utf8");
-  const html = await readFile(path.join(root, "ui/app/index.html"), "utf8");
-  const js = await readFile(path.join(root, "ui/app/app.js"), "utf8");
-  const css = await readFile(path.join(root, "ui/app/app.css"), "utf8");
-  const image = await readFile(path.join(root, "ui/app/probe.svg"));
-  const spec = JSON.parse(original);
-  let sessionId: string | undefined;
-  let releasePage = () => {};
-  let contentChanged = false;
-  try {
-    await seedBrowserSettings(page, {
-      "ui.onboardedVersion": ONBOARDING_VERSION,
-      "ui.locale": "en-US",
-    });
-    await useServerWorlds(page);
-    const directory = await (await request.get("/api/plugins")).json();
-    const created = await request.post("/api/sessions", {
-      data: {
-        locale: "en-US",
-        plugins: [],
-        excludedPlugins: directory.items
-          .filter((item: { source: string }) => item.source === "builtin")
-          .map((item: { id: string }) => item.id),
-      },
-    });
-    expect(created.status(), await created.text()).toBe(201);
-    const createdId: string = (await created.json()).id;
-    sessionId = createdId;
-    const url = `/api/sessions/${sessionId}`;
-    expect(
-      (await approved(request, `${url}/plugins/${pluginId}`, "put")).ok(),
-    ).toBe(true);
-    const previous = await probeContent(request, sessionId);
-    expect(previous.ready).toBe(true);
-    contentChanged = true;
-    await writeFile(
-      inlinePath,
-      html
-        .replace(
-          '<link rel="stylesheet" href="app.css" />',
-          `<style>${css}</style>`,
-        )
-        .replace('<script defer src="app.js"></script>', "")
-        .replace("</body>", `<script>${js}</script></body>`)
-        .replace(
-          'src="probe.svg"',
-          `src="data:image/svg+xml;base64,${image.toString("base64")}"`,
-        ),
-    );
-    await writeFile(
-      specPath,
-      JSON.stringify({ ...spec, webview: { entry: "./inline.html" } }),
-    );
-    await reloadProbe(request, sessionId, previous.signature);
-    await page.goto(`/session?sid=${sessionId}`);
-    const gate = new Promise<void>((resolve) => {
-      releasePage = resolve;
-    });
-    await page.route("**/plugin-frame.html", async (route) => {
-      await gate;
-      await route.abort().catch(() => {});
-    });
-    const controls = page.getByTestId("sandbox-surface-controls");
-    await controls
-      .getByRole("combobox", { name: "Composer", exact: true })
-      .selectOption(`plugin:${pluginId}:input`);
-    await page
-      .getByRole("dialog")
-      .getByRole("button", {
-        name: "Allow requested capabilities",
-        exact: true,
-      })
-      .click();
-    await expect(controls.getByRole("status")).toContainText("Bridge input", {
-      timeout: 12_000,
-    });
-    await expect(page.getByTestId("sandbox-composer")).toHaveCount(0);
-    releasePage();
-    await page.unroute("**/plugin-frame.html");
-    await controls.getByRole("button", { name: "Retry", exact: true }).click();
-    const outer = page.getByTestId("sandbox-composer").locator("iframe");
-    const inner = page
-      .getByTestId("sandbox-composer")
-      .frameLocator("iframe")
-      .frameLocator("iframe");
-    await expect(inner.locator("#draft")).toBeVisible();
-    await expect(outer).toHaveAttribute("sandbox", "allow-scripts");
-    await inner
-      .getByRole("button", { name: "Rejected promise", exact: true })
-      .click();
-    await expect(page.getByTestId("sandbox-composer")).toHaveCount(0);
-    await expect(controls.getByRole("status")).toContainText("Bridge input");
-    await controls
-      .getByRole("button", { name: "Back to default interface", exact: true })
-      .click();
-    await expect(controls.getByRole("status")).toHaveCount(0);
-  } finally {
-    releasePage();
-    if (!page.isClosed()) {
-      await page.unrouteAll({ behavior: "wait" });
-      await page.goto("about:blank");
+for (const delivery of ["url", "inline"] as const) {
+  test(`${delivery} composer uses the same ready, error and opaque-origin recovery contract`, async ({
+    page,
+    request,
+  }, info) => {
+    test.setTimeout(90_000);
+    const root: unknown = info.config.metadata.sandboxProbeRoot;
+    if (typeof root !== "string")
+      throw new Error("Use the private community acceptance configuration");
+    const specPath = path.join(root, "ui/input.json");
+    const inlinePath = path.join(root, "ui/inline.html");
+    const original = await readFile(specPath, "utf8");
+    const html = await readFile(path.join(root, "ui/app/index.html"), "utf8");
+    const js = await readFile(path.join(root, "ui/app/app.js"), "utf8");
+    const css = await readFile(path.join(root, "ui/app/app.css"), "utf8");
+    const image = await readFile(path.join(root, "ui/app/probe.svg"));
+    const spec = JSON.parse(original);
+    let sessionId: string | undefined;
+    let releasePage = () => {};
+    let contentChanged = false;
+    try {
+      await seedBrowserSettings(page, {
+        "ui.onboardedVersion": ONBOARDING_VERSION,
+        "ui.locale": "en-US",
+      });
+      await useServerWorlds(page);
+      const directory = await (await request.get("/api/plugins")).json();
+      const created = await request.post("/api/sessions", {
+        data: {
+          locale: "en-US",
+          plugins: [],
+          excludedPlugins: directory.items
+            .filter((item: { source: string }) => item.source === "builtin")
+            .map((item: { id: string }) => item.id),
+        },
+      });
+      expect(created.status(), await created.text()).toBe(201);
+      const createdId: string = (await created.json()).id;
+      sessionId = createdId;
+      const url = `/api/sessions/${sessionId}`;
+      expect(
+        (await approved(request, `${url}/plugins/${pluginId}`, "put")).ok(),
+      ).toBe(true);
+      if (delivery === "inline") {
+        const previous = await probeContent(request, sessionId);
+        expect(previous.ready).toBe(true);
+        contentChanged = true;
+        await writeFile(
+          inlinePath,
+          html
+            .replace(
+              '<link rel="stylesheet" href="app.css" />',
+              `<style>${css}</style>`,
+            )
+            .replace('<script defer src="app.js"></script>', "")
+            .replace("</body>", `<script>${js}</script></body>`)
+            .replace(
+              'src="probe.svg"',
+              `src="data:image/svg+xml;base64,${image.toString("base64")}"`,
+            ),
+        );
+        await writeFile(
+          specPath,
+          JSON.stringify({ ...spec, webview: { entry: "./inline.html" } }),
+        );
+        await reloadProbe(request, sessionId, previous.signature);
+      }
+      await page.goto(`/session?sid=${sessionId}`);
+      const gate = new Promise<void>((resolve) => {
+        releasePage = resolve;
+      });
+      const pageRoute =
+        delivery === "inline"
+          ? "**/plugin-frame.html"
+          : "**/plugin-assets/**/index.html";
+      await page.route(pageRoute, async (route) => {
+        await gate;
+        await route.abort().catch(() => {});
+      });
+      const controls = page.getByTestId("sandbox-surface-controls");
+      await controls
+        .getByRole("combobox", { name: "Composer", exact: true })
+        .selectOption(`plugin:${pluginId}:input`);
+      await page
+        .getByRole("dialog")
+        .getByRole("button", {
+          name: "Allow requested capabilities",
+          exact: true,
+        })
+        .click();
+      await expect(controls.getByRole("status")).toContainText("Bridge input", {
+        timeout: 12_000,
+      });
+      await expect(page.getByTestId("sandbox-composer")).toHaveCount(0);
+      releasePage();
+      await page.unroute(pageRoute);
+      await controls
+        .getByRole("button", { name: "Retry", exact: true })
+        .click();
+      const outer = page.getByTestId("sandbox-composer").locator("iframe");
+      const frame = page.getByTestId("sandbox-composer").frameLocator("iframe");
+      const inner =
+        delivery === "inline" ? frame.frameLocator("iframe") : frame;
+      const expectReady = async () => {
+        // Only URL pages have a status wrapper; session input proves either
+        // delivery connected and received its projection after each remount.
+        if (delivery === "url")
+          await expect(
+            page.getByTestId("sandbox-composer").locator("[data-page-status]"),
+          ).toHaveAttribute("data-page-status", "ready");
+        await expect(inner.locator("#draft")).toBeVisible();
+        await expect(inner.locator("#input")).toContainText('"seats"');
+      };
+      await expectReady();
+      await expect(outer).toHaveAttribute("sandbox", "allow-scripts");
+      if (delivery === "url")
+        await expect(outer).toHaveAttribute("src", /\/plugin-assets\//);
+      for (const name of [
+        "Rejected promise",
+        "Rejected promise from timer",
+        "Rejected async handler",
+      ]) {
+        // Real clicks execute callbacks from the authored script.
+        await inner.getByRole("button", { name, exact: true }).click();
+        await expect(page.getByTestId("sandbox-composer")).toHaveCount(0);
+        await expect(controls.getByRole("status")).toContainText(
+          "Bridge input",
+        );
+        // Recovery exercises the host and the new frame after each rejection.
+        await controls
+          .getByRole("button", { name: "Retry", exact: true })
+          .click();
+        await expectReady();
+      }
+      await controls
+        .getByRole("button", { name: "Back to default interface", exact: true })
+        .click();
+      await expect(controls.getByRole("status")).toHaveCount(0);
+    } finally {
+      releasePage();
+      if (!page.isClosed()) {
+        await page.unrouteAll({ behavior: "wait" });
+        await page.goto("about:blank");
+      }
+      if (contentChanged) {
+        await writeFile(specPath, original);
+        await rm(inlinePath, { force: true });
+      }
+      if (sessionId && !page.isClosed()) {
+        if (contentChanged) await reloadProbe(request, sessionId);
+        await request.delete(`/api/sessions/${sessionId}`);
+      }
     }
-    if (contentChanged) {
-      await writeFile(specPath, original);
-      await rm(inlinePath, { force: true });
-    }
-    if (sessionId && !page.isClosed()) {
-      if (contentChanged) await reloadProbe(request, sessionId);
-      await request.delete(`/api/sessions/${sessionId}`);
-    }
-  }
-});
+  });
+}

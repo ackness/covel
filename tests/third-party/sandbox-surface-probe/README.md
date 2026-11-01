@@ -12,8 +12,9 @@ note invokes this package's manual runtime through proposal commit, Stop calls
 the host abort and Open notes opens its own panel. Refused submissions retain
 the draft. Code approval and page consent are separate.
 
-Page error throws an uncaught exception; Rejected promise reports an unhandled
-rejection. Ignore heartbeat stops responding to probes without freezing the
+Page error throws an uncaught exception; Rejected promise, Rejected promise from
+timer and Rejected async handler cause unhandled rejections from their respective
+callbacks. Ignore heartbeat stops responding to probes without freezing the
 whole browser. Navigate retires the document. Fill viewport tests frame
 containment with a fixed, high-z-index body that scrolls inside its own frame;
 the root prevents the body's overflow from propagating to the viewport.

@@ -646,8 +646,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 - 父 handler 成功时，子调用的写入和父写入一起提交，排在父结果之前。
 - 父 handler 失败时（抛错、超时、返回 `failed` 或 `skipped`），子调用的写入一起丢弃。PostRuntime Hook 改写了父结果的状态（例如把失败改成成功）时也丢弃，和父 handler 自己的写入一样。多层嵌套逐层适用：任何一层父 handler 失败，它下面所有层的写入都丢弃。
-- 父 handler 挂起等待输入时，子调用的结果连同写入随挂起项保存。恢复后的 handler 成功时，它们和父写入一起提交，排在父结果之前，提交顺序和不挂起时相同；恢复失败、PostRuntime Hook 改了状态，或挂起项被放弃、过期、作废时，它们和父写入一起丢弃。自己也挂起了的子调用不保存，trace 里记一条 `code` 为 `nested-suspension-dropped` 的 `recursive.failed`。
-- 子调用用 `ctx.progress` 上报的进度作业，和父调用在同一个进度范围里，随父执行的提交一起收尾，同一个 runtime 的多次调用（例如父调用多次触发同一个子调用）共用这个范围；作业在完整身份键（`pluginId`、`runtimeId` 等）内按 `jobId` 和序号去重，所以父子或兄弟 runtime 的作业不会互相冲突；同一个 runtime 的多次调用共用一个身份键，要用不同的 `jobId`。子调用保留自己的执行身份，只是在根执行的进度范围里上报。父 handler 成功时，它们按各自的结果结束；父 handler 失败时，以 `cancelled` 结束；父 handler 挂起时，它们和父调用的作业一起停在 `waiting-input`，恢复成功后以保存时的结果结束，挂起项被放弃、过期、作废时以 `cancelled` 结束。
+- 父 handler 挂起等待输入时，子调用的结果连同写入随挂起项保存。恢复后的 handler 成功时，它们和父写入一起提交，排在父结果之前，提交顺序和不挂起时相同；恢复失败或被 PostRuntime Hook 拒绝时，本次不提交，原挂起项保存的写入仍可在之后重试；挂起项被放弃、过期或作废时才丢弃。自己也挂起了的子调用不保存，trace 里记一条 `code` 为 `nested-suspension-dropped` 的 `recursive.failed`。
+- 子调用用 `ctx.progress` 上报的进度作业，和父调用在同一个进度范围里，随父执行的提交一起收尾，同一个 runtime 的多次调用（例如父调用多次触发同一个子调用）共用这个范围；作业在完整身份键（`pluginId`、`runtimeId` 等）内按 `jobId` 和序号去重，所以父子或兄弟 runtime 的作业不会互相冲突；同一个 runtime 的多次调用共用一个身份键，要用不同的 `jobId`。子调用保留自己的执行身份，只是在根执行的进度范围里上报。父 handler 成功时，它们按各自的结果结束；父 handler 失败时，以 `cancelled` 结束；父 handler 挂起时，它们和父调用的作业一起停在 `waiting-input`，已准入的恢复失败时保存的作业变成 `failed`，之后提交成功可修正为成功，再次挂起则恢复等待；挂起项被放弃、过期、作废时以 `cancelled` 结束。修正只影响属于这条挂起链的调用，不改写插件自己报告的失败或取消。详见[作业收尾协议](./protocol.md#作业进度事件job-status实验性)。
 - agent 的 guard 里发起的子调用，只在 guard 返回 `{ skip: true }`、结果仍是跳过时提交；guard 放行、agent 照常运行时丢弃。
 
 挂起的辅助读者仍受源执行的读取依赖检查：它读过的生产者被丢弃时，挂起项和其中缓冲的子调用一起丢弃，即使读者没有暂存写入。详见[事务](./transactions.md)。
@@ -1189,6 +1189,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
+- `EntryList.props.exitTransition` 只接受字面量 `none` / `fade`；其他列表数据仍可绑定状态。省略时关闭，稳定键与显示上限见[界面组件](./ui-components.md#data)。舞台提供方可声明[同一退场策略](./ui-panels.md#stagecast1)，不写入演员持久状态。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
 - `contributes.actionKinds` 的 `name` 不能是基础行动类型、不能重复；`schema` 文件必须在包里并且是 JSON 对象。
 - `contributes.datasets` 的 schema 文件必须在包里并且是合法 JSON；`key` 必须是 schema 顶层 `properties` 里的必填属性（schema 顶层没有 `properties` 时跳过）；同名出现在 `contributes.data` 时两边必须用同一份 schema。

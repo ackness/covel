@@ -189,7 +189,11 @@ it.each(["success", "suspended"])(
       event("runtime.started", { runId: "original" }),
       event("runtime.completed", { runId: "original", status: "suspended" }),
       {
-        ...event("runtime.started", { runId: "continuation", resumed: true }),
+        ...event("runtime.started", {
+          runId: "continuation",
+          resumed: true,
+          resumeSourceRunId: "original",
+        }),
         timestamp: "2026-09-05T04:00:01Z",
       },
       {
@@ -228,7 +232,11 @@ it("keeps the cached start of a recovered continuation when the snapshot only ca
     event("runtime.started", { runId: "original" }),
     event("runtime.completed", { runId: "original", status: "suspended" }),
     {
-      ...event("runtime.started", { runId: "continuation", resumed: true }),
+      ...event("runtime.started", {
+        runId: "continuation",
+        resumed: true,
+        resumeSourceRunId: "original",
+      }),
       timestamp: "2026-09-05T04:00:01Z",
     },
     {
@@ -270,7 +278,11 @@ it.each([
       event("runtime.started", { runId: "original" }),
       event("runtime.completed", { runId: "original", status: "suspended" }),
       {
-        ...event("runtime.started", { runId: "first-resume", resumed: true }),
+        ...event("runtime.started", {
+          runId: "first-resume",
+          resumed: true,
+          resumeSourceRunId: "original",
+        }),
         timestamp: at(1),
       },
       {
@@ -281,7 +293,11 @@ it.each([
         timestamp: at(2),
       },
       {
-        ...event("runtime.started", { runId: "second-resume", resumed: true }),
+        ...event("runtime.started", {
+          runId: "second-resume",
+          resumed: true,
+          resumeSourceRunId: "original",
+        }),
         timestamp: at(3),
       },
       {
@@ -307,5 +323,35 @@ it.each([
         reconcileExecutionSteps(cached, traces.slice(4)),
       ).turns[0]?.steps,
     ).toEqual(shown);
+  },
+);
+
+it.each(["success", "failed", "skipped"])(
+  "recovers a saved child's %s correction without changing its independent twin",
+  (status) => {
+    const original = buildSnapshotExecutionSteps([
+      event("runtime.completed", { runId: "child", status: "success" }),
+      event("runtime.completed", { runId: "top", status: "success" }),
+    ]);
+    const held = reconcileExecutionSteps(original, [
+      event("runtime.completed", { runId: "child", status: "suspended" }),
+    ]);
+    const correction = event(
+      status === "failed"
+        ? "runtime.failed"
+        : status === "skipped"
+          ? "runtime.skipped"
+          : "runtime.completed",
+      { runId: "child", status, reason: "suspension-abandoned" },
+    );
+    const recovered = reconcileExecutionSteps(held, [correction]);
+    expect(recovered).toEqual([
+      expect.objectContaining({
+        runId: "child",
+        status: status === "success" ? "completed" : status,
+      }),
+      expect.objectContaining({ runId: "top", status: "completed" }),
+    ]);
+    expect(reconcileExecutionSteps(recovered, [correction])).toEqual(recovered);
   },
 );

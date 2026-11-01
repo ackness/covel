@@ -151,7 +151,7 @@ tracks:
 
 ## 故事提示的受限选择器
 
-场景舞台与配乐的 `story-cues` 是零预算呈现函数，读取公开故事和各自声明的素材 / 展示数据，不增加模型费用或设置。普通 pre-turn cast 和显式 scene / direction / music 事件覆盖继续使用原有上下文。没有变化、没有素材或没有故事通过 trace 的固定代码说明，玩家不会每回合收到无产出通知。当前名单立即移除离场角色，短暂淡出只存在于画面；显式退场按指定过渡，`none` 或减少动态效果立即清理。切换会话或缺少槽位时不保留旧演员。段落模板的 `CharacterAvatar` 只显示已解析说话人的公开头像，可本地放大。展示规则见[界面槽位](../reference/ui-panels.md#stagecast1)。开发者见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+场景舞台与配乐的 `story-cues` 是零预算呈现函数，读取公开故事和各自声明的素材 / 展示数据，不增加模型费用或设置。普通 pre-turn cast 和显式 scene / direction / music 事件覆盖继续使用原有上下文。没有变化、没有素材或没有故事通过 trace 的固定代码说明，玩家不会每回合收到无产出通知。cast 和 direction 提供方都显式选择宿主的 `exitTransition: "fade"`；当前名单立即移除离场角色，短暂淡出只存在于画面。其他提供方省略该选项时立即切换；显式退场按指定过渡，`none` 或减少动态效果立即清理。切换会话或缺少槽位时不保留旧演员。段落模板的 `CharacterAvatar` 只显示已解析说话人的公开头像，可本地放大。展示规则见[界面槽位](../reference/ui-panels.md#stagecast1)。开发者见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
 
 ### 可选的阅读外观
 

@@ -63,6 +63,8 @@ export interface ExecutionStep {
   runId?: string;
   /** This run continues an earlier suspended run of the same runtime. */
   resumed?: true;
+  /** Original invocation of this suspension chain, assigned by the kernel. */
+  resumeSourceRunId?: string;
   pluginId: string;
   /** Stage recorded by runtime.started, retained for historical setup rows. */
   stage?: Stage;

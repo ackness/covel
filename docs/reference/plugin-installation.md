@@ -12,7 +12,7 @@
 
 事件 runtime 也可由玩家操作显式调用。起始回合、冷却回合和运行次数上限只约束自动事件投递；显式调用绕过这些限制，因此每次玩家操作都可能再次调用模型。
 
-宿主从实际文件与清单推导必填的 `executionMode`：`declarative`、`code` 或 `unknown`。没有作者填写的模式开关。静态校验、归档预览、发现和执行检查共用判定；无法完整读取、链接或扫描中变化得到 `unknown`，不会获得豁免。CLI 与诊断接口给出包内路径、字段和原因。
+宿主从实际文件与清单推导必填的 `executionMode`：`declarative`、`code` 或 `unknown`。没有作者填写的模式开关。静态校验、归档预览、发现和执行检查共用判定；无法完整读取、链接或扫描中变化得到 `unknown`，不会获得豁免。应用内校验与结构化诊断保留执行分类、包内路径、字段和原因。`pnpm validate:plugin` 只打印静态校验结果，不输出执行分类或检查诊断；校验成功不是声明式准入证明。
 
 - 可以声明 agent、自己的数据集、设置、数据接收、固定提示段、JSON 界面、模板、视图和输入模式，以及可选的读/写服务导入。声明输出契约不等于提供可执行服务。
 - `entry`（包括自动发现的 `server/index.js`）、`function`、guard、非空 HTTP 权限，或 hooks/tools/wires/services/actions/forms/extensions/worldProjections 的可执行注册声明，都属于 `code`。禁用、无效和本地化 runtime 中的原始声明仍参与检查。
@@ -394,7 +394,7 @@ ZIP 校验使用[安装时的插件 ID 规则](#安装器做什么不做什么)�
 
 校验只读清单和引用的文件，检查字段、文件、语言和静态声明，绝不导入或执行包内代码，也不修改世界或存档。它复用 CLI 的校验核心；插件 CLI 显示首个失败阶段的错误及已收集的警告，应用还能列出其他可以独立检查的错误。清单解析或加载失败时，依赖其定义的警告不可用。
 
-报告包含 `kind`、可用时的 `id`、`ok`、`counts.errors`、`counts.warnings` 和 `issues`。每个问题有 `severity`、`code`、`message`，以及可用时的包内相对路径 `file`、字段路径或 JSON pointer `field`、修复提示 `hint`。摘要可含版本和语言。消息最多 2000 字符；保留前 200 个问题，超限时另加 `issues-truncated` 警告及省略数量。界面标题和已知代码按界面语言显示，其余消息保留英文；可以复制纯文本报告。
+报告包含 `kind`、可用时的 `id`、`ok`、`counts.errors`、`counts.warnings` 和 `issues`。每个问题有 `severity`、`code`、`message`，以及可用时的包内相对路径 `file`、字段路径或 JSON pointer `field`、修复提示 `hint`。摘要可含版本和语言；插件摘要还包含 `executionMode` 和 `executionDiagnostics`，保留读取不完整、链接或扫描中变化的诊断。消息最多 2000 字符；保留前 200 个问题，超限时另加 `issues-truncated` 警告及省略数量。界面标题和已知代码按界面语言显示，其余消息保留英文；可以复制纯文本报告。
 
 权限与安装相同，使用 `host.files`：托管实例需要运营者 Bearer 令牌；个人实例沿用安装接口的桌面令牌或显式启用规则。路径必须是对应插件或世界允许根目录内的真实目录，拒绝目录根的符号链接。报告把包内路径转为相对路径，把其他主机路径替换为 `<path>`，不返回 CLI 专用的原始文本。请求格式见 [API](./api.md#应用内校验)。
 

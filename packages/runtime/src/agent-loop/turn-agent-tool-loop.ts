@@ -440,6 +440,7 @@ async function runAgentToolLoopWithinBudget(
     messages,
     input.locale,
     policy,
+    responseFormat,
   );
   const loopContextPolicy = createLoopContextPolicy({ locale: input.locale });
   const pictureLoader = createPictureLoader(deps.mediaStore, input.sessionId);
@@ -1483,7 +1484,7 @@ async function runAgentToolLoopWithinBudget(
     !requiredCompletionUnmet
   ) {
     while (budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS) {
-      const checked = checkAgentOutput({
+      const checked = await checkAgentOutput({
         manifest,
         input,
         runId,
@@ -1499,6 +1500,7 @@ async function runAgentToolLoopWithinBudget(
         },
         outputSchema: loaded.outputSchema,
         priorToolCalls: initialState?.collectedToolCalls,
+        finalResponseHasToolCalls: (finalResponse?.toolCalls.length ?? 0) > 0,
       });
       if (
         checked.ok ||

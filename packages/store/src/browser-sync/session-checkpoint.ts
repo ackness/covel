@@ -10,6 +10,7 @@ import type {
   RuntimeExportRecord,
   SessionRecord,
   StoreTransaction,
+  TraceEventRecord,
 } from "../types.js";
 
 /**
@@ -18,10 +19,17 @@ import type {
  * the game does not; the journals of past executions do, and a session of a
  * hundred turns reached the upload limit on them alone.
  *
- * The trace rows the execution status is read from: the start of the newest
- * turn and how it ended. No other trace row is read outside the debug page.
+ * Turn recovery retains turn outcomes. Recent runtime rows retain only the
+ * latest start and effective terminal per run, including saved-suspension
+ * corrections, so checkpoint transfer cannot revive a provisional success.
  */
 const RECOVERY_TRACE_TYPES = ["turn.started", "turn.completed", "turn.failed"];
+const RUNTIME_TRACE_TYPES = [
+  "runtime.started",
+  "runtime.completed",
+  "runtime.failed",
+  "runtime.skipped",
+];
 
 /**
  * How many of the latest executions keep their results and runtime outputs.
@@ -113,7 +121,9 @@ export async function exportSessionCheckpoint(
     store.listRuntimeOutputs(sessionId),
     store.listInteractionRecords(sessionId),
     [] as Awaited<ReturnType<DataStore["listEvents"]>>,
-    store.queryTraceEvents(sessionId, { types: RECOVERY_TRACE_TYPES }),
+    store.queryTraceEvents(sessionId, {
+      types: [...RECOVERY_TRACE_TYPES, ...RUNTIME_TRACE_TYPES],
+    }),
     store.listCharacters(sessionId),
     store.getCharacterSchema(sessionId),
     store.listPluginDataSessionScope(sessionId),
@@ -146,6 +156,37 @@ export async function exportSessionCheckpoint(
     ),
   );
 
+  const lifecycleTurns = new Set([
+    ...recentTurnIds,
+    ...suspensions
+      .filter((row) => !row.resolvedAt || row.resolvedAt.startsWith("claimed:"))
+      .map((row) => row.turnId),
+  ]);
+  const runtimeTraces = new Map<string, TraceEventRecord>();
+  for (const row of traceEvents) {
+    if (
+      !RUNTIME_TRACE_TYPES.includes(row.type) ||
+      !lifecycleTurns.has(row.turnId)
+    )
+      continue;
+    const payload = row.payload as Record<string, unknown> | null;
+    if (
+      !payload ||
+      typeof payload.runtimeId !== "string" ||
+      typeof payload.pluginId !== "string"
+    )
+      continue;
+    const key = JSON.stringify([
+      row.turnId,
+      payload.pluginId,
+      payload.runtimeId,
+      payload.runId ?? "",
+      row.type === "runtime.started",
+    ]);
+    runtimeTraces.set(key, row);
+  }
+  const retainedRuntimeTraces = new Set(runtimeTraces.values());
+
   const checkpoint = {
     schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
     sessionId,
@@ -163,7 +204,11 @@ export async function exportSessionCheckpoint(
     ),
     interactions,
     events,
-    traceEvents,
+    traceEvents: traceEvents.filter(
+      (row) =>
+        RECOVERY_TRACE_TYPES.includes(row.type) ||
+        retainedRuntimeTraces.has(row),
+    ),
     characters,
     characterSchema,
     pluginData: pluginData.filter(

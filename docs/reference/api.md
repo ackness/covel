@@ -1644,7 +1644,7 @@ fork 和社区插件的授权：
 
 `/plugin-assets` 及其子路径中不匹配资源路由的请求也返回相同的 404，包括编码点路径段规范化后缺少插件 ID 或摘要的路径；不会进入公共静态文件或应用首页的回退路由。
 
-成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
+成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie 或 Cross-Origin-Resource-Policy。只有已校验的公开页面 JavaScript（包括桥）在 GET、HEAD 和 304 响应中发送 `Access-Control-Allow-Origin: *`，供不透明源匿名加载脚本并报告未处理的 Promise 拒绝；不允许凭据。其他资源和缺失文件不发送 CORS 允许头，`/api` 的来源拒绝规则不变。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
 
 #### GET /api/ui-specs
 
@@ -4503,7 +4503,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 用玩家提交的数据让一个挂起的 runtime 继续运行。
 
 - **agent runtime**：从保存下来的工具调用记录接着跑。
-- **function runtime**：重新调用 handler，本次数据通过 `ctx.resumeData` 和 `ctx.resumedFromSuspensionId` 传入，不会进入模型循环。handler 挂起前用 `ctx.recursiveCall` 调用的子 runtime，写入随挂起项保存，恢复成功时先于 handler 自己的写入一起提交；恢复没有成功，或挂起项被放弃时，它们和 handler 的写入一起丢弃。
+- **function runtime**：重新调用 handler，本次数据通过 `ctx.resumeData` 和 `ctx.resumedFromSuspensionId` 传入，不会进入模型循环。handler 挂起前用 `ctx.recursiveCall` 调用的子 runtime，写入随挂起项保存，恢复成功时先于 handler 自己的写入一起提交；恢复失败时这些保存的写入仍扣在未解决的挂起项里，之后可重试；放弃挂起项时一起丢弃。
 - 会话的 `runtimeModelOverrides` 照常生效：恢复的 runtime 和它调用的子 agent 都按各自的 runtimeId 选模型。
 - 时限和最初派发时相同：runtime 清单写了 `timeoutMs` 就用它，没写时用框架的默认时限。
 - 恢复的 runtime 可以再次挂起，见下面的[再次挂起](#再次挂起)。
@@ -4556,6 +4556,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 提交失败时，`error` 是 `Resume commit failed: <原因>. The suspension remains unresolved and can be retried.`
 - 失败后，这次请求对挂起项的占用会被释放（前提是会话没有被删除重建），所以可以重试。内部原因只写进服务端日志。
 
+已准入的恢复失败或提交回滚后，父调用和保存的递归后代的有效生命周期与框架管理的进度任务都显示失败，挂起项仍可重试。成功重试修正为成功，再次挂起恢复等待，放弃则取消；插件自己报告的失败或取消不会复活。请求在校验、鉴权或占用检查时被拒绝，不改变尚未执行的挂起项。响应丢失后可从持久 trace、任务记录和挂起列表恢复状态，不应仅因网络错误重跑已提交的恢复。详见[生命周期事件](./protocol.md#执行生命周期事件)。
+
 ##### 过时的挂起项
 
 挂起时会记下三样东西：这时历史里有几个玩家回合，提出它的插件是哪个版本，以及它保存的写入要改的每条记录当时的内容。恢复前，服务端先检查挂起项是否已经过时。过时的挂起项不会再运行，因为它保存的写入可能盖掉更新的状态。
@@ -4596,7 +4598,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 同一个逻辑回合有多个并行挂起项时，等最后一个恢复完才计数。重试不会重复计数。
 - 恢复后又挂起时，回合仍未完成。整条挂起链在最后一次恢复成功时计数，只计一次。
 - 挂起项被放弃、过期或作废时，按回合正常结束的方式收尾：它是这个逻辑回合最后一个还在等待的挂起项时，玩家回合数加一，回合扣下的后台作业（`schedule.detached`）照常入队。这些和删除记录在同一个事务里完成。正在被另一个请求恢复的挂起项也算“还在等待”。
-- 挂起的执行上报过的进度作业（`ctx.progress`）停在 `waiting-input`，挂起的 runtime 通过 `ctx.recursiveCall` 发起的子调用上报的作业也一样。恢复的运行也在原执行的进度范围里上报，所以整条挂起链的作业一起收尾：最后一次恢复成功提交后，它们以 `succeeded` 结束；挂起项被放弃、过期或作废时，以 `cancelled` 结束。恢复失败可以重试，或者恢复后又挂起时，它们继续等待。
+- 挂起的执行上报过的进度作业（`ctx.progress`）停在 `waiting-input`，挂起的 runtime 通过 `ctx.recursiveCall` 发起的子调用上报的作业也一样。恢复的运行也在原执行的进度范围里上报，所以整条挂起链的作业一起收尾：最后一次恢复成功提交后，它们以 `succeeded` 结束；挂起项被放弃、过期或作废时，以 `cancelled` 结束。恢复失败时它们显示 `failed`，挂起项仍可重试；恢复后又挂起时才继续等待。
 
 ##### 恢复 setup runtime
 
@@ -4638,6 +4640,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 
 放弃一个挂起项，把它删除。用于玩家放弃当前选择，或管理界面清理。挂起项不存在时返回 `404`。
+
+如果在会话锁内读到它已经处理完，只删除历史记录。已提交的写入、任务状态和生命周期终态保持不变，也不会取消再次挂起后仍在等待的新挂起项或其父子任务。
 
 它是所在回合最后一个还在等待的挂起项时，这个回合算完成，回合扣下的后台作业照常入队，见[挂起与回合计数](#挂起与回合计数)。请求可以带 `X-Plugin-User-Settings`，作用与恢复请求相同。
 

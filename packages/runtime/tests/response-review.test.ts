@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { LLMAdapter, LLMResponse, RuntimeManifest } from "@covel/shared";
+import { storyOutputJsonSchema } from "@covel/shared";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
@@ -27,7 +28,12 @@ const text = (content: string): LLMResponse => ({
 async function run(
   replies: LLMResponse[],
   maxSteps = 6,
-  { streaming = false, locale = undefined as string | undefined } = {},
+  {
+    streaming = false,
+    locale = undefined as string | undefined,
+    structured = false,
+    rewriteBlank = false,
+  } = {},
 ) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
@@ -46,6 +52,7 @@ async function run(
     updatedAt: now,
   });
   const pipeline = createHookPipeline();
+  let reviews = 0;
   if (!streaming)
     pipeline.register({
       id: "buffer",
@@ -58,9 +65,36 @@ async function run(
     pluginId: story.pluginId,
     event: "PostLLMResponse",
     handler: async (_ctx, payload) => {
+      reviews += 1;
       expect(payload.messages.some((message) => message.role === "user")).toBe(
         true,
       );
+      if (
+        structured &&
+        (!payload.response.content?.trim() ||
+          (rewriteBlank && payload.response.content.startsWith("Rewrite")))
+      ) {
+        return {
+          action: "continue",
+          replace: {
+            correction: "Write the story from the selected perspective.",
+            ...(rewriteBlank
+              ? {
+                  response: {
+                    ...payload.response,
+                    content: " \n ",
+                    reasoningContent: "Reviewed reasoning.",
+                    providerContinuation: {
+                      protocol: "openai-chat-v1",
+                      model: "fixture",
+                      items: [{ type: "reasoning", field: "reasoning" }],
+                    },
+                  },
+                }
+              : {}),
+          },
+        };
+      }
       return payload.response.content?.startsWith("Rejected")
         ? {
             action: "continue",
@@ -117,6 +151,7 @@ async function run(
       loadRuntime: async () => ({
         manifest: { ...story, maxSteps },
         promptTemplate: "Continue the scene.",
+        ...(structured ? { outputSchema: storyOutputJsonSchema() } : {}),
       }),
     },
   );
@@ -135,10 +170,108 @@ async function run(
     sessionClock: { now },
     journalMessages: collectExecutionJournal(result),
   });
-  return { result, committed, generate, stream, toolExecutor, store, onDelta };
+  return {
+    result,
+    committed,
+    generate,
+    stream,
+    toolExecutor,
+    store,
+    onDelta,
+    reviews,
+  };
 }
 
 describe("plugin response validation", () => {
+  it("does not call an empty-content tool response a missing JSON answer", async () => {
+    const { generate, toolExecutor, result } = await run(
+      [
+        {
+          ...text(""),
+          content: null,
+          toolCalls: [
+            { id: "unexecuted", name: "emit-event", arguments: "{}" },
+          ],
+        },
+        text(
+          JSON.stringify({
+            segments: [{ kind: "narration", text: "Rain falls." }],
+          }),
+        ),
+      ],
+      6,
+      { structured: true },
+    );
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(toolExecutor.execute).not.toHaveBeenCalled();
+    const correction = String(
+      generate.mock.calls[1]![0].messages.at(-1)?.content,
+    );
+    expect(correction).toContain(
+      "Write the story from the selected perspective.",
+    );
+    expect(correction).not.toMatch(/empty|whitespace|no JSON/i);
+  });
+
+  it.each([
+    ["en-US", null, false],
+    ["en-US", "", false],
+    ["en-US", " \n ", false],
+    ["en-US", "Rewrite this draft", true],
+    ["zh-CN", " \n ", false],
+    ["zh-CN", "Rewrite this draft", true],
+  ] as const)(
+    "adds localized JSON feedback to an existing blank rejection (%s, %j, rewritten: %s)",
+    async (locale, content, rewriteBlank) => {
+      const replacement = JSON.stringify({
+        segments: [{ kind: "narration", text: "Rain falls." }],
+      });
+      const { result, generate, reviews } = await run(
+        [{ ...text(""), content }, text(replacement)],
+        6,
+        { locale, structured: true, rewriteBlank },
+      );
+      expect(generate).toHaveBeenCalledTimes(2);
+      expect(reviews).toBe(2);
+      expect(result.runtimeResults[0]).toMatchObject({
+        status: "success",
+        stop: { reason: "completed" },
+      });
+      const request = generate.mock.calls[1]![0];
+      expect(request.responseFormat?.type).toBe("json_schema");
+      // This correction spends review budget and keeps the normal tool surface.
+      expect(request.tools?.length).toBeGreaterThan(0);
+      const correction = String(request.messages.at(-1)?.content);
+      expect(correction).toContain(
+        "Write the story from the selected perspective.",
+      );
+      if (locale === "zh-CN") {
+        expect(correction).toMatch(/空白|为空/);
+        expect(correction).toContain("未返回 JSON 对象");
+        expect(correction).toContain("完整对象");
+        expect(correction).not.toMatch(/empty|whitespace|no JSON/i);
+      } else {
+        expect(correction).toMatch(/empty or whitespace-only/i);
+        expect(correction).toMatch(/no JSON object was returned/i);
+        expect(correction).toMatch(/complete object.*schema.*segments/i);
+      }
+      if (rewriteBlank) {
+        expect(request.messages).toContainEqual(
+          expect.objectContaining({
+            role: "assistant",
+            content: " \n ",
+            reasoningContent: "Reviewed reasoning.",
+            providerContinuation: expect.any(Object),
+          }),
+        );
+        expect(
+          request.messages.some((message) => message.content === content),
+        ).toBe(false);
+      }
+    },
+  );
+
   it("corrects before dispatch, buffers output, and keeps only the accepted story", async () => {
     const rejected = {
       ...text("Rejected draft"),

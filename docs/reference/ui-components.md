@@ -76,6 +76,7 @@
 
 ### Data
 
+<!-- prettier-ignore -->
 | 组件                  | 用途                                                                                                                                    | 主要属性                                                                                                                                                                                                   |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Card`                | 带边框的容器。                                                                                                                          | `variant`（`glow` / `subtle`）                                                                                                                                                                             |
@@ -86,12 +87,16 @@
 | `Accordion`           | `Section` 子元素的竖向外层容器。                                                                                                        | —                                                                                                                                                                                                          |
 | `Section`             | 可以折叠的标题加正文。                                                                                                                  | `title` _(I18nText)_、`icon`、`defaultOpen`（布尔）                                                                                                                                                        |
 | `JsonView`            | 按形状显示任意 JSON 值：基础类型直接显示，数组显示成标签列表，对象显示成 key: value。                                                   | `value`（任意）                                                                                                                                                                                            |
-| `EntryList`           | 声明式的条目列表：标题、说明、徽标和带标签的字段。                                                                                      | `items`、`titleField`，可选的 `idField`、`descriptionFields`、`badgeFields`、`fields`、`dateField`、`footerField`                                                                                          |
+| `EntryList`           | 声明式的条目列表：标题、说明、徽标和带标签的字段。                                                                                      | `items`、`titleField`，可选的 `idField`、`descriptionFields`、`badgeFields`、`fields`、`dateField`、`footerField`、`exitTransition`                                                                                          |
 | `SceneCastList`       | 来自 `stage.cast@1` 的在场角色：名字、类型和说明。                                                                                      | 无                                                                                                                                                                                                         |
 | `CharacterFieldsView` | 按 schema 显示一个角色的 `fields` 对象。它读会话 World Model 的 `characterSchema`，按类别分组（bio/stats/abilities/equipment/social）。 | `value`（角色的 `fields` 对象）                                                                                                                                                                            |
 | `CharacterAvatar`     | 公开头像，点击放大；数据来源取决于组件位置。                                                                                            | `characterId`，可选的 `size`（默认 `28`）                                                                                                                                                                  |
 
 `CharacterAvatar` 在普通面板按 `characterId` 读取当前会话的 keyed `character.visual@1`；在段落模板只使用宿主已投影的说话人头像，ID 必须匹配 `/character/id`。`size` 默认 28 像素；没有头像时不显示组件，名字和正文由其他节点保留。放大与关闭使用宿主本地预览和已翻译的控件标签；会话、说话人或头像改变会关闭预览。完整限制见[段落模板](./ui-panels.md#段落模板)。
+
+`EntryList.props.exitTransition` 只接受字面量 `"none"` / `"fade"`，省略等同 `"none"`，移除立即生效。`"fade"` 让宿主保留上一显示内容，播放一次 300ms 淡出；匹配的外层动画结束时移除，漏掉事件也会在 350ms 内清理，不需要新的投影。重复快照不延长期限。
+
+保留要求 `idField`（默认 `id`）指向唯一、非空的稳定字符串或有限数字；重排不退场。缺失、空白或重复键会在该次更新立即切换，所有当前行仍显示，也不按旧数组下标读取新行。最多保留 32 条退场行，超出时先移除最早离开的行，不截断当前列表。退场行脱离布局、不可聚焦或交互，对辅助技术隐藏；当前内容立即更新。重新出现的键取消旧退场并显示新内容；策略改为关闭、会话或列表身份更换、无效属性、卸载都会丢弃本地退场记忆。减少动态效果（包括中途开启）立即移除退场行。该能力只用于只读 EntryList，不扩展 `repeat`、行模板或表单。
 
 `EntryCard` 的 `category` 和 `rarity` 是提供者定义的数据键，没有内置枚举或默认稀有度。`categoryOptions` 是 `{ value, label, icon?, color? }` 数组：用 `value` 匹配类别，`label` 按 UI 语言解析，图标和颜色可由条目的 `icon` / `color` 覆盖。`rarityOptions` 是 `{ value, tone?, color? }` 数组：匹配稀有度后，`tone` 控制边线（`muted` / `primary` / `info` / `success` / `warning` / `danger`），`color` 控制类别徽标（`red` / `amber` / `blue` / `green` / `purple` / `cyan`）。缺少匹配项时显示原类别键、通用书本图标和中性色。使用 `FilterContainer` 时，把这两组数组放在行模板的 `EntryCard.props` 中；数据键用 `$item` 绑定。spec 的 `label` 只写英文，译文放在插件的 `locales/<locale>.yaml` 的 `messages` 中，不需要把双语名称写进模型数据。
 
@@ -285,7 +290,7 @@
 
 json-render 提供布局、文字、表单、媒体、数值条、关系图和可组合的重复行。目录有意保持有限：通用表格、统计图、自定义动画或计时器，以及名单外的图标，需要在 `webview` 面板里自行实现，见[自己画界面](../plugins/ui.md#8-自己画界面)。`webview` 仍受同一套沙箱和动作权限限制。
 
-已有的 `WorldDimensions` 表格、宿主 Markdown 表格、组件加载动画和舞台过渡仍可使用；它们不是可自由配置的通用表格或动画接口。图表图片、动画图片和视频也可以直接用媒体组件显示。
+已有的 `WorldDimensions` 表格、宿主 Markdown 表格、组件加载动画、EntryList 的受限退场选项和舞台过渡仍可使用；它们不是可自由配置的通用表格或动画接口。图表图片、动画图片和视频也可以直接用媒体组件显示。
 
 ## Summary
 

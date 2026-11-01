@@ -59,6 +59,8 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 **依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。 SQLite 向量扩展 `sqlite-vec` 由 `store` 直接声明，根包不重复提供。
 
+`shared` 的窄入口 `@covel/shared/plugin-page` 使用直接依赖 `parse5` 准备 URL 页面：按 HTML 解析结果注入桥并设置脚本的匿名 CORS，保留其余原始文本。文件读取与响应头仍由 server 的资源路由负责；Web 和桌面壳无需加载这个解析器。
+
 常规依赖更新只采用发布满七天的正式版；等待期与精确安全版本例外由 [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 管理。版本声明以各包的 `package.json` 和 `mise.toml` 为准，解析结果以 `pnpm-lock.yaml` 为准。升级时同步工作区与工具模板，保留 overrides 的消费方范围，并用[现有检查](./commands.md)验证兼容性。
 
 开发依赖 Fallow 的安全更新同时覆盖分析器、类型分析包和各平台二进制包。它在分析仓库配置时必须把文件读取和路径探测限制在项目根目录内；精确版本的等待期例外不放宽其他依赖的更新规则。

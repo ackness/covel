@@ -40,6 +40,7 @@ const base: StageSpritesProps = {
   speakers: [],
   presence: { B: { characterId: "B", avatar: portrait } },
   retainWhenEmpty: false,
+  exitTransition: "fade",
 };
 const sprite = () =>
   document.querySelector<HTMLElement>('[data-character-id="B"]');

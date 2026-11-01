@@ -465,6 +465,10 @@ export function createSseEventHandler(
               ? { runId: payload.runId }
               : {}),
             ...(payload.resumed === true ? { resumed: true } : {}),
+            ...(typeof payload.resumeSourceRunId === "string" &&
+            payload.resumeSourceRunId
+              ? { resumeSourceRunId: payload.resumeSourceRunId }
+              : {}),
             startedAt: envelope.timestamp,
             ...retryStepMetadata(payload, turnId),
           },

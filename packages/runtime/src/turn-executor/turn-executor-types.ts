@@ -33,6 +33,8 @@ import type { MediaStoreLike } from "../function-runtime/runtime-media-context.j
  * still assignable wherever `AgentLoopDeps` is expected.
  */
 export interface AgentLoopDeps {
+  /** Kernel attempt identity shared by recursive progress reporters. */
+  readonly progressAttemptId?: string;
   /** Host-owned delegation capabilities carried to tool invocations. */
   readonly delegation?: import("../orchestration/delegation-budget.js").DelegationBudget;
   /** LLM adapter for making model calls. */
@@ -168,6 +170,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     stage?: Stage;
     /** The run continues a suspended runtime. */
     resumed?: true;
+    /** Original invocation of this suspension chain, assigned by the kernel. */
+    resumeSourceRunId?: string;
   }) => Promise<void>;
 
   /**

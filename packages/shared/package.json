@@ -36,6 +36,10 @@
       "types": "./src/plugin-user-settings-header.ts",
       "import": "./src/plugin-user-settings-header.ts"
     },
+    "./plugin-page": {
+      "types": "./src/plugin-page.ts",
+      "import": "./src/plugin-page.ts"
+    },
     "./plugin-runtime": {
       "types": "./src/plugin-runtime/index.ts",
       "import": "./src/plugin-runtime/index.ts"
@@ -56,6 +60,7 @@
   "dependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
     "css-tree": "^3.2.1",
+    "parse5": "^8.0.1",
     "smol-toml": "^1.9.1",
     "zod": "^4.6.7"
   }

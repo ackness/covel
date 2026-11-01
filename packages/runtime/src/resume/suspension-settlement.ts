@@ -29,21 +29,18 @@ import type {
   SuspensionBasis,
   SuspensionRecord,
 } from "@covel/store";
-import type { EventBus } from "@covel/events";
 import {
   applySessionClockTx,
   updateSetupRuntimeStates,
 } from "../commit/session-clock.js";
 import {
-  finalizeSuspendedJobStatuses,
-  returnJobsToWaitingInput,
-} from "../job-status/job-status.js";
+  settleSavedWork,
+  type SavedLifecycleDeps,
+} from "./suspended-lifecycle.js";
 import {
   changedSuspensionWrites,
   type SuspensionWriteReader,
 } from "./suspension-baseline.js";
-import { nestedRuntimesOf } from "./suspended-nested-results.js";
-import { suspensionProgressScopeId } from "./suspension-progress-scope.js";
 
 /**
  * Whether a suspension still waits for an answer: unresolved, or claimed by a
@@ -231,6 +228,7 @@ export async function settleAbandonedSetupAttempt(
   manifest: RuntimeManifest | undefined,
   now: string,
 ): Promise<void> {
+  if (!isPendingSuspension(suspension)) return;
   const { sessionId, runtimeId } = suspension;
   const executionId =
     suspension.pendingContinuation.executionContext.executionId;
@@ -286,45 +284,30 @@ export async function settleAbandonedSetupAttempt(
  * and those of the nested calls saved with it.
  */
 export async function settleAbandonedSuspensionJobs(
-  deps: {
-    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
-    readonly eventBus?: EventBus;
-  },
+  deps: SavedLifecycleDeps,
   suspension: SuspensionRecord,
 ): Promise<void> {
-  await finalizeSuspendedJobStatuses(
-    deps,
-    {
-      sessionId: suspension.sessionId,
-      executionId: suspensionProgressScopeId(suspension.pendingContinuation),
-      pluginId: suspension.pluginId,
-      runtimeId: suspension.runtimeId,
-      alsoSettle: nestedRuntimesOf(suspension),
-    },
-    "skipped",
-  );
+  // Use the record read under the session lock, before its deletion. A resolved
+  // leg is history; its owner may already have committed or still be continuing.
+  if (!isPendingSuspension(suspension)) return;
+  await settleSavedWork(deps, suspension, "skipped");
 }
 
-/**
- * After a resume attempt that ended without committing (its runtime failed,
- * threw, timed out or was stopped by `PostRuntime`): the suspension stays open
- * for a retry, so the jobs the attempt's runtimes reported under the suspended
- * execution wait for input again, and a success one of them claimed is taken
- * back, since its writes never landed. Call it while the claim is still held,
- * so no retry is reporting under the same scope. `runtimeIds` names the
- * runtimes the attempt ran, when known; the suspended runtime is always one.
- */
+/** Failed admitted attempts release their claim, but their effective work fails. */
 export async function settleFailedResumeJobs(
-  deps: {
-    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
-    readonly eventBus?: EventBus;
+  deps: Omit<SavedLifecycleDeps, "store"> & {
+    readonly store: SavedLifecycleDeps["store"] &
+      Pick<DataStore, "getSuspension">;
   },
   suspension: SuspensionRecord,
-  runtimeIds: Iterable<string> = [],
+  attemptId?: string,
 ): Promise<void> {
-  await returnJobsToWaitingInput(deps, {
-    sessionId: suspension.sessionId,
-    progressScopeId: suspensionProgressScopeId(suspension.pendingContinuation),
-    runtimeIds: new Set([suspension.runtimeId, ...runtimeIds]),
-  });
+  try {
+    const live = await deps.store.getSuspension(suspension.id);
+    if (!live || live.resolvedAt !== suspension.resolvedAt) return;
+    if (live.resolvedAt && !live.resolvedAt.startsWith("claimed:")) return;
+    await settleSavedWork(deps, suspension, "failed", attemptId);
+  } catch (error) {
+    console.warn("[suspension] failed-attempt settlement failed:", error);
+  }
 }

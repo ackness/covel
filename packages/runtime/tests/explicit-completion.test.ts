@@ -113,6 +113,10 @@ async function run(
           resumeSchema: {},
           createdAt: "2026-01-01T00:00:00Z",
           pendingContinuation: {
+            lifecycle: {
+              runId: "suspended-run",
+              progressRunId: "suspended-run",
+            },
             readScopes: [],
             takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
             messages: [

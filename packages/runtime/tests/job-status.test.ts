@@ -114,6 +114,55 @@ describe("createProgressReporter.report", () => {
     ]);
   });
 
+  it("binds invocation ownership and never revives a plugin-authored failure", async () => {
+    const deps = {
+      ...h.deps,
+      ownership: { runId: "owned-run", attemptId: "attempt" },
+    };
+    const reporter = createProgressReporter(deps);
+    await reporter.report({
+      jobId: "job",
+      state: "succeeded",
+      sequence: 1,
+      data: { _covel: { runId: "other", attemptId: "other", settled: true } },
+    });
+    expect((await h.store.listJobStatus(SESSION))[0]?.data).toEqual({
+      _covel: { runId: "owned-run", attemptId: "attempt", settled: false },
+    });
+    await finalizeJobStatuses(deps, {
+      outcome: "failed",
+      reportedJobs: ["job"],
+    });
+    await finalizeJobStatuses(deps, {
+      outcome: "success",
+      reportedJobs: ["job"],
+    });
+    await finalizeJobStatuses(deps, {
+      outcome: "success",
+      reportedJobs: ["job"],
+    });
+    expect(
+      (await h.store.listJobStatus(SESSION)).map((row) => row.state),
+    ).toEqual(["succeeded", "failed", "succeeded"]);
+    await reporter.report({
+      jobId: "job",
+      state: "failed",
+      sequence: 10,
+      data: {
+        _covel: { runId: "owned-run", attemptId: "attempt", settled: true },
+      },
+    });
+    await finalizeJobStatuses(deps, {
+      outcome: "success",
+      reportedJobs: ["job"],
+    });
+    expect((await h.store.listJobStatus(SESSION)).at(-1)).toMatchObject({
+      state: "failed",
+      sequence: 10,
+      data: { _covel: { settled: false } },
+    });
+  });
+
   it("emits a job-status.updated SSE event carrying the full record", async () => {
     const reporter = createProgressReporter(h.deps);
     await reporter.report({ jobId: "job-a", state: "queued", sequence: 1 });

@@ -107,6 +107,7 @@ export interface ExecuteFunctionRuntimeOptions {
    * turnId scope in that case.
    */
   readonly executionId?: string;
+  readonly progressRunId?: string;
   /** Resume payload for a previously suspended function runtime. */
   readonly resumeData?: unknown;
   /** Identifies a resume invocation even when `resumeData` is undefined. */
@@ -148,6 +149,7 @@ export async function executeFunctionRuntime({
   recursionDepth,
   startTime,
   runId,
+  progressRunId = runId,
   timeoutMs,
   executionId,
   resumeData,
@@ -169,7 +171,7 @@ export async function executeFunctionRuntime({
     input.sessionId,
     manifest,
     { turnId: input.turnId, runId },
-    resumedFromSuspensionId !== undefined,
+    resumedFromSuspensionId !== undefined ? progressRunId : undefined,
   );
 
   const helperCtx = {
@@ -219,6 +221,7 @@ export async function executeFunctionRuntime({
     timeoutMs,
     ...(executionId !== undefined ? { executionId } : {}),
     runId,
+    progressRunId,
     writeBuffer,
     ...(operations ? { operations } : {}),
     pluginDataVisibility: createPluginDataVisibility({
@@ -362,6 +365,7 @@ export async function executeFunctionRuntime({
       reason: handlerOutcome.reason,
       resumeSchema: handlerOutcome.resumeSchema ?? {},
       pendingContinuation: {
+        lifecycle: { runId, progressRunId },
         readScopes: [],
         messages: [],
         toolCallsSoFar: [],

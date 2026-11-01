@@ -144,41 +144,57 @@ describe("stage decision lifecycle", () => {
     },
   );
 
-  it("discards a real sprite lifecycle when its cast provider disappears and mounts recovery fresh", () => {
-    vi.useFakeTimers();
-    stageSlots.realSprites = true;
-    stageSlots.reduce = false;
-    const castSlot = (...ids: string[]) => [
-      {
-        slot: "stage.cast@1",
-        value: {
-          actors: ids.map((id) => ({ characterId: id, displayName: id })),
-          retainWhenEmpty: false,
+  it.each(["missing", "invalid"])(
+    "discards a real sprite lifecycle for a %s cast slot and mounts recovery fresh",
+    (slotState) => {
+      vi.useFakeTimers();
+      stageSlots.realSprites = true;
+      stageSlots.reduce = false;
+      const castSlot = (...ids: string[]) => [
+        {
+          slot: "stage.cast@1",
+          value: {
+            actors: ids.map((id) => ({ characterId: id, displayName: id })),
+            retainWhenEmpty: false,
+            exitTransition: "fade",
+          },
         },
-      },
-    ];
-    const props = fixture();
-    stageSlots.items = castSlot("A", "B");
-    const { rerender } = render(<StageView {...props} />);
-    expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(2);
-    stageSlots.items = castSlot("A");
-    rerender(<StageView {...props} />);
-    expect(
-      document.querySelector('[data-character-id="B"][data-phase="exit"]'),
-    ).not.toBeNull();
-    stageSlots.items = [];
-    rerender(<StageView {...props} />);
-    expect(screen.queryByTestId("stage-sprites")).toBeNull();
-    expect(screen.getByTestId("stage-decision-input")).toBeDefined();
-    stageSlots.items = castSlot("C");
-    rerender(<StageView {...props} />);
-    expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(1);
-    expect(
-      document.querySelector('[data-character-id="C"][data-phase="present"]'),
-    ).not.toBeNull();
-    act(() => vi.advanceTimersByTime(500));
-    expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(1);
-  });
+      ];
+      const props = fixture();
+      stageSlots.items = castSlot("A", "B");
+      const { rerender } = render(<StageView {...props} />);
+      expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(2);
+      stageSlots.items = castSlot("A");
+      rerender(<StageView {...props} />);
+      expect(
+        document.querySelector('[data-character-id="B"][data-phase="exit"]'),
+      ).not.toBeNull();
+      stageSlots.items =
+        slotState === "missing"
+          ? []
+          : [
+              {
+                slot: "stage.cast@1",
+                value: {
+                  actors: [],
+                  retainWhenEmpty: true,
+                  exitTransition: "invalid",
+                },
+              },
+            ];
+      rerender(<StageView {...props} />);
+      expect(screen.queryByTestId("stage-sprites")).toBeNull();
+      expect(screen.getByTestId("stage-decision-input")).toBeDefined();
+      stageSlots.items = castSlot("C");
+      rerender(<StageView {...props} />);
+      expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(1);
+      expect(
+        document.querySelector('[data-character-id="C"][data-phase="present"]'),
+      ).not.toBeNull();
+      act(() => vi.advanceTimersByTime(500));
+      expect(document.querySelectorAll(".ui-stage-sprite")).toHaveLength(1);
+    },
+  );
 
   it("passes explicit cast focus through to the sprite layer", () => {
     stageSlots.items = [

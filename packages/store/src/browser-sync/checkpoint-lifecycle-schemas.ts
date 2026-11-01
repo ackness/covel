@@ -136,6 +136,24 @@ const suspendedLoopState = z.strictObject({
   steeredProse: z.array(z.string()).optional(),
   completingToolOutput: jsonObject.optional(),
 });
+const jobOwnership = z.strictObject({
+  runId: nonEmptyString,
+  attemptId: nonEmptyString,
+  settled: z.boolean(),
+});
+const jobData = jsonValue.superRefine((value, context) => {
+  if (
+    value &&
+    typeof value === "object" &&
+    "_covel" in value &&
+    !jobOwnership.safeParse(value._covel).success
+  )
+    context.addIssue({
+      code: "custom",
+      path: ["_covel"],
+      message: "Invalid kernel job ownership",
+    });
+});
 const suspendedNestedResult = z.strictObject({
   readScopes: proposalReadScopesSchema,
   operationReadScopes: z
@@ -159,6 +177,10 @@ const suspensions = createdRow.extend({
   reason: z.string(),
   resumeSchema: jsonValue,
   pendingContinuation: z.looseObject({
+    lifecycle: z.strictObject({
+      runId: nonEmptyString,
+      progressRunId: nonEmptyString,
+    }),
     delegation: delegationSnapshotSchema.optional(),
     messages: z.array(jsonValue),
     partialContent: z.string().optional(),
@@ -328,7 +350,7 @@ export const checkpointLifecycleArrays = {
       ]),
       progress: z.number().optional(),
       message: z.string().optional(),
-      data: jsonValue.optional(),
+      data: jobData.optional(),
       sequence: z.number(),
       createdAt: timestamp,
     }),

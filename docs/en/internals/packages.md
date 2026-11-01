@@ -59,6 +59,8 @@ The small packages `approval`, `context`, `events`, `create`, and `settings` eac
 
 **Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction. The `store` package declares the SQLite vector extension `sqlite-vec` directly; the root package does not duplicate it.
 
+The narrow `@covel/shared/plugin-page` entry uses the direct `parse5` dependency to prepare URL pages: it injects the bridge and sets anonymous script CORS using parsed HTML locations, preserving the remaining source text. The server asset route still owns file reads and response headers; Web and the desktop shell need not load this parser.
+
 Routine dependency updates use stable releases published at least seven days earlier. [`pnpm-workspace.yaml`](../../../pnpm-workspace.yaml) defines the waiting period and exceptions for exact security releases. Package manifests and `mise.toml` define declared versions; `pnpm-lock.yaml` records resolved versions. Update the workspace and tools scaffold together, preserve consumer scopes on overrides, and verify compatibility with the [existing checks](./commands.md).
 
 Security updates to the Fallow development dependency cover the analyzer, its type analysis package, and platform binaries together. When analyzing repository configuration, it must confine file reads and path probes to the project root. Exceptions for exact security versions do not relax the update policy for other dependencies.

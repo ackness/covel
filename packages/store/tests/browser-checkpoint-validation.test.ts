@@ -238,6 +238,48 @@ describe("checkpoint record validation", () => {
       }),
     ).toThrow(/inputSlots.narrative.source.resultId/);
   });
+  it("validates saved run ownership and kernel task provenance", () => {
+    const withOwner = {
+      ...checkpoint,
+      jobStatus: checkpoint.jobStatus.map((row) => ({
+        ...row,
+        data: {
+          _covel: { runId: "child", attemptId: "attempt", settled: true },
+        },
+      })),
+    };
+    expect(
+      validateBrowserCheckpoint(JSON.parse(JSON.stringify(withOwner)))
+        .jobStatus,
+    ).toEqual(withOwner.jobStatus);
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...withOwner,
+        jobStatus: withOwner.jobStatus.map((row) => ({
+          ...row,
+          data: {
+            _covel: { runId: "child", attemptId: "attempt", settled: "forged" },
+          },
+        })),
+      }),
+    ).toThrow("jobStatus[0].data._covel");
+    const suspension = checkpoint.suspensions[0]!;
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...checkpoint,
+        suspensions: [
+          {
+            ...suspension,
+            pendingContinuation: {
+              ...suspension.pendingContinuation,
+              lifecycle: { runId: "", progressRunId: "owner" },
+            },
+          },
+        ],
+      }),
+    ).toThrow("lifecycle.runId");
+  });
+
   it("accepts a continuation's loop state, prompt segments and nested results", () => {
     const suspension = checkpoint.suspensions[0]!;
     const withLoop = (loop: unknown) => ({

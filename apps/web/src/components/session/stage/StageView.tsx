@@ -1,5 +1,5 @@
 import { StoryOperationFailureNotice } from "../chat-messages/story-operation-failure-notice.js";
-import { projectStoryOperationFailures } from "@covel/shared";
+import { projectStoryOperationFailures, stageCastSchema } from "@covel/shared";
 /**
  * Full-screen visual-novel stage (viewMode: "stage"). Composes the five stage
  * layers over kernel UI projections and owns the small amount of
@@ -22,7 +22,6 @@ import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import type {
   StageBackdropModel,
-  StageCastModel,
   StageChoicesModel,
   CharacterVisualModel,
 } from "@covel/shared";
@@ -157,8 +156,11 @@ export function StageView(props: StageViewProps): ReactElement {
   const effectiveSceneCurrent = slots.find(
     (entry) => entry.slot === "stage.backdrop@1",
   )?.value as StageBackdropModel | undefined;
-  const cast = slots.find((entry) => entry.slot === "stage.cast@1")?.value as
-    StageCastModel | undefined;
+  const castValue = slots.find((entry) => entry.slot === "stage.cast@1")?.value;
+  const cast = useMemo(() => {
+    const parsed = stageCastSchema.safeParse(castValue);
+    return parsed.success ? parsed.data : undefined;
+  }, [castValue]);
   const suggestions = slots.find((entry) => entry.slot === "stage.choices@1")
     ?.value as StageChoicesModel | undefined;
   const speakers: readonly StageSpeaker[] = useMemo(
@@ -292,6 +294,7 @@ export function StageView(props: StageViewProps): ReactElement {
             sessionId={session.id}
             dimmed={choicesVisible}
             retainWhenEmpty={cast.retainWhenEmpty}
+            exitTransition={cast.exitTransition}
           />
         )}
         <StageHud

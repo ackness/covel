@@ -106,40 +106,52 @@ const isLetter = (char: string | undefined): boolean =>
  * opened, so a text whose only marks are apostrophes has no speech in it.
  *
  * A single quote mark (`'` or `’`) is an apostrophe unless it delimits:
- * between letters (I'm, don’t, Aya's) it never does; after a letter it
- * closes a single quote that is open and is otherwise a possessive (the
- * guards' keys); a straight `'` opens a quote only when no letter precedes it.
+ * between letters (I'm, don’t, Aya's) it never does. Inside its matching
+ * single quote, a mark after a letter and before whitespace plus a letter
+ * may be a possessive (the guards' keys), so it stays inside speech. A mark
+ * after dialogue punctuation still closes the quote. A straight `'` opens
+ * a quote only when no letter precedes it.
  */
 function scanDialogue(text: string): { narration: string; opened: boolean } {
-  const stack: string[] = [];
+  const stack: { closer: string; start: number; ambiguous: boolean }[] = [];
   let result = "";
   let opened = false;
-  // Outermost unmatched opener: the tail from there is validated as
-  // narration, while dialogue that closed properly stays stripped.
-  // Returning the raw text instead would un-hide closed dialogue and let
-  // its pronouns be flagged as narration (false perspective violations).
-  let openStart = -1;
   for (let i = 0; i < text.length; i++) {
     const char = text[i]!;
+    const quote = stack.at(-1);
     const single = char === "'" || char === "’";
-    const apostrophe = single && isLetter(text[i - 1]) && isLetter(text[i + 1]);
-    if (!apostrophe && char === stack.at(-1)) {
+    const afterLetter = single && isLetter(text[i - 1]);
+    let next = i + 1;
+    if (afterLetter && char === quote?.closer) {
+      // Each lookahead crosses only the adjacent whitespace run, keeping
+      // the total scan linear even with many ambiguous marks.
+      while (next < text.length && /\s/u.test(text[next]!)) next++;
+      if (next > i + 1 && isLetter(text[next])) quote.ambiguous = true;
+    }
+    const apostrophe = afterLetter && isLetter(text[next]);
+    if (!apostrophe && char === quote?.closer) {
       stack.pop();
       result += " ";
-      if (!stack.length) openStart = -1;
     } else if (
       !apostrophe &&
       QUOTE_PAIRS[char] &&
       (char !== "'" || !isLetter(text[i - 1]))
     ) {
-      if (!stack.length) openStart = i;
-      stack.push(QUOTE_PAIRS[char]!);
+      stack.push({ closer: QUOTE_PAIRS[char]!, start: i, ambiguous: false });
       opened = true;
     } else if (!stack.length) result += char;
   }
-  // An unclosed quote cannot hide its remainder from validation.
+  // Validate an unclosed tail without un-hiding earlier closed dialogue.
+  // If an unmatched quotation has a possessive/closing ambiguity, keep its
+  // words hidden; that ambiguity alone must not request a perspective repair.
+  // An unambiguous outer tail before a nested ambiguous quote is still checked.
+  const openStart = stack[0]?.start;
+  const ambiguousStart = stack.find((quote) => quote.ambiguous)?.start;
   return {
-    narration: openStart >= 0 ? result + text.slice(openStart) : result,
+    narration:
+      openStart === undefined
+        ? result
+        : result + text.slice(openStart, ambiguousStart ?? text.length),
     opened,
   };
 }

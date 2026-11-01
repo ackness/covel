@@ -95,7 +95,6 @@ export type {
 export {
   createProgressReporter,
   finalizeJobStatuses,
-  finalizeSuspendedJobStatuses,
 } from "./job-status/job-status.js";
 export {
   ABANDONED_SETUP_ATTEMPT_ERROR,

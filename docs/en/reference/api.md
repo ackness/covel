@@ -1644,7 +1644,7 @@ Public in every host profile, without session, token or cookie authentication. O
 
 Requests to `/plugin-assets` or its child paths that match no asset route return the same 404, including paths whose plugin ID or digest is removed by encoded dot-segment normalization. They never reach public static files or the app's index fallback.
 
-Successful GET and HEAD responses use the listed MIME, `nosniff`, `ETag`, `Content-Length` and `Referrer-Policy: no-referrer`. Entry HTML uses `Cache-Control: no-cache`; other assets use `Cache-Control: public, max-age=31536000, immutable`. Entry ETags include the host bridge script hash so a host upgrade can refresh HTML at the same plugin URL. An exact `If-None-Match` returns 304 without a body and retains the appropriate cache policy. No Set-Cookie, CORS allow headers or Cross-Origin-Resource-Policy are sent. Entry HTML receives the [page CSP and injected bridge](./ui-panels.md#multi-file-pages); other files receive `Content-Security-Policy: sandbox`. `X-Frame-Options: SAMEORIGIN` remains. No media token handling applies.
+Successful GET and HEAD responses use the listed MIME, `nosniff`, `ETag`, `Content-Length` and `Referrer-Policy: no-referrer`. Entry HTML uses `Cache-Control: no-cache`; other assets use `Cache-Control: public, max-age=31536000, immutable`. Entry ETags include the host bridge script hash so a host upgrade can refresh HTML at the same plugin URL. An exact `If-None-Match` returns 304 without a body and retains the appropriate cache policy. No Set-Cookie or Cross-Origin-Resource-Policy is sent. Only verified public page JavaScript, including the bridge, sends `Access-Control-Allow-Origin: *` on GET, HEAD and 304 responses, allowing opaque origins to load scripts anonymously and report unhandled Promise rejections. Credentials are not allowed. Other assets and missing files send no CORS allow headers; the `/api` origin guards are unchanged. Entry HTML receives the [page CSP and injected bridge](./ui-panels.md#multi-file-pages); other files receive `Content-Security-Policy: sandbox`. `X-Frame-Options: SAMEORIGIN` remains. No media token handling applies.
 
 #### GET /api/ui-specs
 
@@ -4503,7 +4503,7 @@ A runtime can pause partway through and wait for the player to provide data. Thi
 Resume a suspended runtime with the data the player submitted.
 
 - **agent runtime**: Continues from the saved tool-call record.
-- **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The writes of child runtimes the handler called with `ctx.recursiveCall` before it suspended are saved with the suspended item. They commit with a successful resume, ahead of the handler's own writes. When the resume does not succeed, or the item is abandoned, they are dropped together with the handler's writes.
+- **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The writes of child runtimes the handler called with `ctx.recursiveCall` before it suspended are saved with the suspended item. They commit with a successful resume, ahead of the handler's own writes. A failed resume leaves those saved writes buffered in the unresolved suspension for retry; abandoning the item discards them together.
 - The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
 - The time limit is the one of the original dispatch: the runtime manifest's `timeoutMs` when it sets one, otherwise the framework default.
 - A resumed runtime can suspend again; see [Suspending again](#suspending-again) below.
@@ -4556,6 +4556,8 @@ Rules for failed responses:
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 
+After an admitted resume fails or rolls back, the parent and saved recursive descendants show failed effective lifecycle and framework-managed task status, while the suspension remains retriable. A committed retry corrects them to success, another suspension restores waiting, and abandonment cancels them; plugin-authored failures and cancellations are not revived. Refusals during validation, authorization or claim checks do not change untouched suspensions. After losing a response, recover from persisted traces, tasks and the suspension list; a transport error alone must not rerun a committed resume. See [Lifecycle events](./protocol.md#execution-lifecycle-events).
+
 ##### Out-of-date suspended items
 
 A suspension records three things: how many player turns the history holds at that moment, the version of the plugin that asked, and the content at that moment of every record its saved writes would change. Before a resume, the server checks whether the suspended item is out of date. An out-of-date item does not run again, because the writes it saved could overwrite newer state.
@@ -4596,7 +4598,7 @@ A resumed runtime can suspend again: an agent calls `suspend` once more, or a fu
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
 - When a resumed runtime suspends again, the turn is still not complete. The whole chain counts once, when its last resume succeeds.
 - When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
-- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`, including those reported by the nested calls (`ctx.recursiveCall`) that the suspended runtime made. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, or after a resume suspends again, they keep waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`, including those reported by the nested calls (`ctx.recursiveCall`) that the suspended runtime made. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. A failed resume marks them `failed` while retaining the suspension for retry; another suspension returns them to waiting.
 
 ##### Resuming setup runtimes
 
@@ -4638,6 +4640,8 @@ Each item is a `SuspensionSummary`. It contains only the public information the 
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 
 Discards a suspended item by deleting it. This is used when the player gives up the current choice, or when an admin screen cleans up. If the suspended item does not exist, it returns `404`.
+
+If the record read under the session lock is already resolved, only that historical record is deleted. Committed writes, task states and lifecycle terminals remain unchanged. A successor still waiting after another suspension, and its parent and child tasks, are not cancelled.
 
 If it was the last item of its turn still waiting, the turn counts as complete and the background jobs the turn held back are queued as usual; see [Suspensions and turn counting](#suspensions-and-turn-counting). The request may carry `X-Plugin-User-Settings`, which works as it does for a resume.
 

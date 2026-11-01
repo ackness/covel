@@ -103,7 +103,10 @@ beforeEach(async () => {
   // Match production: neither public files nor the SPA may answer asset misses.
   const webRoot = path.join(root, "web");
   await mkdir(path.join(webRoot, "plugin-assets"), { recursive: true });
-  await writeFile(path.join(webRoot, "index.html"), "<title>SPA fallback</title>");
+  await writeFile(
+    path.join(webRoot, "index.html"),
+    "<title>SPA fallback</title>",
+  );
   await writeFile(
     path.join(webRoot, "plugin-assets/public.txt"),
     "Unpublished public file",
@@ -164,7 +167,9 @@ describe("public plugin assets", () => {
         headers: { Origin: "http://localhost:5173" },
       });
       expect(response.status).toBe(404);
-      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(response.headers.get("content-type")).toContain(
+        "application/json",
+      );
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect(response.headers.get("access-control-allow-origin")).toBeNull();
@@ -204,11 +209,15 @@ describe("public plugin assets", () => {
         expect(response.headers.get("referrer-policy")).toBe("no-referrer");
         expect(response.headers.get("cross-origin-resource-policy")).toBeNull();
         expect(response.headers.get("set-cookie")).toBeNull();
+        const corsOrigin = file.endsWith(".js") ? "*" : null;
+        expect(response.headers.get("access-control-allow-origin")).toBe(
+          corsOrigin,
+        );
         expect(
-          [...response.headers.keys()].some((name) =>
-            name.startsWith("access-control-allow-"),
-          ),
-        ).toBe(false);
+          response.headers.get("access-control-allow-credentials"),
+        ).toBeNull();
+        expect(response.headers.get("access-control-allow-headers")).toBeNull();
+        expect(response.headers.get("access-control-allow-methods")).toBeNull();
         const body = await response.arrayBuffer();
         expect(response.headers.get("content-length")).toBe(
           String(body.byteLength),
@@ -224,6 +233,9 @@ describe("public plugin assets", () => {
         expect(cached.headers.get("cache-control")).toBe(
           response.headers.get("cache-control"),
         );
+        expect(cached.headers.get("access-control-allow-origin")).toBe(
+          corsOrigin,
+        );
         const head = await request(file, { method: "HEAD" });
         expect(head.status).toBe(200);
         expect(await head.text()).toBe("");
@@ -233,6 +245,9 @@ describe("public plugin assets", () => {
         );
         expect(head.headers.get("content-length")).toBe(
           String(body.byteLength),
+        );
+        expect(head.headers.get("access-control-allow-origin")).toBe(
+          corsOrigin,
         );
         if (file !== "index.html")
           expect(response.headers.get("content-security-policy")).toBe(
@@ -305,7 +320,7 @@ describe("public plugin assets", () => {
     );
     const html = await response.text();
     expect(html).toContain(
-      `<head><script src="${bridgeName}"></script><title>`,
+      `<head><script crossorigin="anonymous" src="${bridgeName}"></script><title>`,
     );
     const bridge = await request(bridgeName);
     expect(bridge.status).toBe(200);
@@ -314,6 +329,30 @@ describe("public plugin assets", () => {
     );
     expect(bridge.headers.get("content-security-policy")).toBe("sandbox");
     expect(await bridge.text()).toBe(PLUGIN_BRIDGE_SCRIPT);
+  });
+  it("enables rejection reporting for page scripts before the browser fetches them", async () => {
+    await put(
+      "ui/app/index.html",
+      '<head><script defer src="app.js"></script></head>',
+    );
+    await register();
+    prefix = await index();
+    const response = await request("index.html");
+    expect(await response.text()).toBe(
+      `<head><script crossorigin="anonymous" src="${bridgeName}"></script>` +
+        '<script crossorigin="anonymous" defer src="app.js"></script></head>',
+    );
+    for (const file of ["app.js", bridgeName]) {
+      const script = await request(file, { headers: { Origin: "null" } });
+      expect(script.status).toBe(200);
+      expect(script.headers.get("access-control-allow-origin")).toBe("*");
+      expect(script.headers.get("access-control-allow-credentials")).toBeNull();
+    }
+    const missing = await request("missing.js", {
+      headers: { Origin: "null" },
+    });
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("access-control-allow-origin")).toBeNull();
   });
   it.each([
     [
@@ -328,7 +367,7 @@ describe("public plugin assets", () => {
     await register();
     prefix = await index();
     const result = await (await request("index.html")).text();
-    const script = `<script src="${bridgeName}"></script>`;
+    const script = `<script crossorigin="anonymous" src="${bridgeName}"></script>`;
     expect(result).toBe(
       insertion ? html.replace(insertion, insertion + script) : script + html,
     );
@@ -340,7 +379,9 @@ describe("public plugin assets", () => {
     const webview = result.view[0]?.specs[0]?.webview as { url: string };
     const response = await app.request(webview.url);
     const html = await response.text();
-    expect(html).toBe(`<head><script src="../${bridgeName}"></script></head>`);
+    expect(html).toBe(
+      `<head><script crossorigin="anonymous" src="../${bridgeName}"></script></head>`,
+    );
     const resolved = new URL(
       `../${bridgeName}`,
       `http://localhost${webview.url}`,

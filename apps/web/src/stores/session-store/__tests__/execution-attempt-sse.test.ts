@@ -1,5 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { createMemoryStore } from "@covel/store/memory";
+import {
+  exportSessionCheckpoint,
+  validateBrowserCheckpoint,
+  replaceSessionFromCheckpoint,
+} from "@covel/store";
+import type { SnapshotTraceEvent } from "@covel/shared";
 import type { SseEnvelope } from "@/services/api.js";
 import { initialState, reducer } from "../reducer.js";
 import {
@@ -7,6 +14,10 @@ import {
   type SseEventHandlerDeps,
 } from "../sse-handler.js";
 import { projectExecutionTurns } from "../execution-projection.js";
+import {
+  buildSnapshotExecutionSteps,
+  reconcileExecutionSteps,
+} from "../snapshot-execution-steps.js";
 import type { SessionAction } from "../types.js";
 import { subscribeToast } from "@/lib/toast-channel.js";
 
@@ -371,7 +382,11 @@ it("shows successful resumed runs as completed instead of retaining the earlier 
   const h = harness(false);
   h.send("runtime.started", { runId: "original" });
   h.send("runtime.completed", { runId: "original", status: "suspended" });
-  h.send("runtime.started", { runId: "continuation", resumed: true });
+  h.send("runtime.started", {
+    runId: "continuation",
+    resumed: true,
+    resumeSourceRunId: "original",
+  });
   const displayed = () =>
     projectExecutionTurns([], h.getState().executionSteps).turns.find(
       (turn) => turn.turnId === "attempt",
@@ -387,7 +402,12 @@ it("shows successful resumed runs as completed instead of retaining the earlier 
       resumed: true,
     }),
   ]);
-  h.send("turn.resumed", { suspensionId: "suspension", status: "success" });
+  h.send("turn.resumed", {
+    suspensionId: "suspension",
+    runId: "continuation",
+    resumeSourceRunId: "original",
+    status: "success",
+  });
   expect(displayed()).toEqual([
     expect.objectContaining({ runId: "continuation", status: "completed" }),
   ]);
@@ -403,7 +423,12 @@ it("supersedes an earlier suspension when only the committed resume notification
   h.send("runtime.completed", { runId: "original", status: "suspended" });
   h.send("runtime.started", { runId: "continuation" });
   h.send("runtime.completed", { runId: "continuation", status: "success" });
-  h.send("turn.resumed", { suspensionId: "suspension", status: "success" });
+  h.send("turn.resumed", {
+    suspensionId: "suspension",
+    runId: "continuation",
+    resumeSourceRunId: "original",
+    status: "success",
+  });
   expect(
     projectExecutionTurns([], h.getState().executionSteps).turns.find(
       (turn) => turn.turnId === "attempt",
@@ -426,8 +451,16 @@ it.each([
     const h = harness(false);
     h.send("runtime.started", { runId: "original" });
     h.send("runtime.completed", { runId: "original", status: "suspended" });
-    h.send("runtime.started", { runId: "first-resume", resumed: true });
+    h.send("runtime.started", {
+      runId: "first-resume",
+      resumed: true,
+      resumeSourceRunId: "original",
+    });
     h.send("runtime.failed", { runId: "first-resume", error: "timeout" });
+    h.send("runtime.failed", {
+      runId: "original",
+      error: "Saved work could not commit",
+    });
     const displayed = () =>
       projectExecutionTurns([], h.getState().executionSteps).turns.find(
         (turn) => turn.turnId === "attempt",
@@ -435,7 +468,11 @@ it.each([
     expect(displayed()).toEqual([
       expect.objectContaining({ runId: "first-resume", status: "failed" }),
     ]);
-    h.send("runtime.started", { runId: "second-resume", resumed: true });
+    h.send("runtime.started", {
+      runId: "second-resume",
+      resumed: true,
+      resumeSourceRunId: "original",
+    });
     expect(displayed()).toEqual([
       expect.objectContaining({ runId: "second-resume", status: "running" }),
     ]);
@@ -452,11 +489,254 @@ it("still reports a failed nested run of the runtime after a later resume succee
   h.send("runtime.started", { runId: "nested" });
   h.send("runtime.failed", { runId: "nested", error: "nested failure" });
   h.send("runtime.completed", { runId: "original", status: "suspended" });
-  h.send("runtime.started", { runId: "continuation", resumed: true });
+  h.send("runtime.started", {
+    runId: "continuation",
+    resumed: true,
+    resumeSourceRunId: "original",
+  });
   h.send("runtime.completed", { runId: "continuation", status: "success" });
   expect(
     projectExecutionTurns([], h.getState().executionSteps).turns.find(
       (turn) => turn.turnId === "attempt",
     )?.steps,
   ).toEqual([expect.objectContaining({ runId: "nested", status: "failed" })]);
+});
+
+it("keeps an independent saved child suspended across another invocation's resume and checkpoint recovery", async () => {
+  const h = harness(false);
+  const store = createMemoryStore();
+  const traces: SnapshotTraceEvent[] = [];
+  const timestamp = "2026-09-05T01:00:00.000Z";
+  try {
+    await store.createSession({
+      id: "session",
+      locale: "en-US",
+      status: "active",
+      phase: "playing",
+      setupRuntimes: {},
+      activePlugins: ["tracker"],
+      completedPlayerTurns: 0,
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await store.saveTurnResult({
+      id: "result",
+      sessionId: "session",
+      turnId: "attempt",
+      origin: "player",
+      commitStatus: "committed",
+      runtimeResults: [],
+      durationMs: 0,
+      createdAt: timestamp,
+    });
+    const send = async (type: string, payload: Record<string, unknown>) => {
+      const event = {
+        type,
+        turnId: "attempt",
+        timestamp: new Date(
+          Date.parse(timestamp) + traces.length,
+        ).toISOString(),
+        payload: { runtimeId: "tracker", pluginId: "tracker", ...payload },
+      };
+      traces.push(event);
+      h.send(type, payload);
+      await store.addTraceEvent({
+        id: `trace-${traces.length}`,
+        sessionId: "session",
+        traceId: "trace",
+        turnId: event.turnId,
+        type,
+        payload: event.payload,
+        createdAt: event.timestamp,
+      });
+    };
+    await send("runtime.started", { runtimeId: "parent", runId: "parent" });
+    await send("runtime.started", { runId: "top" });
+    await send("runtime.started", { runId: "saved-child" });
+    await send("runtime.completed", {
+      runId: "saved-child",
+      status: "success",
+    });
+    await send("runtime.completed", { runId: "top", status: "suspended" });
+    await send("runtime.completed", {
+      runtimeId: "parent",
+      runId: "parent",
+      status: "suspended",
+    });
+    await send("runtime.completed", {
+      runId: "saved-child",
+      status: "suspended",
+    });
+    const cached = h.getState().executionSteps;
+    await send("runtime.started", {
+      runId: "continuation",
+      resumed: true,
+      resumeSourceRunId: "top",
+    });
+    await send("runtime.completed", {
+      runId: "continuation",
+      status: "success",
+    });
+    await send("turn.resumed", {
+      suspensionId: "top-suspension",
+      runId: "continuation",
+      resumeSourceRunId: "top",
+    });
+    const check = (
+      steps: typeof cached,
+      childStatus: "suspended" | "completed",
+    ) => {
+      expect(
+        steps.filter(
+          (step) => step.turnId === "attempt" && step.runtimeId === "tracker",
+        ),
+      ).toEqual([
+        expect.objectContaining({ runId: "top", status: "suspended" }),
+        expect.objectContaining({ runId: "saved-child", status: childStatus }),
+        expect.objectContaining({
+          runId: "continuation",
+          status: "completed",
+          resumeSourceRunId: "top",
+        }),
+      ]);
+      expect(
+        projectExecutionTurns([], steps)
+          .turns.find((turn) => turn.turnId === "attempt")
+          ?.steps.find((step) => step.runtimeId === "tracker")?.status,
+      ).toBe(childStatus);
+    };
+    check(h.getState().executionSteps, "suspended");
+    check(buildSnapshotExecutionSteps(traces), "suspended");
+    const checkpoint = validateBrowserCheckpoint(
+      JSON.parse(
+        JSON.stringify(
+          await exportSessionCheckpoint(store, "session", {
+            revision: 1,
+            actionId: "reload",
+          }),
+        ),
+      ),
+    );
+    await replaceSessionFromCheckpoint(store, checkpoint);
+    const recovered = (await store.listTraceEvents("session")).map((row) => ({
+      type: row.type,
+      turnId: row.turnId,
+      timestamp: row.createdAt,
+      payload: row.payload as SnapshotTraceEvent["payload"],
+    }));
+    check(buildSnapshotExecutionSteps(recovered), "suspended");
+    check(reconcileExecutionSteps(cached, recovered), "suspended");
+    await send("runtime.completed", {
+      runId: "saved-child",
+      status: "success",
+    });
+    await send("runtime.completed", {
+      runtimeId: "parent",
+      runId: "parent",
+      status: "success",
+    });
+    check(h.getState().executionSteps, "completed");
+    check(buildSnapshotExecutionSteps(traces), "completed");
+  } finally {
+    await store.close();
+  }
+});
+
+it("does not assign a resume notification to an unrelated saved child when its start was missed", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "saved-child" });
+  h.send("runtime.completed", { runId: "saved-child", status: "suspended" });
+  const before = h.getState().executionSteps;
+  h.send("turn.resumed", { suspensionId: "top-suspension" });
+  expect(h.getState().executionSteps).toEqual(before);
+  h.send("turn.resumed", {
+    suspensionId: "top-suspension",
+    runId: "continuation",
+    resumeSourceRunId: "top",
+  });
+  expect(
+    h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+  ).toEqual([
+    expect.objectContaining({ runId: "saved-child", status: "suspended" }),
+    expect.objectContaining({ runId: "continuation", status: "completed" }),
+  ]);
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([
+    expect.objectContaining({ runId: "saved-child", status: "suspended" }),
+  ]);
+});
+
+it.each([
+  ["success", "completed"],
+  ["failed", "failed"],
+  ["skipped", "skipped"],
+] as const)(
+  "corrects one held child to %s while preserving its independent twin",
+  (status, expected) => {
+    const h = harness(false);
+    h.send("runtime.started", { runId: "top" });
+    h.send("runtime.started", { runId: "saved-child" });
+    h.send("runtime.completed", { runId: "top", status: "success" });
+    h.send("runtime.completed", { runId: "saved-child", status: "success" });
+    h.send("runtime.completed", { runId: "saved-child", status: "suspended" });
+    const event =
+      status === "failed"
+        ? "runtime.failed"
+        : status === "skipped"
+          ? "runtime.skipped"
+          : "runtime.completed";
+    const payload = {
+      runId: "saved-child",
+      status,
+      ...(status === "failed" ? { error: "Saved work could not commit" } : {}),
+      ...(status === "skipped" ? { reason: "suspension-abandoned" } : {}),
+    };
+    h.send(event, payload);
+    h.send(event, payload);
+    expect(
+      h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+    ).toEqual([
+      expect.objectContaining({ runId: "top", status: "completed" }),
+      expect.objectContaining({ runId: "saved-child", status: expected }),
+    ]);
+    const steps = projectExecutionTurns(
+      [],
+      h.getState().executionSteps,
+    ).turns.find((turn) => turn.turnId === "attempt")?.steps;
+    expect(steps).toHaveLength(1);
+    expect(steps?.[0]?.status).toBe(
+      status === "skipped" ? "completed" : expected,
+    );
+  },
+);
+
+it("applies a dropped nested run correction despite a committed same-runtime top-level run", () => {
+  const h = harness(false);
+  h.send("runtime.started", { runId: "top" });
+  h.send("runtime.started", { runId: "child" });
+  h.send("runtime.completed", { runId: "child", status: "success" });
+  h.send("runtime.completed", { runId: "top", status: "success" });
+  for (let i = 0; i < 2; i++)
+    h.send("runtime.failed", {
+      runId: "child",
+      status: "failed",
+      error: "Commit rejected",
+    });
+  expect(
+    h.getState().executionSteps.filter((step) => step.turnId === "attempt"),
+  ).toEqual([
+    expect.objectContaining({ runId: "top", status: "completed" }),
+    expect.objectContaining({ runId: "child", status: "failed" }),
+  ]);
+  expect(
+    projectExecutionTurns([], h.getState().executionSteps).turns.find(
+      (turn) => turn.turnId === "attempt",
+    )?.steps,
+  ).toEqual([expect.objectContaining({ runId: "child", status: "failed" })]);
 });

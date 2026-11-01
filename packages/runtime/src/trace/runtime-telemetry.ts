@@ -1,4 +1,4 @@
-/** Runtime lifecycle notifications describe finalized execution, not commit. */
+/** Initial lifecycle notifications describe computation; settlement can correct them. */
 
 import {
   getRuntimeSpec,
@@ -18,7 +18,7 @@ export async function reportRuntimeStarted(
   sessionId: string,
   manifest: RuntimeManifest,
   identity: { readonly turnId: string; readonly runId: string },
-  resumed = false,
+  resumeSourceRunId?: string,
 ): Promise<void> {
   const stage = getRuntimeSpec(manifest).stage;
   const payload = {
@@ -26,7 +26,7 @@ export async function reportRuntimeStarted(
     pluginId: manifest.pluginId,
     ...identity,
     ...(stage !== undefined ? { stage } : {}),
-    ...(resumed ? { resumed: true as const } : {}),
+    ...(resumeSourceRunId ? { resumed: true as const, resumeSourceRunId } : {}),
   };
   try {
     await deps.onRuntimeStart?.(payload);

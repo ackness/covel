@@ -10,7 +10,7 @@
 
 测试表单工具时，同时断言错误码和失败校验不会发布交互，再用修正后的输入重试。
 
-干净的声明式分发示例是 [`declarative-notebook`](../../tests/third-party/declarative-notebook/README.md)。其测试留在包外，覆盖真实社区发现、免代码审批、模型工具调用、提交、代码升级和独立的沙箱授权。校验输出报告分类；运行时测试还应断言存储的提交结果，而不只看模型说了什么。
+干净的声明式分发示例是 [`declarative-notebook`](../../tests/third-party/declarative-notebook/README.md)。其测试留在包外，覆盖真实社区发现、免代码审批、模型工具调用、提交、代码升级和独立的沙箱授权。应用内校验和结构化报告展示执行分类，CLI 只显示静态校验结果；运行时测试还应断言存储的提交结果，而不只看模型说了什么。
 
 文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
 
@@ -64,6 +64,8 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 CLI 把首个失败阶段的错误写入 stderr，把已收集的警告写入 stdout；有错误的包也会显示这些警告。有错误时退出码为 `1`，只有警告时为 `0`，未提供路径参数或传入不支持的选项时为 `2`。应用内可以查看其他可独立检查的错误，见[应用内校验](../reference/plugin-installation.md#应用内校验)。
 
 它不做的事：不运行入口文件、guard 和函数。所以“声明了一个工具，但代码里没有注册”它查不出来。这要靠下面两种测试。
+
+执行分类可以从文件和声明静态推导，无需运行入口；CLI 不打印分类或执行检查诊断。校验通过不等于获得声明式准入证明，也不授予代码执行权限，见[声明式插件](../reference/plugin-installation.md#声明式插件)。
 
 ## 单元测试
 

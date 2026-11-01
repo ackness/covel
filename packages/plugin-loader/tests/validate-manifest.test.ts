@@ -86,9 +86,14 @@ describe("manifest authoring CLI", () => {
       const result = await validate(root, path.join(root, "PLUGIN.md"), root);
       expect(result.status).toBe(invalid ? 1 : 0);
       expect(result.stderr).toBe(invalid ? failure : "");
-      expect(result.stdout).toContain("  execution: code\n");
-      expect(result.stdout).toContain(
-        "  PLUGIN.md: entry: entry requires server-code authorization.\n",
+      expect(result.stdout).not.toContain("execution:");
+      expect(result.stdout).not.toContain("server-code authorization");
+      expect(result.stdout).not.toContain("Package inspection is incomplete");
+      expect(result.stdout).toBe(
+        (invalid
+          ? ""
+          : `✓ Static package validation: ${root}\n  languages: text en; instructions en\n`) +
+          warnings.map((warning) => `${warning}\n`).join(""),
       );
       expect(
         result.stdout
@@ -105,6 +110,21 @@ describe("manifest authoring CLI", () => {
       }
     },
   );
+  it("prints only static results when dependency inspection is incomplete", async () => {
+    const { root, warnings } = await warningFixture(false);
+    await mkdir(path.join(root, "node_modules"));
+    await symlink("../PLUGIN.md", path.join(root, "node_modules/linked.md"));
+    const result = await validate(root);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(
+      `✓ Static package validation: ${root}\n  languages: text en; instructions en\n` +
+        warnings.map((warning) => `${warning}\n`).join(""),
+    );
+    expect(result.stdout).not.toContain("execution:");
+    expect(result.stdout).not.toContain("server-code authorization");
+    expect(result.stdout).not.toContain("Package inspection is incomplete");
+  });
   it.each([true, false])(
     "keeps a failing invocation and package warning order with invalid first=%s",
     async (invalidFirst) => {

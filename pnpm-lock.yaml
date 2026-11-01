@@ -797,6 +797,9 @@ importers:
       css-tree:
         specifier: ^3.2.1
         version: 3.2.1
+      parse5:
+        specifier: ^8.0.1
+        version: 8.0.1
       smol-toml:
         specifier: ^1.9.1
         version: 1.9.1

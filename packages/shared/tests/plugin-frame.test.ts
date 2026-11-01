@@ -7,6 +7,7 @@ import {
   PLUGIN_BRIDGE_SCRIPT,
   PLUGIN_PAGE_READY_TIMEOUT_MS,
 } from "../src/plugin-frame.js";
+import { pluginPageDocument } from "../src/plugin-page.js";
 
 describe("plugin pages", () => {
   it("encodes every URL segment", () => {
@@ -35,6 +36,57 @@ describe("plugin pages", () => {
       ]),
     );
     expect(PLUGIN_ASSET_PAGE_CSP).not.toContain("unsafe-eval");
+  });
+  it("loads the bridge and application scripts with anonymous CORS so rejections are observable", () => {
+    const html = '<head><script defer src="app.js"></script></head>';
+    expect(pluginPageDocument(html, "__covel__/bridge.js")).toBe(
+      '<head><script crossorigin="anonymous" src="__covel__/bridge.js"></script>' +
+        '<script crossorigin="anonymous" defer src="app.js"></script></head>',
+    );
+  });
+  it.each([
+    ["<HTML><HEAD class='page'></HEAD></HTML>", "<HEAD class='page'>"],
+    ["<html><body>page</body></html>", "<html>"],
+    ["<!DOCTYPE html>page", "<!DOCTYPE html>"],
+    ["page", ""],
+  ])("injects the bridge before application code in %s", (html, opening) => {
+    const bridge = '<script crossorigin="anonymous" src="bridge.js"></script>';
+    expect(pluginPageDocument(html, "bridge.js")).toBe(
+      opening ? html.replace(opening, opening + bridge) : bridge + html,
+    );
+  });
+  it("normalizes script CORS attributes while preserving sources and execution order", () => {
+    const scripts =
+      '<SCRIPT async SRC="one.js" CROSSORIGIN=use-credentials></SCRIPT>' +
+      '<script crossorigin src="two.js" defer></script>' +
+      '<script src="three.js" crossorigin="anonymous"></script>';
+    expect(pluginPageDocument(scripts, "../bridge.js")).toBe(
+      '<script crossorigin="anonymous" src="../bridge.js"></script>' +
+        '<SCRIPT async SRC="one.js" crossorigin="anonymous"></SCRIPT>' +
+        '<script crossorigin="anonymous" src="two.js" defer></script>' +
+        '<script src="three.js" crossorigin="anonymous"></script>',
+    );
+  });
+  it("ignores markup in comments, raw text and inline scripts", () => {
+    const before = '<!-- <head><script src="comment.js"></script> -->';
+    const body =
+      '<style>/* <script src="style.js"> */</style>' +
+      '<textarea><script src="text.js"></script></textarea>' +
+      '<noscript><script src="disabled.js"></script></noscript>' +
+      "<script>const text = '<script src=\"literal.js\">';</script>";
+    const html = `${before}<head><title>Page</title></head><body>${body}</body>`;
+    expect(pluginPageDocument(html, "bridge.js")).toBe(
+      `${before}<head><script crossorigin="anonymous" src="bridge.js"></script>` +
+        `<title>Page</title></head><body>${body}</body>`,
+    );
+  });
+  it("prepares scripts in templates without changing inert text", () => {
+    const html =
+      '<head></head><template><script src="later.js"></script></template>';
+    expect(pluginPageDocument(html, "bridge.js")).toBe(
+      '<head><script crossorigin="anonymous" src="bridge.js"></script></head>' +
+        '<template><script crossorigin="anonymous" src="later.js"></script></template>',
+    );
   });
   it("shares a stable bridge source with a ready or page-error acknowledgement", () => {
     expect(PLUGIN_BRIDGE_SCRIPT).toContain(

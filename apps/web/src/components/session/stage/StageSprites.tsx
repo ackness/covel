@@ -8,6 +8,7 @@
  */
 import { clsx } from "clsx";
 import type { ReactElement } from "react";
+import type { ExitTransition } from "@covel/shared";
 import { Media } from "@/components/Media.js";
 import { type PresenceRecord, type StageSpeaker } from "./stage-selectors.js";
 import {
@@ -24,6 +25,7 @@ export interface StageSpritesProps {
   /** The cast selection may briefly report no speakers between turns. An
    * authoritative stage-direction `actors: []` instead permits departure. */
   readonly retainWhenEmpty?: boolean;
+  readonly exitTransition?: ExitTransition;
 }
 
 export function StageSprites({
@@ -32,12 +34,14 @@ export function StageSprites({
   sessionId,
   dimmed = false,
   retainWhenEmpty = true,
+  exitTransition,
 }: StageSpritesProps): ReactElement {
-  const { live, outgoing, finish } = useStageSpriteTransitions({
+  const { live, outgoing, validKeys, finish } = useStageSpriteTransitions({
     speakers,
     presence,
     sessionId,
     retainWhenEmpty,
+    exitTransition,
   });
 
   return (
@@ -50,7 +54,7 @@ export function StageSprites({
       )}
       data-testid="stage-sprites"
     >
-      {[...outgoing, ...live].map((entry) => {
+      {[...outgoing, ...live].map((entry, index) => {
         const { slot, lane } = entry;
         const generation =
           "generation" in entry && typeof entry.generation === "number"
@@ -59,7 +63,7 @@ export function StageSprites({
         return (
           <div
             // Keep Media mounted across departure; generations guard cleanup.
-            key={slot.characterId}
+            key={validKeys ? slot.characterId : index}
             data-character-id={slot.characterId}
             onAnimationEnd={(event) => {
               if (
@@ -81,6 +85,7 @@ export function StageSprites({
             data-transition={slot.transition ?? "fade"}
             data-phase={slot.exiting ? "exit" : "present"}
             aria-hidden={slot.exiting || undefined}
+            inert={slot.exiting || undefined}
             style={{
               left: `${lane.leftPct}%`,
               width: `${lane.widthPct}%`,
