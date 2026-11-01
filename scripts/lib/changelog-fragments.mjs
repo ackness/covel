@@ -9,6 +9,11 @@
  *
  * Everything here works on text; scripts/changelog.mjs reads and writes files.
  */
+import path from "node:path";
+import {
+  mapMarkdownDestinations,
+  relativeLinkPath,
+} from "./markdown-links.mjs";
 
 /** Section names, in the order a release lists them. */
 export const SECTIONS = [
@@ -174,7 +179,20 @@ function collectFragments(fragments) {
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
   );
   for (const { name, text } of sorted) {
-    const parsed = parseFragment(text, name);
+    // Only fragments change directory. Existing release/Unreleased entries
+    // already use the changelog's base and must never be rebased again.
+    const rebased = mapMarkdownDestinations(text, (destination) => {
+      const target = relativeLinkPath(destination);
+      if (target === null) return destination;
+      const relative =
+        path.posix.relative(
+          path.posix.dirname(CHANGELOG_PATH),
+          path.posix.join(FRAGMENT_DIR, target),
+        ) || ".";
+      const trailingSlash = target.endsWith("/") ? "/" : "";
+      return relative + trailingSlash + destination.slice(target.length);
+    });
+    const parsed = parseFragment(rebased, name);
     for (const error of parsed.errors) {
       errors.push(`${FRAGMENT_DIR}/${name}: ${error}`);
     }

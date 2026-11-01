@@ -22,6 +22,10 @@ import {
   renderPreview,
   unreleasedEntriesError,
 } from "./lib/changelog-fragments.mjs";
+import {
+  mapMarkdownDestinations,
+  relativeLinkPath,
+} from "./lib/markdown-links.mjs";
 
 /** The fragment files of a checkout, and the other files in their directory. */
 export function readFragments(root) {
@@ -48,6 +52,28 @@ export function checkChangelog(root, { noPending = false } = {}) {
   const { fragments, strays } = readFragments(root);
   const pending = pendingEntries(changelog, fragments);
   const errors = [...pending.errors];
+  for (const { name, text } of fragments) {
+    mapMarkdownDestinations(text, (destination) => {
+      const target = relativeLinkPath(destination);
+      if (target !== null) {
+        try {
+          const decoded = decodeURIComponent(
+            target.replace(/\\([^\w\s])/g, "$1"),
+          );
+          if (!fs.existsSync(path.resolve(root, FRAGMENT_DIR, decoded))) {
+            errors.push(
+              `${FRAGMENT_DIR}/${name}: link target "${destination}" does not exist relative to the fragment`,
+            );
+          }
+        } catch {
+          errors.push(
+            `${FRAGMENT_DIR}/${name}: link target "${destination}" has invalid URL encoding`,
+          );
+        }
+      }
+      return destination;
+    });
+  }
   for (const name of strays) {
     errors.push(
       `${FRAGMENT_DIR}/${name}: only fragment files (<slug>.md) and README.md belong here`,
