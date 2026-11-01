@@ -24,6 +24,7 @@ describe("default tool registry", () => {
         "suspend",
         "runtime-done",
         "delegate",
+        "delegate-batch",
         "emit-event",
         "sync-characters",
         "list-characters",

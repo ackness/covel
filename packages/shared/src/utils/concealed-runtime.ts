@@ -52,6 +52,7 @@ const CONTENT_FREE_TRACE_FIELDS = new Set([
   // Sub-agent call tree: identities and how a run ended, never its brief or
   // output.
   "subagentCallId",
+  "batchIndex",
   "parentCallId",
   "parentRuntimeId",
   "parentPluginId",

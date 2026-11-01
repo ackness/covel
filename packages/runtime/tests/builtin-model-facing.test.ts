@@ -83,6 +83,9 @@ const inputs: Record<string, Record<string, unknown>> = {
   "memory-search": { query: "gate" },
   "world-dimension-get": { queries: [{ dimension: "discoveries" }] },
   "world-dimension-list": {},
+  "delegate-batch": {
+    requests: [{ target: { contract: "gate-actor@1" }, brief: "Greet them" }],
+  },
   delegate: { target: { contract: "gate-actor@1" }, brief: "Greet them" },
 };
 
@@ -154,6 +157,12 @@ describe("builtin model-facing results", () => {
     // sub-agent here returns a stored value with its bookkeeping.
     const runner: SubagentRunner = {
       inFlight: 0,
+      runBatch: async (args) =>
+        args.map(() => ({
+          ok: true as const,
+          output: value,
+          stopReason: "completed" as const,
+        })),
       privateTargetKind: () => undefined,
       run: async () => ({ ok: true, output: value, stopReason: "completed" }),
     };

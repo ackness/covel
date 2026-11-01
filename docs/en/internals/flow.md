@@ -731,6 +731,8 @@ A `schedule.subagentOnly` runtime is not in this tree: neither the automatic pat
 
 ### 4.4 Sub-agents
 
+`delegate-batch` captures one speculative parent scope before any await, validates entries independently, then claims all eligible children in input order before starting providers. It never waits for pool capacity. Results join by index without fail-fast behavior; publication rechecks the enclosing tool lifetime before accepting reads and operations. Loading/preparation also races cancellation and its remaining time limit. See the [tool contract](../reference/tools.md#delegate-batch).
+
 Another runtime runs a sub-agent inside its own execution: a function with `ctx.agents.run`, an agent with the `delegate` tool.
 
 - **World snapshot**: before any asynchronous load, the runner forks the caller's visible world with an independent recorder for child property reads. Tools and services derive from that snapshot. Observations merge into the caller only after all output checks pass while the invocation remains live. Failed or late results are discarded, and views are revoked on completion. Resumed parents capture their current view each time, including saved own pending world writes, without reusing a child view or historical producer identities. Plugin KV and recursive executions retain their separate read boundaries; see [World Model](../reference/world-model.md).

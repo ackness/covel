@@ -855,6 +855,7 @@ async function runAgentToolLoopWithinBudget(
                 "suspend",
                 "runtime-done",
                 "delegate",
+                "delegate-batch",
               ].includes(call.name)
             )
               return false;

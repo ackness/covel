@@ -1391,6 +1391,8 @@ Privacy boundary:
 
 ### Sub-agent events
 
+`delegate-batch` uses the existing tool/subagent event families. Every attempted entry has a unique `subagentCallId`, points `parentCallId` at the enclosing batch tool, and carries content-free zero-based `batchIndex` on its child events, including refusals. Completion order can interleave; a completed child remains speculative until the enclosing tool succeeds, and outer cancellation does not emit a second child terminal event. Claims, not event totals, determine root delegation usage. Billable totals count reported leaf `llm.responded` / gateway usage once, including steps before a later failure; child summaries and tool results add no billable calls.
+
 One run of a [sub-agent](./plugins.md#sub-agents) emits `subagent.*`. Like `recursive.*`, they go to the trace only (`forwardToActionStream: false`).
 
 <!-- prettier-ignore -->

@@ -10,6 +10,8 @@ For requests or follow-up work between packages, choose a service or event from 
 
 To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output; when allowed, it can stage write-service operations that commit with the caller.
 
+For bounded independent agent work, use [`delegate-batch`](./tools.md#delegate-batch). It reuses sub-agent admission and isolation; it adds no extension point or scheduler.
+
 Framework schema ownership does not imply a kernel extension point. [`turn-policy@1` and `character-actor@1`](./plugin-extensions.md#orchestration-contracts) are optional service/runtime contracts, without the extension-point exemption for story dependencies.
 
 ## Declarative consumers

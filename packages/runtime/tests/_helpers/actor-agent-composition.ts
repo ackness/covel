@@ -10,7 +10,13 @@ import {
   type RuntimeManifest,
   type SubscriptionEvent,
 } from "@covel/shared";
-import { delegateTool, tool, z, withPendingProposals } from "@covel/tools";
+import {
+  delegateTool,
+  delegateBatchTool,
+  tool,
+  z,
+  withPendingProposals,
+} from "@covel/tools";
 import {
   executeTurn,
   commitExecution,
@@ -36,9 +42,11 @@ export const compositionScenarios = [
 export async function assertPrivateActorComposition({
   concealed,
   scenario,
+  batch = false,
   inspectTrace,
 }: {
   concealed: boolean;
+  batch?: boolean;
   scenario: (typeof compositionScenarios)[number];
   inspectTrace?: (store: DataStore, sessionId: string) => Promise<void>;
 }) {
@@ -92,6 +100,14 @@ export async function assertPrivateActorComposition({
     continuations.push(structuredClone(result));
     return result;
   };
+  const delegate = (args: Record<string, unknown>, id: string) =>
+    toolCall(
+      batch ? "delegate-batch" : "delegate",
+      batch
+        ? { requests: [args, { ...args, brief: "SECOND-BRIEF-SECRET" }] }
+        : args,
+      id,
+    );
   const store = createMemoryStore();
   const sessionId = "scene";
   const turnId = "turn";
@@ -168,7 +184,7 @@ export async function assertPrivateActorComposition({
     outputKind: "story",
     stage: "narrative",
     tools: {
-      builtin: ["delegate"],
+      builtin: [batch ? "delegate-batch" : "delegate"],
       services: [{ contract: "turn-policy@1", name: "choose" }],
     },
   };
@@ -195,7 +211,9 @@ export async function assertPrivateActorComposition({
         )
       ) {
         actorCalls++;
-        expect(text).not.toMatch(/semantic-character|PARENT-SECRET/);
+        expect(text).not.toMatch(
+          /semantic-character|PARENT-SECRET|INTENT-SECRET/,
+        );
         expect(text).toContain("Mara");
         if (!messages.some((m) => m.role === "tool"))
           return toolCall(readWorld.name, {}, `actor-read-${actorCalls}`);
@@ -234,8 +252,7 @@ export async function assertPrivateActorComposition({
       }
       if (parentCalls === 2) {
         return withContinuation(
-          toolCall(
-            "delegate",
+          delegate(
             {
               brief: "BRIEF-SECRET" + (compacted ? "b".repeat(8_000) : ""),
               target: { contract: CHARACTER_ACTOR_CONTRACT },
@@ -251,8 +268,7 @@ export async function assertPrivateActorComposition({
         expect(text).toContain("Mara");
         expect(text).not.toContain("semantic-character");
         return withContinuation(
-          toolCall(
-            "delegate",
+          delegate(
             {
               brief: "BRIEF-SECRET" + (compacted ? "b".repeat(8_000) : ""),
               target: { contract: CHARACTER_ACTOR_CONTRACT },
@@ -282,8 +298,7 @@ export async function assertPrivateActorComposition({
         );
         expect(digest?.content).toContain("BRIEF-SECRET");
         if (parentCalls === 4) {
-          return toolCall(
-            "delegate",
+          return delegate(
             {
               brief: "BRIEF-SECRET" + "c".repeat(8_000),
               target: { contract: CHARACTER_ACTOR_CONTRACT },
@@ -332,11 +347,13 @@ export async function assertPrivateActorComposition({
       toolExecutor: createToolExecutor({
         store,
         findTool: (name) =>
-          name === "delegate"
-            ? delegateTool
-            : name === readWorld.name
-              ? readWorld
-              : undefined,
+          name === "delegate-batch"
+            ? delegateBatchTool
+            : name === "delegate"
+              ? delegateTool
+              : name === readWorld.name
+                ? readWorld
+                : undefined,
       }),
       loadRuntime: async (manifest) => ({
         manifest,
@@ -377,8 +394,8 @@ export async function assertPrivateActorComposition({
   expect(execution.result.runtimeResults).toHaveLength(2);
   expect(execution.result.runtimeResults[0]?.status).toBe("success");
   expect(parentCalls).toBe(native || compacted ? 5 : 4);
-  expect(actorCalls).toBe(compacted ? 4 : 2);
-  expect(childReads).toBe(compacted ? 2 : 1);
+  expect(actorCalls).toBe((compacted ? 4 : 2) * (batch ? 2 : 1));
+  expect(childReads).toBe((compacted ? 2 : 1) * (batch ? 2 : 1));
   const committed = await commitExecution({
     store,
     eventBus,

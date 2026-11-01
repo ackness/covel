@@ -221,6 +221,7 @@ describe(`${PLUGIN_ID} package`, () => {
       "memory-search",
       "emit-event",
       "delegate",
+      "delegate-batch",
     ]);
     expect(english).toContain('target: { contract: "character-actor@1" }');
     expect(chinese).toContain('target: { contract: "character-actor@1" }');

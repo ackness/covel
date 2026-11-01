@@ -42,6 +42,7 @@ import { buildContext } from "@covel/context";
 import { AiProviderError } from "@covel/ai-provider";
 import {
   DELEGATE_TOOL_NAME,
+  DELEGATE_BATCH_TOOL_NAME,
   SUBAGENT_BRIEF_MAX_CHARS,
   validateOutput,
 } from "@covel/tools";
@@ -53,7 +54,11 @@ import {
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import { DEFAULT_RUNTIME_TIMEOUT_MS } from "../turn-executor/runtime-scaffold.js";
 import { unwrapRetryCause } from "../turn-executor/runtime-finalization.js";
-import { combineAbortSignals } from "../turn-executor/turn-control.js";
+import { waitForToolWork } from "./tool-executor-lifetime.js";
+import {
+  RuntimeTimeoutError,
+  combineAbortSignals,
+} from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
@@ -85,6 +90,9 @@ export interface SubagentCaller {
 }
 
 export interface SubagentRunArgs {
+  /** Host-only correlation and preflight refusal; never passed to a model. */
+  readonly batchIndex?: number;
+  readonly refusal?: Extract<SubagentResult, { ok: false }>["error"];
   readonly caller: SubagentCaller;
   readonly world?: WorldModelView;
   /** The request as the plugin or the model wrote it; validated here. */
@@ -128,6 +136,8 @@ export interface SubagentRunner {
   ): "actor" | "concealed" | undefined;
   /** Never throws for a sub-agent failure: it resolves with `ok: false`. */
   run(args: SubagentRunArgs): Promise<SubagentResult>;
+  /** Claim in input order, then start every admitted provider before joining. */
+  runBatch(args: readonly SubagentRunArgs[]): Promise<SubagentResult[]>;
   /** Sub-agents of this execution now in flight. */
   readonly inFlight: number;
 }
@@ -182,206 +192,269 @@ export function createSubagentRunner(
     privateTargetKind(request, caller) {
       const parsed = parseRequest(request);
       if (typeof parsed === "string") return undefined;
-      const target = resolveTarget(
-        options.activeRuntimes,
-        options.pausedRuntimes ?? [],
-        parsed.target,
-        caller,
+      // Ambiguous or paused targets can still carry private content. Privacy
+      // classification is conservative; actual admission resolves separately.
+      const providers = [
+        ...options.activeRuntimes,
+        ...(options.pausedRuntimes ?? []),
+      ].filter((provider) =>
+        "contract" in parsed.target
+          ? provider.outputContract === parsed.target.contract
+          : provider.name === parsed.target.runtimeId &&
+            provider.pluginId === caller.pluginId,
       );
-      const provider = target.provider;
-      return provider?.concealed
+      return providers.some((provider) => provider.concealed)
         ? "concealed"
-        : provider?.outputContract === CHARACTER_ACTOR_CONTRACT
+        : providers.some(
+              (provider) =>
+                provider.outputContract === CHARACTER_ACTOR_CONTRACT,
+            )
           ? "actor"
           : undefined;
     },
     get inFlight() {
       return inFlight;
     },
-    async run(args) {
-      const subagentCallId = crypto.randomUUID();
-      const startTime = Date.now();
-      const trace = {
-        subagentCallId,
-        parentCallId: args.parentCallId,
-        parentRuntimeId: args.caller.runtimeId,
-        parentPluginId: args.caller.pluginId,
-        turnId: args.input.turnId,
-      };
-      const refuse = async (
-        code: SubagentErrorCode,
-        message: string,
-        provider?: RuntimeManifest,
-      ): Promise<SubagentResult> => {
-        await emitSafely(args.deps.emitter, "subagent.failed", {
-          ...trace,
-          ...(provider
-            ? { runtimeId: provider.name, pluginId: provider.pluginId }
-            : {}),
-          error: message,
-          code,
-          durationMs: Date.now() - startTime,
+    run: (args) => run(args),
+    runBatch(args) {
+      let previous = Promise.resolve();
+      let start!: () => void;
+      const admitted = new Promise<void>((resolve) => {
+        start = resolve;
+      });
+      const results = args.map((arg) => {
+        const ready = previous;
+        let release!: () => void;
+        previous = new Promise<void>((resolve) => {
+          release = resolve;
         });
-        return { ok: false, error: { code, message } };
-      };
-
-      // Admission is synchronous: provider/budget loading must not move the
-      // snapshot boundary or let a child observe later caller writes.
-      const assertLive = () => {
-        args.parentSignal?.throwIfAborted();
-        args.deps.turnControl?.executionSignal?.throwIfAborted();
-        args.deps.turnControl?.signal?.throwIfAborted();
-        if (
-          args.parentDeadline !== undefined &&
-          Date.now() >= args.parentDeadline
-        )
-          throw new Error("The caller's deadline has expired");
-      };
-      let worldFork: ReturnType<typeof forkWorldModelView> | undefined;
-      try {
-        worldFork = args.world
-          ? forkWorldModelView(args.world, assertLive)
-          : undefined;
-      } catch {
-        if (
-          args.parentSignal?.aborted ||
-          args.deps.turnControl?.executionSignal?.aborted ||
-          args.deps.turnControl?.signal?.aborted
-        )
-          return refuse("cancelled", MESSAGES.cancelled);
-        if (
-          args.parentDeadline !== undefined &&
-          Date.now() >= args.parentDeadline
-        )
-          return refuse("timeout", MESSAGES.timeout);
-        return refuse("internal", MESSAGES.internal);
-      }
-      try {
-        const parsed = parseRequest(args.request);
-        if (typeof parsed === "string") return refuse("invalid-input", parsed);
-        const target = resolveTarget(
-          options.activeRuntimes,
-          options.pausedRuntimes ?? [],
-          parsed.target,
-          args.caller,
-        );
-        if ("code" in target)
-          return refuse(target.code, target.message, target.provider);
-
-        const actor =
-          target.provider.outputContract === CHARACTER_ACTOR_CONTRACT;
-        if (actor) {
-          if (
-            parsed.data !== undefined ||
-            !characterActorInputSchema.safeParse({
-              characterId: parsed.characterId,
-              brief: parsed.brief,
-              ...(parsed.instruction !== undefined
-                ? { instruction: parsed.instruction }
-                : {}),
-            }).success
-          )
-            return refuse(
-              "invalid-input",
-              "Character actors require characterId and brief; use instruction instead of data",
-            );
-        } else if (
-          parsed.characterId !== undefined ||
-          parsed.instruction !== undefined
-        ) {
-          return refuse(
-            "invalid-input",
-            "Character fields are only accepted by character actors",
-          );
-        }
-        const world =
-          worldFork?.world ??
-          (actor && args.deps.store
-            ? await createWorldModelView(
-                args.deps.worldModelReads ?? args.deps.store,
-                args.input.sessionId,
-                [],
-                [],
-                () => {},
-                args.deps.dimensionContext,
-              )
-            : undefined);
-        const character = actor
-          ? (args.world ?? world)?.characters.find(
-              (character) => character.id === parsed.characterId,
-            )
-          : undefined;
-        if (actor && !character)
-          return refuse(
-            "not-found",
-            "The character is not in the current world view",
-          );
-        budget ??= await (loadingBudget ??= createDelegationBudget(
-          args.input.sessionId,
-          args.deps.store,
-        ));
-        const delegation = budget;
-        // No await between the last cancellation/pool check and admission.
-        if (
-          args.parentSignal?.aborted ||
-          args.deps.turnControl?.executionSignal?.aborted ||
-          args.deps.turnControl?.signal?.aborted
-        )
-          return refuse("cancelled", MESSAGES.cancelled);
-        if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
-          return refuse("unavailable", MESSAGES.depth);
-        if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
-          return refuse("unavailable", MESSAGES.pool);
-        if (budget.claim(actor ? parsed.characterId : undefined))
-          return refuse(
-            "unavailable",
-            "The execution's delegation allowance is exhausted; finish without further children",
-          );
-        inFlight++;
-        try {
-          const { fault, ...result } = await withServiceOrigin(args, () =>
-            runProvider({
-              args: {
-                ...args,
-                world,
-                deps: {
-                  ...args.deps,
-                  delegation,
-                  emitter: delegation.privacy.emitter(
-                    args.deps.emitter,
-                    options.activeRuntimes,
-                  ),
-                },
-              },
-              request: parsed,
-              provider: target.provider,
-              subagentCallId,
-              startTime,
-              trace,
-              runner,
-              worldFork,
-              assertLive,
-            }),
-          );
-          options.onSettled?.({
-            pluginId: target.provider.pluginId,
-            runtimeId: target.provider.name,
-            callerPluginId: args.caller.pluginId,
-            callerRuntimeId: args.caller.runtimeId,
-            ok: result.ok,
-            ...(fault ? { fault } : {}),
-            ...(result.stopReason ? { stopReason: result.stopReason } : {}),
-            ...(result.ok ? {} : { code: result.error.code }),
-          });
-          return result;
-        } finally {
-          inFlight--;
-        }
-      } finally {
-        worldFork?.discard();
-      }
+        return run(arg, { ready, release, start: admitted });
+      });
+      // Every claim/refusal is decided before any provider can finish and
+      // refill the batch. This is an admission barrier, never a worker queue.
+      void previous.then(start);
+      return Promise.allSettled(results).then((outcomes) =>
+        outcomes.map((outcome): SubagentResult => {
+          if (outcome.status === "fulfilled") return outcome.value;
+          console.warn("[subagent] batch child failed", outcome.reason);
+          return {
+            ok: false,
+            error: { code: "internal", message: MESSAGES.internal },
+          };
+        }),
+      );
     },
   };
+  async function run(
+    args: SubagentRunArgs,
+    admission?: {
+      ready: Promise<void>;
+      release(): void;
+      start: Promise<void>;
+    },
+  ): Promise<SubagentResult> {
+    const subagentCallId = crypto.randomUUID();
+    const startTime = Date.now();
+    const trace = {
+      subagentCallId,
+      parentCallId: args.parentCallId,
+      parentRuntimeId: args.caller.runtimeId,
+      parentPluginId: args.caller.pluginId,
+      turnId: args.input.turnId,
+      ...(args.batchIndex !== undefined ? { batchIndex: args.batchIndex } : {}),
+    };
+    const refuse = async (
+      code: SubagentErrorCode,
+      message: string,
+      provider?: RuntimeManifest,
+    ): Promise<SubagentResult> => {
+      admission?.release();
+      await emitSafely(args.deps.emitter, "subagent.failed", {
+        ...trace,
+        ...(provider
+          ? { runtimeId: provider.name, pluginId: provider.pluginId }
+          : {}),
+        error: message,
+        code,
+        durationMs: Date.now() - startTime,
+      });
+      return { ok: false, error: { code, message } };
+    };
+
+    // Admission is synchronous: provider/budget loading must not move the
+    // snapshot boundary or let a child observe later caller writes.
+    const assertLive = () => {
+      args.parentSignal?.throwIfAborted();
+      args.deps.turnControl?.executionSignal?.throwIfAborted();
+      args.deps.turnControl?.signal?.throwIfAborted();
+      if (
+        args.parentDeadline !== undefined &&
+        Date.now() >= args.parentDeadline
+      )
+        throw new Error("The caller's deadline has expired");
+    };
+    let worldFork: ReturnType<typeof forkWorldModelView> | undefined;
+    try {
+      assertLive();
+      worldFork = args.world
+        ? forkWorldModelView(args.world, assertLive)
+        : undefined;
+    } catch {
+      if (
+        args.parentSignal?.aborted ||
+        args.deps.turnControl?.executionSignal?.aborted ||
+        args.deps.turnControl?.signal?.aborted
+      )
+        return refuse("cancelled", MESSAGES.cancelled);
+      if (
+        args.parentDeadline !== undefined &&
+        Date.now() >= args.parentDeadline
+      )
+        return refuse("timeout", MESSAGES.timeout);
+      return refuse("internal", MESSAGES.internal);
+    }
+    try {
+      if (admission) await admission.ready;
+      if (args.refusal) return refuse(args.refusal.code, args.refusal.message);
+      const parsed = parseRequest(args.request);
+      if (typeof parsed === "string") return refuse("invalid-input", parsed);
+      const target = resolveTarget(
+        options.activeRuntimes,
+        options.pausedRuntimes ?? [],
+        parsed.target,
+        args.caller,
+      );
+      if ("code" in target)
+        return refuse(target.code, target.message, target.provider);
+
+      const actor = target.provider.outputContract === CHARACTER_ACTOR_CONTRACT;
+      if (actor) {
+        if (
+          parsed.data !== undefined ||
+          !characterActorInputSchema.safeParse({
+            characterId: parsed.characterId,
+            brief: parsed.brief,
+            ...(parsed.instruction !== undefined
+              ? { instruction: parsed.instruction }
+              : {}),
+          }).success
+        )
+          return refuse(
+            "invalid-input",
+            "Character actors require characterId and brief; use instruction instead of data",
+          );
+      } else if (
+        parsed.characterId !== undefined ||
+        parsed.instruction !== undefined
+      ) {
+        return refuse(
+          "invalid-input",
+          "Character fields are only accepted by character actors",
+        );
+      }
+      const world =
+        worldFork?.world ??
+        (actor && args.deps.store
+          ? await createWorldModelView(
+              args.deps.worldModelReads ?? args.deps.store,
+              args.input.sessionId,
+              [],
+              [],
+              () => {},
+              args.deps.dimensionContext,
+            )
+          : undefined);
+      const character = actor
+        ? (args.world ?? world)?.characters.find(
+            (character) => character.id === parsed.characterId,
+          )
+        : undefined;
+      if (actor && !character)
+        return refuse(
+          "not-found",
+          "The character is not in the current world view",
+        );
+      budget ??= await (loadingBudget ??= createDelegationBudget(
+        args.input.sessionId,
+        args.deps.store,
+      ));
+      const delegation = budget;
+      // No await between the last cancellation/pool check and admission.
+      if (
+        args.parentSignal?.aborted ||
+        args.deps.turnControl?.executionSignal?.aborted ||
+        args.deps.turnControl?.signal?.aborted
+      )
+        return refuse("cancelled", MESSAGES.cancelled);
+      if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
+        return refuse("unavailable", MESSAGES.depth);
+      if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
+        return refuse("unavailable", MESSAGES.pool);
+      if (budget.claim(actor ? parsed.characterId : undefined))
+        return refuse(
+          "unavailable",
+          "The execution's delegation allowance is exhausted; finish without further children",
+        );
+      inFlight++;
+      admission?.release();
+      try {
+        if (admission) await admission.start;
+        if (
+          admission &&
+          (args.parentSignal?.aborted ||
+            args.deps.turnControl?.executionSignal?.aborted ||
+            args.deps.turnControl?.signal?.aborted)
+        )
+          return refuse("cancelled", MESSAGES.cancelled);
+        const { fault, ...result } = await withServiceOrigin(args, () =>
+          runProvider({
+            args: {
+              ...args,
+              world,
+              deps: {
+                ...args.deps,
+                delegation,
+                emitter: delegation.privacy.emitter(
+                  args.deps.emitter,
+                  options.activeRuntimes,
+                ),
+              },
+            },
+            request: parsed,
+            provider: target.provider,
+            subagentCallId,
+            startTime,
+            trace,
+            runner,
+            worldFork,
+            assertLive,
+          }),
+        );
+        options.onSettled?.({
+          pluginId: target.provider.pluginId,
+          runtimeId: target.provider.name,
+          callerPluginId: args.caller.pluginId,
+          callerRuntimeId: args.caller.runtimeId,
+          ok: result.ok,
+          ...(fault ? { fault } : {}),
+          ...(result.stopReason ? { stopReason: result.stopReason } : {}),
+          ...(result.ok ? {} : { code: result.error.code }),
+        });
+        return result;
+      } finally {
+        inFlight--;
+      }
+    } catch (error) {
+      console.warn("[subagent] admission failed", error);
+      return refuse(
+        args.parentSignal?.aborted ? "cancelled" : "internal",
+        args.parentSignal?.aborted ? MESSAGES.cancelled : MESSAGES.internal,
+      );
+    } finally {
+      admission?.release();
+      worldFork?.discard();
+    }
+  }
   return runner;
 }
 
@@ -529,7 +602,10 @@ export function subagentToolNames(
   };
   const keep = (name: string): boolean => {
     if (name === "suspend") return false;
-    if (name === DELEGATE_TOOL_NAME && options.depth >= SUBAGENT_MAX_DEPTH)
+    if (
+      [DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(name) &&
+      options.depth >= SUBAGENT_MAX_DEPTH
+    )
       return false;
     const info = toolExecutor?.getToolInfo(name, context);
     return info === undefined || info.annotations.readOnly === true;
@@ -585,6 +661,7 @@ async function runProvider({
     pluginId: provider.pluginId,
   };
   const usage = { inputTokens: 0, outputTokens: 0, reported: false };
+  let terminalEmitted = false;
   const emitter = subagentEmitter(deps.emitter, trace, usage);
   // Operations of this run count only when it succeeds, and are its own.
   const operations = args.operations?.child({
@@ -631,15 +708,18 @@ async function runProvider({
         parentRuntimeId: args.caller.runtimeId,
         error: cause instanceof Error ? cause.message : cause,
       });
-    await emitSafely(deps.emitter, "subagent.failed", {
-      ...identity,
-      code,
-      error: message,
-      ...(stop ? { stopReason: stop.reason } : {}),
-      ...(stop?.cancelledBy ? { cancelledBy: stop.cancelledBy } : {}),
-      ...(fault ? { fault } : {}),
-      durationMs: Date.now() - startTime,
-    });
+    if (!terminalEmitted) {
+      terminalEmitted = true;
+      await emitSafely(deps.emitter, "subagent.failed", {
+        ...identity,
+        code,
+        error: message,
+        ...(stop ? { stopReason: stop.reason } : {}),
+        ...(stop?.cancelledBy ? { cancelledBy: stop.cancelledBy } : {}),
+        ...(fault ? { fault } : {}),
+        durationMs: Date.now() - startTime,
+      });
+    }
     return {
       ok: false,
       error: { code, message },
@@ -710,11 +790,23 @@ async function runProvider({
     args.parentSignal,
   );
 
+  // Preparation is cancellable too: a loader need not cooperate with abort.
+  const preparation = new AbortController();
+  const preparationDeadline = Date.now() + timeoutMs;
+  const preparationTimer = setTimeout(
+    () => preparation.abort(new RuntimeTimeoutError(MESSAGES.timeout)),
+    timeoutMs,
+  );
+  const preparationSignal = AbortSignal.any([
+    preparation.signal,
+    ...(executionSignal ? [executionSignal] : []),
+    ...(deps.turnControl?.signal ? [deps.turnControl.signal] : []),
+  ]);
+  const prepare = <T>(work: Promise<T>) =>
+    waitForToolWork(work, preparationSignal, () => {});
   try {
-    const providerLoaded = await deps.loadRuntime(
-      provider,
-      input.locale,
-      input.sessionId,
+    const providerLoaded = await prepare(
+      deps.loadRuntime(provider, input.locale, input.sessionId),
     );
     if (!providerLoaded) return fail("internal", MESSAGES.internal);
     const actor = provider.outputContract === CHARACTER_ACTOR_CONTRACT;
@@ -734,13 +826,15 @@ async function runProvider({
     const surfaceExecutor = innerExecutor
       ? withAgentToolSurface(
           innerExecutor,
-          await prepareAgentToolSurface({
-            manifest,
-            input,
-            deps,
-            loaded,
-            canWrite: operations !== undefined,
-          }),
+          await prepare(
+            prepareAgentToolSurface({
+              manifest,
+              input,
+              deps,
+              loaded,
+              canWrite: operations !== undefined,
+            }),
+          ),
           deps.services,
           operations,
         )
@@ -778,18 +872,18 @@ async function runProvider({
       );
       if (!character || !deps.delegation)
         return fail("internal", MESSAGES.internal);
-      const history = await deps.delegation.history.read(
-        character.id,
-        args.world,
+      const history = await prepare(
+        deps.delegation.history.read(character.id, args.world),
       );
-      (input as { playerMessage: string }).playerMessage =
-        await buildCharacterBrief(
+      (input as { playerMessage: string }).playerMessage = await prepare(
+        buildCharacterBrief(
           character,
           history,
           request.brief,
           request.instruction,
           input.locale,
-        );
+        ),
+      );
     }
 
     // The provider's own prompt with no session history: the context
@@ -797,16 +891,18 @@ async function runProvider({
     // A write the provider asked for in the previous turn that did not
     // take effect is told to it, as to a scheduled agent.
     const notices = deps.failedOperationSummaries?.[provider.name];
-    const assembled = await buildContext({
-      promptTemplate: loaded.promptTemplate,
-      manifest,
-      turnInput: input,
-      completedResults: new Map(),
-      messageHistory: [],
-      ...(notices?.length ? { failedOperationSummaries: notices } : {}),
-      ...(deps.store ? { store: deps.store } : {}),
-      ...withUserSettings(manifest, input),
-    });
+    const assembled = await prepare(
+      buildContext({
+        promptTemplate: loaded.promptTemplate,
+        manifest,
+        turnInput: input,
+        completedResults: new Map(),
+        messageHistory: [],
+        ...(notices?.length ? { failedOperationSummaries: notices } : {}),
+        ...(deps.store ? { store: deps.store } : {}),
+        ...withUserSettings(manifest, input),
+      }),
+    );
     const messages: LLMMessage[] = [
       { role: "system", content: assembled.systemPrompt },
       ...assembled.messages,
@@ -814,16 +910,23 @@ async function runProvider({
     const worldBase =
       args.world ??
       (deps.store
-        ? await createWorldModelView(
-            deps.worldModelReads ?? deps.store,
-            input.sessionId,
-            [],
-            [],
-            () => {},
-            deps.dimensionContext,
+        ? await prepare(
+            createWorldModelView(
+              deps.worldModelReads ?? deps.store,
+              input.sessionId,
+              [],
+              [],
+              () => {},
+              deps.dimensionContext,
+            ),
           )
         : undefined);
 
+    if (Date.now() >= preparationDeadline)
+      preparation.abort(new RuntimeTimeoutError(MESSAGES.timeout));
+    preparationSignal.throwIfAborted();
+    clearTimeout(preparationTimer);
+    const remainingMs = Math.max(1, preparationDeadline - Date.now());
     const toolLoop = await runAgentToolLoop({
       worldBase,
       manifest,
@@ -831,7 +934,7 @@ async function runProvider({
       loaded,
       deps: subDeps,
       maxSteps,
-      timeoutMs,
+      timeoutMs: remainingMs,
       messages,
       ...(deps.estimator && deps.contextBudget
         ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
@@ -897,6 +1000,10 @@ async function runProvider({
     }
     const stopReason = settled.result.stop?.reason ?? "completed";
     const acceptedOutput = structuredClone(output);
+    // Completion delivery can itself outlive the caller. If the final check
+    // then refuses publication, the enclosing scope discards this output;
+    // do not emit a second terminal event for the already completed child.
+    terminalEmitted = true;
     await emitSafely(deps.emitter, "subagent.completed", {
       ...identity,
       stopReason,
@@ -928,7 +1035,9 @@ async function runProvider({
         : {}),
     };
   } catch (error) {
-    let stop = stopOf(error, subagentCallId);
+    let stop = preparation.signal.aborted
+      ? { reason: "deadline" as const }
+      : stopOf(error, subagentCallId);
     // Loading and terminal event delivery can outlive the caller too, before
     // or after the loop's own cancellation classification runs.
     if (deps.turnControl?.signal?.aborted)
@@ -950,6 +1059,9 @@ async function runProvider({
       stop = { ...stop, cancelledBy: "parent" };
     const code = codeForStop(stop);
     return fail(code, messageFor(code), stop, error);
+  } finally {
+    clearTimeout(preparationTimer);
+    preparation.abort(new Error("Sub-agent preparation has ended"));
   }
 }
 
@@ -990,8 +1102,13 @@ function subagentEmitter(
   fields: Readonly<Record<string, unknown>>,
   usage: { inputTokens: number; outputTokens: number; reported: boolean },
 ): TurnEmitter {
-  const { subagentCallId, parentCallId, parentRuntimeId } = fields;
-  const tree = { subagentCallId, parentCallId, parentRuntimeId };
+  const { subagentCallId, parentCallId, parentRuntimeId, batchIndex } = fields;
+  const tree = {
+    subagentCallId,
+    parentCallId,
+    parentRuntimeId,
+    ...(batchIndex !== undefined ? { batchIndex } : {}),
+  };
   return {
     sessionId: parent?.sessionId ?? "",
     turnId: parent?.turnId ?? "",

@@ -58,7 +58,7 @@ function viewValue(world: WorldModelView) {
 
 describe("sub-agent world snapshots", () => {
   it.each(
-    (["run", "delegate"] as const).flatMap((route) =>
+    (["run", "delegate", "delegate-batch"] as const).flatMap((route) =>
       (["success", "failure", "idle"] as const).flatMap((childOutcome) =>
         [false, true].map((changed) => ({ route, childOutcome, changed })),
       ),
@@ -91,13 +91,18 @@ describe("sub-agent world snapshots", () => {
       let childEvidence = "";
       const llm: LLMAdapter = {
         generate: async (request) => {
-          if (request.tools?.some((t) => t.name === "delegate")) {
+          if (
+            request.tools?.some((t) =>
+              ["delegate", "delegate-batch"].includes(t.name),
+            )
+          ) {
             switch (parentCalls++) {
               case 0:
-                return toolCall("delegate", {
-                  target,
-                  brief: "A constant brief",
-                });
+                return route === "delegate-batch"
+                  ? toolCall("delegate-batch", {
+                      requests: [{ target, brief: "A constant brief" }],
+                    })
+                  : toolCall("delegate", { target, brief: "A constant brief" });
               case 1:
                 return toolCall("stage-character", {
                   id: "source",
@@ -126,10 +131,10 @@ describe("sub-agent world snapshots", () => {
       };
       const reader = fn(
         "read",
-        route === "delegate"
+        route !== "run"
           ? {
               runtimeType: "agent",
-              tools: { builtin: ["delegate", "stage-character"] },
+              tools: { builtin: [route, "stage-character"] },
             }
           : {},
       );
@@ -687,6 +692,7 @@ describe("sub-agent world snapshots", () => {
       const abort = new AbortController();
       let modelCalls = 0;
       const startedAt = Date.now();
+      const terminals: string[] = [];
       const result = await runner.run({
         caller: { pluginId: "observer", runtimeId: "observer/read", depth: 0 },
         request: { target: { contract: target.contract }, brief: "Constant" },
@@ -713,6 +719,8 @@ describe("sub-agent world snapshots", () => {
             sessionId: SESSION,
             turnId: input.turnId,
             emit: async (type) => {
+              if (type === "subagent.completed" || type === "subagent.failed")
+                terminals.push(type);
               if (type !== "subagent.completed") return;
               if (exit === "cancelled") abort.abort(new Error("caller ended"));
               if (exit === "deadline")
@@ -721,6 +729,7 @@ describe("sub-agent world snapshots", () => {
           },
         },
       });
+      expect(terminals).toHaveLength(1);
       expect(modelCalls).toBe(exit === "load-failure" ? 0 : 2);
       expect(observations).toBe(exit === "load-failure" ? 0 : 1);
       expect(result.ok).toBe(exit === "success");
@@ -853,9 +862,13 @@ describe("sub-agent world snapshots", () => {
       ).toBe(false);
     }
   });
-  it.each([false, true])(
-    "keeps story text and a safe notice when a successful child's operation is refused (concealed=%s)",
-    async (concealed) => {
+  it.each(
+    (["run", "delegate-batch"] as const).flatMap((route) =>
+      [false, true].map((concealed) => ({ route, concealed })),
+    ),
+  )(
+    "keeps story text and a safe notice when a successful child's service operation is refused via $route (concealed=$concealed)",
+    async ({ route, concealed }) => {
       const registry = services();
       let serviceCalls = 0;
       registry.register("service", {
@@ -881,10 +894,17 @@ describe("sub-agent world snapshots", () => {
         deps: {
           services: registry,
           llm: {
-            generate: async () =>
-              modelCalls++ === 0
+            generate: async (request) => {
+              if (request.tools?.some((t) => t.name === "delegate-batch"))
+                return request.messages.some((m) => m.role === "tool")
+                  ? prose("The story continues.")
+                  : toolCall("delegate-batch", {
+                      requests: [{ target, brief: "Constant safe brief" }],
+                    });
+              return modelCalls++ === 0
                 ? toolCall("record", { secret: "PRIVATE-SERVICE-REQUEST" })
-                : prose("Complete"),
+                : prose("Complete");
+            },
           },
         },
       });
@@ -894,7 +914,15 @@ describe("sub-agent world snapshots", () => {
         outputContract: target.contract,
         tools: { services: [{ contract: "test.write@1", name: "record" }] },
       };
-      const r = await f.execute([producer, story, actor], {
+      const owner =
+        route === "delegate-batch"
+          ? {
+              ...story,
+              runtimeType: "agent" as const,
+              tools: { builtin: ["delegate-batch"] },
+            }
+          : story;
+      const r = await f.execute([producer, owner, actor], {
         [producer.name]: async () => writes(character()),
         [story.name]: async (ctx) => {
           expect(

@@ -31,6 +31,8 @@
 | UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                                        |
 | 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                                       |
 
+agent 可用 [`delegate-batch`](./tools.md#delegate-batch) 并发委托独立请求。写服务仍共用调用方/提供方锁和操作序号；结果按索引排列不代表服务按该顺序取得锁。
+
 下面是表里装不下的细节。
 
 函数 runtime 改自己的数据时，可以交一串操作而不是算好的整个值：`ctx.pluginData.update(namespace, key, ops)` 产生 `plugin.data.update`，提交时在最新的值上应用（见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。这只属于 runtime 的写入边界：扩展点和读服务的 `ctx.pluginData` 只读。别的插件要改这个插件的数据，调用它的[写服务](#写服务)。

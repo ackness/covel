@@ -42,6 +42,7 @@
 | **suspend** | builtin | — | auto-allow | 用表单字段声明答案，挂起等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
 | **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
 | **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；可通过写服务暂存操作 | `stagesWrites` |
+| **delegate-batch** | builtin | — | auto-allow | 有界并发委托独立子 agent，准入和结果保持输入顺序 | `stagesWrites` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
 | **memory-search** | builtin | — | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | 组合角色属性 schema 与维度声明初始化 | 默认 |
@@ -59,6 +60,7 @@
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件 | 默认 |
 | submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
 | submit-openai-image-structured-prompt | local | openai-image-gen | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
+
 
 每个内置插件的工具都必须出现在这张表里，`apps/server/tests/lib/reference-tables.test.ts` 会检查。
 
@@ -100,7 +102,7 @@ runtime 声明的 `tools.plugin` 中有工具未注册时，即使它被 `tools.
 
 agent 的一条模型回复可以包含多个工具调用。调用经过 `PreToolUse` 改写后，只有在 runtime 已授权、工具声明 `readOnly: true` 且 `concurrencySafe: true` 时才进入并行池。连续满足条件的调用组成一池，最多同时执行 8 个。`concurrencySafe` 是作者的承诺：工具与其他只读调用并发时不会通过共享状态产生副作用；内核会拒绝只读工具返回的写入和事件，但不能检查外部副作用。
 
-其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 没有声明安全并发，始终串行。
+其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 和 `delegate-batch` 都是屏障。只有一次 batch 内部的子 agent 并发运行。
 
 工具消息、调用记录、proposal 和事件都按模型给出的顺序汇总，不按完成时间排序。池中某个工具触发自己的 `timeoutMs` 时，它返回 `timeout` 并计入失败调用；其他调用和后续循环继续。没有默认的单工具超时，省略时仍受 runtime 总时限约束；会等待网络读取的并发工具应自行设置 `timeoutMs`。
 
@@ -763,6 +765,19 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 - 注解为 `readOnly: false`、`stagesWrites: true`、`idempotent: false`、`concurrencySafe: false`。
 
 契约声明在 `packages/tools/src/builtin/delegate.ts`，执行逻辑在 `packages/runtime/src/agent-loop/subagent-delegate.ts` 和 `subagent-runner.ts`。
+
+#### delegate-batch
+
+在 `agent.tools.builtin` 显式声明 `delegate-batch`，传入 `{requests: [<delegate request>, ...]}`，共 1–32 项。每项沿用上面的 delegate 参数和 brief/data 大小限制。外层未知字段、无效 JSON、空数组或超长数组使整个工具失败，不启动子 agent；单项无效只产生该索引的 `invalid-input` 结果。
+
+成功返回 `{data:{results:[...]}}`，每个输入索引恰有一项：`{ok:true,output}` 或 `{ok:false,error:{code,message}}`。即使全部失败，batch 工具仍成功；父方取消则调用失败，迟到结果丢弃。用量与路由身份只进 trace，不进入回执。staged 提示只统计本次调用保留的操作。
+
+执行沿用同一个 runner，在启动提供方之前按输入顺序认领名额，与其他调用方共享深度、不同演员、调用次数和并发上限。超限项立即返回 `unavailable`，不消耗调用次数，不排队、补位或重试。已准入的失败与取消仍消耗名额。每个子 agent 从同一准入快照独立分叉，兄弟不会获得彼此的回复或 intent。提供方失败只影响该项；父方停止或截止会取消全部活跃子 agent，包括准备与加载。
+
+成功读取、基线和写服务操作仍须等外层工具成功且有效后才接受。失败子项不贡献证据；外层取消时，已成功子项的证据和操作也丢弃。原有的调用方/提供方服务锁和操作序号仍有效，计划顺序不保证服务效果顺序。两个委托工具都保持 `readOnly:false`、`stagesWrites:true`、`idempotent:false`、`concurrencySafe:false`，子 agent 和呈现上下文都不能调用。
+
+任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。`completeAfterTools` 在输出校验前把私密 batch 投影为 `{}`。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
+
 
 ## Character 管理工具
 
@@ -2085,7 +2100,7 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 
 ## 故事内的演员委托
 
-故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事按计划顺序逐个调用，只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。
+故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事的 parallel 计划使用一次 `delegate-batch`，sequential 计划逐个 `delegate`，按计划顺序只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。
 
 ## 呈现函数的调用边界
 

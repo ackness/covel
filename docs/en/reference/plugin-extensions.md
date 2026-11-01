@@ -31,6 +31,8 @@ Start by finding your need in the table and reading the matching interface:
 | A UI emits a domain event                               | `emitEvent`                                                                                     | Can emit only topics that the plugin declares, checked against a schema. Subscribed runtimes run as event tasks.                                                                                  |
 | Draw a custom UI                                        | JSON `view` or HTML `webview`                                                                   | HTML runs in a separate sandbox. It reads data and sends actions through a message bridge.                                                                                                        |
 
+Agent callers may use [`delegate-batch`](./tools.md#delegate-batch) for independent requests. Write services keep the shared per-caller/provider lock and operation sequence. Indexed replies do not impose a service acquisition order.
+
 The details that do not fit in the table come next.
 
 A function runtime that changes its own data can submit a list of operations instead of a computed whole value: `ctx.pluginData.update(namespace, key, ops)` produces `plugin.data.update`, which applies to the latest value at commit (see [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)). This belongs only to the runtime write boundary: `ctx.pluginData` is read-only in extension handlers and read services. Another plugin that needs to change this plugin's data calls one of its [write services](#write-services).

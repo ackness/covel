@@ -42,6 +42,7 @@ Dataset tools write only datasets declared by the caller's package. Arguments st
 | **suspend** | builtin | — | auto-allow | Describe answers with form fields and suspend the runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
 | **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
 | **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; it can stage operations through write services | `stagesWrites` |
+| **delegate-batch** | builtin | — | auto-allow | Run independent sub-agent requests concurrently, with bounded ordered admission and results | `stagesWrites` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
 | **memory-search** | builtin | — | auto-allow | Search memory: conversation history and past summaries (recall), plus the long-term knowledge base (archival), which includes lorebook data, characters, and data that plugins declare as searchable | `readOnly`, `idempotent`, `concurrencySafe` |
 | initialize-world | local | world-init | auto-allow | Initialize the world by combining the character attribute schema and the dimension declarations | defaults |
@@ -100,7 +101,7 @@ If a declared `tools.plugin` tool is not registered, even when deferred by `tool
 
 One model reply can contain several agent tool calls. After `PreToolUse` rewrites a call, it joins the parallel pool only when the runtime authorizes its name and the tool declares both `readOnly: true` and `concurrencySafe: true`. Consecutive eligible calls form one pool, with at most 8 running at once. `concurrencySafe` is the author's promise that concurrent reads do not cause side effects through shared state. The kernel rejects writes and events returned by a read-only tool, but cannot inspect external side effects.
 
-Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` does not declare concurrency safety and always runs serially.
+Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` and `delegate-batch` are barriers. Only the children inside one batch run concurrently.
 
 Tool messages, call records, proposals and events are collected in model order, regardless of completion order. A pooled call that exceeds its own `timeoutMs` returns `timeout` and counts as a failed call; its siblings and the loop continue. There is no default per-tool timeout. Omitting it keeps the runtime deadline as the limit; concurrent tools that wait on network reads should set `timeoutMs`.
 
@@ -765,6 +766,19 @@ An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents)
 - Its annotations are `readOnly: false`, `stagesWrites: true`, `idempotent: false` and `concurrencySafe: false`.
 
 The contract is declared in `packages/tools/src/builtin/delegate.ts`; the execution logic is in `packages/runtime/src/agent-loop/subagent-delegate.ts` and `subagent-runner.ts`.
+
+#### delegate-batch
+
+Declare `delegate-batch` explicitly in `agent.tools.builtin`. Pass `{requests: [<delegate request>, ...]}` with 1–32 entries. Each entry uses the delegate parameters above and the same brief/data limits. Unknown outer fields, invalid JSON, and an empty or oversized array fail the whole tool before any child starts. An invalid individual entry produces only its own indexed `invalid-input` result.
+
+Success returns `{data:{results:[...]}}`, one result per input index: `{ok:true,output}` or `{ok:false,error:{code,message}}`. Even an entirely failed batch succeeds as a tool; parent cancellation fails the invocation and discards late results. Usage and routing identities stay in trace, outside these receipts. A staged notice counts only operations retained by this invocation.
+
+The execution's existing runner claims requests in input order before starting providers. It shares depth, distinct-actor, call and concurrent caps with other callers. Excess attempts receive `unavailable` immediately, consume no call, and never queue, refill or retry. Admitted failures and cancellations consume their claims. Each child gets an independent fork of the same admission snapshot; siblings never receive each other's reply or intent. Provider failures affect only that entry; a parent stop or deadline cancels all active children, including preparation and loading.
+
+Successful reads, baselines and write-service operations remain speculative until the enclosing live tool succeeds. Failed children contribute none; a cancelled outer tool discards even successful children's evidence and operations. The existing per-caller/provider service lock and operation sequence still apply; plan order does not promise service effect order. Both delegation tools keep `readOnly:false`, `stagesWrites:true`, `idempotent:false`, `concurrencySafe:false`, and are unavailable to sub-agents and presentation contexts.
+
+If any entry resolves to a private actor or concealed provider, the whole batch's arguments and results are redacted from persisted/public copies, including malformed entries with known targets. The authorized live parent can use accepted outputs. `completeAfterTools` projects a private batch to `{}` before output validation. See [trace correlation and privacy](./protocol.md#sub-agent-events).
+
 
 ## Character management tools
 
@@ -2087,7 +2101,7 @@ Actor output contains dialogue/action segments without a speaker, plus optional 
 
 ## Delegating actors inside a story
 
-A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator calls once per actor in plan order, combines successful public segments and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.
+A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator uses one `delegate-batch` for a parallel plan and individual `delegate` calls for a sequential plan, combines successful public segments in plan order and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.
 
 ## Presentation call boundaries
 
