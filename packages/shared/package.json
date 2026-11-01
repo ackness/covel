@@ -8,6 +8,18 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./locale": {
+      "types": "./src/locale.ts",
+      "import": "./src/locale.ts"
+    },
+    "./provider-keys": {
+      "types": "./src/utils/provider-keys.ts",
+      "import": "./src/utils/provider-keys.ts"
+    },
+    "./system-proxy-ipc": {
+      "types": "./src/system-proxy-ipc.ts",
+      "import": "./src/system-proxy-ipc.ts"
+    },
     "./desktop-config": {
       "types": "./src/desktop-config/schema.ts",
       "import": "./src/desktop-config/schema.ts"

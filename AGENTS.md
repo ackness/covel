@@ -97,6 +97,8 @@ package test. The host supplies this SDK and `zod` to installed plugins; plugins
 bundle only other dependencies. Respect public package entry points and dependency
 direction (`pnpm check:boundaries`). Shared owns the pure plugin-theme CSS
 policy and its direct parser dependency; loader owns files and web owns rendering.
+Desktop main uses shared's narrow locale, provider-key and proxy-IPC exports to
+avoid loading unrelated domain policies into the shell.
 
 Read [desktop packaging](docs/internals/desktop-packaging.md) before changing the
 shell, sidecar or staging. The packaged backend always runs the app's own Electron

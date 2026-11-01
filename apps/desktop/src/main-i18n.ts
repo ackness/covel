@@ -3,7 +3,7 @@ import {
   canonicalizeLocale,
   DEFAULT_FALLBACK_LOCALE,
   localeRegistry,
-} from "@covel/shared";
+} from "@covel/shared/locale";
 
 export type DesktopLocale = string;
 

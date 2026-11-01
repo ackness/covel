@@ -2,7 +2,7 @@ import {
   SYSTEM_PROXY_IPC_VERSION,
   isSystemProxyResolveRequest,
   type SystemProxyResolveResponse,
-} from "@covel/shared";
+} from "@covel/shared/system-proxy-ipc";
 
 /** Resolve a validated sidecar request without exposing Electron to arbitrary IPC. */
 export async function resolveSystemProxyRequest(

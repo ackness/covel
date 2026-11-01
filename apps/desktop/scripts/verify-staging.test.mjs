@@ -81,7 +81,7 @@ test("staging verification reaps its child before removing SQLite files", async 
           builder.onResolve(
             {
               filter:
-                /^(\.\/(backend-runtime|ensure-electron|packaged-main|private-config|plugin-load-check)\.mjs|\.\.\/src\/runtime-integrity\.ts)$/,
+                /^(\.\/(backend-runtime|ensure-electron|packaged-main|main-bundle|private-config|plugin-load-check)\.mjs|\.\.\/src\/runtime-integrity\.ts)$/,
             },
             (args) => ({ path: args.path, namespace: "preflight" }),
           );
@@ -95,6 +95,7 @@ test("staging verification reaps its child before removing SQLite files", async 
               export const verifyAndProbeBackendRuntime = async () => ({ node: process.versions.node, platform: process.platform, arch: process.arch });
               export const verifyRuntimeSelection = () => ({});
               export const verifyPackagedMain = () => {};
+              export const assertMainBundle = () => {};
               export const verifyRuntimeFile = async () => {};
               export const assertNoPrivateConfig = () => {};
               export const assertLoadedBuiltinPluginEntries = () => {};

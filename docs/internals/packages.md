@@ -81,6 +81,8 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 桌面壳直接依赖 Zod 来校验本地保存的窗口状态。窗口的位置和大小属于 Electron 宿主，不作为共享的领域 schema 暴露。
 
+主进程通过 `@covel/shared/locale`、`@covel/shared/provider-keys` 和 `@covel/shared/system-proxy-ipc` 读取共享辅助函数。这些公开入口不经过 shared 总入口，不把主题 CSS 校验及其解析器带进主进程；主题校验仍由 shared 拥有并供服务端使用。
+
 桌面壳访问 sidecar 的 HTTP 客户端直接依赖 npm Undici，不使用 Electron 内置的 `fetch`。`ai-provider` 的出站传输也显式依赖 npm Undici；升级 Node 或 Electron 不会替换这两处依赖。主进程的 ESM 构建保留原生 `require` 桥接，让打包进去的 Undici 能加载 Node 内置模块。
 
 这些桌面壳依赖在 `apps/desktop/package.json` 中列为开发依赖，因为它们已进入 main/preload bundle；安装包不再另带一份桌面 `node_modules`。服务端拥有独立、完整的运行依赖，包含加载社区 TypeScript 插件需要的 `tsx` / esbuild 和公开 SDK。裁剪边界见[桌面打包](./desktop-packaging.md#staging-目录的规则)。
