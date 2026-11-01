@@ -1,7 +1,14 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Frame,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+import { PLUGIN_PAGE_READY_TIMEOUT_MS } from "@covel/shared";
 import { startStageRenderHost } from "../../apps/server/tests/helpers/stage-render-browser.js";
 import { buildThirdPartyPluginZip } from "../../apps/server/tests/helpers/third-party-package.js";
 import {
@@ -9,6 +16,12 @@ import {
   seedAppSettings,
   waitForTurnIdle,
 } from "./helpers/player.js";
+import {
+  sandboxThemeFixture,
+  startThemeOrchestrationHost,
+  streamingThemeStory,
+  themeSecrets,
+} from "./helpers/theme-orchestration.js";
 
 const fixture = resolve(import.meta.dirname, "../third-party/theme-pack-probe");
 const pluginId = "theme-pack-probe";
@@ -194,6 +207,115 @@ async function close(page: Page, host: Host) {
   await page.goto("about:blank");
   await page.unrouteAll({ behavior: "wait" });
   await host.close();
+}
+
+async function chooseSandboxReader(page: Page) {
+  await page.getByRole("button", { name: "插件视图", exact: true }).click();
+  const option = page.getByRole("button", { name: /^Bridge reader\b/ });
+  await hit(option);
+  await option.click();
+}
+
+async function allowSandbox(page: Page) {
+  const consent = page.getByRole("dialog");
+  const allow = consent.getByRole("button", {
+    name: "允许所请求的能力",
+    exact: true,
+  });
+  await hit(allow);
+  await allow.click();
+  await expect(consent).toBeHidden();
+}
+
+async function expectSandboxStory(region: Locator, story: string) {
+  const iframe = region.locator("iframe");
+  await expect(iframe).toBeVisible();
+  await expect(iframe).toHaveAttribute(
+    "src",
+    /^\/plugin-assets\/sandbox-surface-probe\/[a-f0-9]{32}\/index\.html$/,
+  );
+  const entry = await iframe.getAttribute("src");
+  const element = await iframe.elementHandle();
+  const frame = await element?.contentFrame();
+  if (!frame || !entry) throw new Error("Selected sandbox frame is missing");
+  // A selected region can exist before its new document has loaded. Bind to
+  // that region's frame, then await navigation and its port acknowledgement.
+  await frame.waitForURL((url) => url.pathname === entry, {
+    waitUntil: "load",
+    timeout: PLUGIN_PAGE_READY_TIMEOUT_MS,
+  });
+  await expect(region.locator("[data-page-status]")).toHaveAttribute(
+    "data-page-status",
+    "ready",
+    { timeout: PLUGIN_PAGE_READY_TIMEOUT_MS },
+  );
+  const renderedStory = frame.locator("#story");
+  await expect(renderedStory).toContainText(story);
+  await expect(renderedStory).toBeVisible();
+  return frame;
+}
+
+type PortEnvelope = {
+  type: string;
+  append?: string;
+  value?: {
+    theme?: { id: string; tokens: { background: string } };
+    session?: {
+      turn: number;
+      executing: boolean;
+      streaming: { text: string } | null;
+    };
+  };
+};
+async function portMessages(frame: Frame): Promise<PortEnvelope[]> {
+  return frame.evaluate(
+    () =>
+      (window as Window & { themePortMessages?: PortEnvelope[] })
+        .themePortMessages ?? [],
+  );
+}
+
+async function observeSandboxPort(page: Page) {
+  await page.addInitScript(() => {
+    const envelopes: unknown[] = [];
+    Object.assign(window, { themePortMessages: envelopes });
+    window.addEventListener("message", (event) => {
+      if (event.data?.type !== "covel:connect") return;
+      // Observe the transferred page port, including envelopes the page UI ignores.
+      const port = event.ports[0];
+      port?.addEventListener("message", (message) => {
+        envelopes.push(message.data);
+      });
+    });
+  });
+}
+
+async function assertPrivateThemeDataAbsent(
+  page: Page,
+  host: Host,
+  frame: Frame,
+) {
+  const discovery = await api(
+    host,
+    `/api/ui-specs?sessionId=${host.sessionId}`,
+  ).then((response) => response.text());
+  const port = JSON.stringify(await portMessages(frame));
+  for (const secret of themeSecrets) {
+    expect(discovery).not.toContain(secret);
+    expect(port).not.toContain(secret);
+    await expect(page.locator("body")).not.toContainText(secret);
+    await expect(frame.locator("body")).not.toContainText(secret);
+  }
+  for (const field of [
+    "cssText",
+    "assets",
+    "ui.sessionTheme.",
+    "ui.pluginViewConsent.",
+    "providerContinuation",
+    "reasoningContent",
+    "_hidden",
+  ])
+    expect(port).not.toContain(field);
 }
 
 test("installed community palette, texture and session layout survive hydration and require explicit selection after updates", async ({
@@ -465,6 +587,147 @@ for (const width of [360, 1440])
     }
   });
 
+for (const width of [360, 1440])
+  test(`active themes preserve sandbox consent, revocation and immersive recovery at ${width}px`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const host = await startStageRenderHost({
+      narration: "Public reading theme story.",
+      fixturePlugins: [sandboxThemeFixture],
+    });
+    try {
+      expect((await upload(host)).status).toBe(201);
+      await host.restart();
+      await enable(host);
+      await observeSandboxPort(page);
+      await connect(page, host);
+      await page.setViewportSize({ width, height: 900 });
+      await visit(page, host.sessionId);
+      await composerInput(page).fill("Tell the public story");
+      await composerInput(page).press("Enter");
+      await waitForTurnIdle(page);
+      await select(page);
+      const story = page
+        .locator('[data-covel-theme-part="story"]')
+        .filter({ hasText: "Public reading theme story." });
+      await expect(story).toHaveCSS("color", "rgb(245, 234, 210)");
+
+      await chooseSandboxReader(page);
+      const consent = page.getByRole("dialog");
+      await expect(consent).toContainText("读取公开故事与输入信息");
+      await expect(
+        page.getByTestId("plugin-view-container").locator("iframe"),
+      ).toHaveCount(0);
+      const decline = consent.getByRole("button", {
+        name: "使用默认视图",
+        exact: true,
+      });
+      await hit(decline);
+      await decline.click();
+      await expect(story).toHaveCSS("color", "rgb(245, 234, 210)");
+      await chooseSandboxReader(page);
+      await allowSandbox(page);
+      const main = page.getByRole("region", {
+        name: "Bridge reader",
+        exact: true,
+      });
+      const frame = await expectSandboxStory(
+        main,
+        "Public reading theme story.",
+      );
+      await expect
+        .poll(async () =>
+          (await portMessages(frame)).some(
+            (message) =>
+              message.value?.theme?.id.startsWith(
+                `plugin:${pluginId}:reading:`,
+              ) && message.value.theme.tokens.background === "#24201a",
+          ),
+        )
+        .toBe(true);
+      await expect(main.locator("iframe")).toHaveAttribute(
+        "sandbox",
+        "allow-scripts",
+      );
+      await main
+        .frameLocator("iframe")
+        .getByRole("button", { name: "Fill viewport", exact: true })
+        .click();
+      const controls = page.getByTestId("sandbox-surface-controls");
+      const back = controls.getByRole("button", {
+        name: "切回默认界面",
+        exact: true,
+      });
+      await hit(back);
+      const permissions = main.getByRole("button", {
+        name: "视图权限",
+        exact: true,
+      });
+      await hit(permissions);
+      await permissions.click();
+      const revoke = main.getByRole("button", {
+        name: "撤销此页面的全部权限",
+        exact: true,
+      });
+      await hit(revoke);
+      await revoke.click();
+      await expect(main).toHaveCount(0);
+      await expect(story).toHaveCSS("color", "rgb(245, 234, 210)");
+      await chooseSandboxReader(page);
+      await allowSandbox(page);
+      await expectSandboxStory(main, "Public reading theme story.");
+      await hit(back);
+      await back.focus();
+      await page.keyboard.press("Enter");
+      await expect(main).toHaveCount(0);
+
+      await controls
+        .getByRole("combobox", { name: "输入框", exact: true })
+        .selectOption("plugin:sandbox-surface-probe:input");
+      await allowSandbox(page);
+      const input = page.getByRole("region", {
+        name: "Bridge input",
+        exact: true,
+      });
+      await expectSandboxStory(input, "Public reading theme story.");
+      await input
+        .frameLocator("iframe")
+        .getByRole("button", { name: "Fill viewport", exact: true })
+        .click();
+      await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      // Entering stage moves the composer into StageView and mounts a new page.
+      await expectSandboxStory(input, "Public reading theme story.");
+      await input
+        .frameLocator("iframe")
+        .getByRole("button", { name: "Fill viewport", exact: true })
+        .click();
+      await expect(
+        page
+          .getByTestId("stage-dialog")
+          .locator('[data-covel-theme-part="dialogue"]'),
+      ).toHaveCSS("color", "rgb(245, 234, 210)");
+      await page.getByTestId("stage-immersive-toggle").click();
+      await expectSandboxStory(input, "Public reading theme story.");
+      await hit(back);
+      const reset = page.getByRole("button", {
+        name: "使用默认外观",
+        exact: true,
+      });
+      await hit(reset);
+      await reset.click();
+      await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
+        0,
+      );
+      await expect(input).toBeVisible();
+      await hit(back);
+      await back.click();
+      await expect(input).toHaveCount(0);
+    } finally {
+      await close(page, host);
+    }
+  });
+
 test("malicious uploaded styles are diagnosed atomically while an accepted pack keeps working", async ({
   page,
 }) => {
@@ -685,5 +948,236 @@ test("appearance changes make no action requests during a running turn and disco
   } finally {
     release();
     await close(page, host);
+  }
+});
+
+test("theme toggles preserve streamed public stories and an explicit failed-operation retry without leaking private port data", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const fixture = await startThemeOrchestrationHost();
+  const { host } = fixture;
+  try {
+    expect((await upload(host)).status).toBe(201);
+    await host.restart();
+    await enable(host);
+    const timestamp = new Date().toISOString();
+    await host.store.setPluginData({
+      id: crypto.randomUUID(),
+      sessionId: host.sessionId,
+      pluginId: "theme-story-probe",
+      namespace: "_hidden.private",
+      key: "secret",
+      value: { text: themeSecrets[0] },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await observeSandboxPort(page);
+    await connect(page, host);
+    await visit(page, host.sessionId);
+    await select(page);
+    const controls = page.getByTestId("sandbox-surface-controls");
+    await controls
+      .getByRole("combobox", { name: "输入框", exact: true })
+      .selectOption("plugin:sandbox-surface-probe:input");
+    await allowSandbox(page);
+    const input = page.getByRole("region", {
+      name: "Bridge input",
+      exact: true,
+    });
+    await expect(input.locator("[data-page-status]")).toHaveAttribute(
+      "data-page-status",
+      "ready",
+    );
+    const frame = page
+      .frames()
+      .find((frame) =>
+        frame.url().includes("/plugin-assets/sandbox-surface-probe/"),
+      );
+    expect(frame).toBeDefined();
+    const sandbox = input.frameLocator("iframe");
+    const actions: unknown[] = [];
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method()))
+        writes.push(new URL(request.url()).pathname);
+      if (new URL(request.url()).pathname === "/api/actions")
+        actions.push(request.postDataJSON());
+    });
+    const reset = page
+      .getByTestId("session-recovery-controls")
+      .getByRole("button", { name: "使用默认外观", exact: true });
+    for (let turn = 0; turn < 2; turn++) {
+      if (turn === 1) fixture.allowChange();
+      await sandbox
+        .getByLabel("Player action")
+        .fill(
+          turn === 0
+            ? "Tell the public story and record the change"
+            : "Try the refused change again",
+        );
+      await sandbox
+        .getByRole("button", { name: "Submit action", exact: true })
+        .click();
+      await expect(sandbox.locator("#story")).toContainText(
+        "Public streaming ",
+      );
+      await expect
+        .poll(() =>
+          frame!.evaluate(() => {
+            const bridge = window as unknown as {
+              covel: { getState(): { session: unknown } };
+            };
+            return bridge.covel.getState().session;
+          }),
+        )
+        .toMatchObject({
+          executing: true,
+          turn,
+          streaming: { text: "Public streaming " },
+        });
+      // A real second delta follows the full-state baseline on the same port.
+      const envelopes = (await portMessages(frame!)).length;
+      fixture.nextDelta(turn);
+      await expect
+        .poll(async () =>
+          (await portMessages(frame!))
+            .slice(envelopes)
+            .some(
+              (message) =>
+                message.type === "stream" &&
+                message.append?.includes("theme story."),
+            ),
+        )
+        .toBe(true);
+      await expect(sandbox.locator("#story")).toContainText(
+        streamingThemeStory,
+      );
+      const stop = controls.getByRole("button", { name: "停止", exact: true });
+      await hit(stop);
+      const before = await controlStyle(stop);
+      const writesBefore = [...writes];
+      await hit(reset);
+      await reset.click();
+      await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
+        0,
+      );
+      await expect
+        .poll(async () => {
+          const theme = (await portMessages(frame!))
+            .filter((message) => message.type === "state")
+            .at(-1)?.value?.theme;
+          return theme !== undefined && !theme.id.startsWith("plugin:");
+        })
+        .toBe(true);
+      await select(page);
+      await expect
+        .poll(
+          async () =>
+            (await portMessages(frame!))
+              .filter((message) => message.type === "state")
+              .at(-1)?.value?.theme?.tokens.background,
+        )
+        .toBe("#24201a");
+      await hit(stop);
+      expect(await controlStyle(stop)).toEqual(before);
+      expect(writes).toEqual(writesBefore);
+      expect(actions).toHaveLength(turn + 1);
+      await assertPrivateThemeDataAbsent(page, host, frame!);
+      fixture.release(turn);
+      await expect
+        .poll(async () =>
+          (await portMessages(frame!)).some(
+            (message) =>
+              message.value?.session?.executing === false &&
+              message.value.session.turn === turn + 1,
+          ),
+        )
+        .toBe(true);
+      const story = page
+        .locator('[data-covel-theme-part="story"]')
+        .filter({ hasText: streamingThemeStory });
+      await expect(story.last()).toHaveCSS("color", "rgb(245, 234, 210)");
+      expect(
+        (await host.store.getSession(host.sessionId))?.completedPlayerTurns,
+      ).toBe(turn + 1);
+      const values = await host.store.queryPluginData({
+        sessionId: host.sessionId,
+        pluginId: "theme-story-probe",
+        namespace: "values",
+      });
+      if (turn === 0) {
+        expect(values).toEqual([]);
+        const notice = page.getByText("本回合有 1 个操作没有生效。", {
+          exact: true,
+        });
+        await expect(notice).toBeVisible();
+        expect(
+          await notice.evaluate((element) =>
+            element.closest("[data-covel-theme-part]"),
+          ),
+        ).toBeNull();
+        await reset.click();
+        await select(page);
+        expect(actions).toHaveLength(1);
+      } else
+        expect(values).toContainEqual(
+          expect.objectContaining({ key: "change", value: true }),
+        );
+      await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(
+        0,
+      );
+      await expect(
+        controls.getByRole("button", { name: "停止", exact: true }),
+      ).toHaveCount(0);
+      await assertPrivateThemeDataAbsent(page, host, frame!);
+    }
+    expect(fixture.calls).toEqual([
+      "concealed",
+      "delegate",
+      "actor",
+      "change",
+      "story",
+      "concealed",
+      "delegate",
+      "actor",
+      "change",
+      "story",
+    ]);
+    expect(actions).toEqual([
+      expect.objectContaining({
+        type: "submit_actions",
+        payload: expect.objectContaining({
+          actions: [
+            expect.objectContaining({
+              text: "Tell the public story and record the change",
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        type: "submit_actions",
+        payload: expect.objectContaining({
+          actions: [
+            expect.objectContaining({ text: "Try the refused change again" }),
+          ],
+        }),
+      }),
+    ]);
+    expect(
+      (
+        await host.store.queryTraceEvents(host.sessionId, {
+          types: ["operation.failed"],
+        })
+      ).length,
+    ).toBe(1);
+  } finally {
+    fixture.nextDelta(0);
+    fixture.nextDelta(1);
+    fixture.release(0);
+    fixture.release(1);
+    await page.goto("about:blank");
+    await page.unrouteAll({ behavior: "wait" });
+    await fixture.close();
   }
 });
