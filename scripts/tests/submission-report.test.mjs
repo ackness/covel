@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { submissionReport } from "../lib/submission-report.mjs";
+import { concealTracePayload } from "../../packages/shared/src/utils/concealed-runtime.ts";
 
 const step = (runId, n, reason, extra = {}) => ({
   type: "step.completed",
@@ -166,6 +167,90 @@ test("includes failed billed calls and reports unknown usage and latency sample 
     p50: 20,
     p95: 40,
   });
+});
+
+test("includes successful function gateway calls in usage, cache and duration totals", () => {
+  const result = report([
+    { type: "llm.calling", payload: {} },
+    { type: "gateway.calling", payload: {} },
+    { type: "gateway.calling", payload: {} },
+    {
+      type: "llm.responded",
+      payload: {
+        durationMs: 10,
+        usage: { inputTokens: 7, outputTokens: 3 },
+      },
+    },
+    {
+      type: "gateway.responded",
+      payload: {
+        text: "PRIVATE gateway result",
+        durationMs: 20,
+        usage: {
+          inputTokens: 11,
+          outputTokens: 5,
+          cachedInputTokens: 4,
+          cacheWriteInputTokens: 2,
+        },
+      },
+    },
+    {
+      type: "gateway.failed",
+      payload: { durationMs: 30, usage: { inputTokens: 2, outputTokens: 1 } },
+    },
+  ]);
+  assert.equal(result.model.callingEvents, 3);
+  assert.deepEqual(result.model.usage, {
+    calls: 3,
+    errorCalls: 1,
+    missingUsage: 0,
+    inputTokens: 20,
+    outputTokens: 9,
+    cachedInputTokens: 4,
+    cacheWriteInputTokens: 2,
+    cacheReadSamples: 1,
+    cacheWriteSamples: 1,
+  });
+  assert.deepEqual(result.model.responseDurationMs, {
+    samples: 3,
+    p50: 20,
+    p95: 30,
+  });
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE/);
+});
+
+test("counts concealed correction and first-try success after the real privacy projection", () => {
+  const events = [
+    step("corrected", 1, "invalid-output"),
+    step("corrected", 2, undefined, { stopReason: "completed" }),
+    // Successful finalizers need not have stopReason=completed.
+    step("first", 1, undefined, { finalizer: true, stopReason: "max-steps" }),
+  ].map((event) => ({
+    ...event,
+    payload: concealTracePayload({
+      ...event.payload,
+      toolCalls: [
+        ...event.payload.toolCalls,
+        {
+          name: "PRIVATE business tool",
+          success: true,
+          arguments: "PRIVATE args",
+          output: "PRIVATE output",
+        },
+      ],
+      text: "PRIVATE draft",
+    }),
+  }));
+  for (const event of events) assert.equal(event.payload.toolCalls, undefined);
+  const result = report(events);
+  assert.equal(result.gateResponses.attempts, 3);
+  assert.equal(result.gateResponses.rejected, 1);
+  assert.equal(result.gateResponses.invalidRate, 1 / 3);
+  assert.equal(result.gateResponses.firstAttempts, 2);
+  assert.equal(result.gateResponses.firstInvalidRate, 0.5);
+  assert.equal(result.loops.accepted, 2);
+  assert.deepEqual(result.loops.resubmissions, { 0: 1, 1: 1, 2: 0, "3+": 0 });
+  assert.doesNotMatch(JSON.stringify({ events, result }), /PRIVATE/);
 });
 
 test("does not copy arbitrary strings, keys, origins, concealed content or identifiers into output", () => {

@@ -338,3 +338,97 @@ test("committed segment reveal supports keyboard Show all, reduced motion and in
     await host.close();
   }
 });
+
+test("sticky chat follows readable tall segments before returning to the full bottom", async ({
+  page,
+}) => {
+  let submission = 0;
+  const host = await startStageRenderHost({
+    llmAdapter: {
+      async generate() {
+        const index = ++submission;
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: `tall-${index}`,
+              name: "submit-output",
+              arguments: JSON.stringify({
+                segments: [0, 1, 2].map((unit) => ({
+                  kind: "dialogue",
+                  speaker: "Unknown visitor",
+                  text: `Public dialogue ${index}. Segment ${unit + 1}. ${"A complete readable sentence. ".repeat(60)}`,
+                })),
+                cues: { scene: "Library", present: ["Mira"] },
+                yield: "user",
+              }),
+            },
+          ],
+          finishReason: "tool_calls",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    },
+  });
+  try {
+    await openSession(page, host);
+    const viewport = page
+      .getByTestId("chat-scroll-viewport")
+      .filter({ has: page.getByTestId("story-segments") });
+    await viewport.evaluate((element) => {
+      element.style.flex = "none";
+      element.style.height = "240px";
+      element.style.maxHeight = "240px";
+      element.scrollTop = element.scrollHeight;
+    });
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+    await composerInput(page).fill("Continue with tall paragraphs");
+    await composerInput(page).press("Enter");
+    const story = page.getByTestId("story-segments").last();
+    await expect(story).toContainText("Public dialogue 2.");
+    await expect(story.locator('[data-reveal-hidden="true"]')).toHaveCount(2);
+    const units = story.locator("[data-reveal-unit]");
+    await expect
+      .poll(async () => {
+        const first = await units.first().boundingBox();
+        const box = await viewport.boundingBox();
+        return (
+          !!first &&
+          !!box &&
+          first.y < box.y + box.height &&
+          first.y + first.height > box.y
+        );
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        viewport.evaluate(
+          (element) =>
+            element.scrollHeight - element.scrollTop - element.clientHeight,
+        ),
+      )
+      .toBeGreaterThan(240);
+    // The semantic tail is already present while its display is delayed.
+    await expect(story).toContainText("Segment 3.");
+    await page.clock.runFor(120);
+    await expect(story.locator('[data-reveal-hidden="true"]')).toHaveCount(1);
+    const showAll = page.getByRole("button", { name: "显示全部", exact: true });
+    await showAll.focus();
+    await showAll.press("Enter");
+    await expect(story.locator('[data-reveal-hidden="true"]')).toHaveCount(0);
+    await expect
+      .poll(() =>
+        viewport.evaluate(
+          (element) =>
+            element.scrollHeight - element.scrollTop - element.clientHeight,
+        ),
+      )
+      .toBeLessThanOrEqual(2);
+    await expect(composerInput(page)).toBeEnabled();
+  } finally {
+    await page.goto("about:blank");
+    await page.unrouteAll({ behavior: "wait" });
+    await host.close();
+  }
+});

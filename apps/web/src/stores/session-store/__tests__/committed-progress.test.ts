@@ -64,6 +64,36 @@ function harness() {
 }
 
 describe("committed story progress", () => {
+  it("clears an observer's revision and tool state after correction and termination", () => {
+    const h = harness();
+    const receive = (type: string, payload: Record<string, unknown> = {}) => {
+      const event = h.event(type, payload);
+      h.observe({ ...event, id: "observer", topic: "runtime" });
+    };
+    receive("runtime.started");
+    receive("tool.calling", { toolName: "submit-output" });
+    expect(h.stateRef.current.executionSteps[0]?.status).toBe("tool");
+    receive("step.completed", {
+      step: 1,
+      notes: [
+        { kind: "output-rejected", reason: "invalid-output", attempt: 1 },
+      ],
+    });
+    expect(h.stateRef.current.executionSteps[0]?.revising).toBe(true);
+    receive("step.started", { step: 2 });
+    receive("step.completed", { step: 2, notes: [] });
+    expect(h.stateRef.current.executionSteps[0]?.revising).toBe(false);
+    receive("runtime.completed", { status: "success" });
+    receive("tool.calling", { toolName: "late" });
+    expect(h.stateRef.current.executionSteps[0]).toMatchObject({
+      status: "completed",
+      revising: false,
+    });
+    expect(h.stateRef.current.executionSteps[0]?.toolName).toBeUndefined();
+    expect(h.stateRef.current.messages.map((message) => message.id)).toEqual([
+      "previous",
+    ]);
+  });
   it("shows safe revision across the next attempt without storing candidate or review text", () => {
     const h = harness();
     h.handle(h.event("runtime.started"));

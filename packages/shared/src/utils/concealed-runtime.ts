@@ -65,6 +65,22 @@ export function concealTracePayload(
   const kept: Record<string, unknown> = { concealed: true };
   for (const [key, value] of Object.entries(payload))
     if (CONTENT_FREE_TRACE_FIELDS.has(key)) kept[key] = value;
+  // A finalizer can accept output while retaining a budget stop reason.
+  // Preserve the submission disposition before dropping all tool names.
+  if (
+    payload.submissionAccepted === true ||
+    (Array.isArray(payload.toolCalls) &&
+      payload.toolCalls.some(
+        (call: unknown) =>
+          call !== null &&
+          typeof call === "object" &&
+          "name" in call &&
+          call.name === "submit-output" &&
+          "success" in call &&
+          call.success === true,
+      ))
+  )
+    kept.submissionAccepted = true;
   return kept;
 }
 

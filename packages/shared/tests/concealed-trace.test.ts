@@ -54,3 +54,33 @@ it("preserves rejection identity and safe progress without exposing content", ()
     notes: [{ kind: "output-rejected", reason: "review-rejected", attempt: 1 }],
   });
 });
+
+it("keeps only the accepted submission disposition and remains idempotent", () => {
+  const concealed = concealTracePayload({
+    runId: "run",
+    step: 2,
+    finalizer: true,
+    stopReason: "max-steps",
+    toolCalls: [
+      { name: "private-business-tool", success: true, output: "private" },
+      { name: "submit-output", success: true, arguments: "private candidate" },
+    ],
+  });
+  expect(concealed).toEqual({
+    concealed: true,
+    runId: "run",
+    step: 2,
+    finalizer: true,
+    stopReason: "max-steps",
+    submissionAccepted: true,
+  });
+  expect(concealTracePayload(concealed)).toEqual(concealed);
+  expect(
+    concealTracePayload({
+      toolCalls: [{ name: "submit-output", success: false }],
+    }),
+  ).toEqual({ concealed: true });
+  expect(
+    concealTracePayload({ submissionAccepted: "private candidate" }),
+  ).toEqual({ concealed: true });
+});

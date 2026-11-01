@@ -17,6 +17,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const DEFAULT_THRESHOLD_PX = 80;
 
+/** Follow readable content while later semantic units still reserve layout. */
+function followTop(viewport: HTMLElement): number {
+  const group = Array.from(
+    viewport.querySelectorAll('[data-reveal-active="true"]'),
+  ).at(-1);
+  const hidden = group?.querySelector('[data-reveal-hidden="true"]');
+  const anchor = hidden?.previousElementSibling;
+  if (!anchor)
+    return Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  const rect = anchor.getBoundingClientRect();
+  const viewportTop = viewport.getBoundingClientRect().top + viewport.clientTop;
+  // A tall unit starts at its first readable line; a short one follows its end.
+  return Math.max(
+    0,
+    viewport.scrollTop +
+      Math.min(rect.top, rect.bottom - viewport.clientHeight) -
+      viewportTop,
+  );
+}
+
 export interface AutoScrollResult {
   /** Attach to the scrollable viewport element. */
   scrollRef: (node: HTMLElement | null) => void;
@@ -47,18 +67,19 @@ export function useAutoScroll(
   const scrollViewportToBottom = useCallback((behavior: ScrollBehavior) => {
     const el = viewportRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
+    el.scrollTo({ top: followTop(el), behavior });
   }, []);
 
   const computeIsAtBottom = useCallback(
     (el: HTMLElement): boolean => {
-      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const distance = followTop(el) - el.scrollTop;
       return distance <= thresholdPx;
     },
     [thresholdPx],
   );
 
   const scrollHandlerRef = useRef<(() => void) | null>(null);
+  const revealObserverRef = useRef<MutationObserver | null>(null);
   const scrollRef = useCallback(
     (node: HTMLElement | null) => {
       const prev = viewportRef.current;
@@ -67,6 +88,8 @@ export function useAutoScroll(
       if (prev && scrollHandlerRef.current) {
         prev.removeEventListener("scroll", scrollHandlerRef.current);
       }
+      revealObserverRef.current?.disconnect();
+      revealObserverRef.current = null;
       viewportRef.current = node;
       scrollHandlerRef.current = null;
       if (!node) return;
@@ -77,8 +100,18 @@ export function useAutoScroll(
       };
       scrollHandlerRef.current = handler;
       node.addEventListener("scroll", handler);
+      const observer = new MutationObserver(() => {
+        if (isPinnedRef.current) scrollViewportToBottom("auto");
+      });
+      observer.observe(node, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["data-reveal-active", "data-reveal-hidden"],
+      });
+      revealObserverRef.current = observer;
     },
-    [computeIsAtBottom],
+    [computeIsAtBottom, scrollViewportToBottom],
   );
 
   const jumpToBottom = useCallback(() => {

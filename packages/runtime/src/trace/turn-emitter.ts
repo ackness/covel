@@ -3,7 +3,7 @@
  *
  * Each emit() call does two things:
  *   1. Persists a row into trace_events (via store.addTraceEvent).
- *   2. Broadcasts an eventBus event so the actions SSE stream picks it up.
+ *   2. Broadcasts diagnostics plus safe, replayable runtime progress on eventBus.
  *
  * Created once per turn in actions.ts (alongside createTraceRecorder) and
  * threaded down through ToolCallContext / RuntimeContextView / HookContext /
@@ -15,6 +15,8 @@
 import type { EventBus } from "@covel/events";
 import {
   concealTracePayload,
+  isRuntimeProgressType,
+  runtimeProgressPayload,
   type CovelEventType,
   type RuntimeRetryScope,
 } from "@covel/shared";
@@ -133,6 +135,23 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
               ...enriched,
             },
           });
+          // Trace events are deliberately absent from subscription replay.
+          // Publish only safe activity on the public, replayable runtime topic.
+          if (isRuntimeProgressType(type))
+            opts.eventBus.emit({
+              id: crypto.randomUUID(),
+              type: "event",
+              topic: "runtime",
+              sessionId: opts.sessionId,
+              timestamp: createdAt,
+              payload: {
+                _subTopic: "runtime",
+                _subType: type,
+                sessionId: opts.sessionId,
+                turnId: opts.turnId,
+                ...runtimeProgressPayload(enriched),
+              },
+            });
         } catch {
           console.warn("[turn-emitter] broadcast failed", {
             type,

@@ -713,6 +713,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 - `/api/events/stream` 接受的 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 定义：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。`subscribe.ts` 的 `VALID_TOPICS` 从它生成。
 - `trace`（来自 TurnEmitter）和 `hooks`（来自 hook 管线）是运行时内部的观测 topic。`job` 承载 `job-status.updated`。
+- TurnEmitter 另在公开的 `runtime` topic 发布 `step.started`、`step.completed`、`llm.calling` 和 `tool.calling/completed/failed` 的安全副本。副本只带身份、状态、计数、时长及用量；步骤 note 只保留固定拒绝类别与尝试次数，不含候选、参数或审查原文。这些副本进入普通重连回放；完整 trace 不进入回放缓存。网页端无需订阅 `trace` 就能显示工具活动和“正在修改回复”。action 流仅转发一次进度。
 - `apps/web/src/services/subscription.ts` 默认订阅 `runtime / state / game / plugin / session / system`，不含 `store`。session store 为了恢复后台任务，另外明确订阅 `job`。
 - 客户端按 `event.topic` 分发。新增 topic 或事件时，**必须同时更新这个文件**。
 - `/api/actions` 的回合内事件（`narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）由 `sendAction` 的回调处理，不经过 `subscription.ts`。
@@ -1340,7 +1341,7 @@ error.occurred        → executionError
 
 `tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。没有执行的调用发出 `tool.calling` / `tool.failed` 一对事件，不发 `tool.completed`；两者都带 `skipped: true`、`skipReason`（`hook-aborted`、`suspended`、`terminated` 或 `aborted`）、`durationMs: 0` 和 `approvalStatus: "auto-allowed"`。它们只进入对话和 trace，不进入已执行工具记录、失败计数或 `step.completed.toolCalls`；concealed runtime 仍会剥除 `code`、`error`、`skipped` 和 `skipReason`。
 
-游戏 action 流和普通状态订阅会移除 LLM/tool/hook/子调用/function/gateway 进度中的提示词、回复、参数、结果及审查细节。完整诊断仍保存在 trace 和显式 `topics=trace` 订阅中，遵守 concealed 与委托隐私规则，不能投影为玩家故事。`message.completed` 记录接受时刻；提交后的 `narrative.completed` 记录显示时刻。
+游戏 action 流和普通状态订阅会移除 step/LLM/tool/hook/子调用/function/gateway 进度中的提示词、回复、参数、结果及审查细节。concealed 步骤移除 `toolCalls`，只为成功提交保留 `submissionAccepted: true`；它表示接受输出，不代表提交成功，收尾步骤也保留此标记。完整诊断仍保存在 trace 和显式 `topics=trace` 订阅中，遵守 concealed 与委托隐私规则，不能投影为玩家故事。`message.completed` 记录接受时刻；提交后的 `narrative.completed` 记录显示时刻。
 
 **`command.*`**
 
