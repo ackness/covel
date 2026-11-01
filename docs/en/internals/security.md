@@ -468,6 +468,8 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 
 A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry>` into one `sandbox="allow-scripts"` iframe. It has no `srcdoc` or outer host. The [page contract](../reference/ui-panels.md#multi-file-pages) defines its CSP, file types and limits.
 
+`/plugin-assets` and its child paths serve only published assets. Requests that match no asset route return `404 { "error": "File not found" }` with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. Even when encoded dot segments normalize away the plugin ID or digest, these paths never reach public static files or the app's index fallback.
+
 <!-- prettier-ignore -->
 | Threat | Boundary |
 | --- | --- |
