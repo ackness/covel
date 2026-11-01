@@ -63,6 +63,8 @@ store/database changes and `pnpm e2e` plus `pnpm e2e:extensions` for UI flows. D
 `pnpm check` + `pnpm test:docs:packages`. `pnpm check:push` covers the static gate
 and changed packages with dependents plus E2E collection in a clean checkout;
 full browser, smoke and extension execution belongs to full-scope CI.
+Documentation-only CI skips source checks but retains documentation verification
+and Site; required aggregates always run, using job-level path selection.
 
 In source development, changing bundled plugin manifests, handlers or locales
 restarts the server.

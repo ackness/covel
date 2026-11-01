@@ -338,10 +338,13 @@ test("static checks and source suites run independently and both feed Verificati
   const find = (job, name) =>
     jobs[job].steps.find((step) => step.name === name);
   assert.equal(find("verify", "Check").run, "pnpm check");
-  assert.equal(find("verify", "Check").if, undefined);
+  assert.equal(
+    find("verify", "Check").if,
+    "${{ needs.scope.outputs.scope != 'docs' || inputs.release }}",
+  );
   assert.equal(
     find("verify", "Test documentation examples").run,
-    "pnpm test:docs:packages",
+    "pnpm check:schemas && pnpm check:changelog && pnpm test:docs",
   );
   assert.equal(
     find("verify", "Release preflight").run,
@@ -369,6 +372,11 @@ test("static checks and source suites run independently and both feed Verificati
         };
         assert.equal(cacheCondition(jobs.verify.if, context), !cancelled);
         const full = scope !== "docs" || release;
+        assert.equal(cacheCondition(find("verify", "Check").if, context), full);
+        assert.equal(
+          cacheCondition(find("verify", "Install actionlint").if, context),
+          full,
+        );
         assert.equal(
           cacheCondition(jobs.tests.if, context),
           !cancelled && full,
@@ -453,6 +461,7 @@ test("shared caches restore once and save only authorized successful exact misse
         steps: ci.jobs[job].steps,
         id: "turbo-cache",
         path: ".turbo/cache",
+        skipDocs: job === "verify",
         key: `${prefix}-\${{ runner.os }}-\${{ hashFiles('pnpm-lock.yaml') }}-\${{ inputs.commit || github.sha }}`,
         prefixes: [
           `${prefix}-\${{ runner.os }}-\${{ hashFiles('pnpm-lock.yaml') }}-`,
@@ -471,7 +480,7 @@ test("shared caches restore once and save only authorized successful exact misse
       steps: site.jobs.build.steps,
       id: "site-cache",
       path: ".turbo/cache",
-      key: "turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}",
+      key: "turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ steps.site-key.outputs.hash }}",
       prefixes: [
         "turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-",
       ],

@@ -29,16 +29,16 @@ on:
 permissions:
   contents: read
 
-# A build-only main run must not replace a pending deployment. PRs still share
-# a group, as do eligible deployments, matching the previous Site trigger.
+# Every non-PR invocation has its own group, including deployments: GitHub
+# replaces pending members of a group even with cancel-in-progress: false.
 concurrency:
-  group: site-${{ (github.event_name == 'pull_request' || inputs.deploy) && github.ref || github.run_id }}
+  group: site-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Keep the content-addressed build cache bounded independently of other CI jobs.
 env:
   TURBO_CACHE_MAX_AGE: 2d
-  TURBO_CACHE_MAX_SIZE: 500MB
+  TURBO_CACHE_MAX_SIZE: 128MB
 
 jobs:
   build:
@@ -69,17 +69,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # GitHub keeps PR caches scoped to the PR ref; deployments cannot restore
-      # them. Turbo validates task inputs, including SITE_BASE, after restore.
-      - name: Restore site builds
-        id: site-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}
-          restore-keys: |
-            turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-
-
       # Both builds read SITE_BASE, the path Pages serves the site under: `/covel/` on
       # ackness.github.io, `/` once a custom domain is set. A pull request
       # cannot read the Pages settings, so it builds for `/covel/`.
@@ -87,6 +76,33 @@ jobs:
         id: pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      # Use the task hashes, not a new snapshot for every unrelated commit.
+      - name: Read site build hashes
+        id: site-key
+        env:
+          SITE_BASE: ${{ github.event_name == 'pull_request' && '/covel/' || format('{0}/', steps.pages.outputs.base_path) }}
+        run: |
+          pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --dry=json > "$RUNNER_TEMP/site-build.json"
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from "node:fs";
+          import { createHash } from "node:crypto";
+          const { tasks } = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/site-build.json`, "utf8"));
+          if (!tasks.length) throw new Error("No site build tasks selected");
+          const hashes = tasks.map(task => `${task.taskId}:${task.hash}`).sort();
+          console.log(`hash=${createHash("sha256").update(hashes.join("\n")).digest("hex")}`);
+          NODE
+
+      # GitHub keeps PR caches scoped to the PR ref; deployments cannot restore
+      # them. Turbo validates task inputs, including SITE_BASE, after restore.
+      - name: Restore site builds
+        id: site-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ steps.site-key.outputs.hash }}
+          restore-keys: |
+            turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-
 
       - name: Build
         env:

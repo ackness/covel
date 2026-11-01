@@ -29,8 +29,10 @@
      `pnpm check:push` adds affected suites for source changes. Full requests/main/tags override docs-only;
      affected results are reused only for the same commit and comparison base; cache eviction must use
      the same coverage rule and retain unrelated bases/docs results. CI owns all verification:
-     docs-only PR/main runs documentation tests after check; every full scope requires all suites.
-     Full browser CI uses four isolated shards, both default projects, one worker and at most two
+     docs-only PR/main skips source checks, retaining schema/changelog checks, test:docs and Site;
+     every full scope requires all suites. Server has two isolated shards and runtime coverage runs once independently.
+     Full browser CI balances complete files across four isolated shards (dev tests weighted 3x),
+     both default projects, one worker and at most two
      allowed CPUs; smoke and all extensions also remain required. Daily/manual runs always select
      full scope and add three sandbox approval/region repetitions with zero retries and separate outputs.
      Local push checks only collect E2E; they never execute browsers or install Chromium.
@@ -39,7 +41,8 @@
      Browser CI does not establish real-model or packaged Windows/macOS coverage.
      Non-release CI also requires one Site/docs build, including on docs-only changes;
      the other build excludes those targets. Site uses parallel Turbo tasks with content-addressed
-     outputs; cache changes need hit/miss and input-invalidation evidence (docs, SITE_BASE, config).
+     outputs; the Actions key uses build task hashes and the Site cache directory is capped at 128MB.
+     E2E build:e2e reuses validated content across smoke/extensions/stress. Cache changes need hit/miss and input-invalidation evidence (docs, SITE_BASE, config).
      PR cache isolation must remain intact. Release/explicit-commit runs only restore caches
      and disable setup-node's pnpm cache, including explicit-commit Site builds. Explicit cache saves
      require success, an authorized source, an exact-key miss, and the restore step's original key.
@@ -53,14 +56,16 @@
      纯文档另跑 `pnpm test:docs:packages`；`pnpm check:push` 为源码改动加上受影响的套件。
      显式全量检查及 main/tag 推送优先于纯文档短路径；受影响测试结果只在提交和比较基准相同时复用。
      缓存淘汰使用同一覆盖规则，保留不同基线及互不覆盖的文档结果。
-     CI 统一负责验证：纯文档 PR/main 跑静态与文档检查，每个完整范围必须执行全部套件。
-     完整浏览器 CI 使用四个独立 shard、两个默认 project、一个 worker 和最多两个允许的 CPU；
+     CI 统一负责验证：纯文档 PR/main 跳过源码检查，保留 schema/变更日志检查、test:docs 与 Site；
+     每个完整范围必须执行全部套件。Server 两片独立运行，runtime 覆盖率另跑一次。
+     完整浏览器 CI 按完整文件权重平衡四个独立 shard（开发 project 三倍），两个默认 project、一个 worker、最多两个允许的 CPU；
      smoke 和全部扩展验收仍是必需项。每日和手动运行始终全量，另加三次沙箱审批/区域重复，
      零重试、独立输出。本地推送检查只收集 E2E，不执行浏览器或安装 Chromium。
      记录分片覆盖、CPU 限制、耗时和重试；完整 shard/browser/合并门禁上限为 40/25/65 分钟，
      失败 trace、截图及 HTML 产物保留七天。浏览器 CI 不能证明真实模型或 Windows/macOS 安装包已验证。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
-     Site 用 Turbo 并行构建并按内容复用产物；缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
+     Site 用 Turbo 并行构建，Actions 键使用任务 hash、目录上限 128MB；E2E 的 build:e2e 在 smoke/扩展/压力间复用已校验内容；
+     缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
      PR 缓存隔离保持不变。发布和显式 commit 只恢复缓存，并关闭 setup-node 的 pnpm 缓存，
      包括显式 commit 的 Site 构建。显式保存须满足任务成功、来源获准、精确键未命中，并使用恢复步骤的原始键。
      控制脚本的稀疏检出保留所需导入及比较历史。桌面使用随包 Electron RunAsNode；核对目标/实际版本、fuse 和 ASAR 绑定。

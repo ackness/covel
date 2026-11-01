@@ -230,6 +230,27 @@ test("acceptance survives smoke failures and stress repeats only nightly or manu
   }
 });
 
+test("server shards and runtime coverage have independent runners and all block Verification", () => {
+  assert.deepEqual(ci.jobs.server.strategy.matrix.shard, [1, 2]);
+  assert.equal(ci.jobs.server.strategy["fail-fast"], false);
+  assert.match(
+    stepWith(ci.jobs.server, "--shard=").run,
+    /--shard=\$\{\{ matrix.shard \}\}\/2$/,
+  );
+  assert.equal(
+    stepWith(ci.jobs.runtime, "pnpm test:coverage:runtime").run,
+    "pnpm test:coverage:runtime",
+  );
+  for (const id of ["server", "runtime"]) {
+    assert.equal(ci.jobs[id].needs, "scope");
+    assert.ok(ci.jobs.result.needs.includes(id));
+  }
+  assert.equal(
+    stepWith(ci.jobs.server, "pnpm test:coverage:runtime"),
+    undefined,
+  );
+});
+
 test("failure uploads retain each lane and shard with unique attempt names", () => {
   for (const name of ["e2e", "browser"]) {
     const job = ci.jobs[name];

@@ -200,13 +200,13 @@ pnpm e2e:replay                           # 改之后
 
 ## 环境变量
 
-| 变量                    | 默认值                                                                           | 说明                                                                 |
-| ----------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `E2E_BASE_URL`          | `chromium` 用 `http://127.0.0.1:5183`，`chromium-dev` 用 `http://127.0.0.1:5181` | Playwright 页面导航地址；设了值表示使用你自己管理的外部环境          |
-| `E2E_MODEL_SLOT`        | 不设（按配置的模型路由）                                                         | `pnpm e2e:verify` 让故事类 runtime 改用的 slot，等同于 `--slot`      |
-| `LIVE_LLM_ENABLED`      | `false`                                                                          | 显式启用会访问真实模型服务的 Playwright/Vitest 流程                  |
-| `COVEL_STORY_BASE_URL`  | 没有任何代码读取                                                                 | 不会覆盖 slot；代理地址直接写进 `llm.toml`                           |
-| `COVEL_PLUGIN_BASE_URL` | 没有任何代码读取                                                                 | 不会覆盖 slot；代理地址直接写进 `llm.toml`                           |
+| 变量                    | 默认值                                                                           | 说明                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `E2E_BASE_URL`          | `chromium` 用 `http://127.0.0.1:5183`，`chromium-dev` 用 `http://127.0.0.1:5181` | Playwright 页面导航地址；设了值表示使用你自己管理的外部环境                                |
+| `E2E_MODEL_SLOT`        | 不设（按配置的模型路由）                                                         | `pnpm e2e:verify` 让故事类 runtime 改用的 slot，等同于 `--slot`                            |
+| `LIVE_LLM_ENABLED`      | `false`                                                                          | 显式启用会访问真实模型服务的 Playwright/Vitest 流程                                        |
+| `COVEL_STORY_BASE_URL`  | 没有任何代码读取                                                                 | 不会覆盖 slot；代理地址直接写进 `llm.toml`                                                 |
+| `COVEL_PLUGIN_BASE_URL` | 没有任何代码读取                                                                 | 不会覆盖 slot；代理地址直接写进 `llm.toml`                                                 |
 | `CI`                    | `false`                                                                          | CI 完整套件重试 2 次、1 个 worker；扩展验收始终零重试、1 个 worker，两者均禁止 `test.only` |
 
 ## PostgreSQL 模式
@@ -239,9 +239,13 @@ pnpm docker:pg:down
 
 ### CI 执行与失败证据
 
-`ci.yml` 的每个完整范围都必须执行两个默认 project：非纯文档 PR、main 源码或混合推送、未知范围、显式 commit 和发布。纯文档 PR/main 保留静态、文档测试与 Site 短路径。每日 UTC 03:17 的 `schedule`（默认分支）和 `workflow_dispatch`（所选 ref，无命令或路径输入）始终全量；定时工作流合入默认分支后才能运行。两者只构建 Site，不发布 Pages，部署仍限 main 的 push。
+`ci.yml` 的每个完整范围都必须执行两个默认 project：非纯文档 PR、main 源码或混合推送、未知范围、显式 commit 和发布。纯文档 PR/main 只保留文档验证与 Site，跳过源码 CI。每日 UTC 03:17 的 `schedule`（默认分支）和 `workflow_dispatch`（所选 ref，无命令或路径输入）始终全量；定时工作流合入默认分支后才能运行。两者只构建 Site，不发布 Pages，部署仍限 main 的 push。
 
 `e2e` 的四个 shard 各有独立 runner、检出、安装、构建和临时用户目录，运行 `pnpm e2e --shard=<n>/4 --workers=1`，不限定 project 或 grep，且不会因另一 shard 失败而取消。`browser` 另行运行一次 smoke 和全部扩展验收，包括声明式笔记、可点击地图、社区舞台和沙箱区域；默认 e2e 不包含 `*.acceptance.ts`。准备成功且未取消时，smoke 失败仍尝试扩展；任一失败都会阻止 `Verification`，所有 shard 也都是必需的。`All checks pass` 要求汇总成功并保留其他检查的失败。
+
+分片由 `scripts/e2e-sharding.mjs` 使用 Playwright 的公开 `preprocess` / `skipSharding` / `exclude` API 分配。文件保持完整，serial suite 和文件级 hook 不拆开；按测试数估算权重，开发 project 依据最近 Actions 耗时取三倍权重，再按最长文件优先分到当前负载最小的 runner，避免慢的开发用例集中到最后一片。所有分片使用同一确定性顺序，不设置额外 skip、grep 或重试；用 `--list` 的完整 ID 并集确认无重复、无遗漏。
+
+生产测试包由 `@covel/web#build:e2e` 通过 Turbo 缓存到 `dist/web-e2e`。每次启动仍校验源码、Vite 配置、根环境文件和 `VITE_*` 输入，不能按目录存在跳过；smoke、扩展和压力验证在同一 runner 上复用相同内容。预览 API 端口只影响启动时代理，不进入 bundle 内容，3101/3102 可以复用；runner 之间仍隔离构建和临时用户目录。
 
 所有浏览器执行都用 `scripts/e2e-cpu-list.mjs` 读取 Linux `Cpus_allowed_list`，通过 `taskset -c` 使用前两个允许的逻辑 CPU，子服务和 Chromium 继承限制。CPU 编号不假设从零开始，只有一个时记录限制，无法解析时失败。普通扩展验收的私有包目录会被测试修改，因此始终一个 worker、零重试。
 
@@ -360,7 +364,7 @@ CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp
 | 端口已占用或页面打不开   | 默认的测试 Vite 是 `5181`，打包后的页面是 `5183`，API 是 `3101`。Vite 启用了 `strictPort`，不会悄悄换到别的端口。停掉占用端口的进程后重试。要用自己启动的页面，就设置 `E2E_BASE_URL`，并自己保证后端类型符合目标 spec。  |
 | 等待 API health 超时     | 默认运行检查 `http://127.0.0.1:3101/api/health`；外部环境检查它实际的服务端地址。PostgreSQL 流程先运行 `pnpm db:up` 和 `pnpm dev:pg`，再让 `E2E_BASE_URL` 指向对应的页面，并排除只支持 MemoryStore 的 spec。             |
 | 模型调用或角色创建失败   | 浏览器里的真实模型 spec 使用应用配置的 `story`、`plugin` 等用途。`pnpm e2e:verify` 也按配置路由，只有传了 `--slot` 或设了 `E2E_MODEL_SLOT` 才改用指定的 slot。分别确认需要的 slot 存在，并且 `.env.llm` 里有对应的 key。 |
-| 需要定位异步失败         | 失败时 Playwright 保留截图和首次失败 trace；完整套件的 video 仍在第一次重试时保留。用 `pnpm exec playwright show-report tests/e2e/report` 打开 HTML 报告。                                                                                 |
+| 需要定位异步失败         | 失败时 Playwright 保留截图和首次失败 trace；完整套件的 video 仍在第一次重试时保留。用 `pnpm exec playwright show-report tests/e2e/report` 打开 HTML 报告。                                                               |
 | 找不到插件验证脚本的输出 | 脚本默认写到 `debugs/e2e-logs/`。只想在终端里看时传 `--no-log`；想保留会话和快照时传 `--keep`。                                                                                                                          |
 
 ## 沙箱区域验收

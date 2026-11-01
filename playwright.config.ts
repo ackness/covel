@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 // Keep the default E2E stack isolated from `pnpm dev`: reusing a long-running
@@ -60,6 +61,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [
+    [fileURLToPath(new URL("./scripts/e2e-sharding.mjs", import.meta.url))],
     ["html", { outputFolder: "tests/e2e/report", open: "never" }],
     ["list"],
   ],

@@ -7,7 +7,15 @@ import { parse } from "yaml";
 import { checkRunsState, verificationFailures } from "../ci-results.mjs";
 
 const command = fileURLToPath(new URL("../ci-results.mjs", import.meta.url));
-const fullJobs = ["tests", "web", "server", "postgres", "browser", "e2e"];
+const fullJobs = [
+  "tests",
+  "web",
+  "server",
+  "runtime",
+  "postgres",
+  "browser",
+  "e2e",
+];
 
 function results(scope = "full") {
   return {
