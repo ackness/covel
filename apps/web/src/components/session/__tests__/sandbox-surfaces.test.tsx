@@ -11,7 +11,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
-import { viewEntry } from "./plugin-view-fixtures.js";
+import { sessionPlugin, viewEntry } from "./plugin-view-fixtures.js";
 import type { SessionRecord, UISpecsResponse } from "@/services/api.js";
 import { SessionStateContext } from "@/stores/session-store/context.js";
 import { initialState } from "@/stores/session-store/reducer.js";
@@ -52,8 +52,15 @@ vi.mock("@/components/ui/resizable.js", () => ({
   ResizablePanelGroup: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
-  ResizablePanel: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
+  ResizablePanel: ({
+    children,
+    id,
+    className,
+    style,
+  }: ComponentProps<"div">) => (
+    <div id={id} className={className} style={style}>
+      {children}
+    </div>
   ),
   ResizableHandle: () => null,
 }));
@@ -309,6 +316,57 @@ it("restores only a failed region and keeps it retired until an explicit refetch
   expect(screen.getByTestId("host-story")).toBeTruthy();
   expect(screen.getByRole("region", { name: "Input page" })).toBeTruthy();
 });
+it.each([false, true])(
+  "preserves a scrollable main viewport under stacked recovery notices at narrow width %s",
+  (narrow) => {
+    surfaces.narrow = narrow;
+    state = {
+      ...state,
+      sessionPlugins: [sessionPlugin],
+      executionRecovery: {
+        sessionId: session.id,
+        hydrating: false,
+        checking: false,
+        status: {
+          state: "interrupted",
+          turnId: "turn",
+          retry: { type: "retry_turn", payload: {} },
+        },
+      },
+    };
+    mount();
+    chooseMain();
+    chooseInput();
+    const draft = screen.getByRole("textbox", { name: "Draft Story page" });
+    fireEvent.change(draft, { target: { value: "Keep the main draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Fail Input page" }));
+
+    expect(screen.getByTestId("execution-recovery-notice")).toBeTruthy();
+    expect(screen.getByTestId("no-story-plugin")).toBeTruthy();
+    expect(
+      within(screen.getByTestId("sandbox-surface-controls")).getByRole("status")
+        .textContent,
+    ).toContain("Input page");
+    expect(screen.getByRole("textbox", { name: "Draft Story page" })).toBe(
+      draft,
+    );
+    expect((draft as HTMLTextAreaElement).value).toBe("Keep the main draft");
+
+    // jsdom cannot lay out flex boxes. Check the floor and scroll owner here;
+    // browser acceptance verifies their actual geometry at 360px.
+    const viewport = screen.getByRole("region", {
+      name: "Story page",
+    }).parentElement!;
+    expect(getComputedStyle(viewport).minHeight).toBe("320px");
+    expect(getComputedStyle(viewport).flexShrink).toBe("0");
+    expect(
+      getComputedStyle(document.getElementById("center-panel")!).overflowY,
+    ).toBe("auto");
+    expect(
+      viewport.contains(screen.getByRole("textbox", { name: "Host composer" })),
+    ).toBe(false);
+  },
+);
 it("keeps the selected composer and protected Stop/return controls in immersive stage during execution", () => {
   state = { ...state, executing: true };
   mount();

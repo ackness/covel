@@ -989,6 +989,7 @@ for (const width of [1280, 360]) {
         exact: true,
       });
       const assertHitTarget = async (target: typeof back) => {
+        await target.scrollIntoViewIfNeeded();
         const box = await target.boundingBox();
         expect(box).not.toBeNull();
         if (!box) throw new Error("Host control has no geometry");
@@ -1038,9 +1039,17 @@ for (const width of [1280, 360]) {
       const stop = controls.getByRole("button", { name: "Stop", exact: true });
       await expect(stop).toBeVisible();
       const stopPoint = await assertHitTarget(stop);
+      const aborted = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`${url}/abort`) &&
+          response.request().method() === "POST",
+      );
       await page.mouse.click(stopPoint.x, stopPoint.y);
+      // The player action has not reached the server, so Stop must settle first.
+      expect((await aborted).status()).toBe(409);
       releaseAction();
       await page.unroute("**/api/actions");
+      await expect(stop).toHaveCount(0);
       await controls
         .getByRole("combobox", { name: "Composer", exact: true })
         .focus();
@@ -1065,6 +1074,9 @@ for (const width of [1280, 360]) {
         .click();
       await expect(input).toHaveCount(0);
       await expect(mainPage.locator("#draft")).toBeVisible();
+      expect(
+        (await main.locator("iframe").boundingBox())!.height,
+      ).toBeGreaterThan(160);
       await expect(controls.getByRole("status")).toContainText("Bridge input");
       await controls
         .getByRole("button", { name: "Retry", exact: true })

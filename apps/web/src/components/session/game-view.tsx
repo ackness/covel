@@ -800,6 +800,7 @@ export function GameView({
             {
               "--world-accent": visual.accent,
               background: "var(--surface-session, var(--surface-page))",
+              overflowY: activePluginView?.spec.webview ? "auto" : undefined,
             } as React.CSSProperties
           }
         >
@@ -1027,49 +1028,61 @@ export function GameView({
             </Dialog>
           )}
           {activePluginView && parsePluginViewMode(viewMode) ? (
-            <div className="relative z-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-              <PluginViewHost
-                onRetry={() => retryRegion(activePluginView, "main")}
-                key={JSON.stringify([session.id, activePluginView.mode])}
-                entry={activePluginView}
-                sessionId={session.id}
-                executing={executing}
-                onStop={handleAbort}
-                awaitingBegin={awaitingBegin}
-                onBegin={onBeginAdventure}
-                liveSession={{
-                  sessionId: session.id,
-                  renderMessages: (content) => (
-                    <div
-                      className={
-                        content === "story"
-                          ? "flex h-[60dvh] min-h-48 flex-col"
-                          : "flex max-h-[50dvh] min-h-24 flex-col"
-                      }
-                    >
-                      {renderMessages(content)}
-                    </div>
-                  ),
-                  renderComposer: () =>
-                    activeComposer ? null : renderComposer(),
-                }}
-                sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
-                isCurrent={currentRegion(activePluginView, "main")}
-                onFallback={(reason) => {
-                  if (reason) failRegion(activePluginView, "main");
-                  else handleViewModeChange(viewInfo.hostDefault);
-                }}
-                onRevoke={(capability) => {
-                  handleViewModeChange(viewInfo.hostDefault);
-                  void viewConsent
-                    .revoke(activePluginView, capability)
-                    .catch(() => emitToast("error", t("settings.saveFailed")));
-                }}
-              />
+            <>
+              <div
+                className="relative z-1 flex min-h-0 flex-1 flex-col overflow-hidden"
+                // Let stacked host notices scroll instead of collapsing the page.
+                style={
+                  activePluginView.spec.webview
+                    ? { minHeight: "20rem", flexShrink: 0 }
+                    : undefined
+                }
+              >
+                <PluginViewHost
+                  onRetry={() => retryRegion(activePluginView, "main")}
+                  key={JSON.stringify([session.id, activePluginView.mode])}
+                  entry={activePluginView}
+                  sessionId={session.id}
+                  executing={executing}
+                  onStop={handleAbort}
+                  awaitingBegin={awaitingBegin}
+                  onBegin={onBeginAdventure}
+                  liveSession={{
+                    sessionId: session.id,
+                    renderMessages: (content) => (
+                      <div
+                        className={
+                          content === "story"
+                            ? "flex h-[60dvh] min-h-48 flex-col"
+                            : "flex max-h-[50dvh] min-h-24 flex-col"
+                        }
+                      >
+                        {renderMessages(content)}
+                      </div>
+                    ),
+                    renderComposer: () =>
+                      activeComposer ? null : renderComposer(),
+                  }}
+                  sessionBridgeAllowed={viewConsent.isAllowed(activePluginView)}
+                  isCurrent={currentRegion(activePluginView, "main")}
+                  onFallback={(reason) => {
+                    if (reason) failRegion(activePluginView, "main");
+                    else handleViewModeChange(viewInfo.hostDefault);
+                  }}
+                  onRevoke={(capability) => {
+                    handleViewModeChange(viewInfo.hostDefault);
+                    void viewConsent
+                      .revoke(activePluginView, capability)
+                      .catch(() =>
+                        emitToast("error", t("settings.saveFailed")),
+                      );
+                  }}
+                />
+              </div>
               {!activeComposer &&
                 activePluginView.spec.surface === "main" &&
                 hostComposer}
-            </div>
+            </>
           ) : stageActive ? (
             <StageView
               replayStoryOnEnter={replayStageStory}
