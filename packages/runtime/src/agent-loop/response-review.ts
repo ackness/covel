@@ -1,7 +1,8 @@
 import { instructionLocaleFor } from "@covel/shared";
-import type { LLMMessage, LLMResponse } from "@covel/shared";
+import type { LLMMessage, LLMResponse, LLMResponseFormat } from "@covel/shared";
 import { runPostLLMResponseHook } from "../hooks/wire-helpers.js";
 import type { CorrectionPolicy } from "./correction-policy.js";
+import { outputFormatProblems } from "./output-format-diagnostics.js";
 
 /** Rejected drafts never dispatch tools or become the committed narrative. */
 export function createResponseReviewer(
@@ -9,6 +10,7 @@ export function createResponseReviewer(
   transcript: LLMMessage[],
   locale: string | undefined,
   policy: CorrectionPolicy,
+  responseFormat?: LLMResponseFormat,
 ) {
   const notAccepted =
     instructionLocaleFor(locale) === "zh"
@@ -42,7 +44,16 @@ export function createResponseReviewer(
     }
     transcript.push({
       role: "system",
-      content: `${notAccepted}\n${reviewed.correction}`,
+      content: [
+        notAccepted,
+        reviewed.correction,
+        ...(await outputFormatProblems({
+          content: reviewed.response.content,
+          hasToolCalls: reviewed.response.toolCalls.length > 0,
+          responseFormat,
+          locale,
+        })),
+      ].join("\n"),
     });
     return undefined;
   };

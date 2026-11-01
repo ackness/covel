@@ -65,9 +65,32 @@ async function run(opts: LoopRunOptions) {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("output repair", () => {
+  it("diagnoses malformed private JSON without replacing schema field errors", async () => {
+    const llm = queuedLLM([
+      prose('{"answer":"private sentinel",}'),
+      prose('{"answer":7}'),
+      prose(valid),
+    ]);
+    const { result } = await run({
+      llm,
+      manifest: manifest({ loopProfile: { corrections: { outputRepair: 2 } } }),
+    });
+    expect(result.status).toBe("success");
+    expect(llm.requests).toHaveLength(3);
+    const syntax = String(llm.requests[1]?.messages.at(-1)?.content);
+    expect(syntax).toMatch(/JSON syntax/i);
+    expect(syntax).toMatch(/offset \d+/);
+    expect(syntax).not.toContain("private sentinel");
+    expect(syntax).not.toContain("plain prose");
+    expect(llm.requests[2]?.messages.at(-1)?.content).toContain(
+      "/answer must be string",
+    );
+  });
+
   it("repairs schema prose with tools off, required fields and additive step events", async () => {
     const emitter = makeEmitterSpy();
     const llm = queuedLLM([prose("an unstructured draft"), prose(valid)]);
@@ -566,6 +589,118 @@ describe("output repair", () => {
 
 describe("output gate agreement", () => {
   it.each([
+    ["en-US", "zh", /未返回 JSON 对象/],
+    ["zh-CN", "en", /no JSON object was returned/],
+    ["zh-Hant", "auto", /no JSON object was returned/],
+  ] as const)(
+    "loads diagnostic prompts in the instruction language (%s, override: %s)",
+    async (locale, override, expected) => {
+      vi.stubEnv("COVEL_INSTRUCTION_LOCALE", override);
+      const { args } = await run({
+        llm: queuedLLM([prose(" \n ")]),
+        manifest: manifest({
+          loopProfile: { corrections: { outputRepair: 0 } },
+        }),
+      });
+      const checked = await checkAgentOutput({
+        ...args,
+        input: { ...args.input, locale },
+      });
+      expect(checked.ok).toBe(false);
+      if (!checked.ok) expect(checked.errors[0]).toMatch(expected);
+    },
+  );
+
+  it("puts bounded syntax diagnostics before structural symptoms without echoing private content", async () => {
+    const secret = "PRIVATE_DRAFT_SENTINEL";
+    const prefix = JSON.stringify({ answer: `${secret} 😀` });
+    const properties = Object.fromEntries(
+      Array.from({ length: 8 }, (_, i) => [`field${i}`, { type: "string" }]),
+    );
+    const invalidFields = Object.fromEntries(
+      Object.keys(properties).map((key) => [key, 7]),
+    );
+    const content = `\`\`\`json\n${prefix},"tail":${JSON.stringify(invalidFields)}}\n\`\`\``;
+    const { args } = await run({
+      llm: queuedLLM([
+        { ...prose(content), reasoningContent: "PRIVATE_REASONING_SENTINEL" },
+      ]),
+      loaded: { ...loaded, outputSchema: { type: "object", properties } },
+      manifest: manifest({ loopProfile: { corrections: { outputRepair: 0 } } }),
+    });
+    const checked = await checkAgentOutput(args);
+    expect(checked.ok).toBe(false);
+    if (!checked.ok) {
+      expect(checked.errors[0]).toMatch(/JSON syntax.*after.*root/i);
+      expect(checked.errors.join(" ")).toContain(`offset ${prefix.length}`);
+      expect(checked.errors).toHaveLength(5);
+      expect(checked.errors.every((error) => error.length <= 200)).toBe(true);
+      expect(checked.errors.join(" ")).toContain(
+        "UTF-16 code units after fence normalization",
+      );
+      expect(checked.errors.join(" ")).toMatch(/line 1, column \d+/);
+      expect(checked.errors.join(" ")).toContain("/field0 must be string");
+      expect(checked.errors.join(" ")).not.toMatch(
+        /PRIVATE_|SyntaxError|\bat .*\(|run-loop|plug\/loop/,
+      );
+    }
+    const chinese = await checkAgentOutput({
+      ...args,
+      input: { ...args.input, locale: "zh-CN" },
+    });
+    expect(chinese.ok).toBe(false);
+    if (!chinese.ok) {
+      expect(chinese.errors[0]).toContain("JSON 语法错误");
+      expect(chinese.errors[0]).toContain("根对象已闭合");
+      expect(chinese.errors[0]).toContain("输入结束");
+      expect(chinese.errors.join(" ")).toContain(`偏移 ${prefix.length}`);
+    }
+  });
+
+  it.each([
+    ['{"answer":"PRIVATE_SENTINEL', /unterminated.*string/i, true],
+    ['{"answer":"PRIVATE_SENTINEL\\q"}', /escape/i, true],
+    ['{"answer":', /unexpected end.*complete JSON/i, false],
+    ['{"answer":PRIVATE_SENTINEL}', /JSON syntax/i, false],
+  ] as const)(
+    "diagnoses invalid JSON without echoing source or inventing a location (%s)",
+    async (content, reason, located) => {
+      const { args, result } = await run({
+        llm: queuedLLM([prose(content)]),
+        manifest: manifest({
+          loopProfile: { corrections: { outputRepair: 0 } },
+        }),
+      });
+      expect(result.status).toBe("failed");
+      const checked = await checkAgentOutput(args);
+      expect(checked.ok).toBe(false);
+      if (!checked.ok) {
+        expect(checked.errors[0]).toMatch(reason);
+        const feedback = checked.errors.join(" ");
+        expect(feedback).not.toContain("PRIVATE_SENTINEL");
+        expect(/offset \d+/.test(feedback)).toBe(located);
+        expect(feedback).not.toContain("plain prose");
+      }
+    },
+  );
+
+  it.each([
+    `\`\`\`json\n${valid}\n\`\`\``,
+    `A short preamble. ${valid}`,
+    `${valid}}`,
+    `Example: {"sample":true}. Final: ${valid}`,
+  ])(
+    "keeps accepted tolerant envelopes out of repair (%s)",
+    async (content) => {
+      const llm = queuedLLM([prose(content)]);
+      const { result } = await run({ llm });
+      expect(result.status).toBe("success");
+      expect(result.output).toEqual({ answer: "fixed" });
+      expect(llm.requests).toHaveLength(1);
+    },
+  );
+
+  it.each([
     [
       "empty story",
       { outputKind: "story" },
@@ -595,7 +730,7 @@ describe("output gate agreement", () => {
         schemaGate: createAgentSchemaGate({ ...args, collectedToolCalls: [] }),
       });
       expect(finalized.kind).toBe(gateKind);
-      expect(checkAgentOutput(args).ok).toBe(ok);
+      expect((await checkAgentOutput(args)).ok).toBe(ok);
       expect(result.status === "success").toBe(ok);
       if (!ok) expect(result.stop).toEqual({ reason: "invalid-output" });
     },
@@ -617,7 +752,7 @@ describe("output gate agreement", () => {
       loaded: { ...loaded, outputSchema: schema },
       manifest: manifest({ loopProfile: { corrections: { outputRepair: 0 } } }),
     });
-    const checked = checkAgentOutput(args);
+    const checked = await checkAgentOutput(args);
     expect(checked.ok).toBe(false);
     if (!checked.ok) {
       expect(checked.errors).toHaveLength(5);
@@ -647,7 +782,7 @@ describe("output gate agreement", () => {
     // The required narrative field proves validation selected the tool result,
     // rather than the empty fallback envelope.
     expect(
-      checkAgentOutput({
+      await checkAgentOutput({
         ...args,
         outputSchema: {
           type: "object",
@@ -663,7 +798,7 @@ describe("output gate agreement", () => {
       finalContent: JSON.stringify({ answer: "fixed", pluginData: [] }),
     };
     const modelArgs = { ...args, outputSchema: undefined, toolLoop: modelLoop };
-    expect(checkAgentOutput(modelArgs)).toEqual({ ok: true });
+    expect(await checkAgentOutput(modelArgs)).toEqual({ ok: true });
     expect(warn).not.toHaveBeenCalled();
     settleAgentLoop(modelArgs);
     expect(warn).toHaveBeenCalledOnce();
