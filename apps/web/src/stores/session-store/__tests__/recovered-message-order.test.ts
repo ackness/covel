@@ -124,3 +124,59 @@ it("fills a missing notice on a page overlap while retaining the loaded window a
   ]);
   expect(result.olderMessagesCursor).toBe("next-page");
 });
+
+it.each([false, true])(
+  "completes a recovered durable story once even with a placeholder: %s",
+  (withPlaceholder) => {
+    const story: StreamMessage = {
+      ...row("saved", "assistant", "story", "turn", "now"),
+      runtimeId: "teller",
+      content: "Final story.",
+      segments: [{ kind: "narration", text: "Final story." }],
+    };
+    const saved = { ...story, operationFailures: { count: 1 } };
+    const placeholder = {
+      ...story,
+      id: "stream_turn_teller",
+      content: "Partial",
+      segments: undefined,
+    };
+    const state = reducer(
+      {
+        ...initialState,
+        messages: withPlaceholder ? [saved, placeholder] : [saved],
+      },
+      {
+        type: "COMPLETE_MESSAGE",
+        turnId: "turn",
+        runtimeId: "teller",
+        message: story,
+      },
+    );
+    expect(state.messages).toEqual([saved]);
+    const replaced = reducer(reducer(state, { type: "RESET_SESSION" }), {
+      type: "MERGE_RECOVERED_MESSAGES",
+      messages: [story],
+    });
+    expect(replaced.messages).toEqual([story]);
+  },
+);
+
+it.each([
+  { role: "user" as const, operationFailures: { count: 1 } },
+  { kind: "plugin", operationFailures: { count: 1 } },
+  { operationFailures: { count: 0 } },
+  { operationFailures: { count: 1, privateDetail: "hidden" } },
+])("does not preserve an invalid host notice on completion: %j", (extra) => {
+  const story = row("saved", "assistant", "story", "turn", "now");
+  const state = reducer(
+    { ...initialState, messages: [{ ...story, ...extra }] },
+    {
+      type: "COMPLETE_MESSAGE",
+      turnId: "turn",
+      runtimeId: "teller",
+      message: story,
+    },
+  );
+  expect(state.messages).toEqual([story]);
+});

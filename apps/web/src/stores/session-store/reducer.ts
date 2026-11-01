@@ -440,28 +440,34 @@ export function reducer(
       // completed content.
       const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
       const idx = state.messages.findIndex((m) => m.id === streamId);
-      if (idx >= 0) {
-        const next = [...state.messages];
-        next[idx] = {
-          ...action.message,
-          kind: "story",
-        };
-        return { ...state, messages: orderStoryBeforePluginMessages(next) };
-      }
       const authoritativeIdx = state.messages.findIndex(
         (message) => message.id === action.message.id,
       );
-      if (authoritativeIdx >= 0) {
-        const next = [...state.messages];
-        next[authoritativeIdx] = { ...action.message, kind: "story" };
+      const saved = state.messages[authoritativeIdx];
+      // Resume events predate host notice finalization. A late completion
+      // must keep a validated notice already learned from the durable row.
+      const message: StreamMessage = {
+        ...action.message,
+        kind: "story",
+        ...(!action.message.operationFailures &&
+        action.message.role === "assistant" &&
+        saved &&
+        !saved.id.startsWith(STREAM_ID_PREFIX)
+          ? projectStoryOperationFailures(saved)
+          : {}),
+      };
+      if (authoritativeIdx >= 0 || idx >= 0) {
+        const replaceIdx = authoritativeIdx >= 0 ? authoritativeIdx : idx;
+        // Recovery and a queued delta can leave both identities present.
+        // Keep the durable position and remove its streaming placeholder.
+        const next = state.messages.flatMap((row, index) =>
+          index === replaceIdx ? [message] : row.id === streamId ? [] : [row],
+        );
         return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       return {
         ...state,
-        ...capLiveMessages(state, [
-          ...state.messages,
-          { ...action.message, kind: "story" },
-        ]),
+        ...capLiveMessages(state, [...state.messages, message]),
       };
     }
     case "APPEND_DELTA": {

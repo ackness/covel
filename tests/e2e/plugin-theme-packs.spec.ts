@@ -1237,22 +1237,54 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       });
       if (turn === 0) {
         expect(values).toEqual([]);
-        const notice = page.getByText("本回合有 1 个操作没有生效。", {
-          exact: true,
-        });
-        await expect(notice).toBeVisible();
+        const noticeText = "本回合有 1 个操作没有生效。";
+        const toast = page.getByRole("status").filter({ hasText: noticeText });
+        await expect(toast).toBeVisible();
+        await expect(
+          toast.getByText(noticeText, { exact: true }),
+        ).toBeVisible();
         expect(
-          await notice.evaluate((element) =>
+          await toast.evaluate((element) =>
             element.closest("[data-covel-theme-part]"),
           ),
         ).toBeNull();
+        const footer = page.getByTestId("story-operation-failure-notice");
+        const checkFooter = async () => {
+          await expect(footer).toHaveCount(1);
+          await expect(footer).toHaveText(noticeText);
+          await expect(footer).toBeVisible();
+          await expect(footer).toHaveAttribute("data-covel-host-controls", "");
+          await expect(footer).toHaveCSS("opacity", "1");
+          expect(
+            await footer.evaluate((element) =>
+              element.closest(
+                "[data-covel-theme-part], [data-covel-theme-scope]",
+              ),
+            ),
+          ).toBeNull();
+        };
+        await checkFooter();
+        const before = await controlStyle(footer);
         await reset.click();
+        await checkFooter();
+        await expect(footer).toHaveCSS("color", before.color);
+        await expect(footer).toHaveCSS("font", before.font);
         await select(page);
+        await checkFooter();
+        await expect(footer).toHaveCSS("color", before.color);
+        await expect(footer).toHaveCSS("font", before.font);
         expect(actions).toHaveLength(1);
       } else
         expect(values).toContainEqual(
           expect.objectContaining({ key: "change", value: true }),
         );
+      // A successful explicit retry does not clear the original story's notice.
+      await expect(
+        page.getByTestId("story-operation-failure-notice"),
+      ).toHaveCount(1);
+      await expect(
+        page.getByTestId("story-operation-failure-notice"),
+      ).toBeVisible();
       await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(
         0,
       );
