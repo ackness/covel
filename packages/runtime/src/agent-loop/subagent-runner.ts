@@ -35,6 +35,7 @@ import type {
   StopReason,
   SubagentErrorCode,
   SubagentResult,
+  SubagentTarget,
   TurnInput,
 } from "@covel/shared";
 import { modelFacingJson } from "@covel/shared";
@@ -130,6 +131,8 @@ export interface SubagentSettledEvent {
 }
 
 export interface SubagentRunner {
+  /** Targets eligible in this execution's frozen, provider-resolved registry. */
+  availableTargets(caller: SubagentCaller): readonly SubagentTarget[];
   privateTargetKind(
     request: unknown,
     caller: SubagentCaller,
@@ -189,6 +192,32 @@ export function createSubagentRunner(
   let budget = options.delegation;
   let loadingBudget: Promise<DelegationBudget> | undefined;
   const runner: SubagentRunner = {
+    availableTargets(caller) {
+      if (caller.depth >= SUBAGENT_MAX_DEPTH) return [];
+      const candidates = new Map<string, SubagentTarget>();
+      for (const provider of options.activeRuntimes) {
+        if (provider.outputContract) {
+          const target = { contract: provider.outputContract };
+          candidates.set(JSON.stringify(target), target);
+        }
+        if (provider.pluginId === caller.pluginId) {
+          const target = { runtimeId: provider.name };
+          candidates.set(JSON.stringify(target), target);
+        }
+      }
+      return [...candidates.values()].filter(
+        (target) =>
+          !(
+            "code" in
+            resolveTarget(
+              options.activeRuntimes,
+              options.pausedRuntimes ?? [],
+              target,
+              caller,
+            )
+          ),
+      );
+    },
     privateTargetKind(request, caller) {
       const parsed = parseRequest(request);
       if (typeof parsed === "string") return undefined;

@@ -1063,6 +1063,7 @@ describe("delegate result envelopes", () => {
         inner,
         {
           inFlight: 0,
+          availableTargets: () => [],
           privateTargetKind: () => undefined,
           run: async () => answer,
           runBatch: async (args) => args.map(() => answer),

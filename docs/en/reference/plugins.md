@@ -666,6 +666,8 @@ A `manualTrigger.runtimeId` that names a `schedule.subagentOnly` runtime is an e
 
 Agent callers can also declare [`delegate-batch`](./tools.md#delegate-batch) for independent concurrent requests. It shares the existing root allowance, depth and pool, and retains the same child capabilities. Function callers continue to use `ctx.agents.run`.
 
+Declaring delegation tools in `agent.tools.builtin` does not guarantee they are offered: with no eligible target they are omitted, and otherwise their schemas list only reachable targets. Prompts must allow independent completion when a tool or target is absent. See [delegation tools](./tools.md#sub-agents-delegate) for resolution rules.
+
 A sub-agent is another agent runtime that the caller runs inside its own execution. It has its own transcript and budget and **returns output only**: it makes no proposals of its own, emits no events and forms no top-level runtime result, so it is never a commit unit. When writes are allowed, it can stage operations through write services that commit with the delegating run; those operations are discarded if the sub-agent fails. A function runtime uses `ctx.agents.run`; an agent runtime uses the builtin tool [`delegate`](./tools.md#sub-agents-delegate).
 
 ```ts

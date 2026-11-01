@@ -156,6 +156,7 @@ describe("builtin model-facing results", () => {
     // `delegate` is answered by the agent loop's executor wrapper; the
     // sub-agent here returns a stored value with its bookkeeping.
     const runner: SubagentRunner = {
+      availableTargets: () => [{ contract: "gate-actor@1" }],
       inFlight: 0,
       runBatch: async (args) =>
         args.map(() => ({

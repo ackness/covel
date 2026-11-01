@@ -2,6 +2,7 @@ import { runDelegateBatch } from "./subagent-delegate-batch.js";
 import { forkWorldModelView } from "../function-runtime/world-model-view.js";
 import { characterByName } from "../orchestration/policy-tools.js";
 import { ToolError } from "@covel/shared";
+import { z } from "zod";
 /**
  * The `delegate` tool of agent runtimes: a tool-executor wrapper that answers
  * `delegate` calls by running a sub-agent, and forwards every other call.
@@ -22,7 +23,9 @@ import { renderToolSuccess, renderToolError } from "./tool-result-text.js";
 import {
   DELEGATE_TOOL_NAME,
   DELEGATE_BATCH_TOOL_NAME,
+  DELEGATE_BATCH_MAX_REQUESTS,
   delegateParametersSchema,
+  delegateBatchParametersSchema,
   parseJsonText,
 } from "@covel/tools";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
@@ -56,8 +59,46 @@ export function withSubagentDelegate(
   runner: SubagentRunner,
   scope: SubagentDelegateScope,
 ): ToolExecutor {
+  const targets = runner.availableTargets(scope.caller);
+  const request =
+    targets.length === 0
+      ? undefined
+      : delegateParametersSchema.extend({
+          target: z
+            .union(
+              targets.map((entry) =>
+                "contract" in entry
+                  ? z.strictObject({ contract: z.literal(entry.contract) })
+                  : z.strictObject({ runtimeId: z.literal(entry.runtimeId) }),
+              ),
+            )
+            .describe(
+              "Choose one of the reachable sub-agent targets, never both forms.",
+            ),
+        });
   return {
-    getToolInfo: (name, context) => inner.getToolInfo(name, context),
+    getToolInfo(name, context) {
+      const info = inner.getToolInfo(name, context);
+      if (
+        !info ||
+        ![DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(name)
+      )
+        return info;
+      if (!request) return undefined;
+      const schema =
+        name === DELEGATE_TOOL_NAME
+          ? request
+          : delegateBatchParametersSchema.extend({
+              requests: z
+                .array(request)
+                .min(1)
+                .max(DELEGATE_BATCH_MAX_REQUESTS),
+            });
+      const { $schema: _dialect, ...jsonSchema } = z.toJSONSchema(schema, {
+        target: "draft-7",
+      });
+      return { ...info, jsonSchema };
+    },
     async execute(call, context) {
       if (![DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(call.name))
         return inner.execute(call, context);

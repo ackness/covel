@@ -61,7 +61,6 @@
 | submit-openai-image-text-prompt | local | openai-image-gen | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
 | submit-openai-image-structured-prompt | local | openai-image-gen | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件 | 默认 |
 
-
 每个内置插件的工具都必须出现在这张表里，`apps/server/tests/lib/reference-tables.test.ts` 会检查。
 
 ## 注解与超时
@@ -746,6 +745,8 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 
 agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另一个 agent runtime 在这次执行里拿着简报运行，交回输出。在 `agent.tools.builtin` 里列出 `delegate` 才能调用。
 
+`delegate` 和 `delegate-batch` 只在本次执行冻结的会话注册表中有可用目标时提供给模型；没有目标时两个工具都不出现，runtime 照常运行。目标必须是活动的 `subagentOnly` agent，不能是 function 或呈现 runtime。`target` schema 只列出能唯一解析的契约和调用方自己包里的 runtime ID；缺失、暂停或有歧义的契约不列出，暂停提供方仍参与歧义检查。预载和延迟搜索使用同一规则。提示词应先检查工具及所需目标是否可用，否则自行完成任务。实际调用仍重新解析目标；目标消失时返回 `not-found`，不抛出异常。
+
 | 参数        | 类型   | 必需 | 描述                                                                             |
 | ----------- | ------ | ---- | -------------------------------------------------------------------------------- |
 | target      | object | ✓    | `{ contract }`（契约的提供方，任何包）或 `{ runtimeId }`（本包），只能写其中一个 |
@@ -777,7 +778,6 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 成功读取、基线和写服务操作仍须等外层工具成功且有效后才接受。失败子项不贡献证据；外层取消时，已成功子项的证据和操作也丢弃。原有的调用方/提供方服务锁和操作序号仍有效，计划顺序不保证服务效果顺序。两个委托工具都保持 `readOnly:false`、`stagesWrites:true`、`idempotent:false`、`concurrencySafe:false`，子 agent 和呈现上下文都不能调用。
 
 任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。`completeAfterTools` 在输出校验前把私密 batch 投影为 `{}`。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
-
 
 ## Character 管理工具
 

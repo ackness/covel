@@ -666,6 +666,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 agent 调用方也可声明 [`delegate-batch`](./tools.md#delegate-batch)，并发处理独立请求。它共用原有根执行名额、深度和并发池，子 agent 能力边界相同。函数仍使用 `ctx.agents.run`。
 
+在 `agent.tools.builtin` 声明委托工具不会强制它出现：没有可用目标时工具省略，有目标时 schema 只列出可达项。提示词必须允许工具或目标缺席时独立完成，具体解析规则见[委托工具](./tools.md#子-agentdelegate)。
+
 子 agent 是调用方在自己这次执行里运行的另一个 agent runtime。它有自己的对话记录和预算，**只交回输出**：不产生自己的 proposal、不发事件，也不形成顶层 runtime 结果，所以不会成为提交单位。允许改数据时，它可以通过写服务暂存操作，随委托它的 run 提交；子 agent 失败时这些操作撤回。函数 runtime 用 `ctx.agents.run`，agent runtime 用内置工具 [`delegate`](./tools.md#子-agentdelegate)。
 
 ```ts
