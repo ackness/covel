@@ -279,6 +279,19 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
       toolCall("mark", { note: "once" }),
       toolCall("suspend", ASK),
     ]);
+    const completedWork = () =>
+      f.events.filter(
+        (event) =>
+          event.type === "tool.completed" &&
+          (event.payload as { toolName?: string }).toolName === "mark",
+      );
+    // One diagnostic event and its safe progress copy are emitted before
+    // suspension. Restoring business work must not emit either one again.
+    const originalCompletedWork = completedWork();
+    expect(originalCompletedWork.map((event) => event.topic)).toEqual([
+      "trace",
+      "runtime",
+    ]);
     expect(
       await f.store.getPluginData("session", "plug", "loop", "mark"),
     ).toBeNull();
@@ -308,13 +321,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
     const outcome = await f.commit(execution, saved);
     expect(outcome.status).toBe("committed");
     expect(f.work).toHaveBeenCalledTimes(1);
-    expect(
-      f.events.filter(
-        (event) =>
-          event.type === "tool.completed" &&
-          (event.payload as { toolName?: string }).toolName === "mark",
-      ),
-    ).toHaveLength(1);
+    expect(completedWork()).toEqual(originalCompletedWork);
     expect(
       (await f.store.getPluginData("session", "plug", "loop", "mark"))?.value,
     ).toBe("once");

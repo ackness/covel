@@ -334,6 +334,7 @@ describe("step events", () => {
       "finalizer",
       "retries",
       "notes",
+      "submissionAccepted",
     ]);
     const steps = stepRows(rows);
     expect(steps.length).toBeGreaterThan(0);
@@ -346,6 +347,12 @@ describe("step events", () => {
       { kind: "tool-narrowed", count: 1, ignored: 1 },
     ]);
     expect(steps[1]?.payload).not.toHaveProperty("toolCalls");
+    expect(steps.map((row) => row.payload.submissionAccepted)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      true,
+    ]);
     expect(JSON.stringify(steps)).not.toContain("mark");
     expect(JSON.stringify(steps)).not.toContain("secret-tool");
   });
