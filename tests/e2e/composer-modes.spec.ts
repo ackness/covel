@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   startFakeLlmProvider,
+  submitOutputReply,
   type FakeLlmProvider,
 } from "./helpers/fake-llm-provider.js";
 import {
@@ -69,7 +70,13 @@ test("a second character acts in act mode and the bubble says who and how, also 
   page,
 }) => {
   const provider = await startFakeLlmProvider();
-  provider.reply = () => ({ text: "夜雾漫过码头，阿波的手按在剑柄上。" });
+  provider.reply = () =>
+    submitOutputReply({
+      segments: [
+        { kind: "narration", text: "夜雾漫过码头，阿波的手按在剑柄上。" },
+      ],
+      yield: "user",
+    });
   const worldId = `e2e-duo-${crypto.randomUUID()}`;
   let sessionId: string | undefined;
   try {

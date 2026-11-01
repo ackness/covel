@@ -202,6 +202,8 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 `runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。`missing_key` 表示内置远程服务商在发请求前就发现缺少密钥。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
 
+提交纠正耗尽时，`Output rejected (...)` 属于输出无效，界面提示玩家重试此任务或查看详情。括号里的固定类别可以是 `invalid-json`、`invalid-output`、`missing-submission`、`required-work`、`review-rejected` 或 `submission-batch`；它们不应退化为通用请求错误。
+
 `runtime.failed.failureTarget` 是可选的 `{ provider, model? }`，只来自实际失败的模型异常，不从错误文字推断。它保存在 runtime result 和 trace 中，并随 SSE、会话快照恢复到执行记录。备用目标失败时记录备用目标；修改模型设置不会改写历史目标。此字段只含服务商和模型标识，不含密钥或连接配置。客户端用当前 active runtime 的模型用途和当前路由，列出同一服务商可能受影响的用途。
 
 `runtime.completed.stopReason` 和 `runtime.failed.stopReason` 说明 agent runtime 的工具循环怎样结束，取值见下面的结束原因表，和 `RuntimeResult.stop.reason` 相同。函数 runtime 和 guard 不带这个字段。循环里抛出、又没有哪个调用点能归类的内部错误（比如工具执行器或 Hook 自身的缺陷）也不带。

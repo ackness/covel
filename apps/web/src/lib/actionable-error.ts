@@ -52,7 +52,7 @@ function classifyRawActionableError(
     return "network";
   }
   if (
-    /output did not match output\.schema|expected a json envelope|schema[- ]validation|exhausted the tool loop|without producing final output|requiretooluse/.test(
+    /output rejected \((?:invalid-json|invalid-output|missing-submission|required-work|review-rejected|submission-batch)\)|output did not match output\.schema|expected a json envelope|schema[- ]validation|exhausted the tool loop|without producing final output|requiretooluse/.test(
       lower,
     )
   ) {
