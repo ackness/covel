@@ -95,8 +95,9 @@ exports `dist/`. Install, Turbo and server startup rebuild it. After editing SDK
 source, run `pnpm --filter @covel/plugin-handlers-utils build` before a direct
 package test. The host supplies this SDK and `zod` to installed plugins; plugins
 bundle only other dependencies. Respect public package entry points and dependency
-direction (`pnpm check:boundaries`). Shared owns the pure plugin-theme CSS
-policy and its direct parser dependency; loader owns files and web owns rendering.
+direction (`pnpm check:boundaries`). Shared owns the pure plugin-theme CSS policy
+and URL-page HTML preparation, with their direct parser dependencies; loader owns
+files and web owns rendering.
 Desktop main uses shared's narrow locale, provider-key and proxy-IPC exports to
 avoid loading unrelated domain policies into the shell.
 

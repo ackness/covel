@@ -125,6 +125,14 @@
   find("rejection").onclick = () => {
     void Promise.reject(new Error("Probe rejection"));
   };
+  find("timer-rejection").onclick = () => {
+    setTimeout(() => {
+      void Promise.reject(new Error("Probe timer rejection"));
+    }, 0);
+  };
+  find("async-rejection").onclick = async () => {
+    throw new Error("Probe async event rejection");
+  };
   find("unresponsive").onclick = () => {
     ignoreHeartbeat = true;
   };

@@ -75,6 +75,8 @@ export const PLUGIN_BRIDGE_SCRIPT = `
     if (event.target && event.target !== window && event.target.tagName !== "SCRIPT") return;
     pageError();
   }, true);
+  // URL pages load classic scripts with anonymous CORS: browsers suppress this
+  // event entirely for no-CORS scripts with muted errors in an opaque origin.
   addEventListener("unhandledrejection", pageError);
   // The host's style scheme, as --covel-* custom properties on the document.
   const applyTheme = theme => {

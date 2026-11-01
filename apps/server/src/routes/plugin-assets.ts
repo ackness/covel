@@ -9,6 +9,7 @@ import {
   PLUGIN_ASSET_PAGE_CSP,
   PLUGIN_BRIDGE_SCRIPT,
 } from "@covel/shared";
+import { pluginPageDocument } from "@covel/shared/plugin-page";
 import { isPathInside, type PluginRegistry } from "@covel/plugin-loader";
 import { errorBody } from "../api-error.js";
 import { findPluginAssetRoot } from "./misc-api/ui-specs.js";
@@ -21,16 +22,7 @@ const MAX_PAGE_ENTRY_BYTES = 2 * 1024 * 1024;
 
 function injectBridge(html: string, entry: string): string {
   const prefix = "../".repeat(entry.split("/").length - 1);
-  const script = `<script src="${prefix}${BRIDGE_PATH}"></script>`;
-  for (const pattern of [
-    /<head\b[^>]*>/i,
-    /<html\b[^>]*>/i,
-    /<!doctype\b[^>]*>/i,
-  ]) {
-    if (pattern.test(html))
-      return html.replace(pattern, (match) => match + script);
-  }
-  return script + html;
+  return pluginPageDocument(html, `${prefix}${BRIDGE_PATH}`);
 }
 
 /** Public files, limited to the registry snapshot's published listing. */
@@ -42,7 +34,7 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
     return c.json(errorBody("File not found"), 404);
   };
   app.use(`${PLUGIN_ASSETS_PATH}/*`, (c, next) => {
-    // CORS is global; opaque frames must load classic subresources without CORS.
+    // Remove global CORS permissions; verified public scripts opt in below.
     for (const name of [...c.res.headers.keys()])
       if (
         name.toLowerCase().startsWith("access-control-allow-") ||
@@ -153,6 +145,15 @@ export function createPluginAssetRoutes(registry: PluginRegistry): Hono {
       entry ? "no-cache" : "public, max-age=31536000, immutable",
     );
     c.header("Referrer-Policy", "no-referrer");
+    // Anonymous CORS keeps script errors and promise rejections observable in
+    // opaque frames. Only published JavaScript (including our bridge) opts in;
+    // no credentials, fonts, HTML, missing files or API responses are exposed.
+    if (
+      bridge ||
+      (root.purpose === "page" &&
+        metadata?.mime === "text/javascript; charset=utf-8")
+    )
+      c.header("Access-Control-Allow-Origin", "*");
     c.header(
       "Content-Security-Policy",
       entry ? PLUGIN_ASSET_PAGE_CSP : "sandbox",
