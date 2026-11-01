@@ -1,5 +1,5 @@
 import { getModelView, ToolError } from "@covel/plugin-handlers-utils";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSessionEmitEventTool,
   schemaHasReferences,
@@ -7,6 +7,9 @@ import {
 } from "../src/builtin/emit-event.js";
 import { getEmittedEvents, getPendingProposals } from "../src/result.js";
 import type { ToolExecutionContext } from "../src/types.js";
+import { validateOutput } from "../src/output-validator.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 const ctx: ToolExecutionContext = {
   sessionId: "s1",
@@ -165,6 +168,7 @@ describe("session event definitions", () => {
       properties: {
         topic: { type: "string", enum: ["a.b", "c.d"] },
         data: {
+          type: "object",
           anyOf: [
             {
               type: "object",
@@ -180,26 +184,163 @@ describe("session event definitions", () => {
     });
     expect(topics[0]!.schema).toHaveProperty("$id");
   });
-  it("uses a single payload directly and falls back for absent or referenced schemas", () => {
+  it("uses a single payload directly and leaves sessions without topics unchanged", () => {
     expect(
       buildSessionEmitEventTool(deps, [topics[1]!])!.jsonSchema,
     ).toMatchObject({
       properties: { data: { ...topics[1]!.schema, title: "c.d" } },
     });
-    for (const schema of [
-      undefined,
-      { $ref: "#/$defs/value", $defs: {} },
-      { properties: { nested: { $ref: "#" } } },
-    ])
-      expect(
-        buildSessionEmitEventTool(deps, [{ topic: "a.b", schema }])!.jsonSchema,
-      ).toMatchObject({
-        properties: { data: { type: "object", title: "a.b" } },
-      });
     expect(buildSessionEmitEventTool(deps, [])).toBeUndefined();
     expect(createEmitEventTool(deps).jsonSchema).toMatchObject({
       properties: { topic: { type: "string" } },
     });
+  });
+  it("types nested enum, const and structural nodes only in the model-facing copy", async () => {
+    const schema = {
+      type: "object",
+      properties: {
+        checks: {
+          items: {
+            properties: {
+              difficulty: { enum: ["easy", "hard"] },
+              outcome: { const: "success" },
+            },
+          },
+        },
+        phase: { anyOf: [{ const: "day" }, { enum: ["night"] }] },
+        metadata: {
+          type: "object",
+          default: { enum: ["literal data"], properties: { enum: {} } },
+          properties: { enum: { enum: ["value"] } },
+          additionalProperties: { enum: [true, false] },
+        },
+      },
+    };
+    const original = structuredClone(schema);
+    const directory = makeDirectory([{ topic: "checks.resolved" }]);
+    directory.validate.mockImplementation(async (_sessionId, _topic, data) => {
+      const result = validateOutput(data, schema);
+      return result.valid
+        ? { ok: true as const }
+        : { ok: false as const, reason: "author schema rejected payload" };
+    });
+    const tool = buildSessionEmitEventTool({ directory }, [
+      { topic: "checks.resolved", schema },
+      { topic: "other.event", schema: { type: "object" } },
+    ])!;
+    expect(tool.jsonSchema).toMatchObject({
+      properties: {
+        data: {
+          type: "object",
+          anyOf: [
+            {
+              properties: {
+                checks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      difficulty: { type: "string", enum: ["easy", "hard"] },
+                      outcome: { type: "string", const: "success" },
+                    },
+                  },
+                },
+                phase: {
+                  type: "string",
+                  anyOf: [
+                    { type: "string", const: "day" },
+                    { type: "string", enum: ["night"] },
+                  ],
+                },
+                metadata: {
+                  default: original.properties.metadata.default,
+                  properties: { enum: { type: "string", enum: ["value"] } },
+                  additionalProperties: {
+                    type: "boolean",
+                    enum: [true, false],
+                  },
+                },
+              },
+            },
+            { type: "object", title: "other.event" },
+          ],
+        },
+      },
+    });
+    expect(schema).toEqual(original);
+    const data = { checks: [{ difficulty: "easy", outcome: "success" }] };
+    expect(
+      getEmittedEvents(
+        await tool.execute({ topic: "checks.resolved", data }, ctx),
+      ),
+    ).toEqual([{ topic: "checks.resolved", data }]);
+    await expect(
+      tool.execute(
+        {
+          topic: "checks.resolved",
+          data: { checks: [{ difficulty: "unknown" }] },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "invalid-input" });
+    expect(schema).toEqual(original);
+  });
+  it.each([
+    ["string", ["one", "two"]],
+    ["number", [1, 2.5]],
+    ["boolean", [true, false]],
+    ["null", [null]],
+    ["object", [{ enum: ["literal data"] }]],
+    ["array", [[1], [2]]],
+  ])("infers %s for enums and constants", (type, values) => {
+    const tool = buildSessionEmitEventTool(deps, [
+      {
+        topic: "a.b",
+        schema: {
+          type: "object",
+          properties: {
+            choice: { enum: values },
+            fixed: { const: values[0] },
+            count: { type: "integer", enum: [1, 2] },
+          },
+        },
+      },
+    ])!;
+    expect(tool.jsonSchema).toMatchObject({
+      properties: {
+        data: {
+          properties: {
+            choice: { type, enum: values },
+            fixed: { type, const: values[0] },
+            count: { type: "integer", enum: [1, 2] },
+          },
+        },
+      },
+    });
+  });
+  it.each([
+    undefined,
+    { $ref: "#/$defs/value", $defs: {} },
+    { properties: { nested: { $ref: "#" } } },
+    { type: "object", properties: { choice: { enum: ["one", 2] } } },
+    { type: "object", properties: { choice: { enum: [] } } },
+    { type: "object", properties: { unknown: {} } },
+  ])("omits an undescribable topic with a diagnostic (%j)", (schema) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unsafe = { topic: "unsafe.event", schema };
+    const tool = buildSessionEmitEventTool(deps, [unsafe, topics[1]!])!;
+    expect(tool.jsonSchema).toEqual({
+      type: "object",
+      properties: {
+        topic: { type: "string", enum: ["c.d"] },
+        data: { ...topics[1]!.schema, title: "c.d" },
+      },
+      required: ["topic", "data"],
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('"unsafe.event"'),
+    );
+    expect(buildSessionEmitEventTool(deps, [unsafe])).toBeUndefined();
   });
   it("keeps Zod loose so unknown topics are refused and bad payloads remain invalid-input", async () => {
     const tool = buildSessionEmitEventTool(deps, topics)!;

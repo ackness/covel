@@ -610,7 +610,9 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 校验和可用 topic 的列举交给一个事件目录（`EventDirectoryLike`；服务端的实现在 `apps/server/src/routes/api/bootstrap/event-directory.ts`）。它汇总当前会话里已启用插件的声明。一个 topic 在一个会话里只有一个声明它的插件（见 [plugins.md § 会话插件选择](./plugins.md#会话插件选择)），所以 payload 总是按这唯一的一份 schema 校验。
 
-模型看到的 `topic` schema 是本会话公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。包含 `$ref` / `$defs` 或无法读取的 schema 只展示普通对象。没有公开 topic 时使用通用定义。
+模型看到的 `topic` schema 是本会话可描述的公开 topic 的 enum。`data` 带上对应的 payload schema；多个 topic 时放在 `type: "object"` 的 `data.anyOf` 中，每支的 `title` 是 topic。只有一个 topic 时直接使用该 schema，省略 `$schema` / `$id`。框架只在给模型的副本中，为缺少 `type` 的同类型 `enum`、`const`、对象和数组结构补上类型；同类型的组合分支也补上类型。`default`、`examples` 和枚举内的对象仍是数据，不按 schema 改写。作者仍应显式写出类型，例如 `{ "type": "string", "enum": ["day", "night"] }`。
+
+无法安全描述的 topic 从工具的 topic enum 和 payload 分支中一起省略，服务端告警写明 topic 和原因，不阻止故事继续。例如 schema 无法读取、含未展开的引用，或无类型的枚举混用不同类型、字段没有足够信息推导类型。所有公开 topic 都无法描述时，该会话不提供 `emit-event`；没有公开 topic 的会话仍使用通用定义。模型侧的整理不修改作者 schema，执行时仍由原始 schema 校验。
 
 每回合准备工具时刷新这份定义，不要求会话有角色 schema。执行时仍接受字符串 topic，并由目录的 Ajv 校验 payload：未知 topic 仍是 `refused`，不会变成 `invalid-input`。提示词目录保留 topic、描述和必填字段摘要；工具定义已包含的 payload schema 不再重复。schema 在任意深度含 `$ref` / `$defs` 时，目录仍显示完整 payload schema；读取失败时只标注 `(schema unavailable)`。事件发射说明指向工具定义中的 topic 和 payload 格式。
 

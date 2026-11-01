@@ -236,6 +236,8 @@ After a new version is published, each session's next execution first resolves i
 
 Event schemas are read and compiled at startup and while a new version is being prepared. Both the compile result and a compile failure are cached per version, and only then is the new declaration published. A fix to a file at the same path takes effect only at the next reload. An old version that is already in use keeps its original validator even if it has not yet handled this event, so later edits on disk do not affect it.
 
+The model-facing event schema is a separate descriptive copy. Adding types or omitting a topic that cannot be described leaves the original validator unchanged. Authors should declare `type` explicitly for enums. See [`emit-event`](./tools.md#emit-event) for type inference, omission, and warning rules.
+
 ### Community plugins that fail to parse at startup
 
 A community plugin whose static parse fails at startup still keeps its discovery location, and it still accepts file watching.

@@ -308,8 +308,8 @@ export function createEventDirectory(
         try {
           const raw = (await loadSchema(entry)).raw;
           fields = requiredFieldsSummary(raw);
-          // Referenced schemas fall back to a plain object in the tool
-          // definition, so the catalogue keeps their complete payload shape.
+          // Referenced schemas cannot be inlined in the tool definition;
+          // the catalogue retains their complete payload shape.
           if (schemaHasReferences(raw))
             payloadSchema = JSON.stringify(
               typeof raw === "object" && raw !== null
