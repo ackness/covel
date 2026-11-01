@@ -92,7 +92,7 @@ const newShapeFields = {
 
 const compiledPositives: readonly Fixture[] = [
   {
-    name: "required tool choice for explicit completion",
+    name: "required tool choice for agent steps",
     manifest: {
       ...base,
       stage: "post-turn",

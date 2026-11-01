@@ -1,3 +1,4 @@
+import { agentOutputContract } from "./agent-output-contract.js";
 import type { UpstreamWorldWrite } from "../function-runtime/upstream-world-model.js";
 import { settleAgentLoop } from "./settle-agent-loop.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -146,6 +147,7 @@ export async function executeAgentRuntime({
   runId,
   operations,
 }: ExecuteAgentRuntimeOptions): Promise<RuntimeResult> {
+  const agentOutput = agentOutputContract(loaded);
   // ── Agent runtime: LLM pipeline ─────────────────────────────
   // Emit start AFTER guard passes (or no guard exists) — prevents
   // frontend showing an infinite spinner for guard-skipped runtimes.
@@ -249,6 +251,7 @@ export async function executeAgentRuntime({
     const buildParams = {
       promptSegments,
       promptTemplate: loaded.promptTemplate,
+      agentOutput,
       manifest,
       turnInput: input,
       completedResults,

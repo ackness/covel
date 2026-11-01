@@ -1,3 +1,7 @@
+import {
+  requiredAgentWork,
+  type EffectiveAgentOutput,
+} from "@covel/shared/plugin-runtime";
 /**
  * Shared prompt-assembly helpers used by the public context builder and the
  * segment-based prompt assembler.
@@ -521,102 +525,39 @@ export function buildExecutionStoryCue(locale: string | undefined): string {
   return "The story text above was written in this turn, after the player's message. The story now stands at its end. Do this runtime's task as the system instructions define.";
 }
 
-/**
- * How a runtime finishes: with `runtime-done`, with a completing tool, with
- * its structured output, or with its story text.
- *
- * The prompt's `[COMPLETION]` instruction is written from this answer. A
- * caller that decides which tools a runtime is offered reads the same answer,
- * so the prompt never names a terminator the runtime does not have.
- */
+/** The same submission contract drives prompt assembly and tool advertisement. */
 export function resolveFrameworkCompletion(
-  manifest: Pick<
-    RuntimeManifest,
-    "output" | "outputKind" | "requireToolUse" | "completeAfterTools"
-  >,
+  manifest: Pick<RuntimeManifest, "requireToolUse" | "completeAfterTools">,
+  output?: EffectiveAgentOutput,
 ): FrameworkCompletionContract {
-  if (manifest.outputKind === "story") return { completion: "story" };
-  const completingTools = manifest.completeAfterTools ?? [];
-  // The loop ends such a run when one of these tools succeeds, and takes the
-  // tool's result as the output of a runtime that declares a schema.
-  if (manifest.requireToolUse === true && completingTools.length > 0)
-    return { completion: "completing-tool", completingTools };
-  if (manifest.output?.schema) return { completion: "structured-output" };
   return {
-    completion: "runtime-done",
-    requireToolUse: manifest.requireToolUse === true,
+    completion: "submit-output",
+    requiredWork: output?.requiredWork ?? requiredAgentWork(manifest),
   };
 }
 
-/** The `[COMPLETION]` lines of the preamble for one way of finishing. */
 function completionInstruction(
   contract: FrameworkCompletionContract | undefined,
   isZh: boolean,
 ): readonly string[] {
-  const mode = contract?.completion ?? "runtime-done";
-  if (mode === "story") {
-    return isZh
-      ? [
-          "[COMPLETION] 本 runtime 的结果是你回复里的故事，按下面的指令要求的输出格式写出。工具按下面的指令使用；最后一次工具结果之后，把故事作为回复写出来。只有工具调用、没有故事的回复不算完成。",
-        ]
-      : [
-          "[COMPLETION] The result of this runtime is the story in your reply, written in the output format the instructions below require. Use tools as the instructions below say; after the last tool result, write the story as your reply. A reply with a tool call and no story does not finish this runtime.",
-        ];
-  }
-  if (mode === "completing-tool") {
-    // The run ends with the tool, and a quiet turn is recorded through it
-    // too: this runtime is not given `runtime-done`, which records nothing.
-    const names = (contract?.completingTools ?? []).map(
-      (name) => `\`${name}\``,
-    );
-    if (isZh) {
-      const tool =
-        names.length === 0
-          ? "完成工具"
-          : names.length === 1
-            ? ` ${names[0]} `
-            : ` ${names.join("、")} 中的任意一个`;
-      return [
-        `[COMPLETION] 本 runtime 在成功调用${tool}后结束：调用成功后框架会自动结束本次运行。之后不要输出额外终止文本，也不要调用 \`runtime-done\`——本 runtime 没有该工具。`,
-        "[COMPLETION] 本回合确实无变化时，也通过同一个工具记录：按工具说明提交空结果。",
+  const required = contract?.requiredWork;
+  const names = required?.toolNames.map((name) => `\`${name}\``).join(", ");
+  const lines = isZh
+    ? [
+        "[COMPLETION] 完成必需的业务工具工作后，单独调用 `submit-output` 提交最终结果。参数必须符合该工具的 schema；回复正文不是输出通道。若提交被拒绝，修正报告的问题并再次调用。提交成功结束本次运行，但不代表更改已经保存。",
+        "[COMPLETION] 没有业务输出且 schema 允许时，提交 `{}`。没有声明输出 schema 的 system agent 可以这样表达无变化。提交工具不产生领域写入，也不代替必需的业务工作。",
+      ]
+    : [
+        "[COMPLETION] After required business tool work, call `submit-output` alone with the final result. Arguments must match the tool schema; reply content is not an output channel. If rejected, correct the reported problems and submit again. Successful submission ends this run; it does not confirm that changes have been saved.",
+        "[COMPLETION] Submit `{}` when there is no business output and the schema permits it. A system agent without an authored output schema can use this for no change. Submission produces no domain writes and does not replace required business work.",
       ];
-    }
-    const tool =
-      names.length === 0
-        ? "its completing tool"
-        : names.length === 1
-          ? names[0]
-          : `one of ${names.join(", ")}`;
-    return [
-      `[COMPLETION] This runtime ends when a call to ${tool} succeeds: the framework then finishes the run. Do not emit terminator text after it, and do not call \`runtime-done\` — this runtime does not have that tool.`,
-      "[COMPLETION] A turn in which nothing changed is recorded through the same tool: submit the empty result its description allows.",
-    ];
-  }
-  if (mode === "structured-output") {
-    return isZh
-      ? [
-          "[COMPLETION] 本 runtime 以**结构化 JSON 输出**结束：完成所有业务工具调用后，直接返回符合 schema 的 JSON。不要调用 `runtime-done`——本 runtime 没有该工具。",
-        ]
-      : [
-          "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
-        ];
-  }
-  // A runtime that must record its result is not told that `runtime-done`
-  // alone ends a quiet turn: the loop rejects that call.
-  if (isZh) {
-    return [
-      "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
-      contract?.requireToolUse
-        ? "[COMPLETION] 本 runtime 必须用声明的业务工具提交结果：只调用 `runtime-done` 不会记录任何内容。本回合确实无变化时，也要按工具说明提交空结果，再调用 `runtime-done`。不要反复调用同一个业务工具。"
-        : "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
-    ];
-  }
-  return [
-    "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
-    contract?.requireToolUse
-      ? "[COMPLETION] This runtime must record its result with a declared business tool: `runtime-done` alone records nothing. If nothing changed this turn, submit the empty result the tool's description allows, then call `runtime-done`. Do not repeatedly call the same business tool."
-      : "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
-  ];
+  if (required?.required)
+    lines.push(
+      isZh
+        ? `[COMPLETION] 提交前必须成功调用${names ? `以下业务工具之一：${names}` : "至少一个已授权的业务工具"}。确实无变化时也要按业务工具说明提交空结果，再调用 \`submit-output\`。业务工具成功后不要重复写入；读取结果后再提交最终输出。`
+        : `[COMPLETION] Before submission, ${names ? `one of these business tools must succeed: ${names}` : "at least one authorized business tool must succeed"}. Even for no change, send the empty result allowed by the business tool, then call \`submit-output\`. Read successful business results before submitting output; do not repeat successful writes.`,
+    );
+  return lines;
 }
 
 /**
@@ -636,11 +577,7 @@ export function buildFrameworkPreamble(
   }
 
   const languageName = resolveLocaleLanguageName(locale);
-  // Framework completion contract — see packages/tools/src/builtin/runtime-done.ts
-  // and the tool_calls early-exit branch in turn-executor.ts. Without this
-  // preamble, agent runtimes waste a round-trip on a terminator message after
-  // every successful tool call. Emitted in the session's instruction language
-  // (English, or Chinese for a Chinese session) rather than every locale at once.
+  // Static instruction text follows the framework instruction locale.
   const isZh = instructionLocaleFor(locale) === "zh";
   const completion = completionInstruction(options, isZh);
   // The whole preamble is in one language. With the frame and the language

@@ -100,9 +100,9 @@ runtime:
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
-    finishWith: save-facts
+    completion: { afterTools: [save-facts] }
 ---
-Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
+Extract facts supported by runtime-inputs.narrative.value, then call save-facts. Read its result and call submit-output with the final output object.
 ```
 
 这个包的 ID 是目录名 `example`，入口是 `server/index.js`（它注册 `save-facts`），runtime 没有 `function` 块所以是 agent，包提供 `example.facts@1`，因为 runtime 输出它。这些都不用写，见[默认值](#默认值)。
@@ -175,15 +175,15 @@ entry 里的注册和清单里的声明双向核对：注册了却没声明，�
 
 ## Runtime 分组字段
 
-| 字段          | 主要配置                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                    |
-| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                 |
-| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `finishWith`, `completion`, `loop` |
-| `function`    | 有这个块的 runtime 是 function，没有的是 agent；`handler`、`model`、`timeoutMs`、`tools`   |
-| `guard`       | runtime 相对的 guard 模块                                                                  |
-| `effects`     | 读写资源与 `parallelSafe`                                                                  |
-| `permissions` | 执行权限声明                                                                               |
+| 字段          | 主要配置                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                  |
+| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`               |
+| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `completion`, `loop`             |
+| `function`    | 有这个块的 runtime 是 function，没有的是 agent；`handler`、`model`、`timeoutMs`、`tools` |
+| `guard`       | runtime 相对的 guard 模块                                                                |
+| `effects`     | 读写资源与 `parallelSafe`                                                                |
+| `permissions` | 执行权限声明                                                                             |
 
 根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
 
@@ -213,7 +213,6 @@ permissions:
 | `io.selfData[].format`、`maxEntries` | `summary`、`50` |
 | `agent.model` | `io.visibility: story` 的 runtime 用 `story`，其他用 `plugin` |
 | `agent.reasoning` | `true`：沿用模型自己的思考设置 |
-| `agent.toolChoice`（写了 `finishWith` 时） | `required` |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
 | `agent.loop.profile` | `io.visibility: story` 的 runtime 用 `story`，其他用 `system` |
 | `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*`、`corrections.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
@@ -226,7 +225,6 @@ permissions:
 
 - 只写了 `event` 的 hook，写成事件名：`- PreToolUse`。
 - 只写了 `point` 和 `id` 的扩展，写成 `<point>/<id>`。
-- `completion: {require: tool-use, afterTools: [一个工具]}` 加 `toolChoice: required`，写成 `finishWith: <工具>`，见[完成条件](#完成条件agentfinishwithagentcompletion)。
 
 下面这些字段不写时由 Covel 推出。写了和推出的值一样时，`pnpm validate:plugin` 同样给出警告（`is the default value; remove it` 或 `is worked out from …; remove it`）。
 
@@ -421,34 +419,43 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 - 每次都用满传输层重试的 5xx 也只够两轮。
 - 很快返回、只占一个 HTTP 请求的失败（连接在应答中途断开、生成错误）才用得上更多次数。
 
-### 完成条件（`agent.finishWith`、`agent.completion`）
+<a id="完成条件agentfinishwithagentcompletion"></a>
+<a id="agent-output-submission"></a>
 
-调用一个工具就结束的 agent 写 `finishWith`：
+### 完成条件（`agent.completion`）
+
+每个 agent 都用宿主生成的 `submit-output` 提交最终结果。故事和系统 agent 使用同一个工具；回复正文不是输出通道。提交成功只结束计算，写入仍要通过 proposal 校验和提交。
+
+工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
+
+没有输出 schema 时，宿主提供默认对象：
+
+- 故事 agent：必需的非空白 `narrativeOutput: string`，可选 `yield: user | continue`。
+- 系统 agent：开放对象，可选 `narrativeOutput: string`、`completion: done | pending`、`preGameDone: boolean`，允许其他业务字段。`{}` 表示没有业务输出。需要给下游提供类型化输出时应声明 schema。
+
+`submit-output` 自动可用，不写进工具白名单、注册声明或 `defer`。函数仍返回 handler 结果，不能调用这个工具。参数里的数据始终是模型输出，不能借 `pluginData`、UI 或事件形状产生写入。
+
+`agent.completion` 只声明提交前必须完成的业务工作：
 
 ```yaml
 agent:
-  finishWith: save-facts
+  tools:
+    plugin: [save-facts]
+  completion:
+    afterTools: [save-facts]
 ```
 
-- `save-facts` 成功之后 runtime 就结束，不再多问模型一次。没有成功调用它就结束时，这次运行失败。
-- 模型每一步都必须调用工具，和写了 `toolChoice: required` 一样。写了 `agent.toolChoice` 时用写的值。
-- 它和 `completion: {require: tool-use, afterTools: [save-facts]}` 加 `toolChoice: required` 的意思相同。
+- 非空 `afterTools` 隐含 `require: tool-use`，要求列表中至少一个已授权的本插件或 builtin 业务工具成功。该调用不结束 runtime；模型读完工具结果后再调用 `submit-output`。
+- `require: tool-use` 不带列表时，任意已授权的业务工具成功即可。失败调用、提交、工具搜索、挂起和委托控制不算业务工作。
+- 无变化时也要按业务工具说明提交空结果，再提交最终输出；不要为重新提交输出而重复已经成功的写入。
+- 导入服务不能列为必需工作，因为它的提供者可能缺席。必需失败仍须由同名工具后续成功解决。
+- `finishWith`、`completion.require: explicit` 和 `runtime-done` 已移除。旧的 `finishWith: save-facts` 改为上面的 `completion`，并在提示词里要求读取工具结果后提交输出。
 
-完成工具应在返回成功之前检查任务所需的覆盖条件。例如[世界事实提取](./tools.md#逐目标评估)要求逐项评估已提供的未完成目标；仅有合法 JSON 不证明提取完整。
-
-有几个完成工具，或者没有变化时要调用 `runtime-done`，就写完整的 `completion`。`finishWith` 和 `completion` 只能写一个。导入的服务工具不能做完成工具：runtime 不能靠另一个插件才能结束。
-
-- `completion.afterTools`：列出的工具成功后就结束。
-- 需要模型读完工具结果再修改时，使用 `completion.require: tool-use` 并省略 `afterTools`。例如角色创建会先返回填好的叙事，模型复核后才结束。
-- `completion.require: explicit`：要以一次成功的完成工具调用，或一次 `runtime-done` 结束。`io.visibility: story` 的 runtime 不能用它。
-- `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
-- 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
-- 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
-- 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
+业务工具仍负责覆盖条件等领域校验。仅有合法 JSON 不证明任务完整。输出提交规则见[工具](./tools.md#submit-output)。
 
 ### 工具选择和思考（`agent.toolChoice`、`agent.reasoning`）
 
-- `agent.toolChoice: required` 要求模型每一步都调用一个工具，调用哪个由模型选。`{name: <工具>}` 要求它调用这一个工具。不写时（也没写 `finishWith`）由模型自己决定。
+- `agent.toolChoice: required` 要求模型每一步都调用一个工具，调用哪个由模型选。`{name: <工具>}` 要求调用这一个工具。不写时由模型自己决定。
 - `agent.reasoning: false` 关闭这个 runtime 的思考，适合只填工具参数的提取类 runtime。不写时沿用模型自己的思考设置；玩家显式设置的思考档位仍然优先。
 - 模型处于思考模式时，服务商不接受强制的工具选择，这时仍由模型自选。
 
@@ -863,7 +870,7 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 | `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
 | `finalizer.maxSteps` | 到步数上限或请求不再装得进模型上下文时，在满足收尾条件后关闭工具再要一次最终答案。超限收尾要求已有完整工具步骤，按[提示词预算](./prompt-structure.md#预算)按需裁剪工具组。`false` 关闭这两种收尾 |
 | `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
-| `corrections.toolUse` | 缺少必需的工具工作或显式完成时的纠正次数。整数 0–3，默认 1 |
+| `corrections.toolUse` | 缺少必需的工具工作时的纠正次数。整数 0–3，默认 1 |
 | `corrections.review` | `PostLLMResponse` 退回草稿后的纠正次数。整数 0–5，默认 2 |
 | `corrections.loopPerturbation` | 工具循环打转时，进入 `fallback` 前的扰动次数。整数 0–3，默认 1 |
 | `corrections.outputRepair` | 输出无效时关闭工具重新请求完整答案的次数。整数 0–3，默认 1 |
@@ -890,9 +897,9 @@ Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩�
 - 最终取值为 `accept` 的 `truncation` 要求最终的 `stream` 为 `true`：只保留玩家边写边读过的正文。所以故事写 `stream: false` 时也要写 `truncation: reject`。
 - `finalizer.deadlineReserveMs` 是非负整数，并且小于 `timeoutMs`（没写时按默认时限比较）。
 
-**时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse` 或显式完成要求，最终输出也不是来自完成工具），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
+**时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse`），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
 
-**纠正预算与输出修复。** `agent.loop.corrections` 的四项预算互不占用，`0` 关闭对应的纠正；只写要覆盖的键。裸文本结束和没有业务工作的 `runtime-done` 共用 `toolUse` 预算。循环及收尾步骤结束后，输出若不符合 schema，或故事正文为空，默认再发一次关闭工具的请求，带上校验错误，要求重新给出完整答案；仍不合格时以 `invalid-output` 失败。修复不追加旧草稿或插话前的正文。只有原本成功结束、必需的工具工作与完成条件已满足、输出不来自完成工具、且还剩至少 3 秒时才尝试；异常、取消和真正超时不修复。每次修复消耗一个 `outputRepair` 预算。每个新的循环重新计数；恢复执行不算新的循环，接着挂起前用掉的次数计数。
+**纠正预算与输出修复。** `agent.loop.corrections` 的四项预算互不占用，`0` 关闭对应的纠正；只写要覆盖的键。缺少必需业务工作时使用 `toolUse` 预算。循环及收尾步骤结束后，输出若不符合 schema，或故事正文为空，默认再发一次关闭工具的请求，带上校验错误，要求重新给出完整答案；仍不合格时以 `invalid-output` 失败。修复不追加旧草稿或插话前的正文。只有原本成功结束、必需的工具工作与完成条件已满足、且还剩至少 3 秒时才尝试；异常、取消和真正超时不修复。每次修复消耗一个 `outputRepair` 预算。每个新的循环重新计数；恢复执行不算新的循环，接着挂起前用掉的次数计数。
 
 ### 作者信息
 
@@ -1004,12 +1011,12 @@ homepage: https://example.com/tidefall
 
 内置的 `world-init` 有四个和维度有关的 runtime。`dimension-clock` 排在时间结算和 `dimension-tracker` 之后。
 
-| Runtime             | 阶段               | 职责                                                                                                                                                                                                  |
-| ------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dimension-context` | pre-turn function  | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                                                                                                   |
-| `dimension-tracker` | post-turn agent    | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证，本轮结算后的世界时钟（`world-time-evolution@1`）为可选输入；`finishWith: update-dimensions`，无变化也以 `update-dimensions({updates: []})` 结算 |
-| `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                         |
-| `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                                      |
+| Runtime             | 阶段               | 职责                                                                                                                                                                                                                    |
+| ------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dimension-context` | pre-turn function  | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                                                                                                                     |
+| `dimension-tracker` | post-turn agent    | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证，本轮结算后的世界时钟（`world-time-evolution@1`）为可选输入；`completion: { afterTools: [update-dimensions] }`，无变化也以 `update-dimensions({updates: []})` 结算 |
+| `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                                           |
+| `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                                                        |
 
 维度工具把不符合 schema 的值报告为可修正的输入错误，见 [update-dimensions](./tools.md#update-dimensions)。
 **读取。**

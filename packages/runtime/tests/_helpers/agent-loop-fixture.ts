@@ -152,20 +152,19 @@ export interface LoopRunOptions {
   readonly loaded?: LoadedRuntime;
 }
 
-const loaded = { promptTemplate: "prompt" } as unknown as LoadedRuntime;
-
 export async function runLoop(
   opts: LoopRunOptions,
 ): Promise<AgentToolLoopCompleted> {
+  const runtime = opts.manifest ?? manifest();
   return (await runAgentToolLoop({
     executionContext: {
       executionId: "exec-loop",
       origin: "manual",
       countPolicy: "none",
     },
-    manifest: opts.manifest ?? manifest(),
+    manifest: runtime,
     input,
-    loaded: opts.loaded ?? loaded,
+    loaded: opts.loaded ?? { manifest: runtime, promptTemplate: "prompt" },
     deps: {
       toolExecutor: makeExecutor(),
       ...opts.deps,

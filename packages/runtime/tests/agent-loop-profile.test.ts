@@ -448,7 +448,6 @@ describe("settling a deadline", () => {
       effectiveMaxSteps: 5,
       deadline: Date.now(),
       requiredToolUseUnmet: false,
-      requiredCompletionUnmet: false,
     };
   }
 

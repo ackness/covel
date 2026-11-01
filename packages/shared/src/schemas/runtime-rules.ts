@@ -50,7 +50,7 @@ export interface RuntimeRuleView extends PresentationRuleView {
   readonly handler?: string;
   readonly stage?: string;
   readonly visibility?: string;
-  readonly requireExplicitCompletion?: boolean;
+  readonly requireToolUse?: boolean;
   /** `true` when the runtime runs only as a sub-agent and is never scheduled. */
   readonly subagentOnly?: boolean;
   /** The guard module, if any. */
@@ -99,6 +99,7 @@ export interface RuntimeRuleView extends PresentationRuleView {
   readonly builtinTools?: readonly string[];
   /** The package's own tools the runtime names. */
   readonly pluginTools?: readonly string[];
+  readonly datasetTools?: readonly string[];
   /**
    * Imported services, with the tool name each one gets. `explicit` is set
    * when the author chose the name (`as`); the derived one is checked here.
@@ -108,10 +109,8 @@ export interface RuntimeRuleView extends PresentationRuleView {
     readonly name: string;
     readonly explicit?: boolean;
   }[];
-  /** Tools whose successful call completes the run. */
-  readonly completingTools?: readonly string[];
-  /** The authored short form of one completing tool. */
-  readonly finishWith?: string;
+  /** Business tools required before output submission. */
+  readonly requiredBusinessTools?: readonly string[];
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
   readonly operationsInputs?: readonly {
@@ -136,7 +135,7 @@ type RuleField =
   | "handler"
   | "stage"
   | "visibility"
-  | "requireExplicitCompletion"
+  | "requireToolUse"
   | "subagentOnly"
   | "guard"
   | "loopPreset"
@@ -153,8 +152,7 @@ type RuleField =
   | "builtinTools"
   | "pluginTools"
   | "serviceImports"
-  | "completingTools"
-  | "finishWith";
+  | "requiredBusinessTools";
 
 /** Where a manifest format writes each field the rules read. */
 export type RuntimeRuleFieldPaths = Readonly<
@@ -169,7 +167,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   handler: ["handler"],
   stage: ["stage"],
   visibility: ["outputKind"],
-  requireExplicitCompletion: ["requireExplicitCompletion"],
+  requireToolUse: ["requireToolUse"],
   subagentOnly: ["subagentOnly"],
   guard: ["guard"],
   loopPreset: ["loopProfile", "preset"],
@@ -186,9 +184,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   builtinTools: ["tools", "builtin"],
   pluginTools: ["tools", "plugin"],
   serviceImports: ["tools", "services"],
-  completingTools: ["completeAfterTools"],
-  // The IR has only the long form; nothing writes this path.
-  finishWith: ["completeAfterTools"],
+  requiredBusinessTools: ["completeAfterTools"],
 };
 
 /** The grouped RUNTIME.md an author writes. */
@@ -199,7 +195,7 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   handler: ["function", "handler"],
   stage: ["schedule", "stage"],
   visibility: ["io", "visibility"],
-  requireExplicitCompletion: ["agent", "completion", "require"],
+  requireToolUse: ["agent", "completion", "require"],
   subagentOnly: ["schedule", "subagentOnly"],
   guard: ["guard"],
   loopPreset: ["agent", "loop", "profile"],
@@ -216,8 +212,7 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   builtinTools: ["agent", "tools", "builtin"],
   pluginTools: ["agent", "tools", "plugin"],
   serviceImports: ["agent", "tools", "services"],
-  completingTools: ["agent", "completion", "afterTools"],
-  finishWith: ["agent", "finishWith"],
+  requiredBusinessTools: ["agent", "completion", "afterTools"],
 };
 
 type RulePath = (
@@ -375,7 +370,11 @@ function serviceImportIssues(
     );
     return;
   }
-  const own = new Set([...(m.builtinTools ?? []), ...(m.pluginTools ?? [])]);
+  const own = new Set([
+    ...(m.builtinTools ?? []),
+    ...(m.pluginTools ?? []),
+    ...(m.datasetTools ?? []),
+  ]);
   const names = new Set<string>();
   const contracts = new Set<string>();
   for (const [i, entry] of imports.entries()) {
@@ -415,12 +414,11 @@ function serviceImportIssues(
       );
     names.add(entry.name);
   }
-  const completes = (tool: string) =>
-    `the imported tool "${tool}" cannot complete the run: it is absent when its provider is; complete with a tool of the runtime's own`;
-  for (const [i, tool] of (m.completingTools ?? []).entries())
-    if (names.has(tool)) add(at("completingTools", i), completes(tool));
-  if (m.finishWith !== undefined && names.has(m.finishWith))
-    add(at("finishWith"), completes(m.finishWith));
+  const prerequisiteIssue = (tool: string) =>
+    `the imported tool "${tool}" cannot be required business work: it is absent when its provider is; require a tool of the runtime's own`;
+  for (const [i, tool] of (m.requiredBusinessTools ?? []).entries())
+    if (names.has(tool))
+      add(at("requiredBusinessTools", i), prerequisiteIssue(tool));
 }
 
 export interface RuntimeRuleIssue {
@@ -491,15 +489,33 @@ export function runtimeRuleIssues(
       `a default provider requires ${name("outputContract")}`,
     );
 
+  const businessTools = new Set([
+    ...(m.builtinTools ?? []),
+    ...(m.pluginTools ?? []),
+    ...(m.datasetTools ?? []),
+  ]);
+  const controlTools = new Set([
+    "submit-output",
+    "search-tools",
+    "suspend",
+    "delegate",
+    "delegate-batch",
+  ]);
+  for (const [i, tool] of (m.requiredBusinessTools ?? []).entries()) {
+    if (controlTools.has(tool) || (!authoring && !businessTools.has(tool)))
+      add(
+        at("requiredBusinessTools", i),
+        "required business work must name an authorized own or builtin business tool",
+      );
+  }
   if (
-    m.requireExplicitCompletion &&
-    (m.runtimeType === "function" ||
-      m.visibility === "story" ||
-      m.output?.schema)
+    !authoring &&
+    m.requiredBusinessTools?.length &&
+    m.requireToolUse === false
   )
     add(
-      at("requireExplicitCompletion"),
-      `explicit completion (${name("requireExplicitCompletion")}) is for non-story agent runtimes without ${name("output", "schema")}; completion uses tools or runtime-done`,
+      at("requireToolUse"),
+      "afterTools implies tool-use; false is contradictory",
     );
 
   if (m.loop) loopProfileIssues(m, m.loop, { authoring }, at, name, add);

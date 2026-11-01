@@ -1,3 +1,4 @@
+import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
 import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -61,6 +62,9 @@ describe("framework actor contract", () => {
     async (schema) => {
       const loaded = await loadRuntime(await fixture(schema), "sample");
       expect(loaded.outputSchema).toEqual(characterActorOutputJsonSchema());
+      expect(resolveAgentOutput(loaded).schema).toEqual(
+        characterActorOutputJsonSchema(),
+      );
       expect(loaded.outputContractSchema).toEqual(
         characterActorOutputJsonSchema(),
       );
@@ -69,6 +73,22 @@ describe("framework actor contract", () => {
   );
   it("retains canonical validation beside a weaker explicit schema", async () => {
     const loaded = await loadRuntime(await fixture("weak.json"), "sample");
+    expect(loaded.outputContractSchema).toEqual(
+      characterActorOutputJsonSchema(),
+    );
+  });
+  it("prefers a convention schema over the actor default while retaining its contract", async () => {
+    const discovery = await fixture();
+    const schema = {
+      type: "object",
+      properties: { brief: { type: "string" } },
+    };
+    await fs.writeFile(
+      path.join(discovery.rootPath, "output.schema.json"),
+      JSON.stringify(schema),
+    );
+    const loaded = await loadRuntime(discovery, "sample");
+    expect(resolveAgentOutput(loaded).schema).toEqual(schema);
     expect(loaded.outputContractSchema).toEqual(
       characterActorOutputJsonSchema(),
     );

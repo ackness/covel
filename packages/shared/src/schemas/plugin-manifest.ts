@@ -459,7 +459,15 @@ export const pluginManifestSchema = z.strictObject({
   contributes: z
     .strictObject({
       tools: z
-        .array(z.string().min(1))
+        .array(
+          z
+            .string()
+            .min(1)
+            .refine(
+              (name) => name !== "submit-output",
+              "submit-output is reserved by the host",
+            ),
+        )
         .describe("Names of tools the entry registers with `registerTool`.")
         .optional(),
       actions: z

@@ -1,3 +1,4 @@
+import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
 /**
  * Deferred tool loading (tool-search) — end-to-end agent-loop behaviour.
  *
@@ -137,7 +138,7 @@ describe("tool-search: deferred loading in the agent loop", () => {
     expect(llm.requestTools).toHaveLength(0);
   });
 
-  it("advertises only search-tools initially, activates matches for the next step", async () => {
+  it("advertises search and submission initially, activates matches for the next step", async () => {
     const llm = new ScriptedLLM([
       toolCallResponse(SEARCH_TOOLS_TOOL_NAME, { query: "roll dice" }),
       toolCallResponse("roll-dice", { value: "2d6" }),
@@ -156,10 +157,10 @@ describe("tool-search: deferred loading in the agent loop", () => {
     const rr = result.runtimeResults.find((r) => r.runtimeId === manifest.name);
     expect(rr?.status).toBe("success");
 
-    // Step 1: reduced surface — search-tools + runtime-done, no pool schemas.
+    // Step 1: reduced surface — search-tools + submit-output, no pool schemas.
     const firstTools = (llm.requestTools[0] ?? []).map((d) => d.name);
     expect(firstTools).toContain(SEARCH_TOOLS_TOOL_NAME);
-    expect(firstTools).toContain("runtime-done");
+    expect(firstTools).toContain("submit-output");
     for (const t of TOOL_POOL) expect(firstTools).not.toContain(t.name);
 
     // Step 2: the activated tool joined the surface and stays for step 3.
@@ -210,7 +211,12 @@ describe("buildToolDefinitions defer shapes", () => {
         tools: { plugin: ["x"], ...(defer !== undefined ? { defer } : {}) },
       });
       expect(() =>
-        buildToolDefinitions(manifest, toolExecutor, TOOL_CONTEXT),
+        buildToolDefinitions(
+          manifest,
+          toolExecutor,
+          TOOL_CONTEXT,
+          resolveAgentOutput({ manifest, promptTemplate: "" }),
+        ),
       ).toThrow(
         'runtime "mega/worker" declares plugin tool "x", but its plugin did not register it',
       );
@@ -224,6 +230,7 @@ describe("buildToolDefinitions defer shapes", () => {
         makeManifest({ tools: { builtin: ["memory-search"] } }),
         toolExecutor,
         TOOL_CONTEXT,
+        resolveAgentOutput({ manifest: makeManifest(), promptTemplate: "" }),
       );
       expect(definitions?.map((definition) => definition.name)).not.toContain(
         "memory-search",
@@ -243,6 +250,7 @@ describe("buildToolDefinitions defer shapes", () => {
       makeManifest({ tools: { plugin: [module.name] } }),
       toolExecutor,
       TOOL_CONTEXT,
+      resolveAgentOutput({ manifest: makeManifest(), promptTemplate: "" }),
     );
     expect(
       definitions?.find((definition) => definition.name === module.name),
@@ -261,7 +269,12 @@ describe("buildToolDefinitions defer shapes", () => {
       },
     });
     const names = (
-      buildToolDefinitions(manifest, toolExecutor, TOOL_CONTEXT) ?? []
+      buildToolDefinitions(
+        manifest,
+        toolExecutor,
+        TOOL_CONTEXT,
+        resolveAgentOutput({ manifest, promptTemplate: "" }),
+      ) ?? []
     ).map((d) => d.name);
     expect(names).toContain("roll-dice");
     expect(names).toContain(SEARCH_TOOLS_TOOL_NAME);
@@ -284,7 +297,12 @@ describe("buildToolDefinitions defer shapes", () => {
       tools: { builtin: TOOL_POOL.map((t) => t.name) },
     });
     const names = (
-      buildToolDefinitions(manifest, toolExecutor, TOOL_CONTEXT) ?? []
+      buildToolDefinitions(
+        manifest,
+        toolExecutor,
+        TOOL_CONTEXT,
+        resolveAgentOutput({ manifest, promptTemplate: "" }),
+      ) ?? []
     ).map((d) => d.name);
     for (const t of TOOL_POOL) expect(names).toContain(t.name);
     expect(names).not.toContain(SEARCH_TOOLS_TOOL_NAME);

@@ -1,43 +1,73 @@
 import { describe, expect, it } from "vitest";
 import { runtimeManifestInputSchema } from "../src/schemas/plugin.js";
+import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 
-const manifest = {
-  name: "external-extractor",
-  description: "An optional state extractor",
-  stage: "post-turn",
-  outputKind: "system",
-  trigger: { type: "auto" },
-  requireExplicitCompletion: true,
-  tools: { plugin: ["save-facts"] },
-  completeAfterTools: ["save-facts"],
-};
+const authored = { schedule: { stage: "post-turn" } };
 
-describe.each([runtimeManifestInputSchema])(
-  "explicit completion manifest contract",
-  (schema) => {
-    it("accepts a third-party extractor with a legitimate no-change path", () => {
-      expect(schema.safeParse(manifest).success).toBe(true);
-    });
-    it.each([
-      { outputKind: "story" },
-      { runtimeType: "function", handler: "./handler.js" },
-      { output: { schema: "./result.schema.json" } },
-    ])("rejects incompatible completion channels: %j", (overrides) => {
-      const result = schema.safeParse({ ...manifest, ...overrides });
-      expect(result.success).toBe(false);
-      if (!result.success)
-        expect(
-          result.error.issues.some((issue) =>
-            issue.path.includes("requireExplicitCompletion"),
-          ),
-        ).toBe(true);
+describe("agent output submission authoring", () => {
+  it.each([
+    { finishWith: "save-facts" },
+    { completion: { require: "explicit" } },
+    { tools: { builtin: ["submit-output"] } },
+    { tools: { plugin: ["submit-output"] } },
+    { tools: { defer: ["submit-output"] } },
+    { completion: { afterTools: ["submit-output"] } },
+    { tools: { services: [{ contract: "facts@1", as: "submit-output" }] } },
+  ])(
+    "rejects removed fields and reserved or unavailable tools: %j",
+    (agent) => {
       expect(
-        schema.safeParse({
-          ...manifest,
-          ...overrides,
-          requireExplicitCompletion: false,
+        runtimeAuthoringManifestSchema.safeParse({ ...authored, agent })
+          .success,
+      ).toBe(false);
+    },
+  );
+
+  it("accepts required business work for either output kind", () => {
+    for (const visibility of ["story", "system"]) {
+      expect(
+        runtimeAuthoringManifestSchema.safeParse({
+          ...authored,
+          io: { visibility, output: { schema: "./output.json" } },
+          agent: {
+            tools: { plugin: ["save-facts"] },
+            completion: { afterTools: ["save-facts"] },
+          },
         }).success,
       ).toBe(true);
-    });
-  },
-);
+    }
+  });
+
+  it("rejects the removed compiled flag even when false", () => {
+    for (const requireExplicitCompletion of [true, false]) {
+      expect(
+        runtimeManifestInputSchema.safeParse({
+          name: "extract",
+          description: "Extract",
+          requireExplicitCompletion,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects contradictory compiled business prerequisites", () => {
+    expect(
+      runtimeManifestInputSchema.safeParse({
+        name: "extract",
+        description: "Extract",
+        requireToolUse: false,
+        completeAfterTools: ["save-facts"],
+        tools: { plugin: ["save-facts"] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("does not allow a function to declare the host submission tool", () => {
+    expect(
+      runtimeAuthoringManifestSchema.safeParse({
+        ...authored,
+        function: { tools: { builtin: ["submit-output"] } },
+      }).success,
+    ).toBe(false);
+  });
+});

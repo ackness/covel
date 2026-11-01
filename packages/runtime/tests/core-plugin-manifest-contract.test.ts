@@ -283,11 +283,10 @@ describe("core plugin manifest contract", () => {
       "char-creator/character-tracker",
     ]) {
       const extractor = requireRuntime(manifests, id);
-      expect(extractor.requireExplicitCompletion).toBe(true);
-      expect(extractor.requireToolUse).not.toBe(true);
+      expect(extractor).not.toHaveProperty("requireExplicitCompletion");
+      expect(extractor.requireToolUse).toBe(true);
       // Each reads a conversation of story text; a required tool call keeps
-      // the model from continuing the story, and runtime-done still settles a
-      // quiet turn.
+      // the model from continuing the story; final output is submitted separately.
       expect(extractor.llm?.toolChoice).toBe("required");
     }
 

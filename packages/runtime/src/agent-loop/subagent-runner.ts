@@ -1,3 +1,4 @@
+import { agentOutputContract } from "./agent-output-contract.js";
 import {
   CHARACTER_ACTOR_CONTRACT,
   characterActorInputSchema,
@@ -923,6 +924,7 @@ async function runProvider({
     const assembled = await prepare(
       buildContext({
         promptTemplate: loaded.promptTemplate,
+        agentOutput: agentOutputContract(loaded),
         manifest,
         turnInput: input,
         completedResults: new Map(),

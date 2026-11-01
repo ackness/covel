@@ -40,23 +40,8 @@ function compileDependency(
 
 type AuthoredAgent = NonNullable<RuntimeAuthoringManifest["agent"]>;
 
-/**
- * The completion rule an agent writes: `finishWith: <tool>` is the short form
- * of `completion: { require: tool-use, afterTools: [<tool>] }`.
- */
-function agentCompletion(agent: AuthoredAgent | undefined) {
-  if (agent?.finishWith === undefined) return agent?.completion;
-  return { require: "tool-use" as const, afterTools: [agent.finishWith] };
-}
-
-/**
- * The model call options of an agent. `finishWith` makes the model call a
- * tool on every step unless the agent names its own `toolChoice`.
- */
 function agentLlm(agent: AuthoredAgent | undefined) {
-  const toolChoice =
-    agent?.toolChoice ??
-    (agent?.finishWith !== undefined ? ("required" as const) : undefined);
+  const toolChoice = agent?.toolChoice;
   const llm = {
     ...(agent?.reasoning === false
       ? { reasoningEffort: "disabled" as const }
@@ -164,7 +149,7 @@ export function compileRuntimeManifest(
       : undefined;
   const loop = a?.loop;
   const loopProfile = agentLoopProfile(a);
-  const completion = agentCompletion(a);
+  const completion = a?.completion;
   const visibility = runtime.io?.visibility ?? DEFAULT_RUNTIME_VISIBILITY;
   // An agent that leaves out its slot or loop limits gets the defaults of its
   // visibility; a function runtime has no loop and names a slot only when
@@ -265,9 +250,13 @@ export function compileRuntimeManifest(
     maxRetries: loop?.maxRetries ?? loopDefaults?.maxRetries,
     loopDetectionThreshold: loop?.loopDetection,
     maxRecursionDepth: loop?.maxRecursionDepth,
-    requireToolUse: completion?.require === "tool-use" || undefined,
-    requireExplicitCompletion: completion?.require === "explicit" || undefined,
-    completeAfterTools: completion?.afterTools,
+    requireToolUse:
+      completion?.require === "tool-use" ||
+      Boolean(completion?.afterTools?.length) ||
+      undefined,
+    completeAfterTools: completion?.afterTools?.length
+      ? completion.afterTools
+      : undefined,
     ...(loopProfile ? { loopProfile } : {}),
     outputKind: visibility,
     ...(runtime.io?.concealed ? { concealed: true } : {}),

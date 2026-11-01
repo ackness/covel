@@ -114,7 +114,11 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
     hookPipeline,
     onRuntimeComplete,
     llm: { generate },
-    loadRuntime: async () => ({ manifest, promptTemplate: "probe", handler }),
+    loadRuntime: async (admitted) => ({
+      manifest: admitted,
+      promptTemplate: "probe",
+      handler,
+    }),
   };
   const failedEvents = () =>
     events.filter((event) => event.type === "runtime.failed");
@@ -191,7 +195,7 @@ describe("resumed runtime terminal failures", () => {
           {},
           {
             ...f.manifest,
-            requireExplicitCompletion: kind === "missing completion",
+            requireToolUse: kind === "missing completion",
           },
           {
             ...f.deps,

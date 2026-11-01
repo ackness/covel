@@ -1,0 +1,3 @@
+### Changed
+
+- **Breaking: every agent submits output through the host-generated `submit-output` tool.** Loaded object schemas take precedence over host story/system defaults; agent completion no longer requests JSON reply content. Remove `finishWith`, `completion.require: explicit` and `runtime-done`. Use `completion.afterTools` for required business work, then submit final output. Reload package declarations and recreate cached compiled definitions and affected agent continuations; committed stories with unchanged payloads remain valid. See [completion conditions](../en/reference/plugins.md#agent-output-submission) and [submission](../en/reference/tools.md#submit-output).

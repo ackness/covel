@@ -13,11 +13,8 @@
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import type { LLMResponseFormat, LLMToolDefinition } from "@covel/shared";
-import {
-  buildToolDefinitions,
-  usesRuntimeDone,
-} from "../turn-executor/turn-executor-helpers.js";
+import type { LLMToolDefinition } from "@covel/shared";
+import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
 import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/retry-common.js";
 import {
@@ -25,6 +22,11 @@ import {
   type ResolvedLoopProfile,
 } from "./loop-profile.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
+
+import {
+  agentOutputContract,
+  type AgentOutputContract,
+} from "./agent-output-contract.js";
 
 export const DEFAULT_MAX_TOOL_STEPS = 20;
 
@@ -42,13 +44,9 @@ export interface AgentLoopPolicy {
    * matches from this pool for the rest of the run.
    */
   readonly deferredToolNames: ReadonlySet<string>;
-  /** JSON-schema response format when the runtime declares an output schema. */
-  readonly responseFormat: LLMResponseFormat | undefined;
-  /**
-   * Use the successful completing tool's structured result as the runtime
-   * output instead of asking the model for a second JSON channel.
-   */
-  readonly outputFromCompletingTool: boolean;
+  /** Final output is submitted only through the generated tool. */
+  readonly output: AgentOutputContract;
+  readonly responseFormat: undefined;
   /**
    * Session/API model override for this runtime. Story runtimes honour
    * the request-scoped story-only API override; every runtime kind honours the
@@ -66,7 +64,7 @@ export interface AgentLoopPolicy {
   readonly useStreaming: boolean;
   /**
    * Per-runtime maxSteps override, then caller budget, then the shared default.
-   * Successful completing tools stop early regardless of this ceiling.
+   * Accepted output ends the loop regardless of this ceiling.
    */
   readonly effectiveMaxSteps: number;
   /**
@@ -77,8 +75,6 @@ export interface AgentLoopPolicy {
   readonly retryPolicy: RetryPolicy;
   /** Nudge a bare (no-tool-call) finish back into the loop once. */
   readonly requireToolUse: boolean;
-  /** Successful tool names that complete the runtime after the response batch. */
-  readonly completeAfterTools: ReadonlySet<string>;
   /**
    * The resolved loop profile: whether text reaches the player, whether
    * queued player interjections are merged (the `story` preset only — plugin
@@ -90,8 +86,7 @@ export interface AgentLoopPolicy {
    * The runtime's exact execution authorization set: its declared
    * tool names (deferred names included — deferring only withholds the
    * schema advertisement, never grants or removes authorization) plus the
-   * framework-contract `runtime-done` sentinel for runtimes that use it
-   * (and story runtimes that receive a story correction).
+   * host-generated submission tool.
    * Passed to the ToolExecutor on every call so execution — not just
    * advertisement — is bounded by the manifest declaration.
    */
@@ -115,31 +110,21 @@ export function buildAgentLoopPolicy({
   maxSteps,
   timeoutMs,
 }: BuildAgentLoopPolicyOptions): AgentLoopPolicy {
-  if (manifest.requireExplicitCompletion && loaded.outputSchema) {
-    throw new Error(
-      "requireExplicitCompletion cannot be combined with an output schema, including convention-loaded output.schema.json",
-    );
-  }
-  // The ToolCallContext is passed so the executor can surface session-
-  // specific tool variants (e.g. character tools with schema-typed fields).
-  const toolDefs = deps.toolExecutor
-    ? buildToolDefinitions(manifest, deps.toolExecutor, {
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-      })
-    : undefined;
-
+  const output = agentOutputContract(loaded);
+  const toolDefs = buildToolDefinitions(
+    manifest,
+    deps.toolExecutor,
+    {
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      locale: input.locale,
+    },
+    output,
+  );
   const authorizedToolNames = new Set(declaredToolNames(manifest));
-  // Output contract, not loop behaviour.
-  // A story runtime is not offered `runtime-done` (see `usesRuntimeDone`),
-  // but a model may call it from habit, with or without a declared story
-  // schema. The call stays authorized so that the loop can answer it by
-  // asking for the story, not with a tool error.
-  if (usesRuntimeDone(manifest) || manifest.outputKind === "story") {
-    authorizedToolNames.add("runtime-done");
-  }
+  authorizedToolNames.add(output.toolName);
 
   // Output contract, not loop behaviour.
   const sessionRuntimeSlot = input.runtimeModelOverrides?.[manifest.name];
@@ -147,30 +132,13 @@ export function buildAgentLoopPolicy({
     input.modelOverride && manifest.outputKind === "story"
       ? input.modelOverride
       : sessionRuntimeSlot;
-  const completeAfterTools = new Set(manifest.completeAfterTools ?? []);
-  // Output contract, not loop behaviour.
-  const outputFromCompletingTool = Boolean(
-    loaded.outputSchema &&
-    manifest.outputKind !== "story" &&
-    manifest.requireToolUse === true &&
-    [...completeAfterTools].some((name) =>
-      toolDefs?.some((definition) => definition.name === name),
-    ),
-  );
-
   return {
     toolDefs,
     deferredToolNames: deps.toolExecutor
       ? resolveDeferredToolNames(manifest)
       : new Set<string>(),
-    // A required, auto-completing tool already exposes its parameter schema to
-    // the provider. Sending response_format too creates two competing output
-    // channels. The completing tool result still passes the runtime schema gate.
-    responseFormat:
-      loaded.outputSchema && !outputFromCompletingTool
-        ? { type: "json_schema" as const, schema: loaded.outputSchema }
-        : undefined,
-    outputFromCompletingTool,
+    responseFormat: undefined,
+    output,
     runtimeModelOverride,
     useStreaming: !!deps.llm.stream,
     effectiveMaxSteps: manifest.maxSteps ?? maxSteps,
@@ -182,8 +150,7 @@ export function buildAgentLoopPolicy({
       loopDetectionThreshold: manifest.loopDetectionThreshold,
       runtimeTimeoutMs: timeoutMs,
     }),
-    requireToolUse: manifest.requireToolUse === true,
-    completeAfterTools,
+    requireToolUse: output.requiredWork.required,
     profile: resolveLoopProfile(manifest),
     authorizedToolNames,
   };

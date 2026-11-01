@@ -62,9 +62,9 @@ runtime:
         select: /narrativeOutput
   agent:
     history: { maxTurns: 2 }
-    finishWith: save-note
+    completion: { afterTools: [save-note] }
 ---
-Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact that the narrative states.
+Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact that the narrative states. Read the result, then call `submit-output` with `{}`.
 ```
 
 Compared with a plugin that has only a prompt, these parts are new:
@@ -76,7 +76,7 @@ Compared with a plugin that has only a prompt, these parts are new:
 | `contributes.tools`              | The tools this plugin registers. The names must match the names registered in the entry file                                                              |
 | `contributes.data.notes`         | Declares the `notes` data space, and the shape (schema) of one record                                                                                     |
 | `agent.history: { maxTurns: 2 }` | The model sees the conversation of only the last 2 turns. See [controlling how much history the model sees](#controlling-how-much-history-the-model-sees) |
-| `agent.finishWith`               | After `save-note` succeeds, this agent ends right away, and does not ask the model one more time                                                          |
+| `agent.completion.afterTools`    | Requires `save-note` to succeed before the model submits final output with `submit-output`                                                                |
 
 This plugin has only one runtime, so you do not need to write `agent.tools.plugin`. It gets all the tools in `contributes.tools` automatically.
 
@@ -225,6 +225,13 @@ Validation does not run your code. To confirm that the tool is really registered
               "arguments": "{\"id\":\"gate-is-locked\",\"text\":\"The north gate is locked at dusk.\"}"
             }
           ]
+        },
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            { "id": "tc-2", "name": "submit-output", "arguments": "{}" }
+          ]
         }
       ],
       "expect": {
@@ -238,7 +245,7 @@ Validation does not run your code. To confirm that the tool is really registered
 }
 ```
 
-This case pretends the model called `save-note` once, and then checks whether the record is in `notes`. Run it:
+This case calls `save-note` once, submits `{}` through `submit-output`, then checks the record in `notes`. Run it:
 
 ```bash
 pnpm test:runtime -- notebook --pretty

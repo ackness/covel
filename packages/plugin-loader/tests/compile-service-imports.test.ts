@@ -139,7 +139,7 @@ describe("service import rules", () => {
       field: "agent.tools.services.1",
     },
     {
-      case: "a completing tool",
+      case: "required business work",
       agent: {
         tools: { services: ["inventory.items@1"] },
         completion: { require: "tool-use", afterTools: ["inventory-items"] },
@@ -152,7 +152,7 @@ describe("service import rules", () => {
         tools: { services: ["inventory.items@1"] },
         finishWith: "inventory-items",
       },
-      field: "agent.finishWith",
+      field: "agent",
     },
   ])("rejects a clash with $case at $field", ({ agent, field }) => {
     const found = issues({ ...staged, agent });

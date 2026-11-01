@@ -19,6 +19,8 @@
 5. 第一个使用共享历史视图的 agent 用这份 system prompt 估算要不要压缩。同一回合里这类 agent 共用一次压缩屏障；压缩成功后重新加载历史和摘要，重新投影并组装 context。声明了历史窗口的 runtime 不触发这个屏障，也不等它。
 6. 执行 `PostContextAssembly`，应用预算。之后每次 `PreLLMCall` 之后，再按实际的请求检查一次预算。
 
+Agent 完成指令统一要求在必需的业务工具工作后调用 `submit-output`。实际加载的输出 schema 在组装前固定，只放在该工具的参数定义中；preamble 不复制 schema，也不要求 JSON 回复正文。无业务输出且 schema 允许时提交 `{}`。工具名、描述、schema 和顺序在同一已准入 runtime 中保持稳定，以便复用提示词缓存。详见[完成条件](./plugins.md#agent-output-submission)。
+
 ### 本回合正文
 
 已提交的历史只到上一回合为止。本回合的消息要等执行提交之后才落库。所以框架把执行日志里还没提交的部分也放进对话：

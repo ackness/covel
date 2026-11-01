@@ -62,9 +62,9 @@ runtime:
         select: /narrativeOutput
   agent:
     history: { maxTurns: 2 }
-    finishWith: save-note
+    completion: { afterTools: [save-note] }
 ---
-Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact that the narrative states.
+Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact that the narrative states. Read the result, then call `submit-output` with `{}`.
 ```
 
 和只有提示词的插件相比，多了这几处：
@@ -76,7 +76,7 @@ Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact t
 | `contributes.tools`              | 这个插件注册了哪些工具。必须和入口文件里注册的名字一致                                 |
 | `contributes.data.notes`         | 声明 `notes` 这个数据空间，以及一条记录的形状（schema）                                |
 | `agent.history: { maxTurns: 2 }` | 只给模型看最近 2 个回合的对话。见[控制模型看到多少历史](#控制模型看到多少历史)         |
-| `agent.finishWith`               | `save-note` 成功之后，这个 agent 立刻结束，不再多问模型一次                            |
+| `agent.completion.afterTools`    | 要求 `save-note` 成功；模型读取结果后用 `submit-output` 提交最终输出                   |
 
 这个插件只有一个 runtime，所以不用写 `agent.tools.plugin`：它自动得到 `contributes.tools` 里的全部工具。
 
@@ -225,6 +225,13 @@ pnpm validate:plugin ~/.covel/plugins/notebook
               "arguments": "{\"id\":\"gate-is-locked\",\"text\":\"The north gate is locked at dusk.\"}"
             }
           ]
+        },
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            { "id": "tc-2", "name": "submit-output", "arguments": "{}" }
+          ]
         }
       ],
       "expect": {
@@ -238,7 +245,7 @@ pnpm validate:plugin ~/.covel/plugins/notebook
 }
 ```
 
-这个用例假装模型调用了一次 `save-note`，然后检查 `notes` 里有没有这条记录。运行它：
+这个用例让假模型调用一次 `save-note`，再用 `submit-output` 提交 `{}`，最后检查 `notes` 里的记录。运行它：
 
 ```bash
 pnpm test:runtime -- notebook --pretty

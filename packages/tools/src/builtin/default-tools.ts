@@ -5,7 +5,6 @@ import { createCharacterTools } from "./character-tools.js";
 import { delegateBatchTool } from "./delegate-batch.js";
 import { delegateTool } from "./delegate.js";
 import { createEmitEventTool, type EventDirectoryLike } from "./emit-event.js";
-import { runtimeDoneTool } from "./runtime-done.js";
 import { suspendTool } from "./suspend.js";
 import {
   worldDimensionGetTool,
@@ -27,7 +26,6 @@ export function createDefaultToolRegistry(
   const registry = new ToolRegistry();
   for (const module of builtinUITools) registry.registerBuiltin(module);
   registry.registerBuiltin(suspendTool);
-  registry.registerBuiltin(runtimeDoneTool);
   registry.registerBuiltin(delegateTool);
   registry.registerBuiltin(delegateBatchTool);
   registry.registerBuiltin(worldDimensionGetTool);

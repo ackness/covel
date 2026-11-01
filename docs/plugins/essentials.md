@@ -151,7 +151,7 @@ agent:
 
 内置工具的清单见[工具参考](../reference/tools.md)。
 
-调用一个工具就结束的 agent 写 `agent.finishWith: <工具>`。完成条件的完整写法见[插件参考](../reference/plugins.md#完成条件agentfinishwithagentcompletion)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
+每个 agent 都以宿主生成的 `submit-output` 提交最终输出。`completion.afterTools` 声明提交前必需的业务工作，见[插件参考](../reference/plugins.md#agent-output-submission)。
 
 ## 怎样用别的插件的结果
 

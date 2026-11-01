@@ -33,6 +33,8 @@ A segment template’s `CharacterAvatar` displays only the host-projected speake
 
 A story operation failure notice projects only a validated positive safe integer `count`; live receipts additionally identify the durable target message. They contain no operation requests, results, summaries, errors, private intent, character notes, provider or child-call breakdown. Concealed and private delegation still permit content-free failure status and aggregate counts without widening content visibility. Public message projections never return arbitrary metadata. Imported content is rendered as data, never HTML or instructions to replay operations. Whole checkpoints retain their broader trusted-owner restore contract; this does not claim they contain no host-private data. See [Message API](../reference/api.md#get-apisessionsidmessages).
 
+`submit-output` is a private control tool for each admitted agent run, absent from the global registry. Automatic authorization adds only this tool and does not widen business allowlists; function calls are rejected. Arguments retain model provenance and cannot become trusted effects through the tool-result channel.
+
 ## Host profile
 
 The server decides once, at startup: it combines the deployment tier, the storage it actually uses and a few switches into a host profile (`apps/server/src/host-profile.ts`) and puts it in every request. Route permission checks, the media routes, the server settings, a request's own model settings and the trace retention all ask it, and no longer read environment variables themselves. `@covel/ai-provider` receives its own part at startup (`configureProviderHostPolicy`). The desktop app always passes `DEPLOYMENT_TIER=self` when it starts the server.

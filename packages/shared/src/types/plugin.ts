@@ -584,28 +584,9 @@ export interface RuntimeManifest {
    * Default 3. Set to 0 to disable loop detection.
    */
   readonly loopDetectionThreshold?: number;
-  /**
-   * Agent runtimes only. Requires a successful completeAfterTools call;
-   * without that list, any successful business tool counts. Failed calls and
-   * runtime-done do not count. A text finish without this evidence gets one
-   * corrective retry, then fails. The same rule applies after resume and at
-   * every loop exit. Default false.
-   */
+  /** Require successful business work before submit-output. Host controls do not count. */
   readonly requireToolUse?: boolean;
-  /**
-   * Require a successful completeAfterTools call or an explicit runtime-done
-   * no-op. Bare text is corrected once, then fails. Unlike requireToolUse,
-   * this preserves the no-change path; read tools alone do not complete work.
-   */
-  readonly requireExplicitCompletion?: boolean;
-  /**
-   * Agent runtimes only. Tool names whose successful execution completes the
-   * runtime after the current response batch. All calls in that response are
-   * executed first; any failed business call keeps the loop alive so the model
-   * can inspect the error and retry. This removes a redundant follow-up LLM
-   * call whose only purpose is to emit `runtime-done` while preserving read →
-   * write workflows that use other tools first.
-   */
+  /** One of these own/builtin business tools must succeed. Implies requireToolUse. */
   readonly completeAfterTools?: readonly string[];
   /**
    * Agent runtimes only. The loop behaviour the author wrote under

@@ -40,7 +40,7 @@ Dataset tools write only datasets declared by the caller's package. Arguments st
 | **world-dimension-list** | builtin | — | auto-allow | List open dimensions with their ID, name, type, and version. Does not dump values or rules | `readOnly`, `idempotent`, `concurrencySafe` |
 | **emit-event** | builtin | — | auto-allow | Emit a domain event that the current session has declared (one topic at a time). Advertises a topic enum and per-topic payload schemas | defaults |
 | **suspend** | builtin | — | auto-allow | Describe answers with form fields and suspend the runtime to wait for player input. Writes to the `suspensions` table. Can be resumed through the resume API | defaults |
-| **runtime-done** | builtin | — | auto-allow | The end signal for the agent tool loop. Call it after the business tool calls are done to end this runtime | defaults |
+| **submit-output** | generated | — | auto-allow | Submit the final object using this runtime’s loaded or host-default schema | — |
 | **delegate** | builtin | — | auto-allow | Hand one job to a sub-agent and get its output back; it can stage operations through write services | `stagesWrites` |
 | **delegate-batch** | builtin | — | auto-allow | Run independent sub-agent requests concurrently, with bounded ordered admission and results | `stagesWrites` |
 | **search-tools** | injected | — | auto-allow | Deferred tool search. The framework injects it automatically when a manifest declares `tools.defer`. It uses BM25 search to find and activate tools that were not preloaded | — |
@@ -101,7 +101,7 @@ If a declared `tools.plugin` tool is not registered, even when deferred by `tool
 
 One model reply can contain several agent tool calls. After `PreToolUse` rewrites a call, it joins the parallel pool only when the runtime authorizes its name and the tool declares both `readOnly: true` and `concurrencySafe: true`. Consecutive eligible calls form one pool, with at most 8 running at once. `concurrencySafe` is the author's promise that concurrent reads do not cause side effects through shared state. The kernel rejects writes and events returned by a read-only tool, but cannot inspect external side effects.
 
-Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `runtime-done` calls are barriers. `delegate` and `delegate-batch` are barriers. Only the children inside one batch run concurrently.
+Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `submit-output` calls are barriers. `delegate` and `delegate-batch` are barriers. Only the children inside one batch run concurrently.
 
 Tool messages, call records, proposals and events are collected in model order, regardless of completion order. A pooled call that exceeds its own `timeoutMs` returns `timeout` and counts as a failed call; its siblings and the loop continue. There is no default per-tool timeout. Omitting it keeps the runtime deadline as the limit; concurrent tools that wait on network reads should set `timeoutMs`.
 
@@ -146,7 +146,7 @@ runtime:
       plugin: [echo-value]
 ---
 When manually triggered, read `payload.value` from the `<runtime-activation>`
-block, call `echo-value` once, then call `runtime-done`.
+block, call `echo-value` once, then call `submit-output` with `{}`.
 ```
 
 ```js
@@ -460,19 +460,17 @@ interface UIRenderPart {
 
 The tool returns `{ ui: [{ parts, layout? }] }`, and the framework builds a `ui.render` proposal from it. Every UI block must include `parts`; blocks without `parts` are rejected.
 
-### runtime-done
+<a id="runtime-done"></a>
 
-Only a successful `runtime-done` call returning its sentinel ends the loop. The same field in another tool’s result is ordinary data.
+### submit-output
 
-An agent uses it to tell the framework "I am done." Call it after all the business tools have been called. The runtime then ends, and the model does not have to write a closing message.
+Every agent automatically receives this host control tool. Its parameters are the runtime’s actual loaded output schema, or the [host object default](./plugins.md#agent-output-submission) when none was authored. It is absent from the global registry; each admitted run owns its frozen definition. Functions cannot call it.
 
-Call it last, only after every needed tool call has succeeded or when nothing needs doing. It records nothing. The run ends after this response; make no more calls or prose. The optional reason is kept in the trace.
+Complete required business tool work, read the results, then call `submit-output` alone. Pass `{}` for no business output when the schema permits it. If rejected, correct the reported problems and call again. Success ends computation; it does not confirm that data has been saved.
 
-| Argument | Type   | Required | Description                 |
-| -------- | ------ | -------- | --------------------------- |
-| reason   | string |          | Optional note for the trace |
+Arguments are always model-authored data. The host does not extract proposals, UI, interactions, notifications or events from them. Tool success and save commit remain separate. `submit-output` is not business work, cannot be deferred, and cannot appear in plugin tool, service import, dataset names or explicit tool allowlists.
 
-A story runtime's tool list does not include it. See [ToolExecutor](#toolexecutor).
+The former `runtime-done` tool has been removed. Do not register a replacement or keep sending old completion calls.
 
 ### memory-search
 
@@ -632,8 +630,8 @@ The text of case 4 clearly says "do not emit again." If the reply were only "emi
 
 Cases 2 and 3 are failed tool calls. The error text goes back to the model, and the call does not count as "a tool was used" (`requireToolUse`). It also does not count as completing the tool work. But they affect the runtime result differently:
 
-- **An unknown topic (case 2) is not a runtime failure.** No enabled plugin declares this topic, so the model has no way to correct it, and the call did nothing. The tool rejects it with `ToolError("refused", …)` (from the public SDK). It does not count as business work (`requireToolUse` is still not met, and `completeAfterTools` is not triggered). It is also not treated as an unresolved failure. If an agent only made this one emit, and then ended with text or `runtime-done`, the result is a normal success with no event emitted. So removing the plugin that consumes an event does not make the runtime that emits it fail.
-- **A payload that does not match the schema (case 3) is a failure.** The contract exists, but the data is wrong, and the model can resend based on the error text. A later successful call of the same tool cancels it out. A `system` runtime that ends without a successful resend and without any other output fails with `tool_failed_without_output`. A runtime that declares `requireExplicitCompletion` cannot end with `runtime-done` while this failure is unresolved.
+- **An unknown topic (case 2) is refused work.** It emits no event and counts as neither successful business work nor an unresolved failure. Removing an optional consumer does not itself fail the runtime. The agent still submits output through `submit-output` and satisfies any required work.
+- **A mismatched payload (case 3) is a failed call.** The model can correct it from the returned error. A later success of the same tool resolves that failure; submission itself does not.
 
 **Internal topics.** A topic declared with `advertise: false` is not in the allow-list of `emit-event`. It can be emitted only by a **function runtime** of the plugin that declares it, through `output.events`. An agent cannot use `emit-event` to emit it directly, which would skip the generation step in between. The list of available topics echoed in case 2 also does not include the names of internal topics.
 
@@ -716,7 +714,7 @@ When one model reply has several tool calls, `suspend` leaves a `summary` placeh
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
   - `ctx.world` is the World Model committed at resume time, with the writes buffered in the state added on top.
-  - The tool loop continues from its state before the suspension: the corrections already spent (the four in `agent.loop.corrections`), the deferred tools activated with `search-tools`, the prose written from merged player interjections, the output of a completing tool that already succeeded, and this turn's prompt segments (`promptSegments` of `PreLLMCall`). An activated tool that is no longer deferred is skipped on resume.
+  - The tool loop continues from its state before the suspension: the corrections already spent (the four in `agent.loop.corrections`), the deferred tools activated with `search-tools`, the prose written from merged player interjections, and this turn's prompt segments (`promptSegments` of `PreLLMCall`). An activated tool that is no longer deferred is skipped on resume.
   - The context is not assembled again: the saved conversation record is the context the runtime ran with, and `PostContextAssembly` does not fire again.
 - A resumed runtime can call `suspend` again. The old suspended item is marked handled and the new one continues the same execution; see [Suspending again](./api.md#suspending-again). Sub-agents cannot suspend.
 - `completion.require: tool-use` uses the same rule after resuming: with `afterTools`, only successful calls from that list count; without a list, successful business tool calls count. A tool that failed before the suspension, and was not cancelled out by a successful call of the same name, still counts as not completed. After resuming, it must be completed again.
@@ -818,7 +816,7 @@ Every tool result the model reads is a JSON object. Success keys appear in the o
 - `summary` and `data` are optional. Without an explicit view, `data` is the tool content projected through `modelFacingJson`, with the top-level `ui` array removed.
 - `withModelView(content, { summary?, data? })` selects what the model reads. With a view, only its specified fields are sent; a summary-only view omits the content. `data` still passes through `modelFacingJson`; `summary` is preserved verbatim.
 - `withModelView`, `withPendingProposals` and `withEmittedEvents` compose in any order, retaining content, the view and both effect channels. Read the view with `getModelView`. `_text` has no special meaning.
-- `parsedResult`, `ctx.tools.call` return values, completing-tool output, UI and interaction payloads remain the full content. The model envelope does not change them.
+- `parsedResult`, `ctx.tools.call` return values, UI and interaction payloads remain the full content. The model envelope does not change them.
 - Successful calls with pending proposals or domain events include `staged`. `count` totals both channels; `kinds` lists distinct proposal types in first-seen order, followed by `event` when there are events. Success means staged; commit can still reject the effects.
 - `instructionLocaleFor(context.locale)` selects the notice and honors `COVEL_INSTRUCTION_LOCALE`: Chinese is “已暂存，回合结束时生效（可能被拒绝）。”; English is “Staged: it takes effect when the turn ends and may still be rejected.” Error messages and hints remain English.
 
@@ -880,7 +878,7 @@ Host developers who write composite tools need to be careful here. When the host
 - `<character-fields>` has one line per id. Within a 12000-character budget, it includes each character's current `fields`, and it is updated every turn. Usually one model call is enough to finish the sync. For a character that is over the budget, its line says `fieldsOmitted`, and the full fields are read with `get-character`.
 - Reasoning is turned off, a single call times out after 30 seconds, and it retries once.
 
-The tracker spends its detail-read budget only after a successful `get-character` result. A failed read remains available for correction; an explicit-completion runtime must resolve that failure with a successful read.
+The tracker spends its detail-read budget only after a successful `get-character` result. A failed read remains available for correction; required failed work still needs a successful read.
 
 #### creates[]
 
@@ -1333,7 +1331,7 @@ Whose dimension definitions are used:
 
 `worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
 
-This runtime declares `agent.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
+This runtime requires `initialize-world` to succeed before final submission. The agent reads its result and calls `submit-output` with the object matching its output schema.
 
 **Used by**: `world-init/schema-gen`
 
@@ -1537,7 +1535,7 @@ Each record is matched to an existing entry by title. The comparison trims leadi
 
 The output is `{ created, updated, skipped, ui }`. `created` and `updated` are the keys that were written.
 
-When there are no new facts worth recording, the model calls `runtime-done`. `codex` lists this tool in `completeAfterTools`, so the run ends right after it succeeds.
+For no new facts, follow the business tool’s empty-result contract, then submit final output through `submit-output`. `completeAfterTools` expresses required work and never ends the run itself.
 
 ### Image prompt submit tools
 
@@ -1558,7 +1556,7 @@ The tool does two things: it writes the normalized `{ prompt, promptMode, compos
 
 The model does not have to write a `{ topic, data }` event envelope itself, so it cannot leave out the topic or write an empty one. The runtime's output schema checks only the trusted result that the tool produces.
 
-Both prompt generators are agents that are triggered manually, and they declare `schedule.background: true`. Their `agent.completion.afterTools` lists the matching tool, so the run ends after one successful submit. The image generator that follows keeps running in the background.
+Both prompt generators are manual background agents. Their `agent.completion.afterTools` requires the matching business tool, followed by `submit-output`. The image generator continues in the background.
 
 ## Imported service tools
 
@@ -1578,7 +1576,7 @@ agent:
 - **Result**: the model gets `{ "data": … }` like any other tool, with IDs, UUIDs and timestamps removed by `modelFacingJson`. Approval, `PreToolUse` / `PostToolUse`, `tool_calls` records and `tool.*` traces work as usual; approval counts the source as `local`.
 - **Time limit**: a call waits at most 15 seconds for the provider and answers `timeout` after that.
 - **Deferred loading**: with `tools.defer: true`, or with an import's name in the `defer` list, the import is deferred like other tools and found through `search-tools`.
-- **Cannot complete a runtime**: `finishWith` and `completion.afterTools` cannot name an imported tool. A runtime must not need another plugin to finish.
+- **Cannot be required business work**: `completion.afterTools` cannot name an imported tool because its provider may be absent.
 
 ### Absent tools
 
@@ -1674,13 +1672,13 @@ This section is mainly for host developers who embed the kernel. Plugin authors 
 
 The tool allow-list controls two things: which tools the model can see, and which tools can actually run.
 
-- The agent loop passes the exact authorized set of the current runtime to the executor, in `ToolCallContext.authorizedToolNames`. The set includes every name declared by `tools.*`, plus `runtime-done` for runtimes whose completion contract uses it and for story runtimes. Runtimes that must finish through a completing tool no longer receive automatic authorization for it.
+- The authorization set contains the runtime’s declared business tools and its host-generated `submit-output`. Adding submission grants no other tool permissions.
 - Tools on the `defer` list are also in the authorized set. Deferring affects only whether the model can see the tool at the start. It does not affect authorization.
 - Before resolving the tool and running approval, the executor first checks whether the final tool name is in the authorized set. "Final" means the name after session overrides and `PreToolUse` replacement. If it is not in the set, the executor returns the structured error `unavailable`.
 - `search-tools` is intercepted inside the loop, so it never reaches the executor.
 - `findTool` is strict for calls with no context: without a context, it can find only builtin tools, and it rejects all plugin tools.
 
-**Story runtimes are an exception.** A story runtime (`io.visibility: story`) ends with the story text. Its tool list does not include `runtime-done`, and the `[COMPLETION]` section does not mention it either. But authorization is still kept. When the model calls it out of habit, the loop uses the remaining steps to ask for the story text, instead of returning `unavailable`. The reason `runtime-done` is not given to a story runtime: a model that follows the instructions literally would call only it and never write the story text.
+Story and system agents share the submission tool and authorization rule. The host generates its schema per admitted runtime. Ordinary tool lookup remains builtin-first, then caller-owned plugin tools.
 
 ### Cancellation
 
@@ -1697,7 +1695,7 @@ An embedding host must wait for this to finish before it closes the Store, the p
 
 ### Assembly
 
-A host installs all the builtin tools at once with `createDefaultToolRegistry({ store, eventDirectory })` from `@covel/tools`. These are UI, suspend, runtime-done, emit-event, and character.
+A host installs all the builtin tools at once with `createDefaultToolRegistry({ store, eventDirectory })` from `@covel/tools`. These are UI, suspend, emit-event, and character.
 
 - The server passes in the real event directory, and it overrides the character write tools per session.
 - `test-runtime` passes in an isolated directory that does not allow any topic.

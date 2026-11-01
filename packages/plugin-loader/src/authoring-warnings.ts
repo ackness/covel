@@ -103,22 +103,6 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
   const agent = record(runtime.agent);
   out.check(at("agent.model"), agent?.model, defaultAgentModel(visibility));
   out.check(at("agent.reasoning"), agent?.reasoning, true);
-  if (agent?.finishWith !== undefined)
-    out.check(at("agent.toolChoice"), agent.toolChoice, "required");
-  const completion = record(agent?.completion);
-  const afterTools = list(completion?.afterTools);
-  const [onlyTool] = afterTools;
-  if (
-    completion?.require === "tool-use" &&
-    afterTools.length === 1 &&
-    typeof onlyTool === "string" &&
-    onlyKeys(completion, ["require", "afterTools"]) &&
-    agent?.toolChoice === "required"
-  )
-    out.shorter(
-      at("agent.completion"),
-      `write finishWith: ${onlyTool} in place of completion and toolChoice`,
-    );
   const loop = record(agent?.loop);
   const defaults = defaultAgentLoop(visibility);
   for (const field of ["timeoutMs", "callTimeoutMs", "maxRetries"] as const)

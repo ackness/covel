@@ -296,30 +296,23 @@ export const runtimeAuthoringManifestSchema = z
             "`true` lists the session's event directory in the prompt so the model knows which topics it may emit.",
           )
           .optional(),
-        finishWith: z
-          .string()
-          .min(1)
-          .describe(
-            "Tool that ends the run: the run completes after a successful call to it, and fails if it ends without one. The model must call a tool on every step (`toolChoice: required`) unless `toolChoice` says otherwise. Not with `completion`, which is the long form for several tools or explicit completion.",
-          )
-          .optional(),
         completion: z
           .strictObject({
             require: z
-              .enum(["explicit", "tool-use"])
+              .literal("tool-use")
               .describe(
-                "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count.",
+                "Requires successful business work before submit-output: one tool in afterTools, or any authorized business tool without a list. Host control tools and failed calls do not count.",
               )
               .optional(),
             afterTools: z
               .array(z.string())
               .describe(
-                "The runtime completes after a successful call to one of these tools.",
+                "At least one of these own or builtin business tools must succeed before submission. Implies require: tool-use; does not end the run.",
               )
               .optional(),
           })
           .describe(
-            "How the agent run ends. For one completing tool, `finishWith` is shorter.",
+            "Required business work before the host-generated submit-output tool.",
           )
           .optional(),
         loop: z
@@ -557,13 +550,6 @@ export const runtimeAuthoringManifestSchema = z
         message:
           "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a system runtime instead",
       });
-    if (value.agent?.finishWith !== undefined && value.agent.completion)
-      ctx.addIssue({
-        code: "custom",
-        path: ["agent", "finishWith"],
-        message:
-          "agent.finishWith is the short form of agent.completion; write one of the two",
-      });
     const detached = value.schedule?.detached;
     const inputs = Object.entries(value.io?.inputs ?? {});
     for (const issue of runtimeRuleIssues(
@@ -596,12 +582,10 @@ export const runtimeAuthoringManifestSchema = z
           name: serviceImportName(entry),
           explicit: typeof entry !== "string" && entry.as !== undefined,
         })),
-        completingTools: value.agent?.completion?.afterTools,
-        finishWith: value.agent?.finishWith,
+        requiredBusinessTools: value.agent?.completion?.afterTools,
+        requireToolUse: value.agent?.completion?.require === "tool-use",
         visibility: value.io?.visibility,
         output: value.io?.output,
-        requireExplicitCompletion:
-          value.agent?.completion?.require === "explicit",
         ...(value.agent ? { loop: authoredLoopView(value.agent.loop) } : {}),
         operationsInputs: inputs
           .filter(

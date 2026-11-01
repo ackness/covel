@@ -1,3 +1,4 @@
+import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import {
   frameworkContractSchemas,
   CHARACTER_ACTOR_CONTRACT,
@@ -821,18 +822,35 @@ export async function loadRuntime(
     );
   }
 
-  const outputSchema = await loadOutputSchema(
+  const loadedOutputSchema = await loadOutputSchema(
     runtimeDir,
     discovery.rootPath,
-    parsed.manifest.output?.schema ??
-      (parsed.manifest.outputContract === CHARACTER_ACTOR_CONTRACT
-        ? `contract:${CHARACTER_ACTOR_CONTRACT}`
-        : undefined),
+    parsed.manifest.output?.schema,
     contracts,
   );
+  const outputSchema =
+    loadedOutputSchema === undefined &&
+    parsed.manifest.outputContract === CHARACTER_ACTOR_CONTRACT
+      ? requireContractSchema(`contract:${CHARACTER_ACTOR_CONTRACT}`, contracts)
+      : loadedOutputSchema;
   const outputContractSchema = parsed.manifest.outputContract
     ? contracts[parsed.manifest.outputContract]
     : undefined;
+
+  if (parsed.manifest.runtimeType !== "function") {
+    const effectiveSchema =
+      outputSchema !== undefined ? outputSchema : outputContractSchema;
+    if (effectiveSchema !== undefined) {
+      try {
+        assertAgentOutputObjectSchema(effectiveSchema);
+      } catch (cause) {
+        throw new Error(
+          `${parsed.sourcePath}: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { cause },
+        );
+      }
+    }
+  }
 
   const inputSchema = parsed.manifest.input?.schema
     ? await loadDeclaredSchema(

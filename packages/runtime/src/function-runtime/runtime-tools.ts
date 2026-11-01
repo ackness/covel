@@ -97,6 +97,11 @@ export function createRuntimeTools(options: {
             "Tool calls were terminated by PostToolUse",
           );
         if (failed) throw failure;
+        if (name === "submit-output")
+          throw new ToolError(
+            "unavailable",
+            "submit-output is only available to an admitted agent loop",
+          );
         if (!deps.toolExecutor)
           throw new ToolError("unavailable", "Tool executor is unavailable");
         const started = Date.now();
@@ -112,6 +117,11 @@ export function createRuntimeTools(options: {
             before.reason ?? "Tool call was blocked by PreToolUse",
           );
         const call = before.toolCall;
+        if (name === "submit-output" || call.name === "submit-output")
+          throw new ToolError(
+            "unavailable",
+            "submit-output is only available to an admitted agent loop",
+          );
         const raw = await deps.toolExecutor.execute(
           { toolCallId: call.id, name: call.name, arguments: call.arguments },
           {

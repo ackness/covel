@@ -8,7 +8,7 @@ import {
 } from "../src/index.js";
 
 describe("framework tool names", () => {
-  it("equals the default registry, optional memory tools and search-tools in both directions", () => {
+  it("equals the default registry, optional memory tools and generated control tools in both directions", () => {
     const registry = createDefaultToolRegistry({
       store: {} as DefaultToolRegistryDeps["store"],
       eventDirectory: {
@@ -21,6 +21,7 @@ describe("framework tool names", () => {
       ...registry.builtinTools.keys(),
       ...memoryTools.map((module) => module.name),
       "search-tools",
+      "submit-output",
     ]);
     expect([...actual].sort()).toEqual([...FRAMEWORK_TOOL_NAMES].sort());
   });

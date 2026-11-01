@@ -102,7 +102,6 @@ import {
   checkTextCompletion,
   hasBusinessWork,
   hasCompletedBusinessWork,
-  hasExplicitCompletion,
   captureCompletionCalls,
   runtimeDoneCorrection,
   unresolvedToolFailures,
@@ -134,7 +133,6 @@ export interface AgentToolLoopCompleted {
   readonly deadline: number;
   /** Required business tool work is still missing after the corrective step. */
   readonly requiredToolUseUnmet: boolean;
-  readonly requiredCompletionUnmet: boolean;
   readonly lastTarget?: LLMTargetIdentity;
 }
 
@@ -336,8 +334,6 @@ async function runAgentToolLoopWithinBudget(
     effectiveMaxSteps,
     retryPolicy,
     requireToolUse,
-    completeAfterTools,
-    outputFromCompletingTool,
     profile,
     authorizedToolNames,
   } = buildAgentLoopPolicy({
@@ -633,15 +629,8 @@ async function runAgentToolLoopWithinBudget(
    * step limit, deadline reserve and context overflow.
    */
   const finalizerEligible = (): boolean =>
-    !outputFromCompletingTool &&
     (!requireToolUse ||
       hasBusinessWork(manifest, executedToolCalls, seededBusinessWork)) &&
-    (manifest.requireExplicitCompletion !== true ||
-      hasExplicitCompletion(
-        manifest,
-        executedToolCalls,
-        initialState?.completionCalls,
-      )) &&
     budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS;
 
   // The deadline reserve: no new step starts this close to the deadline when
@@ -796,9 +785,7 @@ async function runAgentToolLoopWithinBudget(
       const assistantMessageIndex = messages.length;
       messages.push(buildAssistantToolCallMessage(response));
 
-      let successfulCompletingToolsInResponse = 0;
       let failedBusinessToolsInResponse = 0;
-      let completingToolOutputInResponse: Record<string, unknown> | null = null;
       // Where this response's calls start in `executedToolCalls`.
       const firstCallOfResponse = executedToolCalls.length;
 
@@ -1084,9 +1071,7 @@ async function runAgentToolLoopWithinBudget(
                           !toolDefs?.some((initial) => initial.name === name),
                       ),
                     steeredProse,
-                    completingToolOutput: outputFromCompletingTool
-                      ? (completingToolOutputInResponse ?? finalToolOutput)
-                      : null,
+                    completingToolOutput: null,
                   },
                   ...(promptSegments ? { promptSegments } : {}),
                 });
@@ -1107,18 +1092,8 @@ async function runAgentToolLoopWithinBudget(
               !toolResult.success ||
               !isRuntimeDoneSentinel(toolResult.parsedResult)
             ) {
-              if (toolResult.success) {
-                if (completeAfterTools.has(effectiveTc.name)) {
-                  successfulCompletingToolsInResponse++;
-                  if (isRecord(toolResult.parsedResult)) {
-                    completingToolOutputInResponse =
-                      deps.delegation?.privacy.completion(
-                        effectiveTc.id,
-                        toolResult.parsedResult,
-                      ) ?? { ...toolResult.parsedResult };
-                  }
-                }
-              } else if (!toolResult.refused) failedBusinessToolsInResponse++;
+              if (!toolResult.success && !toolResult.refused)
+                failedBusinessToolsInResponse++;
             }
 
             // Build ToolCallRecord for RuntimeResult.toolCalls
@@ -1284,34 +1259,6 @@ async function runAgentToolLoopWithinBudget(
         break;
       }
 
-      // Single-shot tool runtimes do not need to ask the model for a second
-      // response whose only useful content is `runtime-done`. Execute the
-      // whole response batch first and auto-complete only when every business
-      // call in that batch succeeded. Failures stay in the transcript so the
-      // model can inspect the tool result and retry on the next step.
-      if (
-        successfulCompletingToolsInResponse > 0 &&
-        failedBusinessToolsInResponse === 0
-      ) {
-        if (outputFromCompletingTool && completingToolOutputInResponse) {
-          // The tool arguments/result are the structured output channel. Ignore
-          // incidental assistant prose and let the normal schema gate validate
-          // the exact returned object before it reaches typed consumers.
-          finalContent = null;
-          finalResponse = undefined;
-          finalResponseMessageIndex = undefined;
-          finalToolOutput = completingToolOutputInResponse;
-        } else if (!finalContent) {
-          finalContent = JSON.stringify({
-            toolCalls: collectedToolCalls
-              .filter((call) => call.toolName !== "runtime-done")
-              .map((call) => ({ name: call.toolName, output: call.output })),
-          });
-        }
-        loop.stop = { reason: "tool-finished" };
-        break;
-      }
-
       // Tool-loop detection: when the LLM keeps emitting the exact same
       // tool call (name + JSON args) `threshold` times in a row it's
       // almost certainly stuck in a KV-cache echo. Inject a perturbation
@@ -1463,13 +1410,6 @@ async function runAgentToolLoopWithinBudget(
   const requiredToolUseUnmet =
     requireToolUse &&
     !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork);
-  const requiredCompletionUnmet =
-    manifest.requireExplicitCompletion === true &&
-    !hasExplicitCompletion(
-      manifest,
-      executedToolCalls,
-      initialState?.completionCalls,
-    );
   const repairableExit =
     loop.stop.reason === "completed" ||
     loop.stop.reason === "tool-finished" ||
@@ -1477,12 +1417,7 @@ async function runAgentToolLoopWithinBudget(
       loop.stop.reason === "deadline" ||
       loop.stop.reason === "context-overflow") &&
       loop.stop.finalizer);
-  if (
-    repairableExit &&
-    finalToolOutput === null &&
-    !requiredToolUseUnmet &&
-    !requiredCompletionUnmet
-  ) {
+  if (repairableExit && finalToolOutput === null && !requiredToolUseUnmet) {
     while (budget.deadline - Date.now() >= FINALIZER_MIN_REMAINING_MS) {
       const checked = await checkAgentOutput({
         manifest,
@@ -1590,6 +1525,5 @@ async function runAgentToolLoopWithinBudget(
     // step limit — so none of them can pass a runtime that did no work.
     requiredToolUseUnmet,
     lastTarget,
-    requiredCompletionUnmet,
   };
 }

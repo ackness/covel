@@ -761,3 +761,49 @@ describe("governed function tools", () => {
     ).toThrow("revoked");
   });
 });
+
+it.each([false, true])(
+  "functions cannot call the host output tool, including hook rewrites (%s)",
+  async (rewrite) => {
+    const hooks = createHookPipeline();
+    hooks.register({
+      id: "rewrite-output",
+      event: "PreToolUse",
+      handler: async () => ({
+        action: "continue",
+        replace: { toolCall: { name: "submit-output", arguments: "{}" } },
+      }),
+    });
+    const execute = vi.fn(async () => {
+      throw new Error("Must not dispatch");
+    });
+    const bound = createRuntimeTools({
+      manifest,
+      context: {
+        ...input,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+      },
+      buffer: [],
+      signal: new AbortController().signal,
+      assertLive() {},
+      deps: {
+        loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+        llm: {
+          generate: async () => {
+            throw new Error("Must not call model");
+          },
+        },
+        toolExecutor: { execute, getToolInfo: () => undefined },
+        hookPipeline: hooks,
+      },
+    });
+    await expect(
+      bound.tools.call(rewrite ? "list-characters" : "submit-output", {}),
+    ).rejects.toThrow("only available to an admitted agent loop");
+    await expect(bound.drain()).rejects.toThrow(
+      "only available to an admitted agent loop",
+    );
+    expect(execute).not.toHaveBeenCalled();
+  },
+);

@@ -322,14 +322,11 @@ async function buildPromptSegments(
     .filter(Boolean)
     .join("\n");
 
-  // The completion instruction must match how the runtime finishes. The loop
-  // decides which tools the runtime is offered from the same answer, so a
-  // runtime is told to call `runtime-done` only when it is given that tool.
   const frameworkPreamble =
     params.frameworkPreamble ??
     defaultFrameworkPreamble(
       params.turnInput.locale,
-      resolveFrameworkCompletion(params.manifest),
+      resolveFrameworkCompletion(params.manifest, params.agentOutput),
     );
 
   const extensionSegments = selectPromptSegments(

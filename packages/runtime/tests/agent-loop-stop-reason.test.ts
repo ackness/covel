@@ -256,12 +256,17 @@ describe("the step limit (E5)", () => {
         tools: { plugin: ["mark", "save"] },
       }),
       loaded: {
+        manifest: manifest({
+          requireToolUse: true,
+          completeAfterTools: ["save"],
+          tools: { plugin: ["mark", "save"] },
+        }),
         promptTemplate: "prompt",
         outputSchema: {
           type: "object",
           properties: { saved: { type: "boolean" } },
         },
-      } as never,
+      },
       deps: { toolExecutor: makeExecutor([markTool, saveTool]) },
     });
     expect(result.stop).toEqual({ reason: "max-steps" });
@@ -296,7 +301,6 @@ describe("the deadline (E6) and cancellation (E7)", () => {
       effectiveMaxSteps: 5,
       deadline: Date.now(),
       requiredToolUseUnmet: false,
-      requiredCompletionUnmet: false,
     };
     const settled = settleAgentLoop({
       manifest: manifest(),

@@ -19,6 +19,8 @@ During one execution, the history is handled in this order:
 5. The first agent that uses the shared history view estimates, using this system prompt, whether compaction is needed. In the same turn, agents of this kind share one compaction barrier. After compaction succeeds, the history and summaries are loaded again, projected again, and the context is assembled again. A runtime that declares a history window does not trigger this barrier and does not wait for it.
 6. Run `PostContextAssembly` and apply the budget. After that, each time after `PreLLMCall`, the budget is checked once more against the actual request.
 
+Agent completion instructions consistently ask for `submit-output` after required business tool work. The loaded output schema is fixed before assembly and appears only in that tool’s parameters; the preamble neither duplicates it nor requests JSON reply content. Submit `{}` for no business output when the schema permits it. The tool name, description, schema and order remain stable for an admitted runtime to preserve prompt caching. See [completion conditions](./plugins.md#agent-output-submission).
+
 ### This turn's story text
 
 Committed history goes only up to the previous turn. The messages of this turn are written to the database only after the execution commits. So the framework also puts the not-yet-committed parts of the execution journal into the conversation:

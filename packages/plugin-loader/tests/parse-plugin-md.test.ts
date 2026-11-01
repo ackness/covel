@@ -102,7 +102,8 @@ describe("current authoring manifests", () => {
           agent: {
             model: "plugin",
             history: { maxTurns: 2 },
-            completion: { require: "explicit", afterTools: ["save"] },
+            tools: { plugin: ["save"] },
+            completion: { afterTools: ["save"] },
             loop: { maxSteps: 4 },
           },
         },
@@ -117,7 +118,7 @@ describe("current authoring manifests", () => {
       defaultProvider: true,
       maxSteps: 4,
       history: { maxTurns: 2 },
-      requireExplicitCompletion: true,
+      requireToolUse: true,
       completeAfterTools: ["save"],
     });
     expect(
@@ -133,34 +134,39 @@ describe("current authoring manifests", () => {
       },
     ]);
   });
-  it("compiles finishWith into tool-use completion with a required tool call", () => {
+  it("compiles afterTools as required work without forcing tool choice", () => {
     const compile = (agent: object) =>
       compileInlineRuntime(
         parsePluginMd(
           md({
             ...root,
+            contributes: { tools: ["save"] },
             runtime: { schedule: { stage: "post-turn" }, agent },
           }),
           "probe/PLUGIN.md",
         ),
       )!.manifest;
-    expect(compile({ reasoning: false, finishWith: "save" })).toMatchObject({
+    expect(
+      compile({ reasoning: false, completion: { afterTools: ["save"] } }),
+    ).toMatchObject({
       requireToolUse: true,
       completeAfterTools: ["save"],
-      llm: { reasoningEffort: "disabled", toolChoice: "required" },
+      llm: { reasoningEffort: "disabled" },
     });
-    // A written tool choice replaces the one finishWith implies.
     expect(
-      compile({ finishWith: "save", toolChoice: { name: "save" } }).llm,
-    ).toEqual({ toolChoice: { name: "save" } });
-    // Reasoning is the model's own setting unless the agent turns it off.
+      compile({ completion: { afterTools: ["save"] } }).llm,
+    ).toBeUndefined();
+    expect(
+      compile({ completion: { afterTools: [] } }).completeAfterTools,
+    ).toBeUndefined();
     expect(compile({ reasoning: true }).llm).toBeUndefined();
+    expect(() => compile({ finishWith: "save" })).toThrow("finishWith");
+    expect(() => compile({ completion: { require: "explicit" } })).toThrow(
+      "agent.completion.require",
+    );
     expect(() =>
-      compile({
-        finishWith: "save",
-        completion: { require: "explicit", afterTools: ["save"] },
-      }),
-    ).toThrow("agent.finishWith");
+      compile({ completion: { afterTools: ["not-declared"] } }),
+    ).toThrow("completeAfterTools");
   });
   it("compiles schedule.detached into the turn completion policy", () => {
     const compile = (detached: unknown) =>

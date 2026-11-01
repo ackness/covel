@@ -246,6 +246,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
         version: "1.0.0",
         entry: "./server.js",
         contributes: {
+          tools: ["save"],
           hooks: [{ event: "TurnStart" }],
           extensions: [
             { point: "prompt.segment@1", id: "notes", order: 0 },
@@ -257,13 +258,18 @@ describe("validate:plugin warnings for a field written with its default", () => 
         notes: {
           ...agent,
           agent: {
+            tools: { plugin: ["save"] },
             toolChoice: "required",
             completion: { require: "tool-use", afterTools: ["save"] },
           },
         },
         tally: {
           ...agent,
-          agent: { finishWith: "save", toolChoice: "required" },
+          agent: {
+            tools: { plugin: ["save"] },
+            completion: { afterTools: ["save"] },
+            toolChoice: "required",
+          },
         },
       },
     );
@@ -280,13 +286,8 @@ describe("validate:plugin warnings for a field written with its default", () => 
     expect(text).toContain(
       "PLUGIN.md: contributes.extensions[1]: write prompt.segment@1/rules; it means the same",
     );
-    expect(text).toContain(
-      "notes/RUNTIME.md: agent.completion: write finishWith: save in place of completion and toolChoice; it means the same",
-    );
-    expect(text).toContain(
-      'tally/RUNTIME.md: agent.toolChoice: "required" is the default value',
-    );
-    expect(warnings).toHaveLength(5);
+    expect(text).not.toContain("finishWith");
+    expect(warnings).toHaveLength(3);
   });
 
   it("stays quiet about a value that differs from the default", async () => {

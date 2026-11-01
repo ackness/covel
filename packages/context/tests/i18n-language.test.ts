@@ -37,8 +37,8 @@ describe("prompt locale normalization", () => {
     ).toContain("Begin the current game turn");
 
     const preamble = buildFrameworkPreamble("zh-Hant-TW");
-    expect(preamble).toContain("[COMPLETION] When you have finished");
-    expect(preamble).not.toContain("本 runtime 完成");
+    expect(preamble).toContain("[COMPLETION] After required business");
+    expect(preamble).not.toContain("完成必需的业务工具工作后");
     expect(preamble).toContain("繁體");
   });
 
@@ -47,18 +47,15 @@ describe("prompt locale normalization", () => {
     // `[COMPLETION]` in Chinese.
     for (const options of [
       undefined,
-      { completion: "runtime-done" as const, requireToolUse: true },
-      { completion: "completing-tool" as const },
+      { completion: "submit-output" as const },
+      { requiredWork: { required: true, toolNames: [] } },
+      { requiredWork: { required: true, toolNames: ["save-facts"] } },
       {
-        completion: "completing-tool" as const,
-        completingTools: ["save-facts"],
+        requiredWork: {
+          required: true,
+          toolNames: ["save-facts", "save-notes"],
+        },
       },
-      {
-        completion: "completing-tool" as const,
-        completingTools: ["save-facts", "save-notes"],
-      },
-      { completion: "structured-output" as const },
-      { completion: "story" as const },
     ]) {
       const chinese = buildFrameworkPreamble("zh-CN", options).split("\n");
       expect(
@@ -74,65 +71,37 @@ describe("prompt locale normalization", () => {
     }
   });
 
-  it("tells a story runtime to finish with its text, not with runtime-done", () => {
+  it("uses one submission instruction and explains no business output", () => {
     for (const locale of ["en-US", "zh-CN"]) {
-      const story = buildFrameworkPreamble(locale, { completion: "story" });
-      expect(story).not.toContain("runtime-done");
-      expect(story).toMatch(
-        /output format the instructions below require|下面的指令要求的输出格式/,
-      );
-      expect(story).toMatch(/story in your reply|回复里的故事/);
-      // Every other runtime that has the tool is still told to call it.
-      expect(buildFrameworkPreamble(locale)).toContain("`runtime-done`");
-    }
-  });
-
-  it("tells a runtime that ends with a completing tool to end with it, not with runtime-done", () => {
-    // The loop ends such a run when the tool succeeds and rejects a bare
-    // `runtime-done`; the instruction said to end a quiet turn with it.
-    for (const locale of ["en-US", "zh-CN"]) {
-      const one = buildFrameworkPreamble(locale, {
-        completion: "completing-tool",
-        completingTools: ["save-facts"],
-      });
-      expect(one).toMatch(
-        /ends when a call to `save-facts` succeeds|在成功调用 `save-facts` 后结束/,
-      );
-      expect(one).toMatch(/nothing changed|无变化/);
-      expect(one).toMatch(/does not have that tool|没有该工具/);
-      expect(one).not.toMatch(/IMMEDIATELY|立即调用|empty string|空字符串/);
-
-      const several = buildFrameworkPreamble(locale, {
-        completion: "completing-tool",
-        completingTools: ["save-facts", "save-notes"],
-      });
-      expect(several).toMatch(
-        /one of `save-facts`, `save-notes`|`save-facts`、`save-notes` 中的任意一个/,
+      const preamble = buildFrameworkPreamble(locale);
+      expect(preamble).toContain("`submit-output`");
+      expect(preamble).toContain("`{}`");
+      expect(preamble).not.toContain("runtime-done");
+      expect(preamble).toMatch(
+        /does not confirm that changes have been saved|不代表更改已经保存/,
       );
     }
   });
 
-  it("does not tell a runtime that must call a tool to end a quiet turn with runtime-done alone", () => {
+  it("requires business tools before submission even for no change", () => {
     for (const locale of ["en-US", "zh-CN"]) {
       const preamble = buildFrameworkPreamble(locale, {
-        completion: "runtime-done",
-        requireToolUse: true,
+        requiredWork: {
+          required: true,
+          toolNames: ["save-facts", "save-notes"],
+        },
       });
-      expect(preamble).toMatch(/alone records nothing|不会记录任何内容/);
-      expect(preamble).not.toMatch(
-        /If no tool call is needed|无需任何工具调用|empty string|空字符串/,
-      );
-      // Without the requirement the quiet-turn exit stays.
-      expect(buildFrameworkPreamble(locale)).toMatch(
-        /If no tool call is needed|无需任何工具调用/,
-      );
+      expect(preamble).toContain("`save-facts`, `save-notes`");
+      expect(preamble).toMatch(/business tools must succeed|业务工具之一/);
+      expect(preamble).toMatch(/Even for no change|确实无变化/);
+      expect(preamble).toMatch(/do not repeat successful writes|不要重复写入/);
     }
   });
 
   it("separates the instruction language from the output language", () => {
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
     const forcedEnglish = buildFrameworkPreamble("zh-CN");
-    expect(forcedEnglish).toContain("[COMPLETION] When you have finished");
+    expect(forcedEnglish).toContain("[COMPLETION] After required business");
     expect(forcedEnglish).toContain("简体中文");
     expect(
       buildCurrentTurnUserMessage({ playerMessage: "", locale: "zh-CN" }),
@@ -140,7 +109,7 @@ describe("prompt locale normalization", () => {
 
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "zh");
     const forcedChinese = buildFrameworkPreamble("ru-RU");
-    expect(forcedChinese).toContain("本 runtime 完成");
+    expect(forcedChinese).toContain("完成必需的业务工具工作后");
     expect(forcedChinese).toContain("Русский");
   });
 });

@@ -48,6 +48,10 @@ export function datasetSchemaIssues(
   contributes: PluginManifest["contributes"],
 ): string[] {
   const issues: string[] = [];
+  if (Object.hasOwn(contributes?.datasets ?? {}, "submit-output"))
+    issues.push(
+      `${source}: contributes.datasets.submit-output: submit-output is reserved by the host`,
+    );
   for (const [name, dataset] of Object.entries(contributes?.datasets ?? {})) {
     const data =
       contributes?.data && Object.hasOwn(contributes.data, name)

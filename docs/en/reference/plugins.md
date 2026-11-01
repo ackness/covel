@@ -100,9 +100,9 @@ runtime:
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
-    finishWith: save-facts
+    completion: { afterTools: [save-facts] }
 ---
-Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
+Extract facts supported by runtime-inputs.narrative.value, then call save-facts. Read its result and call submit-output with the final output object.
 ```
 
 The ID of this package is its directory name, `example`; its entry is `server/index.js` (which registers `save-facts`); the runtime has no `function` block, so it is an agent; and the package provides `example.facts@1` because the runtime outputs it. None of these needs to be written; see [Defaults](#defaults).
@@ -179,7 +179,7 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
 | `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                                    |
 | `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                                 |
-| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `finishWith`, `completion`, `loop`                 |
+| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `completion`, `loop`                               |
 | `function`    | A runtime with this block is a function, one without it an agent; `handler`, `model`, `timeoutMs`, `tools` |
 | `guard`       | The guard module, relative to the runtime                                                                  |
 | `effects`     | Read and write resources, and `parallelSafe`                                                               |
@@ -213,7 +213,6 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `io.selfData[].format`, `maxEntries` | `summary`, `50` |
 | `agent.model` | `story` for a runtime with `io.visibility: story`, `plugin` for any other |
 | `agent.reasoning` | `true`: the model's own reasoning setting applies |
-| `agent.toolChoice` (with `finishWith`) | `required` |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
 | `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
@@ -226,7 +225,6 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 
 - A hook with only `event` is written as the event name: `- PreToolUse`.
 - An extension with only `point` and `id` is written as `<point>/<id>`.
-- `completion: {require: tool-use, afterTools: [one tool]}` with `toolChoice: required` is written as `finishWith: <tool>`. See [Completion conditions](#completion-conditions-agentfinishwith-agentcompletion).
 
 Covel works out the fields below when they are left out. When one is written with the value Covel would work out, `pnpm validate:plugin` warns in the same way (`is the default value; remove it` or `is worked out from …; remove it`).
 
@@ -421,34 +419,43 @@ The budget decides how many retries can actually be used:
 - A 5xx error that uses up every transport-level retry leaves room for only two rounds.
 - Failures that return quickly and use only one HTTP request (the connection drops partway through a reply, or a generation error) are the ones that can use more attempts.
 
-### Completion conditions (`agent.finishWith`, `agent.completion`)
+<a id="completion-conditions-agentfinishwith-agentcompletion"></a>
+<a id="agent-output-submission"></a>
 
-An agent that finishes by calling one tool writes `finishWith`:
+### Completion conditions (`agent.completion`)
+
+Every agent submits its final result with the host-generated `submit-output` tool. Story and system agents use the same tool; reply content is not an output channel. Successful submission ends computation. Writes still require proposal validation and commit.
+
+Parameters come from the actual loaded output schema: explicit files, `contract:` references and the `output.schema.json` convention take precedence. The schema must describe an object, not a scalar or array, and is neither wrapped nor rewritten. It appears only in the tool definition; agent completion requests no JSON content response format.
+
+Without an output schema, the host supplies an object default:
+
+- Story agent: required nonblank `narrativeOutput: string`, optional `yield: user | continue`.
+- System agent: an open object with optional `narrativeOutput: string`, `completion: done | pending`, `preGameDone: boolean`, and other business fields. `{}` means no business output. Declare a schema for typed downstream output.
+
+`submit-output` is automatically available. Do not put it in allowlists, registrations or `defer`. Functions still return handler results and cannot call it. Its arguments are always model-authored output; fields shaped like `pluginData`, UI or events cannot produce writes.
+
+`agent.completion` declares only business work required before submission:
 
 ```yaml
 agent:
-  finishWith: save-facts
+  tools:
+    plugin: [save-facts]
+  completion:
+    afterTools: [save-facts]
 ```
 
-- The runtime finishes as soon as `save-facts` succeeds, without asking the model again. If it ends without a successful call to that tool, the run fails.
-- The model must call a tool on every step, as with `toolChoice: required`. When `agent.toolChoice` is written, its value is used.
-- It means the same as `completion: {require: tool-use, afterTools: [save-facts]}` with `toolChoice: required`.
+- A nonempty `afterTools` implies `require: tool-use`: at least one listed authorized own or builtin business tool must succeed. That call does not end the runtime. The model reads its result, then calls `submit-output`.
+- Without a list, `require: tool-use` accepts any successful authorized business tool. Failed calls, submission, tool search, suspension and delegation controls do not count as business work.
+- For no change, send the empty result allowed by the business tool, then submit final output. Do not repeat successful writes just to resubmit output.
+- Imported services cannot be required work because their providers may be absent. A required failed call still needs a later success of the same tool.
+- `finishWith`, `completion.require: explicit` and `runtime-done` have been removed. Replace `finishWith: save-facts` with the `completion` above and instruct the model to read the tool result before submitting output.
 
-Completion tools should check required coverage before reporting success. For example, [world fact extraction](./tools.md#per-objective-assessment) requires an assessment of every supplied open objective. Valid JSON alone does not prove complete extraction.
-
-When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`. An imported service tool cannot be a completing tool: a runtime must not need another plugin to finish.
-
-- `completion.afterTools`: the run finishes once one of the listed tools succeeds.
-- When the model must read the tool result and revise it, use `completion.require: tool-use` without `afterTools`. Character creation, for example, returns the filled narrative for review before the model finishes.
-- `completion.require: explicit`: the run must end with a successful call to a completing tool, or with `runtime-done`. A runtime with `io.visibility: story` cannot use it.
-- `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
-- If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
-- The request right after a correction requires the model to call a tool (`toolChoice: "required"`, with any tool named in the manifest kept as it is). After the model calls a tool, the choice goes back to automatic. When the model is in thinking mode, the provider does not accept a forced choice, so the model keeps choosing on its own.
-- This check runs in one place, where the loop returns. It applies to every way a normal run or a resume can end: a text answer, `runtime-done`, automatic completion through `afterTools`, a `PostToolUse` hook that stops the run, and running out of steps.
+Business tools still validate domain constraints such as coverage. Valid JSON alone does not prove a complete task. See the [submission tool](./tools.md#submit-output).
 
 ### Tool choice and reasoning (`agent.toolChoice`, `agent.reasoning`)
 
-- `agent.toolChoice: required` makes the model call a tool on every step; the model picks which one. `{name: <tool>}` makes it call that one tool. Without it (and without `finishWith`), the model decides on its own.
+- `agent.toolChoice: required` makes the model call a tool on every step; the model chooses which one. `{name: <tool>}` selects one tool. When omitted, the model chooses.
 - `agent.reasoning: false` turns reasoning off for this runtime. It suits an extraction runtime that only fills in tool arguments. Without it, the model's own reasoning setting applies; a reasoning level the player sets explicitly still wins.
 - When the model is in thinking mode, the provider does not accept a forced tool choice, so the model keeps choosing on its own.
 
@@ -863,7 +870,7 @@ When only one thing differs from the profile, write only that key; the rest keep
 | `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
 | `finalizer.maxSteps` | At the step limit or when the request no longer fits the model context, turn tools off and ask once for the final answer, subject to the finalizer conditions. Overflow rescue requires a complete tool step and trims tool groups as needed under [prompt budgeting](./prompt-structure.md#budget). `false` disables both rescues |
 | `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
-| `corrections.toolUse` | Corrections for missing required tool work or explicit completion. Integer 0–3, default 1 |
+| `corrections.toolUse` | Corrections for missing required tool work. Integer 0–3, default 1 |
 | `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |
 | `corrections.loopPerturbation` | Perturbations of a repeated tool loop before `fallback`. Integer 0–3, default 1 |
 | `corrections.outputRepair` | Requests with tools off for a complete replacement of invalid output. Integer 0–3, default 1 |
@@ -890,9 +897,9 @@ Loading checks these rules and rejects a manifest that breaks one:
 - A `truncation` that ends up `accept` requires a `stream` that ends up `true`: only text the player read as it was written is kept. A story that writes `stream: false` therefore also writes `truncation: reject`.
 - `finalizer.deadlineReserveMs` is a non-negative integer smaller than `timeoutMs` (compared with the default time limit when `timeoutMs` is not written).
 
-**Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse` or explicit completion, and no output handed over by a completing tool) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
+**Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse`) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
 
-**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. A bare text finish and a `runtime-done` without business work share the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, output not handed over by a completing tool, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit. Each new loop starts fresh budgets; a resumed execution is not a new loop and keeps counting from what it spent before the suspension.
+**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. Missing required business work uses the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit. Each new loop starts fresh budgets; a resumed execution is not a new loop and keeps counting from what it spent before the suspension.
 
 ### Author information
 
@@ -1004,12 +1011,12 @@ The commit rules are under [Turn-level single transaction](./transactions.md#tur
 
 The built-in `world-init` has four runtimes related to dimensions. `dimension-clock` runs after time settlement and `dimension-tracker`.
 
-| Runtime             | Stage              | Responsibility                                                                                                                                                                                                                                                                                                                                               |
-| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `dimension-context` | pre-turn function  | Calls no model. Reads the committed values and publishes `world.dimensions@1`.                                                                                                                                                                                                                                                                               |
-| `dimension-tracker` | post-turn agent    | Must be bound to this turn's narrative, and it maintains the dimensions by the author's rules. WorldIR is an optional supporting input. The world clock after this turn's settlement (`world-time-evolution@1`) is an optional input. `finishWith: update-dimensions`. When nothing changed, it still settles by calling `update-dimensions({updates: []})`. |
-| `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                                 |
-| `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                              |
+| Runtime             | Stage              | Responsibility                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dimension-context` | pre-turn function  | Calls no model. Reads the committed values and publishes `world.dimensions@1`.                                                                                                                                                                                                                                                                                                 |
+| `dimension-tracker` | post-turn agent    | Must be bound to this turn's narrative, and it maintains the dimensions by the author's rules. WorldIR is an optional supporting input. The world clock after this turn's settlement (`world-time-evolution@1`) is an optional input. `completion: { afterTools: [update-dimensions] }`. When nothing changed, it still settles by calling `update-dimensions({updates: []})`. |
+| `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                                                   |
+| `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                                                |
 
 Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](./tools.md#update-dimensions).
 **Reading.**
