@@ -1,3 +1,8 @@
+import {
+  emptyPresentationDigest,
+  presentationIncarnation,
+  takePresentationSnapshot,
+} from "../presentation/projection.js";
 import { createDelegationBudget } from "../orchestration/delegation-budget.js";
 import { createSubagentRunner } from "../agent-loop/subagent-runner.js";
 import { buildTurnDigest } from "./turn-digest.js";
@@ -553,12 +558,36 @@ async function executeTurnImpl(
     resolveEffectsPolicy(),
   );
   emitHazardDiagnostics(hazardDiagnostics);
-  const detachmentPlan =
-    input.detachedStage || scopedRecovery
-      ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
-      : planTurnDetachment(scheduledRuntimes);
+  let detachmentPlan = input.detachedStage
+    ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
+    : planTurnDetachment(scheduledRuntimes);
+  if (scopedRecovery) {
+    detachmentPlan = {
+      ...detachmentPlan,
+      eligibleRuntimeIds: new Set(
+        [...detachmentPlan.eligibleRuntimeIds].filter((runtimeId) =>
+          input.manualTrigger?.presentationJobs?.some(
+            (job) =>
+              job.runtimeId === runtimeId &&
+              job.presentation?.committed &&
+              job.sourceTurnId === executionContext.sourceTurnId &&
+              scheduledRuntimes.some(
+                (manifest) =>
+                  manifest.name === runtimeId &&
+                  manifest.presentation &&
+                  manifest.version === job.pluginVersion,
+              ),
+          ),
+        ),
+      ),
+    };
+  }
   for (const diagnostic of detachmentPlan.diagnostics) {
-    const message = `runtime "${diagnostic.runtimeId}" remains in the foreground: ${diagnostic.reason}`;
+    const presentation = scheduledRuntimes.some(
+      (runtime) =>
+        runtime.name === diagnostic.runtimeId && runtime.presentation,
+    );
+    const message = `runtime "${diagnostic.runtimeId}" ${presentation ? "is unavailable" : "remains in the foreground"}: ${diagnostic.reason}`;
     console.warn(`[covel:warn] [turn-executor] ${message}`);
     emitSubEvent(
       deps.eventBus,
@@ -879,29 +908,63 @@ async function executeTurnImpl(
     );
     for (const manifest of group.runtimes) {
       if (!detachmentPlan.eligibleRuntimeIds.has(manifest.name)) continue;
+      const originalJob = scopedRecovery
+        ? input.manualTrigger?.presentationJobs?.find(
+            (job) => job.runtimeId === manifest.name,
+          )
+        : undefined;
+      const presentation =
+        originalJob?.presentation ??
+        (manifest.presentation
+          ? await takePresentationSnapshot({
+              manifest,
+              sessionId: input.sessionId,
+              sourceTurnId: executionContext.sourceTurnId ?? input.turnId,
+              sourceExecutionId: executionContext.executionId,
+              locale: input.locale,
+              ...(deps.store
+                ? {
+                    incarnation: await presentationIncarnation(
+                      deps.store,
+                      input.sessionId,
+                    ),
+                  }
+                : {}),
+            })
+          : undefined);
       deferredRuntimeJobs.push({
+        ...(presentation ? { presentation } : {}),
         jobId: crypto.randomUUID(),
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
-        sourceTurnId: input.turnId,
-        sourceExecutionId: executionContext.executionId,
-        sourceExecutionStartedAt: executionStartedAt,
+        sourceTurnId: executionContext.sourceTurnId ?? input.turnId,
+        sourceExecutionId:
+          originalJob?.sourceExecutionId ?? executionContext.executionId,
+        sourceExecutionStartedAt:
+          originalJob?.sourceExecutionStartedAt ?? executionStartedAt,
         sourceLogicalTurn: logicalTurn,
         ...(executionContext.logicalTurnId
           ? { sourceLogicalTurnId: executionContext.logicalTurnId }
           : {}),
         ...(manifest.version ? { pluginVersion: manifest.version } : {}),
-        upstreamResults: detachedUpstreamResults(
-          manifest,
-          frozenUpstreamResults,
-          activeRuntimes,
-        ),
-        turnDigest: buildTurnDigest(
-          input,
-          frozenUpstreamResults,
-          activeRuntimes,
-          sessionMeta.lastPlayerInput,
-        ),
+        upstreamResults: manifest.presentation
+          ? []
+          : detachedUpstreamResults(
+              manifest,
+              frozenUpstreamResults,
+              activeRuntimes,
+            ),
+        turnDigest: manifest.presentation
+          ? emptyPresentationDigest(
+              executionContext.sourceTurnId ?? input.turnId,
+              input.locale,
+            )
+          : buildTurnDigest(
+              input,
+              frozenUpstreamResults,
+              activeRuntimes,
+              sessionMeta.lastPlayerInput,
+            ),
       });
     }
     const results = await executeParallel(

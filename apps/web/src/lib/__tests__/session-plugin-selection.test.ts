@@ -25,6 +25,7 @@ function plugin(
     description: `${id} plugin`,
     kind: "plugin",
     source: "builtin",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 0,
     provides: [],
@@ -64,13 +65,12 @@ const plan: WorldPluginPlan = {
   worldId: "world",
   packs: [dialoguePack],
   selectedPackId: dialoguePack.id,
-  policy: {
-    preset: dialoguePack.id,
-    plus: ["pregame"],
-    requires: [],
+  selection: {
+    requestedPluginIds: ["pregame"],
+    requiredContracts: [],
   },
   defaultPluginIds: ["pregame", "chat-mode-narrator", "scene-cast"],
-  missing: [],
+  diagnostics: [],
 };
 
 describe("session plugin selection helpers", () => {
@@ -171,7 +171,7 @@ describe("session plugin selection helpers", () => {
     );
     const requiring = {
       ...plan,
-      policy: { ...plan.policy, requires: ["chat-mode@1"] },
+      selection: { ...plan.selection, requiredContracts: ["chat-mode@1"] },
     };
     expect(recommendationReason(plugins[2]!, requiring, null, labels)).toBe(
       "世界必需",

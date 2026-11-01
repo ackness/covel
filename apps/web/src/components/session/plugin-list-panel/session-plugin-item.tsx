@@ -1,3 +1,4 @@
+import { PluginModelNotice } from "../plugin-model-notice.js";
 import { FaultRecovery } from "./fault-recovery.js";
 import { useState } from "react";
 import {
@@ -149,6 +150,15 @@ export function SessionPluginItem({
         />
       </div>
 
+      {plugin.executionMode === "declarative" && (
+        <p className="px-2.5 pb-2 text-xs text-muted-foreground">
+          {t("plugin.declarative")}
+        </p>
+      )}
+      <PluginModelNotice
+        runtimes={plugin.runtimes}
+        className="px-2.5 pb-2 text-xs text-muted-foreground"
+      />
       <PluginLoadWarnings diagnostics={plugin} />
 
       {plugin.approvalRequired && (

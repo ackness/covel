@@ -10,6 +10,10 @@
  */
 
 import {
+  presentationRuleIssues,
+  type PresentationRuleView,
+} from "./presentation-rules.js";
+import {
   CHARACTER_ACTOR_CONTRACT,
   TURN_POLICY_CONTRACT,
   FRAMEWORK_TOOL_NAMES,
@@ -39,7 +43,7 @@ export function serviceImportName(
 }
 
 /** The manifest fields the rules read, independent of where a manifest writes them. */
-export interface RuntimeRuleView {
+export interface RuntimeRuleView extends PresentationRuleView {
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   readonly runtimeType?: string;
@@ -455,7 +459,7 @@ export function runtimeRuleIssues(
   paths: RuntimeRuleFieldPaths,
   { authoring = false }: { readonly authoring?: boolean } = {},
 ): RuntimeRuleIssue[] {
-  const issues: RuntimeRuleIssue[] = [];
+  const issues: RuntimeRuleIssue[] = presentationRuleIssues(m, authoring);
   const at = (field: RuleField, ...rest: (string | number)[]) => [
     ...paths[field],
     ...rest,

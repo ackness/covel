@@ -25,6 +25,18 @@ export const packageValidationReportSchema = z
     issues: z.array(packageValidationIssueSchema),
     summary: z
       .object({
+        executionMode: z.enum(["declarative", "code", "unknown"]).optional(),
+        executionDiagnostics: z
+          .array(
+            z
+              .object({
+                file: z.string(),
+                field: z.string().optional(),
+                message: z.string(),
+              })
+              .strict(),
+          )
+          .optional(),
         version: z.string().optional(),
         languages: z.string().optional(),
       })

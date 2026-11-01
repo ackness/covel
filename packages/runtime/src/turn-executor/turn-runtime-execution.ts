@@ -1,3 +1,20 @@
+import {
+  attachPresentationState,
+  presentationState,
+} from "../presentation/state.js";
+import { createPresentationBudget } from "../presentation/budget.js";
+import {
+  presentationPolicyError,
+  presentationLimits,
+  presentationNamespaces,
+} from "../presentation/policy.js";
+import {
+  publicStoryCandidate,
+  takePresentationSnapshot,
+  presentationIncarnation,
+  PresentationUnavailable,
+} from "../presentation/projection.js";
+import { presentationSnapshotSchema } from "@covel/shared";
 import { buildOperationsInput } from "./operations-input.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import { commitEligibility } from "../session/session-runtime-result.js";
@@ -176,6 +193,7 @@ export function canStageOperations(
   executionContext: ExecutionContext,
   activation: { readonly detached: boolean },
 ): boolean {
+  if (manifest.presentation !== undefined) return false;
   if ((input as RecursiveTurnInput).withoutOperations) return false;
   if (input.detachedStage !== undefined || activation.detached) return false;
   if (!OPERATION_ORIGINS.has(executionContext.origin)) return false;
@@ -195,6 +213,53 @@ export async function executeOneRuntime(
 ): Promise<RuntimeResult> {
   const stage: InvocationState = { operationReads: new Set() };
   const result = await executeRuntime(inv, stage);
+  if (inv.manifest.presentation !== undefined && !presentationState(result)) {
+    const admitted = presentationPolicyError(inv.manifest)
+      ? { ...inv.manifest, presentation: {} }
+      : inv.manifest;
+    const captured = presentationSnapshotSchema.safeParse(
+      inv.input.detachedStage?.presentation ??
+        inv.input.manualTrigger?.presentationSnapshots?.find(
+          (snapshot) => snapshot.runtimeId === inv.manifest.name,
+        ),
+    );
+    const snapshot =
+      captured.success &&
+      captured.data.committed &&
+      captured.data.runtimeId === inv.manifest.name &&
+      captured.data.pluginId === inv.manifest.pluginId &&
+      captured.data.sourceTurnId ===
+        (inv.input.detachedStage?.sourceTurnId ??
+          inv.input.manualTrigger?.sourceTurnId)
+        ? captured.data
+        : await takePresentationSnapshot({
+            manifest: admitted,
+            sessionId: inv.input.sessionId,
+            sourceTurnId:
+              inv.input.detachedStage?.sourceTurnId ??
+              inv.executionContext.sourceTurnId ??
+              inv.input.turnId,
+            sourceExecutionId:
+              inv.input.detachedStage?.sourceExecutionId ??
+              inv.executionContext.executionId,
+            locale: inv.input.locale,
+          });
+    attachPresentationState(result, {
+      ...(inv.input.detachedStage
+        ? { jobId: inv.input.detachedStage.jobId }
+        : {}),
+      snapshot,
+      mediaIds: new Set(),
+      reason: result.status === "failed" ? "failed" : "unavailable",
+      budget: createPresentationBudget({
+        store: inv.deps.store,
+        sessionId: inv.input.sessionId,
+        snapshot,
+        currentLimits: presentationLimits(admitted),
+        assertLive: () => {},
+      }),
+    });
+  }
   // A run that did not succeed keeps its records, taken back.
   stage.current?.attachTo(result, false);
   // A run that read upstream operations through its `operations@1` input
@@ -241,6 +306,11 @@ async function executeRuntime(
   const progressScopeId =
     (input as RecursiveTurnInput).progressScopeId ?? executionId;
   const runId = inv.runId ?? crypto.randomUUID();
+  const recoverySnapshot = isScopedRuntimeRecovery(input)
+    ? input.manualTrigger?.presentationSnapshots?.find(
+        (snapshot) => snapshot.runtimeId === manifest.name,
+      )
+    : undefined;
   const timeoutMs = resolveRuntimeTimeoutMs(manifest, defaultTimeoutMs);
   // Resolves to the nested execution's kernel-held result. The invocation
   // context keeps those originals for the commit, attached to the parent's
@@ -394,6 +464,44 @@ async function executeRuntime(
   };
 
   try {
+    if (
+      input.detachedStage?.presentation !== undefined &&
+      manifest.presentation === undefined
+    )
+      return emitGateTerminal(
+        makeSkippedResult(
+          manifest,
+          input,
+          "unavailable",
+          "framework:presentation",
+        ),
+        "unavailable",
+      );
+    if (manifest.presentation !== undefined) {
+      const limits = presentationLimits(manifest);
+      if (
+        presentationPolicyError(manifest) ||
+        (!input.detachedStage &&
+          (manifest.turnCompletion?.mode === "detached" ||
+            limits.calls > 0 ||
+            limits.generations > 0 ||
+            ((input.manualTrigger || input.origin === "manual") &&
+              !recoverySnapshot) ||
+            input.origin === "background" ||
+            input.origin === "recursive" ||
+            input.origin === "resume"))
+      ) {
+        return emitGateTerminal(
+          makeSkippedResult(
+            manifest,
+            input,
+            "unavailable",
+            "framework:presentation",
+          ),
+          "unavailable",
+        );
+      }
+    }
     // ── Implicit per-plugin session gate ──────────────────────────
     // A non-setup runtime is skipped while any of its OWN plugin's active setup
     // runtimes is not yet done (incl. waived). This holds for the manual RPC
@@ -517,6 +625,114 @@ async function executeRuntime(
         { manifest, input, runId, startTime },
         "Runtime not found",
       );
+    }
+
+    if (manifest.presentation !== undefined) {
+      let snapshot: import("@covel/shared").PresentationSnapshot;
+      try {
+        if (input.detachedStage || recoverySnapshot) {
+          const parsed = presentationSnapshotSchema.safeParse(
+            input.detachedStage?.presentation ?? recoverySnapshot,
+          );
+          if (
+            !parsed.success ||
+            parsed.data.runtimeId !== manifest.name ||
+            parsed.data.pluginId !== manifest.pluginId ||
+            parsed.data.sourceTurnId !==
+              (input.detachedStage?.sourceTurnId ??
+                input.manualTrigger?.sourceTurnId) ||
+            (input.detachedStage &&
+              parsed.data.sourceExecutionId !==
+                input.detachedStage.sourceExecutionId) ||
+            !parsed.data.committed
+          )
+            throw new PresentationUnavailable();
+          snapshot = parsed.data;
+          if (
+            snapshot.incarnation &&
+            (!deps.store ||
+              (await presentationIncarnation(deps.store, input.sessionId)) !==
+                snapshot.incarnation)
+          )
+            throw new PresentationUnavailable();
+          const namespaces = presentationNamespaces(manifest);
+          if (
+            [...namespaces.reads].some(
+              (namespace) => !Object.hasOwn(snapshot.data, namespace),
+            ) ||
+            [...namespaces.writes].some(
+              (namespace) => !Object.hasOwn(snapshot.baselines, namespace),
+            ) ||
+            Object.keys(snapshot.data).some(
+              (namespace) => !namespaces.reads.has(namespace),
+            ) ||
+            Object.keys(snapshot.baselines).some(
+              (namespace) => !namespaces.writes.has(namespace),
+            )
+          )
+            throw new PresentationUnavailable();
+        } else {
+          snapshot = await takePresentationSnapshot({
+            store: deps.store,
+            manifest,
+            sessionId: input.sessionId,
+            sourceTurnId: executionContext.sourceTurnId ?? input.turnId,
+            sourceExecutionId: executionContext.executionId,
+            locale: input.locale,
+            story: publicStoryCandidate(activeRuntimes, [
+              ...completedResults.values(),
+            ]),
+            upstream: collectUpstreamPluginDataWrites(
+              completedResults,
+              input.sessionId,
+              manifest.pluginId,
+              inv.seedResults,
+            ),
+          });
+        }
+      } catch (error) {
+        if (!(error instanceof PresentationUnavailable)) throw error;
+        return emitGateTerminal(
+          makeSkippedResult(
+            manifest,
+            input,
+            "unavailable",
+            "framework:presentation",
+          ),
+          "unavailable",
+        );
+      }
+      const preRuntime = await runRuntimePreHook(
+        { ...deps, hookPipeline },
+        manifest,
+        input,
+        runId,
+        startTime,
+      );
+      if (preRuntime) return preRuntime;
+      return await executeFunctionRuntime({
+        manifest,
+        input,
+        loaded,
+        deps,
+        hookPipeline,
+        triggerEvent: undefined,
+        upstreamPluginData: collectUpstreamPluginDataWrites(
+          completedResults,
+          input.sessionId,
+          manifest.pluginId,
+          inv.seedResults,
+        ),
+        presentationSnapshot: snapshot,
+        executionContext,
+        createRecursiveCall,
+        recursionDepth,
+        startTime,
+        runId,
+        timeoutMs,
+        executionId: progressScopeId,
+        logicalTurn: sessionMeta?.logicalTurn,
+      });
     }
 
     // ── Activation, input.schema enforce, input bindings ──────────

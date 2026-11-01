@@ -39,6 +39,7 @@ const plugins: SessionPlugin[] = [
     description: "",
     kind: "plugin",
     source: "community",
+    executionMode: "code" as const,
     hostState: "loaded",
     runtimeCount: 0,
     provides: [],

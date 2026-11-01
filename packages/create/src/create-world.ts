@@ -20,6 +20,7 @@ import {
   narratorOnlyLoreIssues,
   validateWorldManifest,
   formatValidationErrors,
+  playerVisibleLore,
 } from "@covel/shared";
 import type { LLMResponse, WorldGenerationPart } from "@covel/shared";
 import type {
@@ -37,7 +38,6 @@ import {
   findLoreMetaErrors,
   findLoreQualityErrors,
   findLoreStructureErrors,
-  dropInvalidDimensions,
   isRecord,
   normalizeGeneratedManifest,
   normalizeLoreDocument,
@@ -130,15 +130,11 @@ function checkManifest(
     while (occupied.has(yamlData.id as string))
       yamlData.id = `${baseId}-${suffix++}`;
   }
-  const warnings = dropInvalidDimensions(yamlData);
-  if (warnings.length > 0) {
-    log(options, "warn", warnings.join("; "));
-  }
+  const warnings: string[] = [];
 
   const briefResult = applyCreationBriefToManifest(
     yamlData,
     options.brief,
-    options.dataContracts,
     options.packs,
   );
   const errors = briefResult.errors;
@@ -436,6 +432,7 @@ async function askUntilAccepted(args: {
 
 /** What is written of a new world so far. Each part adds to it. */
 interface Draft {
+  dimensions?: import("@covel/shared").WorldDimensions;
   yamlData?: Record<string, unknown>;
   manifest?: Record<string, unknown>;
   lore?: string;
@@ -463,7 +460,11 @@ interface PartPlan {
   /** Why the part is not asked for, given what is written so far. */
   skip?(draft: Draft): string | undefined;
   /** Check the section and add it to the draft; the errors when it cannot be imported. */
-  accept(section: string, draft: Draft): string[] | Promise<string[]>;
+  accept(
+    section: string,
+    draft: Draft,
+    answer: string,
+  ): string[] | Promise<string[]>;
 }
 
 /**
@@ -583,9 +584,9 @@ function planParts(
       id: "manifest",
       label: "WORLD_YAML",
       marker: "WORLD_YAML",
-      body: "the complete world.yaml",
+      body: "the complete world.yaml, then ===WORLD_PACKAGE_YAML=== with only the dimensions mapping (use dimensions: {} when none are needed)",
       required: true,
-      accept(section, draft) {
+      accept(section, draft, answer) {
         // A new generation writes one edition. Do not apply this to revisions.
         let singleEdition: string;
         try {
@@ -604,6 +605,25 @@ function planParts(
         }
         const checked = checkManifest(singleEdition, options);
         if ("errors" in checked) return checked.errors;
+        const rawPackage = parsePackage(
+          parseWorldSection(answer, "WORLD_PACKAGE_YAML") ?? undefined,
+        );
+        if ("errors" in rawPackage) return rawPackage.errors;
+        const data = normalizeGeneratedPackage(
+          {
+            dimensions: isRecord(rawPackage.raw)
+              ? rawPackage.raw.dimensions
+              : undefined,
+          },
+          {
+            content: options.brief?.content?.includes("opening-kit")
+              ? ["opening-kit"]
+              : [],
+          },
+        );
+        if (data.errors.length) return data.errors;
+        draft.dimensions = data.content.dimensions;
+        draft.warnings.push(...data.warnings);
         draft.yamlData = checked.yamlData;
         draft.manifest = checked.manifest;
         draft.warnings.push(...checked.warnings);
@@ -648,15 +668,19 @@ function partRequest(plan: PartPlan, draft: Draft): string {
         ]
       : []),
     ...(draft.lore ? ["===WORLD_MD===", draft.lore] : []),
-    ...(draft.characters.length +
+    ...(draft.dimensions !== undefined ||
+    draft.characters.length +
       draft.lorebook.length +
       draft.rules.length +
       draft.contractData.length >
-    0
+      0
       ? [
           "===WORLD_PACKAGE_YAML===",
           stringifyYaml(
             {
+              ...(draft.dimensions === undefined
+                ? {}
+                : { dimensions: draft.dimensions }),
               characters: draft.characters,
               lorebook: draft.lorebook,
               rules: draft.rules,
@@ -723,7 +747,7 @@ async function writeNewWorld(
       take: (content) => {
         const section = parseWorldSection(content, plan.marker);
         return section
-          ? plan.accept(section, draft)
+          ? plan.accept(section, draft, content)
           : [
               `Failed to parse output — expected the ===${plan.marker}=== delimiter`,
             ];
@@ -769,6 +793,9 @@ async function writeNewWorld(
     lore: draft.lore!,
     locale,
     packageContent: {
+      ...(draft.dimensions === undefined
+        ? {}
+        : { dimensions: draft.dimensions }),
       characters: draft.characters,
       lorebook: draft.lorebook,
       rules: draft.rules,
@@ -811,11 +838,92 @@ async function reviseWorld(
           "Failed to parse output — expected ===WORLD_YAML=== and ===WORLD_MD=== delimiters",
         ];
       }
-      const parsed = mergeRevision(
+      let parsed = mergeRevision(
         output,
         revision.current,
         options.dataContracts,
       );
+      // A secret-aware package answer cannot supply public manifest or
+      // dimension replacements. Recreate those changes from public sources.
+      if (hasLoreBoundary(splitLore(revision.current.lore))) {
+        const before = parsePackage(revision.current.packageYaml);
+        const after = parsePackage(parsed.packageYaml);
+        if ("errors" in before) return before.errors;
+        if ("errors" in after) return after.errors;
+        const originalDimensions = isRecord(before.raw)
+          ? before.raw.dimensions
+          : undefined;
+        const proposedDimensions = isRecord(after.raw)
+          ? after.raw.dimensions
+          : undefined;
+        let proposedManifest: unknown;
+        try {
+          proposedManifest = parseYaml(parsed.yaml);
+        } catch (error) {
+          return [`Invalid YAML: ${messageOf(error)}`];
+        }
+        // Obsolete manifest fields are rejected by the ordinary retry below.
+        if (
+          isRecord(proposedManifest) &&
+          !Object.hasOwn(proposedManifest, "dimensions") &&
+          (JSON.stringify(proposedManifest) !==
+            JSON.stringify(parseYaml(revision.current.yaml)) ||
+            JSON.stringify(originalDimensions) !==
+              JSON.stringify(proposedDimensions))
+        ) {
+          const publicRevision: WorldRevision = {
+            instruction: revision.instruction,
+            current: {
+              yaml: revision.current.yaml,
+              lore: playerVisibleLore(revision.current.lore),
+              packageYaml: stringifyYaml({
+                dimensions: originalDimensions ?? {},
+              }),
+            },
+          };
+          const publicAnswer = await requestLlmResponse({
+            llm: options.llm,
+            model: options.model,
+            signal,
+            idleTimeoutMs: options.idleTimeoutMs,
+            onUsage: options.onUsage,
+            messages: [
+              {
+                role: "system",
+                content: await buildWorldPrompt(
+                  "Revise public world metadata and dimensions only. Return WORLD_MD as UNCHANGED.",
+                  locale,
+                  undefined,
+                  options.loadPrompt,
+                  [],
+                  options.packs,
+                  publicRevision,
+                ),
+              },
+              { role: "user", content: revisionRequest(publicRevision) },
+            ],
+          });
+          const publicOutput = parseWorldOutput(publicAnswer.content ?? "");
+          if (!publicOutput)
+            throw new LoreBoundaryError(
+              "Public manifest and dimension revision expected the three delimited sections",
+            );
+          const isolated = mergeRevision(publicOutput, publicRevision.current);
+          const publicPackage = parsePackage(isolated.packageYaml);
+          if ("errors" in publicPackage)
+            throw new LoreBoundaryError("Invalid public dimension revision");
+          parsed = {
+            ...parsed,
+            yaml: isolated.yaml,
+            packageYaml: stringifyYaml({
+              ...(isRecord(after.raw) ? after.raw : {}),
+              dimensions: isRecord(publicPackage.raw)
+                ? publicPackage.raw.dimensions
+                : originalDimensions,
+            }),
+          };
+        }
+      }
       log(
         options,
         "info",

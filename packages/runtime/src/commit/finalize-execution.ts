@@ -1,3 +1,15 @@
+import {
+  presentationCommitGuard,
+  presentationSuperseded,
+  presentationMutationError,
+} from "../presentation/commit.js";
+import {
+  attachPresentationState,
+  presentationState,
+  completePresentation,
+  type PresentationState,
+} from "../presentation/state.js";
+import { finalizePresentationJobs } from "../presentation/jobs.js";
 /**
  * Whole-execution finalize primitive.
  *
@@ -136,6 +148,8 @@ type FinalizableResult = CommittableRuntimeResult &
   Pick<RuntimeResult, "runId" | "status" | "operations" | "operationWrites">;
 
 export interface FinalizeExecutionArgs {
+  /** Host-only receipts retained across the immutable commit-plan clone. */
+  readonly presentationStates?: ReadonlyMap<string, PresentationState>;
   /** Execution-level veto/cancellation forbids all domain writes and success fan-out. */
   readonly abortReason?: string;
   /** Roll back when cancelled before the transaction commits; post-commit fan-out still runs. */
@@ -683,6 +697,10 @@ export async function finalizeExecution(
     extraInTx,
     sessionClock,
   } = args;
+  for (const result of results) {
+    const state = args.presentationStates?.get(result.runId);
+    if (state) attachPresentationState(result, state);
+  }
   const executionContext = args.executionContext;
   const shouldWriteClock =
     sessionClock !== undefined &&
@@ -784,8 +802,13 @@ export async function finalizeExecution(
           // the way the host's own deferred jobs do.
           ...(continuation.withheldRuntimeJobs
             ? {
-                withheldRuntimeJobs: dropped.settleJobs(
-                  continuation.withheldRuntimeJobs as readonly DeferredRuntimeJob[],
+                withheldRuntimeJobs: await finalizePresentationJobs(
+                  tx,
+                  sessionId,
+                  dropped.settleJobs(
+                    continuation.withheldRuntimeJobs as readonly DeferredRuntimeJob[],
+                  ),
+                  runtimes,
                 ),
               }
             : {}),
@@ -915,7 +938,18 @@ export async function finalizeExecution(
     )
       ? { messageSourceTurnId: executionContext.sourceTurnId }
       : {}),
-    ...(args.proposalGuard ? { proposalGuard: args.proposalGuard } : {}),
+    ...(runtimes.find((runtime) => runtime.name === result.runtimeId)
+      ?.presentation
+      ? {
+          proposalGuard: presentationCommitGuard(
+            runtimes.find((runtime) => runtime.name === result.runtimeId)!,
+            result,
+            args.proposalGuard,
+          ),
+        }
+      : args.proposalGuard
+        ? { proposalGuard: args.proposalGuard }
+        : {}),
     ...(args.mediaStore ? { mediaStore: args.mediaStore } : {}),
     ...(datasetPolicy ? { datasetPolicy } : {}),
     ...(deferPostCommit ? { deferPostCommit } : {}),
@@ -1058,6 +1092,29 @@ export async function finalizeExecution(
         settlementsOf(operations),
       );
       outcome = { ...outcome, operations };
+    }
+    for (const result of results) {
+      const state = presentationState(result);
+      if (!state) continue;
+      const isolated = outcome.isolatedRuntimes?.some(
+        (entry) => entry.runId === result.runId,
+      );
+      const failed = result.status === "failed" || isolated;
+      const updated =
+        outcome.status === "committed" &&
+        !failed &&
+        (state.committedWrites ?? 0) > 0;
+      await completePresentation(
+        emitter,
+        result,
+        state,
+        updated ? "updated" : failed ? "failed" : "no-op",
+        failed
+          ? "failed"
+          : outcome.status === "failed"
+            ? "unavailable"
+            : state.reason,
+      );
     }
     await terminalizeExecutionJobs(args, outcome);
     if (args.setupRan && args.setupRan.length > 0) {
@@ -1316,6 +1373,32 @@ export async function finalizeExecution(
           defer: (fn: () => Promise<void>) => void,
         ): Promise<readonly SessionEvent[]> => {
           const { proposals, failedProposals } = prepared.get(result)!;
+          const presentationSource = presentationState(result);
+          if (presentationSource && failedProposals.length)
+            throw new ProposalCommitFailure(failedProposals);
+          if (
+            presentationSource &&
+            !presentationSource.snapshot.committed &&
+            topLevelNarrativeMessageIds.size === 0
+          ) {
+            presentationSource.reason = "no-story";
+            return [];
+          }
+          if (await presentationSuperseded(sink, sessionId, result, proposals))
+            return [];
+          const presentationError = await presentationMutationError(
+            sink,
+            sessionId,
+            result,
+            proposals,
+          );
+          if (presentationError)
+            throw new ProposalCommitFailure(
+              proposals.map((proposal) => ({
+                proposal,
+                error: presentationError,
+              })),
+            );
           const committed: SessionEvent[] = [];
           const failed = [...failedProposals];
           const commitBatch = async (
@@ -1354,6 +1437,8 @@ export async function finalizeExecution(
             await commitBatch(updates);
           }
           if (failed.length > 0) throw new ProposalCommitFailure(failed);
+          const presentation = presentationState(result);
+          if (presentation) presentation.committedWrites = proposals.length;
           return committed;
         };
         // A unit's results commit children first, then the parent; units

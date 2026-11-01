@@ -22,7 +22,11 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import { canonicalizeLocale, validateWorldManifest } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  validateWorldManifest,
+  worldDimensionsSchema,
+} from "@covel/shared";
 import type {
   GeneratedWorld,
   GeneratedWorldPackageContent,
@@ -366,7 +370,10 @@ export async function writeWorldPackage(
   if (
     !locale ||
     world.manifest.id !== id ||
-    !validateWorldManifest(world.manifest).valid
+    !validateWorldManifest(world.manifest).valid ||
+    !worldDimensionsSchema.safeParse(
+      packageContent.dimensions === undefined ? {} : packageContent.dimensions,
+    ).success
   ) {
     throw new Error("Cannot export an invalid generated world");
   }
@@ -435,9 +442,12 @@ export async function writeWorldDataFiles(
   packageContent?: GeneratedWorldPackageContent,
   dataContracts: readonly ContractFile[] = [],
 ): Promise<string[]> {
-  const inline = manifest.dimensions as Record<string, unknown> | undefined;
+  worldDimensionsSchema.parse(
+    packageContent?.dimensions === undefined ? {} : packageContent.dimensions,
+  );
+  const definitions = packageContent?.dimensions;
   const hasDimensions = Boolean(
-    inline && typeof inline === "object" && Object.keys(inline).length > 0,
+    definitions && Object.keys(definitions).length > 0,
   );
   const characters = packageContent?.characters ?? [];
   const contractData = packageContent?.contractData ?? [];
@@ -472,8 +482,7 @@ export async function writeWorldDataFiles(
   };
 
   if (hasDimensions) {
-    await write(GENERATED_DIMENSIONS_PATH, "yaml", inline);
-    delete manifest.dimensions;
+    await write(GENERATED_DIMENSIONS_PATH, "yaml", definitions);
   }
 
   if (characters.length > 0) {

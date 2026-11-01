@@ -1,0 +1,154 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`inferred world data through host admission > imports emberback content using real declarations after redundant requests are removed 1`] = `
+{
+  "activePlugins": [
+    "affinity",
+    "char-creator",
+    "character-blueprint",
+    "codex",
+    "core-quest",
+    "dice-check",
+    "guide",
+    "history-compaction",
+    "inventory",
+    "living-world-rules",
+    "memory",
+    "narrator",
+    "npc-graph",
+    "pregame",
+    "story-events",
+    "world-init",
+    "world-ir",
+    "world-time",
+  ],
+  "requiredContracts": [
+    "world.dimensions@1",
+  ],
+  "requiredDataContracts": [
+    "character.portrait-assets@1",
+    "character.affinity@1",
+    "character.portraits@1",
+    "quests@1",
+    "inventory.items@1",
+    "world.rules@1",
+    "memory.blocks@1",
+    "story.events@1",
+    "world.time-definition@1",
+    "character.blueprints@1",
+  ],
+}
+`;
+
+exports[`inferred world data through host admission > imports haruka-academy content using real declarations after redundant requests are removed 1`] = `
+{
+  "activePlugins": [
+    "affinity",
+    "branch-reply",
+    "char-creator",
+    "character-blueprint",
+    "chat-mode-narrator",
+    "guide",
+    "history-compaction",
+    "living-world-rules",
+    "memory",
+    "pregame",
+    "scene-stage",
+    "story-events",
+    "world-init",
+    "world-ir",
+    "world-time",
+  ],
+  "requiredContracts": [
+    "world.dimensions@1",
+  ],
+  "requiredDataContracts": [
+    "character.portrait-assets@1",
+    "stage.scene-assets@1",
+    "character.affinity@1",
+    "character.portraits@1",
+    "world.rules@1",
+    "memory.blocks@1",
+    "stage.scenes@1",
+    "story.events@1",
+    "world.time-definition@1",
+    "character.blueprints@1",
+  ],
+}
+`;
+
+exports[`inferred world data through host admission > imports lantern-barrow content using real declarations after redundant requests are removed 1`] = `
+{
+  "activePlugins": [
+    "affinity",
+    "char-creator",
+    "character-blueprint",
+    "codex",
+    "core-quest",
+    "dice-check",
+    "guide",
+    "history-compaction",
+    "inventory",
+    "living-world-rules",
+    "memory",
+    "narrator",
+    "npc-graph",
+    "pregame",
+    "story-events",
+    "tabletop-rules",
+    "world-init",
+    "world-ir",
+    "world-time",
+  ],
+  "requiredContracts": [
+    "action-check@1",
+    "world.dimensions@1",
+  ],
+  "requiredDataContracts": [
+    "character.portrait-assets@1",
+    "character.affinity@1",
+    "character.portraits@1",
+    "quests@1",
+    "inventory.items@1",
+    "world.rules@1",
+    "memory.blocks@1",
+    "story.events@1",
+    "tabletop-rules.rules.initial@1",
+    "world.time-definition@1",
+    "character.blueprints@1",
+  ],
+}
+`;
+
+exports[`inferred world data through host admission > imports mistport content using real declarations after redundant requests are removed 1`] = `
+{
+  "activePlugins": [
+    "char-creator",
+    "character-blueprint",
+    "codex",
+    "guide",
+    "history-compaction",
+    "living-world-rules",
+    "memory",
+    "narrator",
+    "npc-graph",
+    "pregame",
+    "story-events",
+    "world-init",
+    "world-ir",
+    "world-time",
+  ],
+  "requiredContracts": [
+    "world.dimensions@1",
+  ],
+  "requiredDataContracts": [
+    "character.portrait-assets@1",
+    "character.portraits@1",
+    "world.rules@1",
+    "memory.blocks@1",
+    "story.events@1",
+    "world.time-definition@1",
+    "character.blueprints@1",
+  ],
+}
+`;

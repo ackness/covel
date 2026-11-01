@@ -1308,6 +1308,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                       ? { sourceTurnId: currentRetryScope.sourceTurnId }
                       : {}),
                     retrySeedResults: retryPlan?.seedResults,
+                    presentationJobs: retryPlan?.presentationJobs,
+                    presentationSnapshots: retryPlan?.presentationSnapshots,
                   },
                 }
               : {}),

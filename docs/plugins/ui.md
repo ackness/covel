@@ -222,7 +222,7 @@ pnpm validate:plugin ~/.covel/plugins/tavern-rumors
 - `invokeRuntime`、`invokePluginAction`、`invokeCommand` 和 `emitEvent` 只能指向自己的插件，写不了别的插件。
 - `invokeRuntime` 点名一个 runtime，等它跑完并拿到结果。`emitEvent` 只说“发生了什么”，点击立刻返回，拿不到订阅者的结果。需要马上看到结果时用前者。
 - `emitEvent` 的事件名必须写在自己 `PLUGIN.md` 的 `contributes.events` 里。只给界面用的事件可以写 `advertise: false`，不让写故事的模型看到。
-- 社区插件第一次发某个事件时，玩家要授权两件事：发这个事件，以及运行订阅它的社区 runtime。
+- 社区插件第一次发某个事件时，玩家仍需授权发出事件。订阅方若是新鲜验证的声明式包，无须代码或 runtime 授权；其他社区订阅方仍要各自获准运行。
 - 订阅事件的 runtime 是后台任务。这一局没有可用的模型密钥时，它不会执行。
 
 想让“去码头”成为玩家的一次行动、由故事来接，就用 `draftMessage` 或 `sendMessage`；想直接改数据，就用 `invokeRuntime` 或 `invokePluginAction`。
@@ -688,3 +688,7 @@ messages:
 ```
 
 `root` 相对包根目录，`entry` 相对 `root`。使用经典外部脚本，内联脚本和模块脚本不会运行。宿主注入 `window.covel`；页面不读会话时删掉 `bridge`。读取会话的页面只在玩家授权后挂载。玩家始终保留宿主返回按钮，也能重试失败的页面。文件规则、上限、CSP 和缓存契约见[多文件页面](../reference/ui-panels.md#多文件页面)。不要把私人文件放进发布根目录。自定义字体使用 CSS `@font-face` 的内嵌 `data:font/woff2;base64,...`（或 WOFF）。即使字体文件位于发布根目录，相对 URL 也会因沙箱不透明源和路由不提供 CORS 允许头而加载失败。
+
+## 用呈现函数更新展示状态
+
+需要跟随故事的背景或配乐时，用[呈现选择器](./advanced.md#呈现选择器)更新自有展示 namespace，再让原有界面槽位读取它。呈现不能读取完整 World Model 或调用槽位服务来绕开限制；它失败时不挡故事和下一次输入。规范见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。

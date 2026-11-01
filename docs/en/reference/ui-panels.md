@@ -10,6 +10,12 @@ The basic idea has one rule. A plugin describes its UI in a JSON document (calle
 > [!NOTE]
 > The DashScope / OpenAI image generation and MiMo TTS described here come from the [official community plugin repository](https://github.com/covel-ai/covel-plugins). They show up, with their tools and UI, after you install them and authorize them in a session.
 
+## UI without server code
+
+JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; no bridge writes or whole-surface replacement are added.
+
+Preparation and session plugin rows disclose model use and actual agent triggers before enable. UI-only packages have no model notice. The notice grants no sandbox capability.
+
 ## Architecture Overview
 
 ```
@@ -882,9 +888,13 @@ Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Until
 
 The capability is session reading, bound to the plugin ID and a SHA-256 hash of the entire loaded spec, including inlined HTML. SettingsStore persists the record on this device at `ui.pluginViewConsent.<pluginId>.<hash>.session`. Changing the spec or HTML asks again. Choose “Revoke story access” in the view bar’s “View permissions” menu to revoke and return to the host default. This consent is independent of server-code approval and applies to every plugin source.
 
+Replacing content or switching sessions closes the old iframe's connection and stream subscription. The page stays unmounted while new content is being hashed or awaiting consent. Already authorized content also gets a new iframe in another session; the old page receives no state or streamed text from the new session.
+
 ### SessionProjection (version 1)
 
 After consent, the page reads the `session` field of the `window.covel` state object, and can also use `window.covel.subscribe` to follow changes. The table below describes that field. The projection does not repeat top-level `locale` and `theme`.
+
+When another client commits a turn, the host also refreshes messages and the turn count and pushes the updated projection. The page does not need to reload.
 
 <!-- prettier-ignore -->
 | Field | Content |
@@ -1228,3 +1238,7 @@ Each card uses `reason` as its title, and it picks the answer control from `resu
 ## Manual performers and orchestration location
 
 Turn Policy declares Choose actors through the generic action catalogue in both composers. Its strict flat fields object requires one multiline actors string, avoiding unsupported arrays. Players and hosts may use it; spectators retain Advance. The framework recognises no bundled wire ID. Orchestration under Loaded Plugins groups the provider and three limits, linking to the provider's own settings for algorithm-specific fields. See [session orchestration settings](../builtin/features.md#session-orchestration-settings) for automatic resolution with one provider, selection with multiple providers, and clearing stale selections.
+
+## Presentation data and slot degradation
+
+UI slots consume committed owned presentation state. Missing public story, assets or allowance, and generation failures leave story and composer usable, degrading only the display. Presentation cannot publish UI proposals and adds no components or provider-selection controls. See [presentation runtimes](./plugins.md#presentation-runtimes).

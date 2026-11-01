@@ -1,3 +1,7 @@
+import {
+  inventoryWorldData,
+  type WorldDataRequirements,
+} from "./requirements.js";
 /**
  * Static validation of one world package directory.
  *
@@ -20,10 +24,10 @@ import {
   validateWorldManifest,
   type NarratorOnlyLoreIssue,
   type WorldDimensions,
-  type WorldPluginPolicy,
+  resolveWorldPluginSelection,
   parseWorldDataTarget,
 } from "@covel/shared";
-import { readFile, readdir, realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -41,13 +45,9 @@ import {
   conventionCollisionDiagnostics,
   conventionCollisions,
   conventionsOfPlugins,
-  setWorldDataConventions,
   worldHasData,
 } from "./conventions.js";
-import {
-  descriptorSourcePaths,
-  loadWorldDataDescriptor,
-} from "./descriptor.js";
+import { descriptorSourcePaths } from "./descriptor.js";
 import {
   checkWorldRecords,
   type ReferencedAttribute,
@@ -80,10 +80,9 @@ export interface WorldPackageDiagnostic {
     | "unknown-plugin"
     | "unknown-setting"
     | "invalid-setting"
-    | "unknown-preset"
     | "unknown-pack"
-    | "preset-not-offered"
-    | "pitch-without-preset"
+    | "invalid-reference"
+    | "redundant-reference"
     | "default-value"
     | "unprovided-contract"
     | "unresolved-contract"
@@ -94,7 +93,7 @@ export interface WorldPackageDiagnostic {
     | "locale-trigger-keys"
     | "locale-script"
     | "edition-incomplete"
-    | "data-file-unused"
+    | "unclaimed-data-source"
     | "attribute-reference"
     | "dimension-reference"
     | "model-hidden-field"
@@ -105,7 +104,7 @@ export interface WorldPackageDiagnostic {
     | "locale-file-name";
   /** Path relative to the world directory. */
   readonly file?: string;
-  /** Location inside `file`, such as `pluginPolicy.plus[1]`. */
+  /** Location inside `file`, such as `plugins[1]`. */
   readonly pointer?: string;
   readonly sourceId?: string;
   readonly locales?: readonly string[];
@@ -141,13 +140,12 @@ interface WorldManifestView {
   /** The world's editions, from its locale files; the default locale first. */
   readonly editions: readonly string[];
   readonly worldData?: string;
-  readonly dimensions?: unknown;
   readonly themeMusic?: string;
   readonly cover?: string;
   readonly characterSchema?: {
     readonly attributes: readonly ReferencedAttribute[];
   };
-  readonly pluginPolicy?: WorldPluginPolicy;
+  readonly plugins?: readonly string[];
   readonly pluginSettings?: Readonly<Record<string, Record<string, unknown>>>;
 }
 
@@ -222,13 +220,14 @@ function declaredLocales(manifest: WorldManifestView): readonly string[] {
 async function checkEditions(
   worldDir: string,
   manifest: WorldManifestView,
+  sources: readonly OrderedWorldDataSource[],
 ): Promise<WorldPackageDiagnostic[]> {
   const diagnostics: WorldPackageDiagnostic[] = [];
   for (const locale of manifest.editions) {
     if (locale === manifest.defaultLocale) continue;
     let status: Awaited<ReturnType<typeof worldTranslationStatus>>;
     try {
-      status = await worldTranslationStatus(worldDir, locale);
+      status = await worldTranslationStatus(worldDir, locale, sources);
     } catch {
       continue; // A source that cannot be read is reported by the data check.
     }
@@ -416,63 +415,40 @@ function checkPluginReferences(
 ): WorldPackageDiagnostic[] {
   const diagnostics: WorldPackageDiagnostic[] = [];
   const known = [...catalogue.getAll().keys()];
-  const policy = manifest.pluginPolicy;
-  const packIds = BUILTIN_PLUGIN_PACKS.map((pack) => pack.id);
-  const preset = policy?.preset;
-  if (preset && !packIds.includes(preset))
+  const selection = resolveWorldPluginSelection(
+    manifest.plugins,
+    BUILTIN_PLUGIN_PACKS,
+  );
+  for (const diagnostic of selection.diagnostics)
     diagnostics.push({
-      level: "error",
-      code: "unknown-preset",
+      level: diagnostic.code === "invalid-reference" ? "error" : "warning",
+      code:
+        diagnostic.code === "missing-plugin"
+          ? "unknown-plugin"
+          : diagnostic.code,
       file: "world.yaml",
-      pointer: "pluginPolicy.preset",
-      message: `Unknown plugin pack "${preset}"`,
-      hint: `Choose a built-in pack: ${packIds.join(", ")}.`,
+      pointer: diagnostic.path,
+      message: `${diagnostic.code}: ${diagnostic.reference ?? diagnostic.path}; unavailable features are omitted from play`,
     });
-  policy?.packs?.forEach((id, index) => {
-    if (packIds.includes(id)) return;
-    diagnostics.push({
-      level: "error",
-      code: "unknown-pack",
-      file: "world.yaml",
-      pointer: `pluginPolicy.packs[${index}]`,
-      message: `Unknown plugin pack "${id}"`,
-      hint: `Choose a built-in pack: ${packIds.join(", ")}.`,
-    });
-  });
-  if (preset && policy?.packs && !policy.packs.includes(preset))
-    diagnostics.push({
-      level: "error",
-      code: "preset-not-offered",
-      file: "world.yaml",
-      pointer: "pluginPolicy.preset",
-      message: `the preset "${preset}" is not one of the packs \`packs\` offers`,
-      hint: "Add the preset to `packs`, or remove `packs` to offer every built-in pack.",
-    });
-  if (policy?.pitch && !preset)
-    diagnostics.push({
-      level: "warning",
-      code: "pitch-without-preset",
-      file: "world.yaml",
-      pointer: "pluginPolicy.pitch",
-      message: "`pitch` presents the preset pack, and this world names none",
-      hint: "Add `preset`, or remove `pitch`.",
-    });
-  policy?.plus?.forEach((id, index) => {
-    const entry = catalogue.get(id);
-    if (entry?.packageManifest?.plugin?.kind !== "core") return;
+  const references = selection.requests.map((ref) => ({
+    id: ref.pluginId,
+    pointer: ref.path,
+  }));
+  for (const ref of selection.requests) {
+    if (
+      ref.packId ||
+      catalogue.get(ref.pluginId)?.packageManifest?.plugin?.kind !== "core"
+    )
+      continue;
     diagnostics.push({
       level: "warning",
       code: "default-value",
       file: "world.yaml",
-      pointer: `pluginPolicy.plus[${index}]`,
-      message: `"${id}" is a \`kind: core\` plugin, which every session has already`,
-      hint: "Remove it from `plus`.",
+      pointer: ref.path,
+      message: `"${ref.pluginId}" is a core plugin enabled by default`,
+      hint: "Remove the redundant plugin reference.",
     });
-  });
-  const references: { id: string; pointer: string }[] = [];
-  policy?.plus?.forEach((id, index) =>
-    references.push({ id, pointer: `pluginPolicy.plus[${index}]` }),
-  );
+  }
   for (const id of Object.keys(manifest.pluginSettings ?? {}))
     references.push({ id, pointer: `pluginSettings.${id}` });
 
@@ -537,15 +513,15 @@ function checkPluginReferences(
       provided.add(
         typeof provision === "string" ? provision : provision.contract,
       );
-  manifest.pluginPolicy?.requires?.forEach((contract, index) => {
+  selection.selection.requiredContracts.forEach((contract) => {
     if (provided.has(contract)) return;
     const suggestion = closestName(contract, provided);
     diagnostics.push({
       level: suggestion || strict ? "error" : "warning",
       code: "unprovided-contract",
       file: "world.yaml",
-      pointer: `pluginPolicy.requires[${index}]`,
-      message: `no scanned plugin provides contract "${contract}"; session creation fails without a provider`,
+      pointer: `plugins[${manifest.plugins?.indexOf(`contract:${contract}`)}]`,
+      message: `no scanned plugin provides contract "${contract}"; play continues without this feature`,
       hint: suggestion ? `Did you mean "${suggestion}"?` : undefined,
     });
   });
@@ -833,75 +809,6 @@ async function checkLocaleFiles(
 }
 
 /** Find unconsumed files for both conventional and explicit source lists. */
-async function unclaimedDataFiles(
-  worldDir: string,
-  manifest: WorldManifestView,
-  sources: readonly OrderedWorldDataSource[],
-): Promise<WorldPackageDiagnostic[]> {
-  const claimed = new Set([
-    ...sources.map((source) => source.descriptor.path),
-    // Framework preview and art-authoring manifests are not session imports.
-    "media/gallery.json",
-    "media/portraits.json",
-    "media/scenes.json",
-  ]);
-  if (manifest.worldData) claimed.add(manifest.worldData);
-  for (const source of sources) {
-    const schema = source.descriptor.schema;
-    if (schema && !schema.includes(":")) claimed.add(schema);
-  }
-  if (manifest.themeMusic) claimed.add(manifest.themeMusic);
-  if (manifest.cover) claimed.add(manifest.cover);
-  const directories = sources
-    .filter((source) => source.descriptor.kind === "media")
-    .map((source) => source.descriptor.path.replace(/\/$/, "") + "/");
-  directories.push("media/gallery/");
-  const diagnostics: WorldPackageDiagnostic[] = [];
-  async function visit(directory: string): Promise<void> {
-    const entries = await readdir(path.join(worldDir, directory), {
-      withFileTypes: true,
-    }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return [];
-      throw error;
-    });
-    for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
-      const file = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) {
-        await visit(file);
-        continue;
-      }
-      if (
-        !entry.isFile() ||
-        entry.name.startsWith(".") ||
-        /^readme(?:\.[^.]+)?\.md$/i.test(entry.name)
-      )
-        continue;
-      if (
-        claimed.has(file) ||
-        directories.some((prefix) => file.startsWith(prefix))
-      )
-        continue;
-      // `quests.zh-CN.yaml` translates `quests.yaml`; it is not a source.
-      const base = file.replace(
-        /\.[A-Za-z]{2,3}(-[A-Za-z0-9]+)*(\.[^.]+)$/,
-        "$2",
-      );
-      if (base !== file && claimed.has(base)) continue;
-      diagnostics.push({
-        level: "warning",
-        code: "data-file-unused",
-        file,
-        message:
-          "this file is not imported: no active source or framework asset declaration claims this path",
-        hint: `Declared paths: ${[...claimed].sort().join(", ")}. Add a source for this file to the descriptor (\`worldData\` in world.yaml), or use a conventional source path.`,
-      });
-    }
-  }
-  for (const directory of ["data", "characters", "media"])
-    await visit(directory);
-  return diagnostics;
-}
-
 /**
  * The plugins a new session of the world starts with when the player changes
  * nothing: what the session preparation screen selects (`defaultPluginIds`),
@@ -911,18 +818,25 @@ async function unclaimedDataFiles(
 function defaultSessionPlugins(
   manifest: WorldManifestView,
   catalogue: PluginCatalogue,
+  inventory: import("./requirements.js").WorldDataRequirements,
 ): readonly string[] {
   const entries = [...catalogue.getAll().values()];
   const plan = worldPluginPlan(
-    manifest.id,
-    { pluginPolicy: manifest.pluginPolicy },
+    {
+      id: manifest.id,
+      name: "",
+      description: "",
+      metadata: { plugins: manifest.plugins },
+    },
     entries.map((entry) => buildPluginSummary(entry)),
+    inventory,
   );
   return resolveSessionPluginPlan(plan.defaultPluginIds, catalogue, {
     excluded: plan.packs.find((pack) => pack.id === plan.selectedPackId)
       ?.excluded,
     authorized: entries.map((entry) => entry.id),
-    requiredContracts: manifest.pluginPolicy?.requires ?? [],
+    requiredContracts: plan.selection.requiredContracts,
+    requiredDataContracts: plan.selection.requiredDataContracts,
   }).active;
 }
 
@@ -981,13 +895,11 @@ async function checkWorldData(
   catalogue: PluginCatalogue,
   strict: boolean,
   defaultPlugins: readonly string[],
+  inventory: WorldDataRequirements,
 ): Promise<WorldPackageDiagnostic[]> {
   const diagnostics: WorldPackageDiagnostic[] = [];
-  const descriptor = await loadWorldDataDescriptor({
-    worldRoot: worldDir,
-    worldId: manifest.id,
-    worldDataPath: manifest.worldData,
-  });
+  const descriptor = inventory.descriptor;
+  if (!descriptor) throw new Error("World package inventory has no descriptor");
   // The dimensions a session of the world starts with, which references in
   // its records are checked against. None when they fail to read.
   let declaredDimensions: WorldDimensions | undefined;
@@ -1007,7 +919,7 @@ async function checkWorldData(
       diagnostics.push({
         level: "warning",
         code: "prompt-size",
-        file: "world.yaml",
+        file: "data/dimensions.yaml",
         pointer: "dimensions",
         message: `Initial dimension values occupy about ${size} tokens in the prompt projection.`,
         hint: "Keep live state compact; move descriptive archives to selective lorebook entries or plugin data.",
@@ -1019,7 +931,7 @@ async function checkWorldData(
       file: "world.yaml",
       pointer: "dimensions",
       message: error instanceof Error ? error.message : String(error),
-      hint: "Check each dimension definition in `data/dimensions.yaml` or under `dimensions` in world.yaml.",
+      hint: "Check each dimension definition in data/dimensions.yaml; world.yaml does not accept inline dimensions.",
     });
   }
   const collisions = await collisionDiagnostics(
@@ -1031,15 +943,31 @@ async function checkWorldData(
   diagnostics.push(...collisions);
   if (!descriptor.diagnostics.some((item) => item.level === "error"))
     diagnostics.push(
-      ...(
-        await unclaimedDataFiles(worldDir, manifest, descriptor.sources)
-      ).filter(
-        // A collision already says why the file is not read.
-        (item) => !collisions.some((collision) => collision.file === item.file),
-      ),
+      ...inventory.diagnostics
+        .filter((item) => item.code === "unclaimed-data-source")
+        .map((item): WorldPackageDiagnostic => ({
+          level: "warning",
+          code: "unclaimed-data-source",
+          file: item.path,
+          pointer: item.pointer,
+          message: item.message,
+          hint: item.hint,
+        }))
+        .filter(
+          // A collision already says why the file is not read.
+          (item) =>
+            !collisions.some((collision) => collision.file === item.file),
+        ),
     );
   if (!manifest.worldData) {
-    if (!(await worldHasData(worldDir, undefined))) return diagnostics;
+    if (
+      !(await worldHasData(
+        worldDir,
+        undefined,
+        conventionsOfPlugins(catalogue),
+      ))
+    )
+      return diagnostics;
   }
   // Where a problem of the descriptor itself is reported.
   const descriptorFile = manifest.worldData ?? "world.yaml";
@@ -1051,6 +979,7 @@ async function checkWorldData(
     worldId: manifest.id,
     worldDataPath: manifest.worldData,
     covelHome: NO_OVERRIDES_HOME,
+    conventions: conventionsOfPlugins(catalogue),
   });
   const fileOf = new Map(
     descriptor.sources.map((source) => [source.id, source.descriptor.path]),
@@ -1115,7 +1044,7 @@ async function checkWorldData(
         file: fileOf.get(source.id) ?? descriptorFile,
         sourceId: source.id,
         message: `a new session of this world starts without a plugin that accepts data contract "${target.contract}" (${listSome(receivers)}); the source is imported only after the player turns one on`,
-        hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
+        hint: "Choose a receiving plugin explicitly when several accept this contract; a unique eligible receiver is selected automatically.",
       });
     }
   }
@@ -1146,7 +1075,7 @@ async function checkWorldData(
         file: fileOf.get(source.id) ?? source.descriptor.path,
         sourceId: source.id,
         message: `a new session of this world starts without a plugin that accepts data contract "${route.contract}" (${listSome(receivers)}); the "${route.field}" field of its characters is imported only after the player turns one on`,
-        hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
+        hint: "Choose a receiving plugin explicitly when several accept this contract; a unique eligible receiver is selected automatically.",
       });
     }
   }
@@ -1308,18 +1237,20 @@ export async function validateWorldPackage(
     options.catalogue ?? (await loadPluginCatalogue(options.pluginsDirs ?? []));
   // A package without a descriptor is read by the conventions of the
   // scanned plugins, as the server reads it by those of the installed ones.
-  // Every scanned plugin's paths are read, so each file is checked for the
-  // plugin that reads it; a session reads by its active plugins alone.
-  // The live server owns global conventions when supplying its catalogue.
-  if (!options.catalogue)
-    setWorldDataConventions(conventionsOfPlugins(catalogue));
-  const defaultPlugins = defaultSessionPlugins(manifest, catalogue);
+  // Static discovery uses the whole catalogue. Import admission separately
+  // limits validation and writes to the session's eligible receivers.
+  const inventory = await inventoryWorldData({
+    worldRoot: worldDir,
+    worldId: manifest.id,
+    registry: catalogue,
+  });
+  const defaultPlugins = defaultSessionPlugins(manifest, catalogue, inventory);
   const strict = options.strict === true;
   return {
     worldId: manifest.id,
     diagnostics: [
       ...(validation.ignoredFields ?? []).map((field) => ({
-        level: "warning" as const,
+        level: options.strict ? ("error" as const) : ("warning" as const),
         code: "manifest-unknown-field" as const,
         file: "world.yaml",
         pointer: field,
@@ -1331,8 +1262,8 @@ export async function validateWorldPackage(
         code: "manifest-invalid" as const,
         file: "world.yaml",
         pointer: issue.path,
-        message: `${issue.message}; the world loads without its pluginPolicy`,
-        hint: "Write `pluginPolicy` as `preset`, `plus`, `pitch`, `packs` and `requires`.",
+        message: `${issue.message}; the world loads without the invalid optional feature`,
+        hint: "Write `plugins` as prefixed pack:, plugin: and contract: references; write presentation overrides in `pluginPitch`.",
       })),
       ...checkDefaultValues(source.base),
       ...inlineLocaleMapDiagnostics(
@@ -1345,7 +1276,11 @@ export async function validateWorldPackage(
       ...(await checkThemeMusic(worldDir, manifest)),
       ...(await checkCover(worldDir, manifest)),
       ...(await checkLocaleFileNames(worldDir, manifest)),
-      ...(await checkEditions(worldDir, manifest)),
+      ...(await checkEditions(
+        worldDir,
+        manifest,
+        inventory.descriptor?.sources ?? [],
+      )),
       ...checkPluginReferences(manifest, catalogue, strict),
       ...(await checkWorldData(
         worldDir,
@@ -1353,6 +1288,7 @@ export async function validateWorldPackage(
         catalogue,
         strict,
         defaultPlugins,
+        inventory,
       )),
     ],
   };

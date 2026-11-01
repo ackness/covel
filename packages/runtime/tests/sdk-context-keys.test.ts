@@ -54,6 +54,7 @@ const SDK_CONTEXT_KEYS = {
   assetProgress: "optional",
   random: "required",
   signal: "optional",
+  presentation: "optional",
 } as const satisfies Record<
   keyof PluginFunctionContext,
   "required" | "optional"

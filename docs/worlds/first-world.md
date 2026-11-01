@@ -4,6 +4,10 @@
 
 全程约二十分钟。不需要写代码。
 
+预置数据按[接收规则](../reference/world-data.md#data-receivers)自动选择唯一合格接收者。只有没有种子内容的玩法或有意消除歧义时才需要额外的 `plugin:` 引用。
+
+结构化维度只写在 `data/dimensions.yaml`，不要复制到 `world.yaml`。编辑器改的是世界记录，重新导出时才写入规范文件；详见[维度来源](../reference/world-data.md#维度来源)。
+
 ## 开始之前
 
 - 已经完成[第一局游戏](../start/first-session.md)，知道一局游戏是怎样进行的。
@@ -121,8 +125,8 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 name: 潮灯镇
 summary: 每逢大退潮，海床上会露出一条通往旧灯塔的石路。今夜潮水退得比任何一年都远，熄了四十年的灯塔亮了。
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: traditional-story
+plugins:
+  - pack:traditional-story
 characterSchema:
   types:
     - npc
@@ -137,10 +141,10 @@ characterSchema:
       description: 面对未知时能不能稳住。
 ```
 
-| 字段                  | 作用                                                             |
-| --------------------- | ---------------------------------------------------------------- |
-| `pluginPolicy.preset` | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
-| `characterSchema`     | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
+| 字段              | 作用                                                             |
+| ----------------- | ---------------------------------------------------------------- |
+| `plugins`         | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
+| `characterSchema` | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
 
 `category` 决定属性用在哪里：`abilities` 是检定和配点用的能力，`stats` 是状态栏里的量条（生命、压力），`social` 是关系（信任），`bio` 是身份，`equipment` 是随身物品。胆识要拿来掷骰，所以放在 `abilities`。
 
@@ -223,7 +227,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 
 你已经有了一个可以玩的世界。可以沿着这些方向继续：
 
-- **换一种玩法。** 把 `preset` 换成 `dialogue-mode`，或者在 `pluginPolicy.plus` 里加上 `dice-check`、`core-quest`、`inventory`、`affinity`，让它变成一场带判定和任务的冒险。
+- **换一种玩法。** 把列表的第一个引用换成 `pack:dialogue-mode`，或者加上 `plugin:dice-check`、`plugin:core-quest`、`plugin:inventory`、`plugin:affinity`，让它变成一场带判定和任务的冒险。
 - **预置更多内容。** 在仓库里运行 `pnpm describe:authoring`，它列出当前版本能预置的每一种内容、文件该放的路径和一份合法的示例。
 - **看成品。** 仓库的 `worlds/` 目录里有四个完整的世界，`worlds/emberback` 是带判定、任务、行囊和好感的参考。
 - **加上画面。** 见[世界立绘](./portraits.md)和[世界场景](./scenes.md)。

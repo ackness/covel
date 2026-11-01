@@ -19,8 +19,12 @@ it("the generation template's prose leaves enter translation; machine leaves and
       "utf8",
     );
     // Exercise the actual schema examples, not an independently corrected fixture.
-    const example = parse(prompt.match(/```yaml\n([\s\S]*?)```/)![1]!);
-    const dimensions = example.dimensions as Record<
+    const packageExample = prompt.match(
+      /^## WORLD_PACKAGE_YAML\s*\n[\s\S]*?```yaml\n([\s\S]*?)```/m,
+    );
+    expect(packageExample).not.toBeNull();
+    const packageContent = parse(packageExample![1]!);
+    const dimensions = packageContent.dimensions as Record<
       string,
       {
         name: string;

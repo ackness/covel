@@ -54,3 +54,33 @@ describe("multi-file page installation validation", () => {
     },
   );
 });
+
+it("assesses the exact community distribution identically in archive and filesystem paths", async () => {
+  const { readPackageInventory, discoverPluginAt, loadPluginDefinition } =
+    await import("@covel/plugin-loader");
+  const path = await import("node:path");
+  const root = path.resolve(
+    import.meta.dirname,
+    "../../../../tests/third-party/declarative-notebook",
+  );
+  const inventory = await readPackageInventory(root);
+  const entries = inventory.files.map((file) => ({
+    relativePath: file.relativePath,
+    content: Buffer.from(file.content),
+  }));
+  const bundle = validatePluginBundle(
+    entries,
+    new Set(),
+    "declarative-notebook",
+  );
+  const definition = await loadPluginDefinition(
+    (await discoverPluginAt(root))!,
+  );
+  expect(bundle.executionMode).toBe("declarative");
+  expect(bundle.executionMode).toBe(definition.executionAssessment?.mode);
+  expect(bundle.hasServerCode).toBe(false);
+  expect(bundle.capabilities.serverCode).toBe(false);
+  expect(bundle.capabilities.datasets).toContainEqual(
+    expect.objectContaining({ namespace: "notes" }),
+  );
+});

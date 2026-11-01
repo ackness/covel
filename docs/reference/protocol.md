@@ -1,10 +1,20 @@
 # SSE 协议
 
+准备计划的两类需求分开冻结在会话 metadata 中：`requiredContracts` 对应能力，`requiredDataContracts` 对应数据 `accepts`；缺失数据通过安全的 `dataNotices` / `worldDataNotices` 告知玩家。见[接收规则](./world-data.md#data-receivers)。
+
+世界准备通过公开计划的 `selection` 读取 `plugins` 引用。创建请求提交明确的插件 ID 与排除项；服务端独立冻结世界的 `contract:` 引用。缺少功能只产生提示，不阻止游玩。
+
 这一页讲客户端和 Covel 服务端之间怎样通讯：客户端发什么请求，服务端推什么事件，每个事件带什么数据，断线之后怎样恢复。
 
 它适合三类读者：写自己的客户端的人、把 Covel 运行时嵌进自己宿主的人，以及改内置网页端或服务端的人。只写插件一般用不到这一页；插件能发的事件见[工具参考](./tools.md)，HTTP 接口的完整说明见 [api.md](./api.md)。
 
 类型定义在 `packages/shared/src/types/protocol.ts`。
+
+## 声明式授权语义
+
+插件摘要必须提供宿主推导的 `executionMode`。新鲜的 `declarative` 状态使创建、启用和 runtime 调用免去代码与 runtime 提示，但不产生授权记录；`serverCodeApproved` 仍只报告真实授权，`approvalRequired` 不再把这些包列为待批准。`code` 和 `unknown` 恢复普通路径。过期审批返回 `409 approval_obsolete`，浏览器把这个响应视为请求已消费，不保存授权；允许操作的调用方保留会话导航检查，再按当前策略重试原始启用或运行。字段定义见[API 状态](./api.md#声明式插件的-api-状态)。
+
+没有新增 SSE 事件或 RPC 通配授权。逐操作、工具、服务提供者和内容绑定的沙箱会话读取授权独立。模型用量提示是启用前的信息，不是 runtime 授权或费用确认。
 
 ## 架构总览
 
@@ -97,6 +107,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 ### 并发时的几条规则
 
+- 会话创建冻结本世界的准备计划；其他世界和无关插件的变化不会使它过期。过期拒绝的诊断字段见 [API](./api.md)，比较范围见[世界数据接收规则](./world-data.md#data-receivers)。
 - 执行期间提交表单时，先检查互斥，再去取得流的所有权。所以它抢不走正在进行的 action 流。
 - 叙事结束之后才到的插话不会被接收，因为模型已经没有机会读它。插话保存下来的记录和实时消息使用同一个身份。
 - 生成、修订、翻译这些 SSE 操作有“同一时间只跑一个”的标记。这个标记一直保持到流的回调完成，包括清理阶段。
@@ -691,6 +702,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - `apps/web/src/services/subscription.ts` 默认订阅 `runtime / state / game / plugin / session / system`，不含 `store`。session store 为了恢复后台任务，另外明确订阅 `job`。
 - 客户端按 `event.topic` 分发。新增 topic 或事件时，**必须同时更新这个文件**。
 - `/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）由 `sendAction` 的回调处理，不经过 `subscription.ts`。
+- `game` 的 `turn.completed` 表示回合已提交。旁观该会话的网页端收到后重读会话快照，更新消息和回合数；即使回合没有角色或维度写入也会刷新。复用现有的恢复代次和执行所有权检查，保留正在进行的本地 action 流。
 
 **鉴权**
 
@@ -853,6 +865,7 @@ data: {
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hook.rewrote`                                                         | Hook 改写了内容                                                                                                                                                                                                                                                                                                                                            |
 | `function.executing` / `function.completed`                            | function-runtime 的 handler 开始和结束（TurnEmitter），和 `recursive.*` 同类                                                                                                                                                                                                                                                                               |
+| `presentation.completed`                                               | 呈现结算状态、固定原因、来源和预算；不包含故事内容，见下文。                                                                                                                                                                                                                                                                                               |
 | `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径；由 `withUtilsTrace` 在 function-runtime / agent-guard 注入的地方包起来）。轮询可能很频繁，所以不进 action 流。负载只有 host / method / status / durationMs，**绝不包含完整 URL、query 或 api key**                                                                  |
 | `context.pruned`                                                       | 提示词组装、`PostContextAssembly` 之后，或循环请求重放或新增裁剪决定时发出。负载为 `{ runtimeId, pluginId, prunedMessageCount }`；循环请求还带 `truncatedToolResultCount`、`truncatedSummaryCount`、`elidedToolResultCount`、`collapsedStepCount`。后两项是本次请求应用的累计账本计数，包含重放；任一计数非零就发事件。只进 trace，同一 runtime 可多次发出 |
 | `context.compaction.failed`                                            | 历史压缩尝试失败时发出，负载是 `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                                                                                    |
@@ -929,6 +942,8 @@ data: {
 - 必须提供 `payload.runtimeId`。
 - 明确给出的 `retryFromTurnId` 必须指向一个已提交、并且仍然属于当前故事的原回合，而且目标仍然处于失败状态。
 - 不带来源时，按普通的 manual 调用处理。
+
+呈现选择器的限定重试使用宿主核验的已提交公开来源；未提供有效来源的手动调用被跳过。已有付费呈现作业保留来源与剩余额度，见[呈现 runtime](./plugins.md#presentation-runtimes)。
 
 **`retry_failed_runtimes`**
 
@@ -1512,3 +1527,26 @@ runtime 的终态：
 ## 创建身份与现有动作协议
 
 创建请求的可选 seatRole 只决定新的人类座位；字段、默认与拒绝规则见[创建接口](./api.md#创建身份)。主持人允许导演指示/旁白/推进，旁观者只有推进。后续动作仍由服务端填写 source，沿用现有 execution.round.completed、execution.advance 和单一 execution.completed 生命周期；此选择不引入新事件或新调度器。
+
+<a id="presentation-completed"></a>
+
+## `presentation.completed`
+
+呈现每次结算记录一条 trace 终态，不转发到 `/api/actions`，不生成玩家无产出通知。负载的宿主身份是 `pluginId`、`runtimeId`、可选 `runId` / `turnId` / `jobId`，来源是 `sourceTurnId` 和 `sourceExecutionId`；`status` 为 `updated`、`no-op` 或 `failed`。无产出总有固定 `reason`，代码见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+```json
+{
+  "pluginId": "gallery-display",
+  "runtimeId": "gallery-display/render",
+  "sourceTurnId": "source",
+  "sourceExecutionId": "execution",
+  "status": "no-op",
+  "reason": "budget-exhausted",
+  "budget": {
+    "calls": { "limit": 2, "used": 2 },
+    "generations": { "limit": 1, "used": 1 }
+  }
+}
+```
+
+事件不含原始输入、自由原因、素材路径、回复或凭证。派发与缓存命中沿用 `gateway.calling` / `gateway.responded`，只记录方法和命中标志；提供方错误不进入呈现诊断。

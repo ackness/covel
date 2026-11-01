@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: mistport
 name: 雾港・裂潮纪
-version: 0.3.1
+version: 0.3.2
 summary: 潮钟三鸣，失踪的公会长与一把破碎的钥匙，把你卷入永雾港城的四方暗战。
 defaultLocale: zh-CN
 tags:
@@ -14,15 +14,12 @@ author:
 license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.1 185)"
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - character-blueprint
-    - story-events
-  pitch:
-    label: 雾港调查剧
-    description: 以传统叙事推进齐老失踪案，带有线索记忆、关系图谱、世界规则、预设角色与立绘。
-    reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
+plugins:
+  - pack:traditional-story
+pluginPitch:
+  label: 雾港调查剧
+  description: 以传统叙事推进齐老失踪案，带有线索记忆、关系图谱、世界规则、预设角色与立绘。
+  reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
 pluginSettings:
   story-events:
     planner: true

@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { useReducer } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { subscribeToast } from "@/lib/toast-channel.js";
+import { resolveApproval } from "@/services/api/approvals.js";
 import type { SessionPlugin, SessionRecord } from "@/services/api.js";
 import {
   SessionWorkspaceSyncError,
@@ -57,6 +59,7 @@ const plugin: SessionPlugin = {
   description: "",
   kind: "plugin",
   source: "community",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 0,
   provides: [],
@@ -137,6 +140,51 @@ beforeEach(() => {
       request.choices.map((choice) => choice.id),
   );
 });
+afterEach(() => vi.unstubAllGlobals());
+
+it.each(["toggle", "bulk"])(
+  "shows an approval conflict while enabling through %s",
+  async (flow) => {
+    const { result } = setup();
+    api.enableSessionPlugin.mockResolvedValueOnce(approval);
+    api.resolveApproval.mockImplementation(resolveApproval);
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: "Approval scope changed", code: "approval_scope_changed" },
+          { status: 409 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const toast = vi.fn();
+    const unsubscribe = subscribeToast(toast);
+    try {
+      await act(async () => {
+        if (flow === "toggle")
+          await result.current.actions.toggleSessionPlugin(plugin.id, true);
+        else {
+          result.current.dispatch({
+            type: "LOAD_SESSION_PLUGINS",
+            plugins: [{ ...plugin, approvalRequired: true }],
+          });
+        }
+      });
+      await vi.waitFor(() => expect(toast).toHaveBeenCalledOnce());
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(api.enableSessionPlugin).toHaveBeenCalledOnce();
+      expect(result.current.state.sessionPlugins[0]?.active).toBe(false);
+      expect(toast).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          kind: "error",
+          detail: expect.stringContaining("Approval scope changed"),
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
+  },
+);
 
 describe.each(["session-b", "session-a"])(
   "plugin operations after navigating to %s",
@@ -628,3 +676,60 @@ it.each(["GET", "reconnect"])(
     );
   },
 );
+
+it("skips entry prompting and enables declarative content without fabricating an approval", async () => {
+  const { result } = setup();
+  await act(async () =>
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [
+        {
+          ...plugin,
+          executionMode: "declarative",
+          active: false,
+          serverCodeApproved: false,
+          approvalRequired: false,
+        },
+      ],
+    }),
+  );
+  expect(confirmation.requestChoices).not.toHaveBeenCalled();
+  await act(async () =>
+    result.current.actions.toggleSessionPlugin(plugin.id, true),
+  );
+  expect(api.enableSessionPlugin).toHaveBeenCalledWith(session.id, plugin.id);
+  expect(confirmation.requestConfirm).not.toHaveBeenCalled();
+  expect(api.resolveApproval).not.toHaveBeenCalled();
+  expect(result.current.state.sessionPlugins[0]?.active).toBe(true);
+});
+it("honors a current server approval requirement after a displayed declarative package gains code", async () => {
+  const { result } = setup();
+  await act(async () =>
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [
+        {
+          ...plugin,
+          executionMode: "declarative",
+          active: false,
+          serverCodeApproved: false,
+          approvalRequired: false,
+        },
+      ],
+    }),
+  );
+  api.enableSessionPlugin
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce(enabled);
+  await act(async () =>
+    result.current.actions.toggleSessionPlugin(plugin.id, true),
+  );
+  expect(confirmation.requestConfirm).toHaveBeenCalledOnce();
+  expect(api.resolveApproval).toHaveBeenCalledWith(
+    approval.approvalId,
+    "allow",
+    "session",
+    session.id,
+  );
+  expect(result.current.state.sessionPlugins[0]?.active).toBe(true);
+});

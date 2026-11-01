@@ -2,6 +2,8 @@
 
 维度是世界的结构化设定和随剧情变化的数据。字段表见 `docs/reference/schema/world-dimensions.md`，完整语义见 `docs/reference/world-data.md`「动态世界维度」。本页只讲怎么写好。
 
+只在 `data/dimensions.yaml` 写整张表，语言覆盖放在旁边；`world.yaml` 不接受维度。生成／修订可携带内容使用 `packageContent.dimensions`，编辑器保存解析后的世界记录。
+
 ## 两类维度
 
 - **静态设定**（地理、阵营、力量体系、历史、经济、社会结构、基调、开局）：不写 `updateRule`。它只作为当前值注入叙事，不产生额外的模型调用。

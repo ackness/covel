@@ -1,3 +1,4 @@
+import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
 /**
  * Plugin RPC approval routes.
  *
@@ -145,7 +146,13 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   }
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
-  if (pendingForAuth.trustLevel === "community") {
+  if (
+    pendingForAuth.trustLevel === "community" &&
+    !(await refreshDeclarativeEligibility(
+      c.get("trustedSources"),
+      pendingForAuth.pluginId,
+    ))
+  ) {
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
   }
@@ -208,6 +215,32 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
         );
       }
 
+      const declarative = await refreshDeclarativeEligibility(
+        c.get("trustedSources"),
+        livePending.pluginId,
+      );
+      if (
+        declarative &&
+        (livePending.action === COMMUNITY_SERVER_CODE_ACTION ||
+          livePending.action.startsWith("runtime:"))
+      ) {
+        // Consume the obsolete request without storing authority for a later code upgrade.
+        gate.decide(
+          { ...decision, decision: "deny" },
+          sessionApprovalScope(liveSession, livePending.pluginId),
+        );
+        return c.json(
+          errorBody(
+            "This package no longer requires code or runtime approval; retry the operation",
+            { code: "approval_obsolete" },
+          ),
+          409,
+        );
+      }
+      if (livePending.trustLevel === "community" && !declarative) {
+        const operatorDenied = requireAccess(c, "plugin.community");
+        if (operatorDenied) return operatorDenied;
+      }
       const result = gate.decide(
         decision,
         sessionApprovalScope(liveSession, livePending.pluginId),

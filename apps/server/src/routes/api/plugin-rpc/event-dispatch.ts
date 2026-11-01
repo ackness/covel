@@ -1,3 +1,4 @@
+import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
 import {
   approvalVerdictResponse,
   hasServerCodeGrant,
@@ -98,8 +99,12 @@ export async function dispatchPluginEvent(
   // discovery source, and a community plugin needs the server-code grant
   // before a per-event grant.
   const entry = pluginRegistry.get(body.pluginId);
+  const declarative = await refreshDeclarativeEligibility(
+    c.get("trustedSources"),
+    body.pluginId,
+  );
   const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
-  if (trustInfo.source === "community") {
+  if (trustInfo.source === "community" && !declarative) {
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
   }
@@ -108,6 +113,7 @@ export async function dispatchPluginEvent(
   await c.get("trustedSources")?.ensureFresh(body.pluginId);
   const needsServerCodeGrant =
     trustInfo.source === "community" &&
+    !declarative &&
     !hasServerCodeGrant(gate, session, body.pluginId);
   const verdict = gate.evaluate({
     sessionId,
@@ -139,6 +145,13 @@ export async function dispatchPluginEvent(
       pluginRegistry.get(runtime.pluginId)?.source,
     ).source;
     if (source !== "community") continue;
+    if (
+      await refreshDeclarativeEligibility(
+        c.get("trustedSources"),
+        runtime.pluginId,
+      )
+    )
+      continue;
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);

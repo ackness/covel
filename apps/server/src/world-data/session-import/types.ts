@@ -76,6 +76,8 @@ export interface DeferredProjectionOutput {
 }
 
 export interface ImportPlan {
+  /** Admitted receiver scope captured with the schemas and planned writes. */
+  readonly activePlugins?: readonly string[];
   /** Private captured package generation; never returned or persisted. */
   readonly datasetPolicy: DatasetPolicyResolver;
   readonly writes: readonly PlannedWrite[];
@@ -87,6 +89,10 @@ export interface ImportPlan {
    * `primary` preserves direct writes and their kernel effects while active
    * projections still reconcile independently; `all` preserves the whole source.
    */
+  readonly deferredCharacterSources?: readonly {
+    readonly sourceId: string;
+    readonly contracts: readonly string[];
+  }[];
   readonly deferredSources?: readonly {
     readonly sourceId: string;
     readonly scope: "primary" | "all";
@@ -171,6 +177,7 @@ export interface WorldDataImportRecord {
 }
 
 export interface PrepareWorldDataImportForSessionOptions {
+  readonly inventory?: import("../requirements.js").WorldDataRequirements;
   /** The world's record; without one the world has no dimensions. */
   readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;
@@ -194,6 +201,7 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 }
 
 export interface PreflightWorldDataForSessionOptions {
+  readonly inventory?: import("../requirements.js").WorldDataRequirements;
   /** The world's record, as for {@link PrepareWorldDataImportForSessionOptions}. */
   readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;

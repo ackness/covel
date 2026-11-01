@@ -54,14 +54,13 @@ characterSchema:
 
 ## 2. 启用两个插件
 
-在 `pluginPolicy.plus` 里加上它们：
+在 `plugins` 里加上它们：
 
 ```yaml
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - tabletop-rules
-    - dice-check
+plugins:
+  - pack:traditional-story
+  - plugin:tabletop-rules
+  - plugin:dice-check
 ```
 
 做到这里已经可以玩了。不写规则文件时，`tabletop-rules` 会自动把所有符合条件的属性拿来配点，额外给 4 点。

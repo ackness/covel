@@ -27,7 +27,7 @@ Only the first two files are required. The rest are optional. You can play witho
 
 ## How worlds and plugins work together
 
-A world does not implement gameplay. It **chooses** gameplay. The `pluginPolicy` in `world.yaml` says which plugins the world wants on, for example the narrator, dice checks, and a quest log. The player can adjust this choice on the session-prep screen.
+A world does not implement gameplay. It **chooses** gameplay. The `plugins` in `world.yaml` says which plugins the world wants on, for example the narrator, dice checks, and a quest log. The player can adjust this choice on the session-prep screen.
 
 A world can also prepare data for plugins. A quest plugin receives the starting quests, an inventory plugin receives the starting items, and an affinity plugin receives the starting relationships. You put the data files at the agreed paths, and the matching plugin reads them when it is turned on.
 

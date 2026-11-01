@@ -1,5 +1,5 @@
 ---
-version: 0.0.6
+version: 0.0.7
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood

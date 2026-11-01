@@ -4,6 +4,10 @@ This page takes you through writing a world package by hand. It is called "潮�
 
 It takes about twenty minutes. You do not need to write code.
 
+Seed content automatically selects its unique eligible receiver under the [receiver rules](../reference/world-data.md#data-receivers). Additional `plugin:` references express gameplay without seed data or an intentional receiver choice.
+
+Write structured dimensions only in `data/dimensions.yaml`, without copying them into `world.yaml`. The editor changes the world record; explicit export writes the canonical file. See [dimension sources](../reference/world-data.md#dimension-sources).
+
 ## Before you start
 
 - You have finished [your first game](../start/first-session.md), so you know how a game plays.
@@ -121,8 +125,8 @@ Go back to `world.yaml` and add two sections at the end:
 name: 潮灯镇
 summary: 每逢大退潮，海床上会露出一条通往旧灯塔的石路。今夜潮水退得比任何一年都远，熄了四十年的灯塔亮了。
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: traditional-story
+plugins:
+  - pack:traditional-story
 characterSchema:
   types:
     - npc
@@ -137,10 +141,10 @@ characterSchema:
       description: 面对未知时能不能稳住。
 ```
 
-| Field                 | What it does                                                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `pluginPolicy.preset` | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
-| `characterSchema`     | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
+| Field             | What it does                                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `plugins`         | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
+| `characterSchema` | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
 
 `category` decides where an attribute is used: `abilities` are what checks and point buy use, `stats` are bars in the status bar (health, stress), `social` holds relationships (trust), `bio` identity, and `equipment` what the character carries. Nerve is rolled against, so it goes in `abilities`.
 
@@ -223,7 +227,7 @@ Restart Covel and enter "潮灯镇" again. This time the session-prep screen has
 
 You now have a world you can play. You can keep going in these directions:
 
-- **Try a different style of play.** Change `preset` to `dialogue-mode`. Or add `dice-check`, `core-quest`, `inventory`, and `affinity` to `pluginPolicy.plus`, so the world becomes an adventure with checks and quests.
+- **Try a different style of play.** Change the first reference to `pack:dialogue-mode`. Or add `plugin:dice-check`, `plugin:core-quest`, `plugin:inventory`, and `plugin:affinity` to `plugins`, so the world becomes an adventure with checks and quests.
 - **Add more preset content.** Run `pnpm describe:authoring` in the repository. It lists every kind of content you can preset in the current version, the path each file goes in, and a valid example.
 - **See a finished world.** The repository's `worlds/` folder has four complete worlds. `worlds/emberback` is a reference that uses checks, quests, inventory, and affinity.
 - **Add pictures.** See [world portraits](./portraits.md) and [world scenes](./scenes.md).

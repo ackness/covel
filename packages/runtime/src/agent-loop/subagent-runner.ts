@@ -412,7 +412,9 @@ function resolveTarget(
     ...pausedRuntimes.map((provider) => ({ provider, paused: true })),
   ].filter(
     ({ provider }) =>
-      provider.subagentOnly && provider.runtimeType !== "function",
+      provider.subagentOnly &&
+      provider.runtimeType !== "function" &&
+      provider.presentation === undefined,
   );
   const resolved = ({ provider, paused }: (typeof providers)[number]) =>
     paused
@@ -662,46 +664,6 @@ async function runProvider({
     deps.turnControl?.executionSignal,
     args.parentSignal,
   );
-  // The sub-agent resolves its own imports, as itself; the surface wraps the
-  // raw executor, then `delegate` wraps that.
-  const surfaceExecutor = innerExecutor
-    ? withAgentToolSurface(
-        innerExecutor,
-        await prepareAgentToolSurface({
-          manifest,
-          input,
-          deps,
-          canWrite: operations !== undefined,
-        }),
-        deps.services,
-        operations,
-      )
-    : undefined;
-  const subDeps: TurnExecutorDeps = {
-    ...deps,
-    onDelta: undefined,
-    emitter,
-    // The player's abort and the caller's cancellation reach the sub-agent;
-    // the steering queue does not.
-    turnControl: {
-      ...(deps.turnControl?.signal ? { signal: deps.turnControl.signal } : {}),
-      ...(executionSignal ? { executionSignal } : {}),
-    },
-    toolExecutor:
-      surfaceExecutor && depth < SUBAGENT_MAX_DEPTH
-        ? withSubagentDelegate(surfaceExecutor, runner, {
-            caller: {
-              pluginId: provider.pluginId,
-              runtimeId: provider.name,
-              depth,
-            },
-            input,
-            deps: { ...deps, toolExecutor: innerExecutor },
-            executionContext: args.executionContext,
-            ...(operations ? { operations } : {}),
-          })
-        : surfaceExecutor,
-  };
 
   try {
     const providerLoaded = await deps.loadRuntime(
@@ -721,6 +683,50 @@ async function runProvider({
           outputContractSchema: canonical,
         }
       : providerLoaded;
+
+    // The sub-agent resolves its own imports, as itself; the surface wraps the
+    // raw executor, then `delegate` wraps that.
+    const surfaceExecutor = innerExecutor
+      ? withAgentToolSurface(
+          innerExecutor,
+          await prepareAgentToolSurface({
+            manifest,
+            input,
+            deps,
+            loaded,
+            canWrite: operations !== undefined,
+          }),
+          deps.services,
+          operations,
+        )
+      : undefined;
+    const subDeps: TurnExecutorDeps = {
+      ...deps,
+      onDelta: undefined,
+      emitter,
+      // The player's abort and the caller's cancellation reach the sub-agent;
+      // the steering queue does not.
+      turnControl: {
+        ...(deps.turnControl?.signal
+          ? { signal: deps.turnControl.signal }
+          : {}),
+        ...(executionSignal ? { executionSignal } : {}),
+      },
+      toolExecutor:
+        surfaceExecutor && depth < SUBAGENT_MAX_DEPTH
+          ? withSubagentDelegate(surfaceExecutor, runner, {
+              caller: {
+                pluginId: provider.pluginId,
+                runtimeId: provider.name,
+                depth,
+              },
+              input,
+              deps: { ...deps, toolExecutor: innerExecutor },
+              executionContext: args.executionContext,
+              ...(operations ? { operations } : {}),
+            })
+          : surfaceExecutor,
+    };
     if (actor) {
       const character = args.world?.characters.find(
         (candidate) => candidate.id === request.characterId,

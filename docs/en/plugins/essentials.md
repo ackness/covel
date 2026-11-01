@@ -4,6 +4,10 @@ This page collects the rules that every plugin author runs into: what you must d
 
 Before you read this page, finish [your first plugin](./first-plugin.md). That page walks you through a complete run. This page explains the rules to follow after that run works.
 
+When functions are unnecessary, combine [prompts, datasets and UI](./prompt-only.md) in a declarative package without an entry or extraction. Code approval depends on current files; see [installation](../reference/plugin-installation.md#declarative-plugins).
+
+For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.
+
 ## Where to read next
 
 | What you want to do                                         | Read this page                             |
@@ -78,7 +82,7 @@ The rules that are easiest to get wrong:
 
 Every `pnpm create-plugin` mode starts `PLUGIN.md` at version `0.1.0`. Change that one place when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
 
-After validation passes, select the plugin on the session-prep screen of the game and authorize it. Only then does it run. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
+After validation passes, select the plugin on the session-prep screen. Packages the host verifies as declarative from current files run directly; code packages ask for authorization. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
 
 ## Where to declare what my code registers
 
@@ -240,6 +244,8 @@ A session may have several `type: player` characters, and the session's seats de
 ### When you want the world author to supply this data
 
 Declare `version`, `schema` and `accepts` for a data namespace in `contributes.data`. Then a world package can import content into it. Adding `authoring` lets world authors and authoring tools know how to write the content. For how to do this, see [advanced · data contracts and world import](./advanced.md#data-contracts-and-world-import) and the [world data reference](../reference/world-data.md).
+
+A world independently requests the receiver with `plugins: [plugin:my-plugin]`, or requests a capability with `contract:my-capability@1`. A missing provider only reduces that content. See [plugin selection](../reference/world-data.md#plugin-selection-pluginpolicy) for pack selection and derived presentation.
 
 If an imported record contains a nested list, and the list items are told apart by a field other than `id` (for example `label`), declare `authoring.source.localeArrayKeys: [label]`. Then, after the author changes the order of the list in the main file, the translation still matches the same record.
 

@@ -1,16 +1,22 @@
 # Built-in Plugins and Features
 
+Bundled worlds use the same prefixed `plugins` selection as community worlds. All host packs remain available; unavailable content produces notices and play can start.
+
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 Covel comes with a set of plugins and four worlds. This chapter tells you what each one is, what you will see in the game, and what you can adjust. To find out which plugin gives you a certain panel, or whether a feature can be turned off, look here.
 
 The built-in plugins and worlds are only demos, and you do not have to use them.
 
-Manage session policy providers and execution limits in [orchestration settings](./features.md#session-orchestration-settings).
+Manage session policy providers and execution limits in [orchestration settings](./features.md#session-orchestration-settings). Plugin list refreshes preserve unsaved orchestration edits.
 
 Narrators supply location and mood cues when they change, for the stage and music to read; see [Narrative and Memory](./story.md).
 
 Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
 
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](../reference/tools.md#opening-character-form).
+
+All four bundled worlds keep their complete dimension tables in `data/dimensions.yaml`; manifests carry no dimensions. See [dimension sources](../reference/world-data.md#dimension-sources) for the distinction between definitions and session values.
 
 ## What is in this chapter
 
@@ -121,3 +127,7 @@ The story interface also provides the host’s [advancement and Stop controls](.
 Ensemble actors respond from their own witnessed history; the shared brief does not automatically tell newcomers about private exchanges from the previous scene. See [ensemble dialogue](./story.md#ensemble-dialogue-and-character-actors).
 
 New compositions remain plugin lists plus a world-generation default view. They do not select a role, perspective or strategy. For DM Mode, set Narrator Perspective to Game master. Ensemble works with the default Player role and mention strategy. To play a human DM, turn off character creation and select Game master in preparation. For Spectator, choose that role at creation, then list, random or director and Advance. Choose Game master instead to direct/narrate the same NPC composition. World allowed-pack lists remain authoritative and saved views are not overwritten. Recommendations stay optional; missing actors/policies preserve narrator-only play.
+
+## Story-driven presentation
+
+Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).

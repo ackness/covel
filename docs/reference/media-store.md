@@ -413,3 +413,7 @@ SQLite 媒体工厂在构造成功之前，自己持有共享连接的引用。�
 ## Tests
 
 共用的契约测试在 `packages/store/src/contract/media-store-contract.ts`。目前的覆盖范围：Memory、SQLite/local-fs，以及 `DATABASE_URL` 指向一个可以连上的数据库时的 PostgreSQL（`packages/store/tests/media-store.test.ts`）。
+
+## 呈现媒体
+
+呈现的媒体 facade 只读可达引用，不能直接 `put` 或 `ingestUrl`。生成 helper 在内部保留标准 writer、pin / claim 和失败补偿；缓存命中不消耗派发额度。缓存也必须来自源快照中的公开可达引用，或本次调用已生成的媒体；相同 prompt 不能读取同包的隐藏缓存。过时或拒绝的结果不能发布展示绑定，已有生成缓存仍可按此范围复用，不承诺撤回费用或字节。可达范围与额度见[呈现 runtime](./plugins.md#presentation-runtimes)。

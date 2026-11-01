@@ -6,6 +6,7 @@
 
 import { DATA_OP_KINDS } from "@covel/plugin-handlers-utils";
 import { z } from "zod";
+import { compiledPresentationSchema } from "./presentation.js";
 import { DATASET_TOOL_KINDS, datasetToolsIssues } from "./dataset-tools.js";
 
 /** A versioned extension point or UI slot name, such as `prompt.segment@1`. */
@@ -86,7 +87,16 @@ export const pluginRelativeJsonSchemaPath = z
 
 /** Public framework schemas may be referenced by URI without plugin copies. */
 const runtimeJsonSchemaReference = z.union([
-  pluginRelativeJsonSchemaPath,
+  z
+    .string()
+    .min(1)
+    .regex(/^(?!\/)[a-z0-9_./-]+\.json$/i, {
+      message:
+        "schema must be a declaration-relative .json path contained inside the plugin package",
+    })
+    .describe(
+      "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment.",
+    ),
   z.string().regex(/^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$/),
 ]);
 
@@ -1102,6 +1112,11 @@ export const permissionsDeclSchema = z
 
 /** Fields of the flat IR shape that the shared runtime rules read. */
 interface ManifestCrossFieldView {
+  readonly presentation?: z.infer<typeof compiledPresentationSchema>;
+  readonly effects?: z.infer<typeof effectsDeclSchema>;
+  readonly inputs?: z.infer<typeof inputsBindingMapSchema>;
+  readonly concealed?: boolean;
+  readonly advertiseEvents?: boolean;
   readonly input?: z.infer<typeof inputConfigSchema>;
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
@@ -1158,6 +1173,8 @@ function addIrRuleIssues(
   for (const issue of runtimeRuleIssues(
     {
       ...rest,
+      presentationInputs: m.inputs,
+      injectedInput: Boolean(m.input?.inject?.length || m.input?.schema),
       ...(loopProfile
         ? {
             loop: {
@@ -1258,6 +1275,7 @@ export const pluginCommandsSchema = z
  */
 export const runtimeManifestInputSchema = z
   .strictObject({
+    presentation: compiledPresentationSchema.optional(),
     name: z
       .string()
       .min(1)

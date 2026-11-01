@@ -1,5 +1,5 @@
 import { SKILL_INSTALL_COMMAND } from "../components/SkillInstall.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import path from "node:path";
 import {
@@ -343,36 +343,94 @@ describe("showcase site", () => {
     }
   });
 
-  it("keeps showcased plugins aligned with world policies and core defaults", () => {
+  it("keeps showcased plugins aligned with world selections, data and core defaults", () => {
     const root = path.join(import.meta.dirname, "../../../../");
     const read = (file: string) => readFileSync(path.join(root, file), "utf8");
     // These authored fields are plain YAML string sequences. Stop at the next
     // field so recommendations cannot accidentally become default selections.
-    const list = (text: string, key: string) => {
+    const list = (text: string, key: string, indent = 2) => {
       const lines = text.split("\n");
-      const start = lines.findIndex((line) => line === `  ${key}:`);
+      const prefix = " ".repeat(indent);
+      const itemPrefix = `${prefix}  - `;
+      const start = lines.findIndex((line) => line === `${prefix}${key}:`);
       const result: string[] = [];
       if (start < 0) return result;
       for (const line of lines.slice(start + 1)) {
-        if (!line.startsWith("    - ")) break;
-        result.push(line.slice(6).trim());
+        if (!line.startsWith(itemPrefix)) break;
+        result.push(line.slice(itemPrefix.length).trim());
       }
       return result;
     };
     const packs = read("packs/builtin.yaml").split(/(?=^- id: )/m);
+    const plugins = PLUGIN_IDS.map((id) => {
+      const manifest = read(`plugins/${id}/PLUGIN.md`);
+      const runtimes = globSync(`plugins/${id}/runtimes/*/RUNTIME.md`, {
+        cwd: root,
+      }).map(read);
+      return {
+        id,
+        core: /^kind: core$/m.test(manifest),
+        presentation: [manifest, ...runtimes].some((text) =>
+          /^(?:  )?presentation:/m.test(text),
+        ),
+        sources: [
+          ...manifest.matchAll(/^        source:\n          path: (.+)$/gm),
+        ].flatMap(([, source]) => (source ? [source] : [])),
+        characterFields: [
+          ...manifest.matchAll(/^        characterField: (.+)$/gm),
+        ].flatMap(([, field]) => (field ? [field] : [])),
+      };
+    });
     for (const mode of COPY.en.hero.modes) {
-      const world = read(`worlds/${WORLD_IDS[mode.visual]}/world.yaml`);
-      const preset = world.match(/^  preset: (.+)$/m)?.[1];
-      const pack = packs.find((entry) => entry.startsWith(`- id: ${preset}\n`));
-      expect(pack).toBeTruthy();
-      const defaults = PLUGIN_IDS.filter((id) =>
-        /^kind: core$/m.test(read(`plugins/${id}/PLUGIN.md`)),
+      const worldDir = `worlds/${WORLD_IDS[mode.visual]}`;
+      const world = read(`${worldDir}/world.yaml`);
+      const defaults = plugins
+        .filter((plugin) => plugin.core)
+        .map(({ id }) => id);
+      const selected = new Set<string>(defaults);
+      let initialPack = true;
+      for (const reference of list(world, "plugins", 0)) {
+        if (reference.startsWith("pack:")) {
+          const packId = reference.slice("pack:".length);
+          const pack = packs.find((entry) =>
+            entry.startsWith(`- id: ${packId}\n`),
+          );
+          expect(pack, `${mode.visual}: ${reference}`).toBeTruthy();
+          // Session preparation expands only the first pack; later packs are alternatives.
+          if (initialPack)
+            for (const id of list(pack!, "requested")) selected.add(id);
+          initialPack = false;
+        } else if (reference.startsWith("plugin:")) {
+          selected.add(reference.slice("plugin:".length));
+        } else {
+          // Contract requirements name capabilities, not plugin IDs.
+          expect(reference).toMatch(/^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$/);
+        }
+      }
+      // Bundled worlds use conventional sources with unique data receivers.
+      // Preparation also activates these receivers, but never a presentation runtime.
+      const characters: unknown = JSON.parse(
+        read(`${worldDir}/characters/characters.json`),
       );
-      const selected = new Set([
-        ...list(pack!, "requested"),
-        ...list(world, "plus"),
-        ...defaults,
-      ]);
+      expect(Array.isArray(characters)).toBe(true);
+      for (const plugin of plugins) {
+        if (plugin.presentation) continue;
+        const hasSource = plugin.sources.some(
+          (source) =>
+            globSync(`${worldDir}/${source}`, { cwd: root }).length > 0,
+        );
+        const hasCharacterField =
+          Array.isArray(characters) &&
+          plugin.characterFields.some((field) =>
+            characters.some(
+              (character: unknown) =>
+                typeof character === "object" &&
+                character !== null &&
+                Object.hasOwn(character, field),
+            ),
+          );
+        if (hasSource || hasCharacterField) selected.add(plugin.id);
+      }
       if (selected.has("chat-mode-narrator")) selected.delete("narrator");
       expect([...PACKS[mode.visual]].sort()).toEqual(
         PLUGIN_IDS.filter((id) => selected.has(id)).sort(),

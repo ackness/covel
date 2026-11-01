@@ -2,7 +2,10 @@ import {
   resolveWorldDimensionsLocale,
   worldDimensionsSchema,
   parseWorldDataTarget,
+  validateWorldManifest,
+  resolveI18nText,
 } from "@covel/shared";
+import { parse as parseYaml } from "yaml";
 import { mkdtemp, mkdir, writeFile, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,12 +18,95 @@ import {
 import { loadPluginCatalogue } from "../../src/world-data/validate-world-package.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { loadWorldDataSummary } from "../../src/world-data/world-load.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
+import { inventoryWorldData } from "../../src/world-data/requirements.js";
 
 async function makeTempWorld(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "covel-world-data-"));
 }
 
 describe("world data loader", () => {
+  it("reads one canonical table with source-language fallback and removes disabled definitions and provider requests", async () => {
+    const root = await makeTempWorld();
+    await mkdir(path.join(root, "data"));
+    await writeFile(
+      path.join(root, "world.yaml"),
+      "id: source-world\nname: Source world\nsummary: Source summary\ndefaultLocale: en-US\nworldData: data/world.data.yaml\n",
+    );
+    await writeFile(path.join(root, "world.ja-JP.yaml"), "name: 世界\n");
+    await writeFile(path.join(root, "WORLD.md"), "Source lore.");
+    await writeFile(
+      path.join(root, "data/dimensions.yaml"),
+      "signal:\n  name: Signal\n  schema: {type: string, x-i18n: true}\n  initialValue: The lamp holds.\nalarm:\n  name: Alarm\n  schema: {type: integer}\n  initialValue: 17\n",
+    );
+    await writeFile(
+      path.join(root, "data/dimensions.ja-JP.yaml"),
+      "signal:\n  name: 信号\n",
+    );
+    await writeFile(
+      path.join(root, "data/world.data.yaml"),
+      "sources:\n  dimensions:\n    path: data/dimensions.yaml\n",
+    );
+    const world = await loadSingleWorld(root);
+    expect(world?.lore).toBe("Source lore.");
+    const localized = resolveWorldDimensionsLocale(
+      worldDimensionsSchema.parse(world?.metadata?.dimensions),
+      "ja-JP",
+    );
+    expect(localized.signal).toMatchObject({
+      name: { "en-US": "Signal", "ja-JP": "信号" },
+      initialValue: "The lamp holds.",
+    });
+    expect(localized.alarm?.initialValue).toBe(17);
+    const registry = createPluginRegistry();
+    const inventory = () =>
+      inventoryWorldData({
+        worldId: "source-world",
+        worldRoot: root,
+        registry,
+      });
+    expect((await inventory()).requiredContracts).toContain(
+      "world.dimensions@1",
+    );
+    await writeFile(
+      path.join(root, "data/world.data.yaml"),
+      "sources:\n  dimensions:\n    path: data/dimensions.yaml\n    enabled: false\n",
+    );
+    expect((await loadSingleWorld(root))?.metadata?.dimensions).toBeUndefined();
+    expect((await inventory()).requiredContracts).not.toContain(
+      "world.dimensions@1",
+    );
+  });
+
+  it.each([
+    "sources:\n  dimensions:\n    kind: yaml\n    path: elsewhere.yaml\n    to: world:metadata.dimensions\n",
+    "sources:\n  first:\n    path: data/dimensions.yaml\n  second:\n    path: data/dimensions.yaml\n",
+  ])(
+    "refuses to publish a world with conflicting dimension source declarations: %s",
+    async (descriptor) => {
+      const root = await makeTempWorld();
+      await mkdir(path.join(root, "data"));
+      await writeFile(
+        path.join(root, "world.yaml"),
+        "id: source-world\nname: Source\nsummary: Source\ndefaultLocale: en-US\nworldData: data/world.data.yaml\n",
+      );
+      await writeFile(path.join(root, "data/dimensions.yaml"), "{}");
+      await writeFile(path.join(root, "data/world.data.yaml"), descriptor);
+      const diagnostics: unknown[] = [];
+      expect(
+        await loadSingleWorld(root, {
+          onWorldDataDiagnostics: (items) => diagnostics.push(...items),
+        }),
+      ).toBeNull();
+      expect(diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "dimension-source-invalid",
+          path: "data/world.data.yaml",
+          pointer: expect.stringContaining("sources."),
+        }),
+      );
+    },
+  );
   it("loads exact-locale lore before short keys and compiles dimension overlays", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "data"), { recursive: true });
@@ -122,7 +208,7 @@ defaultLocale: x/../../../docs/reference/i18n
     expect(record).toBeNull();
   });
 
-  it("passes pluginPolicy from world.yaml into world metadata", async () => {
+  it("preserves plugin selection and authored pitch in world metadata", async () => {
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
@@ -130,23 +216,22 @@ defaultLocale: x/../../../docs/reference/i18n
 name: Policy World
 summary: World with plugin policy
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: dialogue-mode
-  plus:
-    - affinity
-  pitch:
-    label: 校园恋爱
+plugins:
+  - pack:dialogue-mode
+  - plugin:affinity
+pluginPitch:
+  label: 校园恋爱
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "# Policy World");
 
     const record = await loadSingleWorld(root);
 
-    expect(record?.metadata?.pluginPolicy).toEqual({
-      preset: "dialogue-mode",
-      plus: ["affinity"],
-      pitch: { label: "校园恋爱" },
-    });
+    expect(record?.metadata?.plugins).toEqual([
+      "pack:dialogue-mode",
+      "plugin:affinity",
+    ]);
+    expect(record?.metadata?.pluginPitch).toEqual({ label: "校园恋爱" });
   });
 
   it("loads an old pluginPolicy without it, and the rest of the world", async () => {
@@ -172,6 +257,7 @@ pluginPolicy:
     const record = await loadSingleWorld(root);
 
     expect(record?.id).toBe("old-policy-world");
+    expect(record?.lore).toBe("# Old Policy World");
     expect(record?.metadata?.pluginPolicy).toBeUndefined();
   });
 
@@ -340,11 +426,11 @@ defaultLocale: zh-CN
       path.join(home, "world-overrides/demo/world.data.override.yaml"),
       `sources:
   dimensions:
-    path: data/dimensions.override.yaml
+    path: data/dimensions.yaml
 `,
     );
     await writeFile(
-      path.join(home, "world-overrides/demo/data/dimensions.override.yaml"),
+      path.join(home, "world-overrides/demo/data/dimensions.yaml"),
       "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - 覆盖\n    contentRating: teen\n",
     );
 
@@ -705,9 +791,37 @@ worldData: data/world.data.yaml
       }
       return loaded.get(worldId)!;
     };
-    for (const worldId of ["haruka-academy", "mistport"]) {
+    for (const worldId of [
+      "haruka-academy",
+      "mistport",
+      "emberback",
+      "lantern-barrow",
+    ]) {
+      const directory = path.join(worldsRoot, worldId);
+      const manifest = parseYaml(
+        await readFile(path.join(directory, "world.yaml"), "utf8"),
+      );
+      expect(validateWorldManifest(manifest).valid).toBe(true);
+      expect(manifest).not.toHaveProperty("dimensions");
+      const definitions = worldDimensionsSchema.parse(
+        parseYaml(
+          await readFile(path.join(directory, "data/dimensions.yaml"), "utf8"),
+        ),
+      );
       const record = await load(worldId);
       expect(record?.metadata?.dimensions).toBeTruthy();
+      const resolved = resolveWorldDimensionsLocale(
+        worldDimensionsSchema.parse(record?.metadata?.dimensions),
+        record?.locale,
+      );
+      expect(Object.keys(resolved)).toEqual(Object.keys(definitions));
+      for (const [id, definition] of Object.entries(definitions)) {
+        expect(resolved[id]?.initialValue).toEqual(definition.initialValue);
+        expect(resolved[id]?.updateRule).toEqual(definition.updateRule);
+        expect(resolveI18nText(resolved[id]?.name, record?.locale)).toEqual(
+          definition.name,
+        );
+      }
       expect(record?.metadata?.worldData).toMatchObject({
         schemaVersion: 1,
         sources: expect.arrayContaining([

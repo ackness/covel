@@ -1,3 +1,4 @@
+import { resolveWorldPluginSelection } from "@covel/shared";
 import {
   getPluginTrustInfo,
   type PluginRegistry,
@@ -23,18 +24,20 @@ import { hasServerCodeGrant } from "../approval-verdict.js";
 
 /**
  * A session's stored plugin selection. `requiredContracts` is the world's
- * `pluginPolicy.requires` as of session creation, kept with the session so
+ * explicit contract references as of session creation, kept with the session so
  * every later resolution treats the world as a requirer without reloading it.
  */
 export interface SessionPluginSelection {
   requested: string[];
   excluded: string[];
   requiredContracts: string[];
+  requiredDataContracts: string[];
 }
 
 /** The shape persisted under `session.metadata.pluginSelection`. */
 export function storedPluginSelection(selection: SessionPluginSelection) {
   return {
+    requiredDataContracts: selection.requiredDataContracts,
     requested: selection.requested,
     excluded: selection.excluded,
     ...(selection.requiredContracts.length > 0
@@ -57,17 +60,20 @@ export function readSessionPluginSelection(
     requested: strings(selection.requested),
     excluded: strings(selection.excluded),
     requiredContracts: strings(selection.requiredContracts),
+    requiredDataContracts: strings(selection.requiredDataContracts),
   };
 }
 export function authorizedSessionPluginIds(
   registry: Pick<PluginRegistry, "getAll">,
   gate?: RpcApprovalGate,
   session?: SessionRecord,
+  trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService,
 ): string[] {
   return [...registry.getAll().values()]
     .filter(
       (entry) =>
         getPluginTrustInfo(entry.id, entry.source).autoLoad ||
+        Boolean(trustedSources?.isDeclarative(entry.id)) ||
         Boolean(session && gate && hasServerCodeGrant(gate, session, entry.id)),
     )
     .map((entry) => entry.id);
@@ -79,6 +85,8 @@ export function resolveSessionPluginPlan(
     excluded?: readonly string[];
     authorized?: readonly string[];
     requiredContracts?: readonly string[];
+    requiredDataContracts?: readonly string[];
+    automaticPluginIds?: readonly string[];
   } = {},
 ): SessionPluginResolution {
   const authorized = new Set(
@@ -88,6 +96,8 @@ export function resolveSessionPluginPlan(
     requested,
     excluded: options.excluded,
     requiredContracts: options.requiredContracts,
+    requiredDataContracts: options.requiredDataContracts,
+    automaticPluginIds: options.automaticPluginIds,
     plugins: resolvablePlugins(registry.getAll().values()).map((facts) => ({
       ...facts,
       authorized: authorized.has(facts.id),
@@ -130,11 +140,13 @@ export function resolveSessionPluginSet(
   confirmed: readonly string[],
   entries: ReadonlyMap<string, PluginRegistryEntry>,
   requiredContracts?: readonly string[],
+  requiredDataContracts?: readonly string[],
 ): SessionPluginResolution {
   const set = resolveConfirmedSessionPlugins({
     confirmed,
     plugins: resolvablePlugins(entries.values()),
     ...(requiredContracts ? { requiredContracts } : {}),
+    requiredDataContracts,
   });
   return {
     ...set,
@@ -166,18 +178,14 @@ export function sessionPluginIds(
 ): string[] {
   return runnablePluginIds(session.activePlugins ?? [], registry);
 }
-/** A world record's `pluginPolicy.requires`: contracts it needs a provider for. */
+/** Explicit world contracts, frozen into the session on creation. */
 export function worldRequiredContracts(
   world: { metadata?: Readonly<Record<string, unknown>> } | null | undefined,
 ): string[] {
-  const policy = world?.metadata?.pluginPolicy;
-  const requires =
-    policy && typeof policy === "object" && !Array.isArray(policy)
-      ? (policy as Record<string, unknown>).requires
-      : undefined;
-  return Array.isArray(requires)
-    ? requires.filter((item): item is string => typeof item === "string")
-    : [];
+  return [
+    ...resolveWorldPluginSelection(world?.metadata?.plugins, []).selection
+      .requiredContracts,
+  ];
 }
 
 export function unmetRequirementMessage(item: UnmetWorldRequirement): string {
@@ -210,6 +218,7 @@ export function buildAvailablePluginList(
     authorized?: readonly string[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
+    isServerCodeApproved?: (pluginId: string) => boolean;
   } = {},
 ): SessionPlugin[] {
   const authorized = new Set(
@@ -218,14 +227,20 @@ export function buildAvailablePluginList(
   return [...registry.getAll().values()].map((entry) => {
     const rejection = plan?.rejected.find((item) => item.pluginId === entry.id);
     const isActive = active.includes(entry.id);
+    const declarative =
+      options.trustedSources?.isDeclarative(entry.id) ?? false;
+    const codeApproved =
+      entry.source === "builtin" ||
+      (options.isServerCodeApproved?.(entry.id) ??
+        (!declarative && authorized.has(entry.id)));
     return {
       ...buildPluginSummary(
         entry,
         options.isEntryPublished,
         options.trustedSources,
       ),
-      serverCodeApproved: authorized.has(entry.id),
-      ...(authorized.has(entry.id) && entry.source !== "builtin"
+      serverCodeApproved: codeApproved,
+      ...(codeApproved && entry.source !== "builtin"
         ? {
             serverCodeApprovedBy: options.trustedSources?.implicitGrant({
               pluginId: entry.id,
@@ -245,9 +260,7 @@ export function buildAvailablePluginList(
             : "inactive",
       ...(plan?.autoAdded.includes(entry.id) ? { autoAdded: true } : {}),
       ...(rejection ? { rejection } : {}),
-      ...(rejection?.code === "approval-required"
-        ? { approvalRequired: true }
-        : {}),
+      approvalRequired: !declarative && rejection?.code === "approval-required",
     };
   });
 }
@@ -266,6 +279,7 @@ export function buildSessionPluginView(
     paused?: readonly import("@covel/runtime").PluginFaultState[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
     isEntryPublished?: (pluginId: string) => boolean;
+    isServerCodeApproved?: (pluginId: string) => boolean;
   },
 ): {
   items: SessionPlugin[];
@@ -277,6 +291,7 @@ export function buildSessionPluginView(
     session.activePlugins ?? [],
     registry.getAll(),
     selection.requiredContracts,
+    selection.requiredDataContracts,
   );
   const authorized = new Set(options.authorized);
   const awaitingApproval = [

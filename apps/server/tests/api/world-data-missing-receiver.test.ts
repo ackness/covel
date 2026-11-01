@@ -69,9 +69,8 @@ describe("session creation without installed world-data receivers", () => {
       const responseText = await response.text();
       expect(response.status, responseText).toBe(201);
       const body = JSON.parse(responseText);
-      // Without its plugin a file at a conventional path is no source: the
-      // session leaves it out, and the preparation screen names the world's
-      // missing plugins. What the session cannot keep is reported.
+      // Unknown conventions are diagnosed without guessing their contracts.
+      // Kernel data still imports and the storyteller remains available.
       expect(body.worldDataNotices).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

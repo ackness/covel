@@ -1,10 +1,20 @@
 # SSE protocol
 
+Preparation freezes distinct capability `requiredContracts` and data `requiredDataContracts` in session metadata. Safe `dataNotices` / `worldDataNotices` report omissions. See [receiver rules](./world-data.md#data-receivers).
+
+World preparation reads `plugins` references through the public plan's `selection`. Creation submits explicit plugin IDs and exclusions; the server freezes world `contract:` references independently. Missing features produce notices and do not block play.
+
 This page explains how a client and the Covel server talk to each other: what requests the client sends, what events the server pushes, what data each event carries, and how a client recovers after a dropped connection.
 
 It is for three kinds of readers: people who write their own client, people who embed the Covel runtime in their own host, and people who change the bundled web app or the server. If you only write plugins, you rarely need this page. The events a plugin can emit are in the [tools reference](./tools.md). The full HTTP API is in [api.md](./api.md).
 
 The type definitions are in `packages/shared/src/types/protocol.ts`.
+
+## Declarative approval semantics
+
+Plugin summaries require host-derived `executionMode`. Fresh `declarative` status skips code/runtime prompts during creation, enable and runtime calls without recording grants. `serverCodeApproved` still reports real grants; `approvalRequired` no longer marks these packages as pending. `code` and `unknown` use normal admission. Obsolete approvals return `409 approval_obsolete`; the browser treats it as consumed without a grant, and callers allowing the operation retry enable/run under current policy with their session navigation checks intact. See [API state](./api.md#declarative-plugin-api-state) for field definitions.
+
+There is no new SSE event or wildcard RPC grant. Per-action, tool, provider and content-bound sandbox session-read authorization remain independent. Model-use messaging is information before enable, not runtime permission or cost consent.
 
 ## Architecture overview
 
@@ -97,6 +107,7 @@ The return value of `executeTurn` is the `{ result, commit }` shown above, not `
 
 ### A few rules for concurrency
 
+- Session creation freezes the preparation plan for its own world. Changes to other worlds or unrelated plugins do not invalidate it. See the [API](./api.md) for stale-plan diagnostics and [world data receiver rules](./world-data.md#data-receivers) for the comparison scope.
 - When a form is submitted during an execution, the mutual-exclusion check runs first, and only then does it try to take ownership of the stream. So it cannot take over the action stream that is in progress.
 - An interjection that arrives after narration has ended is not accepted, because the model no longer has a chance to read it. The record saved for an interjection and the live message use the same identity.
 - The SSE operations for generate, revise, and translate use a "only one running at a time" flag. The flag stays set until the stream callback finishes, including the cleanup phase.
@@ -691,6 +702,7 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 - `apps/web/src/services/subscription.ts` subscribes by default to `runtime / state / game / plugin / session / system`. It does not include `store`. To recover background tasks, the session store subscribes to `job` explicitly as well.
 - The client dispatches by `event.topic`. When you add a new topic or event, **you must update this file at the same time**.
 - In-turn events on `/api/actions` (`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
+- The `game` event `turn.completed` reports a committed turn. An observing web client rereads the session snapshot to update messages and the turn count, including turns without character or dimension writes. Existing recovery generation and execution ownership checks preserve a healthy local action stream.
 
 **Authentication**
 
@@ -853,6 +865,7 @@ These are written only to `trace_events`, and are delivered through the subscrip
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `hook.rewrote`                                                         | A hook rewrote the content                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `function.executing` / `function.completed`                            | The start and end of a function-runtime handler (TurnEmitter). Same kind as `recursive.*`                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `presentation.completed`                                               | Presentation terminal status, fixed reason, source and budget; no story content. See below.                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | HTTP calls to a provider made through a plugin's own wire (`ctx.utils.fetchWithRetry`, the path an image generation plugin takes. Wrapped by `withUtilsTrace` where function-runtime / agent-guard injects it). Polling can be very frequent, so these do not go into the action stream. The payload has only host / method / status / durationMs, and **never contains a full URL, query, or API key**                                                                                          |
 | `context.pruned`                                                       | Emitted during prompt assembly, after `PostContextAssembly`, or when a loop request replays or adds trimming decisions. Payload: `{ runtimeId, pluginId, prunedMessageCount }`; loop requests also include `truncatedToolResultCount`, `truncatedSummaryCount`, `elidedToolResultCount`, `collapsedStepCount`. The last two count cumulative ledger decisions applied to this request, including replay. Any non-zero count emits the event. Trace only; the same runtime may emit it repeatedly |
 | `context.compaction.failed`                                            | Emitted when a history compaction attempt fails. The payload is `{ pluginId, extensionId, reason, consecutiveFailures }`                                                                                                                                                                                                                                                                                                                                                                         |
@@ -929,6 +942,8 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 - `payload.runtimeId` must be provided.
 - An explicit `retryFromTurnId` must point to an original turn that is committed and still belongs to the current story. The target must still be in the failed state.
 - Without a source, it is handled as an ordinary manual call.
+
+Scoped selector retries use host-validated committed public sources; manual calls without a valid source are skipped. Existing paid presentation jobs retain their source and remaining allowance; see [presentation runtimes](./plugins.md#presentation-runtimes).
 
 **`retry_failed_runtimes`**
 
@@ -1512,3 +1527,26 @@ Actor failures and cap refusals use `subagent.failed`, without a new actor event
 ## Creation role and existing actions
 
 Optional seatRole selects only the new human seat; see [creation API](./api.md#creation-role) for validation/defaults. Hosts can direct/narrate/advance; spectators can only advance. The server still assigns action source and uses the existing round settlement, advancement and single request-terminal events. This choice adds no event or scheduler.
+
+<a id="presentation-completed"></a>
+
+## `presentation.completed`
+
+Each settled presentation records one trace terminal, without forwarding to `/api/actions` or adding a player no-output notification. Host identity is `pluginId`, `runtimeId`, optional `runId` / `turnId` / `jobId`; source correlation is `sourceTurnId` and `sourceExecutionId`. `status` is `updated`, `no-op` or `failed`. No output always includes a fixed `reason`; codes are defined by the [presentation contract](./plugins.md#presentation-runtimes).
+
+```json
+{
+  "pluginId": "gallery-display",
+  "runtimeId": "gallery-display/render",
+  "sourceTurnId": "source",
+  "sourceExecutionId": "execution",
+  "status": "no-op",
+  "reason": "budget-exhausted",
+  "budget": {
+    "calls": { "limit": 2, "used": 2 },
+    "generations": { "limit": 1, "used": 1 }
+  }
+}
+```
+
+The event contains no raw input, free-text reason, asset path, reply or credential. Dispatch and cache hits use existing `gateway.calling` / `gateway.responded`, recording method and cache status only; provider error text stays outside presentation diagnostics.

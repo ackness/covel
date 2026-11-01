@@ -1,3 +1,4 @@
+import { resolveWorldPluginSelection } from "@covel/shared";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +31,7 @@ import { importWorldDataForSession } from "../../../apps/server/tests/helpers/wo
 import { loadSingleWorld } from "../../../apps/server/src/world-seed-loader.ts";
 import { resolveSessionPluginPlan } from "../../../apps/server/src/routes/api/session/plugins.ts";
 import { BUILTIN_PLUGIN_PACKS } from "../../../apps/server/src/config/plugin-packs.ts";
+import { inventoryWorldData } from "../../../apps/server/src/world-data/requirements.ts";
 import createUpdateAffinity from "../tools/update-affinity.js";
 import { currentAffinity } from "../server/current-affinity.js";
 import initializeWorld from "../../world-init/guard.js";
@@ -95,17 +97,39 @@ async function fixture(worldId, locale) {
     includeWorldDataOverrides: false,
   });
   expect(world).toBeTruthy();
-  const policy = world.metadata.pluginPolicy;
-  const pack = BUILTIN_PLUGIN_PACKS.find((item) => item.id === policy.preset);
-  const plan = resolveSessionPluginPlan(
-    [...pack.requested, ...(policy.plus ?? [])],
-    registry,
-    {
-      excluded: policy.minus ?? pack.excluded,
-      authorized: [...registry.getAll().keys()],
-      requiredContracts: policy.requires,
-    },
+  const selection = resolveWorldPluginSelection(
+    world.metadata.plugins,
+    BUILTIN_PLUGIN_PACKS,
   );
+  const pack = selection.packs.find(
+    (item) => item.id === selection.selectedPackId,
+  );
+  const inventory = await inventoryWorldData({
+    world,
+    worldId,
+    worldRoot: path.join(root, "worlds", worldId),
+    covelHome: testHome,
+    registry,
+    locale,
+  });
+  const requested = [...new Set(selection.requests.map((ref) => ref.pluginId))];
+  expect(requested).not.toContain("affinity");
+  const hasAffinityData = worldId !== "mistport";
+  expect(inventory.requiredDataContracts.includes("character.affinity@1")).toBe(
+    hasAffinityData,
+  );
+  const plan = resolveSessionPluginPlan(requested, registry, {
+    excluded: pack?.excluded,
+    authorized: [...registry.getAll().keys()],
+    requiredContracts: [
+      ...new Set([
+        ...selection.selection.requiredContracts,
+        ...inventory.requiredContracts,
+      ]),
+    ],
+    requiredDataContracts: inventory.requiredDataContracts,
+  });
+  expect(plan.autoAdded.includes("affinity")).toBe(hasAffinityData);
   expect(
     plan.rejected.filter((item) => item.code !== "default-replaced"),
   ).toEqual([]);

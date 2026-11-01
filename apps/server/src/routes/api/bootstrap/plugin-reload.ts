@@ -64,6 +64,7 @@ export async function preparePluginReload(
     ),
 
     packageManifest: definition.packageManifest,
+    executionAssessment: definition.executionAssessment,
     manifests: definition.manifests,
     messages: definition.messages,
     languages: definition.languages,

@@ -648,3 +648,7 @@ This changes the development database schema (`turn_results.retry_scope`, log po
 - `getLatestPlayerInput(sessionId)` selects one form submission ordered by `createdAt` descending, with ID byte order as the tiebreak. So execution admission does not need to load the whole input log.
 - `getPluginDataPromptWindow(sessionId, pluginId, namespace, maxEntries)` returns `{ entries, total }`. When the count is within the limit, entries are returned in creation order. When it exceeds the limit, the earliest half is taken, plus the rest of the most recently updated entries, with duplicate anchors removed.
 - The SQL backends count without loading JSON, and they apply the entry limit before decoding records. MemoryStore implements the same selection rule and ownership contract.
+
+## Presentation dispatch control plane
+
+`_presentation_budget` stores kernel CAS counters per source turn / runtime, without prompts, replies, credentials or media. Snapshots, forks and browser checkpoints exclude it, and checkpoint hydration refuses injected spend. Uploading a checkpoint to the same live incarnation preserves the local ledger; a restored / reset incarnation cannot use old snapshots. Session deletion clears spend; terminal job pruning never replenishes it. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).

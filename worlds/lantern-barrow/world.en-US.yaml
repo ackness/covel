@@ -5,17 +5,16 @@ summary:
   lampkeeper is missing, and the bronze tomb doors stand open. Form a party in Greyreed's
   tavern, assign your points, and roll your way down — a classic tabletop adventure,
   starting with your first expedition.
-pluginPolicy:
-  pitch:
-    label: Classic Tabletop
-    description:
-      Point-buy character creation, form-based checks and dice-pool rolls, quests,
-      inventory, companion affinity, and panels for dungeon exploration, the barrow's
-      alarm, and your renown.
-    reason:
-      "Tabletop play is fun when the rules are visible: you assign the attribute points,
-      the dice really roll, and the panels record every room and every noise that stirs
-      the barrow."
+pluginPitch:
+  label: Classic Tabletop
+  description:
+    Point-buy character creation, form-based checks and dice-pool rolls, quests,
+    inventory, companion affinity, and panels for dungeon exploration, the barrow's
+    alarm, and your renown.
+  reason:
+    "Tabletop play is fun when the rules are visible: you assign the attribute points,
+    the dice really roll, and the panels record every room and every noise that stirs
+    the barrow."
 characterSchema:
   attributes:
     - id: persona

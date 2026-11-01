@@ -73,6 +73,8 @@ export interface RequestOptions extends RequestInit {
   silentErrors?: boolean;
   /** HTTP statuses that are expected control flow and should not emit a toast. */
   silentStatuses?: readonly number[];
+  /** API error codes handled by the caller as expected control flow. */
+  silentCodes?: readonly string[];
   /** Disable the shared GET retry loop when the caller owns its own backoff. */
   retry?: boolean;
 }
@@ -250,6 +252,7 @@ export async function requestResponse(
   const {
     silentErrors,
     silentStatuses,
+    silentCodes,
     sessionId,
     operatorAuth,
     retry,
@@ -309,10 +312,15 @@ export async function requestResponse(
         if (isAbortError(error)) throw error;
         return "";
       });
-      if (!silentErrors && !silentStatuses?.includes(res.status)) {
+      const error = new ApiError(res.status, url, text);
+      if (
+        !silentErrors &&
+        !silentStatuses?.includes(res.status) &&
+        !(error.code && silentCodes?.includes(error.code))
+      ) {
         emitHttpErrorToast(url, res.status, text);
       }
-      throw new ApiError(res.status, url, text);
+      throw error;
     }
 
     return res;

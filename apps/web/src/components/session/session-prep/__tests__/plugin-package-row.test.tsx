@@ -20,6 +20,7 @@ const plugin: PluginSummary = {
   description: "Current metadata",
   kind: "plugin",
   source: "builtin",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 2,
   provides: [],
@@ -232,3 +233,26 @@ it.each([
     expect(screen.getByText(sourceLabel)).toBeTruthy();
   },
 );
+
+it("explains model use beside a declarative package before selection", () => {
+  const props = rowProps();
+  props.selectedPluginIdSet = new Set();
+  render(
+    <PluginPackageRow
+      {...props}
+      pkg={{ ...plugin, source: "community", executionMode: "declarative" }}
+    />,
+  );
+  expect(screen.getByTestId("plugin-model-notice").textContent).toContain(
+    "Uses your configured model; charges may apply.",
+  );
+  expect(screen.getByTestId("plugin-model-notice").textContent).toContain(
+    "scheduled turns",
+  );
+  expect(
+    screen.getByText(
+      "No plugin server code · no code or runtime approval needed",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Authorize plugin/)).toBeNull();
+});

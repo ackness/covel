@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
+import { parse as parseYaml } from "yaml";
 import { inspectGeneratedWorldPackage, writeWorldPackage } from "@covel/create";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
@@ -22,6 +23,8 @@ import {
 } from "../../src/lib/session-lock.js";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
+import { aiRoutes } from "../../src/routes/api/ai.js";
+import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
 import * as worldSeed from "../../src/world-seed-loader.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 
@@ -368,6 +371,91 @@ describe("POST /api/worlds/:id/translate", () => {
     expect(await readFile(path.join(dir, "WORLD.ja-JP.md"), "utf8")).toContain(
       "【",
     );
+    expect(await inspectGeneratedWorldPackage(dir)).toEqual({
+      state: "pristine",
+    });
+  });
+
+  it("publishes a lore-only revision of a translated generated package in one language", async () => {
+    app.route("/api/ai", aiRoutes);
+    const pluginPitch = {
+      label: "Harbor watch",
+      description: "Keep watch through winter.",
+      reason: "A long night at the harbor.",
+    };
+    await writeWorldPackage(userWorlds, {
+      id: "made-here",
+      manifest: {
+        id: "made-here",
+        name: "Ash Harbor",
+        summary: "A port that burns every winter.",
+        version: "0.1.0",
+        defaultLocale: "en-US",
+        plugins: ["pack:narrative-only"],
+        pluginPitch,
+      },
+      locale: "en-US",
+      lore: "# Ash Harbor\n\nThe harbor burns every winter.\n",
+      packageContent: { characters: [], lorebook: [], rules: [] },
+      warnings: [],
+    });
+    const dir = path.join(userWorlds, "made-here");
+    await store.createWorld((await loadSingleWorld(dir, { source: "file" }))!);
+    const translated = await readSse(
+      await translate("made-here", { locale: "ja-JP" }),
+    );
+    expect(translated.filter((event) => event.type === "error")).toEqual([]);
+    expect((await store.getWorld("made-here"))?.metadata?.pluginPitch).toEqual(
+      Object.fromEntries(
+        Object.entries(pluginPitch).map(([key, text]) => [
+          key,
+          { "en-US": text, "ja-JP": `【${text}】` },
+        ]),
+      ),
+    );
+
+    const lore = `# Ash Harbor
+
+A second watchtower now guards the harbor.
+
+1. Light the second watchtower.
+2. Find the missing keeper.
+3. Guard the harbor until dawn.`;
+    vi.spyOn(llm, "generate").mockResolvedValue({
+      content: `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\n${lore}\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`,
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    const response = await app.request("/api/ai/revise-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        worldId: "made-here",
+        instruction: "Add a second watchtower to the lore only.",
+      }),
+    });
+    expect(response.status).toBe(200);
+    const revised = await readSse(response);
+    expect(revised.filter((event) => event.type === "error")).toEqual([]);
+    expect(revised).toContainEqual(
+      expect.objectContaining({
+        type: "done",
+        world: expect.objectContaining({
+          lore,
+          metadata: expect.objectContaining({ pluginPitch }),
+        }),
+      }),
+    );
+    expect(
+      parseYaml(await readFile(path.join(dir, "world.yaml"), "utf8")),
+    ).toMatchObject({ defaultLocale: "en-US", pluginPitch });
+    expect(await readFile(path.join(dir, "WORLD.md"), "utf8")).toBe(lore);
+    const { diagnostics } = await validateWorldPackage({
+      worldDir: dir,
+      pluginsDirs: [],
+    });
+    expect(diagnostics.filter((issue) => issue.level === "error")).toEqual([]);
     expect(await inspectGeneratedWorldPackage(dir)).toEqual({
       state: "pristine",
     });

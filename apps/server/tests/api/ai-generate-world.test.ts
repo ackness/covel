@@ -56,7 +56,8 @@ defaultLocale: zh-CN
 tags: [test]
 requiredPlugins: []
 recommendedPlugins: []
-dimensions:
+`;
+const WORLD_DIMENSIONS_YAML = `dimensions:
   geography:
     name: geography
     schema: {}
@@ -87,7 +88,8 @@ const WORLD_MD = `# 生成世界
 2. 保护被追捕的钟匠。
 3. 关闭中央齿轮。`;
 
-const WORLD_PACKAGE_YAML = `characters:
+const WORLD_PACKAGE_YAML = `${WORLD_DIMENSIONS_YAML}
+characters:
   - { schemaVersion: 1, id: keeper, name: 守钟人, role: npc }
   - { schemaVersion: 1, id: courier, name: 信使, role: companion }
   - { schemaVersion: 1, id: thief, name: 窃时者, role: npc }
@@ -103,7 +105,7 @@ rules:
 
 class FixedLlm implements LLMAdapter {
   constructor(
-    private readonly content = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+    private readonly content = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
   ) {}
 
   async generate(): Promise<LLMResponse> {
@@ -309,7 +311,7 @@ protocol = "openai-chat-v1"
           });
           yield {
             type: "text-delta",
-            textDelta: `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+            textDelta: `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
           };
           yield {
             type: "done",
@@ -779,7 +781,7 @@ protocol = "openai-chat-v1"
       app = createTestApp(
         store,
         new FixedLlm(
-          `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+          `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
         ),
       );
 
@@ -1439,7 +1441,7 @@ protocol = "openai-chat-v1"
       app = createTestApp(
         store,
         new FixedLlm(
-          `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+          `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
         ),
       );
       const response = await app.request("/api/ai/generate-world", {
@@ -1458,11 +1460,11 @@ protocol = "openai-chat-v1"
 
     // `low-cost` was not a choice when the two choices were fixed.
     const lowCost = await generate("low-cost");
-    expect(lowCost.pluginPolicy).toMatchObject({ preset: "low-cost" });
+    expect(lowCost.plugins).toContain("pack:low-cost");
     expect(lowCost.defaultViewMode).toBeUndefined();
     // The stage view is the data of the dialogue pack.
     const dialogue = await generate("dialogue-mode");
-    expect(dialogue.pluginPolicy).toMatchObject({ preset: "dialogue-mode" });
+    expect(dialogue.plugins).toContain("pack:dialogue-mode");
     expect(dialogue.defaultViewMode).toBe("stage");
   });
 
@@ -1728,7 +1730,7 @@ protocol = "openai-chat-v1"
           `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\n${JSON.stringify(pack)}\n===END===`;
         const full = FULL.replace(
           WORLD_PACKAGE_YAML,
-          JSON.stringify({ contractData: records }),
+          `${WORLD_DIMENSIONS_YAML}\ncontractData: ${JSON.stringify(records)}`,
         );
         const llm = new SequenceLlm([
           full,

@@ -47,6 +47,7 @@ const plugins: PluginSummary[] = ["builtin", "community"].map((id) => ({
   kind: "plugin",
   source: id === "builtin" ? "builtin" : "community",
   // Loading an entry for another session never grants this new one approval.
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 1,
   provides: [],
@@ -80,12 +81,12 @@ beforeEach(() => {
   vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
     worldId: world.id,
     packs: [],
-    policy: {
-      plus: ["community"],
-      requires: [],
+    selection: {
+      requestedPluginIds: ["community"],
+      requiredContracts: [],
     },
     defaultPluginIds: ["builtin", "community"],
-    missing: [],
+    diagnostics: [],
   });
   vi.mocked(api.preflightWorldData).mockResolvedValue({
     imported: true,
@@ -129,9 +130,9 @@ describe("session prep approval preflight", () => {
     resolvePlan({
       worldId: world.id,
       packs: [],
-      policy: { plus: [], requires: [] },
+      selection: { requestedPluginIds: [], requiredContracts: [] },
       defaultPluginIds: catalogue.map((plugin) => plugin.id),
-      missing: [],
+      diagnostics: [],
     });
     await waitFor(() => expect(toggle.matches(":disabled")).toBe(false));
     fireEvent.click(toggle);
@@ -211,6 +212,8 @@ describe("session prep approval preflight", () => {
       await waitFor(() =>
         expect(api.preflightWorldData).toHaveBeenLastCalledWith(world.id, {
           plugins: ["builtin"],
+          excludedPlugins: [],
+          locale,
         }),
       );
       expect(

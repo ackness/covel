@@ -55,10 +55,21 @@ async function parity(root: string) {
   });
   expect(status).toBe(report.ok ? 0 : 1);
   expect(stderr).toBe(report.ok ? "" : `✗ ${report.cliFailure}\n`);
+  const execution =
+    `  execution: ${report.execution.mode}\n` +
+    report.execution.diagnostics
+      .map(
+        (issue) =>
+          `  ${issue.file}${issue.field ? ": " + issue.field : ""}: ${issue.message}\n`,
+      )
+      .join("");
   expect(stdout).toBe(
-    report.ok
-      ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n${report.cliWarnings.map((line) => `${line}\n`).join("")}`
-      : "",
+    (report.issues.some((issue) => issue.code === "plugin-not-found")
+      ? ""
+      : execution) +
+      (report.ok
+        ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n${report.cliWarnings.map((line) => `${line}\n`).join("")}`
+        : ""),
   );
   return report;
 }
@@ -97,7 +108,7 @@ describe("static package validation", () => {
       "userSettings",
     ].map((field) => ({ [field]: "legacy" })),
   ])(
-    "retains CLI status and exact text for root declarations %#",
+    "prints validation and execution diagnostics for root declarations %#",
     async (fields) => {
       await parity(await fixture(fields));
     },

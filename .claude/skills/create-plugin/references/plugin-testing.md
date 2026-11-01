@@ -364,3 +364,14 @@ Artifacts 写到 `debugs/e2e-logs/`，包含 prompt、LLM raw response、runtime
 - L3 失败：先看 `MockLLM.responses[]` 和 tool call `arguments` 是否是 JSON 字符串。
 - L4 mock 失败：看 `runtimeResults[].error`、`pluginData._logs`、`jobs`。
 - L4 live / L5 失败：先确认 `llm.toml` slot、`~/.covel/keys.env`、provider baseUrl 和网络。
+
+Presentation functions use the restricted public-story context and durable dispatch allowance in [the presentation contract](../../../../docs/reference/plugins.md#presentation-runtimes). Use the [selector and detached generator examples](../../../../docs/plugins/advanced.md#呈现选择器), and test real manifest admission, forbidden capabilities, commit isolation, cache charging and supersession. Agents cannot declare presentation; a function still follows normal server-code approval.
+
+## Declarative distribution checks
+
+Run `pnpm validate:plugin <distribution>` and inspect `execution: declarative`.
+Keep executable tests and configuration outside that directory. Do not run entry
+extraction or create a dummy entry for a declarative package. Exercise it as a
+community package through real enable, model tools and commit; assert stored
+records and the absence of code/runtime grants. Retain per-tool approvals and
+content-bound sandbox session consent. See `docs/plugins/prompt-only.md`.

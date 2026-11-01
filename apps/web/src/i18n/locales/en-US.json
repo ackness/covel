@@ -17,6 +17,8 @@
     "primary": "Primary"
   },
   "session": {
+    "unavailableWorldPacks": "The world recommends an unavailable pack. Choose another pack or start with the current selection.",
+    "worldSelectionTags": "World tags: {{tags}}",
     "operationFailedNotice": "{{count}} actions from this turn did not take effect.",
     "operationFailedNotice_one": "{{count}} action from this turn did not take effect.",
     "operationFailedNotice_other": "{{count}} actions from this turn did not take effect.",
@@ -297,9 +299,13 @@
       "hint": "Data for a plugin that is off or waiting for approval is imported when you turn it on.",
       "hide": "Hide",
       "dimensionsMissing": "World dimensions (such as relationships and resources): no enabled plugin keeps them, so this game does not track them.",
-      "receiverMissing": "\"{{source}}\": no enabled plugin receives this data.",
+      "labeled": "{{source}}: {{message}}",
+      "receiverMissing": "This data has no plugin to receive it.",
       "sourceNotImported": "The data in \"{{source}}\" was not imported (details)",
-      "notImported": "Some data was not imported (details)"
+      "notImported": "Some data was not imported (details)",
+      "receiverAmbiguous": "This data has no plugin to receive it. Choose a receiving plugin.",
+      "receiverExcluded": "This data has no plugin to receive it. Receiving plugins are disabled.",
+      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval."
     },
     "pendingApproval": {
       "title": "Needs approval",
@@ -2149,7 +2155,19 @@
     "faultPaused": "Paused",
     "resumeFault": "Resume",
     "faultPausedNotice": "{{plugin}} is paused in this session after repeated errors.",
-    "resumeFaultFailed": "Could not resume the plugin. Try again."
+    "resumeFaultFailed": "Could not resume the plugin. Try again.",
+    "declarative": "No plugin server code · no code or runtime approval needed",
+    "modelUse": {
+      "notice": "Uses your configured model; charges may apply.",
+      "delegated": "Runs when another runtime delegates work.",
+      "manual": "Runs when explicitly invoked.",
+      "event": "Runs on matching events, including explicit player actions. Explicit calls bypass start-turn, cooldown and maximum-run limits.",
+      "setup": "Runs during session setup.",
+      "scheduled": "Runs on scheduled turns (every {{count}} turns).",
+      "start": "Starts at turn {{count}}.",
+      "cooldown": "Waits at least {{count}} turns between scheduled runs.",
+      "limit": "At most {{count}} scheduled runs per session."
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

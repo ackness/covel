@@ -1,5 +1,9 @@
+import {
+  inventoryWorldData,
+  worldDataRequirementNotices,
+} from "./requirements.js";
 import type {
-  WorldDataImportNotice,
+  UnmetWorldRequirement,
   WorldDataReceiverImport,
 } from "@covel/shared";
 import type { DataStore, MediaStore } from "@covel/store";
@@ -8,28 +12,9 @@ import {
   syncWorldDataForSession,
 } from "./session-import.js";
 import type { WorldDataImportPreflightDeps } from "./session-import/types.js";
-import type { WorldDataDiagnostic } from "./types.js";
 
-/**
- * The findings of an import that tell the player data is missing. Locale
- * file findings and notes stay with the world's author.
- */
-export function worldDataImportNotices(
-  diagnostics: readonly WorldDataDiagnostic[],
-): WorldDataImportNotice[] {
-  return diagnostics.flatMap((diagnostic) =>
-    diagnostic.level === "info" || diagnostic.localeOverlay
-      ? []
-      : [
-          {
-            level: diagnostic.level,
-            ...(diagnostic.sourceId ? { sourceId: diagnostic.sourceId } : {}),
-            ...(diagnostic.code ? { code: diagnostic.code } : {}),
-            message: diagnostic.message,
-          },
-        ],
-  );
-}
+import { worldDataImportNotices } from "./notices.js";
+export { worldDataImportNotices } from "./notices.js";
 
 /**
  * Import the world's data once for plugins that joined a running session: a
@@ -52,6 +37,7 @@ export async function importWorldDataForJoinedPlugins(options: {
     readonly locale?: string;
   };
   readonly joined: readonly string[];
+  readonly unmetData: readonly UnmetWorldRequirement[];
   readonly worldsDirs?: readonly string[];
   readonly covelHome?: string;
   readonly now: string;
@@ -94,10 +80,26 @@ export async function importWorldDataForJoinedPlugins(options: {
         : [],
     ),
   );
+  const inventory = options.preflight.registry
+    ? await inventoryWorldData({
+        world: await options.store.getWorld(worldId),
+        worldId,
+        worldsDirs: options.worldsDirs,
+        covelHome: options.covelHome,
+        registry: options.preflight.registry,
+        locale: session.locale,
+      })
+    : undefined;
   return {
     receivers: receivers.filter((pluginId) => received.has(pluginId)),
     imported: result?.upserted ?? 0,
     conflicts: result?.conflicts.length ?? 0,
-    notices: worldDataImportNotices(prepared.diagnostics),
+    notices: inventory
+      ? worldDataRequirementNotices(
+          inventory,
+          options.unmetData,
+          prepared.diagnostics,
+        )
+      : worldDataImportNotices(prepared.diagnostics),
   };
 }

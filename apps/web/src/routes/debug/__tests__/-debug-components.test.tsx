@@ -169,6 +169,7 @@ describe("debug route components", () => {
           description: "Story plugin",
           kind: "plugin",
           source: "builtin",
+          executionMode: "code" as const,
           hostState: "loaded",
           runtimeCount: 0,
           provides: ["narrative-engine@2"],

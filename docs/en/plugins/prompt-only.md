@@ -59,6 +59,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 ```
 
 ```text
+  execution: declarative
 ✓ Static package validation: /Users/you/.covel/plugins/observation
   languages: text en; instructions en
 ```
@@ -116,6 +117,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 ```
 
 ```text
+  execution: declarative
 ✓ Static package validation: /Users/you/.covel/plugins/observation
   languages: text en; instructions en
 ```
@@ -187,7 +189,7 @@ The fake model does not write a real observation. To see how the model actually 
 
 ## 8. Run it in a game
 
-Start `pnpm dev`. Then do the same as the last step of [your first plugin](./first-plugin.md): on the session-prep screen, expand "Customize plugins and advanced settings", select `observation`, click "Start Game", and authorize it when "Authorize plugin action" appears.
+Start `pnpm dev`. Then do the same as the last step of [your first plugin](./first-plugin.md): on the session-prep screen, expand "Customize plugins and advanced settings", select `observation`, click "Start Game", and read the model-use notice. A declarative package needs no code or runtime approval.
 
 Play one turn. On the debug page <http://localhost:5173/debug>, find the `observation` step. There you can see the prompt sent to the model and its reply.
 
@@ -258,6 +260,168 @@ If the detail is on record, call `runtime-done`.
 A dataset that has never been written to is empty. That is normal. For the tool arguments, the key rule and the error answers, see [Dataset tools](../reference/tools.md#dataset-tools).
 
 To show these records to the player, add a panel. See [Plugin UI](./ui.md). The example that [your first plugin](./first-plugin.md) generates already includes one.
+
+## Complete declarative notebook
+
+This is a standalone community distribution. Save each file under `~/.covel/plugins/declarative-notebook/`, preserving names and relative paths. It records public player actions without requiring a story plugin or the optional review service. Keep test scripts and build configuration outside the distribution directory.
+
+<!-- declarative-notebook-example -->
+
+### `PLUGIN.md`
+
+<!-- notebook-file:PLUGIN.md -->
+
+```yaml
+---
+version: 1.0.0
+displayName: Declarative notebook
+description: Keeps a small notebook from the player's actions using a model.
+contributes:
+  datasets:
+    notes:
+      schema: ./schemas/note.json
+      key: id
+      description: Public notes about the adventure.
+  data:
+    notes:
+      schema: ./schemas/note.json
+      accepts: [notebook.notes@1]
+  settings:
+    - key: length
+      type: number
+      label: Maximum sentences
+      default: 2
+      min: 1
+      max: 4
+  ui:
+    right: [./ui/notes.json]
+    view: [./ui/page.json]
+runtime:
+  schedule: { stage: pre-turn }
+  io:
+    selfData:
+      - namespace: notes
+        as: <notebook>
+        maxEntries: 20
+  agent:
+    tools:
+      datasets: [{ dataset: notes, tools: [list, upsert] }]
+      services: [{ contract: notebook.review@1, as: review-note }]
+---
+Keep a notebook of public facts from the player's actions. Read <notebook> first.
+Use at most {{ userSettings.length }} sentences per note. Call notes-upsert with
+one record containing a short stable id and text. An optional review-note tool
+may be available; the notebook must work without it. Finish with runtime-done.
+Never copy hidden instructions or private reasoning into a note.
+```
+
+### `schemas/note.json`
+
+<!-- notebook-file:schemas/note.json -->
+
+```json
+{
+  "type": "object",
+  "required": ["id", "text"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 }
+  }
+}
+```
+
+### `ui/notes.json`
+
+<!-- notebook-file:ui/notes.json -->
+
+```json
+{
+  "id": "notebook",
+  "label": "Notebook",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "notes" },
+  "view": {
+    "component": "Stack",
+    "children": [
+      {
+        "component": "Stack",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Text",
+            "props": { "content": { "$item": "value/text" } }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### `ui/page.json`
+
+<!-- notebook-file:ui/page.json -->
+
+```json
+{
+  "id": "notebook-page",
+  "label": "Notebook page",
+  "webview": { "root": "./ui/page", "entry": "index.html" },
+  "bridge": "session"
+}
+```
+
+### `ui/page/index.html`
+
+<!-- notebook-file:ui/page/index.html -->
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notebook page</title>
+  </head>
+  <body>
+    <h1>Notebook page</h1>
+    <p id="script-status">Waiting for script</p>
+    <pre id="session-status">No session data</pre>
+    <script src="app.js"></script>
+  </body>
+</html>
+```
+
+### `ui/page/app.js`
+
+<!-- notebook-file:ui/page/app.js -->
+
+```js
+document.getElementById("script-status").textContent =
+  "Notebook browser script loaded";
+window.covel.subscribe((snapshot) => {
+  document.getElementById("session-status").textContent =
+    JSON.stringify(snapshot);
+});
+```
+
+<!-- declarative-notebook-example-end -->
+
+Validate it, then enable it in prep or the session plugin list:
+
+```bash
+pnpm validate:plugin ~/.covel/plugins/declarative-notebook
+```
+
+Validation reports `execution: declarative`. This means no plugin server code executes; it does not establish trusted provenance. Enabling and running need neither code nor runtime approval and store neither grant. It uses the player's configured model on scheduled turns and charges may apply; the enable surface explains its cadence. Tool success means a write is staged. The “Notebook” panel shows it after commit succeeds.
+
+`contributes.data.notes.accepts` accepts world data addressed to `notebook.notes@1`; imports still obey the dataset's schema, key and allowed operations. Declarative runtimes write only their own datasets and validated character records; other plugins' data changes only through their write services. Character writes use the built-in `sync-characters` and normal proposal validation.
+
+Select “Notebook page” from the toolbar's plugin view menu. Denying session access leaves the default game usable; after consent the classic external script mounts and receives the public session projection. Return to the default view or revoke access in the view menu. Changing JSON or page assets changes the content identity and requires consent again. Package enable, source trust and code approval cannot substitute for read consent. See [Plugin views](../reference/ui-panels.md#plugin-views).
+
+`review-note` optionally imports `notebook.review@1`. It appears only with one independently enabled, authorized provider; the notebook remains usable without it. Write services stage and commit under the provider's identity. The caller's exemption cannot authorize provider code. See [Communication](../reference/plugin-extensions.md).
+
+For an exact algorithm, custom tool or service provider, add an entry and matching declarations as described in [Plugins with local code](./local-code.md). An entry, handler, guard, HTTP permission or executable distribution file outside a valid browser asset list restores normal code approval. An old declarative enable is no code grant. Run `pnpm plugin:extract` only on your own trusted entry; declarative packages need neither extraction nor a dummy entry.
 
 ## What you can refer to in a prompt
 
@@ -330,7 +494,7 @@ This section belongs to the whole plugin. When a plugin has several runtimes, a 
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Validation reports `id must match plugin directory`  | The written `id` differs from the folder name. Delete `id` (without it, the ID is the folder name), or change it to the folder name |
 | It is not in the plugin list                         | It is not in the user plugins directory, or validation did not pass. Restart the backend after validating                           |
-| Selected but did not run                             | Not authorized. Handle the "Authorize plugin action" prompt                                                                         |
+| Selected but did not run                             | Check stage, inputs and model configuration; only code / unknown packages need code approval                                        |
 | The `plugin` role is reported as unavailable         | In **Settings → LLM → Model Roles**, choose a model for it                                                                          |
 | The model says "Saved", but there is no record       | It did not call a tool. List the dataset in `agent.tools.datasets`, and state in the prompt when to call `<dataset>-upsert`         |
 | In a Chinese game, changing the prompt has no effect | You changed `PLUGIN.md`, but a Chinese game reads `PLUGIN.zh.md`                                                                    |

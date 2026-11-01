@@ -10,6 +10,7 @@ import type {
 import type { PluginUserSettingSpec, SessionSlashCommand } from "./plugin.js";
 import type { I18nText } from "./world.js";
 import type { PackageAuthor } from "../schemas/package-info.js";
+import type { PresentationBudget } from "@covel/plugin-handlers-utils";
 
 export type PluginSource = "builtin" | "community";
 
@@ -26,6 +27,8 @@ export interface PluginRuntimeTrigger {
 }
 
 export interface PluginRuntimeSummary {
+  /** Configured source-turn limits, with omitted counters normalized to zero. */
+  readonly presentation?: { readonly budget: PresentationBudget };
   readonly id: string;
   readonly runtimeType: "agent" | "function";
   readonly stage?: Stage;
@@ -61,6 +64,13 @@ export interface PluginLoadDiagnostics {
 
 /** Registry-level plugin view used by lists, settings, and session prep. */
 export interface PluginSummary extends PluginLoadDiagnostics {
+  /** Derived by the host from declarations and a complete package inspection. */
+  readonly executionMode: "declarative" | "code" | "unknown";
+  readonly executionDiagnostics?: readonly {
+    readonly file: string;
+    readonly field?: string;
+    readonly message: string;
+  }[];
   readonly trust?: import("../schemas/trusted-sources.js").PluginSourceTrust;
   readonly id: string;
   readonly displayName: I18nText;
@@ -84,6 +94,7 @@ export interface PluginSummary extends PluginLoadDiagnostics {
     import("./plugin-manifest.js").PluginManifest["provides"]
   >;
   readonly requires: readonly string[];
+  readonly acceptsWorldData?: readonly string[];
   readonly optional: readonly string[];
   readonly conflicts: readonly string[];
   readonly extensions: readonly import("../extension-points/index.js").ExtensionDeclaration[];
@@ -219,7 +230,7 @@ export interface PluginLoadError {
 
 /**
  * A named plugin selection a player can pick before play: a built-in pack
- * (`packs/builtin.yaml`), or the one a world presents with its own `pitch`.
+ * (`packs/builtin.yaml`), or the one a world presents with its public text and optional `pluginPitch`.
  */
 export interface PluginPack {
   readonly id: string;
@@ -231,7 +242,7 @@ export interface PluginPack {
   readonly excluded?: readonly string[];
   readonly tags: readonly string[];
   readonly reason?: I18nText;
-  /** `world`: a built-in pack shown with the world's `pitch`. */
+  /** `world`: a built-in pack shown with the world's public presentation. */
   readonly source: "builtin" | "world";
   /**
    * The view a world made for this pack opens new sessions in. The world
@@ -240,35 +251,32 @@ export interface PluginPack {
   readonly defaultViewMode?: DefaultViewMode;
 }
 
-/** A world's `pluginPolicy`, as the session preparation screen uses it. */
-export interface ResolvedWorldPluginPolicy {
-  /** The built-in pack a new session starts from. */
-  readonly preset?: string;
-  /** Plugins the world adds to whichever pack the player picks. */
-  readonly plus: readonly string[];
-  /** Contract IDs the world needs a provider for. */
-  readonly requires: readonly string[];
+/** Independent requests and server-owned world contract requirements. */
+export interface WorldPluginSelection {
+  readonly requestedPluginIds: readonly string[];
+  readonly requiredContracts: readonly string[];
+  readonly requiredDataContracts?: readonly string[];
 }
 
-/** A plugin a world requests that is not installed on this host. */
-export interface MissingWorldPlugin {
-  readonly pluginId: string;
-  /** The pack that requests it; absent when the world's `plus` lists it. */
+/** Bounded public findings about references and unavailable requests. */
+export interface WorldPluginSelectionDiagnostic {
+  readonly code:
+    | "invalid-reference"
+    | "redundant-reference"
+    | "unknown-pack"
+    | "missing-plugin";
+  readonly path: string;
+  readonly reference?: string;
+  readonly pluginId?: string;
   readonly packId?: string;
 }
 
-/**
- * Server-resolved plugin selection plan for one world and live registry.
- *
- * `policy.plus`, each pack's `requested` and `defaultPluginIds` hold
- * installed plugins only, so a client can submit them unchanged. Requests
- * the registry cannot satisfy are reported in `missing` instead.
- */
 export interface WorldPluginPlan {
   readonly worldId: string;
   readonly packs: readonly PluginPack[];
-  readonly policy: ResolvedWorldPluginPolicy;
+  readonly selection: WorldPluginSelection;
   readonly selectedPackId?: string;
   readonly defaultPluginIds: readonly string[];
-  readonly missing: readonly MissingWorldPlugin[];
+  readonly diagnostics: readonly WorldPluginSelectionDiagnostic[];
+  readonly dataNotices?: readonly import("./world-data.js").WorldDataImportNotice[];
 }

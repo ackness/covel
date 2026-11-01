@@ -97,7 +97,7 @@ export function appendDimensionPlan(
     pathOrigin: { descriptorRoot: ".", origin: "world" },
     descriptor: {
       kind: "json",
-      path: "world.yaml",
+      path: "data/dimensions.yaml",
       to: "world:metadata.dimensions",
       merge: "replace",
     },
@@ -122,15 +122,13 @@ export function appendDimensionPlan(
 
 /**
  * Match world loading precedence, but validate only dimension declarations
- * here: the `dimensions` of `world.yaml`, replaced by a dimensions source
- * (`data/dimensions.yaml`) when the package has one. The result is resolved
+ * here: the canonical `data/dimensions.yaml` source. The result is resolved
  * for the session's content locale: a session stores one language, never
  * the package's locale maps.
  */
 export async function readEffectiveDimensions(args: {
   worldRoot: string;
   manifest: {
-    dimensions?: unknown;
     defaultLocale?: string;
     /** The world's editions; without them, its default locale only. */
     editions?: readonly string[];
@@ -144,7 +142,7 @@ export async function readEffectiveDimensions(args: {
       ...(args.manifest.editions ?? []),
     ]),
   ];
-  let definitions = parseDimensions(args.manifest.dimensions);
+  let definitions = parseDimensions(undefined);
   for (const source of args.sources ?? []) {
     const target = parseWorldDataTarget(source.descriptor.to);
     if (

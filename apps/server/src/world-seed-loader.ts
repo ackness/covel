@@ -147,7 +147,7 @@ export async function loadSingleWorld(
     );
   if (validation.droppedSections?.length)
     console.warn(
-      `[world-seed] ${path.basename(worldDir)}: world.yaml: pluginPolicy ignored; sessions start with the plugins every session has:\n${formatValidationErrors(validation.droppedSections)}`,
+      `[world-seed] ${path.basename(worldDir)}: world.yaml: invalid optional selection or presentation omitted:\n${formatValidationErrors(validation.droppedSections)}`,
     );
   if (!validation.valid) {
     const dirName = path.basename(worldDir);
@@ -162,8 +162,6 @@ export async function loadSingleWorld(
   const defaultLocale = manifest.defaultLocale as string | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
   const editions = source.editions;
-  const inlineDimensions =
-    (manifest.dimensions as Record<string, unknown>) ?? {};
 
   const lore = await readLore(worldDir, defaultLocale);
   const loreEditions = Object.fromEntries(
@@ -199,8 +197,6 @@ export async function loadSingleWorld(
       ...((await readGeneratedWorldMarker(worldDir))
         ? { generated: true }
         : {}),
-      dimensions:
-        Object.keys(inlineDimensions).length > 0 ? inlineDimensions : undefined,
       // The locales the world has content for; a session is in one of them.
       ...(editions.length > 1 ? { [WORLD_EDITIONS_KEY]: editions } : {}),
     },
@@ -250,6 +246,9 @@ export async function loadSingleWorld(
     ...misnamedDiagnostics,
   ]);
   if (
+    worldData.diagnostics.some(
+      (diagnostic) => diagnostic.code === "dimension-source-invalid",
+    ) ||
     worldData.summary?.sources.some(
       (source) =>
         source.target === "world:metadata.dimensions" &&

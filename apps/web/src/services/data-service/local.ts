@@ -338,11 +338,27 @@ export class LocalDataService implements DataService {
     const vault = await this.ready();
     const existing = await vault.getWorld(id);
     if (!existing) throw new Error("World not found: " + id);
-    if (patch.dimensions !== undefined)
-      worldDimensionsSchema.parse(patch.dimensions);
+    const hasDimensions =
+      patch.dimensions !== undefined ||
+      Object.hasOwn(patch.metadata ?? {}, "dimensions");
+    const dimensions = hasDimensions
+      ? worldDimensionsSchema.parse(
+          patch.dimensions !== undefined
+            ? patch.dimensions
+            : patch.metadata?.dimensions,
+        )
+      : undefined;
     const updated: StoreWorldRecord = {
       ...existing,
       ...patch,
+      // Metadata is the store's canonical dimension field. Keep its public
+      // projection in sync so checkpoint hydration cannot restore an old copy.
+      ...(hasDimensions
+        ? {
+            dimensions,
+            metadata: { ...existing.metadata, ...patch.metadata, dimensions },
+          }
+        : {}),
       updatedAt: new Date().toISOString(),
     } as StoreWorldRecord;
     await vault.upsertWorld(updated);

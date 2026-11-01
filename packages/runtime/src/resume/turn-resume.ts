@@ -327,7 +327,7 @@ async function executeResumedRuntime(
   const toolExecutor = deps.toolExecutor
     ? withAgentToolSurface(
         deps.toolExecutor,
-        await prepareAgentToolSurface({ manifest, input, deps }),
+        await prepareAgentToolSurface({ manifest, input, deps, loaded }),
         deps.services,
       )
     : undefined;

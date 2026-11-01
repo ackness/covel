@@ -11,7 +11,7 @@ This page covers six built-in plugins that make the story feel more like a game:
 | Affinity (`affinity`)                | Records how close you are with each NPC.                                                         |
 | Hidden Story Events (`story-events`) | Story plots set up by the world author. They happen when their conditions are met.               |
 
-All six are optional and are not turned on automatically. For which worlds include them by default, see [the overview at the end of this page](#overview-of-when-they-are-on).
+All six are optional. Gameplay requests select checks; matching seed data infers receivers under the [receiver rules](../reference/world-data.md#data-receivers). Players can still turn them off during preparation. For which worlds include them by default, see [the overview at the end of this page](#overview-of-when-they-are-on).
 
 ## Dice Check and Tabletop Rules: what is different
 
@@ -66,12 +66,12 @@ If a numeric attribute of the player character is in the `abilities` category an
 
 Optional. No built-in gameplay pack includes it, so a world has to include it.
 
-| World            | How it is included                              |
-| ---------------- | ----------------------------------------------- |
-| `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default |
-| `emberback`      | "Emberback Rescue" gameplay pack, on by default |
+| World            | How it is included      |
+| ---------------- | ----------------------- |
+| `lantern-barrow` | World default selection |
+| `emberback`      | World default selection |
 
-For other worlds, you can tick it on the session-prep screen, or the world author can add it to `pluginPolicy`. See [Point buy and dice checks](../recipes/point-buy.md).
+For other worlds, you can tick it on the session-prep screen, or the world author can add it to `plugins`. See [Point buy and dice checks](../recipes/point-buy.md).
 
 It has no settings you can change.
 
@@ -100,11 +100,11 @@ If the world has no attributes to assign points to (for example, a dialogue-only
 
 ### When it is on
 
-Optional, and not turned on automatically.
+Optional. Matching seed data infers a receiver under the [receiver rules](../reference/world-data.md#data-receivers); players can still turn it off during preparation.
 
-| World            | How it is included                              |
-| ---------------- | ----------------------------------------------- |
-| `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default |
+| World            | How it is included      |
+| ---------------- | ----------------------- |
+| `lantern-barrow` | World default selection |
 
 For other worlds, tick it on the session-prep screen.
 
@@ -135,12 +135,12 @@ When the story clearly gives a commission or an objective, it is logged as a que
 
 ### When it is on
 
-Optional, and not turned on automatically.
+Optional. Matching seed data infers a receiver under the [receiver rules](../reference/world-data.md#data-receivers); players can still turn it off during preparation.
 
-| World            | How it is included                              |
-| ---------------- | ----------------------------------------------- |
-| `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default |
-| `emberback`      | "Emberback Rescue" gameplay pack, on by default |
+| World            | How it is included      |
+| ---------------- | ----------------------- |
+| `lantern-barrow` | World default selection |
+| `emberback`      | World default selection |
 
 It has no settings you can change.
 
@@ -171,12 +171,12 @@ Only item changes that clearly happen in the story are recorded. Inventory datas
 
 ### When it is on
 
-Optional, and not turned on automatically.
+Optional. Matching seed data infers a receiver under the [receiver rules](../reference/world-data.md#data-receivers); players can still turn it off during preparation.
 
-| World            | How it is included                              |
-| ---------------- | ----------------------------------------------- |
-| `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default |
-| `emberback`      | "Emberback Rescue" gameplay pack, on by default |
+| World            | How it is included      |
+| ---------------- | ----------------------- |
+| `lantern-barrow` | World default selection |
+| `emberback`      | World default selection |
 
 It has no settings you can change.
 
@@ -222,13 +222,13 @@ Worlds can seed starting affinity; during play, new records are created only for
 
 ### When it is on
 
-Optional, and not turned on automatically.
+Optional. Matching seed data infers a receiver under the [receiver rules](../reference/world-data.md#data-receivers); players can still turn it off during preparation.
 
-| World            | How it is included                                           |
-| ---------------- | ------------------------------------------------------------ |
-| `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default              |
-| `emberback`      | "Emberback Rescue" gameplay pack, on by default              |
-| `haruka-academy` | "Campus Romance · Visual Novel" gameplay pack, on by default |
+| World            | How it is included      |
+| ---------------- | ----------------------- |
+| `lantern-barrow` | World default selection |
+| `emberback`      | World default selection |
+| `haruka-academy` | World default selection |
 
 > [!NOTE]
 > It makes one more model call per turn to decide score changes, so it costs a little more money and time. If you want to save money, do not turn it on.
@@ -257,14 +257,14 @@ If the narrative leaves an event out, a reminder is sent on the next turn. Each 
 
 ### When it is on
 
-Optional, and not turned on automatically.
+Optional. Matching seed data infers a receiver under the [receiver rules](../reference/world-data.md#data-receivers); players can still turn it off during preparation.
 
-| World            | How it is included                                           |
-| ---------------- | ------------------------------------------------------------ |
-| `lantern-barrow` | "Classic Tabletop" gameplay pack, on by default              |
-| `emberback`      | "Emberback Rescue" gameplay pack, on by default              |
-| `mistport`       | "Mistport Investigation" gameplay pack, on by default        |
-| `haruka-academy` | "Campus Romance · Visual Novel" gameplay pack, on by default |
+| World            | How it is included      |
+| ---------------- | ----------------------- |
+| `lantern-barrow` | World default selection |
+| `emberback`      | World default selection |
+| `mistport`       | World default selection |
+| `haruka-academy` | World default selection |
 
 If a world has no hidden event data, turning this on does nothing.
 
@@ -297,7 +297,7 @@ A misspelled dimension ID, an invalid path inside a dimension, or a candidate in
 | `affinity`       | Yes              | Yes         |            | Yes              |
 | `story-events`   | Yes              | Yes         | Yes        | Yes              |
 
-None of the three general gameplay packs (Traditional Story, Dialogue Mode, Low Cost) include these six plugins. To use them in other worlds, tick them on the session-prep screen.
+The three general gameplay packs (Traditional Story, Dialogue Mode, Low Cost) do not themselves request these six plugins. Actual data can infer receivers; gameplay without seed data uses explicit world `plugins` requests or preparation choices.
 
 ## Next
 

@@ -44,6 +44,7 @@ class ChatModeMockLLM implements LLMAdapter {
   scenePromptCalls = 0;
   memoryCalls = 0;
   trackerCalls = 0;
+  factCalls = 0;
   timeCalls = 0;
   dimensionCalls = 0;
   readonly calls: Array<{
@@ -75,6 +76,44 @@ class ChatModeMockLLM implements LLMAdapter {
       };
     }
 
+    if (toolNames.includes("submit-world-facts")) {
+      this.factCalls += 1;
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `tc-facts-${this.factCalls}`,
+            name: "submit-world-facts",
+            arguments: JSON.stringify({
+              schemaVersion: 1,
+              summary: "A classroom conversation.",
+              entities: [],
+              relations: [],
+              events: [],
+              statements: [],
+            }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 80, outputTokens: 10 },
+      };
+    }
+    if (toolNames.includes("update-affinity")) {
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `tc-affinity-done-${this.factCalls}`,
+            name: "runtime-done",
+            arguments: JSON.stringify({
+              reason: "No interaction facts to record",
+            }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 80, outputTokens: 10 },
+      };
+    }
     if (toolNames.includes("advance-world-time")) {
       this.timeCalls += 1;
       return {
@@ -441,6 +480,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     expect(new Set(observedTurnIds).size).toBe(3);
     expect(mockLLM.narratorCalls).toBe(3);
+    expect(mockLLM.factCalls).toBe(3);
     // The narrative plays Mio from the roleplay notes in her character
     // record: her voice, a secret and an example line, under her name.
     const narratorPrompt = mockLLM.calls
@@ -557,6 +597,12 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       "guide",
     ])
       expect(created.activePlugins).not.toContain(absent);
+
+    expect(
+      (await store.listWorldDataImportLedger(sessionId)).filter(
+        (row) => row.pluginId === "scene-stage",
+      ),
+    ).toEqual([]);
 
     expect(
       registry

@@ -25,7 +25,8 @@ const full = {
     embeddedCharacters: [{ id: "c" }],
     embeddedLorebook: [{ id: "l" }],
     characterSchema: { fields: [] },
-    pluginPolicy: { plus: ["x"] },
+    plugins: ["plugin:x"],
+    pluginPitch: { label: "Selection" },
     worldData: { sources: [] },
   },
 };
@@ -49,7 +50,9 @@ describe("summarizeWorld", () => {
       "accentColor",
       "cover",
       "localizedText",
+      "pluginPitch",
       "pluginSettings",
+      "plugins",
       "source",
       "supportedLocales",
     ]);

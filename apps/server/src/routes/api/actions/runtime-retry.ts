@@ -1,3 +1,5 @@
+import { listRuntimeJobs } from "../plugin-rpc/jobs.js";
+import { parseStagedRuntimeJobPayload } from "../plugin-rpc/runtime-job-worker.js";
 import type {
   ActionRequest,
   RuntimeManifest,
@@ -6,6 +8,7 @@ import type {
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { ActionRejectedError } from "./action-rejection.js";
+import { capturePresentationRecovery } from "@covel/runtime";
 
 type RuntimeRetryAction = Extract<
   ActionRequest,
@@ -15,6 +18,8 @@ type RuntimeRetryAction = Extract<
 >;
 
 export interface RuntimeRetryPlan {
+  readonly presentationJobs?: readonly import("@covel/shared").DeferredRuntimeJob[];
+  readonly presentationSnapshots?: readonly import("@covel/shared").PresentationSnapshot[];
   readonly scope?: RuntimeRetryScope;
   readonly seedResults: readonly RuntimeResult[];
   readonly sourceRuntimeIds: readonly string[];
@@ -122,25 +127,89 @@ export async function prepareRuntimeRetry(
       }
     }
   }
+  const latestPresentationJobs = new Map<
+    string,
+    Awaited<ReturnType<typeof listRuntimeJobs>>[number]
+  >();
+  for (const job of await listRuntimeJobs(store, { sessionId })) {
+    if (
+      runtimeIds.includes(job.runtimeId) &&
+      job.origin.sourceTurnId === source.turnId
+    )
+      latestPresentationJobs.set(job.runtimeId, job);
+  }
+  const presentationJobs = [...latestPresentationJobs.values()]
+    .filter(
+      (job) =>
+        ["failed", "timed_out", "cancelled", "orphaned"].includes(job.status) &&
+        activeRuntimes.some(
+          (runtime) => runtime.name === job.runtimeId && runtime.presentation,
+        ),
+    )
+    .flatMap((job) => {
+      const payload = parseStagedRuntimeJobPayload(job.payload);
+      return payload?.descriptor.presentation?.committed
+        ? [payload.descriptor]
+        : [];
+    });
   if (
     requestedSource &&
-    runtimeIds.some((id) => results.get(id)?.status !== "failed")
+    runtimeIds.some(
+      (id) =>
+        results.get(id)?.status !== "failed" &&
+        !presentationJobs.some((job) => job.runtimeId === id),
+    )
   ) {
     throw new ActionRejectedError(
       "A retry target is no longer failed. Refresh the task statuses before retrying.",
       "retry_target_not_failed",
     );
   }
+  const presentationSnapshots: import("@covel/shared").PresentationSnapshot[] =
+    [];
+  for (const runtime of activeRuntimes) {
+    const failed = results.get(runtime.name);
+    // Only the original failed selector can supply recovery provenance.
+    const original = sourceResults.find(
+      (result) => result.runtimeId === runtime.name,
+    );
+    if (
+      !runtime.presentation ||
+      !runtimeIds.includes(runtime.name) ||
+      failed?.status !== "failed" ||
+      !original
+    )
+      continue;
+    const snapshot = await capturePresentationRecovery(
+      store,
+      sessionId,
+      runtime,
+      original,
+      activeRuntimes,
+    );
+    if (snapshot) presentationSnapshots.push(snapshot);
+  }
   return {
-    sourceRuntimeIds: [...results.keys()],
+    presentationSnapshots,
+    presentationJobs,
+    sourceRuntimeIds: [
+      ...new Set([
+        ...results.keys(),
+        ...presentationJobs.map((job) => job.runtimeId),
+      ]),
+    ],
     scope: {
       sourceTurnId: source.turnId,
       runtimeIds,
       sourceCommitted: true,
-      sourceFailedRuntimeIds: [...results.values()]
-        .filter((result) => result.status === "failed")
-        .map((result) => result.runtimeId)
-        .sort(),
+      sourceFailedRuntimeIds: [
+        ...new Set(
+          [...results.values()]
+            .filter((result) => result.status === "failed")
+            .map((result) => result.runtimeId)
+            .concat(presentationJobs.map((job) => job.runtimeId)),
+        ),
+      ].sort(),
     },
     seedResults: [...results.values()].filter(
       (result) =>

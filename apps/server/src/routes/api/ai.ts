@@ -347,6 +347,7 @@ function withGeneratedPackageMetadata(
     ...record,
     metadata: {
       ...record.metadata,
+      dimensions: packageContent.dimensions,
       ...(packageContent.contractData?.length
         ? { contractData: packageContent.contractData }
         : {}),

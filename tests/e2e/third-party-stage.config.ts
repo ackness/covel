@@ -21,10 +21,16 @@ cpSync(
   join(plugins, "clickable-map"),
   { recursive: true },
 );
+cpSync(
+  resolve(import.meta.dirname, "../third-party/declarative-notebook"),
+  join(plugins, "declarative-notebook"),
+  { recursive: true },
+);
 // `home` is always a new mkdtemp-owned directory, never a user profile.
 process.once("exit", () => rmSync(home, { recursive: true, force: true }));
 
 export default defineConfig({
+  metadata: { declarativeNotebookRoot: join(plugins, "declarative-notebook") },
   testDir: import.meta.dirname,
   testMatch: "**/*.acceptance.ts",
   outputDir: resolve(import.meta.dirname, "artifacts/extensions"),

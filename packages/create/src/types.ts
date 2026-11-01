@@ -35,7 +35,7 @@ export interface CreateWorldOptions {
   readonly dataContracts?: readonly WorldGenerationDataContract[];
   /**
    * The plugin packs a brief may name (`brief.pack`): the server's catalogue.
-   * The chosen one becomes the world's `pluginPolicy.preset`, and its
+   * The chosen one becomes a `pack:` reference in the world's `plugins`, and its
    * `defaultViewMode` the world's.
    */
   readonly packs?: readonly PluginPack[];
@@ -72,7 +72,7 @@ export interface CreateWorldOptions {
 
 /** The current package of a world, in the sections the model writes. */
 export interface WorldSections {
-  /** `world.yaml` with inline data: no `worldData`. */
+  /** Strict `world.yaml` manifest; no dimensions or `worldData` reference. */
   readonly yaml: string;
   readonly lore: string;
   readonly packageYaml?: string;
@@ -136,6 +136,8 @@ export interface GeneratedWorldLorebookEntry {
 }
 
 export interface GeneratedWorldPackageContent {
+  /** Complete dimension definitions, exported only to data/dimensions.yaml. */
+  readonly dimensions?: import("@covel/shared").WorldDimensions;
   readonly contractData?: readonly GeneratedContractData[];
   readonly characters: readonly GeneratedWorldCharacter[];
   readonly lorebook: readonly GeneratedWorldLorebookEntry[];
@@ -161,8 +163,8 @@ export interface WorldGenerationDataContract {
   readonly hint?: string;
   readonly example?: unknown;
   /**
-   * Plugin that receives the data, unless every session has it already
-   * (`kind: core`); the generated world adds it to `pluginPolicy.plus`.
+   * Declaring plugin for authoring context. Session receivers are inferred
+   * from destinations of actual generated content.
    */
   readonly pluginId?: string;
   /** The receiver also wants each record projected into the lorebook. */

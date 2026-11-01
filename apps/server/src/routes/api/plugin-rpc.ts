@@ -1,3 +1,4 @@
+import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
 import {
   approvalVerdictResponse,
   hasServerCodeGrant,
@@ -248,8 +249,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // discovery pipeline, which clamps non-first-dir plugins to 'community'
     // so they can't escalate. A missing source remains community-trusted.
     const entry = pluginRegistry.get(body.pluginId);
+    const declarative = await refreshDeclarativeEligibility(
+      c.get("trustedSources"),
+      body.pluginId,
+    );
     const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
-    if (trustInfo.source === "community") {
+    if (trustInfo.source === "community" && !declarative) {
       const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
     }
@@ -264,24 +269,28 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const needsServerCodeGrant =
       trustInfo.source === "community" &&
       !hasServerCodeGrant(gate, session, body.pluginId);
-    const verdict = gate.evaluate({
-      sessionId,
-      sessionScope: approvalScope,
-      pluginId: body.pluginId,
-      action: needsServerCodeGrant
-        ? COMMUNITY_SERVER_CODE_ACTION
-        : `runtime:${body.runtimeId}`,
-      payload: body.payload,
-      trustLevel: trustInfo.source,
-      description: needsServerCodeGrant
-        ? `Load server-side code for community plugin ${body.pluginId}`
-        : target.description,
-    });
-    const verdictResponse = approvalVerdictResponse(c, verdict, {
-      message: (limit) =>
-        `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
-      code: "queue_full",
-    });
+    const verdict = declarative
+      ? undefined
+      : gate.evaluate({
+          sessionId,
+          sessionScope: approvalScope,
+          pluginId: body.pluginId,
+          action: needsServerCodeGrant
+            ? COMMUNITY_SERVER_CODE_ACTION
+            : `runtime:${body.runtimeId}`,
+          payload: body.payload,
+          trustLevel: trustInfo.source,
+          description: needsServerCodeGrant
+            ? `Load server-side code for community plugin ${body.pluginId}`
+            : target.description,
+        });
+    const verdictResponse =
+      verdict &&
+      approvalVerdictResponse(c, verdict, {
+        message: (limit) =>
+          `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
+        code: "queue_full",
+      });
     if (verdictResponse) return verdictResponse;
     // The run can delegate to the session's sub-agent providers; they need
     // their own grants before it starts.

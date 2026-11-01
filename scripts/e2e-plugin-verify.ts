@@ -1756,15 +1756,15 @@ async function runMain(
     const plan = await httpGet<{
       selectedPackId?: string;
       defaultPluginIds?: string[];
-      policy?: { requested?: string[] };
+      selection: { requestedPluginIds: string[]; requiredContracts: string[] };
     }>(args.server, `/worlds/${encodeURIComponent(chosen.id)}/plugin-plan`);
     plugins = [
       ...new Set([
         ...(plan.defaultPluginIds ?? []),
-        ...(plan.policy?.requested ?? []),
+        ...plan.selection.requestedPluginIds,
       ]),
     ];
-    kv("Preset pack", plan.selectedPackId ?? "(none)");
+    kv("Initial pack", plan.selectedPackId ?? "(none)");
   }
   const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,

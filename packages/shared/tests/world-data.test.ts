@@ -47,16 +47,17 @@ describe("world data schemas", () => {
     };
     const result = worldManifestSchema.safeParse({
       ...world,
-      pluginPolicy: {
-        preset: "dialogue-mode",
-        plus: ["affinity", "story-events"],
-        pitch: {
-          label: "Campus",
-          description: "Dialogue with a route board.",
-          reason: "Relationships drive the story.",
-        },
-        packs: ["dialogue-mode", "low-cost"],
-        requires: ["narrative-engine@2"],
+      plugins: [
+        "pack:dialogue-mode",
+        "plugin:affinity",
+        "plugin:story-events",
+        "contract:narrative-engine@2",
+        "pack:low-cost",
+      ],
+      pluginPitch: {
+        label: "Campus",
+        description: "Dialogue with a route board.",
+        reason: "Relationships drive the story.",
       },
     });
     expect(result.success).toBe(true);
@@ -167,23 +168,21 @@ describe("world data schemas", () => {
     expect(validateWorldManifest({ ...manifest, id: 1 }, options).valid).toBe(
       false,
     );
-    // An unknown key of pluginPolicy is reported and left out too…
-    const typo = validateWorldManifest(
-      { ...manifest, pluginPolicy: { typo: [], plus: ["affinity"] } },
+    const removed = validateWorldManifest(
+      { ...manifest, pluginPolicy: { plus: ["affinity"] } },
       options,
     );
-    expect(typo.valid).toBe(true);
-    expect(typo.ignoredFields).toEqual(["schemaVersion", "pluginPolicy.typo"]);
-    expect(typo.data).toMatchObject({ pluginPolicy: { plus: ["affinity"] } });
-    // …while a known one written wrong drops the section with an error.
+    expect(removed.valid).toBe(true);
+    expect(removed.ignoredFields).toEqual(["schemaVersion", "pluginPolicy"]);
+    expect(removed.data).not.toHaveProperty("pluginPolicy");
     const wrong = validateWorldManifest(
-      { ...manifest, pluginPolicy: { plus: "affinity" } },
+      { ...manifest, plugins: "plugin:affinity" },
       options,
     );
     expect(wrong.valid).toBe(true);
-    expect(wrong.data).not.toHaveProperty("pluginPolicy");
+    expect(wrong.data).not.toHaveProperty("plugins");
     expect(wrong.droppedSections).toEqual([
-      expect.objectContaining({ path: "pluginPolicy.plus" }),
+      expect.objectContaining({ path: "plugins" }),
     ]);
   });
 });

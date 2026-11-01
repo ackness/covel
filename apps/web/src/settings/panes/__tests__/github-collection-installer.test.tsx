@@ -23,6 +23,7 @@ const plugin = {
   version: "1.0.0",
   description: "Dice for the barrow",
   author: "Barrow Works",
+  executionMode: "code" as const,
   hasServerCode: true,
   trustedSource: false,
   capabilities: {
@@ -46,6 +47,7 @@ const world = {
   kind: "world" as const,
   id: "barrow",
   description: "A tabletop world",
+  executionMode: "declarative" as const,
   hasServerCode: false,
   source: { ...source, path: "worlds/barrow" },
   token: "world-token",

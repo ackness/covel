@@ -210,7 +210,7 @@ wrote worlds/tidelamp/media/scenes.registry.json with 1 scene(s)
 > [!NOTE]
 > 世界的 `data/world.data.yaml` 里写了 `media/scenes.registry.json` 时，这个文件必须存在，否则世界通不过校验。图还没做的时候，先运行一次 `node scripts/emit-scenes.mjs <世界ID>`：它会写出一份没有场景的空清单占位。出图后再运行一次即可。
 
-**这一局要启用管理场景的插件。** 内置的是“场景舞台”（`scene-stage`），它包含在“对话模式”（`dialogue-mode`）玩法包里，“传统故事模式”里没有。把 `world.yaml` 的 `pluginPolicy.preset` 改成 `dialogue-mode`，或者在 `pluginPolicy.plus` 里加上 `scene-stage`，或者在开局的准备页展开“自定义插件与高级设置”选中它。
+**这一局要启用管理场景的插件。** 内置的是“场景舞台”（`scene-stage`），它包含在“对话模式”（`dialogue-mode`）玩法包里，“传统故事模式”里没有。把 `world.yaml` 的 `plugins` 改成 `dialogue-mode`，或者在 `plugins` 里加上 `scene-stage`，或者在开局的准备页展开“自定义插件与高级设置”选中它。
 
 想让玩家一进游戏就是舞台视图，在 `world.yaml` 里加一行：
 
@@ -268,3 +268,7 @@ pnpm validate:world worlds/tidelamp
 - **给角色配立绘。** 见[给角色配立绘](./portraits.md)。
 - **定下整个世界的画风，知道交付前检查什么。** 见[世界美术方向](./art-direction.md)。
 - **给世界配背景音乐。** 见[世界数据参考的 Background Music](../reference/world-data.md#background-music)。
+
+## 故事中的素材选择
+
+故事提示经受限的零预算[呈现函数](../reference/plugins.md#presentation-runtimes)选择公开场景素材；不会临时付费出图。现有场景生成命令与文件格式不变，未找到新图时沿用[舞台的降级行为](../builtin/stage.md)。

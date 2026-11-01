@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { disabledDependents, resolveSessionPlugins } from "@covel/shared";
 import {
@@ -27,7 +27,7 @@ export interface UsePluginSelectionResult {
   selectedPlugins: ReadonlySet<string>;
   enabledPluginSummaries: api.PluginSummary[];
   enabledPluginIds: string[];
-  /** Selected community plugins waiting for this new session's approval. */
+  /** Community plugins awaiting approval, separate from explicit requests. */
   pendingApproval: readonly import("@covel/shared").PluginResolutionRejection[];
   requestedPluginIds: string[];
   excludedPluginIds: string[];
@@ -90,9 +90,10 @@ export function usePluginSelection(
     setPluginPlanRequest((request) => request + 1);
   }, []);
 
+  const initializedWorld = useRef<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    setPluginPlan(null);
+    if (initializedWorld.current !== worldId) setPluginPlan(null);
     setPluginPlanError(null);
     setPluginPlanLoading(true);
     prepareWorldForServer()
@@ -103,25 +104,26 @@ export function usePluginSelection(
       )
       .then((plan) => {
         if (cancelled) return;
-        // Publish defaults with the plan so consumers never observe a ready
-        // plan alongside the temporary core-only selection. A default the
-        // initial pack also requests belongs to the pack, so the next pack can
-        // replace it even when the world's `plus` names it too.
-        const initialPack = plan.packs.find(
-          (pack) => pack.id === plan.selectedPackId,
-        );
-        const packRequests = new Set(initialPack?.requested ?? []);
-        setPackRequestedPlugins(packRequests);
-        setOtherSelectedPlugins(
-          new Set(
-            [...defaultSelectedPluginIds(plan)].filter(
-              (id) => !packRequests.has(id),
-            ),
-          ),
-        );
-        setExcludedPlugins(new Set(initialPack?.excluded ?? []));
-        setPackExcludedPlugins(new Set(initialPack?.excluded ?? []));
-        setActivePluginPackId(plan.selectedPackId ?? null);
+        // Publish defaults and plan together only once per world. A refreshed
+        // catalogue or callback must preserve the player's unsaved choices.
+        if (initializedWorld.current !== worldId) {
+          const initialPack = plan.packs.find(
+            (pack) => pack.id === plan.selectedPackId,
+          );
+          setPackRequestedPlugins(new Set(initialPack?.requested ?? []));
+          setOtherSelectedPlugins(
+            new Set([
+              ...[...defaultSelectedPluginIds(plan)].filter(
+                (id) => !initialPack?.requested.includes(id),
+              ),
+              ...plan.selection.requestedPluginIds,
+            ]),
+          );
+          setExcludedPlugins(new Set(initialPack?.excluded ?? []));
+          setPackExcludedPlugins(new Set(initialPack?.excluded ?? []));
+          setActivePluginPackId(plan.selectedPackId ?? null);
+          initializedWorld.current = worldId;
+        }
         setPluginPlan(plan);
       })
       .catch((error: unknown) => {
@@ -150,7 +152,10 @@ export function usePluginSelection(
     () => requiredPluginIdsForWorld(pluginPlan),
     [pluginPlan],
   );
-  const requiredContracts = pluginPlan?.policy.requires ?? NO_CONTRACTS;
+  const requiredContracts =
+    pluginPlan?.selection.requiredContracts ?? NO_CONTRACTS;
+  const requiredDataContracts =
+    pluginPlan?.selection.requiredDataContracts ?? NO_CONTRACTS;
   const [otherSelectedPlugins, setOtherSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
   );
@@ -172,10 +177,15 @@ export function usePluginSelection(
   );
   const candidates = useMemo(
     () =>
-      plugins.map((plugin) => ({
-        ...plugin,
-        authorized: plugin.source === "builtin",
-      })),
+      plugins
+        .filter((plugin) => plugin.hostState !== "error")
+        .map((plugin) => ({
+          ...plugin,
+          authorized:
+            plugin.source === "builtin" ||
+            plugin.executionMode === "declarative" ||
+            plugin.trust?.autoApproved === true,
+        })),
     [plugins],
   );
   const resolution = useMemo(
@@ -185,6 +195,7 @@ export function usePluginSelection(
         excluded: [...excludedPlugins],
         plugins: candidates,
         requiredContracts,
+        requiredDataContracts,
       }),
     [
       candidates,
@@ -192,6 +203,7 @@ export function usePluginSelection(
       excludedPlugins,
       worldRequiredPluginIds,
       requiredContracts,
+      requiredDataContracts,
     ],
   );
   const enabledPluginIds = resolution.active;
@@ -225,9 +237,22 @@ export function usePluginSelection(
         (item) =>
           item.code === "approval-required" &&
           (selectedPlugins.has(item.pluginId) ||
-            worldRequiredPluginIds.has(item.pluginId)),
+            worldRequiredPluginIds.has(item.pluginId) ||
+            candidates.some(
+              (candidate) =>
+                candidate.id === item.pluginId &&
+                requiredDataContracts.some((contract) =>
+                  candidate.acceptsWorldData?.includes(contract),
+                ),
+            )),
       ),
-    [resolution, selectedPlugins, worldRequiredPluginIds],
+    [
+      resolution,
+      selectedPlugins,
+      worldRequiredPluginIds,
+      candidates,
+      requiredDataContracts,
+    ],
   );
   const dependentsOff = useMemo(
     () =>
@@ -265,9 +290,13 @@ export function usePluginSelection(
   const missingPluginIds = useMemo(
     () => [
       ...new Set(
-        (pluginPlan?.missing ?? [])
-          .filter((item) => !item.packId || item.packId === activePluginPackId)
-          .map((item) => item.pluginId),
+        (pluginPlan?.diagnostics ?? [])
+          .filter(
+            (item) =>
+              item.code === "missing-plugin" &&
+              (!item.packId || item.packId === activePluginPackId),
+          )
+          .flatMap((item) => (item.pluginId ? [item.pluginId] : [])),
       ),
     ],
     [pluginPlan, activePluginPackId],
@@ -342,6 +371,7 @@ export function usePluginSelection(
         requested: story,
         plugins: candidates.map((plugin) => ({ ...plugin, kind: "plugin" })),
         requiredContracts,
+        requiredDataContracts,
       }).active,
     );
     // The world's defaults stay requested and are turned off the way a pack
@@ -352,7 +382,8 @@ export function usePluginSelection(
       (pack) => pack.id === pluginPlan?.selectedPackId,
     );
     const defaultRequests = [...defaults].filter(
-      (id) => !initialPack?.requested.includes(id),
+      (id) =>
+        worldRequiredPluginIds.has(id) || !initialPack?.requested.includes(id),
     );
     const offForMinimal = new Set(
       [
@@ -375,6 +406,7 @@ export function usePluginSelection(
     pluginPacks,
     selectedPluginIdSet,
     requiredContracts,
+    requiredDataContracts,
     worldRequiredPluginIds,
   ]);
 
@@ -411,6 +443,7 @@ export function usePluginSelection(
           excluded: [...excluded],
           plugins: candidates,
           requiredContracts,
+          requiredDataContracts,
         });
         // A successful explicit choice replaces only previously active conflicts.
         // Keep unresolved requests so missing dependencies still reach validation.
@@ -440,6 +473,7 @@ export function usePluginSelection(
       candidates,
       worldRequiredPluginIds,
       requiredContracts,
+      requiredDataContracts,
       enabledPluginIds,
     ],
   );
@@ -468,7 +502,10 @@ export function usePluginSelection(
     pendingApproval,
     requestedPluginIds: [
       ...new Set([...selectedPlugins, ...worldRequiredPluginIds]),
-    ].filter((id) => !excludedPlugins.has(id)),
+    ].filter(
+      (id) =>
+        !excludedPlugins.has(id) && plugins.some((plugin) => plugin.id === id),
+    ),
     excludedPluginIds: [...excludedPlugins],
     selectedPluginIdSet,
     pluginPlan,

@@ -2,6 +2,8 @@
 
 This page lists every declaration a plugin package can make: the fields of the root `PLUGIN.md`, the fields of a runtime, the rules for inputs and outputs, and the built-in plugins that ship with Covel. Come here when you write, change, or review a plugin. If this is your first plugin, read [Your First Plugin](../plugins/first-plugin.md) and [Plugin Essentials](../plugins/essentials.md) first.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 A plugin package does three things:
 
 - In the root `PLUGIN.md`, it says who it is, which contracts it provides and needs, and what it contributes (tools, data, UI, and so on).
@@ -12,6 +14,20 @@ The source of the built-in plugins is in [plugins/](../../../plugins/). Optional
 
 > [!IMPORTANT]
 > Covel supports only the format described on this page. A flat old-style manifest, a `PLUGIN.md` in a subdirectory, role mirrors, and old checkpoint development data cannot be read. You must regenerate them. There is no migration read path and no dual write.
+
+<a id="declaration-paths"></a>
+
+## Declaration files and resource paths
+
+File references in root `PLUGIN.md` resolve at the package root. A `RUNTIME.md` handler, guard and private input/output schemas resolve at that manifest's directory; inline runtimes resolve at root. `../../` is allowed only while the resolved path remains inside the package. Real-path and symlink checks also cover conventional `output.schema.json`; no schema is inherited from a parent repository.
+
+Package UI and events are root declarations. Contract URIs are identifiers, not paths. `authoring.source.path` is relative to the consuming world package; descriptors use their world or separate override roots; `webview.entry` is relative to its declared webview root. JS imports and JSON Schema `$ref` retain their own document-relative rules. Credits and licenses remain explicit per independently distributed package, with no parent-directory defaults.
+
+## Declarative package fields
+
+For features that need no server functions, start with [declarative plugins](./plugin-installation.md#declarative-plugins): combine agent prompts, own datasets/generated tools, settings/data receivers, static prompts, UI and service imports. An output contract describes an agent result; `contributes.services`, executable extensions and registrations are server code. There is no authored `executionMode` field.
+
+Declarative runtimes write only their own datasets and character records validated by `sync-characters`; other plugins' data changes only through their write services. The central framework tool capability table and final tool allowlist enforce this boundary; author validation reports unsupported tools. Narrower sub-agent, resume and retry rules still apply. Executable distribution files outside valid browser asset lists restore code approval, including tests and build files. Static validation reads files and reports classification reasons without executing them.
 
 ## Package and Runtime Files
 
@@ -1123,26 +1139,26 @@ After a namespace declares `search`, its records enter the framework's memory re
 - Before the game starts, the session prep screen lists the plugins this will turn off, the contract each one lacks, and the installed plugins that provide it, with a button to turn one on. The game screen does the same for `unavailable`.
 - When none of the enabled plugins has a narrative runtime (`io.visibility: story`), turns do not tell a story. The session prep screen and the game screen both say so and list the narrative plugins that can be turned on. When none is installed, they point to Settings → Install & manage.
 - `requested` and the computed `active` set are stored separately. An automatic dependency does not become the player's explicit choice.
-- The world's `pluginPolicy.requires` is passed in as `requiredContracts`. A world is a dependent, just like a plugin. A single provider is added automatically, and it is not removed as an unneeded dependency. A need that cannot be met is returned in `unmet`, with the reason `missing-provider`, `ambiguous-provider`, `approval-required`, or `excluded`. None of the four blocks session creation: the session starts without this part, and the session-prep screen and the response that creates the session (`unmetRequirements`) tell the player what is missing. The first two are an install problem. The last two are the player's choice.
+- The world's `contract:` references is passed in as `requiredContracts`. A world is a dependent, just like a plugin. A single provider is added automatically, and it is not removed as an unneeded dependency. A need that cannot be met is returned in `unmet`, with the reason `missing-provider`, `ambiguous-provider`, `approval-required`, or `excluded`. None of the four blocks session creation: the session starts without this part, and the session-prep screen and the response that creates the session (`unmetRequirements`) tell the player what is missing. The first two are an install problem. The last two are the player's choice.
 
 **How a world and a gameplay pack give the initial request.**
 
-- A world's `pluginPolicy` picks a built-in pack with `preset` and adds the plugins it wants with `plus`; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy). A gameplay pack uses `requested` and `recommended`. The initial explicit requests are the `preset` pack's `requested` plus `plus`.
+- A world lists `pack:`, `plugin:` and `contract:` references in `plugins`; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy). Only the first pack expands into defaults, alongside independent plugin requests.
 - A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage`, `parsed` or `plugin:<pluginId>:<viewId>`; bridge views request player consent first). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
 - A recommendation is not enabled automatically, and it does not override the player's explicit exclusion.
 - `defaultPluginIds` from `GET /api/worlds/:id/plugin-plan` is the initial set of explicit requests. The session-prep screen and the create endpoint then use the same resolver to compute the active set.
-- Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed is listed in `missing`. The session-prep screen shows it as a notice, and it is not sent in the create request.
+- Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed appears as a `missing-plugin` item in `diagnostics`, retaining its `pluginId`, field `path` and optional `packId`. Unknown packs produce `unknown-pack` items with their reference locations. The prep screen shows these notices, and missing plugin IDs stay out of the create request.
 
 **Switching the gameplay pack on the session-prep screen.**
 
 - Switching packs does not change the view mode. A pack's `defaultViewMode` is written into the world only during AI world generation.
 - Switching replaces the requests that the previous pack contributed, including the pack the world selected at the start.
-- A plugin in the initial default requests that the initial pack requests belongs to that pack. After a switch, it is kept only if the new pack also requests it. This lets the new pack's narrative engine replace the old pack's engine.
-- The world's `plus` and the requests the player added by hand are kept. An explicit exclusion still wins.
+- A plugin requested only by the initial pack belongs to that pack. After a switch, it stays only if the new pack also requests it. A matching independent `plugin:` request from the world keeps the plugin selected; pack and independent requests retain separate ownership.
+- The world's independent plugin references and the requests the player added by hand are kept. An explicit exclusion still wins.
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
-- The resolver still checks the world's `requires` on its own. Do not treat `plus` as a required item that cannot be canceled.
+- The resolver still checks the world's contract references on its own. Independent plugin references can still be canceled.
 - A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
-- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's `requires` pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin in the world's `plus` is excluded, and the pack highlight is cleared.
+- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's contract references pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin in the world's independent plugin references is excluded, and the pack highlight is cleared.
 
 **A save keeps the set the player confirmed.**
 
@@ -1432,3 +1448,67 @@ Each new round uses normal scheduling, tools, proposal validation and commit; in
 ## Optional planning and committed story exports
 
 The bundled dialogue example composes a pre-turn function, plan, with one story agent, narrate. The function projects names and calls a policy once; the story consumes its optional same-package input and owns actor delegation. The complete public story exports as recordAs: latest-story; the planner reads the prior committed value through a same-package scope: committed input, without a dependency back to the current narrative stage. Policies and actors remain replaceable and optional, outside story requires or contract needs. Actor declarations use the framework schema above rather than copying it into a package.
+
+<a id="presentation-runtimes"></a>
+
+## Presentation runtimes
+
+`presentation` restricts a function runtime that selects backdrops, cast or music from public story content. It requires `schedule.stage: post-turn`, effective `io.visibility: system` and staged auto activation. Agents, guards, sub-agents, manual, event, background, concealed, suspension and `recordAs` are unavailable. An invalid declaration disables only that runtime; validation and installation still report the authored field path.
+
+<!-- presentation-file:gallery-display/PLUGIN.md -->
+
+```yaml
+---
+id: gallery-display
+description: Selects art from public story cues.
+contributes:
+  data:
+    art: { schema: ./art.schema.json }
+runtime:
+  schedule: { stage: post-turn }
+  presentation: {}
+  io:
+    inputs:
+      story:
+        from: { contract: narrative-engine@2 }
+        required: false
+  function: {}
+  effects:
+    reads: [plugin-data:self:art, plugin-data:self:display]
+    writes: [plugin-data:self:display]
+---
+```
+
+The example package's `art.schema.json` defines its asset format; `handler.js` sits beside the inline manifest. See the [advanced guide](../plugins/advanced.md#presentation-selectors) for a complete handler and detached generator. Do not add `requires: [narrative-engine@2]` for this optional story input.
+
+### Inputs and writes
+
+Only an optional (`required: false`), untransformed, turn-scoped `narrative-engine@2` input is permitted. Missing or ambiguous public story providers leave the input absent. The host copies validated `segments` and `cues` only, excluding business extras, concealed / non-story / failed results, tools, intent, reasoning, continuations, operations and summaries.
+
+Zero-budget functions read a public candidate before story commit; their writes cannot survive rejection of that story. Detached presentation reads the actual story saved after `PreStateCommit` rewrites and accepted owning-plugin data from that commit. Its versioned snapshot contains no raw upstream result, player message, action or form. Snapshots are limited to 256 KiB total, 50 rows per namespace and 100 character identities; exceeding a bound refuses the whole snapshot, including inline materialization.
+
+A failed zero-budget selector can recover through a scoped runtime retry. The host checks the original committed turn, failure record and source diagnostic, then builds a bounded snapshot from the saved public story and current own assets and display state. Raw historical results never become presentation input. Missing source records or an advanced story refuse recovery; ordinary manual calls remain unavailable.
+
+`ctx.presentation` supplies read-only `characters: {id, name, aliases?}[]`, optional `viewpointCharacterId` and `note(reason)`. Identities come only from exact matches to story names, preserving ambiguity; profiles, private fields and seat lists are absent. Use IDs only to index display state; model input keeps names. `ctx.world`, history, exports, services, tools, recursion and agents are unavailable; player messages, actions and activation payload supply no extra content. The host does not construct a broad context first. Capabilities expire on completion, cancellation or deadline.
+
+Explicit `effects` identify owning, non-reserved namespaces. Reads may cover public assets declared in the package's `contributes.data` with a non-hidden source, or display namespaces also listed in writes. Wildcard `plugin-data:self:*`, `_` namespaces, foreign data, history and kernel inputs are forbidden. `pluginData.get/list` and store aliases enforce the same scope; namespace-less listing is refused.
+
+Only declared own `plugin.data`, update, batch and delete proposals may commit. Dataset schemas, allowed operations, size, preconditions and media validation still apply, including after hook rewrites. Any forbidden proposal discards the whole presentation unit; the story and independent auxiliaries retain normal commit isolation. Executions without a story remain atomic. Story, character, dimension, lorebook, interaction, UI, event, completion and `asset.generate` writes, foreign write services and nested execution are unavailable.
+
+### Dispatch budgets and background generation
+
+Both integers in `presentation: {budget: {calls, generations}}` default to zero. `calls` allows 0–16 admitted gateway dispatches; `generations` allows 0–4 additional image, music or speech output units. A request for `n` images reserves all `n` units together. Text and object generation consume calls too; cache hits and availability probes cost nothing. Evaluation, transcription and arbitrary HTTP are unavailable.
+
+Either positive counter requires `schedule.detached: true` and forbids `settle: true`. An unsafe graph, changed version or unavailable snapshot skips presentation without foreground fallback. Neither the story nor the next player input waits for generation. Ordinary pre-turn cast selection and explicit event overrides remain outside this policy.
+
+The allowance is shared by session incarnation, actual source turn ID and runtime. Opening, first player input and each automatic round have distinct sources even when logicalTurn matches. Source retries, new job IDs, shutdown requeue, cancellation, provider failures and rejected commits never replenish it. Current configuration can only narrow captured limits. A durable kernel CAS reservation precedes external dispatch; paid work is unavailable without that ledger. A stalled wrapper's new dispatch spends another call. Internal transport attempts remain governed by the separate `LLMRequestBudget`; these counters do not promise an exact bill.
+
+A full presentation queue skips only that generation and records `no-op / unavailable`. The story and independent auxiliary writes still commit, and undispatched calls consume no allowance.
+
+`assets:*` / `media:*` permits scoped media helpers only. `ctx.media` can read refs reachable from allowed snapshot assets / display state or produced by this invocation's helpers; session ownership alone is insufficient. Raw `put` / `ingestUrl` is unavailable. Helpers retain the standard private writer, MIME, HTTP / DNS, batch pin, claim and compensation rules. Failed or superseded output publishes no new display binding; external charges, bytes and reusable generation caches cannot be rolled back. The commit transaction checks destination baselines from the snapshot, so newer overrides or source results win.
+
+### No output and trust
+
+`ctx.presentation.note(reason)` accepts fixed codes: `no-story`, `no-scene-change`, `asset-missing`, `budget-exhausted`, `unavailable`, `superseded`, `no-output`, `failed`. Free text is refused. Without a display write or note, the host infers `no-output`; a business return value alone is not visible output. Budget refusal is a normal no-op and can be caught to use existing assets. Uncaught refusal discards incomplete writes without a plugin fault. Own exceptions, invalid output and deadlines retain normal fault provenance.
+
+Each settled invocation records [`presentation.completed`](./protocol.md#presentation-completed), with status, source correlation and counters. It adds no per-turn player notification. A presentation function remains approved, unsandboxed server JS: the API policy does not replace [code approval](./plugin-installation.md) or restrict direct Node access.

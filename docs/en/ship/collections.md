@@ -2,6 +2,10 @@
 
 A collection is a list that says "these worlds and plugins should be installed together". The player pastes one link, ticks the items, confirms once, and everything is installed.
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
+Collection checks infer data requirements from each included world's actual enabled sources, combine included and installed static declarations, and check receivers with the same selector. Schema and output publishers cannot satisfy data requirements; absent sources create none. This read-only check executes no entry or projection and grants no code permission.
+
 When to use it:
 
 - You made a world, and you also wrote a few plugins for it.
@@ -117,16 +121,17 @@ A collection that contains members from someone else's repository cannot be pack
 
 ## How a World Says What It Needs
 
-A world does not name a specific plugin. Instead, it says which capability it needs:
+A world can request a specific plugin or a capability. Use a contract reference when providers should be interchangeable:
 
 ```yaml
 # worlds/tidelamp/world.yaml
-pluginPolicy:
-  requires:
-    - action-check@1
+plugins:
+  - contract:action-check@1
 ```
 
-This line means "I need a plugin that can do action checks". A collection that includes a plugin providing this capability works, and so does one that Covel bundles itself. When no plugin provides it, the check reports an error.
+This line means "I need a plugin that can do action checks". A collection that includes a plugin providing this capability works, and so does one that Covel bundles itself. With no provider the check reports a notice; installation and play can continue without that feature. It checks the initial pack members and independent plugin references, without expanding alternatives. Unknown packs and missing initial-pack members retain their locations and pack provenance.
+
+Installed and included copies of the same provider ID count as one provider. An included update supplies the current manifest facts, so it cannot falsely create ambiguity or retain a removed provision.
 
 ## Version Ranges
 

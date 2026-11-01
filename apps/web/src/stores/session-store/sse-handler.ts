@@ -784,6 +784,7 @@ export function createSseEventHandler(
       // handler ignores them here, same as tool.*/llm.*.
       case "function.executing":
       case "function.completed":
+      case "presentation.completed":
       case "gateway.calling":
       case "gateway.failed":
       // Plugin-utils provider-call trace: /debug-only, same as gateway.*

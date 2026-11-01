@@ -1,3 +1,4 @@
+import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
 import { pluginFaultHost } from "../plugin-faults.js";
 import { readLockedSession } from "./locked-mutation.js";
 import {
@@ -23,7 +24,10 @@ import {
   authorizedSessionPluginIds,
 } from "./plugins.js";
 import { buildSessionCommandList } from "./commands.js";
-import { importWorldDataForJoinedPlugins } from "../../../world-data/receiver-import.js";
+import {
+  importWorldDataForJoinedPlugins,
+  worldDataImportNotices,
+} from "../../../world-data/receiver-import.js";
 import {
   boundDimensionProviderConflict,
   DimensionProviderConflictError,
@@ -159,10 +163,13 @@ export function registerSessionPluginRoutes(
       paused: c.get("pluginFaults")?.latched(id),
       isEntryPublished: c.get("isPluginEntryPublished"),
       trustedSources: c.get("trustedSources"),
+      isServerCodeApproved: (pluginId) =>
+        hasServerCodeGrant(c.get("rpcApprovalGate"), guard.session, pluginId),
       authorized: authorizedSessionPluginIds(
         pluginRegistry,
         c.get("rpcApprovalGate"),
         guard.session,
+        c.get("trustedSources"),
       ),
     });
     return c.json({
@@ -197,6 +204,7 @@ export function registerSessionPluginRoutes(
           errorBody("Plugin is not paused", { code: "plugin_not_paused" }),
           409,
         );
+      await c.get("trustedSources")?.verifyAll();
       const transitions = faults.clear(id, pluginId, "player");
       await pluginFaultHost(c.get("store"))?.publish(
         transitions,
@@ -209,8 +217,11 @@ export function registerSessionPluginRoutes(
           registry,
           c.get("rpcApprovalGate"),
           session,
+          c.get("trustedSources"),
         ),
         trustedSources: c.get("trustedSources"),
+        isServerCodeApproved: (candidate) =>
+          hasServerCodeGrant(c.get("rpcApprovalGate"), session, candidate),
         isEntryPublished: c.get("isPluginEntryPublished"),
       });
       return c.json({
@@ -237,27 +248,35 @@ export function registerSessionPluginRoutes(
       );
     }
 
+    const declarative = await refreshDeclarativeEligibility(
+      c.get("trustedSources"),
+      pluginId,
+    );
     const trust = getPluginTrustInfo(pluginId, pluginEntry.source);
-    if (trust.source === "community") {
+    if (trust.source === "community" && !declarative) {
       const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
     }
     await c.get("trustedSources")?.ensureFresh(pluginId);
     const approvalScope = sessionApprovalScope(guard.session, pluginId);
-    const verdict = c.get("rpcApprovalGate").evaluate({
-      sessionId: id,
-      sessionScope: approvalScope,
-      pluginId,
-      action: COMMUNITY_SERVER_CODE_ACTION,
-      payload: { operation: "enable" },
-      trustLevel: trust.source,
-      description: `Enable server-side code for plugin ${pluginId}`,
-    });
-    const verdictResponse = approvalVerdictResponse(c, verdict, {
-      message: (limit) =>
-        `approval queue is full (limit ${limit}); resolve pending approvals and retry`,
-      code: "approval_queue_full",
-    });
+    const verdict = declarative
+      ? undefined
+      : c.get("rpcApprovalGate").evaluate({
+          sessionId: id,
+          sessionScope: approvalScope,
+          pluginId,
+          action: COMMUNITY_SERVER_CODE_ACTION,
+          payload: { operation: "enable" },
+          trustLevel: trust.source,
+          description: `Enable server-side code for plugin ${pluginId}`,
+        });
+    const verdictResponse =
+      verdict &&
+      approvalVerdictResponse(c, verdict, {
+        message: (limit) =>
+          `approval queue is full (limit ${limit}); resolve pending approvals and retry`,
+        code: "approval_queue_full",
+      });
     if (verdictResponse) return verdictResponse;
 
     await c.get("activatePluginServerCode")?.(pluginId, id);
@@ -282,22 +301,44 @@ export function registerSessionPluginRoutes(
         );
       }
 
+      await c.get("trustedSources")?.verifyAll();
+      if (
+        trust.source === "community" &&
+        !c.get("trustedSources")?.isDeclarative(pluginId)
+      ) {
+        const operatorDenied = requireAccess(c, "plugin.community");
+        if (operatorDenied) return operatorDenied;
+      }
       const selection = readSessionPluginSelection(session);
       const requested = [
         pluginId,
         ...selection.requested.filter((id) => id !== pluginId),
       ];
       const excluded = selection.excluded.filter((id) => id !== pluginId);
-      const { requiredContracts } = selection;
-      const plan = resolveSessionPluginPlan(requested, pluginRegistry, {
-        excluded,
-        requiredContracts,
-        authorized: authorizedSessionPluginIds(
-          pluginRegistry,
-          c.get("rpcApprovalGate"),
-          session,
-        ),
-      });
+      const { requiredContracts, requiredDataContracts } = selection;
+      const plan = resolveSessionPluginPlan(
+        [
+          ...new Set([
+            ...requested,
+            ...session.activePlugins.filter((id) => !excluded.includes(id)),
+          ]),
+        ],
+        pluginRegistry,
+        {
+          excluded,
+          requiredContracts,
+          requiredDataContracts,
+          automaticPluginIds: [...session.activePlugins, ...requested].filter(
+            (id) => !excluded.includes(id),
+          ),
+          authorized: authorizedSessionPluginIds(
+            pluginRegistry,
+            c.get("rpcApprovalGate"),
+            session,
+            c.get("trustedSources"),
+          ),
+        },
+      );
       const rejected = plan.rejected.find((item) => item.pluginId === pluginId);
       if (rejected)
         return c.json(errorBody(rejected.reason, { code: rejected.code }), 409);
@@ -350,6 +391,7 @@ export function registerSessionPluginRoutes(
                 requested,
                 excluded,
                 requiredContracts,
+                requiredDataContracts,
               }),
             },
             updatedAt: new Date().toISOString(),
@@ -378,6 +420,7 @@ export function registerSessionPluginRoutes(
           mediaStore: c.get("mediaStore"),
           session,
           joined,
+          unmetData: plan.unmetData,
           worldsDirs: c.get("worldsDirs"),
           covelHome: c.get("covelHome"),
           now: new Date().toISOString(),
@@ -401,12 +444,7 @@ export function registerSessionPluginRoutes(
           receivers: [],
           imported: 0,
           conflicts: 0,
-          notices: [
-            {
-              level: "error" as const,
-              message: `World data import failed: ${message}`,
-            },
-          ],
+          notices: worldDataImportNotices([{ level: "error", message }]),
         };
       }
       return c.json(
@@ -436,19 +474,34 @@ export function registerSessionPluginRoutes(
       });
       if (session instanceof Response) return session;
 
+      await c.get("trustedSources")?.verifyAll();
       const selection = readSessionPluginSelection(session);
       const requested = selection.requested.filter((id) => id !== pluginId);
       const excluded = [...new Set([...selection.excluded, pluginId])];
-      const { requiredContracts } = selection;
-      const plan = resolveSessionPluginPlan(requested, pluginRegistry, {
-        excluded,
-        requiredContracts,
-        authorized: authorizedSessionPluginIds(
-          pluginRegistry,
-          c.get("rpcApprovalGate"),
-          session,
-        ),
-      });
+      const { requiredContracts, requiredDataContracts } = selection;
+      const plan = resolveSessionPluginPlan(
+        [
+          ...new Set([
+            ...requested,
+            ...session.activePlugins.filter((id) => !excluded.includes(id)),
+          ]),
+        ],
+        pluginRegistry,
+        {
+          excluded,
+          requiredContracts,
+          requiredDataContracts,
+          automaticPluginIds: [...session.activePlugins, ...requested].filter(
+            (id) => !excluded.includes(id),
+          ),
+          authorized: authorizedSessionPluginIds(
+            pluginRegistry,
+            c.get("rpcApprovalGate"),
+            session,
+            c.get("trustedSources"),
+          ),
+        },
+      );
       const active = plan.active;
       const droppedProvider = droppedDimensionProvider(
         session,
@@ -482,6 +535,7 @@ export function registerSessionPluginRoutes(
                 requested,
                 excluded,
                 requiredContracts,
+                requiredDataContracts,
               }),
             },
             updatedAt: new Date().toISOString(),

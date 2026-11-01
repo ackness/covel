@@ -35,6 +35,7 @@ const runtime = (
 });
 const plugin = {
   active: true,
+  executionMode: "code" as const,
   hostState: "loaded" as const,
   runtimes: [runtime("story"), runtime("plugin")],
 };

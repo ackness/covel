@@ -1,5 +1,6 @@
 import {
   mkdirSync,
+  cpSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -36,6 +37,13 @@ const testHome = process.env.E2E_BASE_URL
 if (testHome) {
   mkdirSync(join(testHome, "worlds"));
   mkdirSync(join(testHome, "plugins"));
+  // Real static receivers keep browser and host selection on one catalogue.
+  for (const name of ["test-data-receiver-one", "test-data-receiver-two"])
+    cpSync(
+      new URL(`./tests/fixtures/world-data-receivers/${name}`, import.meta.url),
+      join(testHome, "plugins", name),
+      { recursive: true },
+    );
   // Only remove the temporary profile created by this test process.
   process.once("exit", () =>
     rmSync(testHome, { recursive: true, force: true }),

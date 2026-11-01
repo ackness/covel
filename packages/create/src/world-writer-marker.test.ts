@@ -3,6 +3,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GeneratedWorld } from "./types.js";
+import { parse } from "yaml";
 import {
   GENERATED_WORLD_MARKER,
   WorldPackageModifiedError,
@@ -86,6 +87,42 @@ describe("generated world marker", () => {
     expect(await readFile(path.join(dir, "media", "keeper.png"), "utf8")).toBe(
       "portrait",
     );
+  });
+
+  it("publishes portable dimensions once and removes the file when the last definition is cleared", async () => {
+    const definitions = {
+      alarm: {
+        name: "Alarm",
+        schema: { type: "integer" as const },
+        initialValue: 17,
+      },
+    };
+    const withDimensions = {
+      ...world,
+      packageContent: { ...world.packageContent, dimensions: definitions },
+    };
+    await writeWorldPackage(root, withDimensions, { replace: true });
+    const file = path.join(dir, "data/dimensions.yaml");
+    expect(parse(await readFile(file, "utf8"))).toEqual(definitions);
+    expect(
+      parse(await readFile(path.join(dir, "world.yaml"), "utf8")),
+    ).not.toHaveProperty("dimensions");
+    expect(await readGeneratedWorldMarker(dir)).toMatchObject({
+      files: { "data/dimensions.yaml": expect.any(String) },
+    });
+    await writeWorldPackage(
+      root,
+      {
+        ...withDimensions,
+        packageContent: { ...withDimensions.packageContent, dimensions: {} },
+      },
+      { replace: true },
+    );
+    await expect(readFile(file)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readGeneratedWorldMarker(dir))?.files).not.toHaveProperty(
+      "data/dimensions.yaml",
+    );
+    expect(withDimensions.packageContent.dimensions).toEqual(definitions);
   });
 
   it("does not replace a package whose generated file a person edited", async () => {

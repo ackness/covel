@@ -25,8 +25,18 @@ function uniqueSorted(values: Iterable<string>): string[] {
 }
 
 function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
-  const stage = getRuntimeSpec(manifest).stage;
+  const { stage, presentation } = getRuntimeSpec(manifest);
   return {
+    ...(presentation
+      ? {
+          presentation: {
+            budget: {
+              calls: presentation.budget.calls,
+              generations: presentation.budget.generations,
+            },
+          },
+        }
+      : {}),
     id: manifest.name,
     runtimeType: manifest.runtimeType ?? "agent",
     ...(stage !== undefined ? { stage } : {}),
@@ -100,6 +110,14 @@ export function pluginContractFacts(entry: PluginRegistryEntry) {
     source: getPluginTrustInfo(entry.id, entry.source).source,
     provides: plugin?.provides ?? [],
     requires,
+    runtimes: pluginRuntimeManifests(entry).map(({ manifest }) =>
+      runtimeSummary(manifest),
+    ),
+    acceptsWorldData: uniqueSorted(
+      Object.values(plugin?.contributes?.data ?? {}).flatMap(
+        (data) => data.accepts ?? [],
+      ),
+    ),
     optional: optionalContracts(
       pluginRuntimeManifests(entry).map(({ manifest }) => manifest),
       requires,
@@ -146,6 +164,14 @@ export function buildPluginSummary(
 
   return {
     id: entry.id,
+    executionMode:
+      source === "builtin"
+        ? (entry.executionAssessment?.mode ?? "unknown")
+        : (trustedSources?.executionMode(entry.id) ?? "unknown"),
+    executionDiagnostics:
+      source === "builtin"
+        ? entry.executionAssessment?.diagnostics
+        : trustedSources?.executionDiagnostics(entry.id),
     displayName: entry.summary.displayName ?? entry.summary.name ?? entry.id,
     description: entry.summary.description,
     kind: facts.kind,
@@ -175,6 +201,7 @@ export function buildPluginSummary(
     provides: facts.provides,
     requires: facts.requires,
     optional: facts.optional,
+    acceptsWorldData: facts.acceptsWorldData,
     conflicts: facts.conflicts,
     extensions: facts.extensions,
     eventTopics: facts.eventTopics,

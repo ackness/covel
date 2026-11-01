@@ -18,6 +18,7 @@ const plugin = {
   description: "Memory plugin",
   kind: "plugin",
   source: "builtin",
+  executionMode: "code" as const,
   hostState: "loaded",
   runtimeCount: 1,
   provides: ["memory@1"],
@@ -43,7 +44,62 @@ const plugin = {
   languages: { text: ["en"], instructions: ["en"] },
 };
 
+function presentationPlugin(presentation: unknown) {
+  return {
+    ...plugin,
+    runtimes: [
+      {
+        ...plugin.runtimes[0],
+        runtimeType: "function",
+        stage: "post-turn",
+        turnCompletion: { mode: "detached" },
+        presentation,
+      },
+    ],
+  };
+}
+
 describe("shared API contracts", () => {
+  it.each([
+    { calls: 0, generations: 0 },
+    { calls: 2, generations: 1 },
+    { calls: 16, generations: 4 },
+  ])("accepts normalized presentation limits in discovery: %j", (budget) => {
+    const response = { items: [presentationPlugin({ budget })] };
+    expect(apiListResponseSchema(pluginSummarySchema).parse(response)).toEqual(
+      response,
+    );
+  });
+
+  it.each([
+    null,
+    false,
+    {},
+    { budget: { calls: 1 } },
+    { budget: { generations: 1 } },
+    { budget: { calls: -1, generations: 0 } },
+    { budget: { calls: 0.5, generations: 0 } },
+    { budget: { calls: 17, generations: 0 } },
+    { budget: { calls: 1, generations: 5 } },
+    { budget: { calls: 1, generations: 0, used: 1 } },
+    {
+      budget: { calls: 1, generations: 0 },
+      used: { calls: 1, generations: 0 },
+    },
+    { budget: { calls: 1, generations: 0 }, publicAssetNamespaces: ["art"] },
+    {
+      budget: { calls: 1, generations: 0 },
+      ledger: { sourceTurnId: "private" },
+    },
+  ])(
+    "rejects malformed or private presentation discovery fields: %j",
+    (presentation) => {
+      expect(
+        pluginSummarySchema.safeParse(presentationPlugin(presentation)).success,
+      ).toBe(false);
+    },
+  );
+
   it.each([
     {
       type: "submit_actions",
@@ -156,15 +212,47 @@ describe("shared API contracts", () => {
       worldPluginPlanSchema.safeParse({
         worldId: "world-1",
         packs: [],
-        policy: {
-          preset: "traditional-story",
-          plus: ["dice-check"],
-          requires: ["action-check@1"],
+        selection: {
+          requestedPluginIds: ["dice-check"],
+          requiredContracts: ["action-check@1"],
         },
         defaultPluginIds: ["memory"],
-        missing: [{ pluginId: "absent" }, { pluginId: "absent", packId: "p" }],
+        diagnostics: [
+          { code: "missing-plugin", path: "plugins[0]", pluginId: "absent" },
+          {
+            code: "missing-plugin",
+            path: "packs",
+            pluginId: "absent",
+            packId: "p",
+          },
+        ],
       }).success,
     ).toBe(true);
+  });
+
+  it("preserves explicitly public labels in world data omission notices", () => {
+    const dataNotices = [
+      {
+        level: "warning",
+        code: "receiver-missing",
+        publicLabel: "Starting notes",
+        message: "This data has no plugin to receive it.",
+      },
+    ];
+    expect(
+      worldPluginPlanSchema.parse({
+        worldId: "world-1",
+        packs: [],
+        selection: {
+          requestedPluginIds: [],
+          requiredContracts: [],
+          requiredDataContracts: ["notes@1"],
+        },
+        defaultPluginIds: [],
+        diagnostics: [],
+        dataNotices,
+      }).dataNotices,
+    ).toEqual(dataNotices);
   });
 
   it.each(["verified", "modified", "no-receipt", "unreadable"] as const)(
@@ -287,3 +375,19 @@ it.each([
     code,
   );
 });
+
+it.each(["declarative", "code", "unknown"])(
+  "requires the host execution mode and accepts %s",
+  (executionMode) => {
+    const summary = { ...plugin, executionMode };
+    expect(pluginSummarySchema.parse(summary).executionMode).toBe(
+      executionMode,
+    );
+    const { executionMode: _mode, ...missing } = summary;
+    expect(pluginSummarySchema.safeParse(missing).success).toBe(false);
+    expect(
+      pluginSummarySchema.safeParse({ ...summary, executionMode: "trusted" })
+        .success,
+    ).toBe(false);
+  },
+);

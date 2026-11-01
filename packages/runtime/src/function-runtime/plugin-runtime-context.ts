@@ -1,8 +1,12 @@
+import { createPresentationContext } from "../presentation/context.js";
+import { presentationPolicyError } from "../presentation/policy.js";
+import { PresentationUnavailable } from "../presentation/projection.js";
 import type { UpstreamWorldWrite } from "./upstream-world-model.js";
 import { CharacterHistoryReader } from "../orchestration/character-history.js";
 /**
- * The context a function handler and an agent guard receive. Both get the
- * same fields under the same rules, whatever the plugin's source: a bundled
+ * General function handlers and agent guards share these capabilities.
+ * Presentation invocations use a separate restricted builder before this path.
+ * Fields follow the same rules whatever the plugin's source: a bundled
  * plugin has no capability a community plugin lacks. Source changes only
  * what the security rules require (a community plugin's HTTP calls must
  * match its `permissions.http`).
@@ -73,6 +77,7 @@ import {
 } from "./runtime-abort-boundaries.js";
 
 export interface PluginRuntimeContextOptions {
+  readonly presentationSnapshot?: import("@covel/shared").PresentationSnapshot;
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -131,6 +136,7 @@ export interface PluginRuntimeContextOptions {
 }
 
 export interface PluginRuntimeContext {
+  readonly presentation?: import("../presentation/state.js").PresentationState;
   /** What the handler or guard receives. */
   readonly context: FunctionHandlerContext;
   /** Aborted by a player abort, the deadline, or completion. */
@@ -153,7 +159,7 @@ export interface PluginRuntimeContext {
   dispose(): void;
 }
 
-export async function createPluginRuntimeContext({
+async function createOrdinaryPluginRuntimeContext({
   manifest,
   input,
   loaded,
@@ -663,4 +669,18 @@ export async function createPluginRuntimeContext({
     dispose: () =>
       turnExecutionSignal?.removeEventListener("abort", relayTurnAbort),
   };
+}
+
+export async function createPluginRuntimeContext(
+  options: PluginRuntimeContextOptions,
+): Promise<PluginRuntimeContext> {
+  if (options.manifest.presentation !== undefined) {
+    if (
+      presentationPolicyError(options.manifest) ||
+      !options.presentationSnapshot
+    )
+      throw new PresentationUnavailable();
+    return createPresentationContext(options, options.presentationSnapshot);
+  }
+  return createOrdinaryPluginRuntimeContext(options);
 }

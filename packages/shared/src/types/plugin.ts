@@ -483,6 +483,9 @@ export interface SlashCommandInvocation {
 
 /** Root-owned contribution fields in the compiled execution record. */
 export interface RuntimeManifest {
+  readonly presentation?: import("@covel/plugin-handlers-utils").PresentationDeclaration & {
+    readonly publicAssetNamespaces?: readonly string[];
+  };
   readonly name: string;
   /**
    * Plugin ID this runtime belongs to.

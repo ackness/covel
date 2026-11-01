@@ -52,6 +52,7 @@ for (const width of [1280, 390]) {
             version: "1.1.0",
             description: "Updated plugin",
             author: null,
+            executionMode: "declarative",
             hasServerCode: false,
             trustedSource: false,
             capabilities: packageCapabilities(false),

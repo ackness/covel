@@ -17,6 +17,8 @@
     "primary": "主导航"
   },
   "session": {
+    "unavailableWorldPacks": "世界推荐的玩法包不可用。可以选择其他玩法包，或按当前选择开局。",
+    "worldSelectionTags": "世界标签：{{tags}}",
     "operationFailedNotice": "本回合有 {{count}} 个操作没有生效。",
     "operationFailedNotice_one": "本回合有 {{count}} 个操作没有生效。",
     "operationFailedNotice_other": "本回合有 {{count}} 个操作没有生效。",
@@ -297,9 +299,13 @@
       "hint": "插件已关闭或正在等待你批准时，分配给它的数据会在启用后导入。",
       "hide": "隐藏",
       "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
-      "receiverMissing": "“{{source}}”：没有启用的插件接收这份数据。",
+      "labeled": "{{source}}: {{message}}",
+      "receiverMissing": "这些数据没有插件接收。",
       "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
-      "notImported": "有一部分数据没有导入（详情）"
+      "notImported": "有一部分数据没有导入（详情）",
+      "receiverAmbiguous": "这些数据没有插件接收。请选择一个接收插件。",
+      "receiverExcluded": "这些数据没有插件接收。接收插件已停用。",
+      "receiverApprovalRequired": "这些数据没有插件接收。接收插件需要批准。"
     },
     "pendingApproval": {
       "title": "需要批准",
@@ -2083,7 +2089,19 @@
     "faultPaused": "已暂停",
     "resumeFault": "重新启用",
     "faultPausedNotice": "{{plugin}} 因反复出错已在本会话中暂停。",
-    "resumeFaultFailed": "无法重新启用插件，请重试。"
+    "resumeFaultFailed": "无法重新启用插件，请重试。",
+    "declarative": "不执行插件服务端代码 · 无需代码或运行时审批",
+    "modelUse": {
+      "notice": "使用你配置的模型，可能产生费用。",
+      "delegated": "其他运行时委托任务时运行。",
+      "manual": "明确调用时运行。",
+      "event": "收到匹配的事件时运行，也可由玩家操作显式触发。显式调用不受起始回合、冷却和运行次数上限约束。",
+      "setup": "会话准备期间运行。",
+      "scheduled": "按计划运行（每 {{count}} 回合）。",
+      "start": "从第 {{count}} 回合开始。",
+      "cooldown": "两次计划运行至少间隔 {{count}} 回合。",
+      "limit": "每局最多计划运行 {{count}} 次。"
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",

@@ -23,6 +23,7 @@ import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 import { packageCreditFields } from "./package-info.js";
 import { turnActionRequestsSchema } from "./action.js";
 import { pluginSourceTrustSchema } from "./trusted-sources.js";
+import { presentationBudgetSchema } from "./presentation.js";
 
 export { MAX_PLAYER_MESSAGE_CHARS } from "./action.js";
 
@@ -227,6 +228,9 @@ const effectiveTurnCompletionSchema = z.discriminatedUnion("mode", [
 
 const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
   .object({
+    presentation: z
+      .strictObject({ budget: presentationBudgetSchema.required() })
+      .optional(),
     id: z.string().min(1),
     runtimeType: z.enum(["agent", "function"]),
     stage: stageSchema.optional(),
@@ -244,6 +248,18 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
 export const pluginSummarySchema: z.ZodType<PluginSummary> = z
   .object({
     id: z.string().min(1),
+    executionMode: z.enum(["declarative", "code", "unknown"]),
+    executionDiagnostics: z
+      .array(
+        z
+          .object({
+            file: z.string(),
+            field: z.string().optional(),
+            message: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     displayName: i18nTextSchema,
     description: i18nTextSchema,
     kind: z.enum(["core", "plugin"]),
@@ -292,6 +308,7 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
       ]),
     ),
     requires: z.array(z.string()),
+    acceptsWorldData: z.array(z.string()).optional(),
     optional: z.array(z.string()),
     conflicts: z.array(z.string()),
     extensions: z.array(
@@ -348,23 +365,46 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
   .object({
     worldId: z.string().min(1),
     packs: z.array(pluginPackSchema),
-    policy: z
+    selection: z
       .object({
-        preset: z.string().optional(),
-        plus: z.array(z.string()),
-        requires: z.array(z.string()),
+        requestedPluginIds: z.array(z.string()),
+        requiredContracts: z.array(z.string()),
+        requiredDataContracts: z.array(z.string()).optional(),
       })
       .strict(),
     selectedPackId: z.string().optional(),
     defaultPluginIds: z.array(z.string()),
-    missing: z.array(
-      z
-        .object({
-          pluginId: z.string().min(1),
-          packId: z.string().min(1).optional(),
-        })
-        .strict(),
-    ),
+    dataNotices: z
+      .array(
+        z
+          .object({
+            level: z.enum(["warning", "error"]),
+            sourceId: z.string().optional(),
+            publicLabel: z.string().optional(),
+            code: z.string().optional(),
+            message: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
+    diagnostics: z
+      .array(
+        z
+          .object({
+            code: z.enum([
+              "invalid-reference",
+              "redundant-reference",
+              "unknown-pack",
+              "missing-plugin",
+            ]),
+            path: z.string().max(512),
+            reference: z.string().max(256).optional(),
+            pluginId: z.string().max(256).optional(),
+            packId: z.string().max(256).optional(),
+          })
+          .strict(),
+      )
+      .max(256),
   })
   .strict();
 

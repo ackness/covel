@@ -4,6 +4,10 @@
 
 读这一页之前，先做完[第一个插件](./first-plugin.md)。那一页带你跑通一遍；这一页解释跑通之后要守的规矩。
 
+不需要函数时，用[提示词、数据集与 UI](./prompt-only.md)组合成声明式包，不必生成入口或执行提取。代码审批取决于当前文件，规则见[安装参考](../reference/plugin-installation.md#声明式插件)。
+
+文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
+
 ## 接下来读哪一页
 
 | 你要做的事                             | 读这一页                             |
@@ -78,7 +82,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 `pnpm create-plugin` 的每种模式都把 `PLUGIN.md` 的版本设为 `0.1.0`。发布新版本时改这一处，再用 `pnpm validate:plugin <插件目录>` 检查。
 
-校验通过后，在游戏的准备页选中插件并授权，它才会运行，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
+校验通过后，在游戏的准备页选中插件；宿主根据当前文件确认的声明式包直接运行，代码包按提示授权，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
 ## 我注册的东西要在哪里声明
 
@@ -240,6 +244,8 @@ io:
 ### 想让世界作者提供这份数据
 
 在 `contributes.data` 里给数据空间声明 `version`、`schema` 和 `accepts`，世界包就能把内容导入进来。再加上 `authoring`，世界作者和创作工具就知道这份内容怎么写。做法见[进阶 · 数据契约与世界导入](./advanced.md#数据契约与世界导入)和[世界数据参考](../reference/world-data.md)。
+
+世界通过 `plugins: [plugin:my-plugin]` 独立请求接收插件，或通过 `contract:my-capability@1` 请求能力。缺少提供者只减少对应内容；玩法包选择与派生介绍见[插件选择](../reference/world-data.md#插件选择pluginpolicy)。
 
 如果导入的记录里有嵌套的列表，并且列表项不是用 `id` 而是用别的字段（例如 `label`）区分，声明 `authoring.source.localeArrayKeys: [label]`。这样主文件调整了列表顺序之后，译文仍然对得上同一条记录。
 

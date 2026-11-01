@@ -2,6 +2,8 @@
 
 A tool is a function the model can call during a run. The model gives a name and arguments, the framework runs it, and the result goes back to the model. This page lists every tool, the arguments and return value of each one, how to write your own tool, and how a tool writes data to storage. Plugin authors who write runtime prompts or tools need it.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 There are five kinds of tool:
 
 - **builtin**: included with the framework. Any plugin can use it.
@@ -15,6 +17,12 @@ There are five kinds of tool:
 
 > [!NOTE]
 > The DashScope and OpenAI image generation tools in the table come from the [official community plugin repository](https://github.com/covel-ai/covel-plugins). The matching tools and UI are registered only after you install the plugin and authorize it in a session.
+
+## Tools for declarative runtimes
+
+[Declarative plugins](./plugin-installation.md#declarative-plugins) can use declared read, UI, completion/control tools and `sync-characters` for validated character records. The central capability table lives in `packages/plugin-handlers-utils/src/framework-tool-names.ts`; a new framework tool needs explicit capability review, never approval by name prefix.
+
+Dataset tools write only datasets declared by the caller's package. Arguments strictly match the tool schema: extra `pluginId` or `namespace` fields are errors and cannot change ownership. Generated tools and imported services use exact names, checked by the final executor's `authorizedToolNames` after hook rewrites. Other plugins' data changes only through their independently admitted write services. Code/runtime exemption replaces neither per-tool approval nor proposal validation/commit and does not widen sub-agent, resume or retry write permissions.
 
 ## Overview
 
@@ -2080,3 +2088,7 @@ Actor output contains dialogue/action segments without a speaker, plus optional 
 ## Delegating actors inside a story
 
 A story agent calls delegate with target: {contract: "character-actor@1"}, character: "Mara", a short brief and optional instruction, without characterId or data. The host resolves names and supplies profile/history. The bundled narrator calls once per actor in plan order, combines successful public segments and discards intent. Failed actors lose staged operations. An operation rejected at final commit loses only that operation with the existing fixed notice.
+
+## Presentation call boundaries
+
+Functions with `presentation` have no tool, service or delegation entry, and cannot emit events, suspend or publish UI / completion. Gateway and media helpers share a durable source-turn allowance. Zero or exhausted allowance refuses dispatch as a normal no-op. Ordinary runtime tool lists are unchanged; see [presentation runtimes](./plugins.md#presentation-runtimes).

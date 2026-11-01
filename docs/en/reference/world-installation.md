@@ -2,6 +2,8 @@
 
 This page explains how to install a world someone else made from GitHub, how to update it, and which data is left alone during an update. Players and world authors should read the first half and the last section. People who build tool integrations should read the API section.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 To make your own world, see [Your first world](../worlds/first-world.md). To publish a world together with the plugins it needs, see [Collections](../ship/collections.md).
 
 The **official catalog** is [covel-worlds](https://github.com/covel-ai/covel-worlds).
@@ -13,6 +15,8 @@ The **official catalog** is [covel-worlds](https://github.com/covel-ai/covel-wor
 
 > [!WARNING]
 > Being listed in the catalog does not mean a world passed a security review. Before you use a third-party world, read its prompts, settings, and media yourself.
+
+Dimensions come only from canonical `data/dimensions.yaml` and its adjacent locale overlays. Installation preview rejects inline manifest dimensions, noncanonical dimension paths and duplicate descriptor sources; see [dimension sources](./world-data.md#dimension-sources).
 
 ## Steps in the settings page
 
@@ -30,7 +34,7 @@ Rules:
 - A normal install does not overwrite anything. If an ID conflicts with an existing folder or a world in the database, the install is refused.
 - Only the world folders you selected are installed. No scripts are run, and no plugin is authorized for you.
 - Plugins under the same link are listed together with the world, and you can install them in one confirmation. The installer does not tick plugins for you, and it does not look for the plugins a world needs somewhere else. The exception is when the repository lists them in a [collection manifest](../ship/collections.md).
-- A world author should state the plugins it needs in `pluginPolicy`. Before a game starts, players check the content, the plugins needed, and their permissions.
+- A world author should state the plugins it needs in `plugins`. Before a game starts, players check the content, the plugins needed, and their permissions.
 
 **Download and safety limits** are the same as for plugin installs. See [Plugin install](./plugin-installation.md) for details:
 

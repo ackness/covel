@@ -126,6 +126,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     expect(session.metadata?.pluginSelection).toEqual({
       requested: ["optional-plugin"],
       excluded: [],
+      requiredDataContracts: [],
     });
     expect(activated).not.toHaveBeenCalled();
     const list = async () =>
@@ -897,7 +898,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         id: "tabletop-world",
         name: "Tabletop World",
         description: "Test world",
-        metadata: { pluginPolicy: { requires: ["action-check@1"] } },
+        metadata: { plugins: ["contract:action-check@1"] },
         createdAt: "2026-10-03T00:00:00.000Z",
       });
 
@@ -917,6 +918,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         requested: [],
         excluded: [],
         requiredContracts: ["action-check@1"],
+        requiredDataContracts: [],
       });
 
       // Turning the provider off is the player's choice; the requirement stays
@@ -936,10 +938,10 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     it("starts a world whose required contract has no provider, and names it", async () => {
       await store.upsertWorld({
-        id: "unplayable-world",
-        name: "Unplayable World",
+        id: "partial-world",
+        name: "Partial World",
         description: "Test world",
-        metadata: { pluginPolicy: { requires: ["absent-check@1"] } },
+        metadata: { plugins: ["contract:absent-check@1"] },
         createdAt: "2026-10-03T00:00:00.000Z",
       });
 
@@ -948,7 +950,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: "sess-unmet-world",
-          worldId: "unplayable-world",
+          worldId: "partial-world",
           plugins: [],
         }),
       });
@@ -965,6 +967,36 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           pluginSelection: { requiredContracts: ["absent-check@1"] },
         },
       });
+      registry.register(
+        makeEntry({
+          id: "late-provider",
+          source: "builtin",
+          summary: makeSummary({
+            id: "late-provider",
+            provides: ["absent-check@1"],
+          }),
+        }),
+      );
+      const session = (await store.getSession("sess-unmet-world"))!;
+      const fixed = resolveSessionPluginSet(
+        session.activePlugins ?? [],
+        registry.getAll(),
+        ["absent-check@1"],
+      );
+      expect(fixed.active).not.toContain("late-provider");
+      expect(fixed.unmet).toContainEqual(
+        expect.objectContaining({ contract: "absent-check@1" }),
+      );
+      const unknown = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-unknown",
+          worldId: "partial-world",
+          plugins: ["never-installed"],
+        }),
+      });
+      expect(unknown.status).toBe(400);
     });
 
     it("starts a world with dimensions no active plugin keeps, without them", async () => {
@@ -1298,7 +1330,11 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(res.status).toBe(200);
       expect(
         (await store.getSession(SESSION_ID))?.metadata?.pluginSelection,
-      ).toEqual({ requested: ["optional-plugin"], excluded: ["narrator"] });
+      ).toEqual({
+        requested: ["optional-plugin"],
+        excluded: ["narrator"],
+        requiredDataContracts: [],
+      });
     });
 
     it("refuses to disable the plugin that holds the session's dimensions", async () => {
@@ -1400,7 +1436,12 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       );
       await store.updateSession(SESSION_ID, {
-        activePlugins: ["narrator", "optional-plugin", "forged-core"],
+        activePlugins: [
+          "narrator",
+          "pregame",
+          "optional-plugin",
+          "forged-core",
+        ],
         updatedAt: new Date().toISOString(),
       });
 

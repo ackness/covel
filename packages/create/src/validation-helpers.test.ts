@@ -1,7 +1,8 @@
+import { validateWorldManifest } from "@covel/shared";
 import { describe, expect, it } from "vitest";
 import {
-  dropInvalidDimensions,
   findLoreQualityErrors,
+  normalizeGeneratedManifest,
 } from "./validation-helpers.js";
 
 function loreWith(content: string): string {
@@ -50,44 +51,17 @@ describe("findLoreQualityErrors", () => {
   });
 });
 
-describe("dropInvalidDimensions", () => {
-  it("removes only the dimensions that do not validate and reports each", () => {
-    const manifest: Record<string, unknown> = {
-      dimensions: {
-        coins: {
-          name: "Coins",
-          schema: { type: "integer", minimum: 0 },
-          initialValue: 8,
-        },
-        // `boolean` is not a schema keyword; the model meant `type: boolean`.
-        discoveries: {
-          name: "Discoveries",
-          schema: {
-            type: "object",
-            properties: { visited: { boolean: true } },
-          },
-          initialValue: {},
-        },
-        // The initial value does not satisfy its own schema.
-        morale: {
-          name: "Morale",
-          schema: { type: "integer", maximum: 5 },
-          initialValue: 9,
-        },
-      },
-    };
-
-    const warnings = dropInvalidDimensions(manifest);
-
-    expect(Object.keys(manifest.dimensions as object)).toEqual(["coins"]);
-    expect(warnings).toHaveLength(2);
-    expect(warnings[0]).toContain('dropped dimension "discoveries"');
-    expect(warnings[1]).toContain('dropped dimension "morale"');
-  });
-
-  it("leaves a manifest without dimensions untouched", () => {
-    const manifest: Record<string, unknown> = { id: "plain" };
-    expect(dropInvalidDimensions(manifest)).toEqual([]);
-    expect(manifest).toEqual({ id: "plain" });
+describe("obsolete generated dimensions", () => {
+  it("leaves obsolete inline dimensions for strict validation to reject", () => {
+    const manifest = { id: "plain", dimensions: {} };
+    expect(normalizeGeneratedManifest(manifest)).toEqual([]);
+    expect(validateWorldManifest(manifest).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "dimensions",
+          message: expect.stringContaining("data/dimensions.yaml"),
+        }),
+      ]),
+    );
   });
 });

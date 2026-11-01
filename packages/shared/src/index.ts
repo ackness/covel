@@ -272,6 +272,7 @@ export {
   KERNEL_PLUGIN_DATA_OWNER_PREFIX,
   hiddenPluginDataNamespace,
   isControlPlanePluginDataNamespace,
+  PRESENTATION_BUDGET_NAMESPACE,
   isHiddenPluginDataNamespace,
   pluginDataEntry,
   isKernelPluginDataOwner,
@@ -419,7 +420,9 @@ export {
   characterSchemaSchema,
   worldManifestSchema,
   worldIdSchema,
-  worldPluginPolicySchema,
+  worldPluginReferenceSchema,
+  worldPluginsSchema,
+  pluginPitchSchema,
   WORLD_ACCENT_PATTERN,
   worldAccentColorSchema,
   worldDimensionsSchema,
@@ -434,11 +437,7 @@ export {
   worldStartingConditionsSchema,
 } from "./schemas/world.js";
 
-export type {
-  WorldManifestInput,
-  WorldManifest,
-  WorldPluginPolicy,
-} from "./schemas/world.js";
+export type { WorldManifestInput, WorldManifest } from "./schemas/world.js";
 export type {
   DimensionValueType,
   DimensionValueSchema,
@@ -681,7 +680,11 @@ export {
   validateRandomIntRange,
 } from "@covel/plugin-handlers-utils";
 
-export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
+export {
+  FRAMEWORK_TOOL_NAMES,
+  FRAMEWORK_TOOL_CAPABILITIES,
+  isDeclarativeFrameworkTool,
+} from "@covel/plugin-handlers-utils";
 
 export { isValidPluginSetting } from "./plugin-settings.js";
 
@@ -755,3 +758,22 @@ export type {
   CharacterHistory,
 } from "@covel/plugin-handlers-utils";
 export * from "./schemas/orchestration.js";
+
+export * from "./schemas/presentation.js";
+export {
+  PRESENTATION_REASONS,
+  PresentationBudgetExhausted,
+} from "@covel/plugin-handlers-utils";
+export type {
+  PresentationBudget,
+  PresentationDeclaration,
+  PresentationStory,
+  PresentationCharacter,
+  PresentationContext,
+  PresentationReason,
+} from "@covel/plugin-handlers-utils";
+export {
+  presentationNamespace,
+  presentationRuleIssues,
+} from "./schemas/presentation-rules.js";
+export { resolveWorldPluginSelection } from "./world-plugin-selection.js";

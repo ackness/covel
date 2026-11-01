@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { UnmetWorldRequirement, WorldPluginPlan } from "@covel/shared";
 import i18n from "@/i18n/index.js";
 import * as api from "@/services/api.js";
 import {
@@ -7,21 +8,28 @@ import {
   primeWorldRecord,
 } from "@/services/world-records.js";
 import { SessionPrepScreen } from "../session-prep-screen.js";
+import { worldPluginPlanFixture } from "./session-prep-fixtures.js";
 import type { SessionPrepScreenProps } from "../session-prep/types.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type { sessionModelUses } from "../provider-failure-notice.js";
 
 // What the plugin plan and the world-data check report for this world.
-const prep = vi.hoisted(() => ({
-  unmetRequirements: [] as unknown[],
-  preflight: null as unknown,
-  conflict: null as readonly string[] | null,
-  turnOffPlugins: (() => {}) as (ids: readonly string[]) => void,
-  slots: [] as ResolvedSlot[],
-  plugins: [] as Parameters<typeof sessionModelUses>[0],
-  bindings: {} as Record<string, string>,
-  refresh: vi.fn(),
-}));
+const prep = vi.hoisted(() => {
+  const unmetRequirements: UnmetWorldRequirement[] = [];
+  const diagnostics: WorldPluginPlan["diagnostics"] = [];
+  return {
+    unmetRequirements,
+    diagnostics,
+    omitPlanDiagnostics: false,
+    preflight: null as unknown,
+    conflict: null as readonly string[] | null,
+    turnOffPlugins: (() => {}) as (ids: readonly string[]) => void,
+    slots: [] as ResolvedSlot[],
+    plugins: [] as Parameters<typeof sessionModelUses>[0],
+    bindings: {} as Record<string, string>,
+    refresh: vi.fn(),
+  };
+});
 
 vi.mock("@/services/api.js", () => ({
   getWorldOverlay: vi.fn(),
@@ -39,20 +47,34 @@ vi.mock("@/hooks/use-slot-config.js", () => ({
   useSlotConfig: () => ({ resolvedSlots: prep.slots, refresh: prep.refresh }),
 }));
 vi.mock("../session-prep/use-plugin-selection.js", () => ({
-  usePluginSelection: () => ({
-    enabledPluginIds: ["narrator"],
-    requestedPluginIds: ["narrator"],
-    excludedPluginIds: [],
-    enabledPluginSummaries: prep.plugins,
-    selectedPluginIdSet: new Set(),
-    pluginPlan: {},
-    pluginPlanLoading: false,
-    pluginPlanError: null,
-    missingPluginIds: [],
-    unmetRequirements: prep.unmetRequirements,
-    dependentsOff: [],
-    turnOffPlugins: prep.turnOffPlugins,
-  }),
+  usePluginSelection: (worldId: string) => {
+    const pluginPlan = worldPluginPlanFixture(
+      worldId,
+      {
+        requestedPluginIds: ["narrator"],
+        requiredContracts: prep.unmetRequirements.map((item) => item.contract),
+      },
+      prep.diagnostics,
+    );
+    // Deliberately simulate an incomplete runtime snapshot without weakening
+    // the shared plan contract or the normal typed fixture.
+    if (prep.omitPlanDiagnostics)
+      Reflect.deleteProperty(pluginPlan, "diagnostics");
+    return {
+      enabledPluginIds: ["narrator"],
+      requestedPluginIds: ["narrator"],
+      excludedPluginIds: [],
+      enabledPluginSummaries: prep.plugins,
+      selectedPluginIdSet: new Set(),
+      pluginPlan,
+      pluginPlanLoading: false,
+      pluginPlanError: null,
+      missingPluginIds: [],
+      unmetRequirements: prep.unmetRequirements,
+      dependentsOff: [],
+      turnOffPlugins: prep.turnOffPlugins,
+    };
+  },
 }));
 vi.mock("../session-prep/use-world-data-preflight.js", () => ({
   useWorldDataPreflight: () => ({
@@ -115,6 +137,8 @@ function props(onStart = vi.fn()): SessionPrepScreenProps {
 beforeEach(async () => {
   vi.clearAllMocks();
   prep.unmetRequirements = [];
+  prep.diagnostics = [];
+  prep.omitPlanDiagnostics = false;
   prep.preflight = null;
   prep.conflict = null;
   prep.turnOffPlugins = vi.fn();
@@ -267,6 +291,37 @@ describe("starting without model credentials", () => {
 });
 
 describe("session prep when the world relies on something missing", () => {
+  it("keeps preparation usable when a partial plan snapshot omits diagnostics", async () => {
+    prep.omitPlanDiagnostics = true;
+    const onStart = vi.fn();
+    render(<SessionPrepScreen {...props(onStart)} />);
+    expect(screen.queryByTestId("unavailable-world-packs")).toBeNull();
+    await clickStart();
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+    expect(onStart).toHaveBeenCalledWith(["narrator"], undefined, [], "player");
+  });
+
+  it("shows an unavailable pack notice without blocking creation", async () => {
+    prep.diagnostics = [
+      {
+        code: "unknown-pack",
+        path: "plugins[0]",
+        reference: "pack:unavailable",
+        packId: "unavailable",
+      },
+    ];
+    const onStart = vi.fn();
+    render(<SessionPrepScreen {...props(onStart)} />);
+    const notice = screen.getByTestId("unavailable-world-packs");
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(notice.textContent).toContain(
+      i18n.t("session.unavailableWorldPacks"),
+    );
+    expect(notice.textContent).toContain("unavailable");
+    await clickStart();
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+  });
+
   it("names a required contract without a provider and still starts", async () => {
     prep.unmetRequirements = [
       { contract: "action-check@1", code: "missing-provider" },

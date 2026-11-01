@@ -15,6 +15,10 @@ const record = (lore: string) => ({
   name: "W",
   description: "",
   lore,
+  metadata: {
+    plugins: ["pack:example", "plugin:missing"],
+    pluginPitch: { label: "Watch" },
+  },
   createdAt: "2026-01-01",
 });
 
@@ -64,9 +68,11 @@ describe("world records", () => {
     act(() => invalidateWorldRecord("w"));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.world?.lore).toBe("two");
+    expect(result.current.world?.metadata).toEqual(record("two").metadata);
     // The first fetch finishing late does not replace the newer record.
     await act(async () => releaseFirst(record("one")));
     expect(result.current.world?.lore).toBe("two");
+    expect(result.current.world?.metadata).toEqual(record("two").metadata);
     expect(getWorld).toHaveBeenCalledTimes(2);
   });
 

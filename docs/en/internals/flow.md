@@ -1239,3 +1239,9 @@ Each round persists its outcome once; the request emits one final completion. Re
 ## Bundled dialogue composition
 
 Dialogue uses one read-only pre-turn policy call to prepare an optional name-only plan. The story agent delegates and composes inside its own tool loop. Planning writes no state and owns no actor operations; those settle with the story. Policy order and continuation advice are plugin behaviour, leaving kernel stages, barriers and advancement scheduling unchanged.
+
+## Presentation execution and durable sources
+
+Zero-budget selectors read a validated public candidate and settle valid owned writes with the story. Positive-budget functions use the existing durable queue; changed eligibility skips them without ordinary detached foreground fallback. Transaction reads freeze bounded final messages and accepted own data, with no plugin, network or filesystem work. Repeated source suspension carries the same withheld descriptor; failed stories release no generation. Workers read only that projection; source retries retain original lineage and allowance. Newer display overrides win at commit. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
+
+Queue capacity refusal settles only the presentation, preserving the source transaction. Scoped retries of zero-budget selectors use a host-rebuilt snapshot of committed public story; manual requests cannot supply this source.

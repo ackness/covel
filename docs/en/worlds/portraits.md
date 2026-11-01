@@ -257,7 +257,7 @@ If the world has a second language, the translated names are written in `media/p
 
 **This session must enable the plugin that shows portraits.** The built-in one is "Character Profiles" (`character-blueprint`). It is included in the "Dialogue Mode" gameplay pack (`dialogue-mode`). It is not in the "Traditional Story" pack (`traditional-story`). Use either of these two ways:
 
-- Add `character-blueprint` to `pluginPolicy.plus` in `world.yaml`, or change `pluginPolicy.preset` to `dialogue-mode`.
+- Add `character-blueprint` to `plugins` in `world.yaml`, or change `plugins` to `dialogue-mode`.
 - Or, on the session-prep screen, expand "Customize plugins and advanced settings" and select "Character Profiles".
 
 If the plugin is not enabled, the images and their manifest are skipped, and a notice is shown when the session starts.
@@ -326,3 +326,7 @@ For what each world should convey, and what must not be drawn wrong, see [world 
 - **Add background pictures to places.** See [add scene pictures to your world](./scenes.md).
 - **Set the art style for the whole world, and know what to check before delivery.** See [world art direction](./art-direction.md).
 - **Show the pictures in the world list and world details, with an introduction.** See [gallery information](./art-direction.md#gallery-data-and-front-end-use).
+
+## Public identity for present characters
+
+Story-cue selectors use names, aliases and viewpoint identity to exclude the current character without reading private profiles. Portrait slots still consume existing public assets. See [presentation runtimes](../reference/plugins.md#presentation-runtimes); portrait generation commands and files are unchanged.

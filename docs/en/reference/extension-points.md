@@ -2,6 +2,8 @@
 
 Some work is not done by the kernel itself. Instead, it is handed to plugins: adding a passage to the prompt, compressing the history, or filling a slot in the interface. For each such job, the kernel defines a versioned contract called an **extension point**. A plugin that implements it is called a **provider**.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 This page explains how to declare and register a provider, how the kernel combines several providers, and the inputs and outputs of two extension points: session world context and history compression. Plugin authors who write providers need it.
 
 For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package. Function runtimes and tools call services, and an agent can import a model-facing service as a tool; see [How tools and agents use services](./plugin-extensions.md#how-tools-and-agents-use-services).
@@ -9,6 +11,10 @@ For requests or follow-up work between packages, choose a service or event from 
 To have another agent answer a brief, no extension point is needed: the provider is an agent runtime that declares `schedule.subagentOnly` and `io.output.contract`, and the caller runs it as a [sub-agent](./plugins.md#sub-agents) with `ctx.agents.run` or the `delegate` tool. A sub-agent runs inside the caller's execution, can be found by contract in another package, and returns output; when allowed, it can stage write-service operations that commit with the caller.
 
 Framework schema ownership does not imply a kernel extension point. [`turn-policy@1` and `character-actor@1`](./plugin-extensions.md#orchestration-contracts) are optional service/runtime contracts, without the extension-point exemption for story dependencies.
+
+## Declarative consumers
+
+[Declarative plugins](./plugin-installation.md#declarative-plugins) can import read/write services through versioned contracts but cannot register executable service or extension providers. The host reads static prompt segments and UI. Resolution still requires one active, independently admitted provider. Missing, paused and ambiguous providers retain existing outcomes; there is no first-provider guess. Imports are optional by default and do not automatically enable unrelated packages. Write services retain provider identity and commit rules; the caller's exemption cannot authorize provider server code.
 
 ## Declaring and registering
 
@@ -239,3 +245,7 @@ For the return rules of hooks, see [Hooks](./hooks.md#how-an-event-runs). No ret
 ## Character composition example
 
 turn-policy@1 and character-actor@1 are optional service/runtime contracts, not kernel extension points. The bundled dialogue planner and story agent compose them through [ordinary communication APIs](./plugin-extensions.md#orchestration-contracts).
+
+## Presentation state and UI slots
+
+Presentation adds no extension point. Restricted functions update owned display data; `ui.slot@1` providers consume it through their existing interface. Missing assets or no output degrade only that position. The policy does not expand a slot provider’s ordinary context; see [presentation runtimes](./plugins.md#presentation-runtimes).

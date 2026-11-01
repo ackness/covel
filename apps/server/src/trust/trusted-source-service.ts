@@ -4,6 +4,10 @@ import path from "node:path";
 import {
   computePluginCapabilities,
   packageHasServerCode,
+  assessPluginExecution,
+  unknownExecutionAssessment,
+  readPackageInventory,
+  type PluginExecutionAssessment,
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -33,6 +37,7 @@ interface VerifiedPackage extends PackageIntegrityResult {
   signature?: string;
   capabilities?: PluginCapabilities;
   hasServerCode?: boolean;
+  assessment: PluginExecutionAssessment;
 }
 export type TrustedSourceService = ReturnType<
   typeof createTrustedSourceService
@@ -70,40 +75,66 @@ export function createTrustedSourceService({
     if (event.type === "plugin-registered") results.delete(event.pluginId);
   });
   async function refresh(pluginId: string): Promise<void> {
-    const entry = registry.get(pluginId);
+    const entry = registry.getCurrent(pluginId);
     if (!entry || entry.source !== "community" || !entry.rootPath) return;
     try {
       const signature = await packageStatSignature(entry.rootPath);
       const cached = results.get(pluginId);
       if (cached?.entry === entry && cached.signature === signature) return;
       results.delete(pluginId);
-      const result = await checkPackageIntegrity(entry.rootPath);
+      const inventory = await readPackageInventory(entry.rootPath).catch(
+        () => undefined,
+      );
+      const result = await checkPackageIntegrity(
+        entry.rootPath,
+        inventory?.files,
+      );
       // Do not cache a digest assembled while the directory was changing.
       const after = await packageStatSignature(entry.rootPath);
-      if (signature !== after) result.status = "modified";
+      const stable = signature === after;
+      if (!stable) result.status = "modified";
       const root = entry.packageManifest;
       const runtimes = entry.manifests ?? [];
-      const hasServerCode =
-        root && result.files
-          ? packageHasServerCode(result.files, root, runtimes)
-          : undefined;
+      const bound =
+        stable &&
+        inventory !== undefined &&
+        inventory.digest === entry.executionAssessment?.digest;
+      let assessment =
+        stable && root && inventory
+          ? assessPluginExecution({
+              files: inventory.files,
+              directories: inventory.directories,
+              root,
+              runtimes,
+            })
+          : unknownExecutionAssessment();
+      // New files cannot authorize an old parsed definition, even when both
+      // versions contain only data. Reload publishes the matching definition.
+      if (!bound && assessment.mode === "declarative")
+        assessment = unknownExecutionAssessment();
+      const hasServerCode = packageHasServerCode(assessment);
       const capabilities =
-        root && hasServerCode !== undefined
+        root && bound
           ? computePluginCapabilities({ root, runtimes, hasServerCode })
           : undefined;
-      if (registry.get(pluginId) !== entry) return;
+      if (registry.getCurrent(pluginId) !== entry) return;
       results.set(pluginId, {
         ...result,
         entry,
-        signature: after,
+        signature: stable && inventory ? after : undefined,
         hasServerCode,
         capabilities,
+        assessment,
       });
       if (result.status === "unreadable")
         console.warn(`[trusted-sources] Cannot read package ${pluginId}`);
     } catch (error) {
-      if (registry.get(pluginId) === entry)
-        results.set(pluginId, { entry, status: "unreadable" });
+      if (registry.getCurrent(pluginId) === entry)
+        results.set(pluginId, {
+          entry,
+          status: "unreadable",
+          assessment: unknownExecutionAssessment(),
+        });
       console.warn(
         `[trusted-sources] Verification failed for ${pluginId}:`,
         error,
@@ -111,21 +142,25 @@ export function createTrustedSourceService({
     }
   }
   async function ensureFresh(pluginId: string): Promise<void> {
-    const existing = pending.get(pluginId);
-    if (existing) {
-      await existing;
-      return;
-    }
-    const work = refresh(pluginId);
-    pending.set(pluginId, work);
-    try {
-      await work;
-    } finally {
-      if (pending.get(pluginId) === work) pending.delete(pluginId);
+    // Publication may replace an entry while another request inspects it.
+    // Join that inspection, then inspect the replacement instead of reusing it.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let work = pending.get(pluginId);
+      if (!work) {
+        work = refresh(pluginId);
+        pending.set(pluginId, work);
+      }
+      try {
+        await work;
+      } finally {
+        if (pending.get(pluginId) === work) pending.delete(pluginId);
+      }
+      if (results.get(pluginId)?.entry === registry.getCurrent(pluginId))
+        return;
     }
   }
   function current(pluginId: string): VerifiedPackage | undefined {
-    const entry = registry.get(pluginId);
+    const entry = registry.getCurrent(pluginId);
     const result = results.get(pluginId);
     return entry?.source === "community" && result?.entry === entry
       ? result
@@ -144,6 +179,17 @@ export function createTrustedSourceService({
     } catch {
       return false;
     }
+  }
+  function executionMode(pluginId: string): PluginExecutionAssessment["mode"] {
+    return current(pluginId)?.assessment.mode ?? "unknown";
+  }
+  function isDeclarative(pluginId: string): boolean {
+    // A frozen code-era registry cannot borrow a newer content-only exemption.
+    // Its tools/services still refer to executable registrations from that era.
+    return (
+      executionMode(pluginId) === "declarative" &&
+      registry.get(pluginId)?.executionAssessment?.mode === "declarative"
+    );
   }
   function summary(pluginId: string): PluginSourceTrust {
     const result = current(pluginId);
@@ -193,9 +239,20 @@ export function createTrustedSourceService({
     );
   }
   async function verifyAll(): Promise<void> {
-    for (const entry of registry.getAll().values()) {
-      if (entry.source === "community" && entry.rootPath)
-        await ensureFresh(entry.id);
+    // Another package's awaited activation can republish an earlier entry.
+    // Finish against live publications, with the same bounded retry as admission.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const entries = [...registry.getAll().values()].filter(
+        (entry) => entry.source === "community" && entry.rootPath,
+      );
+      for (const entry of entries) await ensureFresh(entry.id);
+      if (
+        entries.every(
+          (entry) =>
+            results.get(entry.id)?.entry === registry.getCurrent(entry.id),
+        )
+      )
+        return;
     }
   }
   return {
@@ -203,6 +260,11 @@ export function createTrustedSourceService({
     verifyAll,
     ensureFresh,
     implicitGrant,
+    executionMode,
+    executionDiagnostics: (pluginId: string) =>
+      current(pluginId)?.assessment.diagnostics ??
+      unknownExecutionAssessment().diagnostics,
+    isDeclarative,
     summary,
     recordSnapshot,
   };

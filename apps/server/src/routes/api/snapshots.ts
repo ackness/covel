@@ -338,14 +338,18 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
           500,
         );
       }
-      // Community code is approved per session, so a fork starts without it.
+      // A fork cannot inherit a code grant. Fresh declarative content needs none.
       const pluginRegistry = c.get("pluginRegistry");
+      await c.get("trustedSources")?.verifyAll();
       const childActivePlugins = snapshotSession.activePlugins.filter(
         (pluginId) => {
           const entry = pluginRegistry?.get(pluginId);
           if (!pluginRegistry) return true;
           if (!entry) return true;
-          return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
+          return (
+            getPluginTrustInfo(pluginId, entry?.source).autoLoad ||
+            Boolean(c.get("trustedSources")?.isDeclarative(pluginId))
+          );
         },
       );
       // A session's dimension data lives under the provider it bound, and the

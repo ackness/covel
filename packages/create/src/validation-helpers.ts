@@ -7,7 +7,7 @@
  * and enforces lore quality rules.
  */
 
-import { resolveI18nText, validateDimensionData } from "@covel/shared";
+import { resolveI18nText } from "@covel/shared";
 
 // `cover` and `accentColor` are left out on purpose: a generated world ships
 // no picture, so a model-written path would name a file that does not exist.
@@ -19,11 +19,14 @@ const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "summary",
   "defaultLocale",
   "tags",
-  "pluginPolicy",
+  "plugins",
+  "pluginPitch",
   "pluginSettings",
   "worldData",
   "characterSchema",
-  "dimensions",
+  "author",
+  "license",
+  "homepage",
   "defaultViewMode",
 ]);
 
@@ -54,6 +57,8 @@ export function normalizeGeneratedManifest(
   const repairs: string[] = [];
 
   for (const key of Object.keys(manifest)) {
+    // Obsolete dimension answers must reach strict validation and retry.
+    if (key === "dimensions") continue;
     if (!WORLD_MANIFEST_ROOT_KEYS.has(key)) {
       delete manifest[key];
       repairs.push(`removed unknown root field "${key}"`);
@@ -69,29 +74,6 @@ export function normalizeGeneratedManifest(
   // coerced or rewritten according to a fixed list of world-building topics.
 
   return repairs;
-}
-
-/**
- * Remove every dimension whose definition does not validate, and report each
- * one. A single bad schema keyword then costs one dimension, not the whole
- * generated world and another full model call.
- */
-export function dropInvalidDimensions(
-  manifest: Record<string, unknown>,
-): string[] {
-  const dimensions = manifest.dimensions;
-  if (!isRecord(dimensions)) return [];
-  const dropped: string[] = [];
-  for (const [id, definition] of Object.entries(dimensions)) {
-    const validation = validateDimensionData(id, definition);
-    if (validation.valid) continue;
-    delete dimensions[id];
-    const first = validation.errors?.[0];
-    dropped.push(
-      `dropped dimension "${id}": ${first ? `${first.path}: ${first.message}` : "invalid definition"}`,
-    );
-  }
-  return dropped;
 }
 
 function manifestText(value: unknown, locale: string): string | undefined {

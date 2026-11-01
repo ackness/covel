@@ -4,6 +4,7 @@ import type { SessionPlugin } from "./plugin-api.js";
 export interface PluginDiagnostic extends Pick<
   SessionPlugin,
   | "source"
+  | "executionMode"
   | "hostState"
   | "sessionState"
   | "serverCodeApproved"

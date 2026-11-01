@@ -1,3 +1,8 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { parsePluginMd, type PluginRegistryEntry } from "@covel/plugin-loader";
+import { inventoryWorldData } from "../../../world-data/requirements.js";
+import { BUILTIN_PLUGIN_PACKS } from "../../../config/plugin-packs.js";
 /**
  * One preview and one batch install for everything under a GitHub URL.
  *
@@ -17,12 +22,12 @@ import {
   COLLECTION_MANIFEST_FILE,
   COLLECTION_MEMBER_LIMIT,
   checkCollection,
+  getRuntimeSpec,
   collectionManifestSchema,
   collectionPluginFacts,
   collectionWorldFacts,
   githubBatchInstallRequestSchema,
   githubPluginPreviewRequestSchema,
-  providedContracts,
   type CollectionManifest,
   type CollectionMember,
   type CollectionPluginFacts,
@@ -32,7 +37,7 @@ import {
   type GithubPackagePreview,
 } from "@covel/shared";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
-import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
+import { pluginContractFacts } from "../../../lib/plugin-descriptor.js";
 import { APP_VERSION } from "../../../lib/app-version.js";
 import { rollbackWorldWithLifecycle } from "../worlds/delete-route.js";
 import {
@@ -107,27 +112,101 @@ const pluginFacts = (
   entries: readonly ExtractedEntry[],
   reserved: ReadonlySet<string>,
   directory: string | undefined,
-) =>
-  collectionPluginFacts(
-    validatePluginBundle(entries, reserved, directory).manifest.plugin,
+) => {
+  const bundle = validatePluginBundle(entries, reserved, directory);
+  return collectionPluginFacts(
+    bundle.manifest.plugin,
+    bundle.declarations.map(({ manifest }) => ({
+      presentation: getRuntimeSpec(manifest).presentation,
+    })),
   );
-const worldFacts = (entries: readonly ExtractedEntry[], packageName: string) =>
-  collectionWorldFacts(
+};
+const worldFacts = (
+  entries: readonly ExtractedEntry[],
+  packageName: string,
+) => ({
+  sourceEntries: entries,
+  ...collectionWorldFacts(
     parseYaml(
       entries
         .find((entry) => entry.relativePath === "world.yaml")!
         .content.toString("utf8"),
     ) as Record<string, unknown>,
+    BUILTIN_PLUGIN_PACKS,
     packageName,
+  ),
+});
+
+async function collectionDataRequirements(
+  worlds: readonly ReturnType<typeof worldFacts>[],
+  plugins: readonly CollectionPluginFacts[],
+  c: Context,
+): Promise<CollectionWorldFacts[]> {
+  const entries = new Map<string, PluginRegistryEntry>(
+    c.get("pluginRegistry")?.getAll() ?? [],
   );
+  for (const plugin of plugins) {
+    const root = parsePluginMd(
+      `---\n${JSON.stringify({ id: plugin.id, description: plugin.id, contributes: { data: plugin.dataDeclarations } })}\n---\n`,
+      `${plugin.id}/PLUGIN.md`,
+    );
+    entries.set(plugin.id, {
+      id: plugin.id,
+      packageManifest: root,
+      manifests: [],
+      loadedRuntimes: new Map(),
+      status: "discovered",
+      source: "community",
+      summary: {
+        id: plugin.id,
+        name: plugin.id,
+        description: plugin.id,
+        kind: "plugin",
+        runtimeCount: 0,
+      },
+    });
+  }
+  const catalogue = {
+    get: (id: string) => entries.get(id),
+    getAll: () => entries,
+  };
+  const temp = await mkdtemp(path.join(tmpdir(), "collection-sources-"));
+  try {
+    const result: CollectionWorldFacts[] = [];
+    for (const [index, world] of worlds.entries()) {
+      const worldRoot = path.join(temp, String(index));
+      await materializeEntries(worldRoot, world.sourceEntries);
+      const inventory = await inventoryWorldData({
+        worldRoot,
+        worldId: world.id,
+        registry: catalogue,
+      });
+      const { sourceEntries: _sourceEntries, ...facts } = world;
+      result.push({
+        ...facts,
+        requires: [
+          ...new Set([...facts.requires, ...inventory.requiredContracts]),
+        ],
+        requiredDataContracts: inventory.requiredDataContracts,
+      });
+    }
+    return result;
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+}
 
 /** Plugins this host already has, as far as resolving a set is concerned. */
 function availablePlugins(c: Context): CollectionPluginFacts[] {
   const registry = c.get("pluginRegistry");
   if (!registry) return [];
   return [...registry.getAll().values()].map((entry) => {
-    const summary = buildPluginSummary(entry);
-    return { id: summary.id, contracts: providedContracts(summary) };
+    return entry.packageManifest
+      ? collectionPluginFacts(
+          entry.packageManifest.plugin,
+          pluginContractFacts(entry).runtimes,
+        )
+      : { id: entry.id, contracts: [] };
   });
 }
 
@@ -343,7 +422,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
     const reserved = c.get("reservedPluginIds") ?? new Set<string>();
     const items: GithubPackagePreview[] = [];
     const plugins: CollectionPluginFacts[] = [];
-    const worlds: CollectionWorldFacts[] = [];
+    const worlds: ReturnType<typeof worldFacts>[] = [];
     const skipped: string[] = [];
     for (const member of members) {
       if (member.kind === "world" && !worldsAllowed) {
@@ -359,7 +438,9 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         member.location.repo,
         member.directory,
       );
-      let summary: Awaited<ReturnType<typeof inspectWorldBundle>>;
+      let summary:
+        | Awaited<ReturnType<typeof inspectWorldBundle>>
+        | ReturnType<typeof inspectBundle>;
       try {
         summary =
           member.kind === "world"
@@ -407,7 +488,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
     problems.push(
       ...skipped.map((message) => ({ level: "warning" as const, message })),
       ...checkCollection({
-        worlds,
+        worlds: await collectionDataRequirements(worlds, plugins, c),
         plugins,
         available: availablePlugins(c),
         hostVersion: APP_VERSION,
@@ -554,7 +635,7 @@ githubCollectionRoutes.post("/collection", async (c) => {
     const reserved = c.get("reservedPluginIds") ?? new Set<string>();
     const prepared: PreparedPackage[] = [];
     const plugins: CollectionPluginFacts[] = [];
-    const worlds: CollectionWorldFacts[] = [];
+    const worlds: ReturnType<typeof worldFacts>[] = [];
     for (const [kind, members] of [
       ["plugin", manifest.plugins],
       ["world", manifest.worlds],
@@ -575,17 +656,24 @@ githubCollectionRoutes.post("/collection", async (c) => {
           worlds.push(worldFacts(bundle, packageName));
           prepared.push({ kind, id, entries: bundle });
         } else {
-          const { pluginId, manifest } = validatePluginBundle(
+          const { pluginId, manifest, declarations } = validatePluginBundle(
             bundle,
             reserved,
             packageName || undefined,
           );
-          plugins.push(collectionPluginFacts(manifest.plugin));
+          plugins.push(
+            collectionPluginFacts(
+              manifest.plugin,
+              declarations.map(({ manifest }) => ({
+                presentation: getRuntimeSpec(manifest).presentation,
+              })),
+            ),
+          );
           prepared.push({ kind, id: pluginId, entries: bundle });
         }
       }
     const errors = checkCollection({
-      worlds,
+      worlds: await collectionDataRequirements(worlds, plugins, c),
       plugins,
       available: availablePlugins(c),
       hostVersion: APP_VERSION,

@@ -1,3 +1,5 @@
+import { presentationSnapshotSchema } from "@covel/shared";
+import { unavailablePresentationJob } from "@covel/runtime";
 import { publicIncarnationTag } from "../session/session-guard.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { turnDigestSchema } from "@covel/shared";
@@ -77,6 +79,42 @@ export function parseStagedRuntimeJobPayload(
   const digest = turnDigestSchema.safeParse(descriptor.turnDigest);
   if (!digest.success || digest.data.turnId !== descriptor.sourceTurnId)
     return undefined;
+  if (descriptor.presentation !== undefined) {
+    const snapshot = presentationSnapshotSchema.safeParse(
+      descriptor.presentation,
+    );
+    const fields = new Set([
+      "jobId",
+      "runtimeId",
+      "pluginId",
+      "sourceTurnId",
+      "sourceExecutionId",
+      "sourceExecutionStartedAt",
+      "sourceLogicalTurn",
+      "sourceLogicalTurnId",
+      "pluginVersion",
+      "upstreamResults",
+      "turnDigest",
+      "presentation",
+    ]);
+    if (
+      Object.keys(descriptor).some((key) => !fields.has(key)) ||
+      !snapshot.success ||
+      !snapshot.data.committed ||
+      snapshot.data.runtimeId !== descriptor.runtimeId ||
+      snapshot.data.pluginId !== descriptor.pluginId ||
+      snapshot.data.sourceTurnId !== descriptor.sourceTurnId ||
+      snapshot.data.sourceExecutionId !== descriptor.sourceExecutionId ||
+      descriptor.upstreamResults.length ||
+      digest.data.playerMessage ||
+      digest.data.actions.length ||
+      digest.data.lastPlayerInput ||
+      digest.data.narrativeText ||
+      digest.data.toolCallSummaries.length ||
+      digest.data.runtimeResults.length
+    )
+      return undefined;
+  }
   return {
     ...payload,
     descriptor: { ...descriptor, turnDigest: digest.data },
@@ -394,6 +432,14 @@ export async function appendRuntimeJobStatus(
       throw error;
     }
     if (!(await ownsRuntimeJobProjection(tx, job))) return undefined;
+    if (
+      TERMINAL_RUNTIME_JOB_STATUSES.has(job.status) &&
+      job.status !== "succeeded"
+    ) {
+      const staged = parseStagedRuntimeJobPayload(job.payload);
+      if (staged?.descriptor.presentation)
+        await unavailablePresentationJob(tx, job.sessionId, staged.descriptor);
+    }
     const existing = await tx.listJobStatus(job.sessionId, {
       progressScopeId: job.jobId,
       jobId: job.jobId,

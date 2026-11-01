@@ -92,6 +92,10 @@ describe("runtime provider selection", () => {
     ]);
     expect(
       (await store.getSession("session"))?.metadata?.pluginSelection,
-    ).toEqual({ requested: ["first"], excluded: ["second"] });
+    ).toEqual({
+      requested: ["first"],
+      excluded: ["second"],
+      requiredDataContracts: [],
+    });
   });
 });

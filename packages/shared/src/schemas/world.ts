@@ -9,7 +9,6 @@ import { viewModeSchema } from "./view-mode.js";
 import { z } from "zod";
 import { canonicalizeLocale } from "@covel/plugin-handlers-utils";
 import type { AttributeDefinition } from "@covel/plugin-handlers-utils";
-import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 import { packageCreditFields } from "./package-info.js";
 export { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 
@@ -228,68 +227,53 @@ export const worldStartingConditionsSchema = z
 
 // ── World Manifest (world.yaml root) ────────────────────────────
 
-const packIdSchema = z
+/** A world reference always names its kind; pack and plugin slugs are distinct. */
+export const worldPluginReferenceSchema = z
   .string()
-  .min(1)
-  .regex(/^[a-z][a-z0-9-]*$/, {
-    message: 'a pack id must be lowercase with hyphens (e.g. "dialogue-mode")',
+  .max(256)
+  .regex(
+    /^(?:(?:pack|plugin):[a-z][a-z0-9-]*|contract:[a-z][a-z0-9.-]*@[1-9][0-9]*)$/,
+    {
+      message:
+        "Expected pack:<slug>, plugin:<slug>, or contract:<name>@<positive version>",
+    },
+  );
+
+export const worldPluginsSchema = z
+  .array(worldPluginReferenceSchema)
+  .max(256)
+  .superRefine((refs, ctx) => {
+    const seen = new Set<string>();
+    refs.forEach((ref, index) => {
+      if (seen.has(ref))
+        ctx.addIssue({
+          code: "custom",
+          path: [index],
+          message: "Redundant duplicate reference",
+        });
+      seen.add(ref);
+    });
   });
 
-const pluginPitchSchema = z
+export const pluginPitchSchema = z
   .object({
     label: i18nTextSchema
-      .describe("Name of this world's selection, shown on the pack card.")
+      .describe(
+        "Label of this world's initial plugin selection. Defaults to the world name.",
+      )
       .optional(),
     description: i18nTextSchema
-      .describe("What the selection offers. Shown to the player.")
+      .describe(
+        "Public description of the selection. Defaults to the world summary.",
+      )
       .optional(),
     reason: i18nTextSchema
-      .describe("Why the selection suits the world. Shown to the player.")
-      .optional(),
-  })
-  .strict();
-
-export const worldPluginPolicySchema = z
-  .object({
-    preset: packIdSchema
       .describe(
-        "ID of the built-in pack a new session starts from, such as `traditional-story` or `dialogue-mode` (`packs/builtin.yaml`).",
-      )
-      .optional(),
-    plus: z
-      .array(z.string().min(1))
-      .describe(
-        "Plugin IDs this world adds to whichever pack the player picks. Never list a `kind: core` plugin: every session has those already.",
-      )
-      .optional(),
-    pitch: pluginPitchSchema
-      .describe(
-        "How the session preparation screen presents `preset` for this world: its own label, description and reason in place of the pack's.",
-      )
-      .optional(),
-    packs: z
-      .array(packIdSchema)
-      .min(1)
-      .describe(
-        "IDs of the built-in packs the player may choose from, in this order. Without it every built-in pack is offered. `preset` must be one of them.",
-      )
-      .optional(),
-    // Contract IDs, not plugin IDs: any installed provider satisfies them.
-    requires: z
-      .array(
-        z.string().regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/, {
-          message:
-            'a required contract must look like "action-check@1" (a contract ID, not a plugin ID)',
-        }),
-      )
-      .describe(
-        "Contract IDs the world needs, such as `action-check@1`. Any installed provider satisfies one. Without one, a session starts without that part of the world and tells the player.",
+        "Why the selection suits this world. Defaults to the world tags; omitted when there are none.",
       )
       .optional(),
   })
   .strict();
-
-export type WorldPluginPolicy = z.infer<typeof worldPluginPolicySchema>;
 
 // ── Character attribute schema (world-declared) ─────────────────
 //
@@ -483,9 +467,14 @@ export const worldManifestSchema = z
       .describe("Free-form catalogue tags, such as genre.")
       .optional(),
     ...packageCreditFields,
-    pluginPolicy: worldPluginPolicySchema
+    plugins: worldPluginsSchema
       .describe(
-        "Which plugins a session of this world starts with. It states intent and locks nothing; the player can change the selection.",
+        "Ordered pack, plugin and contract references. The first pack is the initial selection; other packs remain alternatives. Redundant duplicate references are rejected. Nothing is locked on.",
+      )
+      .optional(),
+    pluginPitch: pluginPitchSchema
+      .describe(
+        "Optional public presentation overrides; absent fields use the world name, summary and tags.",
       )
       .optional(),
     worldData: z
@@ -507,11 +496,6 @@ export const worldManifestSchema = z
       .lazy(() => characterSchemaSchema.omit({ version: true }))
       .describe(
         "Character types and attributes of this world. When present, sessions use it as written and no schema is generated.",
-      )
-      .optional(),
-    dimensions: worldDimensionsSchema
-      .describe(
-        "Dynamic world dimensions keyed by dimension ID. Each entry is one full definition.",
       )
       .optional(),
     /**

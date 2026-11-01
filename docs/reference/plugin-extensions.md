@@ -2,12 +2,18 @@
 
 一个插件很少单独工作：它要读别的插件算出的结果、发事件、调用别人的函数、在界面上画自己的面板。本页说明这些事各用哪个接口、每个接口的边界在哪里。写多个插件互相配合、接新的模型协议、或做自绘界面的作者需要它。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 分工是这样的：框架负责发现、授权、调度、校验、取消和挂载。业务数据的结构、算法、服务商协议和界面组件都留在插件包里。
 
 可以装上直接看的示例：
 
 - [Lifecycle Probe](../../tests/third-party/lifecycle-probe/README.md) 和 [Service Provider Probe](../../tests/third-party/service-provider-probe/README.md)：两个可以独立安装的插件，一起覆盖命令、面板、手动函数、数据提交和服务协作。
 - [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。
+
+## 声明式消费者
+
+[声明式插件](./plugin-installation.md#声明式插件)可以通过版本化契约导入读/写服务，但不能注册可执行服务或扩展提供者。静态提示段和 UI 由宿主读取。服务解析仍要求唯一、活动且独立获准的提供者；缺失、暂停和歧义保持原有语义，不猜第一个提供者。导入默认可选，不会使一个无关插件自动启用。写服务保持提供者身份与既有提交规则，调用方的免代码审批不能授权提供者的服务器代码。
 
 ## 选择通信方式
 
@@ -867,3 +873,7 @@ const plan = await ctx.services.call({
 ## 内置策略与可选故事组合
 
 内置回合策略提供一个名为 turn-policy 的代码专用读服务，通过提供方的 getOwnSettings().strategy 选择五种算法。只启用它时无需会话选择；同时启用其他提供方才需精确选择。对话叙事的函数通过契约调用一次，因此 director 可以借用 gateway；故事 agent 不再导入一次策略。规划结果在进入模型前投影为名字，原始规范请求和角色 ID 留在代码边界。若自定义包注册多个同契约服务，仍需每次注册各有一条属性匹配的声明，不能按契约去重。
+
+## 呈现与通信
+
+呈现函数只从公开故事投影和自己的明确素材 / 展示 namespace 取输入；services、tools、递归和子 agent 在入口拒绝，包括读服务。界面槽位提供方继续从已提交的自有展示状态绘制，不因为呈现策略获得私有数据权限。完整规则见[呈现 runtime](./plugins.md#presentation-runtimes)。

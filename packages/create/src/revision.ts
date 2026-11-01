@@ -24,7 +24,7 @@ export function revisionRequest(revision: WorldRevision): string {
     "",
     "Return the three sections in the same format, and write only what you change:",
     "- A section that the request does not change: write the single word UNCHANGED as its body.",
-    "- In WORLD_YAML, write only the fields you change. In `dimensions`, write only the dimensions you change, each one whole. A field or a dimension you leave out stays as it is.",
+    "- In WORLD_YAML, write only the manifest fields you change. Dimensions belong only in WORLD_PACKAGE_YAML: write only changed dimensions, each one whole; omitted dimensions stay as they are, and null removes one. Use dimensions: {} to clear the entire table.",
     "- In WORLD_PACKAGE_YAML, write only the items you add or change, under their list (`characters`, `lorebook`, `rules`, `contractData`). An item is matched by its `id` (in `contractData`, by `contract` and `key`) and is written whole. An item or a list you leave out stays as it is. Remove a character, lorebook entry or rule with `{ id: <its id>, remove: true }`. Remove a contract record with `{ contract: <contract ID>, key: <record key>, remove: true }`.",
     ...(hasLoreBoundary(splitLore(current.lore))
       ? [
@@ -58,24 +58,13 @@ function mapping(
 
 /**
  * The manifest after a revision: the fields the model wrote, over the
- * current ones. `dimensions` is merged one dimension at a time, so a request
- * about one dimension does not have to repeat the others; `null` removes one.
+ * current ones. Dimension data belongs to the package section.
  */
 function mergeManifest(
   current: Record<string, unknown>,
   revised: Record<string, unknown>,
 ): Record<string, unknown> {
-  const merged = { ...current, ...revised };
-  if (isRecord(current.dimensions) || isRecord(revised.dimensions)) {
-    const dimensions: Record<string, unknown> = {
-      ...(isRecord(current.dimensions) ? current.dimensions : {}),
-      ...(isRecord(revised.dimensions) ? revised.dimensions : {}),
-    };
-    for (const [id, definition] of Object.entries(dimensions))
-      if (definition === null) delete dimensions[id];
-    merged.dimensions = dimensions;
-  }
-  return merged;
+  return { ...current, ...revised };
 }
 
 /** What names an item of a package list: its id, or contract and key. */
@@ -132,6 +121,19 @@ function mergePackage(
   const merged = { ...current };
   for (const [key, value] of Object.entries(revised)) {
     if (typeof value === "string" && UNCHANGED.test(value)) continue;
+    if (key === "dimensions" && isRecord(value)) {
+      const dimensions =
+        Object.keys(value).length === 0
+          ? {}
+          : {
+              ...(isRecord(current.dimensions) ? current.dimensions : {}),
+              ...value,
+            };
+      for (const [id, definition] of Object.entries(dimensions))
+        if (definition === null) delete dimensions[id];
+      merged.dimensions = dimensions;
+      continue;
+    }
     merged[key] = Array.isArray(value)
       ? mergeList(key, Array.isArray(current[key]) ? current[key] : [], value)
       : value;

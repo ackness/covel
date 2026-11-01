@@ -2,6 +2,8 @@
 
 这一页说明 Covel 服务端有哪些安全边界，以及每条边界为什么画在那里。它写给要改服务端、部署托管实例，或者想知道“批准一个社区插件意味着什么”的人。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](../reference/world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 相关内容在别的页面：
 
 - 每条路由的鉴权约定：[`../reference/api.md`](../reference/api.md#鉴权session-owner-token)
@@ -12,6 +14,18 @@
 - 报告漏洞：[`SECURITY.md`](../../SECURITY.md)
 
 下文多次提到“部署档位”（`DEPLOYMENT_TIER`）。`self` 是默认值，指桌面客户端和自己部署给自己用的实例。`demo` 是给公开网页实例用的档位，为以后的官方网页版准备；官方网页版现在还不支持。`commercial` 是给以后可能有的商业版预留的最严格档位：现在没有账号、租户隔离和配额，这个仓库也不为它更新。`demo` 和 `commercial` 都要求令牌，合称托管档位。
+
+插件文件引用按[声明目录规则](../reference/plugins.md#declaration-paths)解析，并检查解析后的真实路径仍在包内。约定的 `output.schema.json` 也不能通过符号链接逃出包，或从父仓库继承。
+
+## 声明式执行边界
+
+[声明式分类](../reference/plugin-installation.md#声明式插件)需要完整、有界、不跟随链接的文件清单，以及与加载定义一致的内容摘要。扫描前后签名不一致、当前 registry 替换或文件读取失败，都不能沿用旧的正面证明。授权读取当前发布的 registry；执行快照只冻结运行材料，不冻结权限。旧代码快照的 runtime、工具和服务不能借用新声明式版本的免审批资格；缓存的代码 runtime 和每次实际模块导入仍要求真实代码与 runtime 授权。
+
+静态提示段和 UI 不需要导入插件代码。浏览器例外严格复用已校验的资源路径、类型、大小限制；服务器引用覆盖该例外。新增代码时旧的静态激活不会变成授权，未批准的重载移除旧注册并发布待批准元数据。声明式状态不进入持久化 runtime 清单，也不写入 approval gate。
+
+声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据由其写服务在自己的身份下修改。最终工具名在 hook/override 改写后仍受 `authorizedToolNames` 约束。服务、子 agent、恢复与重试保留更窄的上下文限制。免代码审批不免模型工具审批，也不免沙箱 `bridge: session` 的当前内容授权；不增加桥接写能力。
+
+整批刷新会有界重试扫描期间被其他包激活重新发布的条目，不能把短暂失效的旧缓存当成当前列表状态。
 
 ## Host profile
 
@@ -528,3 +542,7 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 ## 游戏内主持人身份
 
 准备页的主持人选项只改变新座位允许的游戏动作。它不授予 owner/operator 身份，不绕过 session.create 的 host-profile 检查，也不允许请求伪造 system 来源。演员的亲历历史与提示词是视角辅助，不是对已批准服务端代码的安全沙箱。
+
+## 呈现投影与内核记账
+
+呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。

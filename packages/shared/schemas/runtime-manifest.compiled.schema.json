@@ -5,6 +5,40 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "budget": {
+          "type": "object",
+          "properties": {
+            "calls": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16,
+              "description": "Maximum admitted gateway dispatches per source turn and runtime, shared across retries; omitted means zero."
+            },
+            "generations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4,
+              "description": "Maximum media output units per source turn and runtime, in addition to calls; omitted means zero."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Durable source-turn allowance; cache hits and availability probes cost zero."
+        },
+        "publicAssetNamespaces": {
+          "description": "Public asset namespaces derived by the loader from the owning package's data declarations.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "name": {
       "type": "string",
       "minLength": 1,
@@ -373,7 +407,8 @@
               {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+                "pattern": "^(?!\\/)[a-z0-9_./-]+\\.json$",
+                "description": "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment."
               },
               {
                 "type": "string",
@@ -620,7 +655,8 @@
             {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+              "pattern": "^(?!\\/)[a-z0-9_./-]+\\.json$",
+              "description": "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment."
             },
             {
               "type": "string",
@@ -719,7 +755,8 @@
                       {
                         "type": "string",
                         "minLength": 1,
-                        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+                        "pattern": "^(?!\\/)[a-z0-9_./-]+\\.json$",
+                        "description": "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment."
                       },
                       {
                         "type": "string",

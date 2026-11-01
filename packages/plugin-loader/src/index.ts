@@ -171,3 +171,19 @@ export {
   computePluginCapabilities,
   packageHasServerCode,
 } from "./capabilities.js";
+export {
+  assessPluginExecution,
+  unknownExecutionAssessment,
+} from "./execution-assessment.js";
+export type {
+  PluginExecutionAssessment,
+  PluginExecutionProof,
+} from "./execution-assessment.js";
+export {
+  readPackageInventory,
+  packageFileSignature,
+  packageContentDigest,
+  PACKAGE_INVENTORY_LIMITS,
+  PackageInventoryError,
+} from "./package-inventory.js";
+export type { PackageFile } from "./package-inventory.js";

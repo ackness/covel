@@ -311,3 +311,48 @@ describe("approvals API helpers", () => {
     ).toBe("owner-secret");
   });
 });
+
+it.each(["allow", "deny"] as const)(
+  "consumes an obsolete execution approval without an error toast (%s)",
+  async (decision) => {
+    const toasts: unknown[] = [];
+    const unsubscribe = subscribeToast((toast) => toasts.push(toast));
+    try {
+      mockFetchOnce(
+        {
+          error:
+            "This package no longer requires code or runtime approval; retry the operation",
+          code: "approval_obsolete",
+        },
+        409,
+      );
+      await expect(
+        resolveApproval("obsolete", decision, "session", "sess-1"),
+      ).resolves.toBeUndefined();
+      expect(toasts).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  },
+);
+it("preserves unrelated approval conflicts as failures", async () => {
+  const toasts: unknown[] = [];
+  const unsubscribe = subscribeToast((toast) => toasts.push(toast));
+  try {
+    mockFetchOnce(
+      { error: "Approval scope changed", code: "approval_scope_changed" },
+      409,
+    );
+    await expect(
+      resolveApproval("outdated", "allow", "session", "sess-1"),
+    ).rejects.toMatchObject({ status: 409, code: "approval_scope_changed" });
+    expect(toasts).toEqual([
+      expect.objectContaining({
+        kind: "error",
+        detail: expect.stringContaining("Approval scope changed"),
+      }),
+    ]);
+  } finally {
+    unsubscribe();
+  }
+});

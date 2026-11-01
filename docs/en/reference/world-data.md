@@ -13,6 +13,30 @@ Some terms used throughout this page:
 
 SillyTavern character cards and lorebooks can be [converted into this same ordinary package](../worlds/import-sillytavern.md). Conversion reports unmappable fields and creates only fixed content files, without executing extensions or scripts.
 
+<a id="data-receivers"></a>
+
+## Selecting receivers from content
+
+A world selects gameplay only through `plugins`. The host first merges conventions, the descriptor and user overrides from all valid static declarations, then inventories sources that exist and are enabled. Discovery imports no plugin code, executes no projections, reads no image bytes and grants no permission. An existing empty structured file still requires a receiver so sync can remove old records; absent files, empty wildcard directories, disabled sources and absent character extension fields do not. Media uses `indexTo`, character extensions use declared `characterField` routes, and portable worlds use `metadata.contractData` and `embeddedCharacters`.
+
+Capability and data requirements are separate. Authored `contract:` gameplay references and actual dimension content use `requiredContracts`; destination `to` / `indexTo` contracts use `requiredDataContracts`, satisfied only by `contributes.data.*.accepts`. Publishing a schema, output or service does not declare a receiver. A standalone `schema: contract:…` is only a validator. Ordinary characters and lorebook content need no plugin; dimensions require `world.dimensions@1`.
+
+Already selected eligible receivers satisfy the requirement, retaining intentional fanout when players select several. Otherwise only a unique eligible receiver joins automatically. Several receivers require a player choice; capability `default` flags do not choose one. A package with no runtimes can receive data. Exclusions, dependencies, conflicts, approval and faults retain their normal admission rules. Inference never installs or approves code, and optional projections do not join merely because compatible sources exist. A unique receiver awaiting approval uses the existing consent flow. A package with presentation runtimes must be selected by a gameplay pack or the player; seed data and assets alone cannot activate it. Once selected, it still receives matching data.
+
+Several declarations share a path only when their target, kind, key, visibility, locale array keys, lorebook and media index behavior agree. Different contracts or hidden/public disagreement remain collisions until an explicit descriptor identifies the destination. Toggling plugins cannot change an identified source's meaning or identity. When a newly installed declaration creates a path or character-field collision, sync defers the original source and preserves its data, ledgers and media references until the author disambiguates it.
+
+An unclaimed structured file under `data/` produces a nonfatal `unclaimed-data-source` warning. Scanning has entry and depth limits, follows no symlinks and never guesses a contract from a basename. Recognized translations, disabled sources, referenced schemas and known infrastructure do not receive duplicate warnings. Authors should install the declaring plugin for validation or add a descriptor with an explicit destination. Arbitrary assets outside the content area do not trigger this warning.
+
+Preparation, creation and session notices use one safe projection, distinguishing missing, ambiguous, disabled and approval-required receivers. Player notices use fixed text. Public sources with a declared title show it through `publicLabel`; hidden sources always use generic wording. Notices contain no raw source IDs, filenames, record keys or exception details. Duplicate reports for one source are grouped; distinct sources remain separate even when they share an omission reason. Author validation retains package-relative locations and remedies. Missing data never prevents starting or storytelling.
+
+Creation independently recomputes and freezes both requirement lists; an older client plan is advisory. Creation checks only this world’s files and record content, plus the registered identities and authorization of the plugins, data receivers and contract providers used by its plan. Changes to those inputs during preparation reject stale creation. Changes to other worlds or installation, approval or republication of unrelated plugins do not invalidate the plan. Synchronizing identical world content again, changing only `updatedAt`, JSON object key order or the `metadata.packageModified` marker, does not invalidate a creation plan. That marker controls later package reloads, not the content imported by this creation. Newly installed receivers never join a frozen session automatically. Checkpoints, forks and resume retain session metadata; explicit toggles preserve existing inferred receivers without silently selecting replacements. Newly installed core defaults and world capability providers also stay out during unrelated toggles; explicitly selected plugins can still resolve their ordinary dependencies. Unreceived conventional sources still reach import planning. Sync defers them and preserves previous rows, ledgers and media references instead of treating them as empty. Preflight and both sync endpoints filter candidates by current authorization, error and fault status before resolving fixed-set dependencies. An unavailable transitive dependency also defers its receiver. Re-enabling seeds only data not yet received. Normal sync still enforces dataset schemas, operation permissions, final-value validation and transactions.
+
+Recreate development sessions and recordings that assume the inferred set, and reimport modified world copies. No database schema reset, automatic rewrite of older sessions or deletion of player data is required.
+
+## Declarative data receivers
+
+An active [declarative plugin](./plugin-installation.md#declarative-plugins) can receive contract-matched world data through `contributes.data` without code approval or import handlers. Data remains owned by the receiver. Declared dataset schemas, keys and `ops` still apply to runtime writes and formal import/sync; import cannot remove data beyond those permissions. Declaring `worldProjections` makes the package code, and projections still need independent server execution authorization. Classification does not change receiver selection or contract matching.
+
 ## World Package
 
 **The smallest world package** has two files:
@@ -69,15 +93,14 @@ worlds/my-world/
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
-pluginPolicy:
-  preset: traditional-story
-  plus:
-    - affinity
+plugins:
+  - pack:traditional-story
+  - plugin:affinity
 defaultViewMode: stage
 ```
 
 - `id` can be left out; the folder's name is used then. Write it only when it must differ from the folder: lowercase letters, digits and `-`, starting with a letter.
-- `pluginPolicy` chooses the plugins of this world. See [plugin selection](#plugin-selection-pluginpolicy).
+- `plugins` chooses the plugins of this world. See [plugin selection](#plugin-selection-pluginpolicy).
 - `worldData` is the path to the descriptor, relative to the world package root. Write it only when the world package has a descriptor.
 - For all the fields of `world.yaml`, see the generated [World manifest field table](./schema/world-manifest.md). For dimensions in a separate file, see [World dimensions field table](./schema/world-dimensions.md).
 - The manifest reads the current fields. Unknown top-level fields are ignored, with warnings from the loader and `pnpm validate:world`. Unknown fields inside known declarations remain errors.
@@ -150,30 +173,29 @@ This section explains how to declare a dimension. For how a dimension is read an
 #### Declaration format
 
 ```yaml
-# world.yaml
-dimensions:
-  reputation:
-    name: 声望 # the translation goes in world.en-US.yaml at the same path
-    description: 主角在当地的公开声望。
-    schema:
-      type: integer
-      minimum: 0
-      maximum: 100
-    initialValue: 0
-    updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
-  discoveries:
-    name: 已知地点
-    schema:
+# data/dimensions.yaml
+reputation:
+  name: 声望 # the translation goes in dimensions.en-US.yaml at the same path
+  description: 主角在当地的公开声望。
+  schema:
+    type: integer
+    minimum: 0
+    maximum: 100
+  initialValue: 0
+  updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
+discoveries:
+  name: 已知地点
+  schema:
+    type: object
+    additionalProperties:
       type: object
-      additionalProperties:
-        type: object
-        properties:
-          description: { type: string }
-          visited: { type: boolean }
-        required: [description, visited]
-        additionalProperties: false
-    initialValue: {}
-    updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
+      properties:
+        description: { type: string }
+        visited: { type: boolean }
+      required: [description, visited]
+      additionalProperties: false
+  initialValue: {}
+  updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
 ```
 
 | Field          | Required | Description                                                                                                                                                  |
@@ -267,19 +289,15 @@ A dimension value that is read is always the raw value. Translation is applied o
 
 <a id="three-ways-for-authors-to-declare-dimensions"></a>
 
-#### Two ways for authors to declare dimensions
+<a id="two-ways-for-authors-to-declare-dimensions"></a>
 
-Both ways use the same declaration format. Pick one:
+#### Dimension sources
 
-1. Write `dimensions` directly in `world.yaml`.
-2. One dimension file, `data/dimensions.yaml`, that holds the **whole dimension table**. It is read by convention; you do not register it.
+A file package authors its whole table only in `data/dimensions.yaml`. Put translations beside it as `dimensions.<locale>.yaml`; they are overlays of that source, not additional sources. `world.yaml` has no `dimensions` field. Strict validation rejects it with a canonical-file hint; tolerant loading diagnoses and omits it without conversion.
 
-When both are used together:
+A descriptor may change or disable that canonical source. It may not define a second dimension table at another path or name the base source twice. A user override keeps its separate contained root and normal precedence, but uses the same relative path and existing source ID. Disabling the source removes both definitions and its inferred provider request. Invalid canonical data keeps the previous complete loaded world.
 
-- `data/dimensions.yaml` replaces the whole table in `world.yaml`. The two are not merged item by item.
-- Only the final declarations go into a session. The ones that were replaced are not each initialized once.
-- The dimension file can also have language files.
-- If any declaration fails to read or validate, this load is thrown away, and the previous complete world stays in use.
+Resolved store/browser records retain definitions and initial values. The editor saves that record through the world API and lifecycle lock; an empty table clears it. Browser saves update canonical `metadata.dimensions` and its top-level projection together before checkpoint export, so restoring the server mirror cannot reinstate an old initial value. These fields are not authored YAML alternatives, and editor saves do not mutate installed files. Package reload preserves player edits until explicit restore.
 
 #### Initialization, evolution and public reads
 
@@ -331,7 +349,7 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **Plugin content** is specified by the `contracts` in the creation brief:
 
-- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). When the receiving plugin is not in the chosen pack, it is added to `pluginPolicy.plus`; a `kind: core` plugin is not added.
+- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). Receivers are inferred from actual generated content rather than added as redundant `plugins` references.
 - A contract that is not chosen does not go into the prompt. If the model outputs records for a contract that was not chosen, or leaves out a contract that was chosen, that attempt counts as a failure and is retried.
 - The records of a contract are written to the file that the receiving plugin declares (the `path` and `kind` of `authoring.source`, for example `data/memory-blocks.json` or `data/time.yaml`). One record is the file content. Several records are written as an array.
 - In the two cases below, the records are rewritten to `data/contract-<n>.json`, and the descriptor `data/world.data.yaml` adds these files as sources. Every other file is at a convention path and is not in the descriptor:
@@ -341,11 +359,13 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **The `@covel/create` interface:**
 
-- `createWorld({ llm, concept, ... })` generates the content and validates it. On success it returns `id`, `manifest`, `lore`, `locale`, `packageContent` and `warnings`. On failure it returns `success: false` and `errors`. `warnings` include content below the brief's target count and invalid dimensions that were dropped.
+- `createWorld({ llm, concept, ... })` generates the content and validates it. On success it returns `id`, `manifest`, `lore`, `locale`, `packageContent` and `warnings`. On failure it returns `success: false` and `errors`. `warnings` include content below the brief's target count and optional supplements that could not be generated.
 - The returned `manifest` has already been validated against the schema and normalized. It includes the canonical form of the locale and defaults such as `characterSchema.types`. All three save targets use the same result.
-- Generation does not write files, and it does not accept `outputDir`. A generated manifest must put its data inside the manifest. It cannot refer to a `worldData` file that has not been generated.
+- Generation does not write files, and it does not accept `outputDir`. Dimensions belong only in `packageContent.dimensions`, validated by the full external dimension schema and its size limits. The strict `manifest` contains no dimensions. Invalid or obsolete inline answers use the normal correction/retry path and cannot be published unchanged. It cannot refer to a `worldData` file that has not been generated.
 - Generated plugin content goes in `packageContent.contractData` as `{contract,key,value}` records. For example, selecting `memory.blocks@1` can produce a record with the key `world`. File and non-file outputs use the same data; duplicate targets are rejected.
-- To get a package of files, call `await writeWorldPackage(outputDir, result, { dataContracts })` explicitly. It returns the relative paths that were written. It works on a separate copy, converting the data in the manifest into file references, and the original result does not change. An existing package with the same name is rejected. When two writes go to the same package at once, only one succeeds.
+- To get a package of files, call `await writeWorldPackage(outputDir, result, { dataContracts })` explicitly. It returns the relative paths that were written. It works on a separate copy, writing portable data to canonical files, and the original result does not change. An existing package with the same name is rejected. When two writes go to the same package at once, only one succeeds.
+
+Revisions reconstruct dimensions in the package-content section and preserve package version and credits. With narrator-only lore, public manifest and dimension replacements are regenerated from original public sources and the author request, independently of the secret-aware draft.
 
 **Worlds without a folder.** A world saved in the server database (`server-store`) or in the browser's local storage has no package folder that can be read later. In that case:
 
@@ -383,61 +403,41 @@ These fields change only how the world is shown. You can leave all of them out.
 - `version`, `author`, `license`, `homepage`: the version and author information of the world package. The fields, limits and translation rules are the same as for plugins. See [author information](./plugins.md#author-information). They show only on the world card. They do not go into session data or the prompt.
 - `cover`, `accentColor`, `themeMusic`: the cover, the accent color, and the music on the world list. See the end of the [Background Music](#background-music) section.
 
-### Plugin selection (`pluginPolicy`)
+<a id="plugin-selection-pluginpolicy"></a>
 
-`pluginPolicy` says which plugins this world would like to use. It does not lock in any plugin. Which ones are finally on is worked out by Covel, from the capabilities and dependencies each plugin declares, the player's authorization, and the player's own checkboxes.
+### Plugin selection (`plugins`)
 
-You write it as "one built-in pack, plus a few plugins":
-
-```yaml
-pluginPolicy:
-  preset: traditional-story # a new session starts from this pack
-  plus: # the plugins this world also wants
-    - dice-check
-    - core-quest
-  pitch: # optional: how this world presents the pack on the session-prep screen
-    label: 古冢探险
-    description: 跑团式的地城探索，带掷骰判定和任务。
-    reason: 每一步都要检定，灯油和名望都会记在面板上。
-```
-
-| Field      | Description                                                                                                                                                                  |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `preset`   | The built-in pack a new session starts from, for example `traditional-story` or `dialogue-mode`. The packs are listed in [`packs/builtin.yaml`](../../../packs/builtin.yaml) |
-| `plus`     | Plugin IDs this world also wants. They stay when the player switches packs. Do not list `kind: core` plugins; every session has them anyway                                  |
-| `pitch`    | How the session-prep screen presents the `preset` pack: `label`, `description` and `reason`, in place of the pack's own text. All three can be translated                    |
-| `packs`    | IDs of the built-in packs the player can choose from, listed in this order. When it is left out, every built-in pack is listed. When it is written, `preset` must be in it   |
-| `requires` | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it.                                                     |
-
-The plugins a new session enables by default are the `requested` list of the `preset` pack, plus `plus`, the core plugins and the dependencies that `requires` brings in.
-
-- `preset` can only be a built-in pack. A world cannot define its own pack; for a different set of plugins, choose the closest pack and add what is missing with `plus`.
-- The session-prep screen lists the `preset` pack first (in the world's words when there is a `pitch`), then the other packs in `packs`.
-- `pnpm validate:world` checks these names: a `preset` that is not a built-in pack is reported as `unknown-preset`, an unknown ID in `packs` as `unknown-pack`, and a `preset` that is not in `packs` as `preset-not-offered`.
-
-`requires` says "what capability this world cannot do without". Write a contract here (a capability name plus a version), not a plugin:
+A world selects gameplay in one ordered list. No reference locks a plugin on:
 
 ```yaml
-pluginPolicy:
-  requires:
-    - action-check@1 # action checks; the built-in dice-check provides it, and you can use another check plugin
-  plus:
-    - dice-check # optional: turns it on by default, and chooses which provider to use when there are several
+name: A small frontier world
+summary: Keep the relay alive through one long night.
+defaultLocale: en-US
+tags: [frontier, mystery]
+plugins:
+  - pack:traditional-story
+  - plugin:dice-check
+  - contract:action-check@1
+# Optional; public name, summary and tags supply omitted presentation.
+pluginPitch:
+  label: The long watch
 ```
 
-- When only one installed plugin provides it, that plugin is turned on automatically.
-- When there is no provider, or there are several and neither the world nor the player has chosen one, the session-prep screen says what is missing. The session starts as usual, only without this part of the gameplay. The response that creates the session lists them in `unmetRequirements`.
-- The player can still turn off a provider. That is the player's choice. The session starts as usual, and the session-prep screen shows a notice.
-- `requires` accepts only contract IDs in the form `name@version`. A plugin ID written here causes an error when the world loads.
+- `pack:<id>`: the first reference selects the initial pack; later references order alternatives. All remaining host packs stay available. Only the selected pack expands. An unavailable first pack produces a located diagnostic and never selects the second instead.
+- `plugin:<id>`: an independent request. It stays after switching packs even if the initial pack also requests it. Switching replaces only the previous pack's requests and exclusions, preserving manual choices. Manual exclusions always win.
+- `contract:<name>@<version>`: a versioned capability request, such as `contract:action-check@1`. A unique available provider joins automatically without another selection or save click. Players choose when several providers qualify. Missing, unapproved or excluded providers reduce the corresponding gameplay; prep and `unmetRequirements` explain why, and session creation still succeeds.
+- Omitted `plugins` and `[]` both add no world requests and select no initial pack. Normal core defaults still apply. Players can explicitly exclude plugins or reset to the smallest narrative set.
+- Prefixes are mandatory. Packs and plugins with the same slug are distinct. Bare IDs, unknown prefixes, invalid versions and duplicates report the field index in author validation. Duplicates never cause duplicate effects.
 
-`plus` holds plugin IDs. The plugin may not be installed on the player's computer:
+Each `pluginPitch` field is optional: `label`, `description` and `reason` default independently to the public world name, summary and tags. Tags use the fixed translated UI label “World tags”; no tags means no derived reason. Authored fields and their translations win, using `resolveI18nText` at display time and its shared fallback for unsupported UI languages. Presentation never reads lore, hidden events or model prompts, never calls a model, and is never written back as derived YAML or metadata. Locale overlay paths are `pluginPitch.label`, `pluginPitch.description` and `pluginPitch.reason`.
 
-- `GET /api/worlds/:id/plugin-plan` removes the IDs that are not installed from the world policy and from each pack's `requested`. They are listed in `missing` instead (for packs, with a `packId`).
-- The session-prep screen uses this to show which plugins are missing. The session can still be created, but the gameplay those plugins provide will not work.
+`GET /api/worlds/:id/plugin-plan` returns `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`, ordered `packs`, optional `selectedPackId`, `defaultPluginIds` and bounded `diagnostics`. Missing plugin IDs stay out of requests submitted to creation; `missing-plugin` diagnostics retain `pluginId`, field `path` and optional `packId`. `unknown-pack` also retains the reference location. Session creation takes the player's explicit requests and exclusions without selecting a pack for direct callers. The server independently reads and freezes world contracts into the session; resolving its fixed set never adds a newly installed plugin.
 
-Fields of `pluginPolicy` that Covel does not know (for example `presetId`, `requested`, `recommended` and `preferredTags` of the earlier form) are ignored when the world loads, with a `manifest-unknown-field` warning. `packs` written as objects (packs the world defined itself, as the earlier form allowed) make the whole `pluginPolicy` invalid: the world loads as usual, only without a plugin selection, and `pnpm validate:world` reports `manifest-invalid`.
+The former `pluginPolicy` and its `preset`, `plus`, `packs` and `requires` fields are removed, with no compatibility reads. Strict author validation rejects them. Player loading reports and ignores unknown root fields; an invalid optional selection or pitch is omitted while the rest of the world and lore remain usable. Recreate development worlds and sessions.
 
 ### World records and world packages
+
+Revisions preserve the record's edited `plugins` and explicit `pluginPitch`, including removal of either field. Translated pitch fields resolve to strings in the world's content locale when building revision input. A revision writes only that language, keeping runtime locale maps out of authored YAML. Restoring a package deliberately reloads its authored values. Derived pitch never enters either transport.
 
 Covel plays the **world record** in the database. The files of a world package are only the format for installing, importing and exporting a world:
 
@@ -540,7 +540,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 
 ### Default plugin settings (`pluginSettings`)
 
-At the top level of `world.yaml` (at the same level as `pluginPolicy`), you can write `pluginSettings` to preset **this world's default values** for plugin settings. The format is `plugin ID → setting → value`:
+At the top level of `world.yaml` (at the same level as `plugins`), you can write `pluginSettings` to preset **this world's default values** for plugin settings. The format is `plugin ID → setting → value`:
 
 ```yaml
 pluginSettings:
@@ -558,7 +558,7 @@ The value of a setting is decided in this order. The earlier item wins:
 
 - The player can still override every value.
 - A setting that the plugin does not declare does not cause an error. It just has no effect. `pnpm validate:world` gives an `unknown-setting` reminder. A value with the wrong type, range or options gives an `invalid-setting` error.
-- `pluginSettings` sets only default values. It does not decide which plugins are turned on. That is decided by [`pluginPolicy`](#plugin-selection-pluginpolicy).
+- `pluginSettings` sets only default values. It does not decide which plugins are turned on. That is decided by [`plugins`](#plugin-selection-pluginpolicy).
 
 For plugin authors: after loading, the value is stored in `WorldRecord.metadata.pluginSettings`. At the start of each turn, it is merged with the player's values (the request header `X-Plugin-User-Settings`) and put into `TurnInput.userSettings`. The agent's `{{ userSettings.* }}`, the guards and the hooks all read the same data.
 
@@ -637,9 +637,9 @@ Rules:
 
 - The import order is: dimensions, then media, then the other contract data, and last `characters`.
 - All four built-in worlds are read this way: they have no descriptor, and every source comes from a convention path.
-- The conventions of the plugins **enabled** in this session are used. A plugin that is not enabled, or that failed to load, does not affect what is read.
+- Discovery uses every valid static declaration; admission separately limits receivers and execution. See [receiver rules](#data-receivers). Temporarily disabling a plugin does not change source identity.
 - Each conventional source has an ID, which a descriptor's `after` and an override use to name it: for the kernel, `dimensions`, `lorebook` and `characters`; for a plugin, its namespace, or `<plugin ID>-<namespace>` when two plugins use the same namespace; for a file in a folder, `<convention ID>-<file name>`, for example `rules-tide-mystery` for `data/rules/tide-mystery.yaml`.
-- When two contracts enabled in the same session declare the same path, that path is not a convention, the file is not imported, and the world package must use a descriptor to say which one it is for. The session still starts. The server log records a `[sessions]` warning, the world data preflight returns a `convention-collision` warning, and `pnpm validate:world` reports it too (see [Static validation](#static-validation-pnpm-validateworld)).
+- Incompatible declarations of one path remove its convention. The file is not imported until a descriptor disambiguates it. Identical declarations are discovered once; disabling a claimant cannot change source visibility. The session still starts. The server log records a `[sessions]` warning, the world data preflight returns a `convention-collision` warning, and `pnpm validate:world` reports it too (see [Static validation](#static-validation-pnpm-validateworld)).
 
 For plugin authors: `path` is a path relative to the world package root. It can contain only ASCII letters, digits, `_`, `.`, `/` and `-`. It cannot start with `/`, and it cannot contain `..`. Its last segment can be `*.<extension>`, meaning every file of that kind in the folder (not for a media source, which is a folder already). It also cannot be a path the kernel or the world package owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json`, the `media/gallery/` folder, or a language version of one (such as `world.zh-CN.yaml`), compared without regard to case. A language version names a two-letter language code (`.fr`, `.zh-CN`) or a three-letter one with a region (`.yue-HK`); a suffix such as `.bak` or `.min` is part of the file name, so `characters/characters.bak.json` is allowed. A plugin manifest that does not follow this fails validation when it loads.
 
@@ -650,7 +650,7 @@ For plugin authors: `path` is a path relative to the world package root. It can 
 - You need to set the order with `after`.
 - You want to turn off a conventional source, or change one of its fields (for example `visibility` or `merge`).
 
-**Unused files.** `pnpm validate:world` checks whether any file in `data/`, `characters/` and `media/` (including subfolders) is not used by any source or framework feature. If one is not, it gives a `data-file-unused` reminder. Both import methods are checked. Language files of a source that already exists, local schemas, dimension files, theme music and gallery images are not reported by mistake. A README is author documentation and is not checked.
+**Unused files.** `pnpm validate:world` and preparation share the bounded scan in [receiver rules](#data-receivers). It reports only unclaimed YAML / JSON under `data/`; arbitrary images, media folders and author documentation are outside this scan.
 
 ## Descriptor
 
@@ -876,7 +876,9 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. P
 
 ### Receivers that join after the game starts
 
-The prep screen lists selected community plugins whose server code is not yet approved under “Needs approval.” They stay checked, but do not count toward enabled plugins, runtimes, narrative checks or receivers in the world-data preflight. Players can still start the game. The world data those plugins receive is imported after approval and enablement.
+The prep screen lists selected non-declarative community plugins whose server code is not yet approved under “Needs approval.” They stay checked, but do not count toward enabled plugins, runtimes, narrative checks or receivers in the world-data preflight. Players can still start the game. The world data those plugins receive is imported after approval and enablement.
+
+A receiver inferred only from data stays in the pending-approval list without becoming an explicit plugin request. Plugins already selected by the world or player retain the existing approval flow. The server independently infers receiver requirements during session creation.
 
 A plugin that is not enabled when the session is created gets no world data, for example a community plugin approved after the game starts. When a plugin is enabled in the game (`PUT /api/sessions/:id/plugins/:pluginId`), Covel imports once for the plugins that just joined:
 
@@ -1244,7 +1246,7 @@ sources:
 - A single media file can be at most 20 MB. The total of one source's directory can be at most 100 MB.
 - The extensions that can be imported are `.png`, `.jpg`, `.jpeg`, `.webp`, `.mp3`, `.wav` and `.mp4`.
 - The preflight check requires that the schema of the matching contract and the receiving declaration are registered. The `assets` and `presence` of `character-blueprint` receive `character.portrait-assets@1` and `character.portraits@1` respectively.
-- When the receiving plugin is not in the `preset` pack, put it in `pluginPolicy.plus`, and a new session turns it on. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
+- When the receiving plugin is not in the initially selected pack, put it in `plugins`, and a new session turns it on. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
 
 For real examples, see `media/` of `worlds/mistport` and `worlds/haruka-academy`.
 
@@ -1354,7 +1356,7 @@ moods:
 The mood comes from the `music.cue` event that the narrative sends. The scene comes from the `scene.set` event (sent by the plugin that tracks the scene). If you want only one theme that runs through the whole game, put one track with `theme: true` in the list. It does not depend on any event.
 
 > [!NOTE]
-> Put `soundtrack` in the world's `pluginPolicy`. These data are imported and played only after the player turns the plugin on.
+> Put `soundtrack` in the world's `plugins`. These data are imported and played only after the player turns the plugin on.
 
 **How to declare it.** Put the files at the two convention paths above. For other paths, write two sources in the descriptor. `registryId: music-registry` is a fixed value in the track list, and it also serves as the `key`:
 
@@ -1514,8 +1516,8 @@ Three built-in RPG plugins accept data preset by a world package. For a step-by-
 POST /api/worlds/<world-id>/world-data/preflight
 ```
 
-- When `plugins` is passed, preflight uses that plugin selection.
-- When `sessionId` is passed, preflight uses the plugins enabled in that existing session.
+- With `plugins`, preflight resolves new-session requests together with `excludedPlugins` and actual data requirements. Optional `locale` previews a world-supported content edition.
+- With `sessionId`, preflight uses only the existing session's fixed, admitted, authorized and unpaused set and its content locale. Request fields cannot replace them.
 - The built-in interface calls it automatically before the game starts. It shows what will be written, a summary of the targets, and the diagnostics.
 
 **Sync (sync):** an HTTP API for authors and tools that applies later data changes in a world package to one specified existing session. The app currently has no sync control for players.
@@ -1586,12 +1588,12 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` turns on its plugin with `pluginPolicy`:
+`world.yaml` turns on its plugin with `plugins`:
 
 ```yaml
-pluginPolicy:
-  preset: dialogue-mode
-  plus: [social-sim]
+plugins:
+  - pack:dialogue-mode
+  - plugin:social-sim
 ```
 
 When `social-sim` declares `authoring.source`, `data/social/links.yaml` is imported from the path it declares; otherwise add a source to `data/world.data.yaml` and write `worldData` in `world.yaml`.
@@ -1633,7 +1635,7 @@ Output when it passes:
 ```
 
 - The validator does not create a session, and it does not run plugin code.
-- It reuses the world data preflight that runs when a session is created. So data that passes here will not fail later, when a session is created, because of the content of its records.
+- It reuses the world data preflight used at session creation. Creation still revalidates current files, catalogue and authorization, and rejects stale plans.
 - Plugins are looked for in the repository's `plugins/` and in each `--plugins <dir>`.
 - When a world has editions in several languages, preflight runs once for each. This is because [language files](#language-files-namelocaleext) make different languages read different text. Every language file next to the main file is checked, not only the world's editions.
 
@@ -1645,7 +1647,7 @@ Output when it passes:
 - Error messages include the file, the record number and the key. When an error is found before import, the whole plan is rejected, and the other valid records are not written either.
 - An empty source gives a warning.
 - When a receiving plugin declares with [`authoring.references`](./plugins.md) that a value is the `id` of a character attribute, the value is checked against the world's `characterSchema`. A missing attribute, a wrong type or a number outside the attribute's range is an `attribute-reference` error. A world without a `characterSchema` is not checked.
-- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`dimensions` in `world.yaml`, or `data/dimensions.yaml`). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
+- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`data/dimensions.yaml`). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
 - Dimension references can also declare `values`, for example `values: [equals, "in[]"]`. Candidates must satisfy the dimension schema at the selected path, including types and enums; failures also report `dimension-reference`. If weather allows only `sun` / `rain`, `equals: snow` or `in: [rain, snow]` points out the invalid candidate. See [`authoring.references`](./plugins.md) for the declaration and conservative checking rules. Session import, preflight and sync also check active receivers' dimension references against the saved world record's dimensions; an error prevents every write in the import plan.
 - In a record or a character field, a field whose name ends in `At` or is `timestamp`, with an ISO time as its value, is treated as bookkeeping, and the model does not read it. Each such field gives a `model-hidden-field` warning. To let the model see a time of the story, use a different name (`date`, `diedOn`), or do not write it as an ISO time.
 - A field of a record whose name is `id` or ends in `Id` / `Ids`, with a UUID as its value, is also treated as bookkeeping. No model reads it, and it gets a `model-hidden-field` warning too. Use an ID a person can read, in lower-case words and hyphens, for example `npc-lin-yao`.
@@ -1657,21 +1659,18 @@ Output when it passes:
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` cannot be parsed or does not match the schema |
 | `manifest-unknown-field` | warning | `world.yaml` has an unknown top-level field, which loading ignores |
-| `default-value` | warning | A value that need not be written and can be deleted: `characterSchema.types` is the default `[npc, companion]`, or `pluginPolicy.plus` lists a `kind: core` plugin |
+| `default-value` | warning | A value that need not be written and can be deleted: `characterSchema.types` is the default `[npc, companion]`, or `plugins` lists a `kind: core` plugin |
 | `lore-missing` | error | One of the world's editions has no lore file |
 | `lore-fallback-missing` | warning | There is no `WORLD.md`, so a session in an undeclared language gets empty lore |
 | `lore-narrator-only` | warning | The [narrator-only marker](#narrator-only-lore-narrator-only) is missing its end, missing its start, nested or written wrong. The lore after it is hidden from the player. |
-| `unknown-plugin` | error or warning | A plugin ID referenced by `pluginPolicy` / `pluginSettings` is not in the scanned directories |
-| `unknown-preset` | error | `pluginPolicy.preset` is not a built-in pack |
-| `unknown-pack` | error | `pluginPolicy.packs` has an ID that is not a built-in pack |
-| `preset-not-offered` | error | `pluginPolicy.packs` is written, but `preset` is not in it |
-| `pitch-without-preset` | warning | `pluginPolicy.pitch` is written without a `preset`, so the text is never shown |
+| `unknown-plugin` | error or warning | A plugin ID referenced by `plugins` / `pluginSettings` is not in the scanned directories |
+| `unknown-pack` | warning | An unavailable pack reference, located by index; an unknown first pack selects none |
 | `unknown-setting` | warning | A key in `pluginSettings` is not a setting the plugin declares, so the value is ignored |
 | `invalid-setting` | error | A value in `pluginSettings` does not match the type, range or options the setting declares |
-| `unprovided-contract` | error or warning | A contract in `pluginPolicy.requires` has no provider |
+| `unprovided-contract` | error or warning | A contract in `contract:` references has no provider |
 | `unresolved-contract` | error or warning | A data contract used by a source has no receiving plugin among the scanned plugins |
-| `unrequested-receiver` | warning | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on. |
-| `convention-collision` | error or warning | More than one plugin declares the path of one of the world's files, and the descriptor does not say which one it is for. A session that enables those plugins together does not import it. |
+| `unrequested-receiver` | warning | Receivers are ambiguous or cannot activate. Authors can select a receiver explicitly; players can still start. |
+| `convention-collision` | error or warning | Incompatible declarations claim a file's path and no descriptor disambiguates it. Sessions leave the file unimported. |
 | `world-data` | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema |
 | `locale-file-name` | error | A language file's name gives only the language (`.en.`) and not the locale of the world's edition (`.en-US.`). This file is not read. |
 | `locale-overlay` | warning | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored. |
@@ -1679,7 +1678,7 @@ Output when it passes:
 | `locale-script` | warning | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file. |
 | `edition-incomplete` | warning | The world has an edition in a language, but that edition is missing some translations. A session in that language reads the world's original default-language text. |
 | `inline-locale-map` | error | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files. |
-| `data-file-unused` | warning | A file in `data/`, `characters/` or `media/` is not used by any source or framework feature |
+| `unclaimed-data-source` | warning | A structured file under `data/` has no source declaration; install its declaring plugin or add an explicit descriptor target |
 | `attribute-reference` | error | A value in a record that names a character attribute (declared by the receiving plugin's `authoring.references`) is missing from the world's `characterSchema`, has the wrong type or is out of range |
 | `dimension-reference` | error | A declared dimension reference is missing, the path beside it is not allowed by the dimension's `schema`, or a candidate declared in `values` does not satisfy the schema at that path |
 | `model-hidden-field` | warning | A record has a field that no model reads: a name ending in `At` or `timestamp` with an ISO time, or `id` / a name ending in `Id` or `Ids` with a UUID |
@@ -1689,7 +1688,7 @@ Output when it passes:
 
 For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
 
-**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the `preset` pack and `pluginPolicy.plus`, plus the core plugins and the dependencies that `requires` brings in. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
+**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the initially selected pack and `plugins`, plus core plugins, capability providers and unique eligible receivers of actual content. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
 
 **The three cases of `prompt-size`.** None of them stops the world from being used:
 
@@ -1725,3 +1724,7 @@ Related pages:
 
 - **World time** is not part of dimensions. It is plugin data. Its contract is `world.time-definition@1`, the record is written as `{ id: world, definition }`, and it is placed in `data/time.yaml`. AI-generated records of this kind keep the same contract in files, in server storage and in browser-local worlds. A world without a folder requires the record's `key` to equal `value.id`. For fields, backward time and random rules, see [World time](./world-time.md).
 - For the world package directory on GitHub, choosing several worlds at once, proxy downloads and the update process, see [world catalog and installation](./world-installation.md).
+
+## Public assets and display state
+
+Presentation reads only declared own public asset namespaces and its explicit display read/write state. Hidden sources and `_hidden.*` never enter the projection: owning data does not make it presentation-readable. Import contracts and file layout are unchanged; see [presentation runtimes](./plugins.md#presentation-runtimes).

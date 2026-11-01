@@ -17,6 +17,8 @@
     "primary": "Основное"
   },
   "session": {
+    "worldSelectionTags": "Теги мира: {{tags}}",
+    "unavailableWorldPacks": "Мир рекомендует недоступный набор. Выберите другой или начните с текущим выбором.",
     "operationFailedNotice": "{{count}} действия из этого хода не вступило в силу.",
     "operationFailedNotice_one": "{{count}} действие из этого хода не вступило в силу.",
     "operationFailedNotice_few": "{{count}} действия из этого хода не вступили в силу.",
@@ -301,9 +303,13 @@
       "hint": "Данные для выключенного плагина или плагина, ожидающего вашего одобрения, появятся, когда вы его включите.",
       "hide": "Скрыть",
       "dimensionsMissing": "Измерения мира (например, отношения и ресурсы): ни один включённый плагин их не хранит, поэтому в этой игре они не учитываются.",
-      "receiverMissing": "«{{source}}»: ни один включённый плагин не принимает эти данные.",
+      "labeled": "{{source}}: {{message}}",
+      "receiverMissing": "This data has no plugin to receive it.",
       "sourceNotImported": "Данные «{{source}}» не импортированы (подробности)",
-      "notImported": "Часть данных не импортирована (подробности)"
+      "notImported": "Часть данных не импортирована (подробности)",
+      "receiverAmbiguous": "This data has no plugin to receive it. Choose a receiving plugin.",
+      "receiverExcluded": "This data has no plugin to receive it. Receiving plugins are disabled.",
+      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval."
     },
     "pendingApproval": {
       "title": "Требуется разрешение",
@@ -2223,7 +2229,19 @@
     "faultPaused": "Приостановлен",
     "resumeFault": "Возобновить",
     "faultPausedNotice": "{{plugin}} приостановлен в этой сессии после повторных ошибок.",
-    "resumeFaultFailed": "Не удалось возобновить работу плагина. Попробуйте ещё раз."
+    "resumeFaultFailed": "Не удалось возобновить работу плагина. Попробуйте ещё раз.",
+    "declarative": "Нет серверного кода плагина · разрешение на код или задачи не требуется",
+    "modelUse": {
+      "notice": "Использует настроенную вами модель; возможны расходы.",
+      "delegated": "Запускается, когда другая задача передаёт ему работу.",
+      "manual": "Запускается при явном вызове.",
+      "event": "Запускается по соответствующим событиям, включая явные действия игрока. Явные вызовы обходят начальный ход, паузу между запусками и ограничение числа запусков.",
+      "setup": "Запускается во время подготовки игры.",
+      "scheduled": "Запускается в запланированные ходы (интервал: {{count}}).",
+      "start": "Начиная с хода {{count}}.",
+      "cooldown": "Между запланированными запусками — не менее {{count}} ходов.",
+      "limit": "Не более {{count}} запланированных запусков за игру."
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} одобрен, но {{count}} его задач не загружаются и не будут выполняться.",

@@ -10,32 +10,39 @@ import {
 
 /** @type {import('@covel/plugin-handlers-utils').PluginFunctionHandler} */
 export default async function handler(ctx) {
-  const skip = (reason) => ({
-    outcome: "success",
-    value: { skipped: true, reason },
-  });
+  const skip = (reason, code) => {
+    ctx.presentation?.note(code);
+    return { outcome: "success", value: { skipped: true, reason } };
+  };
   const story = ctx.inputs?.story?.value;
   const cues = story?.cues;
   const location = typeof cues?.scene === "string" ? cues.scene.trim() : "";
   const present = Array.isArray(cues?.present) ? cues.present : [];
   if (!location && !present.length)
-    return skip("no story scene or presence cues");
-  if (!ctx.pluginData) return skip("no plugin data access");
+    return skip(
+      "no story scene or presence cues",
+      story ? "no-output" : "no-story",
+    );
+  if (!ctx.pluginData) return skip("no plugin data access", "unavailable");
 
   const [registry, previous, direction] = await Promise.all([
     ctx.pluginData.get(SCENES_NS, REGISTRY_KEY),
     ctx.pluginData.get(STAGE_NS, STAGE_KEY),
     ctx.pluginData.get("direction", "current"),
   ]);
-  const change = location
-    ? sceneChange(ctx, {
-        registry,
-        previous,
-        direction,
-        location,
-        variant: previous?.variant === "night" ? "night" : "day",
-      })
-    : null;
+  const hasScenes =
+    Array.isArray(registry?.scenes) && registry.scenes.length > 0;
+  if (location && !hasScenes) ctx.presentation?.note("asset-missing");
+  const change =
+    location && hasScenes
+      ? sceneChange(ctx, {
+          registry,
+          previous,
+          direction,
+          location,
+          variant: previous?.variant === "night" ? "night" : "day",
+        })
+      : null;
   let proposals = change?.sceneChanged ? change.proposals : [];
   const value = {};
   if (change?.sceneChanged) value.stage = change.stage;
@@ -53,6 +60,10 @@ export default async function handler(ctx) {
     proposals.push(makeDirectionProposal(ctx, cast.direction));
     Object.assign(value, cast);
   }
-  if (!proposals.length) return skip("no-op: scene unchanged");
+  if (!proposals.length)
+    return skip(
+      "no-op: scene unchanged",
+      location && !hasScenes ? "asset-missing" : "no-scene-change",
+    );
   return withPendingProposals({ outcome: "success", value }, proposals);
 }

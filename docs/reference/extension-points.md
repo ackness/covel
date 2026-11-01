@@ -2,6 +2,8 @@
 
 有些事情内核自己不做，而是交给插件：往提示词里加一段话、压缩历史、给界面的某个位置填内容。内核为每件这样的事定一份带版本号的约定，叫**扩展点**。实现它的插件叫**提供者**。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 本页说明怎样声明和注册一个提供者、内核怎样组合多个提供者，以及会话世界上下文和历史压缩这两个扩展点的输入输出。写提供者的插件作者需要它。
 
 包与包之间需要请求结果或触发工作时，按[通信方式](./plugin-extensions.md#选择通信方式)选择服务或事件；`ctx.recursiveCall` 的[嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)留在本包内。服务可以由函数 runtime、工具调用，标记为给模型用的服务还能被 agent 导入成工具，见[工具和 agent 怎样用服务](./plugin-extensions.md#工具和-agent-怎样用服务)。
@@ -9,6 +11,10 @@
 要让另一个 agent 回答一段简报时，不需要扩展点：提供方是声明了 `schedule.subagentOnly` 和 `io.output.contract` 的 agent runtime，调用方用 `ctx.agents.run` 或 `delegate` 工具把它作为[子 agent](./plugins.md#子-agent) 运行。子 agent 在调用方的执行里运行，按契约可以找到其他包的提供方，交回输出；允许时可通过写服务暂存操作，随调用方一起提交。
 
 框架拥有 schema 不代表内核扩展点：[`turn-policy@1` 与 `character-actor@1`](./plugin-extensions.md#orchestration-contracts) 是可选的服务/runtime 契约，不享有故事依赖的扩展点豁免。
+
+## 声明式消费者
+
+[声明式插件](./plugin-installation.md#声明式插件)可以通过版本化契约导入读/写服务，但不能注册可执行服务或扩展提供者。静态提示段和 UI 由宿主读取。服务解析仍要求唯一、活动且独立获准的提供者；缺失、暂停和歧义保持原有语义，不猜第一个提供者。导入默认可选，不会使一个无关插件自动启用。写服务保持提供者身份与既有提交规则，调用方的免代码审批不能授权提供者的服务器代码。
 
 ## 声明与注册
 
@@ -239,3 +245,7 @@ Hook 的返回规则见 [Hooks](./hooks.md#how-an-event-runs)：不返回值表�
 ## 角色编排示例
 
 `turn-policy@1` 和 `character-actor@1` 是可选的服务/runtime 契约，不是内核扩展点。内置对话叙事的只读规划器与故事 agent 通过[普通通信接口](./plugin-extensions.md#orchestration-contracts)组合它们。
+
+## 呈现状态与界面槽位
+
+呈现函数不是新的扩展点。它用受限输入更新自己的展示数据；`ui.slot@1` 提供方按原有接口消费这些数据。缺少素材或呈现无产出只降级对应位置。槽位本身的普通上下文不被扩展，见[呈现 runtime](./plugins.md#presentation-runtimes)。

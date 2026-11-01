@@ -148,14 +148,14 @@ async function prepare(
       },
     }),
   );
-  const worldId = `ensemble-${Date.now()}-${role}`;
+  const worldId = `ensemble-${crypto.randomUUID()}-${role}`;
   const name = `Ensemble hall ${worldId}`;
   const world = await page.request.post("/api/worlds", {
     data: {
       id: worldId,
       name,
       locale: "en-US",
-      metadata: { pluginPolicy: { preset: "spectator", packs: ["spectator"] } },
+      metadata: { plugins: ["pack:spectator"] },
     },
   });
   expect(world.ok(), await world.text()).toBe(true);

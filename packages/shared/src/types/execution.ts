@@ -159,6 +159,7 @@ export interface RuntimeRetryScope {
  * session state.
  */
 export interface DeferredRuntimeJob {
+  readonly presentation?: import("../schemas/presentation.js").PresentationSnapshot;
   readonly turnDigest: TurnDigest;
   readonly jobId: string;
   readonly runtimeId: string;
@@ -179,6 +180,7 @@ export interface DeferredRuntimeJob {
 /** Detached-stage context accepted by `executeTurn` after a job is claimed. */
 export type DetachedStageInput = Pick<
   DeferredRuntimeJob,
+  | "presentation"
   | "jobId"
   | "runtimeId"
   | "sourceTurnId"
@@ -257,6 +259,10 @@ export interface TurnInput {
      * finalizing, so the retry turn's artifact records only what actually ran.
      */
     readonly retrySeedResults?: readonly RuntimeResult[];
+    /** Host-validated original public sources for detached presentation retries. */
+    readonly presentationJobs?: readonly DeferredRuntimeJob[];
+    /** Host-owned committed public sources for failed inline selectors only. */
+    readonly presentationSnapshots?: readonly import("../schemas/presentation.js").PresentationSnapshot[];
   };
   /**
    * Re-entry descriptor for a scheduler-deferred stage runtime. Unlike a

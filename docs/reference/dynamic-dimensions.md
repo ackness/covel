@@ -20,12 +20,12 @@
 - 维度的 ID 由作者自己起。常见的九类世界资料（地理、势力等）只是编辑器里的模板，不是允许的 ID 清单。
 
 ```yaml
-dimensions:
-  study:
-    name: 学习进度
-    schema: { type: integer, minimum: 0 }
-    initialValue: 0
-    updateRule: 本轮明确完成一次学习时加一；承诺、回忆和未完成的学习不计入。
+# data/dimensions.yaml
+study:
+  name: 学习进度
+  schema: { type: integer, minimum: 0 }
+  initialValue: 0
+  updateRule: 本轮明确完成一次学习时加一；承诺、回忆和未完成的学习不计入。
 ```
 
 ## 声明与校验
@@ -61,10 +61,7 @@ dimensions:
 > [!NOTE]
 > 开发会话里如果存有多语言对照形式的维度值，需要重新创建这个会话。
 
-**两种写法用同一种声明格式**：写在 `world.yaml` 里，或者写成整张表的维度文件 `data/dimensions.yaml`（`covel://world/dimensions → world:metadata.dimensions`）。
-
-- 维度文件替换 `world.yaml` 里的整张表。
-- 每一项的内容都是一项完整的声明，不是一个值。
+文件包只使用规范维度表 `data/dimensions.yaml`；生成结果使用 `packageContent.dimensions`，服务端和浏览器记录保留解析后的定义。Descriptor、override 和编辑器规则见[维度来源](./world-data.md#维度来源)。
 
 ## 由时钟推导的字段
 
@@ -164,10 +161,10 @@ crownfire:
 
 **和世界包同步：**
 
-- 不管用哪种写法声明，都记进导入账本。
+- 解析后的定义都记进导入账本。
 - 作者的声明没变时，保留这局游戏的进度。
 - 修改或删除一个已经演化、被手改过、或者还有待结算回合的维度，会报告冲突。用 `force` 也不会重置它。
-- `sync-dimensions` 只同步维度，改不了资料库、角色或其他插件数据。写在 `world.yaml` 里和维度文件里的声明都可以用它同步。
+- `sync-dimensions` 只同步维度，改不了资料库、角色或其他插件数据。规范文件和编辑后的记录定义都可以用它同步。
 
 完整的同步规则见 [Preflight 与 Sync](./world-data.md#preflight-与-sync)。
 

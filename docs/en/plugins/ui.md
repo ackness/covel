@@ -222,7 +222,7 @@ A few rules:
 - `invokeRuntime`, `invokePluginAction`, `invokeCommand`, and `emitEvent` can point only at your own plugin. They cannot write to another plugin.
 - `invokeRuntime` names one runtime, waits for it to finish, and gets its result. `emitEvent` only says that something happened. The click returns at once, and you do not get the subscribers' results. Use the first one when you need to see the result right away.
 - The event name in `emitEvent` must be listed in `contributes.events` of your own `PLUGIN.md`. An event meant only for the interface can be written with `advertise: false`, so that the model that writes the story does not see it.
-- The first time a community plugin emits an event, the player must authorize two things: emitting that event, and running the community runtime that subscribes to it.
+- A community emitter still needs approval for the event. A freshly verified declarative subscriber needs neither code nor runtime approval; other community subscribers need their own applicable grants.
 - A runtime that subscribes to an event is a background job. It does not run when there is no usable model key for the session.
 
 To make "go to the docks" a player action that the story then picks up, use `draftMessage` or `sendMessage`. To change data directly, use `invokeRuntime` or `invokePluginAction`.
@@ -688,3 +688,7 @@ messages:
 ```
 
 `root` is relative to the package, while `entry` is relative to `root`. Use external classic scripts: inline scripts and modules do not run. The host injects `window.covel`; remove `bridge` when the page needs no session data. A session-reading page is mounted only after player consent. The player keeps the host back button and can retry a failed page. See [multi-file pages](../reference/ui-panels.md#multi-file-pages) for the file rules, limits, CSP and cache contract. Keep private files out of the published root. For custom fonts, use an embedded `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Even a relative font URL under the published root fails because the sandboxed document has an opaque origin and the route supplies no CORS allow headers.
+
+## Updating display state with presentation
+
+For story-driven backdrops or music, use a [presentation selector](./advanced.md#presentation-selectors) to update owned display namespaces for existing UI slots. Presentation cannot read the full World Model or call slot services to bypass its scope; failure leaves story and next input available. See the [contract](../reference/plugins.md#presentation-runtimes).

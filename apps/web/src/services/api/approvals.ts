@@ -1,6 +1,6 @@
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
-import { request } from "./request.js";
+import { ApiError, request } from "./request.js";
 
 // -- Approvals (RPC approval gate) -------------------------------
 
@@ -18,6 +18,17 @@ export async function resolveApproval(
     body: JSON.stringify({ decision, scope }),
     sessionId,
     operatorAuth: true,
+    silentCodes: ["approval_obsolete"],
+  }).catch((error: unknown) => {
+    // The server consumed this request without a grant. Callers retry the
+    // original enable/run against current policy, retaining their visit guards.
+    if (
+      error instanceof ApiError &&
+      error.status === 409 &&
+      error.code === "approval_obsolete"
+    )
+      return undefined;
+    throw error;
   });
   // The server loads the plugin's tasks as soon as its code may run. One that
   // does not load is said now, with the reason, not found by a later turn.
@@ -26,7 +37,7 @@ export async function resolveApproval(
     emitToast(
       "error",
       i18n.t("pluginJob.runtimesNotLoaded", {
-        plugin: result.pending?.pluginId ?? "",
+        plugin: result?.pending?.pluginId ?? "",
         count: failures.length,
         defaultValue:
           "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

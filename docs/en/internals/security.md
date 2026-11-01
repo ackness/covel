@@ -2,6 +2,8 @@
 
 This page explains which security boundaries the Covel server has, and why each boundary is drawn where it is. It is written for people who change the server, run a hosted instance, or want to know "what it means to approve a community plugin".
 
+See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 Related material is on other pages:
 
 - Authentication rules for each route: [`../reference/api.md`](../reference/api.md#authentication-session-owner-token)
@@ -12,6 +14,18 @@ Related material is on other pages:
 - Reporting a vulnerability: [`SECURITY.md`](../../../SECURITY.md)
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
+
+Plugin file references follow the [declaration-directory rules](../reference/plugins.md#declaration-paths) and must remain inside the package after real-path resolution. Conventional `output.schema.json` cannot escape through a symlink or be inherited from a parent repository.
+
+## Declarative execution boundary
+
+[Declarative classification](../reference/plugin-installation.md#declarative-plugins) requires a complete, bounded inventory that does not follow links and a content digest matching the loaded definition. Changed before/after signatures, registry replacement and failed reads cannot retain an old positive proof. Authorization reads live publication; execution snapshots freeze artifacts, not authority. Code-era runtime, tool and service snapshots cannot borrow a newer declarative exemption; cached code runtimes and actual module imports still require real code/runtime grants.
+
+Static prompts and UI need no plugin import. Browser exceptions reuse validated asset paths, types and size limits; server references override them. Adding code never turns an old static activation into a grant. Unapproved reload removes old registrations and publishes pending metadata. Declarative status is neither persisted on runtime manifests nor written into the approval gate.
+
+Declarative runtimes write only their own datasets and validated character records; other plugins' data is modified by their write services under provider identity. `authorizedToolNames` still checks the final name after hook/override rewrites. Services, sub-agents, resume and retry retain narrower context restrictions. Code exemption grants neither tool approval nor current-content `bridge: session` consent and adds no bridge write capability.
+
+Whole-list refresh retries entries republished by another package’s awaited activation, within a fixed limit, so earlier cache invalidation is checked before producing the list.
 
 ## Host profile
 
@@ -528,3 +542,7 @@ Delegation privacy uses kernel-recorded provider and call identity to project st
 ## In-game host role
 
 The preparation role changes only a new seat's permitted game actions. It grants no owner/operator identity, bypasses no session.create host-profile check and cannot authorise system-source requests. Actor history and prompts aid perspective; they are not a sandbox for approved server code.
+
+## Presentation projection and kernel bookkeeping
+
+Presentation uses a separate context builder, copying only public `segments` / `cues`, minimal identity and explicitly allowed own data. Concealed / failed / non-story results, hidden namespaces, raw digests and services are absent. `_presentation_budget`, owned by `__kernel:presentation`, is control-plane source/counter bookkeeping: plugin, RPC, data-tool and portable projections cannot expose it; snapshots, forks and browser checkpoints exclude it. Spend remains until session deletion; restore / reset changes incarnation so old jobs cannot attach. Function JS remains unsandboxed under existing code approval. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).

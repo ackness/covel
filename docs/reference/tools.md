@@ -2,6 +2,8 @@
 
 工具是模型在一次运行中可以调用的函数：模型给出名字和参数，框架执行它，把结果回给模型。本页列出全部工具、每个工具的参数和返回，以及怎样写自己的工具、工具怎样把数据写进存储。写 runtime 提示词或写工具的插件作者需要它。
 
+世界数据的静态发现、接收者推导与缺失提示见[接收规则](./world-data.md#data-receivers)。接收声明不满足服务或 runtime 能力依赖。
+
 工具分五类：
 
 - **builtin**：框架自带，任何插件都可以用。
@@ -15,6 +17,12 @@
 
 > [!NOTE]
 > 表里的 DashScope / OpenAI 生图工具由[官方社区插件仓库](https://github.com/covel-ai/covel-plugins)提供。安装并在会话里授权之后，对应的工具和界面才会注册。
+
+## 声明式 runtime 的工具
+
+[声明式插件](./plugin-installation.md#声明式插件)可以使用声明的读取工具、界面工具和完成/控制工具，也可以用 `sync-characters` 提交经过验证的角色记录。中央能力表位于 `packages/plugin-handlers-utils/src/framework-tool-names.ts`；新增框架工具必须明确评审其能力，不能因其名字或前缀自动放行。
+
+数据集工具只写调用包声明的数据集；参数严格匹配工具 schema，额外的 `pluginId` 或 `namespace` 会报错，不会改变归属。生成工具与服务导入使用精确工具名，最终执行器在 hook 改名之后检查 `authorizedToolNames`。其他插件的数据只能由其独立准入的写服务修改。代码/runtime 免审批不会替代逐工具审批、提案校验或提交，也不会放宽子 agent、恢复与重试的写入限制。
 
 ## 概览
 
@@ -2078,3 +2086,7 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 ## 故事内的演员委托
 
 故事 agent 可调用 `delegate`，传 `target: {contract: "character-actor@1"}`、`character: "Mara"`、简短的 `brief` 和可选 `instruction`；不传 characterId 或 data。名字解析、档案与亲历历史由框架负责。内置对话叙事按计划顺序逐个调用，只组合成功的公开段落，丢弃 intent；失败演员的暂存操作不提交。操作在最终提交被拒时，按现有规则只损失该操作并显示固定通知。
+
+## 呈现函数的调用边界
+
+带 `presentation` 的函数没有工具、服务或委派入口，也不能发事件、挂起或发布 UI / completion。gateway 与媒体 helper 共享来源回合的持久额度；零额度在派发前拒绝，额度耗尽是正常 no-op。普通 runtime 的工具清单不变，见[呈现 runtime](./plugins.md#presentation-runtimes)。

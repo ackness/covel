@@ -292,16 +292,30 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime`
 
-| Field         | Type   | Required | Description                                                                                                                                      |
-| ------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `description` | text   | no       | What the runtime does. Plain string; translations go in locale files.                                                                            |
-| `schedule`    | object | no       | When and in what order the runtime runs.                                                                                                         |
-| `io`          | object | no       | What the runtime reads and produces.                                                                                                             |
-| `agent`       | object | no       | Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body.                 |
-| `function`    | object | no       | Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`. |
-| `guard`       | string | no       | Path of the guard module. It runs before the runtime and can skip it.                                                                            |
-| `effects`     | object | no       | Declared read and write sets, used to detect parallel hazards.                                                                                   |
-| `permissions` | object | no       | Declared permission upper bounds.                                                                                                                |
+| Field          | Type   | Required | Description                                                                                                                                      |
+| -------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `presentation` | object | no       | Function-only public-story presentation. Omitted budget counters are zero; a positive budget requires detached, non-settling execution.          |
+| `description`  | text   | no       | What the runtime does. Plain string; translations go in locale files.                                                                            |
+| `schedule`     | object | no       | When and in what order the runtime runs.                                                                                                         |
+| `io`           | object | no       | What the runtime reads and produces.                                                                                                             |
+| `agent`        | object | no       | Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body.                 |
+| `function`     | object | no       | Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`. |
+| `guard`        | string | no       | Path of the guard module. It runs before the runtime and can skip it.                                                                            |
+| `effects`      | object | no       | Declared read and write sets, used to detect parallel hazards.                                                                                   |
+| `permissions`  | object | no       | Declared permission upper bounds.                                                                                                                |
+
+## `runtime.presentation`
+
+| Field    | Type   | Required | Description                                                                  |
+| -------- | ------ | -------- | ---------------------------------------------------------------------------- |
+| `budget` | object | no       | Durable source-turn allowance; cache hits and availability probes cost zero. |
+
+## `runtime.presentation.budget`
+
+| Field         | Type    | Required | Description                                                                                                 |
+| ------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `calls`       | integer | no       | Maximum admitted gateway dispatches per source turn and runtime, shared across retries; omitted means zero. |
+| `generations` | integer | no       | Maximum media output units per source turn and runtime, in addition to calls; omitted means zero.           |
 
 ## `runtime.schedule`
 

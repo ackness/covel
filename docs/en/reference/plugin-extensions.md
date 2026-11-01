@@ -2,12 +2,18 @@
 
 A plugin rarely works alone. It may need to read a result that another plugin computed, emit an event, call another plugin's function, or draw its own panel in the interface. This page explains which interface to use for each of these jobs and where the boundary of each one is. Plugin authors who write several plugins that work together, connect a new model protocol, or build a custom UI need it.
 
+See [world data receivers](./world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
+
 The split of work is this: the framework handles discovery, authorization, scheduling, validation, cancellation, and mounting. The structure of business data, the algorithms, the provider protocols, and the UI components stay inside the plugin package.
 
 Examples you can install and look at:
 
 - [Lifecycle Probe](../../../tests/third-party/lifecycle-probe/README.md) and [Service Provider Probe](../../../tests/third-party/service-provider-probe/README.md): two plugins you can install on their own. Together they cover commands, panels, manual functions, data submission, and service collaboration.
 - [Jev choice recommendation demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo).
+
+## Declarative consumers
+
+[Declarative plugins](./plugin-installation.md#declarative-plugins) can import read/write services through versioned contracts but cannot register executable service or extension providers. The host reads static prompt segments and UI. Resolution still requires one active, independently admitted provider. Missing, paused and ambiguous providers retain existing outcomes; there is no first-provider guess. Imports are optional by default and do not automatically enable unrelated packages. Write services retain provider identity and commit rules; the caller's exemption cannot authorize provider server code.
 
 ## Choose a way to communicate
 
@@ -867,3 +873,7 @@ See [character delegation](./plugins.md#character-orchestration) and the [compos
 ## Bundled policy and optional story composition
 
 The bundled provider exposes one code-only read service named turn-policy, with five algorithms chosen by its own getOwnSettings().strategy. Alone it needs no session selection; additional providers require an exact choice. The dialogue function calls once by contract so director can borrow a gateway; the story agent does not import/call policy again. Plans project names before reaching models; canonical requests and character IDs remain in code. Custom packages with several services on a contract still need one matching declaration per registration, without deduplication by contract.
+
+## Presentation and communication
+
+Presentation functions read projected public story and explicit own asset / display namespaces. Service, tool, recursion and sub-agent calls are refused at entry, including read services. UI-slot providers render committed own display state; presentation grants no private-data authority. See [presentation runtimes](./plugins.md#presentation-runtimes).

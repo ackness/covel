@@ -200,6 +200,10 @@ export interface TurnCompletionPolicy {
  * activated is a run-time property (`RuntimeActivation`).
  */
 export interface NormalizedRuntimeSpec {
+  readonly presentation?: {
+    readonly budget: import("@covel/plugin-handlers-utils").PresentationBudget;
+    readonly publicAssetNamespaces: readonly string[];
+  };
   readonly id: string;
   readonly pluginId: string;
   readonly declaredTrigger: TriggerSpec;

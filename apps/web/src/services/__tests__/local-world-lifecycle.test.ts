@@ -23,6 +23,10 @@ beforeEach(async () => {
   });
   await vault.upsertWorld({
     id: "world-a",
+    metadata: {
+      plugins: ["pack:example", "contract:check@1", "plugin:missing"],
+      pluginPitch: { label: "Watch" },
+    },
     name: "World A",
     description: "",
     createdAt: "2026-01-01",
@@ -58,7 +62,20 @@ it("keeps edited worlds through later local checkpoint writes and a fresh servic
   await service.updateSession("session-a", { status: "paused" });
   const reloaded = new LocalDataService(vault);
   expect((await reloaded.getWorld("world-a"))?.name).toBe("Edited");
+  expect((await reloaded.getWorld("world-a"))?.metadata).toEqual({
+    plugins: ["pack:example", "contract:check@1", "plugin:missing"],
+    pluginPitch: { label: "Watch" },
+    dimensions: {
+      history: { name: "History", schema: { type: "array" }, initialValue: [] },
+    },
+  });
   expect((await vault.getCheckpoint("session-a"))?.world?.name).toBe("Edited");
+  expect(
+    (await vault.getCheckpoint("session-a"))?.world?.metadata,
+  ).toMatchObject({
+    plugins: ["pack:example", "contract:check@1", "plugin:missing"],
+    pluginPitch: { label: "Watch" },
+  });
 });
 
 it("atomically deletes a world and its local sessions without deleting shared server worlds", async () => {
@@ -84,11 +101,45 @@ it("atomically deletes a world and its local sessions without deleting shared se
   expect(api.deleteWorld).not.toHaveBeenCalled();
 });
 
-it("rejects invalid edited dimensions before they can break session checkpoints", async () => {
-  await expect(
-    service.updateWorld("world-a", {
-      dimensions: { geography: { regions: [] } },
-    }),
-  ).rejects.toThrow();
-  expect((await service.getWorld("world-a"))?.dimensions).toBeUndefined();
+it.each([false, true])(
+  "rejects invalid edited dimensions before they can break session checkpoints (metadata=%s)",
+  async (metadata) => {
+    const dimensions = { geography: { regions: [] } };
+    await expect(
+      service.updateWorld(
+        "world-a",
+        metadata ? { metadata: { dimensions } } : { dimensions },
+      ),
+    ).rejects.toThrow();
+    expect((await service.getWorld("world-a"))?.dimensions).toBeUndefined();
+  },
+);
+
+it("keeps portable generated definitions, edited initial values and explicit clears through reload and local checkpoints", async () => {
+  const dimensions = {
+    alarm: {
+      name: { en: "Alarm", ja: "警戒" },
+      schema: { type: "integer" as const },
+      initialValue: 17,
+    },
+  };
+  await service.saveGeneratedWorld({
+    id: "portable",
+    name: "Portable",
+    description: "",
+    metadata: { dimensions },
+    createdAt: "2026-01-01",
+  });
+  expect((await service.getWorld("portable"))?.dimensions).toEqual(dimensions);
+  await service.updateWorld("portable", {
+    dimensions: { alarm: { ...dimensions.alarm, initialValue: 23 } },
+  });
+  const fresh = new LocalDataService(vault);
+  expect(
+    (await fresh.getWorld("portable"))?.dimensions?.alarm?.initialValue,
+  ).toBe(23);
+  await fresh.updateWorld("portable", { dimensions: {} });
+  await fresh.createSession("portable", "cleared", [], "en-US");
+  expect((await fresh.getWorld("portable"))?.dimensions).toEqual({});
+  expect((await vault.getCheckpoint("cleared"))?.world?.dimensions).toEqual({});
 });

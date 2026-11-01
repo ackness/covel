@@ -4,6 +4,10 @@
 
 读这一页之前，先读完[带本地代码的插件](./local-code.md)。每一节可以单独读，用到哪节读哪节。
 
+`authoring.source` 与 `accepts` 让宿主从实际存在的世界内容发现数据需求；它不提供 runtime 或服务能力，也不授予代码权限。相同路径只合并等效声明。详见[接收规则](../reference/world-data.md#data-receivers)。
+
+文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
+
 ## 多个 runtime 的布局
 
 一个插件有多个 runtime 时，每个 runtime 住在 `runtimes/` 下自己的文件夹里：
@@ -165,9 +169,9 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。同一个会话启用的两个插件声明了同一个 `path` 时，这个路径不再算约定位置，所以选一个别的插件不会用的路径。内核和世界包自己的路径（如 `data/dimensions.yaml`、`world.yaml`）不能声明，列表见[世界数据](../reference/world-data.md)。
+世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。同一路径的声明不兼容时，需要显式 descriptor 指明目标，与会话启用集合无关。内核和世界包自己的路径（如 `data/dimensions.yaml`、`world.yaml`）不能声明，列表见[世界数据](../reference/world-data.md)。
 
-`generate` 有两个取值：`offer` 把这类内容列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、不是媒体、以 `id` 为 `key`。玩家选中后，生成器会把 schema、提示和示例写进它的提示词，并把这个插件加进世界要启用的插件里。只给在真实模型上验证过生成质量的内容声明它。
+`generate` 有两个取值：`offer` 把这类内容列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、不是媒体、以 `id` 为 `key`。玩家选中后，生成器会把 schema、提示和示例写进它的提示词，生成的实际内容再参与接收者推导。只给在真实模型上验证过生成质量的内容声明它。
 
 ### 检查声明
 
@@ -742,3 +746,94 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 对话叙事采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色演员)。
 
 历史段落只供策略选人，不自动加入共享演员简报；运行器按角色提供亲历历史。`scene-cast@1` 的结构化名单供规划器读取，`activeCastContext` 则作为可选输入供故事 agent 使用。
+
+## 呈现选择器
+
+在 `~/.covel/plugins/gallery-display/` 建包，使用[呈现 runtime 示例清单](../reference/plugins.md#presentation-runtimes)。给 `art.schema.json` 写入 `{"type":"object"}`，将公开素材按场景名作为 key 导入 `art`。同目录的 `handler.js` 如下。缺少故事或素材时保留已有展示：
+
+<!-- presentation-file:gallery-display/art.schema.json -->
+
+```json
+{ "type": "object" }
+```
+
+<!-- presentation-file:gallery-display/handler.js -->
+
+```js
+export default async function handler(ctx) {
+  const slot = ctx.inputs?.story;
+  const story = slot?.cardinality === "one" ? slot.value : undefined;
+  if (!story) {
+    ctx.presentation.note("no-story");
+    return { outcome: "success", value: {} };
+  }
+  const scene = story.cues?.scene;
+  const art = scene ? await ctx.pluginData.get("art", scene) : null;
+  if (!art) {
+    ctx.presentation.note("asset-missing");
+    return { outcome: "success", value: {} };
+  }
+  const previous = await ctx.pluginData.get("display", "current");
+  if (previous?.scene === scene) {
+    ctx.presentation.note("no-scene-change");
+    return { outcome: "success", value: {} };
+  }
+  await ctx.pluginData.set("display", "current", { scene, art });
+  return { outcome: "success", value: { selected: true } };
+}
+```
+
+需要生成时，另建 `gallery-generator` 包，根 `PLUGIN.md` 只写 `id: gallery-generator` 和 `description: Generates public story art.`。下面分别是 `runtimes/render/RUNTIME.md` 和同目录的 `handler.js`。选择 image 用途的模型在会话模型设置完成；包不指定服务商。
+
+<!-- presentation-file:gallery-generator/PLUGIN.md -->
+
+```yaml
+---
+id: gallery-generator
+description: Generates public story art.
+---
+```
+
+<!-- presentation-file:gallery-generator/runtimes/render/RUNTIME.md -->
+
+```yaml
+---
+schedule: { stage: post-turn, detached: true }
+presentation: { budget: { calls: 1, generations: 1 } }
+io:
+  inputs:
+    story:
+      from: { contract: narrative-engine@2 }
+      required: false
+function: { model: image }
+effects:
+  reads: [plugin-data:self:display]
+  writes: [plugin-data:self:display, media:*]
+---
+```
+
+<!-- presentation-file:gallery-generator/runtimes/render/handler.js -->
+
+```js
+export default async function handler(ctx) {
+  const slot = ctx.inputs?.story;
+  const story = slot?.cardinality === "one" ? slot.value : undefined;
+  if (!story) {
+    ctx.presentation.note("no-story");
+    return { outcome: "success", value: {} };
+  }
+  if (!ctx.images?.isAvailable()) {
+    ctx.presentation.note("unavailable");
+    return { outcome: "success", value: {} };
+  }
+  const { refs } = await ctx.images.generate({
+    prompt: JSON.stringify(story.segments),
+    n: 1,
+  });
+  if (refs[0]) await ctx.pluginData.set("display", "current", { art: refs[0] });
+  else ctx.presentation.note("asset-missing");
+  return { outcome: "success", value: {} };
+}
+```
+
+用 `pnpm validate:plugin ~/.covel/plugins/gallery-display` 和 `pnpm validate:plugin ~/.covel/plugins/gallery-generator` 检查自己的文件。成功表示静态契约通过，不会生成媒体。通过真实队列的假 gateway 测试确认故事先提交、后续输入不等待，以及旧结果不能覆盖新状态，见[插件测试](./testing.md#验证呈现的拒绝路径)。排查时查 `presentation.completed` 的固定 reason 与 budget；没有每回合玩家弹窗。完整限制集中在[呈现 runtime](../reference/plugins.md#presentation-runtimes)。

@@ -53,7 +53,7 @@ When the user asks for a diagram or an overview, add `map.html` to the report fo
 
 ### 1. Scope And Context
 
-Confirm or infer: the target tree, the world and plugin set to reason about (default: one bundled world with the set its `pluginPolicy` and pack resolve to), the layers in scope (default: all four), and any focus the user named.
+Confirm or infer: the target tree, the world and plugin set to reason about (default: one bundled world with the set its `plugins` references and initial pack resolve to), the layers in scope (default: all four), and any focus the user named.
 
 Read `flow.md`, `design-principles.md`, `docs/reference/glossary.md`, `docs/reference/plugins.md`, and `docs/internals/technical-debt.md` — a limit recorded there is not a finding. Earlier audits under `devs/docs/audits/` are leads: re-check each against current code, and do not re-report what the user deferred.
 

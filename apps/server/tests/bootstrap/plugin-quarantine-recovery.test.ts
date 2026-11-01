@@ -63,7 +63,9 @@ async function fixture(development = true) {
   let approved = false;
   const onReload = vi.fn(async () => {});
   const prepareDeclarations = vi.fn(async () => {
-    expect(discovered.registry.get(id)?.status).toBe("error");
+    expect(discovered.registry.get(id)?.status).toBe(
+      discovered.discoveryMap.has(id) ? "registered" : "error",
+    );
     expect(state.imports).toBe(0);
   });
   const manager: BootstrapPluginEntries = await createBootstrapPluginEntries({
@@ -148,8 +150,14 @@ describe("startup quarantine recovery", () => {
     await f.manager.reload(f.id);
     expect(f.registry.get(f.id)?.status).toBe("registered");
     expect(f.state.imports).toBe(0);
-    await expect(f.manager.reload(f.id)).rejects.toThrow(
-      "requires a live server-code approval",
+    await expect(f.manager.reload(f.id)).resolves.toMatchObject({
+      pluginId: f.id,
+    });
+    expect(f.registry.get(f.id)?.status).toBe("registered");
+    expect(f.state).toEqual({ imports: 0, activations: 0 });
+    expect(f.tools.find("value", f.id)).toBeUndefined();
+    await expect(f.manager.ensurePluginEntry(f.id, "session")).rejects.toThrow(
+      "requires explicit approval",
     );
   });
 

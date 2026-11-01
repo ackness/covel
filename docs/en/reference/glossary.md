@@ -237,7 +237,7 @@ See: [Transactions · Operation-based writes](./transactions.md#operation-based-
 
 A named group of plugins (two sets, `requested` and `recommended`, plus tags) that together make up a way of playing, for example `traditional-story` or `dialogue-mode`.
 
-When a player picks a gameplay pack on the session-prep screen, it replaces the plugins brought in by the previous pack in one step. Plugins the world itself requires, and plugins the player picked by hand, stay the same. A world sets its default gameplay pack with `pluginPolicy.preset` and adds the plugins it wants with `pluginPolicy.plus`. The packs are the built-in ones only (`packs/builtin.yaml`); a world does not define packs of its own.
+When a player picks a gameplay pack on the session-prep screen, it replaces the plugins brought in by the previous pack in one step. Plugins the world itself requires, and plugins the player picked by hand, stay the same. A world sets its default gameplay pack with `plugins` and adds the plugins it wants with `plugins`. The packs are the built-in ones only (`packs/builtin.yaml`); a world does not define packs of its own.
 
 It is different from a **Preset**. A Preset packages a model choice, not plugins.
 

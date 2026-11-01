@@ -497,7 +497,11 @@ export { estimateTokens } from "./token-estimation.js";
 export { rankTexts, searchExcerpt, searchTerms } from "./text-search.js";
 export type { RankedText, RankTextsOptions } from "./text-search.js";
 
-export { FRAMEWORK_TOOL_NAMES } from "./framework-tool-names.js";
+export {
+  FRAMEWORK_TOOL_NAMES,
+  FRAMEWORK_TOOL_CAPABILITIES,
+  isDeclarativeFrameworkTool,
+} from "./framework-tool-names.js";
 
 export * from "./i18n.js";
 export * from "./locale-registry.js";
@@ -531,3 +535,5 @@ export type TokenEstimator = (text: string) => number;
 export * from "./action-schemas.js";
 export * from "./story-schemas.js";
 export * from "./orchestration-contracts.js";
+
+export * from "./presentation.js";

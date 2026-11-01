@@ -5,6 +5,32 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "budget": {
+          "type": "object",
+          "properties": {
+            "calls": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16,
+              "description": "Maximum admitted gateway dispatches per source turn and runtime, shared across retries; omitted means zero."
+            },
+            "generations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4,
+              "description": "Maximum media output units per source turn and runtime, in addition to calls; omitted means zero."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Durable source-turn allowance; cache hits and availability probes cost zero."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Function-only public-story presentation. Omitted budget counters are zero; a positive budget requires detached, non-settling execution."
+    },
     "description": {
       "anyOf": [
         {
