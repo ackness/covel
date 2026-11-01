@@ -468,6 +468,8 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 多文件视图从 `/plugin-assets/<pluginId>/<digest>/<entry>` 直接加载进一层 `sandbox="allow-scripts"` iframe，没有 `srcdoc` 或外层宿主。[页面契约](../reference/ui-panels.md#多文件页面)定义 CSP、文件类型和大小限制。
 
+`/plugin-assets` 及其子路径只提供已发布资源。未匹配资源路由的请求统一返回 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`；即使编码的点路径段规范化后移除了插件 ID 或摘要，也不会进入公共静态文件或应用首页的回退路由。
+
 <!-- prettier-ignore -->
 | 威胁 | 边界 |
 | --- | --- |

@@ -6,6 +6,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createPluginRegistry,
@@ -99,8 +100,16 @@ beforeEach(async () => {
     }),
   );
   app.route("/", createPluginAssetRoutes(registry));
-  // The SPA fallback must never shadow the asset route, even on a missing file.
-  app.get("*", (c) => c.html("SPA fallback"));
+  // Match production: neither public files nor the SPA may answer asset misses.
+  const webRoot = path.join(root, "web");
+  await mkdir(path.join(webRoot, "plugin-assets"), { recursive: true });
+  await writeFile(path.join(webRoot, "index.html"), "<title>SPA fallback</title>");
+  await writeFile(
+    path.join(webRoot, "plugin-assets/public.txt"),
+    "Unpublished public file",
+  );
+  app.use("/*", serveStatic({ root: webRoot }));
+  app.get("*", serveStatic({ root: webRoot, path: "/index.html" }));
   prefix = await index();
 });
 afterEach(async () => {
@@ -115,11 +124,61 @@ function request(file: string, init?: RequestInit) {
 async function missing(file: string) {
   const response = await request(file);
   expect(response.status, file).toBe(404);
+  expect(response.headers.get("content-type")).toContain("application/json");
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   expect(await response.json()).toEqual({ error: "File not found" });
 }
 describe("public plugin assets", () => {
+  it.each([
+    "%2e%2e/%2e%2e/PLUGIN.md",
+    "%2E%2E/%2E%2E/missing.js",
+    "../../PLUGIN.md",
+    "%2e%2e/%2e%2e/",
+  ])("keeps normalized asset paths out of static serving: %s", async (file) => {
+    // Both Fetch and the Node HTTP adapter normalize dot segments before routing.
+    await missing(file);
+  });
+  it.each([
+    "/plugin-assets",
+    "/plugin-assets/",
+    "/plugin-assets/PLUGIN.md",
+    "/plugin-assets/public.txt",
+    "/plugin-assets/p",
+    "/plugin-assets/p/PLUGIN.md",
+  ])("reserves incomplete asset paths: %s", async (url) => {
+    const response = await app.request(url);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await response.json()).toEqual({ error: "File not found" });
+  });
+  it("uses the same missing response for HEAD and unsupported asset methods", async () => {
+    for (const [url, method] of [
+      ["/plugin-assets/PLUGIN.md", "HEAD"],
+      [`${prefix}app.js`, "POST"],
+    ] as const) {
+      const response = await app.request(url, {
+        method,
+        headers: { Origin: "http://localhost:5173" },
+      });
+      expect(response.status).toBe(404);
+      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      if (method === "HEAD") expect(await response.text()).toBe("");
+      else expect(await response.json()).toEqual({ error: "File not found" });
+    }
+  });
+  it("keeps the SPA fallback available outside the asset namespace", async () => {
+    for (const url of ["/", "/session/example", "/plugin-assets-other/page"]) {
+      const response = await app.request(url);
+      expect(response.status, url).toBe(200);
+      expect(await response.text()).toBe("<title>SPA fallback</title>");
+    }
+  });
   it.each([
     ["index.html", "text/html; charset=utf-8"],
     ["app.js", "text/javascript; charset=utf-8"],
@@ -292,7 +351,11 @@ describe("public plugin assets", () => {
   });
   it.each([
     "..%2f..%2fPLUGIN.md",
+    "..%2f..%2fpackage.json",
     "%2e%2e/PLUGIN.md",
+    "../PLUGIN.md",
+    "server/index.js",
+    "missing.js",
     "a/../b",
     "a//b.js",
     "%5csecret",
