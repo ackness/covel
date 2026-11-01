@@ -154,6 +154,30 @@ async function controlStyle(locator: Locator) {
 }
 async function hit(locator: Locator) {
   await expect(locator).toBeVisible();
+  // Visibility can precede Radix's modal layer registration: the body and
+  // dialog still reject pointers until its effects enable the current layer.
+  // Also wait for the dialog's own entrance motion before measuring its center.
+  await expect
+    .poll(
+      () =>
+        locator.evaluate((element) => {
+          const dialog = element.closest('[role="dialog"]');
+          return (
+            !dialog ||
+            (getComputedStyle(element).pointerEvents !== "none" &&
+              getComputedStyle(dialog).pointerEvents !== "none" &&
+              dialog
+                .getAnimations()
+                .every(
+                  (animation) =>
+                    animation.playState === "finished" ||
+                    animation.playState === "idle",
+                ))
+          );
+        }),
+      { message: "Dialog control finishes opening and accepts pointer events" },
+    )
+    .toBe(true);
   const report = await locator.evaluate((element) => {
     const describe = (node: Element | null) => {
       if (!node) return null;

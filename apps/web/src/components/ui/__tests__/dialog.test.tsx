@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../dialog.js";
 
 afterEach(cleanup);
@@ -36,5 +42,42 @@ describe("Dialog", () => {
     );
 
     expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull();
+  });
+
+  it("restores pointer access when a consent dialog remounts already open", async () => {
+    const allow = vi.fn();
+    const consent = (requested: boolean, ready: boolean) =>
+      requested ? (
+        <Dialog open={ready}>
+          <DialogContent>
+            <DialogTitle>Page consent</DialogTitle>
+            <button onClick={allow}>Allow capabilities</button>
+          </DialogContent>
+        </Dialog>
+      ) : null;
+    // First selection hashes the content before opening; after revocation the
+    // same content is already hashed, so the replacement root starts open.
+    const view = render(consent(true, false));
+    view.rerender(consent(true, true));
+    await waitFor(() =>
+      expect(getComputedStyle(screen.getByRole("dialog")).pointerEvents).toBe(
+        "auto",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Allow capabilities" }));
+    view.rerender(consent(false, false));
+    expect(document.body.style.pointerEvents).not.toBe("none");
+    view.rerender(consent(true, true));
+    const dialog = screen.getByRole("dialog");
+    const button = screen.getByRole("button", { name: "Allow capabilities" });
+    await waitFor(() => {
+      expect(getComputedStyle(dialog).pointerEvents).toBe("auto");
+      expect(getComputedStyle(button).pointerEvents).toBe("auto");
+    });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.click(button);
+    expect(allow).toHaveBeenCalledTimes(2);
+    view.unmount();
+    expect(document.body.style.pointerEvents).not.toBe("none");
   });
 });
