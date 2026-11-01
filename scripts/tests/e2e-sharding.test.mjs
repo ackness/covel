@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import BalancedSharding, { shardFiles } from "../e2e-sharding.mjs";
+import BalancedSharding, { fileWeight, shardFiles } from "../e2e-sharding.mjs";
+
+test("new files remain eligible and added cases scale a measured file's weight", () => {
+  assert.equal(fileWeight("chromium/new.spec.ts", 2), 6);
+  assert.equal(fileWeight("chromium-dev/new.spec.ts", 2), 18);
+  const key = "chromium-dev/world-dimension-authoring.spec.ts";
+  assert.ok(
+    fileWeight(key, 1) > 9,
+    "measured slow single-test files carry their actual cost",
+  );
+  assert.equal(fileWeight(key, 2), 2 * fileWeight(key, 1));
+});
 
 test("weighted shards are deterministic, disjoint, complete and keep files intact", () => {
   const files = Array.from({ length: 32 }, (_, index) => ({

@@ -1,0 +1,238 @@
+{
+  "chromium-dev/browser-initialization.spec.ts": {
+    "seconds": 12.15,
+    "tests": 1
+  },
+  "chromium-dev/browser-media-cache.spec.ts": {
+    "seconds": 8.9,
+    "tests": 1
+  },
+  "chromium-dev/browser-state-cache.spec.ts": {
+    "seconds": 11.5,
+    "tests": 1
+  },
+  "chromium-dev/browser-workspace-concurrency.spec.ts": {
+    "seconds": 42.3,
+    "tests": 5
+  },
+  "chromium-dev/browser-world-concurrency.spec.ts": {
+    "seconds": 16.95,
+    "tests": 2
+  },
+  "chromium-dev/catalog-accessibility.spec.ts": {
+    "seconds": 3.0,
+    "tests": 1
+  },
+  "chromium-dev/frontend-lifecycle.spec.ts": {
+    "seconds": 51.85,
+    "tests": 5
+  },
+  "chromium-dev/plugin-assets-isolation.spec.ts": {
+    "seconds": 7.45,
+    "tests": 7
+  },
+  "chromium-dev/remote-ui-cache.spec.ts": {
+    "seconds": 19.85,
+    "tests": 2
+  },
+  "chromium-dev/session-credentials.spec.ts": {
+    "seconds": 19.6,
+    "tests": 2
+  },
+  "chromium-dev/session-prep-lore.spec.ts": {
+    "seconds": 26.3,
+    "tests": 2
+  },
+  "chromium-dev/world-data-receivers.spec.ts": {
+    "seconds": 21.6,
+    "tests": 2
+  },
+  "chromium-dev/world-dimension-authoring.spec.ts": {
+    "seconds": 40.25,
+    "tests": 1
+  },
+  "chromium-dev/world-plugin-selection.spec.ts": {
+    "seconds": 17.25,
+    "tests": 1
+  },
+  "chromium-dev/world-session-credentials.spec.ts": {
+    "seconds": 18.05,
+    "tests": 2
+  },
+  "chromium/ai-world-gen.spec.ts": {
+    "seconds": 2.4,
+    "tests": 1
+  },
+  "chromium/appearance.spec.ts": {
+    "seconds": 47.25,
+    "tests": 15
+  },
+  "chromium/aurora-motion.spec.ts": {
+    "seconds": 15.4,
+    "tests": 5
+  },
+  "chromium/auto-advance.spec.ts": {
+    "seconds": 14.85,
+    "tests": 2
+  },
+  "chromium/browser-private-local-world.spec.ts": {
+    "seconds": 5.1,
+    "tests": 1
+  },
+  "chromium/bundled-views.spec.ts": {
+    "seconds": 53.4,
+    "tests": 5
+  },
+  "chromium/composer-modes.spec.ts": {
+    "seconds": 3.45,
+    "tests": 1
+  },
+  "chromium/configuration-propagation.spec.ts": {
+    "seconds": 8.85,
+    "tests": 1
+  },
+  "chromium/ensemble-orchestration.spec.ts": {
+    "seconds": 39.55,
+    "tests": 4
+  },
+  "chromium/execution-recovery.spec.ts": {
+    "seconds": 19.65,
+    "tests": 5
+  },
+  "chromium/execution-retry-batch.spec.ts": {
+    "seconds": 8.55,
+    "tests": 1
+  },
+  "chromium/full-flow.spec.ts": {
+    "seconds": 9.29,
+    "tests": 9
+  },
+  "chromium/gameplay-experience.spec.ts": {
+    "seconds": 14.85,
+    "tests": 2
+  },
+  "chromium/i18n.spec.ts": {
+    "seconds": 4.05,
+    "tests": 3
+  },
+  "chromium/lazy-chunk-retry.spec.ts": {
+    "seconds": 3.85,
+    "tests": 1
+  },
+  "chromium/llm-capability.spec.ts": {
+    "seconds": 18.9,
+    "tests": 4
+  },
+  "chromium/llm-model-binding.spec.ts": {
+    "seconds": 8.85,
+    "tests": 2
+  },
+  "chromium/llm-model-configurations.spec.ts": {
+    "seconds": 6.2,
+    "tests": 1
+  },
+  "chromium/narrative-only-setup.spec.ts": {
+    "seconds": 12.5,
+    "tests": 2
+  },
+  "chromium/onboarding.spec.ts": {
+    "seconds": 15.4,
+    "tests": 4
+  },
+  "chromium/operation-failure-notice.spec.ts": {
+    "seconds": 4.85,
+    "tests": 1
+  },
+  "chromium/orchestration-settings.spec.ts": {
+    "seconds": 8.4,
+    "tests": 1
+  },
+  "chromium/page-policy.spec.ts": {
+    "seconds": 8.12,
+    "tests": 4
+  },
+  "chromium/plugin-diagnostics.spec.ts": {
+    "seconds": 9.35,
+    "tests": 2
+  },
+  "chromium/plugin-install.spec.ts": {
+    "seconds": 7.3,
+    "tests": 2
+  },
+  "chromium/plugin-theme-packs.spec.ts": {
+    "seconds": 60.3,
+    "tests": 9
+  },
+  "chromium/plugin-update.spec.ts": {
+    "seconds": 6.85,
+    "tests": 2
+  },
+  "chromium/plugin-webview-actions.spec.ts": {
+    "seconds": 3.8,
+    "tests": 1
+  },
+  "chromium/plugin-webview-isolation.spec.ts": {
+    "seconds": 5.47,
+    "tests": 22
+  },
+  "chromium/presentation-runtime.spec.ts": {
+    "seconds": 20.8,
+    "tests": 4
+  },
+  "chromium/provider-lifecycle.spec.ts": {
+    "seconds": 26.55,
+    "tests": 7
+  },
+  "chromium/reasoning-display.spec.ts": {
+    "seconds": 9.35,
+    "tests": 2
+  },
+  "chromium/session-summary.spec.ts": {
+    "seconds": 7.5,
+    "tests": 2
+  },
+  "chromium/settings-import.spec.ts": {
+    "seconds": 8.25,
+    "tests": 2
+  },
+  "chromium/settings-panels.spec.ts": {
+    "seconds": 10.3,
+    "tests": 3
+  },
+  "chromium/stage-mode.spec.ts": {
+    "seconds": 17.9,
+    "tests": 3
+  },
+  "chromium/stage-render-followups.spec.ts": {
+    "seconds": 7.8,
+    "tests": 2
+  },
+  "chromium/tabletop-check.spec.ts": {
+    "seconds": 11.45,
+    "tests": 2
+  },
+  "chromium/theme-save.spec.ts": {
+    "seconds": 10.55,
+    "tests": 1
+  },
+  "chromium/typed-form.spec.ts": {
+    "seconds": 7.05,
+    "tests": 2
+  },
+  "chromium/world-generation-progress.spec.ts": {
+    "seconds": 17.05,
+    "tests": 4
+  },
+  "chromium/world-install.spec.ts": {
+    "seconds": 6.65,
+    "tests": 2
+  },
+  "chromium/world-time-labels.spec.ts": {
+    "seconds": 14.75,
+    "tests": 4
+  },
+  "chromium/world-update.spec.ts": {
+    "seconds": 6.05,
+    "tests": 2
+  }
+}

@@ -31,12 +31,13 @@
      the same coverage rule and retain unrelated bases/docs results. CI owns all verification:
      docs-only PR/main skips source checks, retaining schema/changelog checks, test:docs and Site;
      every full scope requires all suites. Server has two isolated shards and runtime coverage runs once independently.
-     Full browser CI balances complete files across four isolated shards (dev tests weighted 3x),
+     Full browser CI balances complete files across four isolated shards using measured durations (new dev files default to 3x),
      both default projects, one worker and at most two
      allowed CPUs; smoke and all extensions also remain required. Daily/manual runs always select
      full scope and add three sandbox approval/region repetitions with zero retries and separate outputs.
      Local push checks only collect E2E; they never execute browsers or install Chromium.
-     Record shard coverage, CPU affinity, durations and retries; job budgets are 40/25/65 minutes
+     Central collection must prove exact shard coverage and include every extension file; browser runners
+     collect during execution without redundant --list. Record CPU affinity, durations and retries; job budgets are 40/25/65 minutes
      for full shard/browser/merge gate. Failure traces, screenshots and HTML artifacts last seven days.
      Browser CI does not establish real-model or packaged Windows/macOS coverage.
      Non-release CI also requires one Site/docs build, including on docs-only changes;
@@ -58,10 +59,10 @@
      缓存淘汰使用同一覆盖规则，保留不同基线及互不覆盖的文档结果。
      CI 统一负责验证：纯文档 PR/main 跳过源码检查，保留 schema/变更日志检查、test:docs 与 Site；
      每个完整范围必须执行全部套件。Server 两片独立运行，runtime 覆盖率另跑一次。
-     完整浏览器 CI 按完整文件权重平衡四个独立 shard（开发 project 三倍），两个默认 project、一个 worker、最多两个允许的 CPU；
+     完整浏览器 CI 按完整文件权重平衡四个独立 shard（使用实测耗时，新开发文件默认三倍），两个默认 project、一个 worker、最多两个允许的 CPU；
      smoke 和全部扩展验收仍是必需项。每日和手动运行始终全量，另加三次沙箱审批/区域重复，
      零重试、独立输出。本地推送检查只收集 E2E，不执行浏览器或安装 Chromium。
-     记录分片覆盖、CPU 限制、耗时和重试；完整 shard/browser/合并门禁上限为 40/25/65 分钟，
+     集中收集须证明分片并集完整且覆盖全部扩展文件；浏览器执行前不重复 --list。记录 CPU 限制、耗时和重试；完整 shard/browser/合并门禁上限为 40/25/65 分钟，
      失败 trace、截图及 HTML 产物保留七天。浏览器 CI 不能证明真实模型或 Windows/macOS 安装包已验证。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
      Site 用 Turbo 并行构建，Actions 键使用任务 hash、目录上限 128MB；E2E 的 build:e2e 在 smoke/扩展/压力间复用已校验内容；

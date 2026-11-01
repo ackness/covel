@@ -58,7 +58,7 @@
       ]
     },
     "@covel/web#build:e2e": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build:e2e"],
       "outputs": ["../../dist/web-e2e/**"],
       "env": ["VITE_*"],
       "inputs": [
@@ -68,6 +68,9 @@
         "$TURBO_ROOT$/.env.production",
         "$TURBO_ROOT$/.env.production.local"
       ]
+    },
+    "build:e2e": {
+      "dependsOn": ["^build:e2e"]
     },
     "@covel/desktop#build": {
       "dependsOn": ["^build", "@covel/server#build"],

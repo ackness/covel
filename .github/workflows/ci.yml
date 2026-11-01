@@ -154,6 +154,12 @@ jobs:
         if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
         run: pnpm check
 
+      # Validate coverage once, away from the browser critical path. Browser
+      # jobs collect again as part of execution, without a redundant --list.
+      - name: Verify browser shard coverage
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
+        run: node scripts/check-e2e-shards.mjs
+
       - name: Test documentation examples
         if: ${{ needs.scope.outputs.scope == 'docs' && !inputs.release }}
         run: pnpm check:schemas && pnpm check:changelog && pnpm test:docs
@@ -449,11 +455,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Collect shard tests
-        run: |
-          echo "Full browser shard ${{ matrix.shard }}/4 (both default projects)"
-          pnpm e2e --shard=${{ matrix.shard }}/4 --list
-
       # The browser download is cached by Playwright version (from the
       # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
       # downloads a build per distribution release and ubuntu-latest moves to a
@@ -537,11 +538,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Collect browser tests
-        run: |
-          pnpm e2e --list
-          pnpm e2e:extensions --list
 
       # The browser download is cached by Playwright version (from the
       # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright

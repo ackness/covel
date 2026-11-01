@@ -83,6 +83,12 @@ test("E2E bundles reuse content across preview ports and invalidate source, conf
       dry(workspace, args, { ...process.env, RUNTIME_PORT: "3101" }),
       id,
     );
+    const graph = dry(workspace, args);
+    assert.equal(
+      graph.has("@covel/plugin-handlers-utils#build"),
+      false,
+      "preview builds must not rewrite the SDK while the dev server is serving it",
+    );
     assert.deepEqual(original.outputs, ["../../dist/web-e2e/**"]);
     assert.equal(
       task(dry(workspace, args, { ...process.env, RUNTIME_PORT: "3102" }), id)
@@ -94,6 +100,7 @@ test("E2E bundles reuse content across preview ports and invalidate source, conf
       "apps/web/src/main.tsx",
       "apps/web/vite.config.ts",
       ".env.production",
+      "packages/plugin-handlers-utils/src/index.ts",
     ]) {
       writeFixtureFile(workspace, file, "changed\n");
       const next = task(dry(workspace, args), id).hash;

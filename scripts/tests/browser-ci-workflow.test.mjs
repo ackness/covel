@@ -139,10 +139,9 @@ test("every full scope requires all four isolated browser shards and the native 
     run,
     /--project|--grep|--pass-with-no-tests|E2E_BASE_URL/,
   );
-  assert.match(
-    stepWith(job, "--list").run,
-    /pnpm e2e --shard=\$\{\{ matrix.shard \}\}\/4 --list/,
-  );
+  assert.equal(stepWith(job, "--list"), undefined);
+  assert.equal(stepWith(ci.jobs.browser, "--list"), undefined);
+  assert.ok(stepWith(ci.jobs.verify, "node scripts/check-e2e-shards.mjs"));
   for (const lane of [job, ci.jobs.browser]) {
     assert.equal(lane["continue-on-error"], undefined);
     assert.ok(

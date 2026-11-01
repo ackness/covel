@@ -1,6 +1,29 @@
 // Playwright's default count-based partition puts the slower development
 // project on the final shard. Keep each file (and its serial suites/hooks)
 // together, and spread both projects over the same four runners.
+import { readFileSync } from "node:fs";
+
+const durations = JSON.parse(
+  readFileSync(
+    new URL("../tests/e2e/shard-durations.json", import.meta.url),
+    "utf8",
+  ),
+);
+
+export function fileWeight(key, count) {
+  const measured = durations[key];
+  // Scale when cases are added to an existing file. Unknown files still run;
+  // their default is based on the measured project-level cost per test.
+  return (
+    count *
+    (measured
+      ? measured.seconds / measured.tests
+      : key.startsWith("chromium-dev/")
+        ? 9
+        : 3)
+  );
+}
+
 export function shardFiles(files, total) {
   const shards = Array.from({ length: total }, () => ({
     weight: 0,
@@ -23,9 +46,10 @@ export default class BalancedSharding {
     const files = suite.suites.flatMap((project) =>
       project.suites.map((file) => ({
         key: `${project.title}/${file.title}`,
-        // Recent Actions runs measured about 3x the time per dev-mode test.
-        weight:
-          file.allTests().length * (project.title === "chromium-dev" ? 3 : 1),
+        weight: fileWeight(
+          `${project.title}/${file.title}`,
+          file.allTests().length,
+        ),
         suite: file,
       })),
     );
