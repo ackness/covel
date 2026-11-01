@@ -17,6 +17,7 @@ import { suspendTool } from "@covel/tools";
 import {
   commitExecution,
   createHookPipeline,
+  createTraceRecorder,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -95,12 +96,16 @@ describe.each(["agent", "function"] as const)(
       const eventBus = createEventBus();
       const events: SubscriptionEvent[] = [];
       eventBus.onEmit((event) => events.push(event));
+      const trace = createTraceRecorder(store, SESSION, input.turnId);
+      const completed = vi.fn(trace.runtimeCompleted);
 
       let leg = 0;
       const deps = (): ExecutionDeps => ({
         store,
         eventBus,
         hookPipeline,
+        onRuntimeStart: trace.runtimeStarted,
+        onRuntimeComplete: completed,
         llm: queuedLLM(
           leg === 2
             ? [prose("All answered.")]
@@ -166,17 +171,38 @@ describe.each(["agent", "function"] as const)(
 
         const started = events
           .filter((event) => event.type === "runtime.started")
-          .map((event) => event.payload as { resumed?: boolean });
+          .map(
+            (event) => event.payload as { runId: string; resumed?: boolean },
+          );
         expect(started).toHaveLength(3);
+        expect(new Set(started.map((event) => event.runId)).size).toBe(3);
         expect(started[0]).not.toHaveProperty("resumed");
         expect(started.slice(1)).toEqual([
           expect.objectContaining({ resumed: true }),
           expect.objectContaining({ resumed: true }),
         ]);
-        const completed = events
+        // Each invocation finalizes once. Commit-time corrections update the
+        // saved invocation's lifecycle without replaying execution or hooks.
+        expect(completed.mock.calls.map(([info]) => info.status)).toEqual([
+          "suspended",
+          "suspended",
+          "success",
+        ]);
+        const terminals = events
           .filter((event) => event.type === "runtime.completed")
-          .map((event) => (event.payload as { status?: string }).status);
-        expect(completed).toEqual(["suspended", "suspended", "success"]);
+          .map((event) => {
+            const { runId, status } = event.payload as {
+              runId: string;
+              status: string;
+            };
+            return { runId, status };
+          });
+        expect(terminals).toEqual([
+          { runId: started[0]!.runId, status: "suspended" },
+          { runId: started[1]!.runId, status: "suspended" },
+          { runId: started[2]!.runId, status: "success" },
+          { runId: started[1]!.runId, status: "success" },
+        ]);
       } finally {
         await eventBus.close();
       }

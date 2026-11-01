@@ -84,7 +84,8 @@ export async function resumeRuntimePipeline(
   options?: ResumeSuspendedRuntimeOptions,
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
-  const runId = crypto.randomUUID();
+  const runId = deps.progressAttemptId ?? crypto.randomUUID();
+  deps = { ...deps, progressAttemptId: runId };
 
   // TurnInput for the resumed runtime: session, turn and content locale come
   // from the suspension and there is no fresh player message. The session's
@@ -269,6 +270,7 @@ async function executeResumedRuntime(
         executionId: progressScopeId,
         resumeData,
         resumedFromSuspensionId: suspension.id,
+        progressRunId: pendingContinuation.lifecycle.progressRunId,
         ...(pendingContinuation.nestedResults?.length
           ? {
               restoredNested: restoreNestedResults(

@@ -127,6 +127,7 @@ export async function executeAgentGuard({
       ...(inputs ? { inputs: freezeInputSlots(inputs) } : {}),
       ...(exports ? { exports: freezeInputSlots(exports) } : {}),
       executionContext,
+      progressRunId: runId,
       createRecursiveCall,
       recursionDepth,
       startTime,

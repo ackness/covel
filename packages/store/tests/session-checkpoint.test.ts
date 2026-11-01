@@ -208,6 +208,64 @@ describe("session checkpoint transfer", () => {
     expect(checkpoint.events).toEqual([]);
   });
 
+  it.each(["memory", "sqlite"])(
+    "retains the latest run correction and an independent twin on %s",
+    async (backend) => {
+      const store =
+        backend === "memory"
+          ? createMemoryStore()
+          : createSqliteStore(":memory:");
+      const session = makeSession();
+      try {
+        await store.createSession(session);
+        await store.saveTurnResult(
+          makeTurnResult({ sessionId: session.id, turnId: "turn" }),
+        );
+        const statuses = [
+          ["child", "success"],
+          ["top", "success"],
+          ["child", "suspended"],
+          ["child", "failed"],
+        ];
+        for (const [index, [runId, status]] of statuses.entries())
+          await store.addTraceEvent(
+            makeTraceEvent({
+              sessionId: session.id,
+              turnId: "turn",
+              type:
+                status === "failed" ? "runtime.failed" : "runtime.completed",
+              payload: {
+                pluginId: "probe",
+                runtimeId: "probe/child",
+                runId,
+                status,
+              },
+              createdAt: new Date(
+                Date.UTC(2026, 9, 7, 0, 0, index),
+              ).toISOString(),
+            }),
+          );
+        const checkpoint = await exportSessionCheckpoint(store, session.id, {
+          revision: 1,
+          actionId: "reload",
+        });
+        expect(checkpoint.traceEvents.map((row) => row.payload)).toEqual([
+          expect.objectContaining({ runId: "top", status: "success" }),
+          expect.objectContaining({ runId: "child", status: "failed" }),
+        ]);
+        await replaceSessionFromCheckpoint(
+          store,
+          JSON.parse(JSON.stringify(checkpoint)),
+        );
+        expect(
+          (await store.listTraceEvents(session.id)).map((row) => row.payload),
+        ).toEqual(checkpoint.traceEvents.map((row) => row.payload));
+      } finally {
+        await store.close();
+      }
+    },
+  );
+
   it("carries only the newest revision of each runtime export", async () => {
     const store = createMemoryStore();
     const session = makeSession();

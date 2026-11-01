@@ -610,17 +610,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     function makeEnvelope(
       eventType: string,
       eventPayload: Record<string, unknown>,
+      eventTurnId = currentTurnId,
     ): SseEnvelope {
       return {
         type: eventType,
         requestId,
         traceId,
         sessionId,
-        turnId: currentTurnId,
+        turnId: eventTurnId,
         flowId: traceId,
         seq: seq++,
         timestamp: new Date().toISOString(),
-        payload: { ...eventPayload, ...currentRetryScope },
+        payload: {
+          ...eventPayload,
+          ...(eventTurnId === currentTurnId ? currentRetryScope : {}),
+        },
       };
     }
 
@@ -636,10 +640,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     const writeEvent = (
       eventType: string,
       eventPayload: Record<string, unknown>,
+      eventTurnId = currentTurnId,
     ): Promise<void> => {
       try {
         // Snapshot payloads as well as identity before later business mutations.
-        const data = JSON.stringify(makeEnvelope(eventType, eventPayload));
+        const data = JSON.stringify(
+          makeEnvelope(eventType, eventPayload, eventTurnId),
+        );
         writes.enqueue(() => stream.writeSSE({ data }));
       } catch {
         writes.close();
@@ -1428,7 +1435,19 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               });
             }
           };
+          const correctedRuns = new Set<string>();
           const outcome = await commitExecution({
+            onRuntimeCorrection: (type, payload) => {
+              if (typeof payload.runId === "string")
+                correctedRuns.add(payload.runId);
+              return writeEvent(
+                type,
+                payload,
+                typeof payload.turnId === "string"
+                  ? payload.turnId
+                  : currentTurnId,
+              );
+            },
             memorySystem: c.get("memorySystem"),
             imageFlowRuntimeIds: (
               await resolveMediaImageFlow(
@@ -1487,6 +1506,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 result,
                 outcome.isolatedRuntimes,
               )) {
+                if (correctedRuns.has(payload.runId)) continue;
+                await emitter.emit("runtime.failed", payload);
                 await writeEvent("runtime.failed", payload);
               }
             },

@@ -115,6 +115,10 @@ export function registerPersistenceStoreSuites(
         ...base,
         pendingContinuation: {
           ...base.pendingContinuation,
+          lifecycle: {
+            runId: "resumed-run",
+            progressRunId: "original-progress-run",
+          },
           messages: [{ role: "system", content: "x".repeat(20_000) }],
           toolCallsSoFar: [{ name: "ask" }],
           pendingProposals: [{ type: "plugin.data" }],
@@ -136,8 +140,9 @@ export function registerPersistenceStoreSuites(
       expect(result!.reason).toBe(suspension.reason);
       expect(result!.runtimeId).toBe(suspension.runtimeId);
       expect(result!.resumeSchema).toEqual(suspension.resumeSchema);
-      // The identity of the execution stays; what the resume consumed goes.
+      // Execution and lifecycle identity stay; what the resume consumed goes.
       expect(result!.pendingContinuation).toEqual({
+        lifecycle: suspension.pendingContinuation.lifecycle,
         readScopes: [],
         messages: [],
         toolCallsSoFar: [],

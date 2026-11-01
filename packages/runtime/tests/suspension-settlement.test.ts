@@ -402,6 +402,13 @@ describe("abandoning a suspension that holds nested calls", () => {
       pluginId: "probe",
       runtimeId,
       jobId,
+      data: {
+        _covel: {
+          runId: runtimeId === asker.name ? "suspended-run" : runtimeId,
+          attemptId: "original",
+          settled: false,
+        },
+      },
       sequence: 1,
       state: "waiting-input",
       createdAt: timestamp,
@@ -422,6 +429,7 @@ describe("abandoning a suspension that holds nested calls", () => {
       pluginId: "probe",
       runtimeId: asker.name,
       pendingContinuation: {
+        lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
         executionContext: { executionId: scope },
         nestedResults: nestedResults.map((result) => ({ result })),
@@ -438,7 +446,16 @@ describe("abandoning a suspension that holds nested calls", () => {
 
     await settleAbandonedSuspensionJobs(
       { store },
-      held([{ pluginId: "probe", runtimeId: "probe/nested" }]),
+      held([
+        {
+          pluginId: "probe",
+          runtimeId: "probe/nested",
+          runId: "probe/nested",
+          turnId: "turn-1",
+          status: "success",
+          durationMs: 0,
+        },
+      ]),
     );
 
     expect(await statesOf(store, "own-job")).toEqual([

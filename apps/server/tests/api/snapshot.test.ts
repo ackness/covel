@@ -1409,6 +1409,7 @@ describe("Snapshot routes", () => {
           required: ["answer"],
         },
         pendingContinuation: {
+          lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           executionContext: {
@@ -1470,6 +1471,7 @@ describe("Snapshot routes", () => {
         reason: "Already handled",
         resumeSchema: {},
         pendingContinuation: {
+          lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
           takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           executionContext: {

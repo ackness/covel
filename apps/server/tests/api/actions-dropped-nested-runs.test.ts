@@ -101,7 +101,7 @@ describe("droppedRunPayloads", () => {
     ]);
   });
 
-  it("never reports a dropped nested run over a committed top-level run of the same runtime", () => {
+  it("reports the dropped nested run independently of its committed top-level twin", () => {
     expect(
       droppedRunPayloads(
         {
@@ -123,7 +123,7 @@ describe("droppedRunPayloads", () => {
           },
         ],
       ).map((payload) => payload.runId),
-    ).toEqual(["parent-run"]);
+    ).toEqual(["nested-run", "parent-run"]);
   });
 });
 
@@ -132,6 +132,11 @@ describe("POST /api/actions — runs dropped with a nested unit", () => {
     const store = createMemoryStore();
     const pluginRegistry = createPluginRegistry();
     const eventBus = createEventBus(store);
+    const observedFailures: Record<string, unknown>[] = [];
+    eventBus.onEmit((event) => {
+      if (event.type === "runtime.failed")
+        observedFailures.push(event.payload as Record<string, unknown>);
+    });
     const sessionLock = createInProcessSessionLock();
     const story = manifest(STORY, { stage: "narrative", outputKind: "story" });
     // `parent` calls `shared` nested; `shared` also runs at top level.
@@ -294,12 +299,26 @@ describe("POST /api/actions — runs dropped with a nested unit", () => {
       .map((event) => event.payload);
     expect(corrections).toEqual([
       expect.objectContaining({
+        runtimeId: SHARED,
+        runId: nestedSharedRun?.runId,
+        status: "failed",
+      }),
+      expect.objectContaining({
         runtimeId: PARENT,
         runId: parentRun?.runId,
         turnId: parentRun?.turnId,
         status: "failed",
       }),
     ]);
+    expect(observedFailures.map((payload) => payload.runId)).toEqual([
+      nestedSharedRun?.runId,
+      parentRun?.runId,
+    ]);
+    expect(
+      (
+        await store.queryTraceEvents(SESSION_ID, { types: ["runtime.failed"] })
+      ).map((row) => (row.payload as { runId: string }).runId),
+    ).toEqual([nestedSharedRun?.runId, parentRun?.runId]);
     expect(
       (await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes")).map(
         (row) => row.key,

@@ -504,6 +504,8 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 **订阅内容。** SSE 连接只接收通过 owner 验证时那一代会话的事件，通过验证后才占用补发状态。生产者在异步工作之前捕获代次；删除控制事件不受 topic 过滤，跨来源乱序也不能把另一代内容交给旧连接。具体握手与重连规则见[协议](../reference/protocol.md)。
 
+**进度归属。** `ctx.progress.report` 会移除插件提供的 `data._covel`，再写入内核捕获的调用身份和收尾来源。恢复和放弃据此选择自己的任务，不能把同 runtime 的独立调用一并收尾。这不构成对已批准服务端 JavaScript 的沙箱。详见[进度协议](../reference/protocol.md#作业进度事件job-status实验性)。
+
 **插件数据管理。** 插件的默认启用状态不是数据所有权边界。管理工具和脚本遵守统一的[插件数据写入规则](../reference/api.md#插件数据plugin-data)，`kind: core` 不提供额外保护。
 
 **读取执行状态。** `GET /api/sessions/:id/execution` 把通过 owner 授权的那个会话代次，绑定到已有的响应侧读取屏障上。

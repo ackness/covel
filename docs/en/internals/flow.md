@@ -216,6 +216,9 @@ Details to remember:
 - `turn.suspended` is sent only after the commit.
 - When a suspension record is saved, an older item of the same runtime that still waits is voided in the same transaction. A resume's commit transaction first checks the record contents noted at the suspension, and writes nothing when one changed.
 - A resumed runtime can suspend again. That commit first marks the old suspended item handled, then saves the new one; the new item continues the same execution and does not abandon the old one. The rules are in [Suspending again](../reference/api.md#suspending-again).
+- When a function suspends, its successful recursive children and all their descendants are saved with the continuation. Their computation results remain successful while domain writes, journal rows, triggers and output exports wait. The final successful resume commits one atomic unit, children before parent, without rerunning saved handlers or Hooks. Another suspension only transfers the saved work.
+- A child's earlier success describes computation. After saving the suspension, the kernel appends a `suspended` lifecycle correction using the original `(turnId, runtimeId, runId)` and makes that invocation's tasks wait. A failed resume or rollback appends failure; a later committed retry corrects it to success, another suspension returns it to waiting, and abandonment, expiry or invalidation cancels it. Earlier traces remain history. Independent invocations of the same runtime keep their own outcomes.
+- The continuation retains the suspended run and the task owner of the chain. Kernel metadata in progress records preserves invocation identity and settlement provenance, which plugins cannot forge. This lets a retry correct a framework failure without reviving a failure or cancellation explicitly reported by a plugin. Public task deduplication and the root progress scope remain unchanged.
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
 - Event publishing after a commit runs one event at a time, and one failure does not roll back data that was already written. On failure, the host records a `commit.fanout.failed` trace. The session's subscribed stream receives `system.reset` (`reason: "publish-failed"`) and reads everything again. The `execution.completed` event carries `resync: true`.
@@ -1071,7 +1074,7 @@ The events it emits include:
 - `block.emitted`
 - `hook.fired` / `hook.rewrote` / `hook.aborted`
 
-The lifecycle events of a runtime (`turn.started`, `turn.completed`, `runtime.started`, `runtime.completed`, `runtime.failed`) are still written by `TraceRecorder`. The two mechanisms run side by side.
+Runtime lifecycle events use `TraceRecorder`, including starts and terminals at the resume entry. After commit or a suspension exit, saved recursive work appends an effective-status correction for the same run, persisting it before delivery to subscribers and the initiating action stream, once per stream. Corrections do not recommit proposals, rerun Hooks or count innocent child runs as plugin faults.
 
 Streamed story deltas are not saved. Each runtime saves only its final `message.completed`, so the table does not grow too large.
 

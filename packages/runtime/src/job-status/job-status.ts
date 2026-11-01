@@ -14,6 +14,11 @@
  * plugin's — or another runtime's — job.
  */
 
+import {
+  jobOwnership,
+  jobOwnershipData,
+  type JobOwnership,
+} from "./job-ownership.js";
 import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { JobStatusRecord, JobStatusState, JsonValue } from "@covel/shared";
@@ -40,6 +45,8 @@ export interface ProgressReporterDeps {
   readonly progressScopeId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /** The invocation that owns these tasks, retained across resumed attempts. */
+  readonly ownership?: Omit<JobOwnership, "settled">;
   /**
    * Kernel-owned correlation fields merged into every emitted `data` value.
    * Detached stage workers use this to associate plugin-defined sub-jobs with
@@ -127,7 +134,32 @@ export function createProgressReporter(
           reportEffect = { ...effect, data: canon.value };
         }
       }
-      const record = buildRecord(deps, reportEffect);
+      // Plugin data cannot forge the kernel owner or settlement provenance.
+      if (
+        reportEffect.data &&
+        typeof reportEffect.data === "object" &&
+        !Array.isArray(reportEffect.data)
+      ) {
+        const { _covel: _untrusted, ...data } = reportEffect.data as Record<
+          string,
+          JsonValue
+        >;
+        reportEffect = { ...reportEffect, data };
+      }
+      const record = buildRecord(
+        {
+          ...deps,
+          ...(deps.ownership
+            ? {
+                contextData: {
+                  ...deps.contextData,
+                  ...jobOwnershipData({ ...deps.ownership, settled: false }),
+                },
+              }
+            : {}),
+        },
+        reportEffect,
+      );
       const inserted = await appendAndEmit(deps, record);
       if (!inserted) {
         console.debug(
@@ -152,7 +184,8 @@ const OUTCOME_TO_STATE: Readonly<Record<ExecutionJobOutcome, JobStatusState>> =
 
 /**
  * States that already represent a settled job. The finalizer leaves them alone,
- * except a `succeeded` whose execution's writes did not commit.
+ * except a claimed success whose writes did not commit, or a framework-owned
+ * correction that a later attempt can settle again.
  */
 const TERMINAL_STATES: ReadonlySet<JobStatusState> = new Set([
   "succeeded",
@@ -171,7 +204,8 @@ const TERMINAL_STATES: ReadonlySet<JobStatusState> = new Set([
  * (a suspended runtime's writes are held until its suspension is resumed, and
  * an abandon discards them), or `rolledBack` says the commit was undone. Such
  * a job takes the mapped state instead, so a suspension chain's final resume
- * settles it once and an abandon cancels it.
+ * settles it once and an abandon cancels it. Framework-owned terminal
+ * corrections can be replaced by a later attempt; plugin terminals cannot.
  *
  * Kernel-facing: called with the raw (un-revoked) store, unlike the plugin's
  * `ctx.progress`. `finalizeExecution` calls it once the domain outcome is known.
@@ -210,149 +244,30 @@ export async function finalizeJobStatuses(
     const claimedSuccessLost =
       latest.state === "succeeded" &&
       (target === "failed" || target === "waiting-input" || rolledBack);
+    const owner = jobOwnership(latest);
+    const frameworkOwned = owner?.settled === true;
     if (
-      (TERMINAL_STATES.has(latest.state) && !claimedSuccessLost) ||
+      (TERMINAL_STATES.has(latest.state) &&
+        !claimedSuccessLost &&
+        !frameworkOwned) ||
       latest.state === target
     )
       continue;
     await appendAndEmit(
       deps,
-      buildRecord(deps, {
-        jobId,
-        state: target,
-        sequence: latest.sequence + 1,
-      }),
-    );
-  }
-}
-
-/**
- * Return to waiting for input the jobs that some runtimes reported under a
- * continued progress scope, including a success one of them claimed. Used
- * when a resume attempt ends without committing: none of its writes landed
- * and its suspension stays open for a retry, which settles the jobs again.
- * Only the named runtimes' jobs are touched; the scope also holds jobs that
- * the suspended execution's own commit settled. Best-effort like every
- * job-status write: a failure is logged and never changes the outcome.
- */
-export async function returnJobsToWaitingInput(
-  deps: {
-    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
-    readonly eventBus?: EventBus;
-  },
-  scope: {
-    readonly sessionId: string;
-    readonly progressScopeId: string;
-    readonly runtimeIds: ReadonlySet<string>;
-  },
-): Promise<void> {
-  try {
-    const reported = await deps.store.listJobStatus(scope.sessionId, {
-      progressScopeId: scope.progressScopeId,
-    });
-    const groups = new Map<
-      string,
-      { pluginId: string; runtimeId: string; jobIds: Set<string> }
-    >();
-    for (const record of reported) {
-      if (!scope.runtimeIds.has(record.runtimeId)) continue;
-      const key = `${record.pluginId}\u0000${record.runtimeId}`;
-      const group = groups.get(key) ?? {
-        pluginId: record.pluginId,
-        runtimeId: record.runtimeId,
-        jobIds: new Set<string>(),
-      };
-      group.jobIds.add(record.jobId);
-      groups.set(key, group);
-    }
-    for (const group of groups.values()) {
-      await finalizeJobStatuses(
+      buildRecord(
         {
-          store: deps.store,
-          ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
-          sessionId: scope.sessionId,
-          progressScopeId: scope.progressScopeId,
-          pluginId: group.pluginId,
-          runtimeId: group.runtimeId,
+          ...deps,
+          ...(owner
+            ? { contextData: jobOwnershipData({ ...owner, settled: true }) }
+            : {}),
         },
         {
-          outcome: "suspended",
-          reportedJobs: [...group.jobIds],
-          rolledBack: true,
+          jobId,
+          state: target,
+          sequence: latest.sequence + 1,
         },
-      );
-    }
-  } catch (err) {
-    console.warn(
-      "[job-status] returning a failed resume's jobs to waiting failed:",
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-/**
- * Settle the jobs a suspended execution reported, which its own finalizer left
- * in `waiting-input`. They live under the suspended execution's progress scope
- * (its `executionId`), not under the resume's. A committed resume ends them as
- * the resumed runtime ended (`success`); an abandoned, expired or voided
- * suspension ends them `cancelled` (`skipped`). A failed resume that can be
- * retried leaves them waiting. Best-effort like every job-status write: a
- * failure is logged and never changes the outcome it follows. The tasks of
- * `alsoSettle` runtimes end with the suspended runtime's.
- */
-export async function finalizeSuspendedJobStatuses(
-  deps: {
-    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
-    readonly eventBus?: EventBus;
-  },
-  suspended: {
-    readonly sessionId: string;
-    readonly executionId: string;
-    readonly pluginId: string;
-    readonly runtimeId: string;
-    /**
-     * Other runtimes whose tasks end with it: the `ctx.recursiveCall`
-     * children saved with the suspension.
-     */
-    readonly alsoSettle?: readonly {
-      readonly pluginId: string;
-      readonly runtimeId: string;
-    }[];
-  },
-  outcome: "success" | "skipped",
-): Promise<void> {
-  try {
-    const reported = await deps.store.listJobStatus(suspended.sessionId, {
-      progressScopeId: suspended.executionId,
-    });
-    for (const runtime of [
-      { pluginId: suspended.pluginId, runtimeId: suspended.runtimeId },
-      ...(suspended.alsoSettle ?? []),
-    ]) {
-      const jobIds = reported
-        .filter(
-          (record) =>
-            record.pluginId === runtime.pluginId &&
-            record.runtimeId === runtime.runtimeId,
-        )
-        .map((record) => record.jobId);
-      if (jobIds.length === 0) continue;
-      await finalizeJobStatuses(
-        {
-          store: deps.store,
-          ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
-          sessionId: suspended.sessionId,
-          progressScopeId: suspended.executionId,
-          pluginId: runtime.pluginId,
-          runtimeId: runtime.runtimeId,
-        },
-        { outcome, reportedJobs: jobIds },
-      );
-    }
-  } catch (err) {
-    console.warn(
-      "[job-status] settling a suspended execution's jobs failed:",
-      err instanceof Error ? err.message : String(err),
+      ),
     );
   }
 }

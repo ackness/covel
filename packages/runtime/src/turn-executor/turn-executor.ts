@@ -224,6 +224,10 @@ async function executeTurnImpl(
   // Allocate identity before hooks run. Counting stays conservative until the
   // authoritative persisted session phase is loaded below.
   let executionContext = createExecutionContext(input);
+  deps = {
+    ...deps,
+    progressAttemptId: deps.progressAttemptId ?? executionContext.executionId,
+  };
   const executionFlags = input as RecursiveTurnInput;
   const shouldAppendPlayerMessage =
     !input.manualTrigger &&

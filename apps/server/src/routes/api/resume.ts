@@ -395,13 +395,13 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             emitter,
             eventBus,
           });
-          // Nothing it reported landed: its jobs, a claimed success
-          // included, wait for the retry. Settled before the claim is
+          // Nothing it reported landed: its jobs, including a claimed
+          // success, fail for this attempt. Settled before the claim is
           // released, so no retry reports under the same scope meanwhile.
           await settleFailedResumeJobs(
             { store, ...(eventBus ? { eventBus } : {}) },
-            liveSuspension,
-            execution.commit.results.map((ran) => ran.runtimeId),
+            { ...liveSuspension, resolvedAt: ownClaim },
+            execution.commit.progressAttemptId,
           );
           await releaseClaim();
           // The runtime's own failure, the text a turn reports to the player
@@ -509,11 +509,11 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     // runtime error propagates to the caller; the suspension is back to
     // `unresolved` and appears in subsequent `listSuspensions`. A claim
     // still held means the attempt did not commit: what its runtime
-    // reported waits for the retry, as after a failed result.
+    // reported fails for this attempt, as after a failed result.
     if (ownClaim !== undefined) {
       await settleFailedResumeJobs(
         { store, ...(eventBus ? { eventBus } : {}) },
-        suspension,
+        { ...suspension, resolvedAt: ownClaim },
       );
     }
     await releaseClaim();

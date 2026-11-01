@@ -1,6 +1,10 @@
 import type { EventBus } from "@covel/events";
 import { estimateTokens } from "@covel/context";
-import type { ExecutionDeps, TurnExecutorDeps } from "@covel/runtime";
+import {
+  createTraceRecorder,
+  type ExecutionDeps,
+  type TurnExecutorDeps,
+} from "@covel/runtime";
 import type { Context } from "hono";
 import { pluginDatasetsLoader } from "./bootstrap/runtime-loader.js";
 
@@ -52,8 +56,22 @@ export function buildResumeTurnExecutorDeps(
   emitter: NonNullable<TurnExecutorDeps["emitter"]>,
   eventBus: EventBus | undefined,
 ): ExecutionDeps {
+  const trace = createTraceRecorder(
+    c.get("store"),
+    emitter.sessionId,
+    emitter.turnId,
+    emitter.traceId,
+  );
   return {
     ...buildTurnExecutorDeps(c),
+    onRuntimeStart: (info) => trace.runtimeStarted(info),
+    onRuntimeComplete: (info) =>
+      info.status === "failed"
+        ? trace.runtimeFailed({
+            ...info,
+            error: info.error ?? "Runtime failed",
+          })
+        : trace.runtimeCompleted(info),
     store: c.get("store"),
     ...(eventBus ? { eventBus } : {}),
     emitter,
