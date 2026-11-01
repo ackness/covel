@@ -40,7 +40,7 @@ pnpm db:studio        # Drizzle Studio
 ```bash
 pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm test:coverage          # Vitest workspaces plus the desktop Node tests, reports under each package's coverage/
-pnpm e2e                    # all Playwright specs
+pnpm e2e                    # all default Playwright specs across both projects
 pnpm e2e:ui                 # the same in the Playwright UI
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
@@ -166,7 +166,7 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 | ---------------------- | ---------------------------------------------------------------------- | ---------------------------- |
 | 提交（pre-commit）     | 对改动的文件跑 Prettier 和 Oxlint                                      | 类型检查、测试               |
 | 推送（pre-push，可选） | 在干净检出里安装依赖，跑 `pnpm check`；纯文档另跑文档测试              | 源码的测试套件               |
-| `pnpm check:push`      | 和推送钩子一样，再加上受影响的包的测试和 `pnpm e2e --list`             | 不受影响的包                 |
+| `pnpm check:push`      | 和推送钩子一样，再加上受影响的包的测试和 `pnpm e2e --list`             | 不受影响的包、浏览器执行     |
 | 拉取请求（CI）         | `pnpm check` 和官网/文档站构建；纯文档跑文档测试，其余跑全部测试和构建 | 纯文档不跑完整套件和其他构建 |
 
 ### 提交和推送时
@@ -175,6 +175,8 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 - `pnpm hooks:install` 安装 pre-push 钩子。它对每个被推送的提交做一次干净检出，安装依赖，再跑 `pnpm check`。源码推送不跑测试套件；纯文档推送另跑下述文档测试。CI 在源码拉取请求上并行跑所有测试，`main` 只接受拉取请求。
 - `pnpm check:push` 用同样的方式检查 HEAD，并加上这次改动可能影响到的部分：自远端主分支以来改过的包、依赖它们的包的测试，以及 `pnpm e2e --list`。
 - `COVEL_PUSH_CHECK=affected git push` 让钩子也这样做。
+
+工作流、脚本、E2E 或配置改动在本地可不选任何包单元测试，表示由静态检查和收集覆盖；源码 CI 仍须执行完整浏览器和扩展验收。本地推送检查不会启动浏览器或安装 Chromium。
 
 ### 什么时候会跑全部测试
 
@@ -196,11 +198,13 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 ### 拉取请求上
 
-CI（`.github/workflows/ci.yml`）统一处理文档、源码和混合改动，始终运行完整的 `pnpm check`。纯文档另跑文档测试；源码、无法确定范围的改动和发布运行全部测试。完整路径的静态检查与其余包测试、构建分别在 `verify` 和 `tests` 中并行运行，各用独立缓存键，两者都属于必需任务。Web 单元测试、带 runtime 覆盖率下限的服务端测试、PostgreSQL 集成和浏览器冒烟测试继续独立并行运行。每次非发布 CI 调用 Site 构建官网和文档站一次；完整检查的其余构建排除这两个目标，独立的 `pnpm build` 不变。发布跳过 Site，运行 release preflight，并由平台打包任务构建。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
+CI（`.github/workflows/ci.yml`）统一处理文档、源码和混合改动，始终运行完整的 `pnpm check`。纯文档另跑文档测试；源码、无法确定范围的改动和发布运行全部测试。完整路径的静态检查与其余包测试、构建分别在 `verify` 和 `tests` 中并行运行，各用独立缓存键，两者都属于必需任务。Web 单元测试、带 runtime 覆盖率下限的服务端测试、PostgreSQL 集成、四个完整浏览器 shard 以及 smoke/全部扩展验收独立并行运行。每次非发布 CI 调用 Site 构建官网和文档站一次；完整检查的其余构建排除这两个目标，独立的 `pnpm build` 不变。发布跳过 Site，运行 release preflight，并由平台打包任务构建。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
 Site 用上面的 Turbo 命令并行运行两个独立构建；输入相同时直接恢复 `dist/`，必需任务仍要成功。输入包括站点配置、`docs/**`、`SITE_BASE`、构建环境文件、lockfile 和工具链；复制文档输出到官网的步骤在缓存之后进行。各任务只恢复一次缓存；普通 PR/main 运行在任务成功且精确键未命中时，用恢复步骤返回的原始键保存，PR 缓存保持 GitHub 的 ref 隔离。发布和显式 commit 请求的 Turbo、Electron 和 Chromium 缓存仅恢复，setup-node 的 pnpm 缓存关闭；显式 commit 的 Site 构建也遵守这一规则。桌面后端使用随包 Electron RunAsNode，不再下载或缓存独立 Node。Electron 缓存按 OS、架构和 lockfile 区分；发布未命中时重新下载且不保存。范围选择对发布和显式 commit 请求使用浅检出，因为它们不需要 diff；PR/main 保留比较所需的完整提交与树历史。控制脚本任务使用稀疏检出和 blob 过滤，不展开无关工作树内容。
 
 `main` 只接受拉取请求（`Protect main` 规则集：不能直接推送、强制推送或删除）。CI 的 `Verification` 汇总所选任务，包括非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`.github/workflows/gate.yml` 提供每个拉取请求都有的 `All checks pass`：它要求 `Verification` 成功，也保留其他检查的失败。重跑失败检查之后，也要重跑这一项。
+
+混合改动、显式 commit、每日 UTC 03:17 的定时运行及所有手动运行也走完整范围，后两者即使位于纯文档提交也不缩减。手动运行使用所选 ref；定时和手动 CI 不发布 Pages。四个单 worker shard 覆盖两个默认 project，每个最多使用两个允许的 CPU。普通扩展验收始终必需，只有定时和手动运行会把时间敏感沙箱用例重复三次，零重试。每个 shard 上限 40 分钟，smoke/扩展任务 25 分钟，`All checks pass` 65 分钟。具体时限、七天失败产物和本地串行复现见[浏览器测试](./e2e-testing.md#ci-执行与失败证据)。
 
 ### Documentation-only changes
 

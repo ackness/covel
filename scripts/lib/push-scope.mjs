@@ -28,7 +28,8 @@ const WORKSPACE_FILES = [
 
 /**
  * Root paths that no test task reads unless turbo.json says so: the static
- * gate (`pnpm check`) or `pnpm e2e --list` covers them.
+ * gate (`pnpm check`) or `pnpm e2e --list` covers them locally.
+ * Full browser and extension execution remains required in source CI.
  */
 const COVERED_WITHOUT_TESTS = [
   ".github/**",

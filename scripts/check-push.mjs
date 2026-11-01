@@ -330,7 +330,8 @@ function verifyCommit(pushed) {
     // files. Do not copy node_modules, .env, or build output.
     const commands = [["install", "--frozen-lockfile"], ["check"]];
     let ran;
-    let left = "PostgreSQL integration, browser smoke, the build";
+    let left =
+      "PostgreSQL integration, full browser, smoke and extension execution, the build";
     let level = "full";
     // Use the commands available in the checked commit, not the caller's tree.
     const docsCommand = hasScript(checkout, "test:docs:packages")
@@ -348,7 +349,7 @@ function verifyCommit(pushed) {
       level = "docs";
     } else if (staticOnly) {
       ran = "the static gate";
-      left = `every test suite (pnpm check:push runs the changed packages' here), PostgreSQL integration, browser smoke, the build`;
+      left = `every test suite (pnpm check:push runs the changed packages' here), PostgreSQL integration, full browser, smoke and extension execution, the build`;
       level = "static";
     } else {
       const scope = affectedTests(checkout, pushed);
@@ -371,7 +372,7 @@ function verifyCommit(pushed) {
           scope.filters.length > 0
             ? `the static gate, the tests of ${scope.filters.join(" ")} (a leading ... adds the packages that depend on it), the E2E listing`
             : "the static gate and the E2E listing; no test suite reads the changed files";
-        left = `the other test suites (${fullRunHint}), PostgreSQL integration, browser smoke, the build`;
+        left = `the other test suites (${fullRunHint}), PostgreSQL integration, full browser, smoke and extension execution, the build`;
         level = "affected";
       }
       commands.push(["e2e", "--list"]);

@@ -55,7 +55,7 @@ spec 分在两个 project 里。配置按文件内容自动归类，你不用手
 | `chromium-dev` | Vite 开发服务器（5181） | 在页面里加载应用源码模块的 spec（`import("/src/...")`） |
 
 - 打包后的页面是玩家实际运行的版本，加载也快得多。开发服务器只有一个进程，要为每个新的浏览器上下文单独提供几百个模块，worker 再多也得排队。
-- `chromium-dev` 的 `expect` 超时是 20 秒，其余是 5 秒。开发服务器在第一次请求时才转换模块，首屏耗时随机器负载变化。
+- `chromium-dev` 的 `expect` 超时是 20 秒；生产 project 本地 5 秒、CI 10 秒。开发服务器在第一次请求时才转换模块，首屏耗时随机器负载变化。
 - 只跑一个 project 时用 `--project=chromium` 或 `--project=chromium-dev`。
 
 打包后的页面带内容安全策略，开发服务器没有。`tests/e2e/page-policy.spec.ts` 在主要页面和带插件面板的会话上检查没有任何策略违规。新 spec 想做同样的检查时，在第一次导航前调用 `watchPolicyViolations(page)`（`tests/e2e/helpers/page-policy.ts`），结束时断言返回的列表为空。
@@ -73,7 +73,7 @@ pnpm e2e tests/e2e/catalog-accessibility.spec.ts
 这个用例让 Vite 直接提供一份合成的测试页面，通过真实的组件目录和 PluginPanel 验证键盘操作、label 焦点、重复 ID 和 inert 锁。它不调用模型，也不调用 API。
 
 > [!NOTE]
-> 它属于 `chromium-dev`，不能在由服务端托管页面的生产构建上跑，也不在 CI 的冒烟测试里。改了界面的可访问性时，要自己单独跑它。
+> 它属于 `chromium-dev`，不能在由服务端托管页面的生产构建上跑。完整范围 CI 会在完整浏览器 shard 中运行它；本地改了可访问性也要运行。
 
 ### 用自己启动的服务
 
@@ -207,7 +207,7 @@ pnpm e2e:replay                           # 改之后
 | `LIVE_LLM_ENABLED`      | `false`                                                                          | 显式启用会访问真实模型服务的 Playwright/Vitest 流程                  |
 | `COVEL_STORY_BASE_URL`  | 没有任何代码读取                                                                 | 不会覆盖 slot；代理地址直接写进 `llm.toml`                           |
 | `COVEL_PLUGIN_BASE_URL` | 没有任何代码读取                                                                 | 不会覆盖 slot；代理地址直接写进 `llm.toml`                           |
-| `CI`                    | `false`                                                                          | CI 模式下 Playwright 重试 2 次，只用 1 个 worker，并禁止 `test.only` |
+| `CI`                    | `false`                                                                          | CI 完整套件重试 2 次、1 个 worker；扩展验收始终零重试、1 个 worker，两者均禁止 `test.only` |
 
 ## PostgreSQL 模式
 
@@ -236,6 +236,44 @@ pnpm docker:pg:down
 | `debugs/e2e-logs`     | 插件验证脚本日志与 JSON 产物    |
 
 这些目录已在 `.dockerignore` 中排除，不进入生产镜像上下文。
+
+### CI 执行与失败证据
+
+`ci.yml` 的每个完整范围都必须执行两个默认 project：非纯文档 PR、main 源码或混合推送、未知范围、显式 commit 和发布。纯文档 PR/main 保留静态、文档测试与 Site 短路径。每日 UTC 03:17 的 `schedule`（默认分支）和 `workflow_dispatch`（所选 ref，无命令或路径输入）始终全量；定时工作流合入默认分支后才能运行。两者只构建 Site，不发布 Pages，部署仍限 main 的 push。
+
+`e2e` 的四个 shard 各有独立 runner、检出、安装、构建和临时用户目录，运行 `pnpm e2e --shard=<n>/4 --workers=1`，不限定 project 或 grep，且不会因另一 shard 失败而取消。`browser` 另行运行一次 smoke 和全部扩展验收，包括声明式笔记、可点击地图、社区舞台和沙箱区域；默认 e2e 不包含 `*.acceptance.ts`。准备成功且未取消时，smoke 失败仍尝试扩展；任一失败都会阻止 `Verification`，所有 shard 也都是必需的。`All checks pass` 要求汇总成功并保留其他检查的失败。
+
+所有浏览器执行都用 `scripts/e2e-cpu-list.mjs` 读取 Linux `Cpus_allowed_list`，通过 `taskset -c` 使用前两个允许的逻辑 CPU，子服务和 Chromium 继承限制。CPU 编号不假设从零开始，只有一个时记录限制，无法解析时失败。普通扩展验收的私有包目录会被测试修改，因此始终一个 worker、零重试。
+
+只有定时和手动运行会在普通扩展之后，将延迟审批正反例与桌面/移动宽度的独立区域测试各重复三次，一个 worker、零重试。完整套件 CI 允许两次重试，HTML/list 报告单独标示 flaky 和重试；重试通过不能代替零失败的压力验证。不启用付费模型，也不能由浏览器 CI 推断原生 Windows/macOS 或真实模型已经验证。
+
+<!-- prettier-ignore -->
+| 预算 | 本地默认 | CI |
+| --- | --- | --- |
+| 默认测试（两个配置） | 30 秒 | 60 秒 |
+| 生产页面 expect（含扩展） | 5 秒 | 10 秒 |
+| 开发页面 expect | 20 秒 | 20 秒 |
+| API / Vite 开发服务启动 | 60 秒 | 120 秒 |
+| 生产页面构建与启动 | 120 秒 | 180 秒 |
+| 完整 shard / browser 任务 / 合并门禁 | — | 40 / 25 / 65 分钟 |
+
+spec 显式设置的期限保持不变。首次运行要记录真实耗时、重试与 CPU 限制；发现竞争条件时提供复现并修复原因，不用新增重试或延长断言掩盖。
+
+失败时在 Actions 运行页的 **Artifacts** 下载 `covel-e2e-shard-<n>-failure-<run>-attempt-<attempt>` 或 `covel-browser-failure-<run>-attempt-<attempt>`，保留七天。完整 shard 上传 `tests/e2e/artifacts` 与 `tests/e2e/report`。browser 在这两个根目录下分别保存 `ci-smoke`、`extensions`、`extensions-stress`；后续命令不覆盖前一个失败的证据。两套配置均保留失败尝试的 trace 和截图，HTML 不自动打开。下载后用 `pnpm exec playwright show-report <report-dir>` 或 `pnpm exec playwright show-trace <trace.zip>` 查看。
+
+本地共用固定端口、构建输出和验收 fixture，所有 Playwright 命令都需 `flock /tmp/covel-e2e.lock` 串行执行，不可在同一检出并发跑 shard。Linux 上复现 CI 的命令：
+
+```bash
+cpus="$(node scripts/e2e-cpu-list.mjs)"
+for shard in 1 2 3 4; do
+  CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e --shard="$shard/4" --workers=1 || exit "$?"
+done
+CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:smoke
+CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions
+CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|independent sandbox regions' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
+```
+
+收集时先比较不分片列表与四个 `--shard=<n>/4 --list` 的测试 ID 并集，确认两个 project 无重复、无遗漏，再检查扩展列表包含全部验收文件。不要固定历史测试总数；真实模型 opt-in 与已有条件性跳过要分别记录。
 
 ## 发版前的玩家流程验收
 
@@ -322,7 +360,7 @@ pnpm docker:pg:down
 | 端口已占用或页面打不开   | 默认的测试 Vite 是 `5181`，打包后的页面是 `5183`，API 是 `3101`。Vite 启用了 `strictPort`，不会悄悄换到别的端口。停掉占用端口的进程后重试。要用自己启动的页面，就设置 `E2E_BASE_URL`，并自己保证后端类型符合目标 spec。  |
 | 等待 API health 超时     | 默认运行检查 `http://127.0.0.1:3101/api/health`；外部环境检查它实际的服务端地址。PostgreSQL 流程先运行 `pnpm db:up` 和 `pnpm dev:pg`，再让 `E2E_BASE_URL` 指向对应的页面，并排除只支持 MemoryStore 的 spec。             |
 | 模型调用或角色创建失败   | 浏览器里的真实模型 spec 使用应用配置的 `story`、`plugin` 等用途。`pnpm e2e:verify` 也按配置路由，只有传了 `--slot` 或设了 `E2E_MODEL_SLOT` 才改用指定的 slot。分别确认需要的 slot 存在，并且 `.env.llm` 里有对应的 key。 |
-| 需要定位异步失败         | 失败时 Playwright 保留截图；trace 和 video 只在第一次重试时保留。用 `pnpm exec playwright show-report tests/e2e/report` 打开 HTML 报告。                                                                                 |
+| 需要定位异步失败         | 失败时 Playwright 保留截图和首次失败 trace；完整套件的 video 仍在第一次重试时保留。用 `pnpm exec playwright show-report tests/e2e/report` 打开 HTML 报告。                                                                                 |
 | 找不到插件验证脚本的输出 | 脚本默认写到 `debugs/e2e-logs/`。只想在终端里看时传 `--no-log`；想保留会话和快照时传 `--keep`。                                                                                                                          |
 
 ## 沙箱区域验收

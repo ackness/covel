@@ -66,6 +66,7 @@ test("a push of code to a branch runs the static gate and leaves the tests to CI
   );
   assert.match(result.stdout, /Ran: the static gate\./);
   assert.match(result.stdout, /Left to CI: every test suite/);
+  assert.match(result.stdout, /full browser, smoke and extension execution/);
 });
 
 test("a push asked for the affected tests runs those of the packages it changed, measured from the remote's main branch", (t) => {
@@ -443,4 +444,26 @@ test("a manual check lets the push that follows send at once, and a failed check
   assert.equal(pushTopic(probe, next).status, 0);
   // The manual check ran more than the push needs.
   assert.equal(probe.calls().length, 2 + staticCommands.length + 4);
+});
+
+test("browser-only controls collect locally and leave execution to CI", (t) => {
+  for (const file of [
+    ".github/workflows/ci.yml",
+    "tests/e2e/sandbox-surfaces.acceptance.ts",
+    "playwright.config.ts",
+  ]) {
+    const probe = fixture(t);
+    workspace(probe);
+    probe.commitFiles({ [file]: "control change\n" }, "browser controls");
+    const result = probe.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(
+      probe.calls().map(({ args }) => args),
+      [...staticCommands, ["e2e", "--list"]],
+    );
+    assert.match(
+      result.stdout,
+      /Left to CI: .*full browser, smoke and extension execution/,
+    );
+  }
 });
