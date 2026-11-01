@@ -7,14 +7,19 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   SettingsStore,
   type SettingsStoreApi,
   type SettingsBackendAdapter,
 } from "@covel/settings";
-import type { PresetSummary } from "@/services/api.js";
+import {
+  pingPreset,
+  type LlmConfigResponse,
+  type PresetSummary,
+  type ProviderModelProfile,
+} from "@/services/api.js";
 import i18n from "@/i18n";
 import { registerLlmSettings } from "../../registry/llm.js";
 import { LlmPresetsPane } from "../LlmPresetsPane.js";
@@ -22,6 +27,7 @@ import { LlmPresetsPane } from "../LlmPresetsPane.js";
 const mocks = vi.hoisted(() => ({
   store: null as unknown as SettingsStoreApi,
   lookup: vi.fn(),
+  slots: {} as LlmConfigResponse["slots"],
   presets: [
     {
       id: "configured",
@@ -45,7 +51,7 @@ vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: {
       presets: mocks.presets,
-      llmConfig: { configured: true, slots: {} },
+      llmConfig: { configured: true, slots: mocks.slots },
     },
   }),
 }));
@@ -60,6 +66,8 @@ vi.mock("@/services/api.js", async (importOriginal) => ({
 
 let persistedEntries: Record<string, unknown>;
 let adapter: SettingsBackendAdapter;
+
+afterEach(() => vi.unstubAllGlobals());
 
 beforeEach(async () => {
   vi.mocked(requestConfirm).mockReset().mockResolvedValue(true);
@@ -85,6 +93,8 @@ beforeEach(async () => {
   });
   await store.init();
   mocks.store = store;
+  mocks.slots = {};
+  delete mocks.presets[0]!.slotBindings;
   delete mocks.presets[0]!.capability;
   mocks.lookup.mockReset().mockResolvedValue({
     found: false,
@@ -102,6 +112,67 @@ beforeEach(async () => {
 });
 
 describe("provider configuration flow", () => {
+  it("replaces the unkeyed built-in story default when saving the first provider and reports the bound roles", async () => {
+    const story = {
+      provider: "example",
+      model: "opaque-model",
+      protocol: "openai-chat-v1",
+      tag: "text",
+      builtinDefault: true,
+      serverKeyConfigured: false,
+    };
+    mocks.slots = { story };
+    mocks.presets[0]!.slotBindings = ["story"];
+    render(<LlmPresetsPane />);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Add provider" })[0]!,
+    );
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.change(dialog.getByRole("textbox", { name: "Provider ID" }), {
+      target: { value: "relay" },
+    });
+    fireEvent.change(dialog.getByRole("textbox", { name: "API endpoint" }), {
+      target: { value: "https://relay.example/v1" },
+    });
+    fireEvent.change(dialog.getByRole("textbox", { name: /Model IDs/ }), {
+      target: { value: "custom-text-model" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Add provider" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const profiles = mocks.store.get<ProviderModelProfile[]>("llm.providers");
+    const modelRef = profiles?.[0]?.models[0]?.ref;
+    expect(modelRef).toEqual(expect.any(String));
+    expect(persistedEntries["llm.slotConfig"]).toEqual({
+      story: { modelRef },
+      plugin: { modelRef },
+    });
+    expect(screen.getByRole("status").textContent).toBe(
+      "Model roles assigned: Story, Plugin tasks",
+    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ ok: true, latencyMs: 1 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await pingPreset({ slot: "story" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(JSON.parse(atob(headers.get("X-Slot-Config")!))).toMatchObject({
+      slotBindings: {
+        story: { modelRef },
+        plugin: { modelRef },
+      },
+      customPresets: [
+        {
+          id: modelRef,
+          provider: "relay",
+          model: "custom-text-model",
+          baseUrl: "https://relay.example/v1",
+          protocol: "openai-chat-v1",
+        },
+      ],
+    });
+  });
+
   it("saves separate reasoning defaults when adding several models", async () => {
     mocks.lookup.mockImplementation(async (model: string) => ({
       found: true,

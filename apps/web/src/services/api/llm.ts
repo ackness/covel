@@ -45,6 +45,8 @@ export interface ModelCapabilityInfo {
 }
 
 export interface LlmSlotInfo {
+  /** True when the active server configuration uses the built-in fallback. */
+  builtinDefault?: boolean;
   /** Availability of the instance credential; its value stays on the server. */
   serverKeyConfigured?: boolean;
   baseUrl?: string;

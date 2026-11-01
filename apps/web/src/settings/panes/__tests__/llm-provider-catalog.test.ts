@@ -156,10 +156,56 @@ describe("provider catalogue", () => {
   });
 
   it("binds the first manually created model to story and plugin", () => {
-    expect(bindFirstProviderModel({}, [], "model_first", [], [])).toEqual({
+    expect(bindFirstProviderModel({}, [], "model_first", [], {})).toEqual({
       story: { modelRef: "model_first" },
       plugin: { modelRef: "model_first" },
     });
+  });
+
+  it("replaces an unkeyed built-in story default, including its preset assignment", () => {
+    const serverPreset = {
+      id: "server-story",
+      name: "Server story",
+      provider: "custom",
+      model: "default-model",
+      enabled: true,
+      isDefault: true,
+      scope: "server" as const,
+      slotBindings: ["story"],
+    };
+    const slots = {
+      story: { builtinDefault: true, serverKeyConfigured: false },
+    };
+    for (const presets of [[], [serverPreset]]) {
+      expect(
+        bindFirstProviderModel({}, [], "model_first", presets, slots),
+      ).toEqual({
+        story: { modelRef: "model_first" },
+        plugin: { modelRef: "model_first" },
+      });
+    }
+    expect(
+      bindFirstProviderModel(
+        { story: { presetId: serverPreset.id } },
+        [],
+        "model_first",
+        [serverPreset],
+        slots,
+      ),
+    ).toEqual({
+      story: { presetId: serverPreset.id },
+      plugin: { modelRef: "model_first" },
+    });
+  });
+
+  it.each([
+    { builtinDefault: false, serverKeyConfigured: false },
+    { builtinDefault: true, serverKeyConfigured: true },
+    { builtinDefault: true },
+  ])("preserves a configured or potentially usable story role: %j", (story) => {
+    expect(
+      bindFirstProviderModel({}, [], "model_first", [], { story }),
+    ).toEqual({ plugin: { modelRef: "model_first" } });
   });
 
   it("preserves explicit bindings and skips later provider models", () => {
@@ -169,7 +215,7 @@ describe("provider catalogue", () => {
         [],
         "model_first",
         [],
-        [],
+        {},
       ),
     ).toEqual({
       story: { modelRef: "existing" },
@@ -188,7 +234,7 @@ describe("provider catalogue", () => {
         ],
         "model_second",
         [],
-        [],
+        {},
       ),
     ).toEqual({});
   });
@@ -206,10 +252,10 @@ describe("provider catalogue", () => {
     };
 
     expect(
-      bindFirstProviderModel({}, [], "model_first", [serverPreset], []),
+      bindFirstProviderModel({}, [], "model_first", [serverPreset], {}),
     ).toEqual({});
     expect(
-      bindFirstProviderModel({}, [], "model_first", [], ["story"]),
+      bindFirstProviderModel({}, [], "model_first", [], { story: {} }),
     ).toEqual({ plugin: { modelRef: "model_first" } });
   });
 
@@ -226,7 +272,9 @@ describe("provider catalogue", () => {
     };
 
     expect(
-      bindFirstProviderModel({}, [], "model_first", [imagePreset], ["image"]),
+      bindFirstProviderModel({}, [], "model_first", [imagePreset], {
+        image: {},
+      }),
     ).toEqual({
       story: { modelRef: "model_first" },
       plugin: { modelRef: "model_first" },

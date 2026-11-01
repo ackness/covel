@@ -177,6 +177,7 @@ export function createMiscApiRoutes(
         provider: preset.provider,
         model: preset.model,
         protocol: resolved.protocol,
+        builtinDefault: ai.configSource?.kind === "builtin",
         serverKeyConfigured: hasServerRuntimeJobCredentials(
           ai.gateway,
           slotId,
