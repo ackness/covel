@@ -911,9 +911,9 @@ contributes:
 | `sandbox` | `allow-scripts` |
 | `frame-ancestors` | `'self'` |
 
-使用经典外部脚本 `<script src="app.js"></script>`，不使用模块脚本、内联脚本、事件属性或 `eval`。内联样式允许；网络请求不允许。自定义字体要以内嵌 `data:font/woff2;base64,...`（或 WOFF）写入 CSS 的 `@font-face`。字体 URL 请求使用 CORS，而沙箱文档是不透明源，连相对 `.woff` / `.woff2` URL 也跨源；资源路由不发送 CORS 允许头，所以这些 URL 无法加载。`font-src 'self' data:` 保持不变，发布字体文件不代表可以用 URL 加载。`'self'` 按浏览器看到的源工作，兼容 Vite 和反向代理，不限制到某个路径前缀；文件边界由路由的发布清单检查。主页面的 `frame-src 'self'` 限制 iframe 导航，`/api` 另有不透明源和嵌入目标拒绝规则，见[安全边界](../internals/security.md#plugin-pages-loaded-by-url)。
+使用经典外部脚本 `<script src="app.js"></script>`，不使用模块脚本、内联脚本、事件属性或 `eval`。内联样式允许；网络请求不允许。自定义字体要以内嵌 `data:font/woff2;base64,...`（或 WOFF）写入 CSS 的 `@font-face`。字体 URL 请求使用 CORS，而沙箱文档是不透明源，连相对 `.woff` / `.woff2` URL 也跨源；字体资源响应不发送 CORS 允许头，所以这些 URL 无法加载。`font-src 'self' data:` 保持不变，发布字体文件不代表可以用 URL 加载。`'self'` 按浏览器看到的源工作，兼容 Vite 和反向代理，不限制到某个路径前缀；文件边界由路由的发布清单检查。主页面的 `frame-src 'self'` 限制 iframe 导航，`/api` 另有不透明源和嵌入目标拒绝规则，见[安全边界](../internals/security.md#plugin-pages-loaded-by-url)。
 
-宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。视图与替换区域采用下述统一生命周期。未选择区域回退的普通 URL 面板仍使用原来的失败覆盖层：宿主以无凭据 HEAD 区分过期摘要（404）和其他错误，迟到的 ready 可清除该覆盖层，重试重新获取声明并重建 iframe。
+宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。宿主按 HTML 解析结果为入口中的外部脚本及桥设置 `crossorigin="anonymous"`；已校验的公开 JavaScript 资源响应带 `Access-Control-Allow-Origin: *`，不允许凭据。否则，不透明源中的经典脚本会被浏览器静默处理，点击回调中的 Promise 拒绝可能不产生 `unhandledrejection`。运行时创建的外部脚本也应设置 `crossOrigin = "anonymous"`。其他资源、缺失文件和 API 不获得这项 CORS 许可。视图与替换区域采用下述统一生命周期。未选择区域回退的普通 URL 面板仍使用原来的失败覆盖层：宿主以无凭据 HEAD 区分过期摘要（404）和其他错误，迟到的 ready 可清除该覆盖层，重试重新获取声明并重建 iframe。
 
 摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。每次读取通过同一个有界 O_NOFOLLOW 句柄核对长度和 SHA-256，再使用该缓冲区响应；同长度改动也会在 GET、HEAD 或 304 之前返回 no-store 404。入口 HTML 使用 `Cache-Control: no-cache`，每次重用都须重新验证；其 ETag 包含桥接脚本摘要。因此插件文件和 URL 未变时，宿主升级也会返回引用新版桥的 HTML。其余资源（包括带哈希文件名的桥接脚本）仍使用一年不可变缓存。
 

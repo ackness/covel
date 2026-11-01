@@ -1644,7 +1644,7 @@ fork 和社区插件的授权：
 
 `/plugin-assets` 及其子路径中不匹配资源路由的请求也返回相同的 404，包括编码点路径段规范化后缺少插件 ID 或摘要的路径；不会进入公共静态文件或应用首页的回退路由。
 
-成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
+成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie 或 Cross-Origin-Resource-Policy。只有已校验的公开页面 JavaScript（包括桥）在 GET、HEAD 和 304 响应中发送 `Access-Control-Allow-Origin: *`，供不透明源匿名加载脚本并报告未处理的 Promise 拒绝；不允许凭据。其他资源和缺失文件不发送 CORS 允许头，`/api` 的来源拒绝规则不变。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
 
 #### GET /api/ui-specs
 
