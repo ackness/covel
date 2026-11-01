@@ -158,6 +158,8 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 完整的发版清单在 [`desktop-packaging.md`](./desktop-packaging.md#release-checklist)。
 
+变更日志片段中的相对链接和图片路径以 `docs/changelog.d/` 为基准。`pnpm check:changelog` 检查目标文件是否存在；预览和发布组装会将路径改为相对于 `docs/CHANGELOG.md`，保留查询参数和锚点。写法见[片段约定](../changelog.d/README.md)。
+
 ## Git hooks and CI scope
 
 一次改动会经过三道检查：提交时、推送时、拉取请求上。

@@ -158,6 +158,8 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 The full release checklist is in [`desktop-packaging.md`](./desktop-packaging.md#release-checklist).
 
+Relative links and image paths in changelog fragments start from `docs/changelog.d/`. `pnpm check:changelog` checks that their target files exist; preview and release assembly rebase the paths for `docs/CHANGELOG.md`, preserving queries and anchors. See the [fragment conventions](../../changelog.d/README.md).
+
 ## Git hooks and CI scope
 
 A change goes through three checks: when you commit, when you push, and on the pull request.
