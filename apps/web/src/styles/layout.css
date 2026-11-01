@@ -315,3 +315,13 @@
     --fade-end: transparent;
   }
 }
+
+/* This plane has no interactive descendants and cannot paint over host chrome. */
+.ui-session-theme-plane {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  contain: strict;
+  overflow: clip;
+}

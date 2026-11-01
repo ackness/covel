@@ -14,7 +14,7 @@ import { getSettings, initSettings } from "@/settings/store.js";
 
 const mocks = vi.hoisted(() => ({
   plugins: [] as SessionPlugin[],
-  specs: { right: [], message: [] } as UISpecsResponse,
+  specs: { right: [], theme: [], message: [] } as UISpecsResponse,
   fetchSpecs: vi.fn(),
   health: {} as {
     storage?: { data: { backend: "memory"; frontendMode: "remote" } };
@@ -119,6 +119,7 @@ beforeEach(async () => {
   await i18n.changeLanguage("en-US");
   mocks.plugins = [plugin("provider-a"), plugin("provider-b")];
   mocks.specs = {
+    theme: [],
     right: [spec("provider-a", "details"), spec("provider-b", "details")],
     message: [],
   };

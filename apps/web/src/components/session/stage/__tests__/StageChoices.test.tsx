@@ -408,3 +408,25 @@ describe("StageChoices composer modes", () => {
     expect(modes.switchCharacter).toHaveBeenCalledWith("bo");
   });
 });
+
+it("suppresses host submit widgets and hotkeys when a sandbox owns input, retaining decision context", () => {
+  const send = vi.fn();
+  const view = render(
+    <StageChoices
+      {...baseProps}
+      hideInput
+      onSendMessage={send}
+      suggestions={{
+        decision: "Read before answering",
+        choices: [{ id: "one", text: "Suggestion" }],
+      }}
+    />,
+  );
+  expect(screen.getByText("Read before answering")).toBeTruthy();
+  expect(screen.queryByTestId("stage-decision-input")).toBeNull();
+  expect(screen.queryByRole("button")).toBeNull();
+  fireEvent.keyDown(document.body, { key: "1" });
+  expect(send).not.toHaveBeenCalled();
+  view.rerender(<StageChoices {...baseProps} onSendMessage={send} />);
+  expect(screen.getByTestId("stage-decision-input")).toBeTruthy();
+});

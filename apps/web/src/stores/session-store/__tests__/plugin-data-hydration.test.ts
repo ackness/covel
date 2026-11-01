@@ -17,6 +17,7 @@ const { hydratePluginDataForUiSpecs } =
   await import("../plugin-data-hydration.js");
 
 const specs: UISpecsResponse = {
+  theme: [],
   right: [
     {
       pluginId: "fixture-plugin",
@@ -78,6 +79,7 @@ describe("plugin-data hydration session guard", () => {
 it("hydrates and deduplicates namespaces contributed by full-column views", async () => {
   vi.clearAllMocks();
   api.fetchUiSpecs.mockResolvedValue({
+    theme: [],
     right: specs.right,
     view: [
       {

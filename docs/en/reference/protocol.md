@@ -669,7 +669,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 | `operation.failed`              | Operations did not take effect in a committed turn | `{sessionId,turnId,count}`                                                                                                              |
 | `context.compacted`             | Compaction summary saved                           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
-A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state.
+A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state. Read-baseline `conflict` uses these same proposal and operation boundaries, with no new event or client fingerprint argument; see [Transactions](./transactions.md#read-baselines).
 
 ### SSE frame format by channel
 
@@ -1444,6 +1444,8 @@ Warnings from media resolution in the browser state the session, the media ID, a
 - A preview that arrives late for a turn that has already ended is ignored. Explicitly starting a new execution allows the same turn ID to be retried.
 - A GET that was sent before a newer SSE event must not overwrite those updates when its answer arrives.
 
+Stage departure memory retains only already-displayed public images on the client. It adds no `ui.slot.*` event or bridge payload and does not change revision ordering. Slots still reflect the current cast immediately; see [UI slots](./ui-panels.md#stagecast1) for animation and reset rules.
+
 ## Source execution snapshot
 
 A plugin that reads "what the player typed this time" has two values:
@@ -1497,7 +1499,9 @@ How snapshots are saved:
 
 ## Plugin view read-only port
 
-Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Existing page action handlers are unchanged. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
+Declarative [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components) render directly through the host, without this port. Input reuses player-source `submit_actions` and existing interaction responses. Refusal or busy admission retains drafts; UI callbacks are not plugin RPC and do not imply persistence.
+
+Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Consented session pages expose only their declared, schema-validated public methods and safe outcomes; ordinary panel handlers remain separate. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
 
 <a id="auto-advance-events"></a>
 
@@ -1550,3 +1554,15 @@ Each settled presentation records one trace terminal, without forwarding to `/ap
 ```
 
 The event contains no raw input, free-text reason, asset path, reply or credential. Dispatch and cache hits use existing `gateway.calling` / `gateway.responded`, recording method and cache status only; provider error text stays outside presentation diagnostics.
+
+## Sandbox session page protocol
+
+Ordinary session webviews use one MessagePort and public projection version 2. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-2). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
+
+### Session theme snapshots
+
+The read-only `theme` array from `GET /api/ui-specs` supplies validated static appearance. Player selection uses the device SettingsStore, adding no theme action, RPC, SSE or capability grant; existing page writes and content consent remain independent. Existing sandbox `theme` snapshots may carry the relevant session’s effective safe palette, scheme and package content identity plus host fonts/radii, without CSS, resource listings, setting entries, host markers or session IDs. Calls without a session retain base appearance. See the [theme contract](./theme-packages.md#selecting-in-a-session).
+
+## Sandbox region lifecycle
+
+Main and composer share the existing public session protocol. Ready, fixed page-error, ping/pong with increasing IDs and shutdown use the same MessagePort, without another HTTP/SSE channel. Each frame has an independent lease and handles; retirement prevents state, append and reply delivery. Mutations and approval grants also check the lease after credential lookup, immediately before HTTP dispatch. Application script resource failures send the fixed page-error signal even when HTML and the bridge script loaded successfully. See [page failure and recovery](./ui-panels.md#page-failure-and-recovery) for protocol fields, visibility grace and recovery.

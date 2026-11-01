@@ -322,3 +322,75 @@ it("ignores an authored classification claim when executable files exist", () =>
     ).mode,
   ).toBe("code");
 });
+
+it("validates the bridge adopter without executing handlers and keeps a UI-only distribution declarative", async () => {
+  const root = path.join(await temp(), "sandbox-surface-probe");
+  await cp(
+    path.resolve(
+      import.meta.dirname,
+      "../../../tests/third-party/sandbox-surface-probe",
+    ),
+    root,
+    { recursive: true },
+  );
+  const handler = path.join(root, "runtimes/write/handler.js");
+  await writeFile(
+    handler,
+    'throw new Error("Metadata discovery executed server code"); export default async function () {}',
+  );
+  const discovery = await discoverPluginAt(root);
+  const definition = await loadPluginDefinition(discovery!);
+  expect(definition.executionAssessment?.mode).toBe("code");
+  const report = await validatePluginPackage(root);
+  expect(report.ok, JSON.stringify(report.issues)).toBe(true);
+  const ui = await loadPluginUiSpecs(
+    root,
+    "sandbox-surface-probe",
+    definition.packageManifest.manifest.ui,
+  );
+  expect(ui.diagnostics).toEqual([]);
+  expect(ui.slots.view).toHaveLength(2);
+  expect(ui.slots.view?.map((spec) => spec.surface)).toEqual([
+    "main",
+    "composer",
+  ]);
+  expect(ui.slots.view?.[0]?.capabilities).toEqual([
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel",
+  ]);
+  await rm(path.join(root, "runtimes"), { recursive: true });
+  const clean = await loadPluginDefinition((await discoverPluginAt(root))!);
+  expect(clean.executionAssessment?.mode).toBe("declarative");
+  expect((await validatePluginPackage(root)).ok).toBe(true);
+});
+
+it("theme resource declarations never create executable browser exceptions", () => {
+  const theme = {
+    runtime: undefined,
+    contributes: { ui: { theme: ["./theme.json"] } },
+  };
+  const files = {
+    "theme.json": JSON.stringify({
+      id: "reading",
+      label: "Reading",
+      css: "theme.css",
+      assets: { root: "art" },
+    }),
+    "theme.css": ".story{color:var(--story-color)}",
+  };
+  expect(assess(theme, files).mode).toBe("declarative");
+  for (const extension of ["js", "ts", "wasm", "node"])
+    expect(
+      assess(theme, { ...files, [`art/code.${extension}`]: "code" }).mode,
+    ).toBe("code");
+  expect(assess({ ...theme, entry: "./server/index.js" }, files).mode).toBe(
+    "code",
+  );
+  expect(
+    assess(theme, { ...files, "theme.json": "invalid", "art/code.js": "code" })
+      .mode,
+  ).toBe("code");
+});

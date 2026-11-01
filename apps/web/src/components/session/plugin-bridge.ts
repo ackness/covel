@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { PLUGIN_FRAME_CSP, PLUGIN_BRIDGE_SCRIPT } from "@covel/shared";
+import {
+  PLUGIN_FRAME_CSP,
+  PLUGIN_BRIDGE_SCRIPT,
+  SESSION_BRIDGE_MAX_REQUEST_BYTES,
+  SESSION_BRIDGE_REQUEST_BUDGET,
+  sessionBridgeOutcomeSchema,
+} from "@covel/shared";
 
 /**
  * The plugin's document as the frame host (`public/plugin-frame.html`) loads
@@ -16,7 +22,9 @@ const actionEnvelope = z.looseObject({
   type: z.literal("action"),
   id: z.string().min(1).max(80),
 });
-const actionRequest = z.object({
+const actionRequest = z.strictObject({
+  type: z.literal("action"),
+  id: z.string().min(1).max(80),
   action: z.string().min(1).max(120),
   params: z.record(z.string(), z.unknown()),
 });
@@ -29,12 +37,16 @@ export type PluginBridgeHandler = (params: Record<string, unknown>) => unknown;
 export interface PluginBridgeHost {
   state: Readonly<Record<string, unknown>>;
   locked: boolean;
+  /** Session pages validate every outgoing result and own their capability gates. */
+  sessionPage?: boolean;
+  isCurrent?: () => boolean;
   handlers: Readonly<Record<string, PluginBridgeHandler>>;
 }
 
 export interface PluginBridge {
   pushState(state: Readonly<Record<string, unknown>>): void;
   pushStream(seq: number, append: string): void;
+  ping(id: number): void;
   close(): void;
 }
 
@@ -52,12 +64,41 @@ export function connectPluginBridge(
   target: Pick<Window, "postMessage">,
   html: string | undefined,
   host: () => PluginBridgeHost,
-  options?: { onReady?: () => void },
+  options?: {
+    onReady?: () => void;
+    onPageError?: () => void;
+    onPong?: (id: number) => void;
+  },
 ): PluginBridge {
   const channel = new MessageChannel();
   const port = channel.port1;
   const inFlight = new Set<string>();
+  const seen = new Set<string>();
+  let closed = false;
+  const active = () => !closed && (host().isCurrent?.() ?? true);
+  const reply = (message: unknown) => {
+    if (active()) port.postMessage(message);
+  };
+  const failure = (id: string) =>
+    reply({ type: "result", id, error: "Plugin UI action failed" });
   port.onmessage = async ({ data }: MessageEvent<unknown>) => {
+    if (!active()) return;
+    if (data && typeof data === "object" && "type" in data) {
+      if (data.type === "page-error") {
+        options?.onPageError?.();
+        return;
+      }
+      if (data.type === "pong") {
+        const parsed = z
+          .strictObject({
+            type: z.literal("pong"),
+            id: z.number().int().positive().safe(),
+          })
+          .safeParse(data);
+        if (parsed.success) options?.onPong?.(parsed.data.id);
+        return;
+      }
+    }
     if (
       data &&
       typeof data === "object" &&
@@ -70,25 +111,37 @@ export function connectPluginBridge(
     const envelope = actionEnvelope.safeParse(data);
     if (!envelope.success) return;
     const { id } = envelope.data;
-    if (inFlight.has(id) || inFlight.size >= MAX_IN_FLIGHT) return;
+    if (inFlight.has(id)) {
+      failure(id);
+      return;
+    }
+    if (seen.has(id) || seen.size >= SESSION_BRIDGE_REQUEST_BUDGET) {
+      failure(id);
+      return;
+    }
+    seen.add(id);
+    if (inFlight.size >= MAX_IN_FLIGHT) return;
     inFlight.add(id);
     try {
-      const request = actionRequest.safeParse(envelope.data);
+      const bytes = new TextEncoder().encode(JSON.stringify(data)).length;
+      if (bytes > SESSION_BRIDGE_MAX_REQUEST_BYTES)
+        throw new Error("Request too large");
+      const request = actionRequest.safeParse(data);
       if (!request.success) throw new Error("Invalid plugin UI action");
-      const { locked, handlers } = host();
+      const { locked, handlers, sessionPage } = host();
       const handler = Object.hasOwn(handlers, request.data.action)
         ? handlers[request.data.action]
         : undefined;
-      if (locked || !handler)
+      if ((!sessionPage && locked) || !handler || !active())
         throw new Error("Plugin UI action is unavailable");
       const value = await handler(request.data.params);
-      port.postMessage({ type: "result", id, value });
+      if (sessionPage) {
+        const parsed = sessionBridgeOutcomeSchema.safeParse(value);
+        if (!parsed.success) throw new Error("Invalid public outcome");
+        reply({ type: "result", id, value: parsed.data });
+      } else reply({ type: "result", id, value });
     } catch {
-      port.postMessage({
-        type: "result",
-        id,
-        error: "Plugin UI action failed",
-      });
+      failure(id);
     } finally {
       inFlight.delete(id);
     }
@@ -102,13 +155,22 @@ export function connectPluginBridge(
     "*",
     [channel.port2],
   );
-  port.postMessage({ type: "state", value: host().state });
+  reply({ type: "state", value: host().state });
   return {
-    pushState: (state) => port.postMessage({ type: "state", value: state }),
+    ping: (id) => reply({ type: "ping", id }),
+    pushState: (state) => reply({ type: "state", value: state }),
     pushStream: (seq, append) => {
       if (Number.isSafeInteger(seq) && seq > 0 && append)
-        port.postMessage({ type: "stream", seq, append });
+        reply({ type: "stream", seq, append });
     },
-    close: () => port.close(),
+    close: () => {
+      if (closed) return;
+      port.postMessage({ type: "closed" });
+      closed = true;
+      port.onmessage = null;
+      port.close();
+      inFlight.clear();
+      seen.clear();
+    },
   };
 }

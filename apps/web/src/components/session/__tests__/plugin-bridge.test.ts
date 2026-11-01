@@ -197,7 +197,7 @@ describe("connectPluginBridge", () => {
     connection.bridge.close();
   });
 
-  it("limits the requests in progress and ignores a repeated id", async () => {
+  it("limits requests in progress and refuses repeated IDs", async () => {
     const release: (() => void)[] = [];
     const run = vi.fn(
       () => new Promise<string>((resolve) => release.push(() => resolve("ok"))),
@@ -220,10 +220,11 @@ describe("connectPluginBridge", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(run).toHaveBeenCalledTimes(8);
     for (const done of release) done();
-    await vi.waitFor(() => expect(connection.received).toHaveLength(9));
+    await vi.waitFor(() => expect(connection.received).toHaveLength(11));
     expect(
       connection.received
         .slice(1)
+        .filter((message) => (message as { value?: unknown }).value === "ok")
         .map((message) => (message as { id: string }).id)
         .sort(),
     ).toEqual(["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"]);
@@ -288,7 +289,7 @@ it("the page bridge merges appends and ignores the stream lane without consented
   port.onmessage?.({
     data: {
       type: "state",
-      value: { session: { version: 1, streaming: { seq: 2, text: "a" } } },
+      value: { session: { version: 2, streaming: { seq: 2, text: "a" } } },
     },
   });
   port.onmessage?.({ data: { type: "stream", seq: 2, append: "b" } });
@@ -331,4 +332,244 @@ it("connects URL pages without a document and handles ready separately from acti
   await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce());
   expect(received).toEqual([{ type: "state", value: {} }]);
   bridge.close();
+});
+
+it("never executes a completed request ID again and enforces the byte bound", async () => {
+  const run = vi.fn(() => "ok");
+  const c = connect({ handlers: { run } });
+  await c.next();
+  const request = { type: "action", id: "once", action: "run", params: {} };
+  c.port.postMessage(request);
+  await c.next();
+  c.port.postMessage(request);
+  expect(await c.next()).toEqual(failed("once"));
+  c.port.postMessage({
+    ...request,
+    id: "large",
+    params: { value: "字".repeat(50000) },
+  });
+  expect(await c.next()).toEqual(failed("large"));
+  expect(run).toHaveBeenCalledOnce();
+  c.bridge.close();
+});
+it("closes admission permanently when the per-connection ID budget is exhausted", async () => {
+  const run = vi.fn(() => "ok");
+  const c = connect({ handlers: { run } });
+  await c.next();
+  for (let index = 0; index < 4096; index++) {
+    c.port.postMessage({
+      type: "action",
+      id: String(index),
+      action: "run",
+      params: {},
+    });
+    await c.next();
+  }
+  c.port.postMessage({ type: "action", id: "new", action: "run", params: {} });
+  expect(await c.next()).toEqual(failed("new"));
+  c.port.postMessage({ type: "action", id: "0", action: "run", params: {} });
+  expect(await c.next()).toEqual(failed("0"));
+  expect(run).toHaveBeenCalledTimes(4096);
+  c.bridge.close();
+});
+it("drops late replies and delivery after retirement and validates every session outcome", async () => {
+  let active = true;
+  let finish!: (value: unknown) => void;
+  const c = connect({
+    sessionPage: true,
+    isCurrent: () => active,
+    locked: true,
+    handlers: {
+      abortExecution: () => ({ status: "accepted" }),
+      raw: () => ({
+        status: "accepted",
+        result: { providerContinuation: "credential-sentinel" },
+      }),
+      slow: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    },
+  });
+  await c.next();
+  c.port.postMessage({
+    type: "action",
+    id: "abort",
+    action: "abortExecution",
+    params: {},
+  });
+  expect(await c.next()).toEqual({
+    type: "result",
+    id: "abort",
+    value: { status: "accepted" },
+  });
+  c.port.postMessage({ type: "action", id: "raw", action: "raw", params: {} });
+  expect(await c.next()).toEqual(failed("raw"));
+  c.port.postMessage({
+    type: "action",
+    id: "slow",
+    action: "slow",
+    params: {},
+  });
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  active = false;
+  finish({ status: "committed" });
+  c.bridge.pushState({ private: "credential-sentinel" });
+  c.bridge.pushStream(1, "private");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(c.received).toHaveLength(3);
+  expect(JSON.stringify(c.received)).not.toContain("credential-sentinel");
+  c.bridge.close();
+});
+
+it("executes the shipped page script against a real channel, reconstructs text and rejects promises on shutdown", async () => {
+  const { runInNewContext } = await import("node:vm");
+  let connectPage!: (event: unknown) => void;
+  const parent = {};
+  const page: {
+    covel?: {
+      getState(): { session?: { streaming?: { text: string } } };
+      invoke(
+        method: string,
+        params?: Record<string, unknown>,
+      ): Promise<unknown>;
+    };
+  } = {};
+  const captured: unknown[] = [];
+  runInNewContext(PLUGIN_BRIDGE_SCRIPT, {
+    window: page,
+    parent,
+    document: { documentElement: { style: { setProperty() {} }, dataset: {} } },
+    setTimeout,
+    clearTimeout,
+    addEventListener: (type: string, callback: (event: unknown) => void) => {
+      if (type === "message") connectPage = callback;
+    },
+  });
+  let finish!: () => void;
+  const bridge = connectPluginBridge(
+    {
+      postMessage: (
+        _message: unknown,
+        _origin: string,
+        ports: MessagePort[],
+      ) => {
+        const port = ports[0]!;
+        open.push(port);
+        connectPage({
+          source: parent,
+          data: { type: "covel:connect" },
+          ports: [port],
+        });
+        const deliver = port.onmessage!;
+        port.onmessage = (event) => {
+          captured.push(event.data);
+          deliver.call(port, event);
+        };
+      },
+    } as unknown as Pick<Window, "postMessage">,
+    undefined,
+    () => ({
+      state: { session: { version: 2, streaming: { seq: 1, text: "" } } },
+      sessionPage: true,
+      locked: false,
+      handlers: {
+        run: () =>
+          new Promise((resolve) => {
+            finish = () =>
+              resolve({
+                status: "committed",
+                output: { credential: "credential-sentinel" },
+              });
+          }),
+      },
+    }),
+  );
+  await vi.waitFor(() => expect(page.covel?.getState().session).toBeDefined());
+  let expected = "";
+  for (let index = 0; index < 50; index++) {
+    expected += "字🙂";
+    bridge.pushStream(1, "字🙂");
+  }
+  await vi.waitFor(() =>
+    expect(page.covel?.getState().session?.streaming?.text).toBe(expected),
+  );
+  const pending = Array.from({ length: 8 }, () => page.covel!.invoke("run"));
+  for (const promise of pending) void promise.catch(() => {});
+  await expect(page.covel!.invoke("run")).rejects.toThrow("Plugin UI is busy");
+  bridge.close();
+  await Promise.all(
+    pending.map((promise) =>
+      expect(promise).rejects.toThrow("Plugin UI is not connected"),
+    ),
+  );
+  finish?.();
+  expect(JSON.stringify(captured)).not.toContain("credential-sentinel");
+  expect(captured).toContainEqual({ type: "closed" });
+});
+
+it.each(["error", "unhandledrejection"])(
+  "executes the page lifecycle protocol for %s without transmitting private details",
+  async (eventType) => {
+    const { runInNewContext } = await import("node:vm");
+    const events = new Map<string, (event: unknown) => void>();
+    const parent = {};
+    const page = {};
+    runInNewContext(PLUGIN_BRIDGE_SCRIPT, {
+      window: page,
+      parent,
+      document: {},
+      addEventListener: (type: string, callback: (event: unknown) => void) =>
+        events.set(type, callback),
+    });
+    const port = {
+      start: vi.fn(),
+      postMessage: vi.fn(),
+      onmessage: undefined as ((event: { data: unknown }) => void) | undefined,
+    };
+    events.get("message")?.({
+      source: parent,
+      data: { type: "covel:connect" },
+      ports: [port],
+    });
+    expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "ready" });
+    port.onmessage?.({ data: { type: "ping", id: 7 } });
+    expect(port.postMessage).toHaveBeenLastCalledWith({ type: "pong", id: 7 });
+    port.postMessage.mockClear();
+    events.get(eventType)?.({
+      message: "private-error",
+      reason: "credential",
+      filename: "private-file",
+    });
+    expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({
+      type: "page-error",
+    });
+  },
+);
+
+it("does not report normal pagehide as a page error", async () => {
+  const { runInNewContext } = await import("node:vm");
+  const events = new Map<string, (event: unknown) => void>();
+  const parent = {};
+  runInNewContext(PLUGIN_BRIDGE_SCRIPT, {
+    window: {},
+    parent,
+    document: {},
+    addEventListener: (type: string, callback: (event: unknown) => void) =>
+      events.set(type, callback),
+  });
+  const port = { start: vi.fn(), postMessage: vi.fn() };
+  events.get("message")?.({
+    source: parent,
+    data: { type: "covel:connect" },
+    ports: [port],
+  });
+  expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "ready" });
+  port.postMessage.mockClear();
+  events.get("pagehide")?.({ persisted: false });
+  expect(port.postMessage).not.toHaveBeenCalled();
+  events.get("unhandledrejection")?.({ reason: "private-rejection" });
+  expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({
+    type: "page-error",
+  });
 });

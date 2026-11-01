@@ -169,7 +169,10 @@ describe("useGameViewComposer", () => {
     vi.clearAllMocks();
     sessionMock.pendingInteractionDrafts = [];
     sessionMock.restoredInput = null;
-    sessionMock.sessionActionKinds = null;
+    sessionMock.sessionActionKinds = catalogue("main", "player", [
+      "say",
+      "command",
+    ]);
     sessionMock.gameState = {};
   });
 
@@ -911,5 +914,28 @@ describe("useGameViewComposer modes", () => {
     ]);
     act(() => result.current.composerModes.selectKind("act"));
     expect(result.current.composerModes.switcher).not.toBeNull();
+  });
+});
+
+describe("action catalogue readiness", () => {
+  it("admits a known player action, then retains text while its catalogue is unavailable", () => {
+    sessionMock.sessionActionKinds = catalogue("main", "player", [
+      "say",
+      "command",
+    ]);
+    sessionMock.pendingInteractionDrafts = [];
+    sessionMock.restoredInput = null;
+    const { result, rerender, onSendMessage } = setup([]);
+    act(() => result.current.setInputValue("Admitted text"));
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledExactlyOnceWith("Admitted text");
+    sessionMock.sessionActionKinds = null;
+    rerender();
+    act(() => result.current.setInputValue("Hold this text"));
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledOnce();
+    expect(result.current.composerDisabled).toBe(true);
+    expect(result.current.inputValue).toBe("Hold this text");
+    expect(result.current.commandFeedback?.message).toBeTruthy();
   });
 });

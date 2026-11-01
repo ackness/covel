@@ -308,6 +308,7 @@ export function buildPluginDetail(
       ...runtimes.flatMap((runtime) => runtime.writablePluginDataNamespaces),
     ]),
     ui: {
+      theme: uiDeclarations("theme"),
       right: uiDeclarations("right"),
       message: uiDeclarations("message"),
       view: uiDeclarations("view"),

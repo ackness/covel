@@ -1,3 +1,9 @@
+import {
+  checkReadPreconditions,
+  sameReadTargets,
+  withoutReadPreconditions,
+  READ_TARGET_CHANGED,
+} from "../read-baselines.js";
 /**
  * Proposal commit pipeline.
  */
@@ -60,11 +66,16 @@ export async function runPreStateCommitHook(
     readonly signal?: AbortSignal;
     readonly eventBus?: EventBus;
     readonly emitter?: TurnEmitter;
+    readonly pinReadTargets?: boolean;
   } = {},
 ): Promise<
   | { readonly proposal: Proposal }
   | { readonly error: string; readonly code?: "hook-failed" }
 > {
+  const original = structuredClone(proposal);
+  const hookProposal = structuredClone(
+    withoutReadPreconditions(original),
+  ) as Proposal;
   const hookCtx: HookContext = {
     event: "PreStateCommit",
     sessionId: proposal.sessionId,
@@ -76,7 +87,7 @@ export async function runPreStateCommitHook(
   const preResult = await hookPipeline.run(
     "PreStateCommit",
     hookCtx,
-    { proposal },
+    { proposal: hookProposal },
     { eventBus: opts.eventBus, emitter: opts.emitter },
   );
   // Parent cancellation stops the whole batch, including later proposals.
@@ -87,17 +98,22 @@ export async function runPreStateCommitHook(
       ...(preResult.handlerFailed ? { code: "hook-failed" as const } : {}),
     };
   }
-  if (
+  const payload =
     preResult.action === "continue" &&
     "replace" in preResult &&
     preResult.replace?.proposal
-  ) {
-    const replacement = preResult.replace.proposal as Proposal;
-    return {
-      proposal: { ...proposal, payload: replacement.payload } as Proposal,
-    };
-  }
-  return { proposal };
+      ? (preResult.replace.proposal as Proposal).payload
+      : hookProposal.payload;
+  const effective = {
+    ...original,
+    payload: structuredClone(payload),
+  } as Proposal;
+  if (
+    (original.preconditions?.length || opts.pinReadTargets) &&
+    !sameReadTargets(original, effective)
+  )
+    return { error: READ_TARGET_CHANGED };
+  return { proposal: effective };
 }
 
 export interface CommitPipelineOptions {
@@ -126,8 +142,8 @@ export function createCommitPipeline(
   };
   const handlers = createCommitHandlers(store, handlerOptions);
 
-  function commit(proposal: Proposal): Promise<CommitResult> {
-    return commitWith(handlers, store, proposal);
+  async function commit(proposal: Proposal): Promise<CommitResult> {
+    return (await commitAll([proposal]))[0]!;
   }
 
   /**
@@ -185,6 +201,12 @@ export function createCommitPipeline(
         };
       effectiveProposal = hooked.proposal;
     }
+
+    const baselineFailure = await checkReadPreconditions(
+      writeStore,
+      effectiveProposal,
+    );
+    if (baselineFailure) return { committed: false, ...baselineFailure };
 
     // Checked after any hook rewrite, so the handler sees what is stored.
     const checked = await checkCommitProposal(
@@ -259,7 +281,7 @@ export function createCommitPipeline(
         await hookPipeline.run(
           "PostStateCommit",
           hookCtx,
-          { proposal: effectiveProposal, result },
+          { proposal: withoutReadPreconditions(effectiveProposal), result },
           { eventBus, emitter },
         );
       }
@@ -329,6 +351,11 @@ export function createCommitPipeline(
       // the buffer along with the rollback — clients never see events for
       // rolled-back data.
       const postCommit: Array<() => Promise<void>> = [];
+      // A hook veto removes the proposal from screening, but cannot remove
+      // the original batch's atomicity requirement.
+      const guardedBatch = proposals.some(
+        (proposal) => (proposal.preconditions?.length ?? 0) > 0,
+      );
       // PreStateCommit runs before the transaction opens; a vetoed proposal
       // keeps its slot as a failed result without reaching a handler.
       const screened: Array<
@@ -346,32 +373,53 @@ export function createCommitPipeline(
             : { proposal: p },
         );
       }
-      const results = await store.withTransaction(async (tx) => {
-        const txHandlers = createCommitHandlers(tx, {
-          singleBatch: true,
-          ...handlerOptions,
-        });
-        const txResults: CommitResult[] = [];
-        for (const entry of screened) {
-          txResults.push(
-            "error" in entry
-              ? {
-                  committed: false,
-                  error: entry.error,
-                  ...(entry.code ? { code: entry.code } : {}),
-                }
-              : await commitWith(
-                  txHandlers,
-                  tx,
-                  entry.proposal,
-                  (fn) => postCommit.push(fn),
-                  true,
-                ),
-          );
+      class GuardedBatchRejected extends Error {
+        constructor(readonly results: CommitResult[]) {
+          super("Guarded proposal batch rejected");
         }
-        signal?.throwIfAborted();
-        return txResults;
-      });
+      }
+      let results: CommitResult[];
+      try {
+        results = await store.withTransaction(async (tx) => {
+          const txHandlers = createCommitHandlers(tx, {
+            singleBatch: true,
+            ...handlerOptions,
+          });
+          const txResults: CommitResult[] = [];
+          for (const entry of screened) {
+            txResults.push(
+              "error" in entry
+                ? {
+                    committed: false,
+                    error: entry.error,
+                    ...(entry.code ? { code: entry.code } : {}),
+                  }
+                : await commitWith(
+                    txHandlers,
+                    tx,
+                    entry.proposal,
+                    (fn) => postCommit.push(fn),
+                    true,
+                  ),
+            );
+          }
+          signal?.throwIfAborted();
+          if (txResults.some((result) => !result.committed) && guardedBatch)
+            throw new GuardedBatchRejected(txResults);
+          return txResults;
+        });
+      } catch (error) {
+        if (!(error instanceof GuardedBatchRejected)) throw error;
+        return error.results.map((result) =>
+          result.committed
+            ? {
+                committed: false,
+                code: "conflict",
+                error: "The guarded proposal batch was rolled back.",
+              }
+            : result,
+        );
+      }
       // Transaction committed — flush in proposal order. A failing emit/hook
       // must not masquerade as a commit failure (the data IS committed), so
       // each thunk is isolated and surfaced as a warning. A caller-supplied

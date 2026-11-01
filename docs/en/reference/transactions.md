@@ -102,6 +102,30 @@ Usage is simple: put the writes that must succeed or fail together into `fn`, an
 
 A new storage backend **must** pass this suite.
 
+<a id="read-baselines"></a>
+
+## Read-baseline preconditions
+
+When code reads a record and calculates a replacement from it, the kernel automatically protects that calculation's basis. Explicit `get` / `list` calls through `ctx.pluginData`, `ctx.store`, tools and services record a read baseline. A missing concrete key differs from stored JSON `null`. Lists record returned keys, without hypothetical absent keys. Internal dataset mutation checks are not author reads.
+
+A same-key write after such a read is guarded for `plugin.data`, each relevant batch item, delete, and `plugin.data.update` lists containing `set`, `merge`, `upsertItem` or `delete`. For example, the whole `[inc +15, merge {bar: 125}]` list is guarded together. Lists containing only `inc`, `append`, `insert` and `remove` retain latest-value semantics. Without an explicit read of the same key, writes remain blind replacements or operations.
+
+Plugin-data targets use the source plugin rebound by the host and the payload's explicit `namespace` / `key`. Extra `pluginId` / `kind` fields in payloads or batch items cannot change the guarded target. Malformed payloads reach ordinary proposal validation and fail with `proposal-invalid` within their unit's rollback boundary. Target extraction does not abort a valid story's commit.
+
+The basis covers the whole record value: object key order does not affect its fingerprint, while array order does. Row IDs, session IDs and outer timestamps are excluded; an `updatedAt` field inside the value remains content. Each runtime invocation retains its earliest external basis and overlays its own buffered writes separately, allowing repeated writes and read-your-writes without self-conflict. An unexplained external change observed during execution never refreshes the earlier basis. Each write-service call has a separate basis; earlier accepted calls are external to later calls. Each scope allows at most 4096 targets and 256 KiB of serialized evidence. Excess evidence produces an author diagnostic instead of truncating guards.
+
+Hooks run outside the transaction and may rewrite payloads. Conditions stay independently owned by the kernel and are not passed to hooks; in-place mutation or a forged envelope cannot erase them. A hook cannot redirect a guarded namespace, key, character ID or batch target membership. Same-target value rewrites still pass ordinary dataset, size and media checks. A hook changing a relative list into a replacement receives the applicable guard too. The standalone commit pipeline retains the original batch's guarded status: vetoing a relative prefix carrying the condition also rolls back later derived writes and their success notifications.
+
+After earlier scopes have committed, the transaction-bound handle compares conditions before the scope's first mutation of each target. A mismatch returns `code: conflict` with a fixed explanation containing no record content or fingerprint. An auxiliary unit loses its own writes, provider writes and exports. A story-attached operation loses only that operation, retaining the story, unrelated operations and existing failure notices. A conflict on the story's own state write is its own proposal failure. Without a story, the whole execution rolls back. Conflicts do not increment caller or provider fault counts. The kernel never automatically reruns a model or service; callers may explicitly retry and recompute from fresh reads.
+
+Characters receive an exact version or absence condition and semantic-content fingerprint only after actual observation of `characters` containing uncommitted upstream changes to that same character. This also detects a producer hook rewriting content at the same predicted version. Ordinary committed-character `expectedVersion` patches still rebase. Dimensions, schemas and Lorebook retain their own contracts.
+
+The source commit checks a pending calculation's original read basis before saving a suspension and its compact evidence. New resume reads use a fresh scope. Saved calculations keep their original conditions through repeated suspension. The separate suspension write-target digest can reject earlier with `suspension-data-changed`; a change detected only by the read baseline is `conflict`. Presentation jobs retain their separate `superseded` source fence and spending ledger.
+
+The guarantee depends on the host's existing serialized session commit boundary, including PostgreSQL advisory session locks across processes. A transaction alone does not provide serialization. Standalone pipeline callers also own serialization: root handles compare and write inside a transaction; transaction-bound handles reuse the outer transaction and defer notifications. Arbitrary administrator root-store writes, cross-key derivations, list phantoms, field-level dataflow and general serializable transactions are excluded. Evidence travels only through host commit plans and private continuations, never model text, public responses, SSE, traces, operation summaries or sandbox state.
+
+Cancel or recreate unresolved development suspensions, pending or retryable jobs, and checkpoints or snapshots containing previous pending evidence. Explicit retries recompute from current reads. Committed plugin values, characters, world packages and ordinary completed sessions need no DDL or reset. Historic fingerprints are not reconstructed and old evidence is not migrated.
+
 ## Versioned plugin-data batch CAS
 
 Versioned domain records are written with a `PluginDataStore` primitive that the host owns. CAS (compare-and-set) means "check the versions first, and write only if all of them match". Both the root `DataStore` and the transaction view have this method:
@@ -410,7 +434,7 @@ Who calls it:
 
 **Read dependencies.** Within one execution, a runtime that reads its own plugin's data sees the uncommitted writes of upstream runtimes of the same plugin (see [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility)). Each read records which upstream writes it actually saw (`read-dependencies.ts`), and the execution carries these dependencies into its commit plan.
 
-Character and character-schema property reads use the same recorder, retaining producers across plugins. Tool and service reads belong to the calling runtime; host copying does not count. See [World Model](./world-model.md) for granularity. The recorder travels only in the kernel's execution commit plan, never in public results or suspension payloads.
+Character and character-schema property reads use the same recorder, retaining producers across plugins. Tool and service reads belong to the calling runtime; host copying does not count. See [World Model](./world-model.md) for granularity. Successful child world-property reads join the caller's real `runId` while the invocation is still live; no child commit unit is created. Failed children discard their observations and operations without changing existing parent observations. The recorder travels only in the kernel's execution commit plan, never in public results or suspension payloads.
 
 - `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set`, a delete, or an operation list containing either) and then read it, there is no dependency.
 - `list` depends on every upstream that wrote that namespace. A list without a namespace depends on every upstream that wrote plugin data.
@@ -456,7 +480,7 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 
 **PreStateCommit runs outside the transaction.**
 
-- Finalize completes normalization, guards, and the PreStateCommit hooks first, and only then opens the transaction. Inside the transaction, only writes happen. `createCommitPipeline().commitAll` works the same way.
+- Finalize completes normalization, guards, and the PreStateCommit hooks first, and only then opens the transaction. Inside the transaction, only baseline comparisons, validation and storage writes happen. `createCommitPipeline().commitAll` works the same way.
 - Hooks do not read storage state, so running them earlier does not change the meaning. The benefit is that waiting on a plugin hook no longer holds the SQLite / Memory serial gate.
 
 **Player stop and commit share one boundary.**
@@ -587,7 +611,7 @@ A plugin can submit a list of operations against one plugin-data key instead of 
 | `data-op-rejected`                                                    | An operation fails against the current value, for example an `inc` past its `min`                                                                                                    | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`, with a path as `(op 1 at /gold, …)` |
 | `dataset-violation`                                                   | The write breaks a declared dataset: an operation kind that is not allowed, a result that does not match the record schema, or a schema document that is missing or does not compile | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                            |
 | `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | A `MediaRef` in the result names an asset that does not exist, that the session does not reference, or whose MIME type differs                                                       | `plugin.data.update: session … has no reference to media …`                                                              |
-| `conflict`                                                            | An update in a write-service operation fails against the current value: it held against the value its caller saw when it was staged, so another commit changed the value since       | As for `data-op-rejected`                                                                                                |
+| `conflict`                                                            | A read-baseline mismatch, or a staged write-service update that no longer applies                                                                                                    | The existing unit or operation failure boundary; no automatic retry                                                      |
 
 A write-service operation's `plugin.data.update` that fails here reports `conflict` instead of `data-op-rejected`: it already passed the same check when it was staged. A runtime's own update still reports `data-op-rejected`.
 
@@ -602,7 +626,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 **Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data and the immediate writes of a plugin action RPC.
 
-**Suspension write baseline.** The write baseline recorded when a suspension is saved (`takenUnder.writes`) includes a `plugin.data.update` only when its operations contain `set` or `delete`. An update of relative operations only (`merge`, `inc`, array operations) applies to the latest value at commit and cannot put back a stale whole value, so it is left out. The baseline also covers the nested writes saved with the suspension, derived the same way as at commit.
+**Suspension write baseline.** `takenUnder.writes` still covers whole-value `set` / `delete` updates and nested pending writes. It records content at suspension save time. Earlier [read baselines](#read-baselines) separately protect read-derived `merge` / `upsertItem` replacements; the two fences have different observation times.
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 

@@ -6,12 +6,17 @@
  * is not dropped in the game.
  */
 import { z } from "zod";
+import { sessionBridgeCapabilitySchema } from "./session-bridge.js";
 import { PLUGIN_VIEW_ID_PATTERN } from "./view-mode.js";
 import {
   PLUGIN_UI_COMPONENT_NAMES,
   SEGMENT_TEMPLATE_COMPONENT_NAMES,
 } from "../types/plugin-ui.js";
 import { STORY_LIMITS, storySegmentKinds } from "./story-output.js";
+import {
+  sessionMessagesPropsSchema,
+  sessionComposerPropsSchema,
+} from "./catalog.js";
 
 /** The newest `specVersion` this host understands. */
 export const CURRENT_UI_SPEC_VERSION = 1;
@@ -84,6 +89,16 @@ const uiViewNodeSchema: z.ZodType = z.lazy(() =>
       visible: z.unknown().optional(),
     })
     .superRefine((node, ctx) => {
+      const name = node.component ?? node.type;
+      const sessionProps =
+        name === "SessionMessages"
+          ? sessionMessagesPropsSchema.safeParse(node.props ?? {})
+          : name === "SessionComposer"
+            ? sessionComposerPropsSchema.safeParse(node.props ?? {})
+            : undefined;
+      if (sessionProps && !sessionProps.success)
+        for (const issue of sessionProps.error.issues)
+          ctx.addIssue({ ...issue, path: ["props", ...issue.path] });
       if ((node.component ?? node.type) === "FilterContainer") {
         const props = z
           .looseObject({
@@ -140,6 +155,14 @@ export const pluginUiSpecSchema = z
     shortLabel: i18nTextSchema.optional(),
     description: i18nTextSchema.optional(),
     bridge: z.literal("session").optional(),
+    surface: z.enum(["main", "composer"]).optional(),
+    capabilities: z
+      .array(sessionBridgeCapabilitySchema)
+      .max(5)
+      .refine((values) => new Set(values).size === values.length, {
+        message: "capabilities must be unique",
+      })
+      .optional(),
     icon: z.string().optional(),
     group: z.string().optional(),
     groupLabel: i18nTextSchema.optional(),
@@ -223,6 +246,24 @@ export const pluginUiSpecSchema = z
     }
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
+    if (
+      spec.surface !== undefined &&
+      (!hasWebview || spec.bridge !== "session")
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["surface"],
+        message: "surface requires a webview with bridge: session",
+      });
+    if (
+      spec.capabilities !== undefined &&
+      (!hasWebview || spec.bridge !== "session")
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["capabilities"],
+        message: "capabilities require a webview with bridge: session",
+      });
     if (spec.bridge && !hasWebview)
       ctx.addIssue({
         code: "custom",
@@ -292,6 +333,8 @@ const SEGMENT_TEMPLATE_COMPONENTS: ReadonlySet<string> = new Set(
 );
 
 export interface PluginUiSpecIssue {
+  /** Optional package-relative source for static theme compilation. */
+  readonly file?: string;
   /** JSON path inside the spec, such as `view.children[0].component`, or `(root)`. */
   readonly path: string;
   readonly message: string;
@@ -360,7 +403,45 @@ export function pluginUiSpecIssues(
         message: "bridge is only valid in contributes.ui.view",
       });
     }
+    if (slot !== "view" && record.capabilities !== undefined)
+      issues.push({
+        path: "capabilities",
+        message: "capabilities are only valid in contributes.ui.view",
+      });
+    if (slot !== "view" && record.surface !== undefined)
+      issues.push({
+        path: "surface",
+        message: "surface is only valid in contributes.ui.view",
+      });
     if (slot === "segment") issues.push(...segmentTemplateIssues(record));
+    const sessionWidgets = new Set<string>();
+    visitViewNodes(record.view, ["view"], (node, at, repeated) => {
+      const field = node.component !== undefined ? "component" : "type";
+      const name = node[field];
+      if (name !== "SessionMessages" && name !== "SessionComposer") return;
+      const path = formatPath([...at, field]);
+      if (slot !== "view" || record.webview !== undefined)
+        issues.push({
+          path,
+          message: `${name} is only available in a live declarative contributes.ui.view`,
+        });
+      if (repeated)
+        issues.push({
+          path,
+          message: `${name} cannot be repeated or placed in an item template`,
+        });
+      const props = sessionMessagesPropsSchema.safeParse(node.props ?? {});
+      const key =
+        name === "SessionComposer"
+          ? name
+          : `${name}:${props.success ? props.data.content : "story"}`;
+      if (sessionWidgets.has(key))
+        issues.push({
+          path,
+          message: `only one ${key} is allowed in a view`,
+        });
+      sessionWidgets.add(key);
+    });
   }
   walkSpec(spec, [], (at, key, value) => {
     if (
@@ -432,22 +513,33 @@ function segmentTemplateIssues(
 function visitViewNodes(
   node: unknown,
   at: (string | number)[],
-  visit: (node: Record<string, unknown>, at: (string | number)[]) => void,
+  visit: (
+    node: Record<string, unknown>,
+    at: (string | number)[],
+    repeated: boolean,
+  ) => void,
+  repeated = false,
 ): void {
   if (!node || typeof node !== "object" || Array.isArray(node)) return;
   const record = node as Record<string, unknown>;
-  visit(record, at);
+  repeated = repeated || record.repeat !== undefined;
+  visit(record, at, repeated);
   if (Array.isArray(record.children))
     for (const [index, child] of record.children.entries())
-      visitViewNodes(child, [...at, "children", index], visit);
+      visitViewNodes(child, [...at, "children", index], visit, repeated);
   if (record.slots && typeof record.slots === "object")
     for (const [name, children] of Object.entries(record.slots))
       if (Array.isArray(children))
         for (const [index, child] of children.entries())
-          visitViewNodes(child, [...at, "slots", name, index], visit);
+          visitViewNodes(child, [...at, "slots", name, index], visit, repeated);
   const props = record.props as Record<string, unknown> | undefined;
   if (props && typeof props === "object")
-    visitViewNodes(props.itemTemplate, [...at, "props", "itemTemplate"], visit);
+    visitViewNodes(
+      props.itemTemplate,
+      [...at, "props", "itemTemplate"],
+      visit,
+      true,
+    );
 }
 
 function formatPath(path: readonly PropertyKey[]): string {

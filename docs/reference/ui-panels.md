@@ -12,7 +12,7 @@
 
 ## 无服务器代码的界面
 
-JSON 面板、模板、视图和输入模式可随[声明式包](./plugin-installation.md#声明式插件)发布。有效 webview 资源清单内的经典 `.js` 只在浏览器沙箱中运行；不授予服务器代码权限。`bridge: session` 仍要求对当前 spec、HTML 和多文件资源摘要的独立读取授权，拒绝或撤销后普通游戏界面仍可用。改脚本需要对新内容重新授权。宿主的返回/默认界面控件留在 iframe 外；现有 CSP、消息来源和逐 action 限制不变，没有桥接写入或整页替换能力。
+JSON 面板、模板、视图和输入模式可随[声明式包](./plugin-installation.md#声明式插件)发布。有效 webview 资源清单内的经典 `.js` 只在浏览器沙箱中运行；不授予服务器代码权限。`bridge: session` 仍要求对当前 spec、HTML 和多文件资源摘要的独立读取授权，拒绝或撤销后普通游戏界面仍可用。改脚本需要对新内容重新授权。宿主的返回/默认界面控件留在 iframe 外；现有 CSP、消息来源和逐 action 限制不变；页面写入另需逐能力授权，独立主视图/输入框替换遵循相同内容授权。
 
 准备页和会话插件行在启用前显示 agent 的模型使用及实际触发时机；纯界面包没有模型提示。该提示不授予任何沙箱能力。
 
@@ -218,7 +218,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-本页说的 `ui.right`、`ui.message`、`ui.view`、`ui.segment` 都是指 `contributes.ui` 下的键。支持这四个位置；舞台决策区通过右侧面板的 `surfaces` 选择，故事段落的模板见[段落模板](#段落模板)。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
+本页说的 `ui.right`、`ui.message`、`ui.view`、`ui.segment` 都是指 `contributes.ui` 下的键。这四个位置使用面板/模板 schema；另外的 `ui.theme` 使用[独立主题 schema](./theme-packages.md#插件提供的受限主题)；舞台决策区通过右侧面板的 `surfaces` 选择，故事段落的模板见[段落模板](#段落模板)。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
 
 ### JSON Spec 格式
 
@@ -699,7 +699,8 @@ contributes:
 - **选哪个模板。** 每个段落在所有匹配的模板里选最具体的：`kind + speaker` 优先于只写 `speaker`，只写 `speaker` 优先于只写 `kind`；同一级里按 ID 匹配的优先于按名字匹配的。还相同时，按 `/api/ui-specs?sessionId=` 返回的插件顺序，再按声明顺序。只有在会话里可运行的插件提供模板，与 `ui.message` 的筛选相同。
 - **模板读到的状态。** `/segment` 是已提交的段落 `{ kind, text, speaker?, speakerId? }`；`/index` 是段落位置（从 0 开始）；`/character` 是 `speakerId` 指向会话角色时的 `{ id, name, type }`；`/visual` 是这个角色已有的 `character.visual@1` 槽位值。没有插件数据、设置和别的 ID。
 - **哪里用。** 只在聊天视图的 `parsed` 和 `detailed` 模式、只对带 `segments` 的已提交故事使用。有段落命中模板时，整条故事按段落依次显示：命中的段落用模板，其余段落用默认正文。一个段落都没命中时，消息和以前完全一样。流式输出中的故事、舞台对话框和 `raw` 视图不用模板（`raw` 的 JSON 里能看到 `segments`）。
-- **能用哪些组件。** 只能用只显示自身 props 的组件：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、`CharacterAvatar`、各类画廊）都不能用；头像用 `Image` 读 `/visual/avatar`。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **能用哪些组件。** 可用的显示组件为：`Stack`、`Row`、`Grid`、`Separator`、`Text`、`Badge`、`Icon`、`TagList`、`Source`、`Image`、`CharacterAvatar`、`Media`、`AudioPlayer`、`Card`、`CardList`、`EntryCard`、`StatBar`、`Progress`、`Accordion`、`Section`、`JsonView`、`EntryList`、`Prose`、`PlayerMessage`、`Alert`。会发消息、调用运行时、接收输入或读取会话数据的组件（如 `CandidateList`、`Button`、`Choice`、表单与输入组件、`SceneCastList`、`CharacterFieldsView`、各类画廊）都不能用。媒体总在当前会话里解析，`sessionId` prop 不生效。
+- **模板头像。** `CharacterAvatar` 的 `characterId` 必须等于已解析的 `/character/id`，通常绑定 `{ "$state": "/character/id" }`；相同的字面 ID 也合法。它只使用该说话人已投影的 `/visual/avatar`，不查槽位、会话、插件数据或服务。未解析的说话人、缺少 ID 或头像时不显示头像，正文仍可读。其他角色 ID 不会显示头像；`sessionId`、`ref`、`visual` 等 props 不能改换来源。缩略图和放大预览都使用宿主明确提供的当前会话。宿主的本地点击放大与关闭属于显示交互；插件 `on` / `watch`、RPC、输入、上传和发送消息仍不允许。切换会话、说话人或头像会关闭旧预览。
 - **出错怎么办。** 某个模板渲染失败时，只有这一段退回默认正文。模板写错时（缺少或空的 `match`、写了 `webview`、`dataSource`、`surfaces`、`group*`、`shortLabel`、`navTarget`、`alwaysRender`、`bridge`，view 里有 `on` / `watch`，或用了上面列表以外的组件），`pnpm validate:plugin` 和安装报错；加载时这一项给出带声明路径的诊断，同一个插件的其他模板照常使用。
 - `ui.segment` 不派生能力（与 `ui.view` 相同）：模板不运行代码，也不读数据。
 
@@ -822,12 +823,49 @@ contributes:
 - `view` 与 `webview` 二选一。可选 `icon`、`description`、`dataSource`、`emptyState`、`alwaysRender`。没有数据源的声明式页面可用 `alwaysRender: true`。
 - 不允许 `surfaces`、`group`、`groupLabel`、`groupOrder`、`shortLabel`、`navTarget`；这些字段只负责面板和舞台路由。
 - 模式名为 `plugin:<pluginId>:<viewId>`，例如 `plugin:session-view-probe:story`。世界和玩法包的 `defaultViewMode` 接受这个格式，也接受 `parsed` 和 `stage`；`detailed` 和 `raw` 只供作者手动选择。
-- 视图列表加载时先显示宿主默认界面。视图缺失、插件停用、请求失败或渲染出错时回退。宿主默认值只有两种：世界默认值恰为 `stage` 时用舞台，否则用 `parsed`。插件视图永远不作为回退目标。请求暂时失败后仍保留玩家的选择，后续成功加载可以恢复；渲染失败则切回宿主默认值并提示。
-- 视图选择只存在当前挂载中，不按会话保存。插件视图不进入沉浸舞台模式，也不显示宿主输入框。
+- 首次加载视图列表时先显示宿主默认界面。同一会话重新发现视图期间，包括界面语言或其他插件变化、请求暂时失败时，保留已加载且仍获授权的页面、菜单和本地显示状态。插件停用、成功发现后确认视图缺失、撤权或渲染失败才清除对应选择并回退；另一区域及其草稿保留。不同会话不复用旧视图列表。宿主默认值只有两种：世界默认值恰为 `stage` 时用舞台，否则用 `parsed`。插件视图永远不作为回退目标。
+- 视图选择只存在当前挂载中，不按会话保存。普通插件视图不进入沉浸舞台模式，默认不显示宿主输入框；声明式页面可显式组合 `SessionComposer`；显式主视图替换和独立输入框选择见下文。
+
+### 实时会话组件
+
+普通声明式 `ui.view` 可以用 `SessionMessages` 和 `SessionComposer` 组合宿主的公开故事、待处理交互和当前身份的输入框，社区包与内置包使用同一接口。精确属性、数量和位置限制见[实时会话视图组件](./ui-components.md#实时会话视图组件)。
+
+宿主只提供当前会话的渲染入口，不把消息、设置、凭据或行动回调放入 `/data`、`/sources`、JSON 状态或浏览器消息。故事区域使用公开解析视图及原有流式渲染，不显示执行详情或推理。待处理区域先按完整历史和已提交集合判断，只有尚未回答、未被后续玩家消息取代的表单、选择和确认；建议不算必须作答的交互。交互仍显示真实的校验/拒绝反馈。
+
+两个公开消息区域保留当前回合的消息行标记，同一区域内当前回合的选择列表连续编号，并支持数字键选择；过期选择不占用当前编号。点击或数字键选中必答选项时，通过原有交互提交入口发送当前回合、交互和选项，不转成普通发言或仅在本地标成已提交。建议仍可进入待发送区。执行详情、推理和素材管理仍不挂载。
+
+输入框复用会话唯一的控制器：切换页面保留文字、模式、字段、排队选择和停止后恢复的输入；忙碌拒绝不清除草稿。目录未加载、身份不可用、会话结束、开局受阻或有必须作答的交互时不能发送替代的“说”。导演指示和无文字推进仍走现有玩家行动校验，只有正常提交才持久化。打开页面不改变身份、叙事视角或回合策略。选择独立 composer 时，声明式 `SessionComposer` 暂停显示宿主输入框，避免重复；切回默认输入后恢复原有草稿与模式。
+
+宿主的返回、停止、开局和恢复入口留在插件布局外。错误只影响视图，故事执行仍由宿主管理。消息和块内会屏蔽实时上下文，避免消息模板递归挂载故事或输入框；快照和调试面板也没有这些能力。webview 不接收此上下文，其授权、内容哈希和桥接能力保持独立。
+
+### 沙箱主视图与输入框
+
+在已有 `contributes.ui.view` 的 spec 中添加单数 `surface`，不新增 placement：
+
+```json
+{
+  "id": "input",
+  "label": "Adventure input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": ["submitAction", "submitInteraction", "invokeRuntime"],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+每份 spec 只选一个区域；两份 spec 可以共享发布根目录。未知值、错误位置或 JSON 视图得到 `surface` 字段诊断，其他功能照常加载。主视图菜单只列普通视图和 `main`；输入框选择只列 `composer`。每个区域最多一个提供方，由玩家选择，不猜第一个。世界的 `defaultViewMode` 可指定 main 或普通视图，但不能指定 composer，且仍须授权。没有世界/玩法包的输入框默认值。
+
+显式 main 只替换故事栏，默认保留宿主输入框。独立 composer 可用于聊天、普通插件视图和舞台，也可来自另一个插件。舞台把它放在叙事下方，移除重复的自由输入、建议提交和选项快捷键；段落推进、必答表单、挂起和恢复仍由宿主提供。页面没有 submitAction 能力也可以只提供交互或 runtime 界面。玩家随时可返回默认输入。
+
+选择只在本次挂载和当前会话访问中有效；设备上的内容授权会保留。加载和等待授权时，默认界面仍可用。两个 frame 各有租约、句柄和流订阅；一个区域失败、停用或撤销不会重置另一个区域。
+
+沙箱主视图保留最小可用高度，宿主输入框不占用这部分空间。手机上恢复提示等内容堆叠时，会话中栏可纵向滚动，主视图、输入框和宿主控件仍可到达。
+
+宿主在裁剪的 frame 之外保留标明区域的控制条，提供“切回默认界面”、停止、交互与恢复。全局返回同时清除两个选择，区域返回只清除自己；舞台沉浸模式和窄屏也保留全局控制条。页面权限菜单可单独或全部撤销；菜单横向保持在视口边界内，窄屏控件换行后也可撤销。控制条的 `data-covel-host-controls` 标记及其后代属于宿主，主题选择器必须排除它们。iframe 的固定定位、高 z-index 或焦点不能跨越裁剪边界。
 
 ### 多文件页面
 
-页面就是插件视图，没有 `contributes.ui.pages`。只有 `contributes.ui.view` 可以声明 `webview.root`；右侧面板和消息块仍用单文件 HTML。页面保留故事栏布局，不替换宿主主视图或输入框系统位置。
+页面就是插件视图，没有 `contributes.ui.pages`。只有 `contributes.ui.view` 可以声明 `webview.root`；右侧面板和消息块仍用单文件 HTML。普通页面保留故事栏布局；声明单数 `surface` 时可替换下述系统区域。
 
 作者在 spec 中声明：
 
@@ -874,57 +912,95 @@ contributes:
 
 使用经典外部脚本 `<script src="app.js"></script>`，不使用模块脚本、内联脚本、事件属性或 `eval`。内联样式允许；网络请求不允许。自定义字体要以内嵌 `data:font/woff2;base64,...`（或 WOFF）写入 CSS 的 `@font-face`。字体 URL 请求使用 CORS，而沙箱文档是不透明源，连相对 `.woff` / `.woff2` URL 也跨源；资源路由不发送 CORS 允许头，所以这些 URL 无法加载。`font-src 'self' data:` 保持不变，发布字体文件不代表可以用 URL 加载。`'self'` 按浏览器看到的源工作，兼容 Vite 和反向代理，不限制到某个路径前缀；文件边界由路由的发布清单检查。主页面的 `frame-src 'self'` 限制 iframe 导航，`/api` 另有不透明源和嵌入目标拒绝规则，见[安全边界](../internals/security.md#plugin-pages-loaded-by-url)。
 
-宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。收到端口后脚本回报 `ready`，URL 页面等待 8 秒；超时在 iframe 上方显示失败和“重试”。宿主用不带凭据的 HEAD 探测：404 显示“此页面已更新，请重新加载。”，其他失败显示“页面加载失败。”。迟到的 `ready` 会清除错误。重试重新获取 spec 并重建 iframe；宿主的返回按钮始终可用。
+宿主在入口 `<head>` 后注入经典桥接脚本 `__covel__/bridge-<hash8>.js`。没有 `<head>` 时依次放在 `<html>`、doctype 后，或文档开头；嵌套入口自动添加 `../`。作者不用复制桥接代码。视图与替换区域采用下述统一生命周期。未选择区域回退的普通 URL 面板仍使用原来的失败覆盖层：宿主以无凭据 HEAD 区分过期摘要（404）和其他错误，迟到的 ready 可清除该覆盖层，重试重新获取声明并重建 iframe。
 
-摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。入口 HTML 使用 `Cache-Control: no-cache`，每次重用都须重新验证；其 ETag 包含桥接脚本摘要。因此插件文件和 URL 未变时，宿主升级也会返回引用新版桥的 HTML。其余资源（包括带哈希文件名的桥接脚本）仍使用一年不可变缓存。
+摘要是按相对路径排序的 `[relativePath, size, sha256(content)]` JSON 行的 SHA-256 前 32 位小写十六进制。注册表首次投影时计算，重新注册插件时重算；生产文件应只在重启时改变，不保留旧文件副本。重新注册后旧摘要 URL 返回 404，新 URL 可加载。每次读取通过同一个有界 O_NOFOLLOW 句柄核对长度和 SHA-256，再使用该缓冲区响应；同长度改动也会在 GET、HEAD 或 304 之前返回 no-store 404。入口 HTML 使用 `Cache-Control: no-cache`，每次重用都须重新验证；其 ETag 包含桥接脚本摘要。因此插件文件和 URL 未变时，宿主升级也会返回引用新版桥的 HTML。其余资源（包括带哈希文件名的桥接脚本）仍使用一年不可变缓存。
 
-`bridge: "session"` 的逐能力授权不变。整份 spec 的授权哈希包含 URL，而 URL 的摘要覆盖所有发布文件；任一文件变化都会使旧授权失效。没有桥接授权就不挂载读取会话的页面。没有新增任何会话写操作，也不保存每会话的视图选择。开发模式未获服务端代码批准的插件可能要重启才能重算摘要。
+`bridge: "session"` 的逐能力授权不变。整份 spec 的授权哈希包含 URL，而 URL 的摘要覆盖所有发布文件；任一文件变化都会使旧授权失效。没有桥接授权就不挂载读取会话的页面。页面写能力见下文；不保存每会话的视图选择。开发模式未获服务端代码批准的插件可能要重启才能重算摘要。
 
 ### 读取会话前的授权
 
-只有 `contributes.ui.view` 中的 `webview` 可以声明 `bridge: "session"`。玩家同意前不挂载这个页面，也不发送任何会话投影。世界默认选择了它时同样先弹出授权提示，并在下面显示 `parsed` / `stage`。
+只有 `contributes.ui.view` 中的 `webview` 可以声明 `bridge: "session"`，可选 `capabilities` 列出额外能力。列表最多 5 项，不得重复；未知能力、其他 placement、json-render 视图或缺少 `bridge: "session"` 都产生字段诊断，只移除对应功能。`session` 由 bridge 推导，不写进列表。可选单数 `surface: "main" | "composer"` 选择系统区域，同样要求 webview 和 `bridge: "session"`；现有复数 `surfaces` 仍表示面板/舞台路由。
 
-授权能力为“读取会话”，绑定插件 ID 和整份已加载 spec（含内联 HTML）的 SHA-256 内容哈希。记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.session`。spec 或 HTML 改变后重新请求授权；在视图栏的“视图权限”菜单里点“撤销故事读取授权”可以撤销，并返回默认视图。授权独立于服务端代码审批，适用于所有来源的插件。
+玩家同意全部请求能力并成功保存之前，不挂载页面、不发送投影，也不允许调用。世界默认视图同样先显示授权提示，下面保留 `parsed` / `stage`。对话框列出插件、页面和每项能力的含义。保存期间仍可在对话框内切回默认界面或停止当前执行。内置来源、可信来源、声明式分类和服务端代码批准都不能替代页面授权。
+
+<!-- prettier-ignore -->
+| 能力 | 含义 |
+| --- | --- |
+| `session` | 读取公开故事与输入信息，自动请求 |
+| `submitAction` | 提交玩家行动 |
+| `submitInteraction` | 回答当前待处理交互 |
+| `invokeRuntime` | 运行所属插件的手动 runtime |
+| `abortExecution` | 停止当前会话的执行 |
+| `openPanel` | 打开所属插件已声明的面板 |
 
 内容更换或切换会话时，宿主关闭旧 iframe 的连接和流订阅。新内容的哈希尚未完成或尚未授权时不挂载页面；已授权的相同内容在另一个会话也会建立新的 iframe，旧页面不会收到新会话的状态或流文本。
 
-### SessionProjection（版本 1）
+记录通过 SettingsStore 保存在本设备，键为 `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`；读取键的 `.session` 后缀保留。`hash` 是整份已解析 spec 的规范 JSON 的 SHA-256，包含能力列表、内联 HTML 或覆盖所有资源的摘要 URL。内容改变后重新询问；旧读取授权不授予额外能力。所有写入完成持久化后才生效，保存期间的乐观通知不算同意。视图栏的“视图权限”可单独撤销能力或撤销全部；撤销立即停止投影和调用并返回默认视图，即使保存失败也不会继续授权。其他窗口的设置刷新也能撤销访问。
 
-授权后的页面从 `window.covel` 的状态对象读取 `session` 字段，也可用 `window.covel.subscribe` 订阅变化。下表是该字段的内容。它不重复顶层的 `locale` 和 `theme`。
+<a id="sessionprojection版本-1"></a>
+
+### SessionProjection（版本 2）
+
+页面读取 `window.covel` 暴露的状态对象的 `session` 字段，或通过 `window.covel.subscribe` 订阅投影。顶层只提供 `session`、`locale` 和宿主 `theme`；不再提供普通面板的 `data`、`sources`、`jobs`、`context` 或自己的 KV。
 
 其他客户端提交回合后，宿主也会刷新消息和回合数，并推送更新后的投影；页面无需重新加载。
 
 <!-- prettier-ignore -->
 | 字段 | 内容 |
 | --- | --- |
-| `version` | 固定为 `1` |
-| `phase` | `setup` 或 `playing` |
-| `turn` | 已提交的玩家回合数 `completedPlayerTurns` |
-| `executing` | 是否正在执行 |
-| `messages[]` | `{ seq, role, text, truncated? }`。仅包含 `kind === "story"` 的 assistant 消息和不带 block 的 user 消息。`seq` 是首次观测时分配的稳定正整数，宿主淘汰旧消息或补载历史时不重新编号 |
-| `streaming` | `{ seq, text }` 或 `null`。`stream_` 占位消息只在这里出现，不进入 `messages`；最终故事消息沿用占位消息的序号 |
-| `pending[]` | `{ seq, block }`。宿主仍等待玩家回答的交互；`seq` 是同一消息的稳定序号，block 去掉隐藏字段 |
-| `characters[]` | 公开角色的 `id`、`name`、`type`，可选 `aliases`、`description`、`fields`；其余角色字段不传 |
-| `slots[]` | `{ slot, key?, value }`，宿主已经显示的内核 UI 槽位值；媒体引用保持不透明对象 |
+| `version` | 固定为 `2` |
+| `phase` / `turn` / `executing` | `setup` 或 `playing`、已提交玩家回合数、执行状态 |
+| `messages[]` | `{seq, role, text, truncated?}`，仅公开 story 和无 block 的玩家消息 |
+| `streaming` | `{seq, text}` 或 `null`；最终故事继承占位消息的序号 |
+| `pending[]` | `{seq, interaction, handle?}`，公开交互和当前 frame 的不透明回答句柄 |
+| `input.seats[]` | 人类座位的 `{id, role, characterIds, currentCharacterId?, allowed}`；只有公开关联标识，不含用户或账户身份 |
+| `input.kinds[]` | 当前座位可用行动的 `{kind, label, text, actor, fields?}`；字段只含公开 JSON Schema 显示词汇，不发送可执行验证器 |
+| `characters[]` | `id`、`name`、`type`，可选 `aliases`、`description`；不包含任意 `fields` 或私人知识 |
+| `slots[]` | `{slot, key?, value}`，经过内核槽位 schema 校验；媒体只保留 `{id,mime,size}` 的不透明引用 |
 
-序号只在当前会话桥接实例中有效，按首次观测分配，不复用。补载的旧历史会获得新的序号；页面按数组顺序显示消息，不能按 `seq` 排序。
+`interaction` 的类型为 `form`、`choice`、`confirmation` 或 `unavailable`。表单公开标题、提交标签和字段的名称、类型、标签、占位符、必填、默认值、数值限制与选项。选项公开 `choices[].{id,label,description?}`；确认公开提示和确认/取消标签。内部 block/turn/interaction 引用、`meta`、动作映射和服务端验证器均留在宿主。句柄只在当前页面尝试和当前交互有效；回答、替换、淘汰或离开后失效。自定义 JSON UI 和不支持/过大的交互只显示 `unavailable`，没有句柄，宿主提供打开默认交互界面的按钮。可选建议仍由宿主管理。
 
-投影不包含消息 `id`、`turnId`、`requestId`、`runtimeId`、时间戳、非故事的内部消息、推理、执行步骤、插件数据行、设置、供应商密钥或会话令牌。投影构造不读 `plugin_data`。角色的公开 `id` 是角色关联标识，不是消息元数据。
-
-嵌套值递归移除所有 `_` 开头的键，以及 `hidden`、`concealed`、`turnId`、`requestId`、`runtimeId`、`sessionId`、`timestamp`、`createdAt`、`updatedAt`、`uuid`；超过 8 层的值变成 `null`。投影在宿主校验，失败时不发送并只记录一次警告。
+`seq` 在当前会话桥实例中按首次观测分配，不复用。补载历史可能得到较大的序号，页面按数组顺序显示，不能按序号排序。投影不读取插件数据、结果、操作记录、推理、步骤、原生供应商续接或压缩摘要。上游 concealed 私有来源仍由正常执行投影控制，不能靠删除某个键把任意文本变成公开内容。投影校验失败时不发送 session 或流，不回退到原始对象。
 
 <!-- prettier-ignore -->
 | 内容 | 上限与处理 |
 | --- | --- |
-| 消息窗口 | 最近 200 条，消息文本合计最多 256 KiB，先移除最旧的消息 |
-| 单条消息文本 | 32 KiB，截断后带 `truncated: true` |
+| 消息 | 最近 200 条，文本合计 256 KiB；单条 32 KiB，截断带 `truncated: true` |
 | 流式文本 | 64 KiB |
-| 角色 | 最多 100 个，每个序列化后最多 8 KiB，超过时跳过 |
-| 待答交互 | 最多 8 个，每个 block 序列化后最多 16 KiB，过大的替换为 `{ truncated: true }` |
+| 角色 | 最多 100 个，每个序列化后 8 KiB；超过时跳过 |
+| 待答交互 | 最多 8 个，每个 16 KiB；超过时改为 `unavailable` 且没有句柄 |
 
-KiB 按 UTF-8 字节计算。状态变化推送完整投影；流式文本用 `{ type: "stream", seq, append }` 合并推送，间隔 100 ms，结束时立即补齐尾部。完整推送也带当时的流式全文，供页面重新同步。叙事重置会使旧追加基线失效，下一次推送用完整文本替换旧草稿；即使替换文本在 100 ms 内超过旧文本长度，也不会拼接旧前缀。正常完成仍会补齐最后一段文本。
+KiB 按 UTF-8 计算。流式追加每 100 ms 合并一次；有流时的完整状态推送也合并，其他状态变化不会绕过节流。完整状态包含当前流全文并建立追加基线。完成立即补齐尾部；重置、缩短或重试用完整状态替换草稿，即使新文本在计时器触发前已经超过旧文本。断开会取消订阅与排队计时器。
 
-**此版本的会话桥只读。** 不新增 `submitAction`、表单提交、中止或打开面板能力。原有 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent`、`setUiState` 保持原样。图片只传引用，不传字节或 blob URL，因此示例页不显示图片；也不提供输入框。单文件页面没有握手超时提示；多文件页面的超时和重试见[多文件页面](#多文件页面)。宿主返回按钮一直可用。
+### 页面失效与恢复
+
+内联 HTML 与 URL 视图从 frame 挂载开始等待 ready，期限为 8 秒，不依赖 load 事件。共享脚本通过原端口发送固定 page-error 信号处理未捕获异常、未处理的 Promise 拒绝和应用脚本资源加载失败；不发送错误文本、堆栈或 URL。脚本资源错误即使不冒泡也会被捕获；图片加载失败不触发页面回退。正常 pagehide / 卸载不报告页面错误；导航由宿主的 load 与心跳检测处理。load 失败、已连接元素再次导航、React 渲染失败和无效的必需公开投影同样使尝试失效。
+
+ready 后，宿主仅在页面可见时每 5 秒发送递增 ping，脚本在同一端口回复对应 pong。连续三个探测未回复后回退。隐藏标签页不累计失联时间；回来后重置探测并给予 8 秒宽限。它测量页面事件循环，不限制模型/RPC 耗时，也不能恢复整个浏览器渲染进程冻结。
+
+失效先关闭端口、计时器和流订阅，再恢复该区域默认界面。宿主保留带页面名称的提示、重试和撤销权限；迟到的 ready、HEAD 或 RPC 结果不能复活旧尝试。“重试”必须由玩家点击，重新获取声明并核对当前内容授权后创建新 frame。普通行动或 runtime 被拒不是页面故障；不要自动重放修改请求。已获服务端接纳的工作可以正常结算，旧页面不再收到回复。
+
+### 页面请求与安全结果
+
+仍使用一个 MessagePort 和 `window.covel.invoke(method, params)`。参数 schema 严格拒绝未声明字段；页面不能指定 actor、source、会话/回合引用、插件身份、HTTP 路径、令牌、proposal 或模型/供应商覆盖。
+
+<!-- prettier-ignore -->
+| 方法 | 参数与行为 |
+| --- | --- |
+| `submitAction` | `{kind,text?,fields?,seatId?}`；走普通输入准入、座位切换等待、workspace 和 SSE。服务端推导 actor 与 `source: player`。斜杠文本仍作为玩家行动；不走输入框的 command RPC 快捷方式。普通执行忙碌时拒绝，自动推进时走已有的中断并提交；必答交互或 setup 门禁时不可用 |
+| `submitInteraction` | `{handle,values}`；宿主解析当前句柄和内部引用，调用正常交互提交，在同一流保存回答并开始后续回合。字段拒绝保留可编辑状态；重复或过期句柄不可提交，不使用本地 `submitBlock` 代替持久化 |
+| `invokeRuntime` | `{runtimeId,payload?}`；仅限当前启用、所属插件的手动 runtime，不允许 subagent-only。使用正常 RPC 审批、workspace、提案校验、hook 和提交，不开放 action/command/event RPC |
+| `abortExecution` | `{}`；停止当前租约会话的执行，执行中仍可调用；不撤销已提交回合。宿主 Stop 不依赖此授权 |
+| `openPanel` | `{panelId}`；仅打开当前声明的所属插件面板，不授予额外数据或写入权限 |
+
+成功结果只有 `{status,code?,issues?}`。`status` 为 `accepted`、`committed`、`rejected` 或 `unavailable`。`accepted` 表示正常通道已接纳，后台作业也是接纳；不表示存档已经改变。同步 runtime 的正常响应确认提交且目标成功时才返回 `committed`。`code` 为固定枚举 `invalid-request`、`permission-denied`、`busy`、`stale`、`already-answered`、`field-invalid`、`runtime-refused`、`failed`；字段问题为 `{field?,code:"invalid"}`，最多 32 项。不返回原始 RPC、输出/effects、提案、作业 ID、审批内容、路径或错误文本。当前接口不提供 `setUiState`；页面可用内存保留自己的草稿，离开页面后销毁。
+
+每条连接最多 8 个进行中的调用，序列化请求最多 128 KiB。已见请求 ID 不可重复执行；连接最多记住 4096 个 ID，用完后拒绝新请求直到显式重建 frame，不淘汰旧 ID。关闭时拒绝可送达的页面 promise，丢弃迟到回复；页面超时不自动重发修改。这不是跨重载的 exactly-once 保证。
+
+会话导航、插件停用、内容替换、撤权、返回或卸载都会使当前租约失效。宿主在异步等待后及审批重试前再次核对归属。修改请求和审批授权在读取凭据后、发送 HTTP 前再次检查租约，读取期间撤权或离开便不再发送；过期审批仍可拒绝以清理请求。正常输入也会在等待座位切换、自动推进停止和 workspace 后核对调用方；已经发出的操作可以正常结算，但不回复已关闭的页面。
+
+没有媒体字节/blob 通道。视图与替换区域采用上述失效恢复规则；普通非会话面板保持独立的数据和动作契约。
 
 ## 组件 Catalog
 
@@ -1082,10 +1158,16 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 
 内置场景舞台在实际换地点时，先清空已有的方向演员记录，再应用本轮新指令；预览与提交使用相同场景身份和顺序。已有方向状态而没有新登场指令时，返回空演员与 `retainWhenEmpty: false`，防止旧场景立绘残留。没有方向状态时继续使用原来的 cast 提供者。
 
-| 字段              | 类型                       | 必填 | 含义                                                                                  |
-| ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------- |
-| `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                          |
-| `retainWhenEmpty` | boolean                    | 是   | `actors` 为空时，`true` 保留上一组立绘并取消高亮；`false` 清空立绘。schema 没有默认值 |
+| 字段              | 类型                       | 必填 | 含义                                                                                              |
+| ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------------------- |
+| `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                                      |
+| `retainWhenEmpty` | boolean                    | 是   | `actors` 为空时，`true` 保留上一组立绘并取消高亮；`false` 在退场结束后清空立绘。schema 没有默认值 |
+
+演员从权威名单移除时，槽位立即更新。客户端仅保留此前实际显示的图片、名字、变体 framing 和旧位置，播放一次 300ms 淡出；旧登场 `transition` 不作为退场指令。已加载的图片在退场结束前持续显示，不会因开始退场而重新加载或闪成占位图。最多四名当前演员与四张退场图片同时显示；退场图片不占当前演员名额，也不参与新布局，位于当前演员下方、取消高亮、对辅助技术隐藏且不可交互。快速替换超过上限时先移除最早的退场图片。
+
+已送达的 `exiting: true` 使用指定的 `transition`，省略时才用 `fade`。fade 为 300ms、左右滑出为 320ms、dissolve 为 360ms；`none` 与减少动态效果设置立即移除。提交后名单不再包含该角色时，正在进行的显式退场继续到结束，不重播或改为淡出。匹配的外层动画完成时清理，漏掉动画事件也会在 500ms 内清理；重新登场会取消旧退场。未送达的指令不能从名单差异中还原。
+
+只有仍存在的有效槽位给出 `actors: []` 与 `retainWhenEmpty: true` 时，才保留上一组当前演员并取消高亮；显式退场不会变成这组保留演员。`false` 的空名单退场一次后保持空白。槽位缺失、投影恢复时清空、会话切换或组件卸载会立即丢弃所有本地记忆；重新挂载只显示当前名单。退场图片不进入 snapshot、UI slot、会话桥或模型上下文，也不延迟回合或提交写入。
 
 每位演员：
 
@@ -1240,3 +1322,7 @@ agent runtime 调用 `suspend` 之后，会话工具条上出现一个徽标。�
 ## 呈现数据与位置降级
 
 界面槽位消费已提交的呈现自有状态。没有公开故事、素材、额度或生成失败时，故事与输入框继续工作；只少对应展示。呈现不能直接返回 UI proposal，也不增加组件或提供方选择控件。见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+## 独立的主题位置
+
+`contributes.ui.theme` 使用独立的严格主题 schema，不执行 view/webview，不读取会话或申请 bridge。位图根没有 HTML 入口，和页面资源清单分开；坏主题仅报告该项，合法面板和主题继续发现。玩家在“会话主题”明确选择后才挂载；正文文字和独立装饰平面可用受限配色，宿主栏、设置、审批、输入和恢复控件始终在这些节点之外。插件视图与主题分别选择；选择主题不改变内容授权或写入协议。已有沙箱快照只接收该会话的安全配色/身份及宿主字体、圆角，不接收 CSS、资源列表或设置条目。详见[插件主题](./theme-packages.md#插件提供的受限主题)。

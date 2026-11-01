@@ -30,7 +30,7 @@ export interface SessionActions {
    */
   submitComposerAction: (
     submission: ComposerSubmission,
-    opts?: { drafts?: string },
+    opts?: { drafts?: string; isCurrent?: () => boolean },
   ) => boolean;
   /**
    * Switch the character a seat acts as. Rejects with the server's refusal;
@@ -43,7 +43,7 @@ export interface SessionActions {
    */
   steerMessage: (content: string) => Promise<boolean>;
   /** Abort the in-flight turn. No-op when nothing is running. */
-  abortActiveTurn: () => Promise<void>;
+  abortActiveTurn: (options?: { isCurrent?: () => boolean }) => Promise<void>;
   /**
    * Fetch the page of messages immediately older than the current window (from
    * `olderMessagesCursor`) and prepend them. No-op when the cursor is `null`
@@ -57,6 +57,7 @@ export interface SessionActions {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
+    options?: { isCurrent?: () => boolean },
   ) => Promise<InteractionSubmitResult>;
   executeCommand: (command: string) => void;
   retryRuntime: (

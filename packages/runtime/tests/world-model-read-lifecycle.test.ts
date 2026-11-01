@@ -4,7 +4,7 @@ import type {
   RuntimeResult,
   WorldModelView,
 } from "@covel/shared";
-import { withPendingProposals } from "@covel/tools";
+import { tool, z, withPendingProposals } from "@covel/tools";
 import {
   applySuspensionAbandonTx,
   commitExecution,
@@ -12,7 +12,7 @@ import {
   resumeSuspendedRuntime,
 } from "../src/index.js";
 import { attachNestedResults } from "../src/turn-executor/nested-results.js";
-import { queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
+import { prose, queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
 import {
   fixture,
   fn,
@@ -39,6 +39,91 @@ const ask = {
 };
 
 describe("world read lifecycle", () => {
+  it("captures pending world writes before provider loading and closes the child capability", async () => {
+    const loading = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let retained: WorldModelView | undefined;
+    let calls = 0;
+    const peek = tool({
+      name: "child-peek",
+      description: "Read the captured world",
+      annotations: { readOnly: true },
+      parameters: z.object({}),
+      execute: async (_args, ctx) => {
+        retained = ctx.world;
+        expect(
+          ctx.world!.characters.find((c) => c.id === "derived"),
+        ).toMatchObject({ description: "admitted", version: 2 });
+        expect(
+          ctx.world!.characters.find((c) => c.id === "source")?.description,
+        ).toBe("staged");
+        return { seen: "admitted" };
+      },
+    });
+    const actor = fn("child", {
+      runtimeType: "agent",
+      subagentOnly: true,
+      trigger: { type: "manual" },
+      tools: { builtin: [peek.name] },
+    });
+    const reader = fn("read", { tools: { builtin: ["stage-character"] } });
+    const f = await fixture({
+      tools: [peek],
+      deps: {
+        llm: {
+          generate: async () =>
+            calls++ === 0 ? toolCall(peek.name, {}) : prose("Complete"),
+        },
+      },
+    });
+    const handlers = {
+      [producer.name]: async () => writes(character()),
+      [story.name]: tell,
+      [reader.name]: async (ctx: Parameters<typeof tell>[0]) => {
+        await ctx.tools!.call("stage-character", {
+          id: "derived",
+          description: "admitted",
+          expectedVersion: 1,
+        });
+        const child = ctx.agents!.run({
+          target: { runtimeId: actor.name },
+          brief: "Constant safe brief",
+        });
+        await loading.promise;
+        await ctx.tools!.call("stage-character", {
+          id: "derived",
+          description: "later parent write",
+          expectedVersion: 2,
+        });
+        release.resolve();
+        expect((await child).ok).toBe(true);
+        return ok();
+      },
+    };
+    const r = await f.execute([producer, story, reader, actor], handlers, {
+      deps: {
+        loadRuntime: async (manifest) => {
+          if (manifest.subagentOnly) {
+            loading.resolve();
+            await release.promise;
+          }
+          return {
+            manifest,
+            promptTemplate: manifest.name,
+            handler: handlers[manifest.name],
+          };
+        },
+      },
+    });
+    expect(calls).toBe(2);
+    expect(r.edges(reader)).toEqual([r.resultOf(producer).runId]);
+    expect(() => retained!.characters).toThrow();
+    expect((await r.commit()).status).toBe("committed");
+    expect(
+      (await f.store.listCharacters(SESSION)).find((c) => c.id === "derived"),
+    ).toMatchObject({ description: "later parent write", version: 3 });
+  });
+
   it("revokes a cancelled reader and starts the next invocation with a fresh recorder", async () => {
     const f = await fixture();
     const reader = fn("read");
@@ -79,7 +164,23 @@ describe("world read lifecycle", () => {
   it.each(["retry", "detached"] as const)(
     "excludes settled seed subtrees in a real %s execution",
     async (mode) => {
-      const f = await fixture();
+      let childCalls = 0;
+      const f = await fixture({
+        deps: {
+          llm: {
+            generate: async () =>
+              childCalls++ === 0
+                ? toolCall("list-characters", {})
+                : prose("Complete"),
+          },
+        },
+      });
+      const actor = fn("child", {
+        runtimeType: "agent",
+        subagentOnly: true,
+        trigger: { type: "manual" },
+        tools: { builtin: ["list-characters"] },
+      });
       const reader = fn("read", {
         after: [producer.name],
         ...(mode === "detached"
@@ -109,7 +210,7 @@ describe("world read lifecycle", () => {
         { ...seed, runId: "historical-child", runtimeId: "source/child" },
       ]);
       const r = await f.execute(
-        [producer, reader],
+        [producer, reader, actor],
         {
           [reader.name]: async (ctx) => {
             expect(
@@ -122,6 +223,14 @@ describe("world read lifecycle", () => {
             ]);
             expect(ctx.world!.characterSchema?.version).toBe(1);
             expect(ctx.world!.dimensions).toEqual({});
+            expect(
+              (
+                await ctx.agents!.run({
+                  target: { runtimeId: actor.name },
+                  brief: "Constant",
+                })
+              ).ok,
+            ).toBe(true);
             await ctx.pluginData!.set("notes", "current", true);
             return ok();
           },
@@ -166,6 +275,7 @@ describe("world read lifecycle", () => {
       expect(r.resultOf(reader).status, r.resultOf(reader).error).toBe(
         "success",
       );
+      expect(childCalls).toBe(2);
       expect(r.edges(reader)).toEqual([]);
       expect(JSON.stringify(r.execution.commit.readDependencies)).not.toContain(
         "historical",
@@ -319,7 +429,36 @@ describe("world read lifecycle", () => {
   );
 
   it("saves a surviving continuation, resumes twice from committed state, and never replays producers", async () => {
-    const f = await fixture();
+    let childCalls = 0;
+    const peek = tool({
+      name: "resumed-child-world",
+      description: "Read saved world writes",
+      annotations: { readOnly: true },
+      parameters: z.object({}),
+      execute: async (_args, ctx) => {
+        expect(
+          ctx.world!.characters.find((c) => c.id === "derived")?.description,
+        ).toBe("saved");
+        return { seen: "saved" };
+      },
+    });
+    const f = await fixture({
+      tools: [peek],
+      deps: {
+        llm: {
+          generate: async () =>
+            childCalls++ % 2 === 0
+              ? toolCall(peek.name, {})
+              : prose("Complete"),
+        },
+      },
+    });
+    const actor = fn("child", {
+      runtimeType: "agent",
+      subagentOnly: true,
+      trigger: { type: "manual" },
+      tools: { builtin: [peek.name] },
+    });
     const reader = fn("read", { tools: { builtin: ["stage-character"] } });
     let leg = 0;
     const handlers = {
@@ -340,11 +479,19 @@ describe("world read lifecycle", () => {
           expect(
             ctx.world!.characters.find((c) => c.id === "derived")?.description,
           ).toBe("saved");
+        expect(
+          (
+            await ctx.agents!.run({
+              target: { runtimeId: actor.name },
+              brief: "Constant safe brief",
+            })
+          ).ok,
+        ).toBe(true);
         await ctx.pluginData!.set("notes", `leg-${leg}`, true);
         return leg++ < 2 ? suspend() : ok();
       },
     };
-    const r = await f.execute([producer, story, reader], handlers);
+    const r = await f.execute([producer, story, reader, actor], handlers);
     expect(r.edges(reader)).toEqual([r.resultOf(producer).runId]);
     expect((await r.commit()).status).toBe("committed");
     for (let pass = 0; pass < 2; pass++) {
@@ -359,7 +506,7 @@ describe("world read lifecycle", () => {
         {},
         reader,
         r.deps,
-        { activeRuntimes: [producer, story, reader] },
+        { activeRuntimes: [producer, story, reader, actor] },
       );
       expect(resumed.result.status).toBe(pass === 0 ? "suspended" : "success");
       expect(resumed.commit.readDependencies ?? {}).toEqual({});
@@ -380,6 +527,7 @@ describe("world read lifecycle", () => {
         ).status,
       ).toBe("committed");
     }
+    expect(childCalls).toBe(6);
     expect(await f.notes()).toEqual({
       "leg-0": true,
       "leg-1": true,

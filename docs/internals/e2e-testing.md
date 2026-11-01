@@ -62,6 +62,8 @@ spec 分在两个 project 里。配置按文件内容自动归类，你不用手
 
 `tests/e2e/plugin-assets-isolation.spec.ts` 在 `chromium-dev` 的 PAGE_CSP 宿主页下检查经典页面资源、注入桥接、sandbox/CSP 隔离，以及内嵌字体可用而无 CORS 的 URL 字体被拒绝。
 
+`tests/e2e/stage-render-followups.spec.ts` 使用打包后的页面、隔离 HTTP 宿主、内置场景选择器与实际对白模板，覆盖离场、满员替换、减少动态效果、头像预览与重新加载；模型输出固定，不访问付费模型。动画使用受控时钟和真实 CSS 动画生命周期。
+
 ### 可访问性用例
 
 ```bash
@@ -322,3 +324,15 @@ pnpm docker:pg:down
 | 模型调用或角色创建失败   | 浏览器里的真实模型 spec 使用应用配置的 `story`、`plugin` 等用途。`pnpm e2e:verify` 也按配置路由，只有传了 `--slot` 或设了 `E2E_MODEL_SLOT` 才改用指定的 slot。分别确认需要的 slot 存在，并且 `.env.llm` 里有对应的 key。 |
 | 需要定位异步失败         | 失败时 Playwright 保留截图；trace 和 video 只在第一次重试时保留。用 `pnpm exec playwright show-report tests/e2e/report` 打开 HTML 报告。                                                                                 |
 | 找不到插件验证脚本的输出 | 脚本默认写到 `debugs/e2e-logs/`。只想在终端里看时传 `--no-log`；想保留会话和快照时传 `--keep`。                                                                                                                          |
+
+## 沙箱区域验收
+
+使用 `tests/e2e/third-party-stage.config.ts` 运行 `sandbox-surfaces.acceptance.ts`，它在私有社区目录加载真实包，使用生产构建和严格宿主页 CSP，覆盖持久写入、授权、独立区域和恢复。正常流程收集并拒绝 CSP 违规，故意触发沙箱拒绝的测试单独运行。延迟审批测试通过工作室会话列表切换会话，保留同一文档中的旧异步调用，并对照当前会话成功提交的情形。所有固定端口 Playwright 命令必须以 `flock /tmp/covel-e2e.lock` 串行运行；默认 e2e 不包含 acceptance 文件。
+
+API 以 `NODE_ENV=development` 启动，但不启用 `tsx watch`，插件修改通过开发重载接口发布。清理也恢复并重新发布原声明，防止进程重启清空内存会话，或把变更后的插件状态留给后续用例。命令示例：
+
+```bash
+flock /tmp/covel-e2e.lock pnpm exec playwright test --config tests/e2e/third-party-stage.config.ts tests/e2e/sandbox-surfaces.acceptance.ts
+```
+
+原生 Electron 验收另需实际解包应用和一次性配置：安装同一包，测试两个区域、写入/授权/超时/异常/返回，检查本地 JS/CSS/图片、严格 CSP、两种 frame 无 Node、存储与 covelIpc，以及宿主 IPC 正常。通过正常控制重启 sidecar，验证资源端口恢复、无泄漏和空白区域。记录 OS、实际 Electron/内嵌 Node 与资源路径；Linux 或 Chromium 结果不能代替 Windows/macOS 原生运行。没有 GUI 时明确记为未运行。

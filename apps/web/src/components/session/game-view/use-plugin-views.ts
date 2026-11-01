@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   pluginViewMode,
   parsePluginViewMode,
@@ -20,8 +20,9 @@ export interface PluginViewEntry {
   spec: UISlotSpec;
 }
 export interface PluginViews {
-  reload(): void;
+  reload(): void | Promise<void>;
   views: readonly PluginViewEntry[];
+  composers?: readonly PluginViewEntry[];
   status: "loading" | "ready" | "error";
 }
 export function usePluginViews(
@@ -29,37 +30,59 @@ export function usePluginViews(
   sessionPlugins: readonly SessionPlugin[],
   language: string,
 ): PluginViews {
-  const [revision, setRevision] = useState(0);
-  const reload = useCallback(() => setRevision((value) => value + 1), []);
   const activePluginKey = sessionPlugins
     .filter((plugin) => plugin.active)
     .map((plugin) => plugin.id)
     .sort()
     .join("\u001f");
   const [loaded, setLoaded] = useState<{
+    sessionId: string;
     key: string;
     entries: readonly { pluginId: string; specs: UISlotSpec[] }[];
     status: PluginViews["status"];
-  }>({ key: "", entries: [], status: "loading" });
-  const key = JSON.stringify([sessionId, activePluginKey, language, revision]);
+  }>({ sessionId: "", key: "", entries: [], status: "loading" });
+  const key = JSON.stringify([sessionId, activePluginKey, language]);
+  const visit = useRef(key);
+  visit.current = key;
+  const request = useRef(0);
+  const load = useCallback(
+    async (refresh: boolean) => {
+      const generation = ++request.current;
+      if (!refresh)
+        setLoaded((previous) => ({
+          sessionId,
+          key,
+          entries: previous.sessionId === sessionId ? previous.entries : [],
+          status: "loading",
+        }));
+      try {
+        const response = await fetchUiSpecs(sessionId, activePluginKey);
+        if (visit.current === key && request.current === generation)
+          setLoaded({
+            sessionId,
+            key,
+            entries: response.view ?? [],
+            status: "ready",
+          });
+      } catch (error) {
+        if (!refresh && visit.current === key && request.current === generation)
+          setLoaded((previous) => ({ ...previous, status: "error" }));
+        if (refresh) throw error;
+      }
+    },
+    [sessionId, activePluginKey, key],
+  );
+  const reload = useCallback(() => load(true), [load]);
   useEffect(() => {
-    let cancelled = false;
-    setLoaded((previous) => ({ ...previous, key, status: "loading" }));
-    fetchUiSpecs(sessionId, activePluginKey)
-      .then((response) => {
-        if (!cancelled)
-          setLoaded({ key, entries: response.view ?? [], status: "ready" });
-      })
-      .catch(() => {
-        if (!cancelled) setLoaded({ key, entries: [], status: "error" });
-      });
+    void load(false);
     return () => {
-      cancelled = true;
+      request.current++;
     };
-  }, [sessionId, activePluginKey, language, key]);
+  }, [load]);
   const views = useMemo(
     () =>
       loaded.entries.flatMap((entry) => {
+        if (loaded.sessionId !== sessionId) return [];
         const plugin = sessionPlugins.find(
           (plugin) => plugin.id === entry.pluginId && plugin.active,
         );
@@ -84,10 +107,11 @@ export function usePluginViews(
           ];
         });
       }),
-    [loaded.entries, sessionPlugins, language],
+    [loaded.entries, loaded.sessionId, sessionId, sessionPlugins, language],
   );
   return {
-    views,
+    views: views.filter((entry) => entry.spec.surface !== "composer"),
+    composers: views.filter((entry) => entry.spec.surface === "composer"),
     reload,
     status: loaded.key === key ? loaded.status : "loading",
   };

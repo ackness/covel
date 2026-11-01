@@ -247,3 +247,5 @@ When the player types `/time`, it calls the command `world-time:time` that the p
 
 - When the model cannot give a duration, the clock stays at the start, and the runtime is reported as failed. It does not treat the default step as "a duration confirmed from the story". Regeneration and manual recovery follow the framework's general runtime recovery method.
 - The stage's `timeOfDay` (day / night) does not switch automatically based on the world time. Tides, dreams, or backward phases may not map onto day and night. A display plugin can use it only after the world gives an explicit rule for the mapping.
+
+The early changed-tick check remains. If the clock changes after tool execution, the commit-time [read baseline](./transactions.md#read-baselines) rejects the whole derived tick/display update with `conflict`. The independent story remains saved; no automatic clock recomputation is charged or run.

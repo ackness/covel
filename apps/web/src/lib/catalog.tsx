@@ -18,6 +18,10 @@ import {
 } from "@covel/shared";
 import { GraphCanvas } from "./graph-canvas.js";
 import {
+  SessionMessages,
+  SessionComposer,
+} from "./catalog/session-view-renderers.js";
+import {
   filterItems,
   resolvePath,
   valueToHaystack,
@@ -43,6 +47,7 @@ import {
 import { EntryList, SceneCastList } from "./catalog/character-renderers.js";
 import { CharacterFieldsView } from "./catalog/character-fields-renderer.js";
 import { CharacterAvatar } from "./catalog/character-avatar-renderer.js";
+import { SegmentCharacterAvatar } from "./catalog/segment-template-context.js";
 import {
   Button,
   FilterBar,
@@ -129,6 +134,8 @@ const covelComponents = {
   JsonView,
   EntryList,
   SceneCastList,
+  SessionMessages,
+  SessionComposer,
   CharacterFieldsView,
   CharacterAvatar,
   // Interactive
@@ -197,9 +204,11 @@ export const segmentTemplateRegistry: Record<string, ComponentRenderer> =
     Object.fromEntries(
       SEGMENT_TEMPLATE_COMPONENT_NAMES.map((name) => [
         name,
-        SESSION_MEDIA.has(name)
-          ? inCurrentSession(covelComponents[name])
-          : covelComponents[name],
+        name === "CharacterAvatar"
+          ? SegmentCharacterAvatar
+          : SESSION_MEDIA.has(name)
+            ? inCurrentSession(covelComponents[name])
+            : covelComponents[name],
       ]),
     ),
   );

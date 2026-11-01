@@ -26,6 +26,8 @@ The name of the current scene is shown on the screen. A row of small buttons let
 
 At the top of the game screen there are two buttons side by side: "Text" and "Stage". Click "Stage" to enter stage mode, and "Text" to go back to the text view. Switching does not affect your save, and you can switch back and forth at any time.
 
+Choosing Stage offers the current story for rereading in the response panel, using the selected session theme. Choices and input remain available throughout; rereading never delays the next action. Reopening a session still takes already-read stories straight to the response panel.
+
 ### What the world needs to provide
 
 Stage mode needs no extra setup on its own, but how complete the picture is depends on what the world includes:
@@ -45,10 +47,10 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 ### What you will see
 
 - The background and portraits on the stage come from this plugin. Speaker name tags come from the narrator's story segments and do not need it.
-- Dialogue segments in chat gain a speaker nameplate and an avatar when one is available. Stories without segments still use the normal text view.
+- Dialogue segments in chat gain a speaker nameplate and a compact avatar when available, with click-to-enlarge and dismissal. Stories without segments still use the normal text view.
 - On the right there is a "Scene" tab. It contains a read-only "Scene" panel (the scene name, day or night, and where the background comes from) and a "Cast" panel. The "Cast" panel also says why each character was chosen, for example "Mentioned", "In scene", "Profile", or "Recent".
 - An absent scene asset registry preserves the existing backdrop. When a registry exists but does not list the location, the backdrop is empty and the stage falls back to the world cover.
-- The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the stage at once when the update commits, without a fade. At most four actors appear, with focus on the last resolved dialogue or action speaker on stage.
+- The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the current cast immediately at commit while their previously displayed image fades out. Outgoing images do not occupy the four current actor slots. Focus follows the last resolved dialogue or action speaker on stage.
 - The current viewpoint character stays off stage; other characters bound to the same player seat can appear. A location change clears old actors before applying the new presence list. Day/night changes at the same location keep the actors. Without a presence list, existing actors remain unless the scene changes; cast selection applies until an actor record exists.
 
 ### When it is on
@@ -149,4 +151,8 @@ The story attaches canonical names to actor speech/actions; the stage still cons
 
 ## Restricted story-cue selectors
 
-Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, reading public story and declared own assets / display state without model charges or new settings. Ordinary pre-turn cast and explicit scene / direction / music events retain their existing contexts and overrides. Fixed trace codes explain no change, missing assets or no story without per-turn notifications. Departures remain immediate; the paragraph-template `CharacterAvatar` limitation is unchanged. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
+Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, reading public story and declared own assets / display state without model charges or new settings. Ordinary pre-turn cast and explicit scene / direction / music events retain their existing contexts and overrides. Fixed trace codes explain no change, missing assets or no story without per-turn notifications. Departures leave the current cast immediately, with brief fading only in the renderer. Explicit exits retain their transition; `none` and reduced motion cut immediately. Session switches and missing slots discard the old lineup. Template `CharacterAvatar` displays only the resolved speaker’s public portrait with local enlargement. See [UI slots](../reference/ui-panels.md#stagecast1). See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
+
+### Optional reading appearance
+
+Scene Stage offers **Stage reading**. Enable the plugin, open **Session theme** in the session toolbar, choose it and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. Immersive stage keeps the host **Use default appearance** button. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).

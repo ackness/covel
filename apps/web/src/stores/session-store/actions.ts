@@ -91,6 +91,11 @@ export function useBuildSessionActions({
 }: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef, sessionGenerationRef, stateRef } = refs;
   const activeActionRef = useRef<symbol | null>(null);
+  const admittedInput = useRef<{
+    sessionId: string;
+    generation: number;
+    token: symbol;
+  } | null>(null);
   const pendingAdvanceInput = useRef<{
     sessionId: string;
     generation: number;
@@ -307,6 +312,7 @@ export function useBuildSessionActions({
         owner: SessionActionOwner;
         /** Seats a character switch just returned, ahead of the state. */
         seats?: readonly Seat[];
+        canDispatch?: () => boolean;
       },
     ): Promise<void> => {
       const { session, gameState, sessionActionKinds } = stateRef.current;
@@ -336,15 +342,25 @@ export function useBuildSessionActions({
       actions: readonly TurnActionRequest[],
       seats?: readonly Seat[],
       afterAdvance = false,
+      isCurrent?: () => boolean,
     ) => {
       const state = stateRef.current;
       if (
+        (isCurrent && !isCurrent()) ||
         !state.session ||
         state.session.status !== "active" ||
+        (admittedInput.current?.sessionId === state.session.id &&
+          admittedInput.current.generation === sessionGenerationRef.current) ||
         (!afterAdvance && !canRunSessionAction(state))
       )
         return false;
       const owner = claimAction(state.session.id);
+      const token = Symbol("admitted-input");
+      admittedInput.current = {
+        sessionId: state.session.id,
+        generation: sessionGenerationRef.current,
+        token,
+      };
 
       dispatch({ type: "SET_ADVANCE", advance: null });
       dispatch({ type: "SET_EXECUTING", value: true });
@@ -353,8 +369,11 @@ export function useBuildSessionActions({
       runSingleAction(actions, {
         echoUserMessage: true,
         owner,
+        canDispatch: isCurrent,
         ...(seats ? { seats } : {}),
       }).finally(() => {
+        if (admittedInput.current?.token === token)
+          admittedInput.current = null;
         finalizeActionExecution(
           dispatch,
           state.session?.id,
@@ -372,6 +391,7 @@ export function useBuildSessionActions({
       resyncSession,
       sessionIdRef,
       claimAction,
+      sessionGenerationRef,
     ],
   );
 
@@ -379,7 +399,8 @@ export function useBuildSessionActions({
   // the seat's current character, so a request sent first would act as the
   // old one while the bubble named the new one (or the reverse).
   const sendActions = useCallback(
-    (actions: readonly TurnActionRequest[]) => {
+    (actions: readonly TurnActionRequest[], currentOwner?: () => boolean) => {
+      if (currentOwner && !currentOwner()) return false;
       const state = stateRef.current;
       // The old stream can finish before its checkpoint does. Keep admission
       // closed until the entire interrupt-and-submit operation has settled.
@@ -404,10 +425,14 @@ export function useBuildSessionActions({
         void (async () => {
           try {
             // Abort is outside the browser workspace FIFO held by the old stream.
-            await api.abortTurn(sessionId);
+            await api.abortTurn(
+              sessionId,
+              () => isCurrent() && (currentOwner?.() ?? true),
+            );
             await workspace.settle?.(sessionId);
             const seats = await settleSeatSwitches();
-            if (isCurrent()) startActions(actions, seats, true);
+            if (isCurrent() && (currentOwner?.() ?? true))
+              startActions(actions, seats, true, currentOwner);
           } catch (error) {
             if (isCurrent()) {
               dispatch({
@@ -427,16 +452,25 @@ export function useBuildSessionActions({
         })();
         return true;
       }
-      if (!pendingSeatSwitch.current) return startActions(actions);
+      if (!pendingSeatSwitch.current)
+        return startActions(actions, undefined, false, currentOwner);
       const sid = sessionIdRef.current;
       const generation = sessionGenerationRef.current;
-      void settleSeatSwitches().then((seats) => {
-        if (
-          sessionIdRef.current === sid &&
-          sessionGenerationRef.current === generation
-        )
-          startActions(actions, seats);
-      });
+      if (!sid) return false;
+      const token = Symbol("seat-input");
+      pendingAdvanceInput.current = { sessionId: sid, generation, token };
+      void settleSeatSwitches()
+        .then((seats) => {
+          if (
+            sessionIdRef.current === sid &&
+            sessionGenerationRef.current === generation
+          )
+            startActions(actions, seats, false, currentOwner);
+        })
+        .finally(() => {
+          if (pendingAdvanceInput.current?.token === token)
+            pendingAdvanceInput.current = null;
+        });
       return true;
     },
     [
@@ -456,8 +490,11 @@ export function useBuildSessionActions({
   );
 
   const submitComposerAction = useCallback(
-    (submission: ComposerSubmission, opts?: { drafts?: string }) =>
-      sendActions(composerActions(submission, opts?.drafts)),
+    (
+      submission: ComposerSubmission,
+      opts?: { drafts?: string; isCurrent?: () => boolean },
+    ) =>
+      sendActions(composerActions(submission, opts?.drafts), opts?.isCurrent),
     [sendActions],
   );
 
@@ -535,11 +572,14 @@ export function useBuildSessionActions({
     [dispatch, stateRef, sessionIdRef, sessionGenerationRef],
   );
 
-  const abortActiveTurn = useCallback(async (): Promise<void> => {
-    const state = stateRef.current;
-    const sid = state.session?.id ?? state.executionRecovery?.sessionId;
-    if (sid) await api.abortTurn(sid);
-  }, [stateRef]);
+  const abortActiveTurn = useCallback(
+    async (options?: { isCurrent?: () => boolean }): Promise<void> => {
+      const state = stateRef.current;
+      const sid = state.session?.id ?? state.executionRecovery?.sessionId;
+      if (sid) await api.abortTurn(sid, options?.isCurrent);
+    },
+    [stateRef],
+  );
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;

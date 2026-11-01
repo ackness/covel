@@ -235,6 +235,8 @@ export type {
   ProposalPayloadMap,
   ProposalType,
   ProposalFor,
+  ProposalReadPrecondition,
+  ProposalReadScope,
   ProposalSource,
   Proposal,
   NarrativeAppendPayload,

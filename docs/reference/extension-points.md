@@ -249,3 +249,7 @@ Hook 的返回规则见 [Hooks](./hooks.md#how-an-event-runs)：不返回值表�
 ## 呈现状态与界面槽位
 
 呈现函数不是新的扩展点。它用受限输入更新自己的展示数据；`ui.slot@1` 提供方按原有接口消费这些数据。缺少素材或呈现无产出只降级对应位置。槽位本身的普通上下文不被扩展，见[呈现 runtime](./plugins.md#presentation-runtimes)。
+
+## 静态主题不是扩展提供者
+
+主题通过 `contributes.ui.theme` 声明，由宿主校验文件后发现；不需要 `provideExtension`、`ui.slot@1` 或服务注册，也不增加版本化扩展点。见[插件主题](./theme-packages.md#插件提供的受限主题)。

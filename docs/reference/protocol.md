@@ -669,7 +669,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count}`                                                                                                              |
 | `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
-提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。
+提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。 读取基线的 `conflict` 沿用这些提案和操作边界，不新增事件或客户端指纹参数，见[事务](./transactions.md#read-baselines)。
 
 ### SSE 帧格式按通道区分
 
@@ -1444,6 +1444,8 @@ runtime 的终态：
 - 给一个已经结束的回合迟到的预览会被忽略。明确地开始一次新的执行，允许同一个回合 ID 重试。
 - 一个在更新的 SSE 事件之前发出的 GET，它的回答到达时不能覆盖那些更新。
 
+客户端舞台退场仅暂存已显示的公开图片，不新增 `ui.slot.*` 事件或桥接载荷，也不改变 revision 顺序。槽位仍立即反映当前演员；动画与重置规则见[界面槽位](./ui-panels.md#stagecast1)。
+
 ## 来源执行快照
 
 插件读“玩家这次输入了什么”时有两个值：
@@ -1497,7 +1499,9 @@ runtime 的终态：
 
 ## 插件视图的只读端口
 
-插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。既有页面 action handler 不变。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
+声明式 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件) 由宿主直接渲染，不使用此端口。输入复用 `submit_actions` 的玩家来源行动和现有交互协议，拒绝或忙碌时保留草稿；UI 回调不是插件 RPC，也不代表已经提交。
+
+插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。会话页面只暴露逐项授权、经 schema 校验的公开方法与安全结果；普通面板处理器保持独立。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
 
 <a id="auto-advance-events"></a>
 
@@ -1550,3 +1554,15 @@ runtime 的终态：
 ```
 
 事件不含原始输入、自由原因、素材路径、回复或凭证。派发与缓存命中沿用 `gateway.calling` / `gateway.responded`，只记录方法和命中标志；提供方错误不进入呈现诊断。
+
+## 沙箱会话页面协议
+
+普通会话 webview 使用单一 MessagePort，公开投影升级到版本 2；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。
+
+### 会话主题快照
+
+`GET /api/ui-specs` 的只读 `theme` 数组提供已校验的静态外观。玩家选择使用设备 SettingsStore，不新增主题 action、RPC、SSE 或能力授权；现有页面写协议和内容授权保持独立。已有沙箱 `theme` 快照可携带对应会话的有效安全配色、明暗模式和包内容身份，以及宿主字体/圆角；不发送 CSS、资源清单、设置条目、宿主标记或会话 ID。无会话调用仍使用基础外观。详见[主题契约](./theme-packages.md#在会话中选择)。
+
+## 沙箱区域生命周期
+
+主视图和输入框共用已有公开会话协议；ready、固定 page-error、带递增 id 的 ping/pong 与关闭信号使用同一 MessagePort，没有新增 HTTP/SSE 通道。每个 frame 的租约和句柄独立，失效后不能发送投影、追加或回复；修改和审批授权还在凭据读取后、HTTP 派发前核对租约。应用脚本资源加载失败也发送固定 page-error，即使 HTML 和桥接脚本已成功加载。协议字段、可见性宽限与恢复规则见[页面失效与恢复](./ui-panels.md#页面失效与恢复)。

@@ -1,6 +1,12 @@
 import { useDismissibleMenu } from "@/hooks/use-dismissible-menu.js";
 import { Link } from "@tanstack/react-router";
-import { useState, type ComponentType, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import {
   Bug,
   ChevronLeft,
@@ -41,6 +47,7 @@ export type GameViewMode =
   "parsed" | "detailed" | "raw" | "stage" | PluginViewMode;
 
 interface GameViewHeaderProps {
+  themeSettings?: ReactNode;
   t: TFunction;
   sessionId: string;
   sessionPhase: SessionRecord["phase"];
@@ -74,6 +81,7 @@ interface GameViewHeaderProps {
  * the bar.
  */
 export function GameViewHeader({
+  themeSettings,
   t,
   sessionId,
   sessionPhase,
@@ -267,6 +275,8 @@ export function GameViewHeader({
           </Button>
         )}
 
+        {themeSettings}
+
         <MusicToggle sessionId={sessionId} t={t} />
 
         <Button
@@ -331,7 +341,10 @@ export function GameViewHeader({
   );
 }
 
-/** A click-away menu; small enough not to warrant a popover dependency. */
+const MENU_VIEWPORT_GUTTER = 12;
+const MENU_MAX_WIDTH = `calc(100vw - ${MENU_VIEWPORT_GUTTER * 2}px)`;
+
+/** A click-away menu kept within the viewport when toolbar controls wrap. */
 export function HeaderMenu({
   label,
   active,
@@ -345,7 +358,40 @@ export function HeaderMenu({
   readonly children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuLeft, setMenuLeft] = useState(0);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { containerRef, triggerRef } = useDismissibleMenu(open, setOpen, true);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const menu = menuRef.current;
+    if (!open || !container || !menu) return;
+    const position = () => {
+      const anchor = container.getBoundingClientRect();
+      const width = menu.getBoundingClientRect().width;
+      const left = Math.max(
+        MENU_VIEWPORT_GUTTER,
+        Math.min(
+          anchor.right - width,
+          window.innerWidth - width - MENU_VIEWPORT_GUTTER,
+        ),
+      );
+      setMenuLeft(left - anchor.left);
+    };
+    position();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(position);
+    observer?.observe(container);
+    observer?.observe(menu);
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+    };
+  }, [open, containerRef, children]);
 
   return (
     <div
@@ -369,9 +415,15 @@ export function HeaderMenu({
       </Button>
       {open && (
         <div
+          ref={menuRef}
           role="group"
           aria-label={label}
-          className="ui-dialog-shell absolute right-0 top-full z-30 mt-1.5 min-w-48 p-1"
+          className="ui-dialog-shell absolute top-full z-30 mt-1.5 w-max p-1"
+          style={{
+            left: menuLeft,
+            minWidth: `min(12rem, ${MENU_MAX_WIDTH})`,
+            maxWidth: MENU_MAX_WIDTH,
+          }}
           // Any choice closes the menu; the items handle their own action.
           onClick={() => {
             setOpen(false);

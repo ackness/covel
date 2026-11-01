@@ -930,7 +930,7 @@ homepage: https://example.com/tidefall
 - `ctx.world.dimensions` 以提供者发布的冻结快照为底本，并叠加该视图可见的合法维度 proposal。公共读取与执行内预览的区别见下面的[动态维度](#动态维度)。
 - `ctx.world.seats` 是会话的座位，同样冻结。proposal 不改它，玩家用[切换接口](./api.md#会话座位)换当前角色，下一回合生效。
 
-实际读取 `characters` / `characterSchema` 会记录上游生产者，工具和服务共享该调用的读取记录器。辅助读者在生产者被丢弃时一起丢弃，story/setup 保留并记 trace。可见范围、保守粒度和种子排除见 [World Model](./world-model.md)。递归调用不继承父执行的上游，子 agent 仍读已提交世界。
+实际读取 `characters` / `characterSchema` 会记录上游生产者，工具和服务共享该调用的读取记录器。辅助读者在生产者被丢弃时一起丢弃，story/setup 保留并记 trace。可见范围、保守粒度和种子排除见 [World Model](./world-model.md)。子 agent 捕获调用准入时的世界快照，成功子 agent 的属性读取归调用方；失败子 agent 的读取丢弃。插件 KV 和递归执行不继承父方上游。
 
 **按名字找角色。** 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。
 
@@ -983,6 +983,8 @@ homepage: https://example.com/tidefall
 - `list` 依赖所有写过这个 namespace 的上游 runtime；不带 namespace 的列表依赖所有写过插件数据的上游。
 
 提交规则见[回合级单事务](./transactions.md#回合级单事务)。
+
+**读后计算的替换。** 显式读取同一个键后，后续替换自动受保护，包括带派生值的 `inc` + `merge` 列表。盲写和纯相对操作保持原有语义。放行 agent 的 guard 不把自己的读取作用域交给 agent。见[读取基线前提条件](./transactions.md#read-baselines)。
 
 ### 动态维度
 
@@ -1282,7 +1284,7 @@ pnpm lint
 | [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
 | [npc-graph](../../plugins/npc-graph/README.md) | 关系图谱 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
 | [pregame](../../plugins/pregame/README.md) | 开局准备 | `core` | `session.opening@1` | 内联 | 开局时读取世界资料，准备第一段冒险 |
-| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast`、`story-cues` | 可选读取故事的场景与在场角色提示，随故事提交舞台变化；事件仍可覆盖场景、昼夜和演员演出 |
+| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast`、`story-cues` | 可选读取故事的场景与在场角色提示，随故事提交舞台变化；事件仍可覆盖场景、昼夜和演员演出；对白模板使用说话人头像与本地预览 |
 | [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue`、`story-cues` | 可选读取故事的场景与情绪提示，播放世界自带的音乐；场景不依赖场景舞台，事件仍可覆盖 |
 | [story-events](../../plugins/story-events/README.md) | 隐藏事件 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
 | [tabletop-rules](../../plugins/tabletop-rules/README.md) | 跑团规则 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
@@ -1512,3 +1514,19 @@ runtime:
 调用 `ctx.presentation.note(reason)` 记录固定代码：`no-story`、`no-scene-change`、`asset-missing`、`budget-exhausted`、`unavailable`、`superseded`、`no-output`、`failed`。不能传自由文本。没有展示写入且没有 note 时推导 `no-output`；业务返回值本身不算可见产出。预算拒绝是正常 no-op，可以捕获后继续使用已有素材；未捕获则丢弃未完成写入，不归为插件故障。自身异常、无效输出和超时保持原有故障归属。
 
 每次结算通过 [`presentation.completed`](./protocol.md#presentation-completed) 留下状态、来源关联和额度计数。它不增加每回合玩家通知。呈现 function 仍是已批准的非沙箱服务端 JS；这个 API 策略不替代[代码审批](./plugin-installation.md)，也不限制代码直接使用 Node 的权限。
+
+## 仅提供会话视图的包
+
+包可以只有 `contributes.ui.view`，不声明 `entry` 或 runtime。这样的声明式包不调用模型，也不因提供视图而增加权限。内置 `dm-console` 就是这种包；社区包可组合相同的 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。图鉴和关系图谱也可同时声明右侧面板与独立页面，两者读取同一份自有已提交数据。普通声明式加载诊断只移除无效 spec，不影响其他面板和运行时。示例见[插件界面](../plugins/ui.md#声明式会话控制台)。
+
+## 静态主题声明
+
+`contributes.ui.theme: [./ui/reading-theme.json]` 声明受限静态主题。它可单独存在于无 runtime、无 entry 的包中，不是 view/webview。CLI、应用内校验、ZIP 安装和发现共用同一编译器；坏主题只在发现响应中被移除并返回 `slot: "theme"` 诊断。字段、安全边界与资源限制见[插件主题契约](./theme-packages.md#插件提供的受限主题)。玩家从会话工具栏的“会话主题”明确选择；完整工作流程见[主题契约](./theme-packages.md#在会话中选择)。
+
+### 会话中的可选主题
+
+场景舞台通过公共 `contributes.ui.theme` 声明“舞台阅读”，不自动启用或切换视图。无 entry/runtime 的社区 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md) 通过同一清单、静态验证、资源路由和会话选择路径工作。玩家操作、严格语法与限制统一见[插件主题](./theme-packages.md#插件提供的受限主题)。
+
+## 沙箱系统区域
+
+沙箱区域继续使用 `contributes.ui.view` 的 spec 路径，单数 surface 选择主视图或输入框；不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。

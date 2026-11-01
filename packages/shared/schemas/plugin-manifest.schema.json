@@ -1106,6 +1106,16 @@
         "ui": {
           "type": "object",
           "properties": {
+            "theme": {
+              "maxItems": 8,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "description": "Paths of restricted static plugin theme packs."
+            },
             "view": {
               "type": "array",
               "items": {

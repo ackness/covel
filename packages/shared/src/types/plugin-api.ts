@@ -165,6 +165,10 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
   >;
   readonly declaredPluginDataNamespaces: readonly string[];
   readonly ui: {
+    readonly theme: readonly {
+      readonly runtimeId?: string;
+      readonly path: string;
+    }[];
     readonly view: readonly {
       readonly runtimeId?: string;
       readonly path: string;

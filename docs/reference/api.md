@@ -1639,11 +1639,13 @@ fork 和社区插件的授权：
 
 #### GET /plugin-assets/:pluginId/:digest/*
 
-所有宿主配置中均公开，不验证会话、令牌或 cookie。只读取当前非错误插件的已索引 UI 根目录。依次检查 ID 和摘要、原始及解码路径段、发布清单和读取时的真实路径边界。隐藏路径、遍历、编码分隔符、链接、未发布文件、大小变化和过期摘要都返回同一份 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。
+所有宿主配置中均公开，不验证会话、令牌或 cookie。只读取当前非错误插件的已索引 UI 根目录。依次检查 ID 和摘要、原始及解码路径段、发布清单和读取时的真实路径边界。隐藏路径、遍历、编码分隔符、链接、未发布文件、大小或内容哈希变化和过期摘要都返回同一份 `404 { "error": "File not found" }`，带 `Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。
 
 成功的 GET 和 HEAD 带清单中的 MIME、`nosniff`、`ETag`、`Content-Length`、`Referrer-Policy: no-referrer`。入口 HTML 使用 `Cache-Control: no-cache`，其余资源使用 `Cache-Control: public, max-age=31536000, immutable`。入口 ETag 包含宿主桥脚本的摘要，使宿主升级能在同一个插件 URL 上刷新 HTML。精确匹配的 `If-None-Match` 返回 304、无响应体，并保留相应缓存策略。不发送 Set-Cookie、CORS 允许头或 Cross-Origin-Resource-Policy。入口 HTML 使用[页面 CSP 和宿主注入的桥](./ui-panels.md#多文件页面)；其他文件使用 `Content-Security-Policy: sandbox`。保留 `X-Frame-Options: SAMEORIGIN`。不走媒体令牌处理。
 
 #### GET /api/ui-specs
+
+声明式实时视图可组合 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。它们复用现有 `/api/actions` 的玩家来源行动及交互响应，无新增路由、事件或桥接能力。读取视图不执行运行时或写插件数据。
 
 返回插件的 UI 声明，按 slot 分组。前端在启动时调用它，用来动态构建右侧面板的标签页、消息区的 block 渲染器和插件视图导航。
 
@@ -1676,11 +1678,12 @@ fork 和社区插件的授权：
   "message": [...],
   "view": [...],
   "segment": [...],
+  "theme": [...],
   "diagnostics": []
 }
 ```
 
-每个 slot 是一个数组，元素为 `{ pluginId, specs[] }`。`specs` 里的每一项是一个 json-render spec，从插件的 `ui/*.json` 文件加载。
+每个 slot 是一个数组，元素为 `{ pluginId, specs[] }`。`theme` 使用独立的已解析主题类型；其他位置从插件的 `ui/*.json` 加载面板、视图或模板 spec。
 
 **校验与 `specVersion`**：
 
@@ -1692,7 +1695,9 @@ fork 和社区插件的授权：
 
 `view` 始终为数组（可以为空），项为 `{ pluginId, specs }`。仅列出当前会话活跃插件的视图；同一插件重复的视图 ID 保留第一份，其余报告 `slot: "view"` 诊断。这里只读取 UI JSON、HTML 和已发布资源，不导入插件代码，不需要服务端代码审批。读取会话的玩家授权在浏览器挂载前单独处理，见[插件视图](./ui-panels.md#插件视图)。
 
-`segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。
+`segment` 始终为数组（可以为空），项为 `{ pluginId, specs }`，是 `contributes.ui.segment` 的段落模板，按与 `message` 相同的会话筛选，插件的顺序就是模板同级时的先后。缺少 `match`、写了 `webview` / `dataSource` 等面板字段或带 `on` / `watch` 的模板报 `slot: "segment"` 诊断，同一插件的其他模板照常返回。见[段落模板](./ui-panels.md#段落模板)。合法的说话人头像模板 `CharacterAvatar` 走相同校验、逐项诊断与正文回退路径，响应字段不变。
+
+`theme` 必须为 `{ pluginId, specs: ResolvedPluginTheme[] }` 数组，与视图使用相同的会话 owner 门禁和可运行插件筛选。返回完整本地化文本映射、校验后的 tokens/layout、生成的 `cssText`、完整 SHA-256 `contentHash` 和可选 `assets: { digest, files: [{ path, mime, size }] }`；不暴露源 CSS、磁盘根目录、会话数据或能力。诊断使用 `slot: "theme"`，CSS 问题可含包内 `file`。位图通过既有无凭据 `/plugin-assets/<pluginId>/<digest>/<path>` 路由提供 GET/HEAD、ETag、不可变缓存和 `nosniff`，没有 HTML 入口或 bridge。过期、未列出或被替换文件统一 404，页面规则不变。编译和身份规则以[插件主题](./theme-packages.md#插件提供的受限主题)为准；玩家通过设备 SettingsStore 选择；主题没有新增 action、RPC、SSE 或能力授权。现有页面主题快照只投影当前会话的安全配色和身份，详见[主题契约](./theme-packages.md#在会话中选择)。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
 
@@ -3910,7 +3915,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message", "view", "segment"]
+      "uiSlots": ["right", "message", "view", "segment", "theme"]
     },
     "scheduling": {
       "effectsPolicy": "warn"
@@ -4562,6 +4567,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - runtime 恢复运行期间，记录也可能被改。提交事务开始时会再比较一次；有变化就什么都不写，同样作废挂起项并返回这个 `409`。
 
 一个 runtime 同时只有一条待恢复的挂起项。它在另一次执行里再次挂起时，旧的那条在保存新挂起项的同一个事务里按放弃的方式作废，不另发事件。网页端收到新的 `turn.suspended` 时，去掉同一个 runtime 的旧挂起项。
+
+待提交的读后计算写入还会保留最初的私有[读取基线](./transactions.md#read-baselines)。已有写目标摘要发现变化时，仍返回上面的 `suspension_outdated`；仅读取基线不匹配时是普通提交 `conflict`。新读取或再次挂起不能刷新旧计算。客户端不发送指纹令牌。
 
 ##### 再次挂起
 
@@ -6803,3 +6810,9 @@ Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮
 ## 创建身份
 
 `POST /api/sessions` 接受可选的 `seatRole: player | host | spectator`，可与 autoAdvanceLimit 一起提交。省略保持原玩家座位；另两种身份从空角色绑定开始。未知值、非字符串和 null 返回 400，不创建会话。仍先经过 session.create 的 host-profile 授权以及世界/内容语言校验。此字段只影响新会话的游戏动作，不授予 owner/operator 权限，不接受任意 seats 数组或 system 来源。主持人和观众通过动作 API 提交时，须带创建响应中返回的座位 ID；省略 seatId 仍只查找人类玩家主座位。普通客户端会自动携带。
+
+会话页面的 `capabilities` 原样保留在 `/api/ui-specs` 的 `view` 中，并沿用当前会话的可运行插件过滤。资源在返回 GET、HEAD 或 304 前核对索引长度和 SHA-256，使用同一次有界读取的已验证缓冲区响应。页面请求由认证宿主调用已有行动、交互、runtime RPC 和停止入口；修改和审批授权在凭据读取后、HTTP 派发前核对当前租约。不新增 iframe HTTP 权限或发现端点。参数、租约、准入与安全结果见[页面请求与安全结果](./ui-panels.md#页面请求与安全结果)。
+
+## 沙箱区域声明与宿主转发
+
+既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `surface` 和 `capabilities`；composer 不作为主视图默认值。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该区域，晚到结果丢弃；见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。现有 action/command RPC 的即时写入契约不变。

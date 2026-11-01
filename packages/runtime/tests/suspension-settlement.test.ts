@@ -422,6 +422,7 @@ describe("abandoning a suspension that holds nested calls", () => {
       pluginId: "probe",
       runtimeId: asker.name,
       pendingContinuation: {
+        readScopes: [],
         executionContext: { executionId: scope },
         nestedResults: nestedResults.map((result) => ({ result })),
       },

@@ -2092,3 +2092,5 @@ A story agent calls delegate with target: {contract: "character-actor@1"}, chara
 ## Presentation call boundaries
 
 Functions with `presentation` have no tool, service or delegation entry, and cannot emit events, suspend or publish UI / completion. Gateway and media helpers share a durable source-turn allowance. Zero or exhausted allowance refuses dispatch as a normal no-op. Ordinary runtime tool lists are unchanged; see [presentation runtimes](./plugins.md#presentation-runtimes).
+
+Explicit tool reads participate in automatic [same-key read-baseline guards](./transactions.md#read-baselines). Generated dataset mutation checks do not turn a blind write into an explicit read. Commit-time baseline conflicts use the existing failed proposal or operation path; a staged tool answer still does not promise persistence.

@@ -2,7 +2,7 @@ import { compareText } from "@covel/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isLocaleMap } from "@covel/shared";
-import { readLocaleFiles } from "./locale-files.js";
+import { type LocaleFile, readLocaleFiles } from "./locale-files.js";
 
 /** Language of a plugin's main files: manifests, prompts and UI specs. */
 export const PLUGIN_BASE_LOCALE = "en";
@@ -84,6 +84,7 @@ function mapUiText(
   value: unknown,
   translate: (property: string, text: string) => unknown,
   textProperty?: string,
+  preserveContent = false,
 ): unknown {
   if (typeof value === "string")
     return textProperty ? translate(textProperty, value) : value;
@@ -91,9 +92,15 @@ function mapUiText(
     return value.map((item) => mapUiText(item, translate));
   if (value === null || typeof value !== "object") return value;
   const isMap = Object.hasOwn(value, "$map");
+  const node = value as { component?: unknown; type?: unknown };
+  const component = node.component ?? node.type;
   return Object.fromEntries(
     Object.entries(value).map(([property, child]) => {
-      if (isDataSubtree(property) || (isMap && property === "$map"))
+      if (
+        isDataSubtree(property) ||
+        (isMap && property === "$map") ||
+        (preserveContent && property === "content")
+      )
         return [property, child];
       if (
         isMap &&
@@ -121,6 +128,8 @@ function mapUiText(
             : isTextProperty(property)
               ? property
               : undefined,
+          // This component's content is a region selector, not visible text.
+          property === "props" && component === "SessionMessages",
         ),
       ];
     }),
@@ -145,8 +154,15 @@ function uiTexts(value: unknown): { property: string; text: string }[] {
 export async function readMessageCatalogs(
   pluginRoot: string,
 ): Promise<readonly MessageCatalog[]> {
+  return compileMessageCatalogs(await readLocaleFiles(pluginRoot));
+}
+
+/** Compile the same package catalogs from disk or archive locale documents. */
+export function compileMessageCatalogs(
+  files: readonly Pick<LocaleFile, "locale" | "file" | "document">[],
+): readonly MessageCatalog[] {
   const catalogs = new Map<string, MessageCatalog>();
-  for (const { locale, file, document } of await readLocaleFiles(pluginRoot)) {
+  for (const { locale, file, document } of files) {
     const section = document[MESSAGES_SECTION];
     if (section === null || typeof section !== "object") continue;
     const messages: Record<string, string> = {

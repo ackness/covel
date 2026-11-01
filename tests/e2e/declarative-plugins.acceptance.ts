@@ -25,7 +25,12 @@ test("a declarative community notebook commits without grants, retains content c
     throw new Error("Use the private community acceptance configuration");
   const script = path.join(root, "ui/page/app.js");
   const original = await readFile(script, "utf8");
-  const sentinel = path.join(path.dirname(root), "notebook-imported.txt");
+  const sentinel = path.join(
+    path.dirname(root),
+    `notebook-imported-${crypto.randomUUID()}.txt`,
+  );
+  await expect(access(path.join(root, "server"))).rejects.toThrow();
+  await expect(access(sentinel)).rejects.toThrow();
   const provider = await startFakeLlmProvider();
   provider.reply = (model) => ({
     text: "",
@@ -52,10 +57,7 @@ test("a declarative community notebook commits without grants, retains content c
       "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "en-US",
     });
-    // Cleanup removes an imported module, so watch mode may still be restarting.
-    await expect(async () => {
-      await useServerWorlds(page);
-    }).toPass({ timeout: 60_000 });
+    await useServerWorlds(page);
     const discovery = await request.get("/api/plugins");
     const { items } = await discovery.json();
     expect(items).toContainEqual(
@@ -144,6 +146,12 @@ test("a declarative community notebook commits without grants, retains content c
     });
     expect(status.serverCodeApprovedBy).toBeUndefined();
 
+    await expect(
+      page
+        .locator('[data-role="user"]')
+        .filter({ hasText: "We reached the harbor." }),
+    ).toBeVisible();
+
     const openView = async () => {
       await page
         .getByRole("button", { name: "Plugin views", exact: true })
@@ -165,11 +173,21 @@ test("a declarative community notebook commits without grants, retains content c
     ).toBeVisible();
     await openView();
     await page
-      .getByRole("button", { name: "Allow session reading", exact: true })
+      .getByRole("button", {
+        name: "Allow requested capabilities",
+        exact: true,
+      })
       .click();
-    const view = page
-      .getByTestId("plugin-view-container")
-      .frameLocator("iframe");
+    const container = page.getByTestId("plugin-view-container");
+    await expect(container.locator("iframe")).toHaveAttribute(
+      "src",
+      /\/plugin-assets\/declarative-notebook\/[a-f0-9]{32}\/index\.html$/,
+    );
+    await expect(container.locator("iframe")).toHaveAttribute(
+      "sandbox",
+      "allow-scripts",
+    );
+    const view = container.frameLocator("iframe");
     await expect(view.locator("#script-status")).toHaveText(
       "Notebook browser script loaded",
     );
@@ -180,12 +198,15 @@ test("a declarative community notebook commits without grants, retains content c
       .getByRole("button", { name: "View permissions", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Revoke story access", exact: true })
+      .getByRole("button", { name: "Revoke all page permissions", exact: true })
       .click();
     await expect(page.getByTestId("plugin-view-container")).toHaveCount(0);
     await openView();
     await page
-      .getByRole("button", { name: "Allow session reading", exact: true })
+      .getByRole("button", {
+        name: "Allow requested capabilities",
+        exact: true,
+      })
       .click();
     await expect(view.locator("#script-status")).toHaveText(
       "Notebook browser script loaded",
@@ -212,7 +233,10 @@ test("a declarative community notebook commits without grants, retains content c
       page.getByTestId("plugin-view-container").locator("iframe"),
     ).toHaveCount(0);
     await page
-      .getByRole("button", { name: "Allow session reading", exact: true })
+      .getByRole("button", {
+        name: "Allow requested capabilities",
+        exact: true,
+      })
       .click();
     await expect(view.locator("#script-status")).toHaveText(
       "Notebook browser script updated",
@@ -256,11 +280,25 @@ test("a declarative community notebook commits without grants, retains content c
       expect.objectContaining({ action: `runtime:${pluginId}` }),
     );
   } finally {
-    await page.goto("about:blank");
-    if (sessionId) await request.delete(`/api/sessions/${sessionId}`);
-    await rm(path.join(root, "server"), { recursive: true, force: true });
-    await rm(sentinel, { force: true });
-    await writeFile(script, original);
-    await provider.close();
+    try {
+      if (!page.isClosed()) await page.goto("about:blank");
+      if (sessionId) await request.delete(`/api/sessions/${sessionId}`);
+    } finally {
+      try {
+        await rm(path.join(root, "server"), { recursive: true, force: true });
+        await rm(sentinel, { force: true });
+        await writeFile(script, original);
+        // Publish the restored package in the same API process before another
+        // test discovers it; file restoration alone leaves the code upgrade live.
+        const restored = await request.post(`/api/plugins/${pluginId}/reload`);
+        expect(restored.ok(), await restored.text()).toBe(true);
+        const directory = await (await request.get("/api/plugins")).json();
+        expect(
+          directory.items.find((item: { id: string }) => item.id === pluginId),
+        ).toMatchObject({ executionMode: "declarative" });
+      } finally {
+        await provider.close();
+      }
+    }
   }
 });

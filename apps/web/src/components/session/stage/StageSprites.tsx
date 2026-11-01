@@ -7,16 +7,13 @@
  * `transform` (see the `.ui-stage-rise-in` comment in index.css).
  */
 import { clsx } from "clsx";
-import { useRef, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { Media } from "@/components/Media.js";
+import { type PresenceRecord, type StageSpeaker } from "./stage-selectors.js";
 import {
-  assignStations,
-  computeSpriteLanes,
-  computeSpriteSlots,
-  type PresenceRecord,
-  type SpritePosition,
-  type StageSpeaker,
-} from "./stage-selectors.js";
+  EXIT_ANIMATIONS,
+  useStageSpriteTransitions,
+} from "./use-stage-sprite-transitions.js";
 
 export interface StageSpritesProps {
   readonly speakers: readonly StageSpeaker[];
@@ -25,7 +22,7 @@ export interface StageSpritesProps {
   /** Choice overlay open — pull focus off the sprites (classic VN dim). */
   readonly dimmed?: boolean;
   /** The cast selection may briefly report no speakers between turns. An
-   * authoritative stage-direction `actors: []` instead means clear now. */
+   * authoritative stage-direction `actors: []` instead permits departure. */
   readonly retainWhenEmpty?: boolean;
 }
 
@@ -36,30 +33,12 @@ export function StageSprites({
   dimmed = false,
   retainWhenEmpty = true,
 }: StageSpritesProps): ReactElement {
-  // Sticky stations: characters keep their spot while on stage; salience
-  // only moves the highlight. The memory map lives in a ref updated during
-  // render — deterministic and idempotent (assignStations is a fixpoint on
-  // its own output), same pattern as lastSlotsRef below.
-  const stationsRef = useRef<ReadonlyMap<string, SpritePosition>>(new Map());
-  const stations = assignStations(
-    stationsRef.current,
-    speakers.map((speaker) => speaker.id),
-  );
-  stationsRef.current = stations;
-
-  const fresh = computeSpriteSlots(speakers, presence, stations);
-  // Visual-novel sticky sprites: transitional narration turns often have no active
-  // cast — keep the previous line-up on stage (dimmed) instead of blinking
-  // everyone out, until a turn with a real cast replaces it.
-  const lastSlotsRef = useRef(fresh);
-  if (fresh.length > 0) lastSlotsRef.current = fresh;
-  if (!retainWhenEmpty && fresh.length === 0) lastSlotsRef.current = [];
-  const sticky =
-    retainWhenEmpty && fresh.length === 0 && lastSlotsRef.current.length > 0;
-  const slots = sticky
-    ? lastSlotsRef.current.map((slot) => ({ ...slot, active: false }))
-    : fresh;
-  const lanes = computeSpriteLanes(slots.map((slot) => slot.pos));
+  const { live, outgoing, finish } = useStageSpriteTransitions({
+    speakers,
+    presence,
+    sessionId,
+    retainWhenEmpty,
+  });
 
   return (
     <div
@@ -71,81 +50,100 @@ export function StageSprites({
       )}
       data-testid="stage-sprites"
     >
-      {slots.map((slot, index) => (
-        <div
-          key={slot.characterId}
-          // ponytail: transitions `left`/`width` (layout props, against the
-          // web rules) — ≤4 absolutely-positioned sprites moving once per
-          // enter/leave; FLIP/transform plumbing isn't worth it. The global
-          // prefers-reduced-motion block collapses it. Lanes change on cast
-          // membership changes (assignStations), never on speaker switches;
-          // focus changes stay within each stable lane. Active speaker sits on
-          // top for the residual glow/shadow overlap at lane edges.
-          className="ui-stage-sprite absolute bottom-0 h-[92%] px-1 transition-[left,width] duration-500 ease-out"
-          data-transition={slot.transition ?? "fade"}
-          data-phase={slot.exiting ? "exit" : "present"}
-          aria-hidden={slot.exiting || undefined}
-          style={{
-            left: `${lanes[index]!.leftPct}%`,
-            width: `${lanes[index]!.widthPct}%`,
-            zIndex: slot.active ? 2 : 1,
-          }}
-        >
+      {[...outgoing, ...live].map((entry) => {
+        const { slot, lane } = entry;
+        const generation =
+          "generation" in entry && typeof entry.generation === "number"
+            ? entry.generation
+            : undefined;
+        return (
           <div
-            className={clsx(
-              "flex h-full w-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
-              slot.active && !slot.exiting
-                ? "ui-stage-sprite-active"
-                : "ui-stage-sprite-inactive",
-            )}
+            // Keep Media mounted across departure; generations guard cleanup.
+            key={slot.characterId}
+            data-character-id={slot.characterId}
+            onAnimationEnd={(event) => {
+              if (
+                generation !== undefined &&
+                event.target === event.currentTarget &&
+                event.animationName ===
+                  EXIT_ANIMATIONS[slot.transition ?? "fade"]
+              )
+                finish(generation);
+            }}
+            // ponytail: transitions `left`/`width` (layout props, against the
+            // web rules) — ≤4 live sprites moving once per
+            // enter/leave; FLIP/transform plumbing isn't worth it. The global
+            // prefers-reduced-motion block collapses it. Lanes change on cast
+            // membership changes (assignStations), never on speaker switches;
+            // focus changes stay within each stable lane. Active speaker sits on
+            // top for the residual glow/shadow overlap at lane edges.
+            className="ui-stage-sprite absolute bottom-0 h-[92%] px-1 transition-[left,width] duration-500 ease-out"
+            data-transition={slot.transition ?? "fade"}
+            data-phase={slot.exiting ? "exit" : "present"}
+            aria-hidden={slot.exiting || undefined}
+            style={{
+              left: `${lane.leftPct}%`,
+              width: `${lane.widthPct}%`,
+              zIndex: slot.exiting ? 0 : slot.active ? 2 : 1,
+            }}
           >
-            {slot.ref ? (
-              <div
-                key={`${slot.variantId ?? slot.ref.id}:${slot.transition ?? "fade"}`}
-                className="ui-stage-visual flex h-full w-full items-end justify-center"
-                style={{
-                  transform: `translate(${slot.framing?.offsetX ?? 0}%, ${slot.framing?.offsetY ?? 0}%) scale(${slot.framing?.scale ?? 1})`,
-                  transformOrigin: "bottom center",
-                  maskImage:
-                    "linear-gradient(to bottom, black 78%, transparent 100%)",
-                }}
-                data-visual-variant={slot.variantId}
-                data-transition={slot.transition ?? "fade"}
-              >
-                <Media
-                  src={slot.ref}
-                  sessionId={sessionId}
-                  alt={slot.displayName}
-                  fit="contain"
-                  rounded="none"
-                  maxHeight="100%"
-                />
-              </div>
-            ) : (
-              // No sprite/avatar yet — a name-initial standee keeps the
-              // speaker on stage so the dialog nameplate matches someone.
-              <div
-                className="ui-stage-sprite-fallback"
-                aria-label={slot.displayName}
-              >
-                {slot.displayName.trim().slice(0, 1)}
-              </div>
-            )}
-          </div>
-          {!slot.ref && (
-            <span
+            <div
               className={clsx(
-                "ui-stage-panel absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors duration-300",
-                slot.active
-                  ? "border-(--accent-primary) text-(--accent-primary)"
-                  : "text-muted-foreground",
+                "flex h-full w-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
+                slot.active && !slot.exiting
+                  ? "ui-stage-sprite-active"
+                  : "ui-stage-sprite-inactive",
               )}
             >
-              {slot.displayName}
-            </span>
-          )}
-        </div>
-      ))}
+              {slot.ref ? (
+                <div
+                  key={slot.variantId ?? slot.ref.id}
+                  className="ui-stage-visual flex h-full w-full items-end justify-center"
+                  style={{
+                    animation: slot.exiting ? "none" : undefined,
+                    transform: `translate(${slot.framing?.offsetX ?? 0}%, ${slot.framing?.offsetY ?? 0}%) scale(${slot.framing?.scale ?? 1})`,
+                    transformOrigin: "bottom center",
+                    maskImage:
+                      "linear-gradient(to bottom, black 78%, transparent 100%)",
+                  }}
+                  data-visual-variant={slot.variantId}
+                  data-transition={slot.transition ?? "fade"}
+                >
+                  <Media
+                    src={slot.ref}
+                    sessionId={sessionId}
+                    alt={slot.displayName}
+                    fit="contain"
+                    rounded="none"
+                    maxHeight="100%"
+                  />
+                </div>
+              ) : (
+                // No sprite/avatar yet — a name-initial standee keeps the
+                // speaker on stage so the dialog nameplate matches someone.
+                <div
+                  className="ui-stage-sprite-fallback"
+                  aria-label={slot.displayName}
+                >
+                  {slot.displayName.trim().slice(0, 1)}
+                </div>
+              )}
+            </div>
+            {!slot.ref && (
+              <span
+                className={clsx(
+                  "ui-stage-panel absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors duration-300",
+                  slot.active
+                    ? "border-(--accent-primary) text-(--accent-primary)"
+                    : "text-muted-foreground",
+                )}
+              >
+                {slot.displayName}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

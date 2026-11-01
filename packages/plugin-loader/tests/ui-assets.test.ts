@@ -246,3 +246,37 @@ it("does not publish special files even when their extension is allowlisted", as
     "index.html",
   ]);
 });
+
+it("retains each exact file hash and changes the root digest on a same-size edit", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "app.js"), "aaaa");
+  const before = await scan(root, "index.html");
+  expect(before.listed.get("app.js")?.sha256).toMatch(/^[a-f0-9]{64}$/);
+  await writeFile(path.join(root, "app.js"), "bbbb");
+  const after = await scan(root, "index.html");
+  expect(after.digest).not.toBe(before.digest);
+  expect(after.listed.get("app.js")?.sha256).not.toBe(
+    before.listed.get("app.js")?.sha256,
+  );
+});
+
+it("keeps bitmap-only publication separate from page entry and MIME permissions", () => {
+  const files = [
+    "paper.png",
+    "index.html",
+    "app.js",
+    "icon.svg",
+    "font.woff2",
+  ].map((name) => file(name));
+  const theme = plan(files, { purpose: "theme" });
+  expect(theme.issues).toEqual([]);
+  expect([...theme.listed.keys()]).toEqual(["paper.png"]);
+  const page = plan(files, "index.html");
+  expect(page.issues).toEqual([]);
+  expect([...page.listed.keys()]).toEqual(
+    files.map((file) => file.relativePath),
+  );
+  expect(plan([file("paper.png")], "index.html").issues).toContainEqual(
+    expect.objectContaining({ path: "webview.entry" }),
+  );
+});

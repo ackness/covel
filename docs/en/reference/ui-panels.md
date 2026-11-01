@@ -12,7 +12,7 @@ The basic idea has one rule. A plugin describes its UI in a JSON document (calle
 
 ## UI without server code
 
-JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; no bridge writes or whole-surface replacement are added.
+JSON panels, templates, views and composer modes can ship in a [declarative package](./plugin-installation.md#declarative-plugins). Classic `.js` files in a valid webview asset plan run only in the browser sandbox and grant no server-code permission. `bridge: session` still needs independent read consent for the current spec, HTML and multi-file asset digest. Denial or revocation leaves the ordinary game UI usable; script changes require consent for new content. Host back/default controls stay outside the iframe. CSP, message-source validation and per-action restrictions remain; page writes require separate capability consent; independent main/composer replacement follows the same content consent.
 
 Preparation and session plugin rows disclose model use and actual agent triggers before enable. UI-only packages have no model notice. The notice grants no sandbox capability.
 
@@ -218,7 +218,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-When this page says `ui.right`, `ui.message`, `ui.view` or `ui.segment`, it means these keys under `contributes.ui`. These are the four supported placements; a right panel can also select the stage decision area with `surfaces`, and story paragraph templates are described in [Segment templates](#segment-templates). Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
+When this page says `ui.right`, `ui.message`, `ui.view` or `ui.segment`, it means these keys under `contributes.ui`. These four placements use panel/template schemas; `ui.theme` uses the [separate theme schema](./theme-packages.md#restricted-themes-supplied-by-plugins); a right panel can also select the stage decision area with `surfaces`, and story paragraph templates are described in [Segment templates](#segment-templates). Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
 
 ### JSON Spec Format
 
@@ -701,7 +701,8 @@ contributes:
 - **Which template draws a segment.** The most specific matching template wins: `kind + speaker` beats `speaker` alone, which beats `kind` alone; at the same level, a match by ID beats a match by name. Remaining ties go to the plugin order that `/api/ui-specs?sessionId=` returns, then to declaration order. Only plugins runnable in the session contribute templates, as with `ui.message`.
 - **State a template reads.** `/segment` is the committed segment `{ kind, text, speaker?, speakerId? }`; `/index` is its position (from 0); `/character` is `{ id, name, type }` when `speakerId` names a session character; `/visual` is that character's `character.visual@1` slot value when the host has it. No plugin data, settings or other IDs.
 - **Where templates apply.** Only in the chat view's `parsed` and `detailed` modes, and only to committed stories with `segments`. When some segment matches, the story renders segment by segment: matched segments through their template, the rest as default text. When no segment matches, the message renders exactly as before. A story still streaming, the stage dialog and the `raw` view never use templates (the `raw` JSON shows `segments`).
-- **Which components a template can use.** Only components that draw nothing but their own props: `Stack`, `Row`, `Grid`, `Separator`, `Text`, `Badge`, `Icon`, `TagList`, `Source`, `Image`, `Media`, `AudioPlayer`, `Card`, `CardList`, `EntryCard`, `StatBar`, `Progress`, `Accordion`, `Section`, `JsonView`, `EntryList`, `Prose`, `PlayerMessage`, `Alert`. Components that send messages, call runtimes, take input or read session data (such as `CandidateList`, `Button`, `Choice`, form and input components, `SceneCastList`, `CharacterFieldsView`, `CharacterAvatar` and the galleries) are not available; for an avatar, point `Image` at `/visual/avatar`. Media always resolves in the current session, and a `sessionId` prop has no effect.
+- **Which components a template can use.** The available display components are: `Stack`, `Row`, `Grid`, `Separator`, `Text`, `Badge`, `Icon`, `TagList`, `Source`, `Image`, `CharacterAvatar`, `Media`, `AudioPlayer`, `Card`, `CardList`, `EntryCard`, `StatBar`, `Progress`, `Accordion`, `Section`, `JsonView`, `EntryList`, `Prose`, `PlayerMessage`, `Alert`. Components that send messages, call runtimes, take input or read session data (such as `CandidateList`, `Button`, `Choice`, form and input components, `SceneCastList`, `CharacterFieldsView` and the galleries) are not available. Media always resolves in the current session, and a `sessionId` prop has no effect.
+- **Template avatars.** `CharacterAvatar.characterId` must equal the resolved `/character/id`, usually bound as `{ "$state": "/character/id" }`; an equal literal ID is also valid. It uses only that speaker’s projected `/visual/avatar`, with no slot, session, plugin-data or service lookup. An unresolved speaker, missing ID or missing portrait renders no avatar while text remains readable. Other character IDs show no avatar; `sessionId`, `ref`, `visual` and similar props cannot change the source. Both thumbnail and preview resolve in the explicit host session. Local enlargement and dismissal are host display interactions; plugin `on` / `watch`, RPC, input, upload and message actions remain forbidden. Changing session, speaker or portrait closes the former preview.
 - **When something fails.** A template that fails to render falls back to the default text for that segment only. A malformed template (a missing or empty `match`; `webview`, `dataSource`, `surfaces`, `group*`, `shortLabel`, `navTarget`, `alwaysRender` or `bridge`; an `on` / `watch` binding in the view; a component outside the list above) is an error in `pnpm validate:plugin` and installation; at load it becomes a diagnostic with its declared path, and the plugin's other templates still apply.
 - `ui.segment` derives no capability (like `ui.view`): templates run no code and read no data.
 
@@ -824,12 +825,49 @@ Write source text in English and translations under `messages` in `locales/<loca
 - Declare exactly one of `view` and `webview`. Optional fields are `icon`, `description`, `dataSource`, `emptyState` and `alwaysRender`. A declarative page without data can use `alwaysRender: true`.
 - `surfaces`, `group`, `groupLabel`, `groupOrder`, `shortLabel` and `navTarget` are not allowed here; they route panels and stage surfaces.
 - The mode is `plugin:<pluginId>:<viewId>`, for example `plugin:session-view-probe:story`. World and pack `defaultViewMode` accept this format, `parsed` and `stage`. Authors can select `detailed` and `raw` manually only.
-- While views load, the host view is shown. Missing views, disabled plugins, request failures and render errors fall back to it. The host default is `stage` only when the world’s default is exactly `stage`, otherwise `parsed`. A plugin view is never a fallback target. The player’s selection survives a transient request failure and can recover on a later successful load. Render errors select the host default and show a toast.
-- The choice lasts for the current mount and is not saved per session. Plugin views do not use stage immersion and do not show the host composer.
+- On initial discovery, show the host default. During discovery refreshes within the same session, including UI language changes, changes to other plugins and temporary request failures, retain loaded, authorized pages, their menu and local display state. Clear only the affected selection when its plugin is disabled, successful discovery confirms its removal, permission is revoked or rendering fails; preserve the other region and its draft. Never reuse another session's view list. The host default is `stage` only when the world's default is exactly `stage`, otherwise `parsed`; a plugin view is never a fallback target.
+- The choice lasts for the current mount and is not saved per session. Ordinary plugin views do not use stage immersion and omit the host composer by default; a declarative page can explicitly compose `SessionComposer`. Explicit main replacement and independent composer selection are described below.
+
+### Live session components
+
+An ordinary declarative `ui.view` can compose `SessionMessages` and `SessionComposer` for the host's public story, pending interactions and current role's input. Community and bundled packages use the same API. Exact props, counts and placement limits are in [Live session view components](./ui-components.md#live-session-view-components).
+
+The host supplies render slots for the current session only. Messages, settings, credentials and action callbacks are never added to `/data`, `/sources`, JSON state or browser messages. Story uses public parsed rendering and the existing stream, without execution detail or reasoning. Pending is determined against complete history and submitted identities before filtering: unanswered forms, choices and confirmations that no later player message has superseded. Suggestions are optional. Interactions retain real validation and rejection feedback.
+
+Both public message regions retain current-turn row metadata. Choice lists in the same region share consecutive numbering for the current turn and support number keys; stale choices do not consume current numbers. Clicking or using a number key to answer a required choice sends its current turn, interaction and option through the existing interaction submission path. It never becomes free text or a local-only submitted marker. Suggestions can still enter the draft queue. Execution details, reasoning and asset administration remain unmounted.
+
+Input shares the session's single controller: changing views preserves text, mode, fields, queued choices and restored stopped input; busy refusal retains drafts. An unavailable catalogue or identity, ended session, blocked opening or mandatory interaction cannot send a fallback Say. Direct and textless Advance retain existing player-action validation and persist only through normal commit. Opening a view changes no role, narrator perspective or policy. Selecting an independent composer hides the declarative `SessionComposer` input to avoid duplication; returning to default input restores its draft and mode.
+
+Host Back, Stop, Begin and recovery remain outside plugin layout. A view error does not own story execution. Messages and blocks mask live context to prevent recursive feeds or composers; snapshots and debug panels have no such capability. Webviews receive no live context; their consent, content hashes and bridge capabilities remain separate.
+
+### Sandbox main view and composer
+
+Add singular `surface` to a spec in the existing `contributes.ui.view`, without a new placement:
+
+```json
+{
+  "id": "input",
+  "label": "Adventure input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": ["submitAction", "submitInteraction", "invokeRuntime"],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+Each spec targets one region; two specs may share a published root. Unknown values, misplaced fields and JSON views receive a `surface` diagnostic while siblings load. The main menu lists ordinary views and `main`; the composer selector lists only `composer`. Each region has at most one provider, chosen by the player without guessing the first. A world's `defaultViewMode` may name main or an ordinary view, never composer, and still requires consent. There is no world/pack composer default.
+
+Explicit main replaces only the story column and retains the host composer by default. An independently selected composer works in chat, ordinary plugin views and stage, including a different plugin's main. Stage places it below narrative and removes duplicate free input, suggestion submission and choice hotkeys; paragraph progression, required forms, suspension and recovery remain host features. Pages without submitAction may offer only interactions or runtime UI. Players can always return to default input.
+
+Selection lasts only for the current mount and session visit; content consent persists on this device. Default UI remains usable while loading or awaiting consent. Each frame owns its lease, handles and stream subscription; failure, disable or revocation in one region does not reset the other.
+
+Sandbox main views retain a minimum usable height, with the host composer outside that space. When recovery notices and other content stack on a phone, the session center column scrolls vertically so the main view, composer and host controls remain reachable.
+
+Outside the clipped frames, a labelled host strip provides “Back to default interface”, Stop, and interactions/recovery. Global return clears both selections; region return clears only its own. The global strip remains in immersive stage and narrow layouts. Page permission menus revoke one capability or all; menus stay inside the viewport horizontally when narrow layouts wrap their triggers. The `data-covel-host-controls` marker and its descendants belong to the host and must be excluded from theme selectors. Fixed positioning, high z-index and iframe focus cannot cross the clipping boundary.
 
 ### Multi-file pages
 
-Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Pages keep the story-column layout and do not replace a host main-view or composer system position.
+Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Ordinary pages keep the story-column layout; singular `surface` opts into a system region below.
 
 Authors declare this in the spec:
 
@@ -876,57 +914,95 @@ The entry response CSP is:
 
 Use classic external scripts such as `<script src="app.js"></script>`, without modules, inline scripts, event attributes or `eval`. Inline styles are allowed; network requests are blocked. Embed custom fonts as `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Font URL requests use CORS, and the sandboxed document has an opaque origin, so even relative `.woff` / `.woff2` URLs are cross-origin. The asset route sends no CORS allow headers, so those URLs cannot load. `font-src 'self' data:` is unchanged; publishing a font file does not make its URL usable. `'self'` uses the browser-visible origin, supporting Vite and reverse proxies without a path-prefix restriction. The route checks the published listing for containment. The main page's `frame-src 'self'` limits iframe navigation; `/api` separately rejects opaque origins and embedded destinations. See the [security boundary](../internals/security.md#plugin-pages-loaded-by-url).
 
-The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. With no `<head>`, it uses `<html>`, then the doctype, then the start of the document. Nested entries get the required `../` prefix. Authors do not copy bridge code. The script acknowledges its port with `ready`; URL pages wait 8 seconds, then show a failure overlay with Retry over the iframe. A credential-free HEAD probe distinguishes 404 ("This page was updated; reload it.") from other failures ("This page could not be loaded."). A late `ready` clears the error. Retry fetches the spec again and remounts the iframe; host back controls stay available.
+The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. Without a head it uses `<html>`, the doctype, or the document start, in that order; nested entries receive the appropriate `../` prefix. Authors do not copy the script. Views and replacement regions use the lifecycle below. Ordinary URL panels without region recovery keep their existing failure overlay: a credential-free HEAD distinguishes an expired digest (404) from other failures, late ready may clear that overlay, and Retry reloads declarations and remounts the iframe.
 
-The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
+The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Every read verifies length and SHA-256 through the same bounded O_NOFOLLOW handle, then serves that buffer; same-length edits receive a no-store 404 before GET, HEAD or 304 success. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
 
-Per-capability consent for `bridge: "session"` is unchanged. The whole-spec consent hash includes the URL, whose digest covers every published file; any file change invalidates old consent. A session-reading page is not mounted before consent. No session write operation or per-session view persistence is added. In development, an unapproved server-code plugin may need a restart to recompute its digest.
+Per-capability consent for `bridge: "session"` is unchanged. The whole-spec consent hash includes the URL, whose digest covers every published file; any file change invalidates old consent. A session-reading page is not mounted before consent. Page writes are described below; view selection remains mount-local. In development, an unapproved server-code plugin may need a restart to recompute its digest.
 
 ### Consent before reading a session
 
-Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Until the player consents, the page is not mounted and no session projection is sent. A world default naming it also opens the consent prompt while showing `parsed` / `stage` underneath.
+Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Optional `capabilities` lists at most five distinct additional capabilities. Unknown capabilities, other placements, JSON views and a missing session bridge produce field diagnostics and remove only that feature. `session` is inferred from the bridge and is not written in the list. Optional singular `surface: "main" | "composer"` selects a system region and requires the same session webview; plural `surfaces` still routes panels and stage content.
 
-The capability is session reading, bound to the plugin ID and a SHA-256 hash of the entire loaded spec, including inlined HTML. SettingsStore persists the record on this device at `ui.pluginViewConsent.<pluginId>.<hash>.session`. Changing the spec or HTML asks again. Choose “Revoke story access” in the view bar’s “View permissions” menu to revoke and return to the host default. This consent is independent of server-code approval and applies to every plugin source.
+Until every requested grant has persisted, the page is not mounted, receives no projection and cannot invoke methods. A world default opens the same dialog with `parsed` / `stage` underneath. The dialog names the plugin, page and each capability. While saving, its host return and Stop controls remain available. Builtin or trusted source, declarative classification and server-code approval never replace page consent.
+
+<!-- prettier-ignore -->
+| Capability | Meaning |
+| --- | --- |
+| `session` | Read public story and input context; inferred |
+| `submitAction` | Submit player actions |
+| `submitInteraction` | Answer current pending interactions |
+| `invokeRuntime` | Run the owning plugin's manual runtimes |
+| `abortExecution` | Stop execution in the current session |
+| `openPanel` | Open the owning plugin's declared panels |
 
 Replacing content or switching sessions closes the old iframe's connection and stream subscription. The page stays unmounted while new content is being hashed or awaiting consent. Already authorized content also gets a new iframe in another session; the old page receives no state or streamed text from the new session.
 
-### SessionProjection (version 1)
+SettingsStore saves device-local records at `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`, retaining the `.session` read suffix. The hash is SHA-256 of canonical JSON for the entire resolved spec, including capabilities, inline HTML or a URL digest covering every resource. Changed content asks again; an old reading grant adds no capabilities. Pending optimistic notifications do not grant access. “View permissions” can revoke one capability or all permissions, immediately stopping delivery and dispatch and returning to the default even if persistence fails. Refresh from another window can revoke access too.
 
-After consent, the page reads the `session` field of the `window.covel` state object, and can also use `window.covel.subscribe` to follow changes. The table below describes that field. The projection does not repeat top-level `locale` and `theme`.
+<a id="sessionprojection-version-1"></a>
+
+### SessionProjection (version 2)
+
+Read the `session` field of the state object exposed on `window.covel`, or subscribe with `window.covel.subscribe`. Top-level state contains only `session`, `locale` and host `theme`, without ordinary panel `data`, `sources`, `jobs`, `context` or own-plugin KV.
 
 When another client commits a turn, the host also refreshes messages and the turn count and pushes the updated projection. The page does not need to reload.
 
 <!-- prettier-ignore -->
 | Field | Content |
 | --- | --- |
-| `version` | Always `1` |
-| `phase` | `setup` or `playing` |
-| `turn` | Committed player turns, `completedPlayerTurns` |
-| `executing` | Whether execution is in progress |
-| `messages[]` | `{ seq, role, text, truncated? }`. Only assistant messages with `kind === "story"` and user messages without a block. `seq` is a stable positive ordinal allocated on first observation; host eviction and history loading do not renumber it |
-| `streaming` | `{ seq, text }` or `null`. A `stream_` placeholder appears only here, never in `messages`; the final story message retains its ordinal |
-| `pending[]` | `{ seq, block }`. Interactions the host still expects the player to answer. `seq` is the stable ordinal of the same message; hidden block fields are removed |
-| `characters[]` | Public `id`, `name`, `type`, with optional `aliases`, `description`, `fields`. Other character fields are excluded |
-| `slots[]` | `{ slot, key?, value }` for kernel UI slots the host already shows; media references stay opaque objects |
+| `version` | Always `2` |
+| `phase` / `turn` / `executing` | `setup` or `playing`, committed player-turn count, execution state |
+| `messages[]` | `{seq, role, text, truncated?}`, public stories and player messages without blocks |
+| `streaming` | `{seq,text}` or `null`; the final story inherits its placeholder ordinal |
+| `pending[]` | `{seq,interaction,handle?}`, public display and an opaque answer handle for this frame |
+| `input.seats[]` | Human seats' `{id,role,characterIds,currentCharacterId?,allowed}`; public associations only, without user/account identity |
+| `input.kinds[]` | Currently permitted `{kind,label,text,actor,fields?}`; fields contain public JSON Schema display vocabulary, without executable validators |
+| `characters[]` | `id`, `name`, `type`, optional `aliases`, `description`; no arbitrary `fields` or private knowledge |
+| `slots[]` | `{slot,key?,value}`, validated against kernel slot schemas; media retains only opaque `{id,mime,size}` references |
 
-Ordinals last for the current session bridge instance and are never reused. Newly loaded older history receives new ordinals. Render messages in array order; do not sort by `seq`.
+An `interaction` is `form`, `choice`, `confirmation` or `unavailable`. Forms expose title, submit label and field names, types, labels, placeholders, required flags, defaults, numeric bounds and options. Choices expose `choices[].{id,label,description?}`; confirmations expose prompt and confirm/cancel labels. Internal block/turn/interaction references, `meta`, action maps and server validators remain with the host. Handles belong to the current frame attempt and interaction, expiring on answer, replacement, eviction or departure. Custom JSON UI and unsupported/oversized interactions expose `unavailable` without a handle; a host button opens the ordinary interaction interface. Optional suggestions remain with the host.
 
-The projection excludes message `id`, `turnId`, `requestId`, `runtimeId`, timestamps, internal non-story messages, reasoning, execution steps, plugin data rows, settings, provider keys and session tokens. Building it never reads `plugin_data`. A public character `id` identifies a character; it is not message metadata.
-
-Nested values recursively drop every key starting with `_`, plus `hidden`, `concealed`, `turnId`, `requestId`, `runtimeId`, `sessionId`, `timestamp`, `createdAt`, `updatedAt` and `uuid`. Values beyond depth 8 become `null`. The host validates the projection; invalid projections are withheld with one warning.
+Ordinals are allocated on first observation and never reused within a bridge instance. Older loaded history may receive larger ordinals; render array order rather than sorting by `seq`. The projection does not read plugin data, results, operations, reasoning, steps, native provider continuations or compacted summaries. Upstream concealed provenance remains authoritative; deleting keys cannot make arbitrary text public. Invalid projection withholds session and stream, without a raw fallback.
 
 <!-- prettier-ignore -->
 | Content | Limit and handling |
 | --- | --- |
-| Message window | Last 200 messages, at most 256 KiB of message text total; oldest messages drop first |
-| Single message text | 32 KiB, with `truncated: true` when cut |
+| Messages | Last 200, 256 KiB total text; 32 KiB each with `truncated:true` when cut |
 | Streaming text | 64 KiB |
-| Characters | At most 100, each at most 8 KiB serialized; oversized records are skipped |
-| Pending interactions | At most 8; each block at most 16 KiB serialized; oversized blocks become `{ truncated: true }` |
+| Characters | At most 100, each 8 KiB serialized; oversized entries skipped |
+| Pending interactions | At most 8, each 16 KiB; oversized display becomes `unavailable` without a handle |
 
-KiB counts UTF-8 bytes. State changes push a full projection. Streaming uses coalesced `{ type: "stream", seq, append }` messages at 100 ms intervals, with an immediate tail flush at completion. Every full push includes the current streaming text for resynchronization. A narrative reset invalidates the old append baseline: the next push replaces the discarded draft with the full current text, even when replacement text outgrows it within 100 ms. Normal completion still flushes the final tail.
+KiB counts UTF-8 bytes. Appends coalesce every 100 ms; full pushes while streaming coalesce too, so unrelated state changes cannot bypass throttling. Full state includes current stream text and establishes the append baseline. Completion flushes the tail immediately; reset, shrink and retry replace drafts even if replacement text outgrows the previous text before the timer fires. Retirement cancels subscriptions and queued timers.
 
-**The session bridge is read-only in this version.** It adds no `submitAction`, form submission, abort or open-panel capability. Existing `invokeRuntime`, `invokePluginAction`, `invokeCommand`, `emitEvent` and `setUiState` handlers are unchanged. Images travel only as references, without bytes or blob URLs, so the sample page shows no art. There is no composer. Single-file pages have no handshake timeout notice; see [multi-file pages](#multi-file-pages) for timeout and Retry behaviour. Host back controls remain available.
+### Page failure and recovery
+
+Inline HTML and URL views wait for ready from frame mount, with an 8-second deadline independent of load events. The shared script reports uncaught errors, unhandled Promise rejections and application script resource failures through a fixed page-error signal on the existing port, without error text, stacks or URLs. Script resource errors are captured even when they do not bubble; image load failures do not trigger page fallback. Normal pagehide/unload does not report a page error; the host detects navigation through load and heartbeat checks. Load failure, a connected element navigating again, React render errors and invalid required public projection also retire the attempt.
+
+After ready, the host sends increasing ping probes every 5 seconds while visible; the script replies with the matching pong on the same port. Three unanswered probes trigger fallback. Hidden tabs do not accumulate missed probes; returning resets probes and grants 8 seconds of grace. This measures the document event loop, not model/RPC duration, and cannot recover a browser-wide renderer freeze.
+
+Failure closes ports, timers and stream subscriptions before restoring that region's default UI. A retained host notice names the page and offers Retry and permission revocation. Late ready, HEAD and RPC callbacks cannot revive the attempt. Retry requires a player click, refetching declarations and checking current content consent before creating a new frame. Normal action/runtime refusals are not page failures; never automatically replay mutations. Server-admitted work may settle normally without replying to the retired page.
+
+### Page requests and safe outcomes
+
+Use the existing MessagePort and `window.covel.invoke(method, params)`. Strict schemas reject undeclared fields. Pages cannot select actors, source, session/turn references, plugin identity, HTTP paths, tokens, proposals or model/provider overrides.
+
+<!-- prettier-ignore -->
+| Method | Parameters and behaviour |
+| --- | --- |
+| `submitAction` | `{kind,text?,fields?,seatId?}` uses normal input admission, seat-switch waits, workspace and SSE. The server derives actor and `source:player`. Slash text remains a player action, without the composer's command-RPC shortcut. Normal running turns return busy; automatic advancement uses interrupt-and-submit. Required interactions and setup gates refuse input |
+| `submitInteraction` | `{handle,values}` resolves current host references and uses normal interaction submission to save the answer and start its follow-up on one stream. Field refusal preserves editing. Duplicate/stale handles cannot submit; local `submitBlock` never substitutes for persistence |
+| `invokeRuntime` | `{runtimeId,payload?}` targets only a currently active own manual runtime, excluding subagent-only targets. Uses ordinary RPC approvals, workspace, proposal validation, hooks and commit. No action/command/event RPC |
+| `abortExecution` | `{}` stops execution in the leased session, including while busy; it does not undo committed rounds. Host Stop needs no page grant |
+| `openPanel` | `{panelId}` opens only a currently declared own-plugin panel, without extra read/write authority |
+
+Outcomes contain only `{status,code?,issues?}`. Status is `accepted`, `committed`, `rejected` or `unavailable`. Accepted means normal admission, including background admission, and does not establish saved gameplay. A sync runtime returns committed only after the normal response establishes commit and target success. Fixed codes are `invalid-request`, `permission-denied`, `busy`, `stale`, `already-answered`, `field-invalid`, `runtime-refused`, `failed`. At most 32 field issues contain `{field?,code:"invalid"}`. Raw RPC, outputs/effects, proposals, job IDs, approval data, paths and exception strings never cross the port. This interface does not offer `setUiState`; pages may retain drafts in memory for their own lifetime.
+
+Each connection allows eight calls in flight and 128 KiB serialized request bytes. Seen IDs cannot execute again. A connection remembers at most 4096 IDs, then refuses new calls until explicit frame reconstruction instead of evicting old IDs. Closing rejects deliverable page promises and drops late replies. Timeouts never automatically resend mutations. This is not exactly-once across reloads.
+
+Session navigation, plugin disable, content replacement, revocation, return and unmount retire the lease. The host rechecks ownership after awaits and before approval retries. Mutations and approval grants recheck the lease after credential lookup, immediately before HTTP dispatch; revocation or navigation during that lookup prevents dispatch. A stale approval may still be denied to clean up the request. Normal input also rechecks the caller after seat-switch, automatic-stop and workspace waits. Work already dispatched may settle normally, without replying to the retired frame.
+
+There is no media-byte/blob channel. Views and replacement regions use the recovery rules below; ordinary non-session panels keep their separate data and action contract.
 
 ## Component Catalogue
 
@@ -1084,10 +1160,16 @@ The value is `{ actors, retainWhenEmpty }`. Both fields are required.
 
 On an actual location change, built-in Scene Stage clears existing direction actors before applying new cues. Preview and commit use the same scene identity and ordering. Existing direction state with no new entries yields empty actors and `retainWhenEmpty: false`, preventing old-location portraits from remaining. Without direction state, the original cast provider remains in use.
 
-| Field             | Type                                   | Required | Meaning                                                                                                                        |
-| ----------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `actors`          | Array of the objects below, at most 64 | Yes      | Actors currently on stage; an empty array is valid                                                                             |
-| `retainWhenEmpty` | boolean                                | Yes      | When `actors` is empty, `true` keeps the previous portraits without highlights; `false` clears them. The schema has no default |
+| Field             | Type                                   | Required | Meaning                                                                                                                                                  |
+| ----------------- | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actors`          | Array of the objects below, at most 64 | Yes      | Actors currently on stage; an empty array is valid                                                                                                       |
+| `retainWhenEmpty` | boolean                                | Yes      | When `actors` is empty, `true` keeps the previous portraits without highlights; `false` clears them after departure completes. The schema has no default |
+
+Removing an actor changes the authoritative slot immediately. The client retains only the previously displayed image, name, variant framing and old lane for one 300ms fade; its former entrance `transition` is not an exit instruction. A loaded image stays displayed until departure completes, without reloading or flashing a placeholder when departure begins. Up to four current actors and four outgoing images can coexist. Outgoing images do not consume current capacity or enter the new layout; they sit below current actors, are inactive, hidden from assistive technology and non-interactive. Faster replacements evict the oldest outgoing images first.
+
+A delivered `exiting: true` uses its requested `transition`, defaulting only an omitted value to `fade`. Fade takes 300ms, slides 320ms and dissolve 360ms; `none` and reduced motion cut immediately. Committed omission preserves an ongoing explicit exit without replaying it or changing it to fade. Matching outer animation completion removes it, with cleanup within 500ms if events are lost; re-entry cancels the old departure. Instructions never delivered to the renderer cannot be recovered from cast differences.
+
+Only a still-present valid slot with `actors: []` and `retainWhenEmpty: true` retains the former current lineup without highlights; explicit exits never become that sticky lineup. An empty value with `false` finishes departures once and stays empty. A missing slot, cleared projection during recovery, session change or unmount immediately discards local memory; a fresh mount shows only current actors. Outgoing images never enter snapshots, UI slots, the session bridge or model context, delay a turn or submit writes.
 
 Each actor:
 
@@ -1242,3 +1324,7 @@ Turn Policy declares Choose actors through the generic action catalogue in both 
 ## Presentation data and slot degradation
 
 UI slots consume committed owned presentation state. Missing public story, assets or allowance, and generation failures leave story and composer usable, degrading only the display. Presentation cannot publish UI proposals and adds no components or provider-selection controls. See [presentation runtimes](./plugins.md#presentation-runtimes).
+
+## Separate theme placement
+
+`contributes.ui.theme` has its own strict schema. It executes no view/webview, reads no session and requests no bridge. Bitmap roots have no HTML entry and remain separate from page listings. A broken theme produces only its own diagnostic; valid panels and themes remain discoverable. Styles mount only after an explicit **Session theme** choice. Narrative text and a separate decorative plane receive the restricted palette; host bars, settings, approvals, composer and recovery controls stay outside those nodes. Views and themes are selected independently; theme selection changes neither content consent nor the write protocol. Existing sandbox snapshots receive only the session’s safe palette/identity and host fonts/radii, without CSS, resource listings or setting entries. See [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).

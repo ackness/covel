@@ -412,3 +412,164 @@ it.skipIf(process.platform === "win32")(
     await missing("app.js");
   },
 );
+
+it.each([
+  "index.html",
+  "app.js",
+  "style.css",
+  "icon.svg",
+  "img/logo.png",
+  "font.woff2",
+])(
+  "refuses same-size changes to %s before GET, HEAD or conditional success",
+  async (file) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const before = await request(file);
+    expect(before.status).toBe(200);
+    const etag = before.headers.get("etag")!;
+    const { readFile } = await import("node:fs/promises");
+    const bytes = await readFile(path.join(root, "p/ui/app", file));
+    const changed = Buffer.alloc(bytes.length, "x");
+    expect(changed.equals(bytes)).toBe(false);
+    await put(`ui/app/${file}`, changed);
+    for (const init of [
+      {},
+      { method: "HEAD" },
+      { headers: { "If-None-Match": etag } },
+    ]) {
+      const result = await request(file, init);
+      expect(result.status).toBe(404);
+      expect(result.headers.get("cache-control")).toBe("no-store");
+      expect(result.headers.get("etag")).toBeNull();
+      expect(await result.text()).not.toContain(changed.toString());
+    }
+    const old = prefix;
+    await register();
+    const next = await index();
+    expect(next).not.toBe(old);
+    await missing(file);
+    prefix = next;
+    const fresh = await request(file);
+    expect(fresh.status).toBe(200);
+    expect(await fresh.text()).toContain(changed.toString());
+  },
+);
+
+async function themeIndex(overlap = false) {
+  const bytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV7sAAAAASUVORK5CYII=",
+    "base64",
+  );
+  const assetRoot = overlap ? "ui/app" : "ui/theme-art";
+  await put(`${assetRoot}/img/paper.png`, bytes);
+  if (overlap) await put(`${assetRoot}/img/logo.png`, bytes);
+  await put(
+    "theme.json",
+    JSON.stringify({
+      id: "reading",
+      label: "Reading",
+      css: "./theme.css",
+      assets: { root: `./${assetRoot}` },
+    }),
+  );
+  await put("theme.css", ".surface{background-image:url(img/paper.png)}");
+  await put(
+    "PLUGIN.md",
+    "---\nid: p\ndescription: Theme and page\ncontributes:\n  ui:\n    view: [./view.json]\n    theme: [./theme.json]\n---\n",
+  );
+  await registerTestPlugins(registry, [root]);
+  const result = await specs();
+  const theme = result.theme[0]?.specs[0];
+  if (!theme?.assets) throw new Error(JSON.stringify(result.diagnostics));
+  return {
+    prefix: `/plugin-assets/p/${theme.assets.digest}/`,
+    bytes,
+    assetRoot,
+    theme,
+  };
+}
+it("serves theme-only bitmaps with immutable headers, GET/HEAD/ETag and no bridge", async () => {
+  const theme = await themeIndex();
+  for (const method of ["GET", "HEAD"]) {
+    const response = await app.request(`${theme.prefix}img/paper.png`, {
+      method,
+      headers: { Origin: "null" },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-security-policy")).toBe("sandbox");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    if (method === "GET")
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(theme.bytes);
+    else expect(await response.text()).toBe("");
+    const cached = await app.request(`${theme.prefix}img/paper.png`, {
+      headers: { "If-None-Match": response.headers.get("etag")! },
+    });
+    expect(cached.status).toBe(304);
+  }
+  expect((await app.request(`${theme.prefix}${bridgeName}`)).status).toBe(404);
+  expect((await app.request(`${prefix}index.html`)).status).toBe(200);
+  expect(await (await app.request(`${prefix}index.html`)).text()).toContain(
+    bridgeName,
+  );
+});
+it("keeps publication purpose separate for overlapping page and bitmap roots", async () => {
+  const theme = await themeIndex(true);
+  const pagePrefix = await index();
+  expect(theme.prefix).not.toBe(pagePrefix);
+  for (const file of [
+    "index.html",
+    "app.js",
+    "icon.svg",
+    "font.woff2",
+    bridgeName,
+  ]) {
+    expect((await app.request(`${theme.prefix}${file}`)).status, file).toBe(
+      404,
+    );
+    expect((await app.request(`${pagePrefix}${file}`)).status, file).toBe(200);
+  }
+  expect((await app.request(`${theme.prefix}img/paper.png`)).status).toBe(200);
+  expect((await app.request(`${theme.prefix}%2e%2e/PLUGIN.md`)).status).toBe(
+    404,
+  );
+});
+it("refuses same-size theme replacements until re-registration and retires the old digest", async () => {
+  const first = await themeIndex();
+  const changed = Buffer.from(first.bytes);
+  changed[changed.length - 1] = changed[changed.length - 1]! ^ 1;
+  await put(`${first.assetRoot}/img/paper.png`, changed);
+  expect((await app.request(`${first.prefix}img/paper.png`)).status).toBe(404);
+  await registerTestPlugins(registry, [root]);
+  const result = await specs();
+  const current = result.theme[0]!.specs[0]!;
+  expect(current.contentHash).not.toBe(first.theme.contentHash);
+  expect(current.assets!.digest).not.toBe(first.theme.assets!.digest);
+  expect((await app.request(`${first.prefix}img/paper.png`)).status).toBe(404);
+  const response = await app.request(
+    `/plugin-assets/p/${current.assets!.digest}/img/paper.png`,
+  );
+  expect(response.status).toBe(200);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(changed);
+});
+it.skipIf(process.platform === "win32")(
+  "rejects linked theme parents even when they point inside the same root with identical bytes",
+  async () => {
+    const theme = await themeIndex();
+    await put(`${theme.assetRoot}/other/paper.png`, theme.bytes);
+    await rm(path.join(root, "p", theme.assetRoot, "img"), { recursive: true });
+    await symlink(
+      path.join(root, "p", theme.assetRoot, "other"),
+      path.join(root, "p", theme.assetRoot, "img"),
+      "dir",
+    );
+    expect((await app.request(`${theme.prefix}img/paper.png`)).status).toBe(
+      404,
+    );
+  },
+);

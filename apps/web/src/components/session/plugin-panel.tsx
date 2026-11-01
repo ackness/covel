@@ -1,4 +1,5 @@
 import type { SessionProjection } from "./session-bridge.js";
+import type { PluginBridgeHandler } from "./plugin-bridge.js";
 import type { StreamFeed } from "./session-bridge-stream.js";
 /**
  * PluginPanel — renders a single plugin panel from a json-render spec.
@@ -49,10 +50,16 @@ import { X } from "lucide-react";
 import { PluginJsonRenderDevtools } from "./json-render-devtools.js";
 
 import { PluginWebview } from "./plugin-webview.js";
+import { pluginUiSpecIssues } from "@covel/shared";
+import {
+  PluginViewSessionContext,
+  type PluginViewSession,
+} from "./plugin-view-session-context.js";
 
 export type PluginPanelStateCache = Map<string, StateStore>;
 
 export interface PluginPanelProps {
+  themeSessionId?: string;
   pluginId: string;
   panelId?: string;
   spec: Record<string, unknown>;
@@ -68,9 +75,17 @@ export interface PluginPanelProps {
   /** The panel is shown in the large dialog, not the side column. */
   expanded?: boolean;
   fill?: boolean;
-  sessionBridge?: { projection: SessionProjection; stream: StreamFeed };
+  sessionBridge?: {
+    projection: SessionProjection;
+    stream: StreamFeed;
+    handlers?: Readonly<Record<string, PluginBridgeHandler>>;
+    isCurrent?: () => boolean;
+  };
+  /** Supplied only by the live declarative view host, never by a spec. */
+  liveSession?: PluginViewSession;
   onRenderError?: () => void;
   onRetry?: () => void;
+  onPageFailure?: () => void;
 }
 
 function resolveEmptyMessage(value: unknown, locale: string): string {
@@ -81,10 +96,53 @@ const EMPTY_SOURCES: Record<string, Record<string, unknown>> = {};
 const EMPTY_JOBS: ReturnType<typeof usePluginJobs> = [];
 
 export function PluginPanel(props: PluginPanelProps) {
-  return props.stateOverride !== undefined ? (
-    <SnapshotPluginPanel {...props} />
-  ) : (
-    <LivePluginPanel {...props} />
+  if (props.spec.bridge === "session") return <SessionPluginPanel {...props} />;
+  const live =
+    props.liveSession &&
+    props.fill &&
+    !props.spec.webview &&
+    props.stateOverride === undefined &&
+    !props.enableDevtools;
+  if (live && pluginUiSpecIssues(props.spec, props.pluginId, "view").length)
+    throw new Error("Invalid live declarative view");
+  return (
+    <PluginViewSessionContext.Provider value={live ? props.liveSession! : null}>
+      {props.stateOverride !== undefined ? (
+        <SnapshotPluginPanel {...props} />
+      ) : (
+        <LivePluginPanel {...props} />
+      )}
+    </PluginViewSessionContext.Provider>
+  );
+}
+
+/** Session pages have no access to the ordinary panel data or handler map. */
+function SessionPluginPanel(props: PluginPanelProps) {
+  const { i18n } = useTranslation();
+  const webview = props.spec.webview as
+    { html?: string; url?: string; height?: number } | undefined;
+  const session = props.sessionBridge;
+  if (!webview || !session) return null;
+  return (
+    <PluginWebview
+      themeSessionId={props.themeSessionId}
+      title={
+        resolveEmptyMessage(props.spec.label, i18n.language) || props.pluginId
+      }
+      html={webview.html}
+      src={webview.url}
+      height={webview.height}
+      expanded={props.expanded}
+      fill={props.fill}
+      onRetry={props.onRetry}
+      onPageFailure={props.onPageFailure}
+      stream={session.stream}
+      sessionPage
+      isCurrent={session.isCurrent}
+      locked={false}
+      handlers={session.handlers ?? {}}
+      state={{ locale: i18n.language, session: session.projection }}
+    />
   );
 }
 
@@ -170,9 +228,9 @@ function PluginPanelView({
   enableDevtools = false,
   expanded = false,
   fill = false,
-  sessionBridge,
   onRenderError,
   onRetry,
+  onPageFailure,
   data,
   sources,
   jobs,
@@ -525,14 +583,15 @@ function PluginPanelView({
       allowed.setUiState = updateUiState;
       return (
         <PluginWebview
+          themeSessionId={sessionId}
           title={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
           html={typeof webview.html === "string" ? webview.html : undefined}
           src={typeof webview.url === "string" ? webview.url : undefined}
           onRetry={onRetry}
+          onPageFailure={onPageFailure}
           height={webview.height}
           expanded={expanded}
           fill={fill}
-          stream={spec.bridge === "session" ? sessionBridge?.stream : undefined}
           locked={interactionLocked}
           handlers={allowed}
           state={{
@@ -541,9 +600,6 @@ function PluginPanelView({
             locked: interactionLocked,
             context: surfaceContext ?? {},
             uiState,
-            ...(spec.bridge === "session" && sessionBridge
-              ? { session: sessionBridge.projection }
-              : {}),
           }}
         />
       );

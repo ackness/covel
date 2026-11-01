@@ -219,6 +219,8 @@ Both ways have the same conditions:
 
 If preparation fails, the old version is kept.
 
+Without valid server-code authorization, reload publishes pending declarations and removes old registrations without importing code. It retains that reload's module generation. First activation after approval imports the entry and its relative dependencies inside the package with that generation, so an unchanged path cannot reuse an earlier module cache.
+
 Executions that are already running keep using the old version, and later executions use the new one. The old version no longer accepts new lookups. Its `onDispose()` is called only after every execution using it has finished, and after any provider promise still pending past the timeout has been released. A snapshot does not store authorization. Calls and commits still check whether authorization has been revoked.
 
 ### Sessions after a reload
@@ -358,7 +360,7 @@ A read that sees an uncommitted upstream write records a read dependency on the 
 
 Actual service reads of `ctx.world.characters` or `characterSchema` also charge the original calling runtime under the [World Model](./world-model.md) rules. This includes read services, reads inside write services, tool imports and nested calls. First acquiring `world` creates a detached snapshot without observing its properties; dimension-only reads add no character/schema dependency. The view rejects reads after completion, cancellation or timeout. Calls outside executions with no runtime commit owner add no commit dependencies. Provider write ownership and nested read-only restrictions are unchanged.
 
-Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. When a resumed runtime or a sub-agent calls a service from a tool, it reads committed data only and records no read dependencies, the same as its own tool reads.
+Calls from tools and imports read the same data: the tools of a top-level agent overlay upstream writes and record read dependencies like a function runtime. Resumed plugin-data reads start from current committed values and the saved own buffer. Child plugin KV retains its provider/own-package committed-data and operation-overlay rules without inheriting parent KV. World reads separately use the child's admission snapshot through tools, imports and nested services; observations join the original caller only when the child succeeds. See [World Model](./world-model.md).
 
 A read service also sees what the same caller staged for its provider through earlier write-service calls (below), and records no read dependency for it.
 
@@ -423,6 +425,8 @@ A write service's writes do not land right away. A successful call stages all it
 - Each operation leaves an [operation record](./transactions.md#operation-records) that says, after the commit, whether it committed, failed or was taken back.
 
 A story-attached operation that fails at commit does not fail the story. The player immediately sees a fixed notice with the number of actions that did not take effect; the debug trace retains `operation.failed`. Such a failure is not an execution failure: the action stream carries no `proposal.failed` for it, and the turn still shows as committed. On the next player or continuation execution, the calling agent receives an `operations-not-applied` block listing at most ten failed operation summaries from the previous committed turn; for an operation a sub-agent made, that sub-agent receives it the next time it is called. Other runtimes and scoped retries do not receive it. The notice follows only the newest committed player or continuation turn; see [turn flow](../internals/flow.md).
+
+Each provider call retains its own external read basis, including earlier accepted calls. A stale derived replacement fails with `conflict` in that operation's existing failure domain, without faulting caller or provider or rerunning service code. Story text survives an attached operation failing. See [read baselines](./transactions.md#read-baselines).
 
 #### Where write services cannot be called
 
@@ -877,3 +881,7 @@ The bundled provider exposes one code-only read service named turn-policy, with 
 ## Presentation and communication
 
 Presentation functions read projected public story and explicit own asset / display namespaces. Service, tool, recursion and sub-agent calls are refused at entry, including read services. UI-slot providers render committed own display state; presentation grants no private-data authority. See [presentation runtimes](./plugins.md#presentation-runtimes).
+
+## Static theme discovery
+
+`contributes.ui.theme` is static metadata read from files, without registering `ui.slot@1`, services or executable extension points, or granting session capabilities. Discovery uses the separate `theme` array on `/api/ui-specs`; see [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).

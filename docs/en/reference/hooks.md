@@ -291,6 +291,8 @@ Payload: `{ proposal }`.
 
 The writes a [write service](./plugin-extensions.md#write-services) staged arrive with the provider as their source: `ctx.pluginId` is the provider and `ctx.runtimeId` is `service:<service name>`; the calling plugin does not appear in the hook. Rejecting any one of them rejects the whole operation (see [Transactions · Write-service operations](./transactions.md#write-service-operations)).
 
+Read-baseline conditions stay private and pinned by the kernel, independently of the payload object passed to this hook. Hooks cannot redirect guarded targets or batch membership. Same-target rewrites retain the check; a new replacement receives any applicable recorded basis. See [Transactions](./transactions.md#read-baselines).
+
 ### `PostStateCommit`
 
 Fires after a proposal is committed. To do something after the data is actually written, use this event.

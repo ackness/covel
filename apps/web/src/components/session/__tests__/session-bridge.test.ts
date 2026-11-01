@@ -14,6 +14,10 @@ import {
   type SessionProjectionInput,
   SESSION_BRIDGE_MAX_CHARACTER_BYTES,
 } from "../session-bridge.js";
+import {
+  createInteractionHandles,
+  publicInteraction,
+} from "../session-bridge-interactions.js";
 
 const message = (
   id: string,
@@ -43,7 +47,7 @@ const input = (
   slots: [],
   ...extra,
 });
-describe("read-only session projection", () => {
+describe("public session projection", () => {
   it("includes only player-visible story and user messages, without store metadata", () => {
     const result = buildSessionProjection(
       input({
@@ -202,7 +206,14 @@ describe("read-only session projection", () => {
               _hidden: "private",
               data: {
                 hidden: "private",
-                fields: [{ name: "public", runtimeId: "private" }],
+                fields: [
+                  {
+                    name: "public",
+                    label: "Public",
+                    type: "text",
+                    runtimeId: "private",
+                  },
+                ],
               },
             },
           }),
@@ -217,26 +228,55 @@ describe("read-only session projection", () => {
     expect(result.pending).toEqual([
       {
         seq: 3,
-        block: {
-          type: "interactive_form",
-          data: { fields: [{ name: "public" }] },
+        interaction: {
+          type: "form",
+          fields: [{ name: "public", label: "Public", type: "text" }],
         },
       },
     ]);
   });
-  it("bounds pending blocks and replaces an oversized block", () => {
+  it("bounds pending blocks and withholds handles only for interactions over the byte limit", () => {
+    const handles = createInteractionHandles();
+    const choice = (id: string, length: number) =>
+      message(id, "", {
+        kind: "plugin",
+        block: {
+          type: "interactive_choice",
+          data: { choices: [{ id: "left", label: "字".repeat(length) }] },
+        },
+      });
+    const small = choice("small", 5000);
+    const large = choice("large", 6000);
+    for (const item of [small, large])
+      expect(publicInteraction(item.block!).type).toBe("choice");
+    expect(
+      new TextEncoder().encode(JSON.stringify(publicInteraction(small.block!)))
+        .length,
+    ).toBeLessThan(16384);
+    expect(
+      new TextEncoder().encode(JSON.stringify(publicInteraction(large.block!)))
+        .length,
+    ).toBeGreaterThan(16384);
+    const messages = [
+      small,
+      large,
+      ...Array.from({ length: 10 }, (_, index) => choice(String(index), 5000)),
+    ];
     const result = buildSessionProjection(
       input({
-        messages: Array.from({ length: 12 }, (_, index) =>
-          message(String(index), "", {
-            kind: "plugin",
-            block: { type: "interactive_choice", content: "x".repeat(17000) },
-          }),
-        ),
+        messages,
+        interactionHandle: handles.issue,
       }),
     );
     expect(result.pending).toHaveLength(8);
-    expect(result.pending[0]?.block).toEqual({ truncated: true });
+    const handle = result.pending[0]?.handle;
+    expect(handle).toEqual(expect.any(String));
+    expect(handles.resolve(handle!, messages, new Set())).toMatchObject({
+      blockId: "small",
+      type: "choice",
+    });
+    expect(result.pending[1]?.interaction).toEqual({ type: "unavailable" });
+    expect(result.pending[1]).not.toHaveProperty("handle");
   });
   it("removes all reserved keys recursively and cuts values beyond depth 8", () => {
     expect(
@@ -285,7 +325,10 @@ describe("read-only session projection", () => {
         slots: [
           {
             slot: "stage.backdrop@1",
-            value: { ref: { type: "media", id: "opaque" }, _hidden: "private" },
+            value: {
+              ref: { id: "a".repeat(64), mime: "image/png", size: 1 },
+              _hidden: "private",
+            },
           },
         ],
       }),
@@ -297,12 +340,11 @@ describe("read-only session projection", () => {
       type: "npc",
       aliases: ["Alias"],
       description: "Known",
-      fields: { visible: 3 },
     });
     expect(result.slots).toEqual([
       {
         slot: "stage.backdrop@1",
-        value: { ref: { type: "media", id: "opaque" } },
+        value: { ref: { id: "a".repeat(64), mime: "image/png", size: 1 } },
       },
     ]);
     expect(sessionProjectionSchema.safeParse(result).success).toBe(true);

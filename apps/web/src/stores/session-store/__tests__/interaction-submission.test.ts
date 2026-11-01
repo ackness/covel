@@ -138,9 +138,10 @@ describe("interaction submission", () => {
     const started = envelope("execution.started", { runtimeCount: 1 });
     const completed = envelope("execution.completed", { committed: true });
     answerWith(stored, started, completed);
-    await expect(
-      submitInteractionBlock(deps, submission),
-    ).resolves.toBeUndefined();
+    await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
+      rejected: [],
+      status: "accepted",
+    });
 
     expect(api.sendAction).toHaveBeenCalledOnce();
     expect(stream().request).toMatchObject({
@@ -350,9 +351,10 @@ describe("interaction submission", () => {
         },
       ],
     });
-    await expect(
-      submitInteractionBlock(deps, submission),
-    ).resolves.toBeUndefined();
+    await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
+      rejected: [],
+      status: "already-answered",
+    });
     // The block takes the answer the server holds.
     await vi.waitFor(() =>
       expect(deps.dispatch).toHaveBeenCalledWith({

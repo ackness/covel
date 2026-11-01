@@ -23,9 +23,13 @@
 
 静态提示段和 UI 不需要导入插件代码。浏览器例外严格复用已校验的资源路径、类型、大小限制；服务器引用覆盖该例外。新增代码时旧的静态激活不会变成授权，未批准的重载移除旧注册并发布待批准元数据。声明式状态不进入持久化 runtime 清单，也不写入 approval gate。
 
-声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据由其写服务在自己的身份下修改。最终工具名在 hook/override 改写后仍受 `authorizedToolNames` 约束。服务、子 agent、恢复与重试保留更窄的上下文限制。免代码审批不免模型工具审批，也不免沙箱 `bridge: session` 的当前内容授权；不增加桥接写能力。
+待批准重载获准后，首次激活使用已发布的模块代次，不能复用以前代次的缓存代码；实际导入和发布仍重新检查授权。见[开发时单插件热重载](../reference/plugin-extensions.md#开发时单插件热重载)。
+
+声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据由其写服务在自己的身份下修改。最终工具名在 hook/override 改写后仍受 `authorizedToolNames` 约束。服务、子 agent、恢复与重试保留更窄的上下文限制。免代码审批不免模型工具审批，也不免沙箱 `bridge: session` 的当前内容授权；页面写能力仍需另外同意。
 
 整批刷新会有界重试扫描期间被其他包激活重新发布的条目，不能把短暂失效的旧缓存当成当前列表状态。
+
+段落模板中的 `CharacterAvatar` 只显示宿主已投影的说话人公开头像；`characterId` 必须匹配，组件不查任意会话或角色槽位。宿主本地放大与关闭不授予插件操作、数据读取或写入能力，也不增加审批。模板仍不接收设置、隐藏 namespace、concealed 输出、私人角色说明、续写或推理内容。退场画面只保存在渲染器内，不进入 snapshot、桥接或模型上下文。见[段落模板](../reference/ui-panels.md#段落模板)。
 
 ## Host profile
 
@@ -467,7 +471,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | --- | --- |
 | 读取应用存储、cookie 或 preload API | 不透明源，没有 `allow-same-origin`；不向 frame 提供 Electron IPC 或供应商凭据 |
 | 网络、子框架、表单、base 修改和内联代码 | 响应 CSP 阻止连接、框架、表单、base、object、内联脚本和 eval；可加载同源经典脚本、样式和图片；自定义字体使用内嵌 data: URI，相对字体 URL 因不透明源和无 CORS 允许头而加载失败 |
-| 读取包文件或逃出根目录 | 索引时 realpath 边界检查，lstat 排除链接和 junction；路由只读清单文件，再检查 O_NOFOLLOW、普通文件、索引大小和真实路径 |
+| 读取包文件或逃出根目录 | 索引时 realpath 边界检查，lstat 排除链接和 junction；路由只读清单文件，再检查 O_NOFOLLOW、普通文件、索引大小、SHA-256 和真实路径 |
 | 直接打开 SVG 执行脚本 | 非入口响应使用 `Content-Security-Policy: sandbox` |
 | 不透明文档访问 API | 所有 `/api` 方法在 CORS 前拒绝 `Origin: null`，代码为 `foreign_request_refused` |
 | 不带 Origin 的 API 自导航 | `/api` 拒绝 `Sec-Fetch-Dest: iframe`、`frame`、`embed`、`object`；不使用 Sec-Fetch-Site 推断 |
@@ -475,7 +479,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | 内容变化和会话读取 | URL 摘要覆盖全部发布文件；授权仍经 SettingsStore 绑定插件 ID、能力和完整 spec 哈希 |
 | 页面缺失、过期或加载失败 | 8 秒 ready 握手、不带凭据的 HEAD 探测和重试覆盖层；宿主返回按钮始终可用 |
 
-`script-src 'self'` 有意采用浏览器看到的源，不采用绝对路径来源：服务端无法从 Vite 或反向代理背后推断这个源。页面可以加载其他同源公开静态文件，包括其他插件的资源和应用脚本，但不能读取应用存储、调用 API 或建立连接。作者不能把密钥或服务端代码放进发布根目录。公开资源不需要 cookie、令牌、第二个源或媒体令牌特例。资源路由不发 CORP，以便不透明源页面加载自己的经典子资源。它也不发 CORS 允许头；字体请求需要 CORS，所以自定义字体必须以内嵌 `data:` URI 加载。入口 HTML 每次重用都重新验证，ETag 包含宿主桥摘要；宿主升级可刷新注入的桥脚本地址。桥接代码与单文件视图共享，由宿主注入，不增加写能力。
+`script-src 'self'` 有意采用浏览器看到的源，不采用绝对路径来源：服务端无法从 Vite 或反向代理背后推断这个源。页面可以加载其他同源公开静态文件，包括其他插件的资源和应用脚本，但不能读取应用存储、调用 API 或建立连接。作者不能把密钥或服务端代码放进发布根目录。公开资源不需要 cookie、令牌、第二个源或媒体令牌特例。资源路由不发 CORP，以便不透明源页面加载自己的经典子资源。它也不发 CORS 允许头；字体请求需要 CORS，所以自定义字体必须以内嵌 `data:` URI 加载。入口 HTML 每次重用都重新验证，ETag 包含宿主桥摘要；宿主升级可刷新注入的桥脚本地址。桥接代码与单文件视图共享，由宿主注入；脚本自身不授予写权限。
 
 ## Other server guards
 
@@ -527,7 +531,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 原因都记在服务端日志里。
 - 这些改动并不表示所有 trace、游戏内容或日志输出面都做了清理。
 
-`contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个只读能力不增加页面写入接口；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。
+`contributes.ui.view` 的 `bridge: session` 另可读取经过校验、裁剪和去除隐藏键的会话投影。挂载前必须逐项取得玩家同意，绑定插件 ID 与 spec + HTML 的内容哈希，所有来源一视同仁；世界默认视图不能绕过。授权通过本设备 SettingsStore 保存，视图栏菜单可撤销。这个读取授权不隐含写入授权；范围与限制见[插件视图](../reference/ui-panels.md#插件视图)。
 
 ## 导入第三方内容：只做数据转换
 
@@ -535,14 +539,34 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 
 ## 角色视角与私有委托
 
-亲历历史和按名字调用是受约束的上下文能力，不是对已批准服务端代码的安全隔离。角色只能通过此 helper 读取当前 world 中角色的已提交在场故事；工具与服务原有的批准和读取权限不变。调用方仍负责简报和 instruction 的内容。
+亲历历史和按名字调用是受约束的上下文能力，不是对已批准服务端代码的安全隔离。角色只能通过此 helper 读取当前 world 中角色的已提交在场故事；工具与服务原有的批准和读取权限不变。调用方仍负责简报和 instruction 的内容。子 agent 继承调用准入时已有授权的服务端世界读快照，不继承父方 KV、历史或对话，不增加浏览器能力或服务端代码豁免；这不是席位可见性过滤。子 agent 的角色读取基线在同一成功边界归入调用方，失败或取消时丢弃；基线仍只属于宿主私有证据。世界来源与记录器始终留在宿主内存中，见 [World Model](../reference/world-model.md)。
 
 委托隐私使用内核记录的提供方和调用 ID，过滤实时流、持久 trace、父方工具记录及后续请求的 trace 副本；不信任插件自报的隐藏标志，也不按字段名全局删数据。实际父模型仍能使用 intent。设置接口继续使用 host-profile、会话 owner、settle 和锁；选服务不授予执行权。详见[协议](../reference/protocol.md#委托的私有投影)。
 
 ## 游戏内主持人身份
+
+声明式实时视图只有宿主提供的当前会话渲染入口，不序列化 session store、设置、密钥或回调到插件状态或 postMessage。宿主渲染消息/块时屏蔽上下文，嵌套插件消息不能递归读取故事或再挂载输入框；快照和调试面板也不授予入口。webview 不接收该上下文，其独立同意与能力规则不变。主持人控制台不读取隐藏事件的内容、条件或数量；游戏身份不增加隐藏数据或管理权限。
 
 准备页的主持人选项只改变新座位允许的游戏动作。它不授予 owner/operator 身份，不绕过 session.create 的 host-profile 检查，也不允许请求伪造 system 来源。演员的亲历历史与提示词是视角辅助，不是对已批准服务端代码的安全沙箱。
 
 ## 呈现投影与内核记账
 
 呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+普通 session 页面只接收版本 2 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。沙箱主视图与输入框使用独立租约和有界生命周期，失效只恢复对应区域。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。
+
+读取基线指纹和目标身份只留在宿主提交证据及私有 continuation 中。公开 runtime 副本去掉缓冲和操作写入；Hook、响应、trace、模型和沙箱投影不暴露条件。采集基线不增加隐藏数据或呈现上下文的访问能力。见[事务](../reference/transactions.md#read-baselines)。
+
+## 插件主题的样式边界
+
+插件主题使用 shared 的 `css-tree` AST 编译器，严格限制目标、属性和值，拒绝解析恢复、转义、at-rule 和表外声明；不是应用级导入主题的作用域检查。编译后的 scope 与 part 只匹配宿主指定的正文/装饰元素，不能放在含宿主控件的祖先上。URL 只从本包当前摘要的位图清单生成，公共 DTO 再校验确切 owner/digest/path；CSP 的本源图片许可不能代替此检查。磁盘和 ZIP 使用相同字节校验，主题资源无脚本例外、无 bridge、无能力授权；内置来源也不放宽策略。位图服务同时拒绝链接父目录和内容哈希不匹配。完整规则见[主题契约](../reference/theme-packages.md#插件提供的受限主题)。应用级导入 CSS 的既有限制与风险保持不变。
+
+会话主题来源由设备 SettingsStore 的主题助手持有。每次会话/插件快照刷新先撤下有效来源；客户端用共享策略重验 DTO 和 CSS，再绑定到当前挂载独有的 scope，避免旧会话节点复用样式。只安装一个有效来源，使用 `textContent` 写入 style；没有原始 CSS link 或 HTML 拼接。位图在生效前通过无凭据、无 referrer、拒绝重定向的本包静态 HEAD 检查，失效时整包回退。主题选择不读取游戏 KV、隐藏数据或 trace，也不调用运行时/行动端点。
+
+继承和绘制同样受限：正文只标记 Markdown 文字叶节点，舞台标记正文段落而不含继续按钮；装饰平面在正文内容框内裁剪、低于内容且 `pointer-events: none`。宿主恢复栏在内容与 iframe 之外，即使隐藏沉浸模式工具栏也保留。设置、审批、输入、停止、窗口和页面栏不是配色节点的后代。json-render 不转发任意 DOM 属性，不能伪造保留标记。已有 iframe 仅接收安全配色快照，不授予额外读写；同意与撤销机制不变。真实浏览器命中测试、CSP/图片加载和图形 Electron 验证仍是发布检查，jsdom 不证明这些平台行为。
+
+## 沙箱区域的宿主控制
+
+修改和审批授权在异步凭据读取后、HTTP 派发前核对页面租约。读取期间撤权或导航不会发出旧请求；已经派发的工作仍可结算，回复不会交给过期页面。应用脚本资源错误通过捕获监听发送固定 page-error，不含资源地址或错误细节；只恢复受影响区域。
+
+主视图和输入框的 iframe 保持 `sandbox="allow-scripts"`、无 referrer 和原 CSP，不增加网络、表单、全屏、弹窗、顶层导航、同源或 IPC 权限。认证宿主代为发出获准请求；不向 opaque 请求发放来源或令牌例外。两个区域分别关闭端口与流订阅，过期 ready/审批/RPC 不能复活页面。探测仅计可见时间，不保证整个渲染进程冻结时恢复。宿主控制条在裁剪区域外，沉浸舞台和窄屏仍可点击或键盘激活返回、停止和恢复。标记 `data-covel-host-controls` 及后代须排除于主题选择器。精确生命周期见[页面失效与恢复](../reference/ui-panels.md#页面失效与恢复)。

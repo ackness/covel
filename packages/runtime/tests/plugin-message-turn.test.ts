@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { ExecutionContext, Proposal } from "@covel/shared";
+import type { ExecutionContext, ProposalFor } from "@covel/shared";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
 import { anchorPluginMessage } from "../src/commit/plugin-message-turn.js";
@@ -12,7 +12,7 @@ const source = { pluginId, runtimeId: `${pluginId}/cards` };
 
 function proposal(
   items: Array<{ namespace: string; key: string; value: unknown }>,
-): Proposal {
+): ProposalFor<"plugin.data.batch"> {
   return {
     id: "write-cards",
     type: "plugin.data.batch",

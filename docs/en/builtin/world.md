@@ -25,6 +25,8 @@ Character tracking, fact extraction, and dimension updates read the attribution 
 > [!NOTE]
 > None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the session-prep screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
 
+If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
+
 A world package has one authored dimension file, `data/dimensions.yaml`. The world editor saves resolved records without directly changing installed packages; an empty table clears definitions. See [dimension sources](../reference/world-data.md#dimension-sources).
 
 ## Pre-Game Setup (`pregame`)
@@ -147,6 +149,8 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 ## Codex (`codex`)
 
+The Codex page (`library`) in Plugin views and the original right panel share committed entries. Search covers titles, content and tags, retaining category counts, expandable full content, tags/rarity, empty and no-match states. Page filters are independent of the panel; ordinary hydration updates both without model calls when opening. Back to default view returns to ordinary play.
+
 When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
 **What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
@@ -160,6 +164,8 @@ When a named place, person, item, skill, legend or monster first appears in the 
 - Each time it sorts entries, it makes one more model call.
 
 ## Relationship Graph (`npc-graph`)
+
+The Relationship Graph page (`relationships`) in Plugin views keeps the original right panel and reads the same nodes and edges. The larger graph supports pan, zoom, fit, accessible character lists and node details; superseded relationships stay hidden. Empty data still has a selectable page. Narrow screens can scroll through controls and details, while host Back/Stop remain outside. Hydration updates both surfaces; opening does not trigger extraction. Disabling the provider removes only its entries and falls back without deleting graph data.
 
 A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
 

@@ -21,6 +21,7 @@ import { useImageGeneration } from "./chat-messages/use-image-generation.js";
 import { useLoadOlderMessages } from "./chat-messages/use-load-older-messages.js";
 import { useMessageGrouping } from "./chat-messages/use-message-grouping.js";
 import { isPreGameSession } from "@/stores/session-store/selectors.js";
+import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
 import type {
   WorldRecord,
   PluginSummary,
@@ -31,6 +32,8 @@ import type {
 // ── Types ────────────────────────────────────────────────────────
 
 export interface ChatMessagesProps {
+  /** Public live-view regions omit execution detail and separate mandatory waits. */
+  content?: "story" | "pending";
   messages: StreamMessage[];
   executionSteps: ExecutionStep[];
   showExecutionTimeline?: boolean;
@@ -79,6 +82,7 @@ export const ChatMessages = memo(function ChatMessages(
 });
 
 const ChatMessagesContent = memo(function ChatMessagesContent({
+  content,
   olderMessagesCursor,
   dimensions,
   loadOlderMessages,
@@ -136,7 +140,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   const { topSentinelRef, loadingOlder, loadFailed, retry } =
     useLoadOlderMessages({
       viewportEl,
-      hasOlder: olderMessagesCursor != null,
+      hasOlder: content !== "pending" && olderMessagesCursor != null,
       firstMessageId: messages[0]?.id,
       onLoadOlder: loadOlderMessages,
     });
@@ -166,7 +170,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   // ChatMessages accepts "stage" only so GameViewHeader's viewMode type-checks
   // when passed through (game-view swaps ChatMessages out entirely in stage
   // mode); the per-message renderers below only know parsed/detailed/raw.
-  const renderViewMode = viewMode === "stage" ? "parsed" : viewMode;
+  const renderViewMode = content || viewMode === "stage" ? "parsed" : viewMode;
 
   const renderMessage = useCallback(
     (msg: StreamMessage, index: number) => {
@@ -222,7 +226,50 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     ],
   );
 
-  const renderedRows = useMessageGrouping({
+  const renderPublicMessage = (msg: StreamMessage, index: number) => {
+    if (
+      msg.role === "system" ||
+      (msg.role !== "user" &&
+        msg.kind &&
+        !["story", "plugin-message", "plugin"].includes(msg.kind))
+    )
+      return null;
+    if (
+      msg.block &&
+      ![
+        "plugin_message",
+        "ui.render",
+        "interactive_form",
+        "interactive_choice",
+        "interactive_confirmation",
+        "form",
+        "choice",
+        "confirmation",
+        "notification",
+      ].includes(String(msg.block.type))
+    )
+      return null;
+    const pending = isPendingInteractionMessage(
+      msg,
+      messages,
+      submittedBlockIds,
+    );
+    if (content === "pending")
+      return pending ? renderMessage(msg, index) : null;
+    // Only public parsed content. Message-only grouping below omits reasoning,
+    // execution details and asset administration while preserving turn rows.
+    if (pending) return null;
+    if (
+      !msg.block &&
+      msg.role !== "user" &&
+      msg.kind !== "story" &&
+      msg.kind !== "plugin-message"
+    )
+      return null;
+    return renderMessage(msg, index);
+  };
+
+  const publicRows = useMessageGrouping({
     recoveryTurnId,
     messages,
     executionSteps,
@@ -230,7 +277,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     executing,
     plugins,
     onRetryRuntime,
-    renderMessage,
+    renderMessage: content ? renderPublicMessage : renderMessage,
+    messagesOnly: Boolean(content),
     foldUpdates: viewMode === "parsed",
     expandUpdates: expandUpdates === true,
     expandLatestUpdates: turnNotes === "inline",
@@ -250,12 +298,20 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
 
             {/* Only above the true first message, not above a loaded page. */}
             {backdrop === "banner" &&
+              content !== "pending" &&
               messages.length > 0 &&
               olderMessagesCursor == null && (
                 <ChapterBanner world={world} locale={session.locale} />
               )}
 
-            {messages.length === 0 &&
+            {content === "pending" && publicRows.length === 0 && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {t("session.noPendingInteractions")}
+              </p>
+            )}
+
+            {!content &&
+              messages.length === 0 &&
               !executing &&
               (isPreGame ? (
                 <SessionCanvasHero
@@ -277,9 +333,10 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
               ))}
 
             {/* Render messages with per-turn execution timelines inline */}
-            {renderedRows}
+            {publicRows}
 
-            {executionError &&
+            {content !== "pending" &&
+              executionError &&
               (() => {
                 const resolved = resolveI18nSentinel(executionError, t);
                 return (

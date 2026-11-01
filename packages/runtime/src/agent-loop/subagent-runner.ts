@@ -46,7 +46,10 @@ import {
   validateOutput,
 } from "@covel/tools";
 import { z } from "zod";
-import { createWorldModelView } from "../function-runtime/world-model-view.js";
+import {
+  createWorldModelView,
+  forkWorldModelView,
+} from "../function-runtime/world-model-view.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import { DEFAULT_RUNTIME_TIMEOUT_MS } from "../turn-executor/runtime-scaffold.js";
 import { unwrapRetryCause } from "../turn-executor/runtime-finalization.js";
@@ -222,122 +225,160 @@ export function createSubagentRunner(
         return { ok: false, error: { code, message } };
       };
 
-      const parsed = parseRequest(args.request);
-      if (typeof parsed === "string") return refuse("invalid-input", parsed);
-      const target = resolveTarget(
-        options.activeRuntimes,
-        options.pausedRuntimes ?? [],
-        parsed.target,
-        args.caller,
-      );
-      if ("code" in target)
-        return refuse(target.code, target.message, target.provider);
-
-      const actor = target.provider.outputContract === CHARACTER_ACTOR_CONTRACT;
-      if (actor) {
+      // Admission is synchronous: provider/budget loading must not move the
+      // snapshot boundary or let a child observe later caller writes.
+      const assertLive = () => {
+        args.parentSignal?.throwIfAborted();
+        args.deps.turnControl?.executionSignal?.throwIfAborted();
+        args.deps.turnControl?.signal?.throwIfAborted();
         if (
-          parsed.data !== undefined ||
-          !characterActorInputSchema.safeParse({
-            characterId: parsed.characterId,
-            brief: parsed.brief,
-            ...(parsed.instruction !== undefined
-              ? { instruction: parsed.instruction }
-              : {}),
-          }).success
+          args.parentDeadline !== undefined &&
+          Date.now() >= args.parentDeadline
         )
+          throw new Error("The caller's deadline has expired");
+      };
+      let worldFork: ReturnType<typeof forkWorldModelView> | undefined;
+      try {
+        worldFork = args.world
+          ? forkWorldModelView(args.world, assertLive)
+          : undefined;
+      } catch {
+        if (
+          args.parentSignal?.aborted ||
+          args.deps.turnControl?.executionSignal?.aborted ||
+          args.deps.turnControl?.signal?.aborted
+        )
+          return refuse("cancelled", MESSAGES.cancelled);
+        if (
+          args.parentDeadline !== undefined &&
+          Date.now() >= args.parentDeadline
+        )
+          return refuse("timeout", MESSAGES.timeout);
+        return refuse("internal", MESSAGES.internal);
+      }
+      try {
+        const parsed = parseRequest(args.request);
+        if (typeof parsed === "string") return refuse("invalid-input", parsed);
+        const target = resolveTarget(
+          options.activeRuntimes,
+          options.pausedRuntimes ?? [],
+          parsed.target,
+          args.caller,
+        );
+        if ("code" in target)
+          return refuse(target.code, target.message, target.provider);
+
+        const actor =
+          target.provider.outputContract === CHARACTER_ACTOR_CONTRACT;
+        if (actor) {
+          if (
+            parsed.data !== undefined ||
+            !characterActorInputSchema.safeParse({
+              characterId: parsed.characterId,
+              brief: parsed.brief,
+              ...(parsed.instruction !== undefined
+                ? { instruction: parsed.instruction }
+                : {}),
+            }).success
+          )
+            return refuse(
+              "invalid-input",
+              "Character actors require characterId and brief; use instruction instead of data",
+            );
+        } else if (
+          parsed.characterId !== undefined ||
+          parsed.instruction !== undefined
+        ) {
           return refuse(
             "invalid-input",
-            "Character actors require characterId and brief; use instruction instead of data",
+            "Character fields are only accepted by character actors",
           );
-      } else if (
-        parsed.characterId !== undefined ||
-        parsed.instruction !== undefined
-      ) {
-        return refuse(
-          "invalid-input",
-          "Character fields are only accepted by character actors",
-        );
-      }
-      const world =
-        args.world ??
-        (actor && args.deps.store
-          ? await createWorldModelView(
-              args.deps.worldModelReads ?? args.deps.store,
-              args.input.sessionId,
-              [],
-              [],
-              () => {},
-              args.deps.dimensionContext,
+        }
+        const world =
+          worldFork?.world ??
+          (actor && args.deps.store
+            ? await createWorldModelView(
+                args.deps.worldModelReads ?? args.deps.store,
+                args.input.sessionId,
+                [],
+                [],
+                () => {},
+                args.deps.dimensionContext,
+              )
+            : undefined);
+        const character = actor
+          ? (args.world ?? world)?.characters.find(
+              (character) => character.id === parsed.characterId,
             )
-          : undefined);
-      const character = actor
-        ? world?.characters.find(
-            (character) => character.id === parsed.characterId,
-          )
-        : undefined;
-      if (actor && !character)
-        return refuse(
-          "not-found",
-          "The character is not in the current world view",
-        );
-      budget ??= await (loadingBudget ??= createDelegationBudget(
-        args.input.sessionId,
-        args.deps.store,
-      ));
-      const delegation = budget;
-      // No await between the last cancellation/pool check and admission.
-      if (
-        args.parentSignal?.aborted ||
-        args.deps.turnControl?.executionSignal?.aborted ||
-        args.deps.turnControl?.signal?.aborted
-      )
-        return refuse("cancelled", MESSAGES.cancelled);
-      if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
-        return refuse("unavailable", MESSAGES.depth);
-      if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
-        return refuse("unavailable", MESSAGES.pool);
-      if (budget.claim(actor ? parsed.characterId : undefined))
-        return refuse(
-          "unavailable",
-          "The execution's delegation allowance is exhausted; finish without further children",
-        );
-      inFlight++;
-      try {
-        const { fault, ...result } = await withServiceOrigin(args, () =>
-          runProvider({
-            args: {
-              ...args,
-              world,
-              deps: {
-                ...args.deps,
-                delegation,
-                emitter: delegation.privacy.emitter(
-                  args.deps.emitter,
-                  options.activeRuntimes,
-                ),
+          : undefined;
+        if (actor && !character)
+          return refuse(
+            "not-found",
+            "The character is not in the current world view",
+          );
+        budget ??= await (loadingBudget ??= createDelegationBudget(
+          args.input.sessionId,
+          args.deps.store,
+        ));
+        const delegation = budget;
+        // No await between the last cancellation/pool check and admission.
+        if (
+          args.parentSignal?.aborted ||
+          args.deps.turnControl?.executionSignal?.aborted ||
+          args.deps.turnControl?.signal?.aborted
+        )
+          return refuse("cancelled", MESSAGES.cancelled);
+        if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
+          return refuse("unavailable", MESSAGES.depth);
+        if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
+          return refuse("unavailable", MESSAGES.pool);
+        if (budget.claim(actor ? parsed.characterId : undefined))
+          return refuse(
+            "unavailable",
+            "The execution's delegation allowance is exhausted; finish without further children",
+          );
+        inFlight++;
+        try {
+          const { fault, ...result } = await withServiceOrigin(args, () =>
+            runProvider({
+              args: {
+                ...args,
+                world,
+                deps: {
+                  ...args.deps,
+                  delegation,
+                  emitter: delegation.privacy.emitter(
+                    args.deps.emitter,
+                    options.activeRuntimes,
+                  ),
+                },
               },
-            },
-            request: parsed,
-            provider: target.provider,
-            subagentCallId,
-            startTime,
-            trace,
-            runner,
-          }),
-        );
-        options.onSettled?.({
-          pluginId: target.provider.pluginId,
-          runtimeId: target.provider.name,
-          callerPluginId: args.caller.pluginId,
-          callerRuntimeId: args.caller.runtimeId,
-          ok: result.ok,
-          ...(fault ? { fault } : {}),
-          ...(result.stopReason ? { stopReason: result.stopReason } : {}),
-          ...(result.ok ? {} : { code: result.error.code }),
-        });
-        return result;
+              request: parsed,
+              provider: target.provider,
+              subagentCallId,
+              startTime,
+              trace,
+              runner,
+              worldFork,
+              assertLive,
+            }),
+          );
+          options.onSettled?.({
+            pluginId: target.provider.pluginId,
+            runtimeId: target.provider.name,
+            callerPluginId: args.caller.pluginId,
+            callerRuntimeId: args.caller.runtimeId,
+            ok: result.ok,
+            ...(fault ? { fault } : {}),
+            ...(result.stopReason ? { stopReason: result.stopReason } : {}),
+            ...(result.ok ? {} : { code: result.error.code }),
+          });
+          return result;
+        } finally {
+          inFlight--;
+        }
       } finally {
-        inFlight--;
+        worldFork?.discard();
       }
     },
   };
@@ -519,6 +560,8 @@ interface ProviderRun {
   readonly startTime: number;
   readonly trace: Readonly<Record<string, unknown>>;
   readonly runner: SubagentRunner;
+  readonly worldFork?: ReturnType<typeof forkWorldModelView>;
+  readonly assertLive: () => void;
 }
 
 async function runProvider({
@@ -529,6 +572,8 @@ async function runProvider({
   startTime,
   trace,
   runner,
+  worldFork,
+  assertLive,
 }: ProviderRun): Promise<
   SubagentResult & { readonly fault?: "runtime" | "timeout" }
 > {
@@ -766,18 +811,18 @@ async function runProvider({
       { role: "system", content: assembled.systemPrompt },
       ...assembled.messages,
     ];
-    // The caller's world only resolves the actor's profile and brief; the
-    // sub-agent's own reads stay on committed data, like every child run.
-    const worldBase = deps.store
-      ? await createWorldModelView(
-          deps.worldModelReads ?? deps.store,
-          input.sessionId,
-          [],
-          [],
-          () => {},
-          deps.dimensionContext,
-        )
-      : undefined;
+    const worldBase =
+      args.world ??
+      (deps.store
+        ? await createWorldModelView(
+            deps.worldModelReads ?? deps.store,
+            input.sessionId,
+            [],
+            [],
+            () => {},
+            deps.dimensionContext,
+          )
+        : undefined);
 
     const toolLoop = await runAgentToolLoop({
       worldBase,
@@ -851,7 +896,7 @@ async function runProvider({
         );
     }
     const stopReason = settled.result.stop?.reason ?? "completed";
-    operations?.commit();
+    const acceptedOutput = structuredClone(output);
     await emitSafely(deps.emitter, "subagent.completed", {
       ...identity,
       stopReason,
@@ -865,9 +910,13 @@ async function runProvider({
           }
         : {}),
     });
+    // No await between the final lifetime check and accepting reads/writes.
+    assertLive();
+    worldFork?.accept();
+    operations?.commit();
     return {
       ok: true,
-      output: structuredClone(output),
+      output: acceptedOutput,
       stopReason,
       ...(usage.reported
         ? {
@@ -880,6 +929,17 @@ async function runProvider({
     };
   } catch (error) {
     let stop = stopOf(error, subagentCallId);
+    // Loading and terminal event delivery can outlive the caller too, before
+    // or after the loop's own cancellation classification runs.
+    if (deps.turnControl?.signal?.aborted)
+      stop = { reason: "cancelled", cancelledBy: "player" };
+    else if (args.parentSignal?.aborted || executionSignal?.aborted)
+      stop = { reason: "cancelled", cancelledBy: "parent" };
+    else if (
+      args.parentDeadline !== undefined &&
+      Date.now() >= args.parentDeadline
+    )
+      stop = { reason: "deadline" };
     // The model-call layer reports any execution abort as the player's. Only
     // the player's own signal is; any other abort came from the caller.
     if (

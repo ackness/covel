@@ -4,10 +4,13 @@ import { PluginViewHost } from "../plugin-view-host.js";
 import { projection, viewEntry } from "./plugin-view-fixtures.js";
 import i18n from "@/i18n/index.js";
 const mocks = vi.hoisted(() => ({ panel: vi.fn(), throws: false }));
-vi.mock("../use-session-bridge.js", () => ({
-  useSessionBridge: () => ({
+vi.mock("../use-session-bridge-actions.js", () => ({
+  useSessionBridgeActions: () => ({
     projection,
     stream: { subscribe: () => () => {}, read: () => null },
+    handlers: {},
+    isCurrent: () => true,
+    retire: () => {},
   }),
 }));
 vi.mock("../plugin-panel.js", () => ({
@@ -32,6 +35,7 @@ afterEach(() => {
   mocks.panel.mockClear();
   mocks.throws = false;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 it("draws the host bar outside the plugin container and gates session access", () => {
   const onFallback = vi.fn();
@@ -72,10 +76,7 @@ it("omits the notice and the projection for a view without a bridge", () => {
     />,
   );
   expect(screen.queryByText(i18n.t("session.viewReadsStory"))).toBeNull();
-  expect(mocks.panel.mock.lastCall?.[0]).toHaveProperty(
-    "sessionBridge",
-    undefined,
-  );
+  expect(mocks.panel.mock.lastCall?.[0]).not.toHaveProperty("sessionBridge");
 });
 it("falls back on a child error while keeping the host back button", () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -112,6 +113,43 @@ it("offers consent revocation in the host view menu", () => {
     screen.getByRole("button", { name: i18n.t("session.revokeViewConsent") }),
   );
   expect(revoke).toHaveBeenCalledOnce();
+});
+it("keeps permissions reachable at 360px when the trigger moves between viewport edges", () => {
+  vi.stubGlobal("innerWidth", 360);
+  const revoke = vi.fn();
+  render(
+    <PluginViewHost
+      entry={viewEntry}
+      sessionId="s"
+      onFallback={vi.fn()}
+      onRevoke={revoke}
+      sessionBridgeAllowed
+    />,
+  );
+  const label = i18n.t("session.viewPermissions");
+  const trigger = screen.getByRole("button", { name: label });
+  let triggerLeft = 12;
+  vi.spyOn(
+    HTMLDivElement.prototype,
+    "getBoundingClientRect",
+  ).mockImplementation(function (this: HTMLDivElement) {
+    return this === trigger.parentElement
+      ? new DOMRect(triggerLeft, 0, 40, 40)
+      : new DOMRect(0, 0, 192, 180);
+  });
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("group", { name: label });
+  expect(menu.style.left).toBe("0px");
+  expect(menu.classList.contains("right-0")).toBe(false);
+
+  triggerLeft = 308;
+  fireEvent(window, new Event("resize"));
+  expect(menu.style.left).toBe("-152px");
+  fireEvent.click(
+    screen.getByRole("button", { name: i18n.t("session.revokeViewConsent") }),
+  );
+  expect(revoke).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("group", { name: label })).toBeNull();
 });
 it("gates a URL page and wires Retry outside the always-present host back control", () => {
   const entry = {

@@ -372,3 +372,203 @@ describe("multi-file view authoring", () => {
     });
   });
 });
+
+describe("session page capability declarations", () => {
+  const page = {
+    id: "reader",
+    label: "Reader",
+    bridge: "session",
+    webview: { entry: "./page.html" },
+    capabilities: [
+      "submitAction",
+      "submitInteraction",
+      "invokeRuntime",
+      "abortExecution",
+      "openPanel",
+    ],
+  };
+  it("accepts ordinary session pages and keeps the capabilities", () => {
+    expect(pluginUiSpecIssues(page, "owner", "view")).toEqual([]);
+    expect(pluginUiSpecSchema.parse(page).capabilities).toEqual(
+      page.capabilities,
+    );
+  });
+  it.each(["right", "message", "segment"] as const)(
+    "refuses capabilities in %s",
+    (slot) => {
+      expect(
+        pluginUiSpecIssues(page, "owner", slot).map((issue) => issue.path),
+      ).toContain("capabilities");
+    },
+  );
+  it.each([
+    { capabilities: ["session"] },
+    { capabilities: ["invokeCommand"] },
+    { capabilities: ["submitAction", "submitAction"] },
+    { capabilities: "submitAction" },
+    { bridge: undefined },
+    { webview: undefined, view: { component: "Text" } },
+  ])("refuses malformed or misplaced capabilities %j", (change) => {
+    expect(
+      pluginUiSpecIssues({ ...page, ...change }, "owner", "view").some(
+        (issue) => issue.path.startsWith("capabilities"),
+      ),
+    ).toBe(true);
+  });
+  it.each(["main", "composer"])("accepts the %s session surface", (surface) => {
+    expect(pluginUiSpecIssues({ ...page, surface }, "owner", "view")).toEqual(
+      [],
+    );
+    expect(pluginUiSpecSchema.parse({ ...page, surface }).surface).toBe(
+      surface,
+    );
+  });
+  it.each(["right", "message", "segment"] as const)(
+    "refuses surface placement in %s",
+    (slot) => {
+      expect(
+        pluginUiSpecIssues({ ...page, surface: "main" }, "owner", slot).map(
+          (issue) => issue.path,
+        ),
+      ).toContain("surface");
+    },
+  );
+  it.each([
+    { surface: "sidebar" },
+    { surface: ["main", "composer"] },
+    { surface: "main", bridge: undefined },
+    { surface: "composer", webview: undefined, view: { component: "Text" } },
+  ])("rejects invalid surface declarations %j", (change) => {
+    expect(
+      pluginUiSpecIssues({ ...page, ...change }, "owner", "view").map(
+        (issue) => issue.path,
+      ),
+    ).toContain("surface");
+  });
+});
+
+describe("live session view widgets", () => {
+  const view = (node: unknown) => ({
+    id: "console",
+    label: "Console",
+    view: node,
+  });
+  const widget = (component: string, props?: Record<string, unknown>) => ({
+    component,
+    ...(props ? { props } : {}),
+  });
+  it("accepts one of each region and composer, including type aliases and slots", () => {
+    expect(
+      pluginUiSpecIssues(
+        view({
+          type: "Stack",
+          slots: {
+            body: [
+              widget("SessionMessages"),
+              widget("SessionMessages", { content: "pending" }),
+              { type: "SessionComposer", props: {} },
+            ],
+          },
+        }),
+        "community",
+        "view",
+      ),
+    ).toEqual([]);
+  });
+  it.each([
+    ["SessionMessages", { content: "raw" }, "view.props.content"],
+    ["SessionMessages", { sessionId: "other" }, "view.props"],
+    [
+      "SessionMessages",
+      { content: { $state: "/secret" } },
+      "view.props.content",
+    ],
+    ["SessionComposer", { seatId: "host" }, "view.props"],
+    ["SessionComposer", { action: "direct" }, "view.props"],
+  ])("rejects author-selected props for %s", (name, props, path) => {
+    const issues = pluginUiSpecIssues(
+      view(widget(name as string, props as Record<string, unknown>)),
+      "community",
+      "view",
+    );
+    expect(issues.map((issue) => issue.path)).toEqual([path]);
+  });
+  it.each(["right", "message", "segment"] as const)(
+    "rejects session widgets in %s",
+    (slot) => {
+      const issues = pluginUiSpecIssues(
+        { ...view(widget("SessionComposer")), match: { kind: "narration" } },
+        "community",
+        slot,
+      );
+      expect(issues).toContainEqual({
+        path: "view.component",
+        message:
+          "SessionComposer is only available in a live declarative contributes.ui.view",
+      });
+    },
+  );
+  it.each([
+    [
+      { ...widget("SessionComposer"), repeat: { statePath: "/entries" } },
+      "view.component",
+    ],
+    [
+      {
+        component: "Stack",
+        repeat: { statePath: "/entries" },
+        slots: { body: [{ type: "SessionMessages" }] },
+      },
+      "view.slots.body[0].type",
+    ],
+    [
+      {
+        component: "FilterContainer",
+        props: {
+          items: { $state: "/entries" },
+          itemTemplate: {
+            component: "Stack",
+            children: [widget("SessionComposer")],
+          },
+        },
+      },
+      "view.props.itemTemplate.children[0].component",
+    ],
+  ])(
+    "rejects multiplied live controls with the exact node path",
+    (node, path) => {
+      expect(pluginUiSpecIssues(view(node), "community", "view")).toEqual([
+        { path, message: expect.stringContaining("cannot be repeated") },
+      ]);
+    },
+  );
+  it.each([
+    [widget("SessionComposer"), { type: "SessionComposer" }, "SessionComposer"],
+    [
+      widget("SessionMessages"),
+      widget("SessionMessages", { content: "story" }),
+      "SessionMessages:story",
+    ],
+    [
+      widget("SessionMessages", { content: "pending" }),
+      widget("SessionMessages", { content: "pending" }),
+      "SessionMessages:pending",
+    ],
+  ])("rejects duplicate live regions", (first, second, name) => {
+    expect(
+      pluginUiSpecIssues(
+        view({ component: "Stack", children: [first, second] }),
+        "community",
+        "view",
+      ),
+    ).toEqual([
+      {
+        path: "view.children[1].component".replace(
+          "component",
+          "type" in second ? "type" : "component",
+        ),
+        message: `only one ${name} is allowed in a view`,
+      },
+    ]);
+  });
+});

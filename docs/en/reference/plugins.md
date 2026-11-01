@@ -930,7 +930,7 @@ The character schema, the characters, and the world record belong to the kernel'
 - `ctx.world.dimensions` starts from the provider's frozen snapshot and overlays the valid dimension proposals visible to that view. See [Dynamic dimensions](#dynamic-dimensions) for the distinction between public reads and execution-local previews.
 - `ctx.world.seats` holds the session's seats, frozen as well. No proposal changes them; the player switches the current character through the [switch endpoint](./api.md#session-seats), and it applies from the next turn.
 
-Actual `characters` / `characterSchema` reads record upstream producers, using the same invocation recorder in tools and services. Auxiliary readers drop with rejected producers; story/setup readers survive with a trace. See [World Model](./world-model.md) for visibility, conservative granularity and seed exclusion. Recursive calls do not inherit parent upstream state, and sub-agents still read committed world data.
+Actual `characters` / `characterSchema` reads record upstream producers, using the same invocation recorder in tools and services. Auxiliary readers drop with rejected producers; story/setup readers survive with a trace. See [World Model](./world-model.md) for visibility, conservative granularity and seed exclusion. Sub-agents capture the world at admission; successful child property reads belong to the caller, while failed child reads are discarded. Plugin KV and recursive executions do not inherit parent upstream state.
 
 **Finding a character by name.** Besides `name`, a character can have `aliases` (other names for the same person).
 
@@ -983,6 +983,8 @@ Upstream writes are only read. They never enter the reader's own buffer, so noth
 - `list` depends on every upstream runtime that wrote any key in that namespace; a list without a namespace depends on every upstream that wrote plugin data.
 
 The commit rules are under [Turn-level single transaction](./transactions.md#turn-level-single-transaction).
+
+**Read-derived replacements.** Explicit same-key reads automatically guard later replacements, including derived `inc` + `merge` lists. Blind writes and pure relative lists keep their existing semantics. Guards and the agent they allow to run have separate scopes. See [read-baseline preconditions](./transactions.md#read-baselines).
 
 ### Dynamic dimensions
 
@@ -1282,7 +1284,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@2` (default provider) | inline | Advances the story based on the player's actions. |
 | [npc-graph](../../../plugins/npc-graph/README.md) | Relationship Graph | `plugin` | `npc-graph@1`, `graph-rag@1` | `extractor`, `rag-retriever` | Records the relationships between people. |
 | [pregame](../../../plugins/pregame/README.md) | Pre-Game Setup | `core` | `session.opening@1` | inline | Reads the world material at the start and prepares the first adventure. |
-| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast`, `story-cues` | Optionally reads story scene and presence cues and commits stage changes with the story; events still override scenes, day/night, and actor direction. |
+| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast`, `story-cues` | Optionally reads story scene and presence cues and commits stage changes with the story; events still override scenes, day/night, and actor direction; dialogue templates use speaker-scoped avatars and local previews |
 | [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue`, `story-cues` | Optionally reads story scene and mood cues to play the world's music; scene selection works without Scene Stage, and events remain overrides. |
 | [story-events](../../../plugins/story-events/README.md) | Hidden Story Events | `plugin` | `story-event-cue@1`, `story-event.plan@1` | `intake`, `evaluate`, `plot` | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
 | [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Tabletop Rules | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
@@ -1512,3 +1514,19 @@ A full presentation queue skips only that generation and records `no-op / unavai
 `ctx.presentation.note(reason)` accepts fixed codes: `no-story`, `no-scene-change`, `asset-missing`, `budget-exhausted`, `unavailable`, `superseded`, `no-output`, `failed`. Free text is refused. Without a display write or note, the host infers `no-output`; a business return value alone is not visible output. Budget refusal is a normal no-op and can be caught to use existing assets. Uncaught refusal discards incomplete writes without a plugin fault. Own exceptions, invalid output and deadlines retain normal fault provenance.
 
 Each settled invocation records [`presentation.completed`](./protocol.md#presentation-completed), with status, source correlation and counters. It adds no per-turn player notification. A presentation function remains approved, unsandboxed server JS: the API policy does not replace [code approval](./plugin-installation.md) or restrict direct Node access.
+
+## Packages that only provide session views
+
+A package may contain only `contributes.ui.view`, with no `entry` or runtime. Such declarative packages make no model calls and gain no permission from providing a view. The bundled `dm-console` is one example; community packages compose the same [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components). Codex and Relationship Graph can declare both right panels and dedicated pages over the same committed owner data. Ordinary declarative diagnostics omit invalid specs without losing other panels or runtimes. See the [authoring example](../plugins/ui.md#declarative-session-console).
+
+## Static theme declarations
+
+`contributes.ui.theme: [./ui/reading-theme.json]` declares restricted static themes, including in packages without runtimes or entries. It is separate from view/webview. CLI, in-app validation, ZIP admission and discovery share one compiler; discovery removes only the broken theme and reports `slot: "theme"`. See the [plugin theme contract](./theme-packages.md#restricted-themes-supplied-by-plugins) for fields, resources and safety limits. Players explicitly choose a pack in **Session theme** in the session toolbar; see the [theme workflow](./theme-packages.md#selecting-in-a-session).
+
+### Optional session themes
+
+Scene Stage declares **Stage reading** through public `contributes.ui.theme`, without automatic activation or view switching. The no-entry, zero-runtime community [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md) uses the same manifest, static validation, resource route and session picker. Workflow, strict syntax and limits are defined in [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).
+
+## Sandbox system regions
+
+Sandbox regions keep spec paths under `contributes.ui.view`; singular surface selects main or composer. No new placement, runtime trigger or proposal kind is introduced. Own manual-runtime invocation retains approvals, proposals and commit. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer) for declarations, consent, composition and retirement.

@@ -21,6 +21,7 @@ import { createExecutionWriteBuffer } from "../function-runtime/execution-write-
 import { createPluginRuntimeContext } from "../function-runtime/plugin-runtime-context.js";
 import { attachNestedResults } from "../turn-executor/nested-results.js";
 import { attachReadDependencies } from "../read-dependencies.js";
+import { ownScopeProposals } from "../read-baselines.js";
 import {
   createPluginDataVisibility,
   type PluginDataVisibility,
@@ -163,7 +164,7 @@ export async function executeAgentGuard({
     const guardOutput = getToolContent(rawGuardOutput);
     if (guardOutput.skip === true) {
       const pendingProposals = [
-        ...getPendingProposals(rawGuardOutput),
+        ...ownScopeProposals(getPendingProposals(rawGuardOutput), writeBuffer),
         ...writeBuffer,
       ];
 

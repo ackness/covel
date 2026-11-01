@@ -26,7 +26,7 @@ const target = (key = "gold") => ({
 });
 
 describe("suspensionWriteTargets and plugin.data.update", () => {
-  it("adds no target for relative operations only", () => {
+  it("leaves non-whole-value updates to the separate read-time fence", () => {
     expect(
       suspensionWriteTargets([
         update([

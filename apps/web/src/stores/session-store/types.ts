@@ -147,6 +147,7 @@ export interface FormIssue {
 /** What a form submission settles with: `rejected` when the server refused the values. */
 export type InteractionSubmitResult = {
   readonly rejected: readonly FormIssue[];
+  readonly status?: "accepted" | "already-answered";
 } | void;
 
 export interface AssetProgressEvent {

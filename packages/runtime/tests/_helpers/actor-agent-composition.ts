@@ -10,7 +10,7 @@ import {
   type RuntimeManifest,
   type SubscriptionEvent,
 } from "@covel/shared";
-import { delegateTool } from "@covel/tools";
+import { delegateTool, tool, z, withPendingProposals } from "@covel/tools";
 import {
   executeTurn,
   commitExecution,
@@ -124,6 +124,30 @@ export async function assertPrivateActorComposition({
     createdAt: "2026-01-01",
     updatedAt: "2026-01-01",
   });
+  const producer: RuntimeManifest = {
+    pluginId: "sample",
+    name: "sample/world",
+    description: "Update the visible character",
+    runtimeType: "function",
+    stage: "pre-turn",
+    outputKind: "system",
+    trigger: { type: "auto" },
+  };
+  let childReads = 0;
+  const readWorld = tool({
+    name: "actor-world",
+    description: "Read the assigned character",
+    annotations: { readOnly: true },
+    parameters: z.object({}),
+    execute: async (_args, ctx) => {
+      childReads++;
+      const description = ctx.world!.characters.find(
+        (c) => c.name === "Mara",
+      )?.description;
+      expect(description).toBe("current staged profile");
+      return { description };
+    },
+  });
   const actor: RuntimeManifest = {
     pluginId: "sample",
     name: "sample/actor",
@@ -131,6 +155,7 @@ export async function assertPrivateActorComposition({
     runtimeType: "agent",
     outputKind: "system",
     subagentOnly: true,
+    tools: { builtin: [readWorld.name] },
     outputContract: CHARACTER_ACTOR_CONTRACT,
     concealed,
     trigger: { type: "manual" },
@@ -172,6 +197,9 @@ export async function assertPrivateActorComposition({
         actorCalls++;
         expect(text).not.toMatch(/semantic-character|PARENT-SECRET/);
         expect(text).toContain("Mara");
+        if (!messages.some((m) => m.role === "tool"))
+          return toolCall(readWorld.name, {}, `actor-read-${actorCalls}`);
+        expect(text).toContain("current staged profile");
         return prose(
           JSON.stringify({
             segments: [{ kind: "dialogue", text: "I will listen." }],
@@ -289,7 +317,7 @@ export async function assertPrivateActorComposition({
       playerMessage: "PARENT-SECRET",
       locale: "en-US",
     },
-    [parent, actor],
+    [producer, parent, actor],
     {
       store,
       ...(compacted
@@ -303,22 +331,54 @@ export async function assertPrivateActorComposition({
       emitter: createTurnEmitter({ store, eventBus, sessionId, turnId }),
       toolExecutor: createToolExecutor({
         store,
-        findTool: (name) => (name === "delegate" ? delegateTool : undefined),
+        findTool: (name) =>
+          name === "delegate"
+            ? delegateTool
+            : name === readWorld.name
+              ? readWorld
+              : undefined,
       }),
       loadRuntime: async (manifest) => ({
         manifest,
         promptTemplate:
           manifest === actor ? "ACTOR-PROMPT" : "Compose a story.",
+        ...(manifest === producer
+          ? {
+              handler: async () =>
+                withPendingProposals(
+                  { outcome: "success" as const, value: {} },
+                  [
+                    {
+                      id: crypto.randomUUID(),
+                      type: "character.upsert" as const,
+                      sessionId,
+                      turnId,
+                      source: { pluginId: "sample", runtimeId: producer.name },
+                      timestamp: "2026-10-31T00:00:00.000Z",
+                      payload: {
+                        id: "semantic-character",
+                        name: "Mara",
+                        aliases: ["Captain"],
+                        type: "npc",
+                        description: "current staged profile",
+                        expectedVersion: 1,
+                      },
+                    },
+                  ],
+                ),
+            }
+          : {}),
         ...(manifest === parent
           ? { outputSchema: storyOutputJsonSchema() }
           : {}),
       }),
     },
   );
-  expect(execution.result.runtimeResults).toHaveLength(1);
+  expect(execution.result.runtimeResults).toHaveLength(2);
   expect(execution.result.runtimeResults[0]?.status).toBe("success");
   expect(parentCalls).toBe(native || compacted ? 5 : 4);
-  expect(actorCalls).toBe(compacted ? 2 : 1);
+  expect(actorCalls).toBe(compacted ? 4 : 2);
+  expect(childReads).toBe(compacted ? 2 : 1);
   const committed = await commitExecution({
     store,
     eventBus,

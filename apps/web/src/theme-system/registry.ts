@@ -1,3 +1,4 @@
+import { resolveSessionThemeLayout } from "./plugin-themes.js";
 import { storedThemeSelection } from "./selection.js";
 import { sameSettingValue } from "@covel/settings";
 import { ThemeImportError } from "./import-error.js";
@@ -150,7 +151,9 @@ function applyThemeSelection(store: SettingsStoreApi): void {
     id: resolvedTheme,
     scheme: resolvedScheme,
   } = storedThemeSelection(store);
-  applyThemeLayout(resolveThemeLayout(theme?.layout));
+  applyThemeLayout(
+    resolveSessionThemeLayout(store, resolveThemeLayout(theme?.layout)),
+  );
 
   applyAppearance(resolvedTheme);
   applyColorScheme(resolvedScheme);

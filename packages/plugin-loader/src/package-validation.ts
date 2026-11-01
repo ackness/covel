@@ -1,3 +1,5 @@
+import { readMessageCatalogs } from "./locale-messages.js";
+import { diskPluginThemeFiles } from "./theme-files.js";
 import {
   unknownExecutionAssessment,
   type PluginExecutionAssessment,
@@ -105,7 +107,7 @@ export function parseIssueLocation(
     } else if (
       !token.startsWith("/") &&
       !/^[A-Za-z]:/.test(token) &&
-      /^(?:\.\/)?[\w./-]+\.(?:md|json|ya?ml|[cm]?[jt]s)$/.test(token)
+      /^(?:\.\/)?[\w./-]+\.(?:md|json|css|ya?ml|[cm]?[jt]s)$/.test(token)
     ) {
       file = token.replace(/^\.\//, "");
     } else if (located && /^[A-Za-z_][\w.[\]-]*$/.test(token)) {
@@ -248,6 +250,8 @@ export async function validatePluginPackage(
           throw new Error("UI asset escapes plugin root");
         return listPluginAssetFiles(directory);
       },
+      diskPluginThemeFiles(rootPath),
+      await readMessageCatalogs(rootPath),
     );
   } catch (error) {
     fail("plugin-files", error);

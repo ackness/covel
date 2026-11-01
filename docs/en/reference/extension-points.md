@@ -249,3 +249,7 @@ turn-policy@1 and character-actor@1 are optional service/runtime contracts, not 
 ## Presentation state and UI slots
 
 Presentation adds no extension point. Restricted functions update owned display data; `ui.slot@1` providers consume it through their existing interface. Missing assets or no output degrade only that position. The policy does not expand a slot provider’s ordinary context; see [presentation runtimes](./plugins.md#presentation-runtimes).
+
+## Static themes are not extension providers
+
+Themes use `contributes.ui.theme` and are discovered after host file validation. They need no `provideExtension`, `ui.slot@1`, or service registration and add no versioned extension point. See [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).

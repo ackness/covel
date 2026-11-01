@@ -354,6 +354,10 @@ A block sits under a turn. To change the story text itself, for example to add a
     "component": "Stack",
     "children": [
       {
+        "component": "CharacterAvatar",
+        "props": { "characterId": { "$state": "/character/id" } }
+      },
+      {
         "component": "Badge",
         "props": { "label": { "$state": "/segment/speaker" } }
       },
@@ -375,7 +379,7 @@ contributes:
       - ./ui/nameplate.json
 ```
 
-`match` is required: `kind` matches segment kinds, `speaker` matches a character ID or name. A template only displays, with no buttons and no data source; paragraphs no template matches look as before. See [Segment templates](../reference/ui-panels.md#segment-templates) for the state it reads and how a template is chosen.
+`match` is required: `kind` matches segment kinds, `speaker` matches a character ID or name. A template only displays, with no authored action buttons or data source. The avatar above uses only the resolved speaker’s public portrait and supports host-local enlargement; missing imagery leaves the nameplate and prose readable. Paragraphs no template matches look as before. See [Segment templates](../reference/ui-panels.md#segment-templates) for the state it reads and how a template is chosen.
 
 ## 5. Give the player choices
 
@@ -692,3 +696,100 @@ messages:
 ## Updating display state with presentation
 
 For story-driven backdrops or music, use a [presentation selector](./advanced.md#presentation-selectors) to update owned display namespaces for existing UI slots. Presentation cannot read the full World Model or call slot services to bypass its scope; failure leaves story and next input available. See the [contract](../reference/plugins.md#presentation-runtimes).
+
+## Request player actions from a session page
+
+See the two independent regions and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; explicit main retains host input, while independent composers also work in stage. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
+
+## Declarative session console
+
+Create `session-desk/PLUGIN.md` in the user plugin directory, add a description and the declaration below, then create `ui/desk.json` with the JSON example. No entry, runtime, hard dependency or browser bridge is needed. Put Chinese translations of English labels in `messages` in `locales/zh.yaml`.
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/desk.json]
+```
+
+```json
+{
+  "id": "desk",
+  "label": "Session desk",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "SceneCastList" },
+      { "component": "SessionMessages", "props": { "content": "pending" } },
+      { "component": "SessionMessages" },
+      { "component": "SessionComposer" }
+    ]
+  }
+}
+```
+
+Enable this community package and choose Session desk from Plugin views. It uses the host's real current-role input and public rendering; actions remain available without a cast provider. See the [component contract](../reference/ui-components.md#live-session-view-components) for props, singleton limits, repeat diagnostics and unavailable placements. Validate with `pnpm validate:plugin <plugin-dir>`; do not place these widgets in `ui.message` or row templates.
+
+## Publishing static themes
+
+Put palettes and restricted styles in separate JSON files under `contributes.ui.theme`, without a runtime, dummy panel or entry. Descriptor, CSS and asset-root paths are package-relative; CSS image paths are asset-root-relative. See [plugin themes](../reference/theme-packages.md#restricted-themes-supplied-by-plugins) for the example and validation limits. Static validation, API discovery and explicit **Session theme** selection are available. For a runnable community example, zip and install [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md), enable the plugin, then select its theme. Scene Stage’s optional **Stage reading** uses the same public declaration.
+
+## Build an independent input page
+
+The community `sandbox-surface-probe` example declares `ui/reader.json` as main and the following `ui/input.json` as composer. Both paths remain under `contributes.ui.view`. The shared root's `index.html` loads classic `app.js`; server handlers and schemas stay outside the published root.
+
+```json
+{
+  "id": "input",
+  "label": "Bridge input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": [
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel"
+  ],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <pre id="story"></pre>
+    <label>Player action <textarea id="draft"></textarea></label>
+    <button id="submit">Submit action</button>
+    <output id="outcome"></output>
+  </body>
+</html>
+```
+
+```js
+const draft = document.getElementById("draft");
+window.covel.subscribe(({ session }) => {
+  document.getElementById("story").textContent =
+    (session?.messages ?? []).map((row) => row.text).join("\n") +
+    (session?.streaming?.text ?? "");
+});
+document.getElementById("submit").onclick = async () => {
+  try {
+    const result = await window.covel.invoke("submitAction", {
+      kind: "say",
+      text: draft.value,
+    });
+    document.getElementById("outcome").textContent = result.status;
+    if (result.status === "accepted") draft.value = "";
+  } catch {
+    document.getElementById("outcome").textContent =
+      "Unavailable; draft retained.";
+  }
+};
+```
+
+The complete fixture also answers current interaction handles, invokes its own manual runtime, stops execution and opens its own panel; never render raw execution results. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for methods/outcomes and [sandbox regions](../reference/ui-panels.md#sandbox-main-view-and-composer) for consent and timeouts. Changed content or capabilities require consent again. Players revoke, return or explicitly retry from the host. Error/unresponsive modes support acceptance; they never replay mutations or recover drafts through reload.

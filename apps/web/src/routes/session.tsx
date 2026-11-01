@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -21,6 +21,7 @@ import { OnboardingWizard } from "@/components/onboarding-wizard.js";
 import { ImageScopeContext } from "@/lib/external-images.js";
 import { isOnboarded } from "@/components/onboarding-wizard/persistence.js";
 import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
+import { SessionRecoveryBoundary } from "@/components/session/session-recovery-boundary.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ServerStatusOverlay } from "@/components/desktop/server-status-overlay.js";
 
@@ -311,15 +312,29 @@ function SessionScreen() {
   // session store itself; the prop just carries this branch's null-narrowing.
   if (state.session) {
     return (
-      <Suspense
-        fallback={
-          <div
-            role="status"
-            className="flex items-center justify-center h-full"
-          >
-            <span className="sr-only">{t("common.loading")}</span>
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
+      <SessionRecoveryBoundary
+        recovery={state.executionRecovery}
+        steps={state.executionSteps}
+        onOpenSettings={settings.openWithKey}
+        onRetry={retryInterruptedTurn}
+        onRefresh={refreshExecutionRecovery}
+        onStop={abortActiveTurn}
+        loading={
+          <>
+            <div
+              role="status"
+              className="flex flex-1 items-center justify-center"
+            >
+              <span className="sr-only">{t("common.loading")}</span>
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+            <SettingsDialog
+              open={settings.open}
+              onOpenChange={settings.onOpenChange}
+              initialKey={settings.initialKey}
+              plugins={state.plugins}
+            />
+          </>
         }
       >
         <ImageScopeContext.Provider value={state.session.worldId}>
@@ -330,7 +345,7 @@ function SessionScreen() {
             onPanelHandled={handlePanelHandled}
           />
         </ImageScopeContext.Provider>
-      </Suspense>
+      </SessionRecoveryBoundary>
     );
   }
 

@@ -354,6 +354,10 @@ pnpm test:runtime -- tavern-rumors --pretty
     "component": "Stack",
     "children": [
       {
+        "component": "CharacterAvatar",
+        "props": { "characterId": { "$state": "/character/id" } }
+      },
+      {
         "component": "Badge",
         "props": { "label": { "$state": "/segment/speaker" } }
       },
@@ -375,7 +379,7 @@ contributes:
       - ./ui/nameplate.json
 ```
 
-`match` 是必填的：`kind` 按段落类型匹配，`speaker` 按角色 ID 或名字匹配。模板只负责显示，不能有按钮和数据来源；没命中模板的段落和以前一样。可读的状态和选择规则见[段落模板](../reference/ui-panels.md#段落模板)。
+`match` 是必填的：`kind` 按段落类型匹配，`speaker` 按角色 ID 或名字匹配。模板只负责显示，不能声明操作按钮和数据来源；上例头像只显示已解析说话人的公开头像，可以用宿主本地预览放大，缺少头像时保留名牌和正文。没命中模板的段落和以前一样。可读的状态和选择规则见[段落模板](../reference/ui-panels.md#段落模板)。
 
 ## 5. 给玩家选项
 
@@ -692,3 +696,100 @@ messages:
 ## 用呈现函数更新展示状态
 
 需要跟随故事的背景或配乐时，用[呈现选择器](./advanced.md#呈现选择器)更新自有展示 namespace，再让原有界面槽位读取它。呈现不能读取完整 World Model 或调用槽位服务来绕开限制；它失败时不挡故事和下一次输入。规范见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
+
+## 从会话页面请求玩家行动
+
+查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个独立区域和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变；显式主视图保留宿主输入框，独立输入框可用于舞台。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+
+## 声明式会话控制台
+
+在用户插件目录建立 `session-desk/PLUGIN.md`，填写描述并加入下面的声明；创建 `ui/desk.json`，使用后面的 JSON。不需要入口、runtime、硬依赖或浏览器桥。英文标签的中文译文放在 `locales/zh.yaml` 的 `messages` 中。
+
+```yaml
+contributes:
+  ui:
+    view: [./ui/desk.json]
+```
+
+```json
+{
+  "id": "desk",
+  "label": "Session desk",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "children": [
+      { "component": "SceneCastList" },
+      { "component": "SessionMessages", "props": { "content": "pending" } },
+      { "component": "SessionMessages" },
+      { "component": "SessionComposer" }
+    ]
+  }
+}
+```
+
+启用此社区包后，从“插件视图”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。
+
+## 发布静态主题
+
+配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。可静态验证、通过 API 发现，并由玩家在“会话主题”明确选择。可运行的社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)：压缩包内容后通过安装入口安装，启用插件，再选择主题。场景舞台的可选“舞台阅读”也只使用这条公共声明。
+
+## 创建独立输入页面
+
+社区示例 `sandbox-surface-probe` 把 `ui/reader.json` 声明为 main，把下面的 `ui/input.json` 声明为 composer。两份路径仍放在 `contributes.ui.view`。共享根目录的 `index.html` 载入经典 `app.js`；服务端 handler 与 schema 留在根目录之外。
+
+```json
+{
+  "id": "input",
+  "label": "Bridge input",
+  "surface": "composer",
+  "bridge": "session",
+  "capabilities": [
+    "submitAction",
+    "submitInteraction",
+    "invokeRuntime",
+    "abortExecution",
+    "openPanel"
+  ],
+  "webview": { "root": "./ui/app", "entry": "index.html" }
+}
+```
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <pre id="story"></pre>
+    <label>Player action <textarea id="draft"></textarea></label>
+    <button id="submit">Submit action</button>
+    <output id="outcome"></output>
+  </body>
+</html>
+```
+
+```js
+const draft = document.getElementById("draft");
+window.covel.subscribe(({ session }) => {
+  document.getElementById("story").textContent =
+    (session?.messages ?? []).map((row) => row.text).join("\n") +
+    (session?.streaming?.text ?? "");
+});
+document.getElementById("submit").onclick = async () => {
+  try {
+    const result = await window.covel.invoke("submitAction", {
+      kind: "say",
+      text: draft.value,
+    });
+    document.getElementById("outcome").textContent = result.status;
+    if (result.status === "accepted") draft.value = "";
+  } catch {
+    document.getElementById("outcome").textContent =
+      "Unavailable; draft retained.";
+  }
+};
+```
+
+完整示例还用当前句柄回答交互、调用所属手动 runtime、停止和打开自己的面板；不要把原始结果写进页面。结果与方法见[页面请求](../reference/ui-panels.md#页面请求与安全结果)，授权与超时见[沙箱区域](../reference/ui-panels.md#沙箱主视图与输入框)。内容或能力变化后重新授权；玩家可从宿主撤销、返回或显式重试。错误/失联模式用于验收，不会自动重放修改，也不能用页面重载恢复草稿。

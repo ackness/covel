@@ -7,7 +7,7 @@
 ## Authoring tip
 
 - **组件从哪来。** `apps/web/src/lib/catalog.tsx` 导出 `covelRegistry`，各个渲染器按职责放在 `apps/web/src/lib/catalog/` 下。插件只能用注册在这里的组件：词汇由框架定，插件用它来组合。
-- **在插件里引用。** 在 `ui/*.json` 里写 `"component": "<Name>"`，名字和下文完全一致。spec 文件通过 `PLUGIN.md` 的 `contributes.ui.right` / `ui.message` 被发现。
+- **在插件里引用。** 在 `ui/*.json` 里写 `"component": "<Name>"`，名字和下文完全一致。spec 文件通过 `PLUGIN.md` 的 `contributes.ui.right` / `ui.message` / `ui.view` 被发现。
 - **文字与校验。** spec 里写 English，译文写在 `locales/<locale>.yaml` 的 `messages` 一节（见 [ui-panels.md](./ui-panels.md#插件-ui-文本规范)）。运行 `pnpm check:i18n`：它包含 `check-plugin-i18n`，会拒绝 spec 里的中文，并要求内置插件的每条界面文字都有中文译文。
 - **找出这一页还没写到的组件。** 完整的清单随时可以搜出来：
 
@@ -89,7 +89,9 @@
 | `EntryList`           | 声明式的条目列表：标题、说明、徽标和带标签的字段。                                                                                      | `items`、`titleField`，可选的 `idField`、`descriptionFields`、`badgeFields`、`fields`、`dateField`、`footerField`                                                                                          |
 | `SceneCastList`       | 来自 `stage.cast@1` 的在场角色：名字、类型和说明。                                                                                      | 无                                                                                                                                                                                                         |
 | `CharacterFieldsView` | 按 schema 显示一个角色的 `fields` 对象。它读会话 World Model 的 `characterSchema`，按类别分组（bio/stats/abilities/equipment/social）。 | `value`（角色的 `fields` 对象）                                                                                                                                                                            |
-| `CharacterAvatar`     | 按角色 ID 从 `character.visual@1` 取的头像，点击放大。                                                                                  | `characterId`，可选的 `size`（默认 `28`）                                                                                                                                                                  |
+| `CharacterAvatar`     | 公开头像，点击放大；数据来源取决于组件位置。                                                                                            | `characterId`，可选的 `size`（默认 `28`）                                                                                                                                                                  |
+
+`CharacterAvatar` 在普通面板按 `characterId` 读取当前会话的 keyed `character.visual@1`；在段落模板只使用宿主已投影的说话人头像，ID 必须匹配 `/character/id`。`size` 默认 28 像素；没有头像时不显示组件，名字和正文由其他节点保留。放大与关闭使用宿主本地预览和已翻译的控件标签；会话、说话人或头像改变会关闭预览。完整限制见[段落模板](./ui-panels.md#段落模板)。
 
 `EntryCard` 的 `category` 和 `rarity` 是提供者定义的数据键，没有内置枚举或默认稀有度。`categoryOptions` 是 `{ value, label, icon?, color? }` 数组：用 `value` 匹配类别，`label` 按 UI 语言解析，图标和颜色可由条目的 `icon` / `color` 覆盖。`rarityOptions` 是 `{ value, tone?, color? }` 数组：匹配稀有度后，`tone` 控制边线（`muted` / `primary` / `info` / `success` / `warning` / `danger`），`color` 控制类别徽标（`red` / `amber` / `blue` / `green` / `purple` / `cyan`）。缺少匹配项时显示原类别键、通用书本图标和中性色。使用 `FilterContainer` 时，把这两组数组放在行模板的 `EntryCard.props` 中；数据键用 `$item` 绑定。spec 的 `label` 只写英文，译文放在插件的 `locales/<locale>.yaml` 的 `messages` 中，不需要把双语名称写进模型数据。
 
@@ -227,6 +229,20 @@
 | `PlayerMessage` | 靠右的玩家聊天气泡（Paper 主题下有另一种样式）。 | `content`（string）                                                                               |
 | `Alert`         | 信息 / 成功 / 警告 / 错误通知。                  | `level`（`info` / `success` / `warning` / `error`）、`title` _(I18nText)_、`message` _(I18nText)_ |
 
+### 实时会话视图组件
+
+<!-- prettier-ignore -->
+| 组件 | 属性 | 显示内容 |
+| --- | --- | --- |
+| `SessionMessages` | 仅可选的字面量 `content: "story" \| "pending"`，默认 `"story"` | 公开故事/玩家消息和当前故事流，或待处理的公开交互；没有待处理交互时显示空状态 |
+| `SessionComposer` | 空对象 `{}`，也可省略 `props` | 当前会话共享的模式栏、字段、输入、排队草稿和反馈 |
+
+这些组件只用于实时声明式 `contributes.ui.view`。每份视图最多一个故事区域、一个待处理区域和一个输入框；不能直接带 `repeat`、放在重复祖先下或 `FilterContainer.props.itemTemplate` 中。`component` 和 `type` 写法都校验，具名 slots 和行模板内的错误带精确路径。其他 props（包括会话、座位、角色、来源和行动参数）会被拒绝，不能用表达式选择 `content`。这里的 `content` 是控制值，不做翻译；区域标题用普通文本组件翻译。
+
+右侧、消息和段落模板不允许这些组件，webview、快照、调试或嵌套消息渲染没有实时宿主上下文；运行时也拒绝非法 props，只显示有界的不可用提示。`pending` 是玩家已经看到且尚未回答/未过期的表单、选择和确认，依据完整历史判断；它不重复出现在故事区域，建议不锁输入。未公开的剧情队列、条件和数量都不在其中。详细宿主与行动规则见[实时会话组件](./ui-panels.md#实时会话组件)。
+
+`SceneCastList` 仍只读公开 `stage.cast@1`，没有提供方或演员时显示空状态；它不是所有已知人物、内核亲历历史或演员行动资格清单。
+
 ### Visualization
 
 | 组件              | 用途                                                                                                                                                                        | 主要属性                                                  |
@@ -273,7 +289,7 @@ json-render 提供布局、文字、表单、媒体、数值条、关系图和�
 
 ## Summary
 
-目前一共 50 个组件。权威的清单是 `apps/web/src/lib/catalog.tsx` 导出的 `covelRegistry`；渲染器的实现在 `apps/web/src/lib/catalog/` 下。
+目前一共 52 个组件。权威的清单是 `apps/web/src/lib/catalog.tsx` 导出的 `covelRegistry`；渲染器的实现在 `apps/web/src/lib/catalog/` 下。
 
 新增一个组件时：
 
@@ -331,3 +347,11 @@ json-render 提供布局、文字、表单、媒体、数值条、关系图和�
 ```
 
 宿主拿任务的 `itemField` 值和每条媒体记录的 `matchField` 比较，空值不算匹配。这样任务行可以显示关联的预览，而组件不需要知道 prompt 字段，也不需要读第二个插件 namespace。
+
+## 沙箱页面与组件动作
+
+JSON 组件的动作处理器与[授权沙箱接口](./ui-panels.md#页面请求与安全结果)分别管理。沙箱区域只可通过普通玩家行动、交互和所属手动 runtime 请求修改，不接收原始面板数据或执行结果，也不开放 action/command/event RPC。组件白名单不变。
+
+## 会话主题标记
+
+受限插件主题只作用于宿主正文 Markdown 的文字叶节点、舞台正文段落和独立的无交互装饰平面。`Prose`、段落模板和其他插件组件不会因为显示文字就成为主题目标。目录渲染器只传递声明的属性，不把任意 DOM 属性展开到节点，因此 spec 不能指定保留的 `data-covel-theme-scope` / `data-covel-theme-part`。宿主操作按钮和图片授权控件始终在配色节点之外。完整边界见[插件主题](./theme-packages.md#在会话中选择)。

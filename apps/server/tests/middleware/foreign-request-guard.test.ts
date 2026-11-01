@@ -51,18 +51,20 @@ describe("foreign API requests", () => {
       expect(calls).toEqual([]);
     },
   );
-  it.each(["iframe", "frame", "embed", "object"])(
-    "refuses %s navigations",
-    async (dest) => {
-      const { app, calls } = harness();
-      const response = await app.request(`${SERVER}/api/sessions`, {
-        headers: { "Sec-Fetch-Dest": dest },
-      });
-      expect(response.status).toBe(403);
-      expect(response.headers.get("access-control-allow-origin")).toBeNull();
-      expect(calls).toEqual([]);
-    },
-  );
+  it.each(
+    ["iframe", "frame", "embed", "object"].flatMap((dest) =>
+      ["GET", "POST", "OPTIONS"].map((method) => [dest, method]),
+    ),
+  )("refuses %s embedding with %s before CORS", async (dest, method) => {
+    const { app, calls } = harness();
+    const response = await app.request(`${SERVER}/api/sessions`, {
+      method,
+      headers: { "Sec-Fetch-Dest": dest, Origin: "http://localhost:5173" },
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(calls).toEqual([]);
+  });
   it.each(["empty", "image", "audio", "video", "document", undefined])(
     "allows %s requests",
     async (dest) => {

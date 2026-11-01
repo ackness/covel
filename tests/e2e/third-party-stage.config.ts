@@ -26,11 +26,19 @@ cpSync(
   join(plugins, "declarative-notebook"),
   { recursive: true },
 );
+cpSync(
+  resolve(import.meta.dirname, "../third-party/sandbox-surface-probe"),
+  join(plugins, "sandbox-surface-probe"),
+  { recursive: true },
+);
 // `home` is always a new mkdtemp-owned directory, never a user profile.
 process.once("exit", () => rmSync(home, { recursive: true, force: true }));
 
 export default defineConfig({
-  metadata: { declarativeNotebookRoot: join(plugins, "declarative-notebook") },
+  metadata: {
+    declarativeNotebookRoot: join(plugins, "declarative-notebook"),
+    sandboxProbeRoot: join(plugins, "sandbox-surface-probe"),
+  },
   testDir: import.meta.dirname,
   testMatch: "**/*.acceptance.ts",
   outputDir: resolve(import.meta.dirname, "artifacts/extensions"),
@@ -45,8 +53,12 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: "pnpm --filter @covel/server dev",
+      // Fixture upgrades import temporary modules. Watching those modules would
+      // restart the memory-backed API during the next test's session setup.
+      command:
+        "pnpm --filter @covel/server exec tsx --import=../../scripts/ensure-plugin-sdk.mjs src/index.ts",
       env: {
+        NODE_ENV: "development",
         STORE_BACKEND: "memory",
         SERVER_PORT: "3102",
         CORS_ORIGIN: webOrigin,
@@ -66,12 +78,12 @@ export default defineConfig({
     },
     {
       command:
-        "pnpm --filter @covel/web dev --host 127.0.0.1 --port 5182 --strictPort",
+        "pnpm --filter @covel/web e2e:serve --host 127.0.0.1 --port 5182",
       env: { RUNTIME_PORT: "3102" },
       url: webOrigin,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-      timeout: 60_000,
+      timeout: 120_000,
     },
   ],
 });

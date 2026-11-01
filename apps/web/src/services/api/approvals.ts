@@ -9,6 +9,7 @@ export async function resolveApproval(
   decision: "allow" | "deny",
   scope?: "once" | "session",
   sessionId?: string,
+  canDispatch?: () => boolean,
 ): Promise<void> {
   const result = await request<{
     pending?: { pluginId?: string };
@@ -17,6 +18,7 @@ export async function resolveApproval(
     method: "POST",
     body: JSON.stringify({ decision, scope }),
     sessionId,
+    canDispatch,
     operatorAuth: true,
     silentCodes: ["approval_obsolete"],
   }).catch((error: unknown) => {

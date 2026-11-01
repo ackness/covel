@@ -1,3 +1,4 @@
+import { forkWorldModelView } from "../function-runtime/world-model-view.js";
 import { characterByName } from "../orchestration/policy-tools.js";
 import { ToolError } from "@covel/shared";
 /**
@@ -127,73 +128,85 @@ async function runDelegate(
       });
     }
   }
-  await emitToolEvent(context, call, "tool.calling", {
-    arguments: call.arguments,
-    source: "builtin",
-  });
-  const { target, brief, data, maxSteps } = parsed.data;
-  // Isolate this invocation's operations from earlier or concurrent calls.
+  const worldFork = context.world
+    ? forkWorldModelView(context.world, () => context.signal?.throwIfAborted())
+    : undefined;
   const operations = scope.operations?.child();
-  let result: SubagentResult;
+  let accepted = false;
   try {
-    result = await runner.run({
-      caller: scope.caller,
-      request: {
-        target,
-        brief,
-        ...(characterId !== undefined ? { characterId } : {}),
-        ...(parsed.data.instruction !== undefined
-          ? { instruction: parsed.data.instruction }
-          : {}),
-        ...(data !== undefined ? { data } : {}),
-        ...(maxSteps !== undefined ? { budget: { maxSteps } } : {}),
-      },
-      input: scope.input,
-      world: context.world,
-      deps: scope.deps,
-      executionContext: scope.executionContext,
-      ...(operations ? { operations } : {}),
-      parentCallId: call.toolCallId,
-      ...(context.signal ? { parentSignal: context.signal } : {}),
+    await emitToolEvent(context, call, "tool.calling", {
+      arguments: call.arguments,
+      source: "builtin",
     });
-  } catch (error) {
-    operations?.discard();
-    throw error;
+    const { target, brief, data, maxSteps } = parsed.data;
+    // Isolate this invocation's operations from earlier or concurrent calls.
+    let result: SubagentResult;
+    try {
+      result = await runner.run({
+        caller: scope.caller,
+        request: {
+          target,
+          brief,
+          ...(characterId !== undefined ? { characterId } : {}),
+          ...(parsed.data.instruction !== undefined
+            ? { instruction: parsed.data.instruction }
+            : {}),
+          ...(data !== undefined ? { data } : {}),
+          ...(maxSteps !== undefined ? { budget: { maxSteps } } : {}),
+        },
+        input: scope.input,
+        world: worldFork?.world,
+        deps: scope.deps,
+        executionContext: scope.executionContext,
+        ...(operations ? { operations } : {}),
+        parentCallId: call.toolCallId,
+        ...(context.signal ? { parentSignal: context.signal } : {}),
+      });
+    } catch (error) {
+      operations?.discard();
+      throw error;
+    }
+    if (!result.ok) {
+      operations?.discard();
+      return failed(call, context, startTime, result);
+    }
+    const staged = operations?.held() ?? [];
+    // A completing `delegate` hands the original output to the caller's output
+    // gate; only the model-facing envelope carries the staged notice. Stop
+    // reason and usage stay on the sub-agent's own `subagent.completed` trace.
+    const output = result.output;
+    const resultText = renderToolSuccess({
+      content: output,
+      locale: scope.input.locale,
+      stagedOperations: {
+        count: staged.length,
+        kinds: staged.flatMap((operation) =>
+          operation.writes.map((write) => write.type),
+        ),
+      },
+    });
+    await emitToolEvent(context, call, "tool.completed", {
+      result: resultText,
+      parsedResult: output,
+      durationMs: Date.now() - startTime,
+      success: true,
+    });
+    context.signal?.throwIfAborted();
+    worldFork?.accept();
+    operations?.commit();
+    accepted = true;
+    return {
+      toolCallId: call.toolCallId,
+      name: call.name,
+      result: resultText,
+      parsedResult: output,
+      success: true,
+      approvalStatus: APPROVAL,
+    };
+  } finally {
+    if (!accepted) operations?.discard();
+    worldFork?.discard();
   }
-  if (!result.ok) {
-    operations?.discard();
-    return failed(call, context, startTime, result);
-  }
-  const staged = operations?.held() ?? [];
-  operations?.commit();
-  // A completing `delegate` hands the original output to the caller's output
-  // gate; only the model-facing envelope carries the staged notice. Stop
-  // reason and usage stay on the sub-agent's own `subagent.completed` trace.
-  const output = result.output;
-  const resultText = renderToolSuccess({
-    content: output,
-    locale: scope.input.locale,
-    stagedOperations: {
-      count: staged.length,
-      kinds: staged.flatMap((operation) =>
-        operation.writes.map((write) => write.type),
-      ),
-    },
-  });
-  await emitToolEvent(context, call, "tool.completed", {
-    result: resultText,
-    parsedResult: output,
-    durationMs: Date.now() - startTime,
-    success: true,
-  });
-  return {
-    toolCallId: call.toolCallId,
-    name: call.name,
-    result: resultText,
-    parsedResult: output,
-    success: true,
-    approvalStatus: APPROVAL,
-  };
 }
 
 /**

@@ -36,9 +36,9 @@ describe("plugin pages", () => {
     );
     expect(PLUGIN_ASSET_PAGE_CSP).not.toContain("unsafe-eval");
   });
-  it("shares a stable bridge source with a ready acknowledgement", () => {
+  it("shares a stable bridge source with a ready or page-error acknowledgement", () => {
     expect(PLUGIN_BRIDGE_SCRIPT).toContain(
-      'port.start();\n    port.postMessage({ type: "ready" });',
+      'port.start();\n    port.postMessage({ type: failed ? "page-error" : "ready" });',
     );
     const hash8 = createHash("sha256")
       .update(PLUGIN_BRIDGE_SCRIPT)

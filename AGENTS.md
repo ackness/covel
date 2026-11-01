@@ -93,7 +93,8 @@ exports `dist/`. Install, Turbo and server startup rebuild it. After editing SDK
 source, run `pnpm --filter @covel/plugin-handlers-utils build` before a direct
 package test. The host supplies this SDK and `zod` to installed plugins; plugins
 bundle only other dependencies. Respect public package entry points and dependency
-direction (`pnpm check:boundaries`).
+direction (`pnpm check:boundaries`). Shared owns the pure plugin-theme CSS
+policy and its direct parser dependency; loader owns files and web owns rendering.
 
 Read [desktop packaging](docs/internals/desktop-packaging.md) before changing the
 shell, sidecar or staging. The packaged backend always runs the app's own Electron

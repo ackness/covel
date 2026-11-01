@@ -22,9 +22,9 @@ it("shares only in-flight reads for the same session, plugin set and language", 
   );
   const first = fetchUiSpecs("s", "a");
   expect(fetchUiSpecs("s", "a")).toBe(first);
-  resolve({ right: [] });
+  resolve({ right: [], theme: [] });
   await first;
-  mocks.request.mockResolvedValue({ right: [] });
+  mocks.request.mockResolvedValue({ right: [], theme: [] });
   const next = fetchUiSpecs("s", "a");
   expect(next).not.toBe(first);
   const otherSession = fetchUiSpecs("other", "a");
@@ -43,14 +43,18 @@ it("allows a failed read to be retried", async () => {
   const failed = fetchUiSpecs("s", "a");
   expect(fetchUiSpecs("s", "a")).toBe(failed);
   await expect(failed).rejects.toThrow("offline");
-  mocks.request.mockResolvedValue({ right: [] });
-  await expect(fetchUiSpecs("s", "a")).resolves.toEqual({ right: [] });
+  mocks.request.mockResolvedValue({ right: [], theme: [] });
+  await expect(fetchUiSpecs("s", "a")).resolves.toEqual({
+    right: [],
+    theme: [],
+  });
   expect(mocks.request).toHaveBeenCalledTimes(2);
 });
 
 it("preserves view entries in the client response", async () => {
   const response: import("../api/plugin-data.js").UISpecsResponse = {
     right: [],
+    theme: [],
     message: [],
     view: [
       {
@@ -68,4 +72,26 @@ it("preserves view entries in the client response", async () => {
   };
   mocks.request.mockResolvedValue(response);
   await expect(fetchUiSpecs("s", "p")).resolves.toEqual(response);
+});
+
+it("preserves the distinct typed theme response", async () => {
+  const response: import("../api/plugin-data.js").UISpecsResponse = {
+    right: [],
+    theme: [
+      {
+        pluginId: "reader",
+        specs: [
+          {
+            pluginId: "reader",
+            id: "reading",
+            label: { en: "Reading", zh: "阅读" },
+            contentHash: "a".repeat(64),
+            tokens: { light: { "--story-color": "#ffffff" } },
+          },
+        ],
+      },
+    ],
+  };
+  mocks.request.mockResolvedValue(response);
+  await expect(fetchUiSpecs("s", "reader")).resolves.toEqual(response);
 });

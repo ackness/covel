@@ -86,6 +86,33 @@ const peek = (ctx: Ctx) =>
     input: {},
   });
 
+const deriveWallet = (ctx: Ctx, by: number) =>
+  ctx.services!.call({
+    pluginId: "bank",
+    name: "derive",
+    contract: "bank.derive@1",
+    input: { by },
+  });
+function derivedService(registry: PluginServiceRegistry) {
+  registry.register("bank", {
+    name: "derive",
+    contract: "bank.derive@1",
+    access: "write",
+    input: z.object({ by: z.number() }),
+    output: z.unknown(),
+    handler: async ({ by }, ctx) => {
+      const value = (await ctx.pluginData.get("wallet", "gold")) as {
+        amount: number;
+      };
+      await ctx.pluginData.update("wallet", "gold", [
+        { op: "inc", path: "/amount", by },
+        { op: "merge", value: { bar: value.amount + by + 100 } },
+      ]);
+      return { predicted: value.amount + by };
+    },
+  });
+}
+
 interface Scenario {
   readonly runtimes: readonly RuntimeManifest[];
   readonly handlers: Record<string, FunctionHandler>;
@@ -296,6 +323,69 @@ const buyThree = (narrator = story()) => ({
 
 for (const [backend, create] of BACKENDS) {
   describe(`write-service operations at commit: ${backend}`, () => {
+    it("gives each derived provider call its predecessor's basis without self-conflict", async () => {
+      const narrator = story();
+      const r = await run({
+        create,
+        runtimes: [narrator],
+        services: derivedService,
+        handlers: {
+          [narrator.name]: async (ctx) => {
+            await deriveWallet(ctx, 5);
+            await deriveWallet(ctx, 7);
+            return ok({ narrativeOutput: "You save." });
+          },
+        },
+      });
+      expect(r.outcome.failedProposals).toEqual([]);
+      expect(
+        (await r.store.getPluginData(SESSION, "bank", "wallet", "gold"))?.value,
+      ).toEqual({ amount: 112, bar: 212 });
+      expect(settled(await r.persisted())).toEqual(["committed", "committed"]);
+    });
+
+    it("isolates a stale provider calculation from story and an independent operation without faulting", async () => {
+      const narrator = story();
+      const r = await run({
+        create,
+        runtimes: [narrator],
+        services: derivedService,
+        handlers: {
+          [narrator.name]: async (ctx) => {
+            await deriveWallet(ctx, 5);
+            await trade(ctx, "book", 1);
+            return ok({ narrativeOutput: "You buy a book." });
+          },
+        },
+        beforeCommit: async (store) => {
+          const row = await store.getPluginData(
+            SESSION,
+            "bank",
+            "wallet",
+            "gold",
+          );
+          await store.setPluginData({ ...row!, value: { amount: 200 } });
+        },
+      });
+      expect(r.outcome.status).toBe("committed");
+      expect(r.outcome.failedProposals[0]?.code).toBe("conflict");
+      expect(await r.gold()).toBe(199);
+      expect(await r.items()).toEqual(["book"]);
+      expect(settled(await r.persisted())).toEqual([
+        "failed/conflict",
+        "committed",
+      ]);
+      const faults = classifyExecutionFaults(
+        r.execution.commit.results,
+        r.outcome,
+        new Set(),
+        [],
+        r.execution.commit.serviceCalls ?? [],
+      );
+      expect(faults.get("bank")?.kind).not.toBe("fault");
+      expect(faults.get(narrator.pluginId)?.kind).not.toBe("fault");
+    });
+
     it("overlays a recursive unit's own writes before its operations in call order", async () => {
       const parent = story("shop");
       const child = fn("shop", "child", { trigger: { type: "manual" } });

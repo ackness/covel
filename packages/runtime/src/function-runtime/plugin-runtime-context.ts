@@ -150,7 +150,7 @@ export interface PluginRuntimeContext {
    */
   readonly nestedResults: readonly RuntimeResult[];
   /** Upstream producer ids whose writes this invocation's reads saw. */
-  readDependencies(): readonly string[];
+  readDependencies(): import("../read-dependencies.js").ReadRecorder;
   /** Revoke every capability; a later call throws. */
   revoke(): void;
   /** Wait for nested turns, sub-agents and tool calls the plugin did not await. */
@@ -655,7 +655,7 @@ async function createOrdinaryPluginRuntimeContext({
     abort: handlerAbort,
     tools: runtimeTools,
     nestedResults,
-    readDependencies: () => [...(pluginDataVisibility?.recorder ?? [])],
+    readDependencies: () => pluginDataVisibility?.recorder ?? new Set(),
     revoke: () => {
       capabilitiesRevoked = true;
       if (!subagentAbort.signal.aborted)

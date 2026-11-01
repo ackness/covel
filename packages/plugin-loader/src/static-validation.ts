@@ -1,5 +1,9 @@
+import type { PluginThemeFiles } from "./theme-files.js";
+import type { MessageCatalog } from "./locale-messages.js";
+import { compilePluginTheme } from "./plugin-themes.js";
+import { MAX_PLUGIN_THEMES } from "@covel/shared";
 import { planPluginAssetRoot } from "./ui-assets.js";
-import { PLUGIN_UI_SLOTS } from "./ui-spec.js";
+import { PLUGIN_UI_SPEC_SLOTS } from "./ui-spec.js";
 import {
   FRAMEWORK_TOOL_NAMES,
   isKernelExtensionContract,
@@ -144,6 +148,8 @@ export function validatePluginFiles(
   listFiles?: (
     absoluteDir: string,
   ) => readonly { path: string; size: number }[],
+  themeFiles?: PluginThemeFiles,
+  themeCatalogs?: readonly MessageCatalog[],
 ): void {
   if (packageManifest.disabledRuntime)
     throw new Error(packageManifest.disabledRuntime.message);
@@ -262,7 +268,36 @@ export function validatePluginFiles(
   }
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   const viewIds = new Set<string>();
-  for (const slot of PLUGIN_UI_SLOTS)
+  const themeIds = new Set<string>();
+  const themes = plugin.contributes?.ui?.theme ?? [];
+  if (themes.length > MAX_PLUGIN_THEMES)
+    throw new Error(
+      "PLUGIN.md: contributes.ui.theme: package exceeds 8 theme declarations",
+    );
+  for (const declaredPath of themes) {
+    try {
+      const { theme } = compilePluginTheme({
+        pluginId: plugin.id,
+        declaredPath,
+        files: themeFiles ?? {
+          read() {
+            throw new Error("binary inspection is required");
+          },
+          list() {
+            throw new Error("bitmap listing is required");
+          },
+        },
+        catalogs: themeCatalogs,
+      });
+      if (themeIds.has(theme.id)) throw new Error("id: duplicate theme id");
+      themeIds.add(theme.id);
+    } catch (error) {
+      throw new Error(
+        `PLUGIN.md: contributes.ui.theme: ${declaredPath}: ${error instanceof Error ? error.message : "invalid theme"}`,
+      );
+    }
+  }
+  for (const slot of PLUGIN_UI_SPEC_SLOTS)
     for (const reference of plugin.contributes?.ui?.[slot] ?? []) {
       const source = packageManifest.sourcePath;
       const field = `contributes.ui.${slot}`;

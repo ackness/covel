@@ -777,3 +777,15 @@ export {
   presentationRuleIssues,
 } from "./schemas/presentation-rules.js";
 export { resolveWorldPluginSelection } from "./world-plugin-selection.js";
+
+export * from "./schemas/session-bridge.js";
+
+export { canonicalJson } from "./utils/canonical-json.js";
+export {
+  proposalReadPreconditionSchema,
+  proposalReadScopesSchema,
+} from "./schemas/proposal-read-scopes.js";
+
+export * from "./schemas/plugin-theme.js";
+export * from "./plugin-theme-css.js";
+export * from "./plugin-theme.js";

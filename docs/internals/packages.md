@@ -193,3 +193,7 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 ## 可选群像提供方
 
 `plugins/character-agent` 提供可重复使用的角色演员，`plugins/turn-policy` 提供一个可选策略读服务；它们与对话叙事通过公开 SDK 契约组合，不是框架依赖或专用宿主路径。
+
+## 主题编译的依赖方向
+
+`shared` 拥有纯主题 schema、CSS 策略和 `css-tree` 直接依赖，不读取文件或依赖 Web；布局 ID 也是低层共享枚举。`plugin-loader` 负责文件/ZIP 适配、位图校验与内容身份；server 缓存并发布安全 DTO 与资源；web 负责外观应用。规则见[主题契约](../reference/theme-packages.md#插件提供的受限主题)。

@@ -255,6 +255,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field     | Type           | Required | Description                                                                                         |
 | --------- | -------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `theme`   | list of string | no       | Paths of restricted static plugin theme packs.                                                      |
 | `view`    | list of string | no       | Paths of UI specs for full-column views the player can switch to.                                   |
 | `right`   | list of string | no       | Paths of UI specs for right-panel tabs.                                                             |
 | `message` | list of string | no       | Paths of UI specs rendered inside the message stream.                                               |

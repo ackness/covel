@@ -20,9 +20,15 @@ import type { PluginRpcRequest, PluginRpcResponse } from "./types.js";
 export async function postPluginRpc(
   sessionId: string,
   req: PluginRpcRequest,
+  canDispatch?: () => boolean,
 ): Promise<PluginRpcResponse> {
   return request<PluginRpcResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
-    { method: "POST", body: JSON.stringify(req), operatorAuth: true },
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+      operatorAuth: true,
+      canDispatch,
+    },
   );
 }

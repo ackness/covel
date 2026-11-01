@@ -102,6 +102,30 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 
 新增的存储后端**必须**通过这套测试。
 
+<a id="read-baselines"></a>
+
+## 读取基线前提条件
+
+先读一条记录，再根据它计算替换值时，内核自动保护这次计算的依据。`ctx.pluginData`、`ctx.store`、工具和服务中的显式 `get` / `list` 都会记录读取基线。具体键的缺失和存储的 JSON `null` 不同；列表只记录返回的键，不记录假想的缺失键。数据集写工具为校验而做的内部读取不算作者读取。
+
+同一作用域读过的同一个插件数据键，随后通过 `plugin.data`、batch 条目、delete，或含 `set`、`merge`、`upsertItem`、`delete` 的 `plugin.data.update` 改写时，内核给 proposal 信封加上私有前提条件。例如 `[inc +15, merge {bar: 125}]` 的整个列表一起受保护。只含 `inc`、`append`、`insert`、`remove` 的列表继续作用于提交时的最新值。没有相同键的显式读取就是盲写，沿用覆盖或操作语义。
+
+插件数据目标由宿主重绑定后的来源插件和 payload 的 `namespace` / `key` 确定；payload 或 batch 条目里额外的 `pluginId` / `kind` 字段不能改变保护目标。格式错误的 payload 交给普通 proposal 校验，以 `proposal-invalid` 拒绝，沿用所属单元的回滚边界，不会在提取目标时中止有效故事的提交。
+
+基线按整条记录的值计算，JSON 对象键顺序不影响指纹，数组顺序影响。行 ID、会话 ID、外层时间戳不参与；值内部叫 `updatedAt` 的字段仍是内容。每个 runtime 调用保留最早的外部依据，自己的缓冲写入单独叠加，所以多次写入和读回自己的写入不会自冲突。执行中再次观察到无法解释的外部变化时，不刷新旧依据。每次写服务调用有独立基线，前面已接受的调用属于后面调用的外部依据。每个作用域最多记录 4096 个目标，序列化证据最多 256 KiB；超限报作者诊断，不截断保护条件。
+
+Hook 在事务外运行，只能改 payload。内核独立保管条件，不交给 Hook；Hook 不能通过原地修改或伪造信封删除它。已保护写入的 namespace、key、角色 ID 和 batch 目标成员不能被重定向。同目标的值改写仍须通过普通数据集、大小和媒体校验。Hook 把相对操作改成替换时，同样补上适用条件。独立提交管线保留原始批次的受保护状态：即使 Hook 否决携带条件的相对操作前缀，后续派生写入和成功通知也一起撤销。
+
+提交在前面的作用域落库之后，通过事务句柄在该作用域第一次改动目标之前比较条件。不一致报告固定说明和 `code: conflict`，不暴露记录内容或指纹。辅助单元丢弃自身、提供者写入和导出；故事附带操作只丢该操作，保留故事、其他操作和既有失败通知。故事自己的状态写入冲突仍是自己的 proposal 失败。没有故事时整个执行回滚。冲突不增加调用方或提供者的故障计数，不自动重跑模型或服务；调用方可以明确重试并重新读取、计算。
+
+角色只在实际观察 `characters` 属性、且同一个角色包含未提交的上游改动时，增加精确版本或缺失条件及语义内容指纹。这也检测保持预测版本不变的生产者 Hook 改写。普通已提交角色的 `expectedVersion` 补丁仍然变基，不把所有角色更新改成严格 CAS。维度、schema 和 Lorebook 保留各自合同。
+
+挂起在源提交时先核对计算原来的读取依据，再保存必要的紧凑证据。恢复的新读取使用新作用域，旧的待提交计算保留原条件，再次挂起也不能刷新它。挂起写目标摘要仍单独存在：它发现变化时可以更早以 `suspension-data-changed` 拒绝；仅由读取基线发现的变化是 `conflict`。呈现作业保留独立的 `superseded` 来源围栏和花费账本。
+
+保证依赖宿主已有的会话串行提交边界：PostgreSQL 多进程仍须持有会话 advisory lock。事务本身不等于串行化。独立调用提交管线的宿主同样负责串行化；根句柄在事务内比较和写入，已有事务句柄复用外层事务并延迟通知。不保护任意管理员根存储写入，也不推断跨键依赖、列表幻影、字段级数据流或通用可串行事务。证据只在宿主提交计划和私有 continuation 中传递，不进入模型、公开响应、SSE、trace、操作摘要或沙箱状态。
+
+开发期旧的未解决挂起项、待运行或可重试作业，以及包含旧待提交证据的 checkpoint / snapshot 必须取消或重建；从当前读取明确重试即可。已提交的插件值、角色、世界包和普通已完成会话无需 DDL 或重置，不重建历史指纹或迁移旧证据。
+
 ## Versioned plugin-data batch CAS
 
 带版本的领域记录用一个由宿主持有的 `PluginDataStore` 原语来写。CAS（compare-and-set）的意思是“先比对版本，全部对得上才写”。根 `DataStore` 和事务内的视图上都有这个方法：
@@ -410,7 +434,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
 
-角色和角色 schema 的属性读取也使用同一个记录器，跨插件保留生产者身份。工具和服务的读取归调用 runtime；宿主复制不算读取。粒度见 [World Model](./world-model.md)。记录器只在内核的执行提交计划中传递，不写进公开结果或挂起载荷。
+角色和角色 schema 的属性读取也使用同一个记录器，跨插件保留生产者身份。工具和服务的读取归调用 runtime；宿主复制不算读取。粒度见 [World Model](./world-model.md)。子 agent 的世界属性读取在成功且调用仍有效时归调用方真实 `runId`，不建立子 agent 提交单元。失败子 agent 的观察和操作一起撤回；父方已有观察不变。记录器只在内核的执行提交计划中传递，不写进公开结果或挂起载荷。
 
 - `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set`、删除，或含有其中之一的操作列表）再读，就没有依赖。
 - `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
@@ -456,7 +480,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 **PreStateCommit 在事务外运行。**
 
-- finalize 先完成规范化、守卫和 PreStateCommit Hook，再开启事务。事务里只做写入。`createCommitPipeline().commitAll` 同理。
+- finalize 先完成规范化、守卫和 PreStateCommit Hook，再开启事务。事务里只做基线比较、校验和存储写入。`createCommitPipeline().commitAll` 同理。
 - Hook 不读取存储状态，提前运行不改变语义。好处是插件 Hook 的等待不再占用 SQLite / Memory 的串行门。
 
 **玩家停止和提交共用一条边界。**
@@ -587,7 +611,7 @@ await store.withTransaction(async (tx) => {
 | `data-op-rejected`                                                    | 操作作用在当前值上失败，比如 `inc` 越过 `min`                                                   | `plugin.data.update: inc result is outside the allowed range (op 0, out-of-bounds)`，有路径时写成 `(op 1 at /gold, …)` |
 | `dataset-violation`                                                   | 违反了声明的数据集：操作种类不允许、结果不符合记录 schema，或数据集的 schema 文档缺失、无法编译 | `plugin.data.update: dataset inventory: operation kind append is not allowed`                                          |
 | `media-not-found` / `media-ownership-invalid` / `media-mime-mismatch` | 结果里的 `MediaRef` 指向不存在的资源、本会话没有引用的资源，或 MIME 类型不符                    | `plugin.data.update: session … has no reference to media …`                                                            |
-| `conflict`                                                            | 写服务操作里的更新在当前值上失败：暂存时它在调用方看到的值上成立，说明值已被别的提交改了        | 和 `data-op-rejected` 相同                                                                                             |
+| `conflict`                                                            | 读取基线不匹配，或暂存写服务更新在当前值上不再成立                                              | 沿用单元或操作失败边界；不自动重试                                                                                     |
 
 写服务操作里的 `plugin.data.update` 在这里失败时报告 `conflict` 而不是 `data-op-rejected`：它暂存时已经在同样的检查下成立。runtime 自己的更新仍然报告 `data-op-rejected`。
 
@@ -602,7 +626,7 @@ await store.withTransaction(async (tx) => {
 
 **依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据，以及 plugin action RPC 的立即写入。
 
-**挂起的写入基线。** 保存挂起时记录的写入基线（`takenUnder.writes`）只收录含 `set` 或 `delete` 的 `plugin.data.update`。只有相对操作（`merge`、`inc`、数组操作）的更新作用在提交时的最新值上，不会把旧的整个值写回去，所以不收录。基线也覆盖随挂起保存的子调用写入，推导方式和提交时相同。
+**挂起的写入基线。** `takenUnder.writes` 仍覆盖含 `set` / `delete` 的整值更新和嵌套待提交写入，记录的是挂起保存时的内容。更早的[读取基线](#read-baselines)另外保护读后计算的 `merge` / `upsertItem` 替换；两道围栏的观察时点不同。
 
 `isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
 

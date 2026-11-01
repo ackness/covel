@@ -1,3 +1,11 @@
+import {
+  withoutReadPreconditions,
+  attachOperationBaselines,
+  operationReadScopesOf,
+  attachReadScopes,
+  readScopesOf,
+  validateReadScopes,
+} from "../read-baselines.js";
 /**
  * `ctx.recursiveCall` results of a suspended function runtime.
  *
@@ -38,7 +46,25 @@ export function suspendNestedResults(nested: readonly RuntimeResult[]): {
     const journal = journalOf(result);
     const trigger = runtimeTriggerOf(result);
     saved.push({
-      result: structuredClone(result),
+      result: structuredClone({
+        ...result,
+        ...(result.pendingProposals
+          ? {
+              pendingProposals: result.pendingProposals.map((proposal) => ({
+                ...withoutReadPreconditions(proposal),
+                turnId: result.turnId,
+                source: {
+                  pluginId: result.pluginId,
+                  runtimeId: result.runtimeId,
+                },
+              })),
+            }
+          : {}),
+      }),
+      readScopes: readScopesOf(result),
+      ...(Object.keys(operationReadScopesOf(result)).length
+        ? { operationReadScopes: operationReadScopesOf(result) }
+        : {}),
       ...(journal.length > 0 ? { journal: structuredClone(journal) } : {}),
       ...(trigger !== undefined ? { trigger } : {}),
     });
@@ -52,6 +78,14 @@ export function restoreNestedResults(
 ): RuntimeResult[] {
   return saved.map((entry) => {
     const result = structuredClone(entry.result) as RuntimeResult;
+    attachReadScopes(result, validateReadScopes(entry.readScopes));
+    const operations = Object.fromEntries(
+      Object.entries(entry.operationReadScopes ?? {}).map(([id, scopes]) => [
+        id,
+        validateReadScopes(scopes),
+      ]),
+    );
+    attachOperationBaselines(result, operations);
     if (entry.trigger !== undefined)
       attachRuntimeTrigger(result, entry.trigger);
     if (entry.journal?.length)

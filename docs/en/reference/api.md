@@ -1645,6 +1645,8 @@ Successful GET and HEAD responses use the listed MIME, `nosniff`, `ETag`, `Conte
 
 #### GET /api/ui-specs
 
+Declarative live views can compose [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components). They reuse existing player-source actions and interaction responses through `/api/actions`, with no new route, event or bridge capability. Retrieving a view runs no runtime and writes no plugin data.
+
 Returns plugins' UI declarations, grouped by slot. The front end calls it at startup, to build right-panel tabs, message block renderers and plugin view navigation dynamically.
 
 A webview spec returns `webview: { html, height? }` for a single file or `webview: { url, height? }` for a multi-file view. Authoring fields `root` and `entry` are not sent. The URL contains the digest of every published file; a new registration rebuilds the asset index and makes old URLs return 404. Only views allow `root`; a `right` or `message` declaration receives a `webview.root` diagnostic.
@@ -1676,11 +1678,12 @@ A webview spec returns `webview: { html, height? }` for a single file or `webvie
   "message": [...],
   "view": [...],
   "segment": [...],
+  "theme": [...],
   "diagnostics": []
 }
 ```
 
-Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `specs` is a json-render spec, loaded from the plugin's `ui/*.json` files.
+Each slot is an array. Its elements are `{ pluginId, specs[] }`. `theme` uses a separate resolved-theme type; other placements load panel, view or template specs from the plugin's `ui/*.json` files.
 
 **Validation and `specVersion`**:
 
@@ -1692,7 +1695,9 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 
 `view` is always an array (possibly empty) of `{ pluginId, specs }`. With a session, it lists only active plugins. The first view ID within a plugin wins; later duplicates produce `slot: "view"` diagnostics. Loading reads UI JSON, HTML and published assets without importing plugin code or requiring server-code approval. The browser separately gates mounting on player consent for session reading; see [Plugin views](./ui-panels.md#plugin-views).
 
-`segment` is always an array (possibly empty) of `{ pluginId, specs }`: the story paragraph templates of `contributes.ui.segment`, filtered by session like `message`. Plugin order is the tie-break order between templates of the same specificity. A template without `match`, with `webview`, `dataSource` or another panel field, or with an `on` / `watch` binding gets a `slot: "segment"` diagnostic, and the plugin's other templates are still returned. See [Segment templates](./ui-panels.md#segment-templates).
+`segment` is always an array (possibly empty) of `{ pluginId, specs }`: the story paragraph templates of `contributes.ui.segment`, filtered by session like `message`. Plugin order is the tie-break order between templates of the same specificity. A template without `match`, with `webview`, `dataSource` or another panel field, or with an `on` / `watch` binding gets a `slot: "segment"` diagnostic, and the plugin's other templates are still returned. See [Segment templates](./ui-panels.md#segment-templates). Valid speaker-scoped `CharacterAvatar` templates use the same validation, per-template diagnostics and prose fallback; response fields do not change.
+
+`theme` is a required array of `{ pluginId, specs: ResolvedPluginTheme[] }`, using the same session owner guard and runnable-plugin filter as views. It returns localized text maps, validated tokens/layout, generated `cssText`, full SHA-256 `contentHash`, and optional `assets: { digest, files: [{ path, mime, size }] }`. It exposes no raw CSS, disk roots, session data or capabilities. Diagnostics use `slot: "theme"`; CSS issues may include a package-relative `file`. Bitmap-only assets use the existing credential-free `/plugin-assets/<pluginId>/<digest>/<path>` route with GET/HEAD, ETag, immutable caching and `nosniff`, without HTML entry or bridge behavior. Old/unlisted/changed files return the same 404; page rules remain unchanged. See [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins) for the authoritative compiler and identity contract. Players select themes through the device SettingsStore. Themes add no action, RPC, SSE or capability grant. Existing page theme snapshots project only the current session’s safe palette and identity; see the [theme contract](./theme-packages.md#selecting-in-a-session).
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
 
@@ -3910,7 +3915,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message", "view", "segment"]
+      "uiSlots": ["right", "message", "view", "segment", "theme"]
     },
     "scheduling": {
       "effectsPolicy": "warn"
@@ -4562,6 +4567,8 @@ Rules for `data-changed`:
 - A record can also change while the resumed runtime runs. The commit transaction compares again before it writes anything; on a change it writes nothing, voids the item the same way and answers the same `409`.
 
 A runtime has only one suspended item waiting to resume at a time. When it suspends again in another execution, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
+
+Pending read-derived writes also retain their original private [read baselines](./transactions.md#read-baselines). Changes caught by the existing write-target digest keep the `suspension_outdated` response above; a read-baseline mismatch alone is a normal commit `conflict`. A fresh read or repeated suspension cannot refresh the old calculation. The client sends no fingerprint token.
 
 ##### Suspending again
 
@@ -6805,3 +6812,9 @@ Both routes use existing host-profile/session-owner guards. PATCH uses the settl
 ## Creation role
 
 `POST /api/sessions` accepts optional `seatRole: player | host | spectator` alongside autoAdvanceLimit. Omission keeps the existing player seat; other roles begin unbound. Unknown, non-string and null values return 400 without creating a session. Existing session.create host-profile authorization and world/content-locale validation apply. This creation-only game role grants no owner/operator privilege and accepts neither arbitrary seats nor system-source input. Host and spectator action API requests must include the seat ID returned at creation; omitting seatId still looks up the primary human player seat. The ordinary client includes it automatically.
+
+Session-page `capabilities` survive in `/api/ui-specs` under `view`, with the existing runnable-session-plugin filter. Before GET, HEAD or 304 success, assets verify indexed length and SHA-256 and serve the buffer from that same bounded read. The authenticated host routes page requests through existing action, interaction, runtime RPC and abort endpoints; mutations and approval grants check the current lease after credential lookup, immediately before HTTP dispatch. Iframe HTTP authority and discovery endpoints are unchanged. See [page requests and safe outcomes](./ui-panels.md#page-requests-and-safe-outcomes) for parameters, leases and admission.
+
+## Sandbox region declarations and host forwarding
+
+The existing `GET /api/ui-specs` `view` array preserves optional `surface` and `capabilities`; composer cannot be a main default. No discovery or write endpoint is added. The authenticated host forwards actions, answers and own manual runtimes, preserving server authorization, approvals, proposal validation and commit. Stop and own-panel navigation require their own grants. Failure restores only that region and drops late results; see [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer). Existing action/command RPC immediate-write semantics remain unchanged.

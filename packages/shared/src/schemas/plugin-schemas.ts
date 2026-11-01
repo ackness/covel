@@ -1,3 +1,4 @@
+import { MAX_PLUGIN_THEMES, pluginThemePathSchema } from "./plugin-theme.js";
 /**
  * Zod schemas for validating PLUGIN.md frontmatter.
  *
@@ -809,6 +810,16 @@ const pluginEventDeclSchema = z
 /** `contributes.ui`: package-relative paths of UI spec files, by placement. */
 export const pluginUiPathsSchema = z
   .object({
+    theme: z
+      .array(
+        pluginThemePathSchema.refine(
+          (value) => value.endsWith(".json"),
+          "expected a JSON theme file",
+        ),
+      )
+      .max(MAX_PLUGIN_THEMES)
+      .describe("Paths of restricted static plugin theme packs.")
+      .optional(),
     view: z
       .array(z.string().min(1))
       .describe(

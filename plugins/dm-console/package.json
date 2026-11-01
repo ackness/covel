@@ -1,0 +1,5 @@
+{
+  "name": "@covel/plugin-dm-console",
+  "private": true,
+  "type": "module"
+}

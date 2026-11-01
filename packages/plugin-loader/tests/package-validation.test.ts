@@ -454,3 +454,16 @@ it("validates multi-file pages with the same planner the loader uses", async () 
     }),
   );
 });
+
+it("keeps a package-relative stylesheet as the diagnostic source", () => {
+  expect(
+    parseIssueLocation(
+      "ui/reading.css: css.rules[0].declarations[0]: property is not allowed",
+      "/probe",
+    ),
+  ).toEqual({
+    file: "ui/reading.css",
+    field: "css.rules[0].declarations[0]",
+    message: "property is not allowed",
+  });
+});

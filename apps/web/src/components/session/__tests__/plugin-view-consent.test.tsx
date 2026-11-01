@@ -16,11 +16,11 @@ import {
   sessionViewConsentKey,
   usePluginViewConsent,
 } from "../plugin-view-consent.js";
+import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
 import { useGameViewMode } from "../game-view/use-game-view-mode.js";
 import { PluginViewHost } from "../plugin-view-host.js";
 import { PluginWebview } from "../plugin-webview.js";
 import type { StreamFeed } from "../session-bridge-stream.js";
-import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
 import {
   viewEntry,
   pageViewEntry,
@@ -39,8 +39,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/settings/use-settings.js", () => ({
   useSettingsStore: () => mocks.store,
 }));
-vi.mock("../use-session-bridge.js", () => ({
-  useSessionBridge: (sessionId: string) => mocks.sessionBridge(sessionId),
+vi.mock("../use-session-bridge-actions.js", () => ({
+  useSessionBridgeActions: (_entry: PluginViewEntry, sessionId: string) => ({
+    ...mocks.sessionBridge(sessionId),
+    handlers: {},
+    isCurrent: () => true,
+    retire: () => {},
+  }),
 }));
 vi.mock("../plugin-panel.js", () => ({
   PluginPanel: ({
@@ -288,6 +293,208 @@ it("ignores a stale digest promise and an old view while current content is bein
   } finally {
     digest.mockRestore();
   }
+});
+
+it("requires every declared capability independently and survives remount with the same content", async () => {
+  const entry = {
+    ...viewEntry,
+    spec: {
+      ...viewEntry.spec,
+      capabilities: ["submitAction", "abortExecution"] as const,
+    },
+  };
+  const hash = await hashPluginViewContent(pluginViewContent(entry.spec));
+  await mocks.store!.set(sessionViewConsentKey("p", hash), true);
+  const first = renderHook(() => usePluginViewConsent([entry]));
+  await waitFor(() => expect(first.result.current.ready(entry)).toBe(true));
+  expect(first.result.current.isAllowed(entry)).toBe(false);
+  await mocks.store!.set(
+    sessionViewConsentKey("p", hash, "submitAction"),
+    true,
+  );
+  expect(first.result.current.isAllowed(entry)).toBe(false);
+  await act(() => first.result.current.grant(entry));
+  expect(first.result.current.isAllowed(entry)).toBe(true);
+  first.unmount();
+  const next = renderHook(() => usePluginViewConsent([entry]));
+  await waitFor(() => expect(next.result.current.isAllowed(entry)).toBe(true));
+  await act(() => next.result.current.revoke(entry, "abortExecution"));
+  expect(next.result.current.isAllowed(entry)).toBe(false);
+  expect(
+    mocks.store!.get(sessionViewConsentKey("p", hash, "submitAction")),
+  ).toBe(true);
+});
+
+it.each(["success", "failure", "navigation", "revoke"] as const)(
+  "does not authorize optimistic persistence before %s settles",
+  async (outcome) => {
+    let finish!: () => void;
+    let fail!: (reason: Error) => void;
+    let saving = false;
+    const store = new SettingsStore({
+      load: async () => ({}),
+      save: () =>
+        saving
+          ? new Promise<void>((resolve, reject) => {
+              finish = resolve;
+              fail = reject;
+            })
+          : Promise.resolve(),
+      loadSecrets: async () => ({}),
+      saveSecrets: async () => {},
+    });
+    await store.init();
+    mocks.store = store;
+    const entry = {
+      ...viewEntry,
+      spec: { ...viewEntry.spec, capabilities: ["submitAction"] as const },
+    };
+    const hook = renderHook(
+      ({ scope }) => usePluginViewConsent([entry], scope),
+      { initialProps: { scope: "visit-one" } },
+    );
+    await waitFor(() => expect(hook.result.current.ready(entry)).toBe(true));
+    saving = true;
+    let grant!: Promise<void>;
+    act(() => {
+      grant = hook.result.current.grant(entry).catch(() => {});
+    });
+    await waitFor(() => expect(finish).toBeDefined());
+    expect(hook.result.current.isAllowed(entry)).toBe(false);
+    if (outcome === "navigation") hook.rerender({ scope: "visit-two" });
+    let revoke: Promise<void> | undefined;
+    if (outcome === "revoke") {
+      saving = false;
+      act(() => {
+        revoke = hook.result.current.revoke(entry);
+      });
+    }
+    saving = false;
+    await act(async () => {
+      if (outcome === "failure") {
+        fail(new Error("save refused"));
+      } else {
+        finish();
+      }
+      await grant;
+      await revoke;
+    });
+    expect(hook.result.current.isAllowed(entry)).toBe(outcome === "success");
+  },
+);
+
+it("observes external SettingsStore refresh and fails closed on revocation", async () => {
+  let bundle = {
+    schemaVersion: 2 as const,
+    revision: 0,
+    savedAt: "",
+    entries: {} as Record<string, unknown>,
+  };
+  const store = new SettingsStore({
+    load: async () => bundle.entries,
+    save: async () => {},
+    loadSecrets: async () => ({}),
+    saveSecrets: async () => {},
+    loadWithRevision: async () => structuredClone(bundle),
+    saveWithRevision: async (entries, revision) => {
+      bundle = { ...bundle, entries, revision: revision + 1 };
+      return structuredClone(bundle);
+    },
+  });
+  await store.init();
+  mocks.store = store;
+  const hook = renderHook(() => usePluginViewConsent([viewEntry]));
+  await waitFor(() => expect(hook.result.current.ready(viewEntry)).toBe(true));
+  await act(() => hook.result.current.grant(viewEntry));
+  const guard = hook.result.current.isCurrent(viewEntry);
+  expect(guard()).toBe(true);
+  bundle = { ...bundle, revision: bundle.revision + 1, entries: {} };
+  await act(() => store.refresh());
+  expect(guard()).toBe(false);
+  expect(hook.result.current.isAllowed(viewEntry)).toBe(false);
+});
+
+it("binds consent to the surface and keeps independently granted pages separate", async () => {
+  const main = {
+    ...viewEntry,
+    spec: { ...viewEntry.spec, surface: "main" as const },
+  };
+  const composer = {
+    ...viewEntry,
+    mode: "plugin:p:input" as const,
+    viewId: "input",
+    spec: {
+      ...viewEntry.spec,
+      id: "input",
+      surface: "composer" as const,
+      capabilities: ["submitAction" as const],
+    },
+  };
+  const { result, rerender } = renderHook(
+    ({ entries }) => usePluginViewConsent(entries, "visit"),
+    {
+      initialProps: { entries: [main, composer] as readonly PluginViewEntry[] },
+    },
+  );
+  await waitFor(() => expect(result.current.ready(composer)).toBe(true));
+  await act(() => result.current.grant(main));
+  expect(result.current.isAllowed(main)).toBe(true);
+  expect(result.current.isAllowed(composer)).toBe(false);
+  await act(() => result.current.grant(composer));
+  await act(() => result.current.revoke(composer, "submitAction"));
+  expect(result.current.isAllowed(main)).toBe(true);
+  expect(result.current.isAllowed(composer)).toBe(false);
+  const changed = {
+    ...main,
+    spec: { ...main.spec, surface: "composer" as const },
+  };
+  rerender({ entries: [changed, composer] });
+  expect(result.current.isAllowed(changed)).toBe(false);
+  await waitFor(() => expect(result.current.ready(changed)).toBe(true));
+  expect(result.current.isAllowed(changed)).toBe(false);
+});
+it("does not resolve a composer declaration as a world default main view", () => {
+  const entry = {
+    ...viewEntry,
+    spec: { ...viewEntry.spec, surface: "composer" as const },
+  };
+  const { result } = renderHook(() =>
+    useGameViewMode(
+      { metadata: { defaultViewMode: entry.mode } },
+      { views: [entry], reload: () => {}, status: "ready" },
+      () => true,
+    ),
+  );
+  expect(result.current[0]).toBe("parsed");
+  expect(result.current[2].consentView).toBeUndefined();
+});
+
+it("waits for the new visit's world default after dropping a previous selection", () => {
+  const { result, rerender } = renderHook(
+    ({ scope, world }) =>
+      useGameViewMode(
+        world,
+        { views: [], reload() {}, status: "ready" },
+        undefined,
+        scope,
+      ),
+    {
+      initialProps: {
+        scope: "first",
+        world: { metadata: { defaultViewMode: "stage" } } as {
+          metadata: { defaultViewMode: string };
+        } | null,
+      },
+    },
+  );
+  expect(result.current[0]).toBe("stage");
+  rerender({ scope: "second", world: null });
+  expect(result.current[0]).toBe("parsed");
+  rerender({
+    scope: "second",
+    world: { metadata: { defaultViewMode: "stage" } },
+  });
+  expect(result.current[0]).toBe("stage");
 });
 
 it.each([viewEntry, pageViewEntry])(

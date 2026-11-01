@@ -34,6 +34,8 @@ export const PLUGIN_ASSETS_PATH = "/plugin-assets";
 export const PLUGIN_ASSET_DIGEST_PATTERN = /^[a-f0-9]{32}$/;
 export const PLUGIN_ASSET_RESERVED_DIR = "__covel__";
 export const PLUGIN_PAGE_READY_TIMEOUT_MS = 8000;
+export const PLUGIN_PAGE_HEARTBEAT_INTERVAL_MS = 5000;
+export const PLUGIN_PAGE_MISSED_HEARTBEATS = 3;
 
 /** Encode each segment independently, including the package ID. */
 export function pluginAssetUrl(
@@ -62,8 +64,18 @@ export const PLUGIN_ASSET_PAGE_CSP = [
 /** Small transport only; rendering, state interpretation and interactions belong to the plugin. */
 export const PLUGIN_BRIDGE_SCRIPT = `
 (() => {
-  let port, state = {}, sequence = 0;
+  let port, closed = false, failed = false, state = {}, sequence = 0;
   const listeners = new Set(), pending = new Map();
+  const pageError = () => {
+    failed = true;
+    if (port && !closed) port.postMessage({ type: "page-error" });
+  };
+  addEventListener("error", event => {
+    // Resource errors do not bubble. Only scripts are required for the app.
+    if (event.target && event.target !== window && event.target.tagName !== "SCRIPT") return;
+    pageError();
+  }, true);
+  addEventListener("unhandledrejection", pageError);
   // The host's style scheme, as --covel-* custom properties on the document.
   const applyTheme = theme => {
     if (!theme || !theme.tokens) return;
@@ -77,7 +89,8 @@ export const PLUGIN_BRIDGE_SCRIPT = `
     getState: () => state,
     subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
     invoke(action, params = {}) {
-      if (!port) return Promise.reject(new Error("Plugin UI is not connected"));
+      if (!port || closed) return Promise.reject(new Error("Plugin UI is not connected"));
+      if (pending.size >= 8) return Promise.reject(new Error("Plugin UI is busy"));
       const id = String(++sequence);
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { pending.delete(id); reject(new Error("Plugin UI action timed out")); }, 120000);
@@ -90,7 +103,13 @@ export const PLUGIN_BRIDGE_SCRIPT = `
     if (event.source !== parent || event.data?.type !== "covel:connect" || !event.ports[0] || port) return;
     port = event.ports[0];
     port.onmessage = ({ data }) => {
-      if (data?.type === "state") {
+      if (data?.type === "ping" && Number.isSafeInteger(data.id) && data.id > 0) {
+        if (!closed) port.postMessage({ type: "pong", id: data.id });
+      } else if (data?.type === "closed") {
+        closed = true;
+        for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error("Plugin UI is not connected")); }
+        pending.clear(); port.close();
+      } else if (data?.type === "state") {
         state = data.value;
         applyTheme(state.theme);
         for (const fn of listeners) fn(state);
@@ -108,6 +127,6 @@ export const PLUGIN_BRIDGE_SCRIPT = `
       }
     };
     port.start();
-    port.postMessage({ type: "ready" });
+    port.postMessage({ type: failed ? "page-error" : "ready" });
   });
 })();`;

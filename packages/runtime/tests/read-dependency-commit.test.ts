@@ -341,7 +341,7 @@ describe("read dependencies at commit", () => {
     expect(await notes()).toEqual({ a: "b's own" });
   });
 
-  it("keeps an overwriting reader when its producer is dropped", async () => {
+  it("conservatively rejects a same-key read replacement after its masked external producer is dropped", async () => {
     const { outcome, notes, runOf } = await run(
       [story, a, b],
       {
@@ -367,8 +367,16 @@ describe("read dependencies at commit", () => {
         cause: "rejected",
         error: "a-refused refused",
       },
+      expect.objectContaining({
+        runtimeId: b.name,
+        runId: runOf(b.name),
+        cause: "rejected",
+      }),
     ]);
-    expect(await notes()).toEqual({ a: "b's own" });
+    expect(
+      outcome.failedProposals.some((failure) => failure.code === "conflict"),
+    ).toBe(true);
+    expect(await notes()).toEqual({});
   });
 
   it("commits a story that read a dropped producer and traces it once", async () => {

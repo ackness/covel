@@ -15,6 +15,8 @@ import {
   validatePluginFiles,
   compileInlineRuntime,
   parseRuntimeMd,
+  compileMessageCatalogs,
+  parseLocaleFile,
   validatePluginDeclarations,
   multiRuntimeRootDiagnostics,
   withDerivedPackageFields,
@@ -297,6 +299,36 @@ export function validatePluginBundle(
             ? [{ path: file, size: entry.content.byteLength }]
             : [];
         }),
+      {
+        read(relative, limit) {
+          relative = relative.replace(/^\.\//, "");
+          const entry = entries.find(
+            (candidate) => candidate.relativePath === relative,
+          );
+          if (!entry || entry.content.byteLength > limit)
+            throw new Error("theme file missing or oversized");
+          return entry.content;
+        },
+        list(relative) {
+          const prefix = relative.replace(/^\.\//, "") + "/";
+          return entries
+            .filter((entry) => entry.relativePath.startsWith(prefix))
+            .map((entry) => ({
+              relativePath: entry.relativePath.slice(prefix.length),
+              size: entry.content.byteLength,
+            }));
+        },
+      },
+      compileMessageCatalogs(
+        entries.flatMap((entry) => {
+          if (!/^locales\/[^/]+\.ya?ml$/.test(entry.relativePath)) return [];
+          const locale = parseLocaleFile(
+            entry.content.toString("utf8"),
+            entry.relativePath,
+          );
+          return locale ? [locale] : [];
+        }),
+      ),
     );
     // `package.json` is optional: a package without one is ESM and bundles
     // no dependencies.

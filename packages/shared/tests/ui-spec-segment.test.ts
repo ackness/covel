@@ -25,6 +25,29 @@ describe("segment template rules", () => {
     ).toEqual([]);
   });
 
+  it.each(["component", "type"])(
+    "accepts a speaker avatar with the %s spelling but rejects authored actions",
+    (spelling) => {
+      const avatar = {
+        [spelling]: "CharacterAvatar",
+        props: { characterId: { $state: "/character/id" } },
+      };
+      const spec = { match: { kind: "dialogue" }, view: avatar };
+      expect(segmentIssues(spec)).toEqual([]);
+      for (const binding of ["on", "watch"]) {
+        expect(
+          paths({
+            ...spec,
+            view: {
+              ...avatar,
+              [binding]: { press: { action: "sendMessage" } },
+            },
+          }),
+        ).toEqual([`view.${binding}`]);
+      }
+    },
+  );
+
   it("requires a non-empty match", () => {
     expect(paths({ view })).toEqual(["match"]);
     expect(segmentIssues({ match: {}, view })).toEqual([
@@ -123,7 +146,6 @@ describe("segment template rules", () => {
       "Tabs",
       "FilterContainer",
       "SceneCastList",
-      "CharacterAvatar",
       "PortraitGallery",
       "MediaGallery",
       "WorldDimensions",

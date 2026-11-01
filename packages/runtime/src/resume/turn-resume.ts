@@ -1,3 +1,10 @@
+import {
+  attachReadScopes,
+  readScopesOf,
+  validateReadScopes,
+} from "../read-baselines.js";
+import { attachReadDependencies } from "../read-dependencies.js";
+import { createPluginDataVisibility } from "../function-runtime/upstream-plugin-data.js";
 import { createDelegationBudget } from "../orchestration/delegation-budget.js";
 import { settleAgentLoop } from "../agent-loop/settle-agent-loop.js";
 import { loadLastPlayerInput } from "../turn-executor/session-state.js";
@@ -197,6 +204,23 @@ async function executeResumedRuntime(
   }
 
   const { pendingContinuation } = suspension;
+  const capturedReadScopes = validateReadScopes(pendingContinuation.readScopes);
+  const knownIds = new Set(
+    capturedReadScopes.flatMap((scope) => scope.proposalIds ?? []),
+  );
+  const blindPrefix = (
+    pendingContinuation.pendingProposals as readonly Proposal[]
+  )
+    .filter((proposal) => !knownIds.has(proposal.id))
+    .map((proposal) => proposal.id);
+  const savedReadScopes = [
+    ...capturedReadScopes,
+    ...(blindPrefix.length ? [{ reads: [], proposalIds: blindPrefix }] : []),
+  ];
+  const keepSavedReads = (result: RuntimeResult): RuntimeResult => {
+    attachReadScopes(result, [...savedReadScopes, ...readScopesOf(result)]);
+    return result;
+  };
   const inherited = pendingContinuation.executionContext;
   const resumeExecutionContext: ExecutionContext = {
     ...inherited,
@@ -216,42 +240,44 @@ async function executeResumedRuntime(
       deps.store,
       input.sessionId,
     );
-    return executeFunctionRuntime({
-      lastPlayerInput,
-      ...(pendingContinuation.logicalTurn !== undefined
-        ? { logicalTurn: pendingContinuation.logicalTurn }
-        : {}),
-      manifest,
-      input,
-      loaded,
-      deps,
-      hookPipeline,
-      triggerEvent: undefined,
-      inputs: pendingContinuation.inputSlots,
-      exports: pendingContinuation.exportSlots,
-      activation: pendingContinuation.activation,
-      pendingProposals: pendingContinuation.pendingProposals as Proposal[],
-      executionContext: resumeExecutionContext,
-      createRecursiveCall: () => async () => {
-        throw new Error(
-          `function runtime "${manifest.name}" cannot use recursiveCall while resuming`,
-        );
-      },
-      recursionDepth: 0,
-      startTime,
-      runId,
-      timeoutMs: resumeTimeoutMs,
-      executionId: progressScopeId,
-      resumeData,
-      resumedFromSuspensionId: suspension.id,
-      ...(pendingContinuation.nestedResults?.length
-        ? {
-            restoredNested: restoreNestedResults(
-              pendingContinuation.nestedResults,
-            ),
-          }
-        : {}),
-    });
+    return keepSavedReads(
+      await executeFunctionRuntime({
+        lastPlayerInput,
+        ...(pendingContinuation.logicalTurn !== undefined
+          ? { logicalTurn: pendingContinuation.logicalTurn }
+          : {}),
+        manifest,
+        input,
+        loaded,
+        deps,
+        hookPipeline,
+        triggerEvent: undefined,
+        inputs: pendingContinuation.inputSlots,
+        exports: pendingContinuation.exportSlots,
+        activation: pendingContinuation.activation,
+        pendingProposals: pendingContinuation.pendingProposals as Proposal[],
+        executionContext: resumeExecutionContext,
+        createRecursiveCall: () => async () => {
+          throw new Error(
+            `function runtime "${manifest.name}" cannot use recursiveCall while resuming`,
+          );
+        },
+        recursionDepth: 0,
+        startTime,
+        runId,
+        timeoutMs: resumeTimeoutMs,
+        executionId: progressScopeId,
+        resumeData,
+        resumedFromSuspensionId: suspension.id,
+        ...(pendingContinuation.nestedResults?.length
+          ? {
+              restoredNested: restoreNestedResults(
+                pendingContinuation.nestedResults,
+              ),
+            }
+          : {}),
+      }),
+    );
   }
 
   await reportRuntimeStarted(
@@ -307,6 +333,13 @@ async function executeResumedRuntime(
 
   // The World Model base is what is committed now, as it is for a resumed
   // function runtime; the loop overlays the continuation's own buffered writes.
+  const pluginDataVisibility = createPluginDataVisibility({
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    runId,
+    basisWrites: () =>
+      pendingContinuation.pendingProposals as readonly Proposal[],
+  });
   const worldBase = deps.store
     ? await createWorldModelView(
         deps.worldModelReads ?? deps.store,
@@ -350,6 +383,7 @@ async function executeResumedRuntime(
         ? { ...deps, toolExecutor }
         : deps;
   const toolLoop = await runAgentToolLoop({
+    pluginDataVisibility,
     worldBase,
     manifest,
     input,
@@ -394,7 +428,11 @@ async function executeResumedRuntime(
   });
   // The loop suspended again: its result is final, and PostRuntime waits
   // for the end of the logical runtime.
-  if ("status" in toolLoop) return toolLoop;
+  if ("status" in toolLoop) {
+    if (toolLoop.status === "suspended")
+      attachReadDependencies(toolLoop, pluginDataVisibility.recorder);
+    return keepSavedReads(toolLoop);
+  }
   lastTarget = toolLoop.lastTarget;
   deltaCount = toolLoop.streamDeltaCount;
 
@@ -417,5 +455,8 @@ async function executeResumedRuntime(
   // PostRuntime runs BEFORE any persistence — the caller persists
   // the hook-finalized output. It runs here once for the logical runtime,
   // with `resumed: true`.
-  return finalizeWithPostRuntime(settled.result);
+  const result = await finalizeWithPostRuntime(settled.result);
+  if (result.status === "success")
+    attachReadDependencies(result, pluginDataVisibility.recorder);
+  return keepSavedReads(result);
 }

@@ -24,7 +24,15 @@ import type {
   FunctionHandler,
   LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
-import { delegateTool, suspendTool, ToolRegistry } from "@covel/tools";
+import {
+  delegateTool,
+  suspendTool,
+  ToolRegistry,
+  tool,
+  z,
+  withPendingProposals,
+  type ToolModule,
+} from "@covel/tools";
 import {
   commitExecution,
   createToolExecutor,
@@ -174,6 +182,7 @@ function deps(args: {
   runtimes: readonly RuntimeManifest[];
   handlers?: Record<string, FunctionHandler>;
   turnId?: string;
+  tools?: readonly ToolModule[];
 }) {
   const registry = new ToolRegistry();
   registry.registerBuiltin(delegateTool);
@@ -208,7 +217,9 @@ function deps(args: {
     loadRuntime: async (manifest: RuntimeManifest) => loaded.get(manifest.name),
     toolExecutor: createToolExecutor({
       store: args.store,
-      findTool: (name, context) => registry.find(name, context.pluginId),
+      findTool: (name, context) =>
+        args.tools?.find((module) => module.name === name) ??
+        registry.find(name, context.pluginId),
       getToolSource: (name) => registry.source(name),
     }),
     resolveModel: (manifest: RuntimeManifest, override?: string) =>
@@ -394,6 +405,160 @@ describe("sub-agents at commit", () => {
 });
 
 describe("sub-agents after resume", () => {
+  it("delegates the resumed agent's saved pending world without replaying its writes", async () => {
+    const store = await seeded(["director", "actor-pkg"]);
+    await store.upsertCharacter({
+      id: "visitor",
+      sessionId: SESSION,
+      name: "Visitor",
+      type: "npc",
+      description: "committed",
+      version: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const stage = tool({
+      name: "stage-world",
+      description: "Stage a character",
+      parameters: z.object({}),
+      execute: async () =>
+        withPendingProposals({ staged: true }, [
+          {
+            id: crypto.randomUUID(),
+            type: "character.upsert",
+            sessionId: SESSION,
+            turnId: input.turnId,
+            source: { pluginId: "director", runtimeId: "director/lead" },
+            timestamp,
+            payload: {
+              id: "visitor",
+              name: "Visitor",
+              type: "npc",
+              description: "saved pending",
+              expectedVersion: 1,
+            },
+          },
+        ]),
+    });
+    let observations = 0;
+    const read = tool({
+      name: "read-world",
+      description: "Read the resumed world",
+      annotations: { readOnly: true },
+      parameters: z.object({}),
+      execute: async (_args, ctx) => {
+        observations++;
+        expect(
+          ctx.world!.characters.find((c) => c.id === "visitor"),
+        ).toMatchObject({ description: "saved pending", version: 2 });
+        expect(await store.getCharacter(SESSION, "visitor")).toMatchObject({
+          description: "committed",
+          version: 1,
+        });
+        return { line: "I see the pending character." };
+      },
+    });
+    const director: RuntimeManifest = {
+      name: "director/lead",
+      pluginId: "director",
+      description: "Director",
+      runtimeType: "agent",
+      outputKind: "system",
+      stage: "narrative",
+      trigger: { type: "auto" },
+      output: { schema: "output.schema.json" },
+      tools: { builtin: [stage.name, "suspend", "delegate"] },
+      maxRetries: 0,
+    };
+    const actor = { ...guard, tools: { builtin: [read.name] } };
+    const { llm, models } = routedLLM({
+      [PARENT_MARK]: (index) =>
+        index === 0
+          ? call(stage.name, {}, "stage")
+          : index === 1
+            ? call(
+                "suspend",
+                {
+                  reason: "Confirm",
+                  fields: [{ type: "text", name: "answer", label: "Answer" }],
+                },
+                "suspend",
+              )
+            : index === 2
+              ? call(
+                  "delegate",
+                  {
+                    target: { contract: CONTRACT },
+                    brief: "Constant safe brief",
+                  },
+                  "delegate",
+                )
+              : json({ line: "Complete" }),
+      [ACTOR_MARK]: (index) =>
+        index === 0
+          ? call(read.name, {}, "read")
+          : json({ line: "I see the pending character." }),
+    });
+    const turnDeps = deps({
+      store,
+      llm,
+      runtimes: [director, actor],
+      tools: [stage, read],
+    });
+    const execution = await executeTurn(input, [director, actor], turnDeps);
+    expect(execution.result.runtimeResults[0]?.status).toBe("suspended");
+    expect(
+      (
+        await commitExecution({
+          store,
+          execution,
+          completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+        })
+      ).status,
+    ).toBe("committed");
+    const [suspension] = await store.listSuspensions(SESSION);
+    const resumed = await resumeSuspendedRuntime(
+      suspension!,
+      {},
+      director,
+      turnDeps,
+      { activeRuntimes: [director, actor] },
+    );
+    expect(resumed.result.status, resumed.result.error).toBe("success");
+    expect(resumed.commit.readDependencies ?? {}).toEqual({});
+    expect(observations).toBe(1);
+    expect(models.filter((m) => m.mark === ACTOR_MARK)).toHaveLength(2);
+    expect(
+      (
+        await commitExecution({
+          store,
+          execution: resumed,
+          completion: {
+            kind: "resume",
+            turnId: input.turnId,
+            suspensionId: suspension!.id,
+            runtimeId: director.name,
+            pluginId: director.pluginId,
+          },
+        })
+      ).status,
+    ).toBe("committed");
+    expect(await store.getCharacter(SESSION, "visitor")).toMatchObject({
+      description: "saved pending",
+      version: 2,
+    });
+    expect(
+      (await store.listSuspensions(SESSION)).every(
+        (s) => s.resolvedAt !== undefined,
+      ),
+    ).toBe(true);
+    expect(
+      (await store.listTurnResults(SESSION)).every(
+        (r) => r.commitStatus !== "pending",
+      ),
+    ).toBe(true);
+  });
+
   it("resolves the sub-agent's slot through the session override on a resumed delegation", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = await seeded(["director", "actor-pkg"]);

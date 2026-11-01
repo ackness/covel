@@ -7,7 +7,7 @@ A plugin's UI is a JSON document (a UI spec), and it can only be built from the 
 ## Authoring tip
 
 - **Where the components come from.** `apps/web/src/lib/catalog.tsx` exports `covelRegistry`. Each renderer lives under `apps/web/src/lib/catalog/`, grouped by responsibility. A plugin can only use components registered here. The framework sets the vocabulary, and plugins combine it.
-- **Referencing them in a plugin.** In `ui/*.json`, write `"component": "<Name>"`, with the name exactly as below. Spec files are discovered through `contributes.ui.right` / `ui.message` in `PLUGIN.md`.
+- **Referencing them in a plugin.** In `ui/*.json`, write `"component": "<Name>"`, with the name exactly as below. Spec files are discovered through `contributes.ui.right` / `ui.message` / `ui.view` in `PLUGIN.md`.
 - **Text and validation.** Write the spec in English, and put translations in the `messages` section of `locales/<locale>.yaml` (see [ui-panels.md](./ui-panels.md#plugin-ui-text-rules)). Run `pnpm check:i18n`. It includes `check-plugin-i18n`, which rejects Chinese in a spec, and requires every interface text of a built-in plugin to have a Chinese translation.
 - **Finding components this page does not cover yet.** The full list can be searched at any time:
 
@@ -89,7 +89,9 @@ PascalCase forms such as `BookOpen` are normalized to the same name. An unknown 
 | `EntryList`           | A declarative entry list: title, description, badges, and fields with labels.                                                                                                                   | `items`, `titleField`, and optional `idField`, `descriptionFields`, `badgeFields`, `fields`, `dateField`, `footerField`                                                                                 |
 | `SceneCastList`       | The characters on stage from `stage.cast@1`: name, type, and description.                                                                                                                       | None                                                                                                                                                                                                    |
 | `CharacterFieldsView` | Shows a character's `fields` object according to the schema. It reads the `characterSchema` of the session's World Model, and groups fields by category (bio/stats/abilities/equipment/social). | `value` (the character's `fields` object)                                                                                                                                                               |
-| `CharacterAvatar`     | An avatar taken from `character.visual@1` by character ID. Click to enlarge.                                                                                                                    | `characterId`, and optional `size` (default `28`)                                                                                                                                                       |
+| `CharacterAvatar`     | A public avatar with click-to-enlarge; its source depends on placement.                                                                                                                         | `characterId`, and optional `size` (default `28`)                                                                                                                                                       |
+
+`CharacterAvatar` in ordinary panels reads the current session’s keyed `character.visual@1` by `characterId`. In segment templates it uses only the host-projected speaker portrait, requiring `/character/id` to match. `size` defaults to 28 pixels. Without a portrait it renders nothing; other nodes keep the label and prose. Enlargement and dismissal use host-local preview controls with translated labels; changing session, speaker or portrait closes the preview. See [Segment templates](./ui-panels.md#segment-templates) for the complete boundary.
 
 `EntryCard` treats `category` and `rarity` as provider-defined data keys, with no built-in enums or default rarity. `categoryOptions` is an array of `{ value, label, icon?, color? }`: `value` matches the category, `label` resolves in the UI language, and per-entry `icon` / `color` override the option. `rarityOptions` is an array of `{ value, tone?, color? }`: after matching rarity, `tone` controls the marker (`muted` / `primary` / `info` / `success` / `warning` / `danger`) and `color` controls the category badge (`red` / `amber` / `blue` / `green` / `purple` / `cyan`). Without a match, the card shows the raw category key, a generic book icon and neutral colors. With `FilterContainer`, place these arrays in the row template’s `EntryCard.props` and bind data keys with `$item`. Write spec labels in English and translate them in the plugin’s `locales/<locale>.yaml` `messages` section, without adding bilingual names to model data.
 
@@ -227,6 +229,20 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 | `PlayerMessage` | A player's chat bubble, aligned to the right (the Paper theme has a different style). | `content` (string)                                                                               |
 | `Alert`         | An info / success / warning / error notice.                                           | `level` (`info` / `success` / `warning` / `error`), `title` _(I18nText)_, `message` _(I18nText)_ |
 
+### Live session view components
+
+<!-- prettier-ignore -->
+| Component | Props | Content |
+| --- | --- | --- |
+| `SessionMessages` | Only optional literal `content: "story" \| "pending"`, default `"story"` | Public story/player messages and current story stream, or pending public interactions with an empty state |
+| `SessionComposer` | Empty object `{}`; `props` may be omitted | The current session's shared mode bar, fields, input, queued drafts and feedback |
+
+These components are valid only in live declarative `contributes.ui.view`. Each view allows at most one story region, one pending region and one composer. They cannot use `repeat`, have a repeated ancestor, or occur inside `FilterContainer.props.itemTemplate`. Both `component` and `type` are checked, including named slots and row templates, with exact diagnostic paths. Other props, including session, seat, actor, source and action parameters, are rejected. Expressions cannot select `content`. This control value is never translated; translate region headings through ordinary text components.
+
+Right, message and segment placements reject them. Webviews, snapshots, debug panels and nested messages have no live host context. Runtime checks also reject invalid props and show a bounded unavailable notice. Pending means already public unanswered, non-stale forms, choices and confirmations, determined using complete history. Pending blocks are not duplicated in story; suggestions do not lock input. Unrevealed plot queues, conditions and counts are excluded. See [Live session components](./ui-panels.md#live-session-components) for host and action rules.
+
+`SceneCastList` still reads only public `stage.cast@1`, with an empty state when no provider or actor exists. It is not all known characters, kernel witnessed history or actor eligibility.
+
 ### Visualization
 
 | Component         | Use                                                                                                                                                                                                                                                                                                                                                                    | Main properties                                           |
@@ -273,7 +289,7 @@ Existing `WorldDimensions` tables, host Markdown tables, component loading anima
 
 ## Summary
 
-There are 50 components in total. The authoritative list is `covelRegistry`, exported from `apps/web/src/lib/catalog.tsx`. The renderer implementations are under `apps/web/src/lib/catalog/`.
+There are 52 components in total. The authoritative list is `covelRegistry`, exported from `apps/web/src/lib/catalog.tsx`. The renderer implementations are under `apps/web/src/lib/catalog/`.
 
 When you add a new component:
 
@@ -331,3 +347,11 @@ This section explains how list components (`EntryList`, `MediaGallery`, `JobList
 ```
 
 The host compares a job's `itemField` value with each media record's `matchField`. An empty value does not count as a match. This way a job row can show its related preview, and the component does not need to know the prompt field or read a second plugin namespace.
+
+## Sandbox pages and component actions
+
+JSON component action handlers and the [consented sandbox interface](./ui-panels.md#page-requests-and-safe-outcomes) are separate. Sandbox regions request mutations through normal player actions, interactions and own manual runtimes, without raw panel data/results or action/command/event RPC. Component allowlists are unchanged.
+
+## Session theme markers
+
+Restricted plugin themes affect only text leaves in host narrative Markdown, stage narrative paragraphs and a separate noninteractive decorative plane. `Prose`, segment templates and other plugin components do not become targets just because they display text. Catalog renderers forward only declared props, without spreading arbitrary DOM attributes, so a spec cannot assign reserved `data-covel-theme-scope` / `data-covel-theme-part`. Host action buttons and image-consent controls stay outside palette nodes. See [plugin themes](./theme-packages.md#selecting-in-a-session) for the boundary.

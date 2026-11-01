@@ -1,10 +1,17 @@
 import {
+  baselinesFor,
+  characterBasisOf,
+  createReadBaselineRecorder,
+  type ReadBaselineRecorder,
+} from "../read-baselines.js";
+import {
   materializeWorldModel,
   DIMENSION_DATA_NAMESPACE,
   dimensionRecordSchema,
   dimensionSnapshotFromRecords,
   localizedWorldText,
   type Proposal,
+  type ProposalReadPrecondition,
   type RuntimeResult,
   type WorldModelView,
 } from "@covel/shared";
@@ -31,6 +38,8 @@ type ObservedProperty = "characters" | "characterSchema";
 interface WorldReadTracking {
   readonly producers: Readonly<Record<ObservedProperty, readonly string[]>>;
   readonly recorder: ReadRecorder;
+  readonly baselines?: ReadBaselineRecorder;
+  readonly characterBaselines: readonly ProposalReadPrecondition[];
 }
 
 // Only the host can snapshot a facade without observing its properties. Neither
@@ -39,6 +48,7 @@ const views = new WeakMap<
   WorldModelView,
   {
     snapshot(): WorldModelView;
+    assertLive(): void;
     tracking?: WorldReadTracking;
   }
 >();
@@ -48,6 +58,9 @@ function noteWorldRead(
   key: keyof WorldModelView,
 ) {
   if (!tracking || (key !== "characters" && key !== "characterSchema")) return;
+  if (key === "characters")
+    for (const baseline of tracking.characterBaselines)
+      (tracking.baselines ?? baselinesFor(tracking.recorder)).observe(baseline);
   for (const producer of tracking.producers[key])
     tracking.recorder.add(producer);
 }
@@ -60,10 +73,27 @@ function ownedSnapshot(view: WorldModelView): WorldModelView {
 export function snapshotWorldModelView(
   view: WorldModelView,
   assertLive: () => void = () => {},
+  baselines?: ReadBaselineRecorder,
 ): WorldModelView {
   assertLive();
   const snapshot = ownedSnapshot(view);
-  const tracking = views.get(view)?.tracking;
+  const sourceTracking = views.get(view)?.tracking;
+  const tracking =
+    sourceTracking && baselines
+      ? { ...sourceTracking, baselines }
+      : sourceTracking;
+  const sourceLive = views.get(view)?.assertLive;
+  return snapshotFacade(snapshot, tracking, () => {
+    sourceLive?.();
+    assertLive();
+  });
+}
+
+function snapshotFacade(
+  snapshot: WorldModelView,
+  tracking: WorldReadTracking | undefined,
+  assertLive: () => void,
+): WorldModelView {
   const copy = Object.defineProperties(
     {},
     Object.fromEntries(
@@ -82,6 +112,7 @@ export function snapshotWorldModelView(
     ),
   ) as WorldModelView;
   views.set(copy, {
+    assertLive,
     snapshot: () => {
       assertLive();
       return snapshot;
@@ -89,6 +120,67 @@ export function snapshotWorldModelView(
     tracking,
   });
   return copy;
+}
+
+/**
+ * Host-only speculative child scope. Capture without observing getters or
+ * retaining the parent's capability lifetime. Only accepted child reads join
+ * the caller's invocation; ordinary tool/service snapshots still share theirs.
+ */
+export function forkWorldModelView(
+  parent: WorldModelView,
+  assertLive: () => void = () => {},
+): { readonly world: WorldModelView; accept(): void; discard(): void } {
+  assertLive();
+  const snapshot = ownedSnapshot(parent);
+  const source = views.get(parent)?.tracking;
+  const recorder: ReadRecorder = new Set();
+  const baselines = createReadBaselineRecorder();
+  let closed = false;
+  const live = () => {
+    assertLive();
+    if (closed) throw new Error("Child world view has completed");
+  };
+  const world = snapshotFacade(
+    snapshot,
+    source
+      ? {
+          recorder,
+          baselines,
+          characterBaselines: structuredClone(source.characterBaselines),
+          producers: {
+            characters: [...source.producers.characters],
+            characterSchema: [...source.producers.characterSchema],
+          },
+        }
+      : undefined,
+    live,
+  );
+  return {
+    world,
+    accept() {
+      if (closed) return;
+      live();
+      acceptWorldModelReadBaselines(parent, baselines.snapshot());
+      for (const producer of recorder) source?.recorder.add(producer);
+      closed = true;
+    },
+    discard() {
+      closed = true;
+    },
+  };
+}
+
+/** Accept a successful tool's character observations into its owning world scope. */
+export function acceptWorldModelReadBaselines(
+  world: WorldModelView,
+  reads: readonly ProposalReadPrecondition[],
+): void {
+  const tracking = views.get(world)?.tracking;
+  if (!tracking) return;
+  const baselines = tracking.baselines ?? baselinesFor(tracking.recorder);
+  for (const read of reads)
+    if (read.kind === "character") baselines.observe(read);
 }
 
 export type WorldModelReadStore = Pick<
@@ -244,6 +336,21 @@ export async function createWorldModelView(
     reads
       ? {
           recorder: reads.recorder,
+          characterBaselines: [
+            ...new Set(
+              reads.upstream.flatMap(({ proposal }) =>
+                proposal.type === "character.upsert"
+                  ? [proposal.payload.id]
+                  : [],
+              ),
+            ),
+          ].map((id) => ({
+            kind: "character" as const,
+            id,
+            basis: characterBasisOf(
+              base.characters.find((character) => character.id === id),
+            ),
+          })),
           producers: {
             characters: [
               ...new Set(
@@ -275,11 +382,15 @@ export function overlayWorldModelView(
   /** The session's content locale. */
   locale?: string,
 ): WorldModelView {
+  const sourceLive = views.get(base)?.assertLive;
   return overlayOwnedWorldModelView(
     ownedSnapshot(base),
     sessionId,
     pending,
-    assertLive,
+    () => {
+      sourceLive?.();
+      assertLive();
+    },
     locale,
     views.get(base)?.tracking,
   );
@@ -365,6 +476,7 @@ function overlayOwnedWorldModelView(
     },
   });
   views.set(view, {
+    assertLive,
     snapshot: () => ({ ...current(), worldRecord }),
     tracking,
   });

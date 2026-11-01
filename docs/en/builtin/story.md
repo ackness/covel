@@ -214,3 +214,13 @@ pluginSettings:
 ```
 
 The player's Perspective setting overrides this world default for subsequent narration while preserving player agency. Narrator perspective and the human seat's role are independent choices.
+
+## DM Console (`dm-console`)
+
+Choose DM Console from the header's Plugin views menu to see scene cast, pending interactions, story and input in the full story column. Host Back, Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
+
+Cast shows public scene actors only, with an empty state without a provider. It is not all known characters or actor eligibility. Pending interactions are already public unanswered, non-stale forms, choices and confirmations, without unrevealed plot or hidden event counts. Story omits tools, reasoning and execution detail.
+
+Select an action permitted for the current role: Game masters can use Direct, Narrate and Advance; spectators can only Advance; players retain ordinary modes. Advance takes no text. Changing views preserves drafts, modes, fields and queued choices; refusal does not clear them. Opening the page changes no role, narrator perspective or policy.
+
+DM Mode and Spectator include the console; Ensemble Dialogue recommends it. Defaults remain text and stage respectively. Ordinary DM Mode still uses Narrator and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.

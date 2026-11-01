@@ -356,9 +356,8 @@ describe("affinity dataset", () => {
     },
   );
 
-  it("adds both stale-read deltas under the real dataset while keeping the last predicted display and history", async () => {
+  it("rejects a stale derived update, preserves the story, and recomputes consistently on explicit retry", async () => {
     const { store, recorded, run, commit } = await fixture();
-    // Both executions read score 10 before either one commits.
     const first = await run(
       [{ name: "NPC", delta: 15, reason: "Helped" }],
       "first",
@@ -369,25 +368,47 @@ describe("affinity dataset", () => {
     );
     expect(getToolContent(recorded[0]).results[0].score).toBe(25);
     expect(getToolContent(recorded[1]).results[0].score).toBe(5);
-    for (const execution of [first, second]) {
-      const outcome = await commit(execution);
-      expect(outcome.status).toBe("committed");
-      expect(outcome.failedProposals).toEqual([]);
-    }
-    const value = (
-      await store.getPluginData(sessionId, "affinity", "affinity", "npc")
-    ).value;
+    expect((await commit(first)).failedProposals).toEqual([]);
+    const stale = await commit(second);
+    expect(stale.status).toBe("committed");
+    expect(stale.failedProposals).toEqual([
+      expect.objectContaining({ code: "conflict" }),
+    ]);
+    const read = async () =>
+      (await store.getPluginData(sessionId, "affinity", "affinity", "npc"))
+        .value;
+    expect(await read()).toMatchObject({
+      score: 25,
+      scoreBar: 125,
+      lastReason: "Helped",
+      notes: "Author note",
+    });
+    expect(
+      (await read()).history.map(({ delta, reason }) => ({ delta, reason })),
+    ).toEqual([{ delta: 15, reason: "Helped" }]);
+    expect(
+      (await store.getPluginData(sessionId, "story", "saved", "second")).value,
+    ).toBe("Story preserved");
+    const retry = await run(
+      [{ name: "NPC", delta: -5, reason: "Argued" }],
+      "retry",
+    );
+    expect((await commit(retry)).failedProposals).toEqual([]);
+    const value = await read();
     expect(value).toMatchObject({
       score: 20,
-      scoreBar: 105,
-      tier: "neutral",
+      scoreBar: 120,
+      tier: "friendly",
       lastReason: "Argued",
       notes: "Author note",
     });
-    // Neither execution advanced completedPlayerTurns before these histories
-    // were predicted, so both stamps are logical turn 1.
-    expect(value.history).toEqual([{ turn: 1, delta: -5, reason: "Argued" }]);
-    expect(value.scoreBar).not.toBe(value.score + 100);
+    expect(
+      value.history.map(({ delta, reason }) => ({ delta, reason })),
+    ).toEqual([
+      { delta: 15, reason: "Helped" },
+      { delta: -5, reason: "Argued" },
+    ]);
+    expect(value.scoreBar).toBe(value.score + 100);
     expect(
       getPendingProposals(recorded[1])[0].payload.ops.map((op) => op.op),
     ).toEqual(["inc", "merge"]);

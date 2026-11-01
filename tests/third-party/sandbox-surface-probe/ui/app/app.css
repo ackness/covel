@@ -1,0 +1,32 @@
+body {
+  color: var(--covel-foreground, #222);
+  background: var(--covel-background, #fff);
+  font: 16px system-ui;
+  margin: 1rem;
+}
+pre {
+  white-space: pre-wrap;
+}
+textarea {
+  display: block;
+  width: 90%;
+  min-height: 4rem;
+}
+button {
+  margin: 0.5rem;
+}
+label {
+  display: block;
+}
+
+/* Keep overflow on the fixed body instead of propagating it to the viewport. */
+html.fill {
+  overflow: hidden;
+}
+body.fill {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  margin: 0;
+  overflow: auto;
+}
