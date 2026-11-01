@@ -60,6 +60,8 @@ A world can set a default for this setting in `pluginSettings`. Your own setting
 
 The story is shown while it is written; once it is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls: the draft shown so far is cleared and replaced by the rewrite, and what stays on screen is the text that passed the check. The omniscient narrator may not call characters "I" or "you"; the game-master perspective skips the person check.
 
+Possessive apostrophes in dialogue (such as `the guards’ keys`) and ambiguous single quote marks do not themselves request a perspective rewrite. Clear narration outside dialogue is still checked.
+
 The story is written in segments: each one is narration, dialogue or action, and dialogue and action name who it is. The stage uses this to give each paragraph its speaker's name tag. When a name matches no character, the name tag shows that name as written.
 
 ### The character you play
