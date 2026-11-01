@@ -4257,7 +4257,7 @@ A story message also has `segments`: the story segments recorded at commit, `{ k
 
 A story message may also carry `operationFailures: { count: number }`, from `metadata.operationFailures` in storage. Only `assistant` messages with `kind: "story"` qualify. `count` must be a positive safe integer and the object must have no other fields; invalid values and other message kinds omit the field. Full history, `/messages/page` and `/view` use the same validation and return only this count, never operation records or arbitrary metadata. Absence means no recorded notice; old messages are not backfilled.
 
-The notice describes attached operations that did not apply when this story committed. Later successes or retries never clear it. Materialized snapshots still capture only a display-message boundary; forks copy the bounded messages and their notices with fresh message IDs. Whole-checkpoint export, validation and replacement preserve metadata without replaying operations or toasts. Reconnect merges fill a missing notice on the same ID while preserving live text and loaded history; an older response without the field never erases a learned notice. A delayed resume response's `narrative.completed` without a notice also retains the validated notice recovered for the same durable message ID, merging its streaming placeholder to avoid duplicate stories. A complete state replacement replaces messages with the restored content. The notice does not enter the model conversation journal. Ownership and counts: [Transactions](./transactions.md#write-service-operations); live delivery: [Protocol](./protocol.md).
+The notice describes attached operations that did not apply when this story committed. Later successes or retries never clear it. Materialized snapshots still capture only a display-message boundary; forks copy the bounded messages and their notices with fresh message IDs. Whole-checkpoint export, validation and replacement preserve metadata without replaying operations or toasts. Reconnect merges fill a missing notice on the same ID while preserving live text and loaded history; an older response without the field never erases a learned notice. A delayed resume response's `narrative.completed` without a notice also retains the validated notice recovered for the same durable message ID, merging by message ID to avoid duplicate stories. A complete state replacement replaces messages with the restored content. The notice does not enter the model conversation journal. Ownership and counts: [Transactions](./transactions.md#write-service-operations); live delivery: [Protocol](./protocol.md).
 
 ```json
 {
@@ -4501,6 +4501,8 @@ A runtime can pause partway through and wait for the player to provide data. Thi
 #### `POST /api/sessions/:id/suspensions/:suspensionId/resume`
 
 Resume a suspended runtime with the data the player submitted.
+
+A story is returned only after the resume transaction commits, and state subscriptions publish its complete `narrative.completed`. Failure or resuspension exposes no candidate. Safe runtime/step/tool progress remains available during resume, without narrative deltas.
 
 - **agent runtime**: Continues from the saved tool-call record.
 - **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The writes of child runtimes the handler called with `ctx.recursiveCall` before it suspended are saved with the suspended item. They commit with a successful resume, ahead of the handler's own writes. A failed resume leaves those saved writes buffered in the unresolved suspension for retry; abandoning the item discards them together.
@@ -5136,6 +5138,8 @@ Pushes an event into a session's event stream from outside. Clients subscribed t
 ### Actions (SSE Bridge)
 
 #### `POST /api/actions`
+
+The stream reports runtime/step/tool progress while the provider works. It publishes one complete `narrative.completed` only after each execution commits, including setup and its opening continuation. Rejection, rollback and cancellation publish no story draft. Read saved messages after reconnect; diagnostic events cannot substitute for a committed message.
 
 Every game action from the player comes in through here: saying something, acting, running a command, answering an interaction, starting a session, and retrying. The server turns each action into one turn run, and it sends the results back over SSE, one piece at a time. The built-in front end mainly uses this endpoint.
 
@@ -6293,7 +6297,6 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 <!-- prettier-ignore -->
 | Type | Category | Description |
 | --- | --- | --- |
-| `narrative.delta` | Narrative | Increment of narrative text (streamed token by token) |
 | `narrative.completed` | Narrative | Narrative text is complete |
 | `interaction.requested` | Interaction | Asks the player for input (form, choice, or confirmation) |
 | `ui.rendered` | UI | Sent after a `ui.render` proposal is submitted |

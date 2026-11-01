@@ -175,7 +175,6 @@ describe("validate:plugin warnings for a field written with its default", () => 
           agent: {
             loop: {
               profile: "story",
-              stream: true,
               // Not the story preset's value: kept.
               steering: false,
               finalizer: { maxSteps: true, deadlineReserveMs: 5000 },
@@ -186,8 +185,8 @@ describe("validate:plugin warnings for a field written with its default", () => 
           ...agent,
           schedule: { stage: "post-turn" },
           agent: {
-            // An actor's fallback is answer-without-tools; system's is fail.
-            loop: { profile: "actor", fallback: "answer-without-tools" },
+            // An actor's fallback is submit-output; system's is fail.
+            loop: { profile: "actor", fallback: "submit-output" },
           },
         },
       },
@@ -203,7 +202,6 @@ describe("validate:plugin warnings for a field written with its default", () => 
         "agent.loop.fallback",
         "agent.loop.finalizer.maxSteps",
         "agent.loop.profile",
-        "agent.loop.stream",
       ].sort(),
     );
   });

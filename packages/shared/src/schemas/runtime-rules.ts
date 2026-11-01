@@ -61,9 +61,7 @@ export interface RuntimeRuleView extends PresentationRuleView {
    */
   readonly loop?: {
     readonly preset?: string;
-    readonly stream?: boolean;
     readonly steering?: boolean;
-    readonly truncation?: string;
     readonly deadlineReserveMs?: number;
     /** The written time limit; the authored rules fall back to the default. */
     readonly timeoutMs?: number;
@@ -225,10 +223,8 @@ function isLoopPresetId(value: string | undefined): value is LoopPresetId {
 }
 
 /**
- * The agent loop profile rules. Only a story writes the narrative feed and
- * reads the player's interjections, so streaming and steering need
- * `visibility: story`; a kept truncated reply is one the player has already
- * read as it streamed.
+ * The agent loop profile rules. Only a story reads player interjections,
+ * so steering requires `visibility: story`.
  */
 function loopProfileIssues(
   m: RuntimeRuleView,
@@ -251,26 +247,15 @@ function loopProfileIssues(
         ? loop.preset
         : defaultLoopPreset(story ? "story" : undefined)
     ];
-  const stream = loop.stream ?? preset.stream;
   const steering = loop.steering ?? preset.steering;
   // A story preset on another runtime is reported once, above.
   if (!story && loop.preset !== "story") {
-    if (stream)
-      add(
-        at("loop", "stream"),
-        `${name("loop", "stream")}: true requires ${name("visibility")} 'story'; ${storyOnly}`,
-      );
     if (steering)
       add(
         at("loop", "steering"),
         `${name("loop", "steering")}: true requires ${name("visibility")} 'story'; ${storyOnly}`,
       );
   }
-  if (loop.truncation !== undefined && loop.truncation !== "reject")
-    add(
-      at("loop", "truncation"),
-      `${name("loop", "truncation")} only supports 'reject'; output submissions must be complete`,
-    );
   const reserve = loop.deadlineReserveMs;
   // The loader fills an agent's default time limit, so an authored runtime
   // is checked against the limit its compiled form will carry.

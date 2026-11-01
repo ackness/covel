@@ -136,9 +136,6 @@ async function run(
       usage: reply.usage,
     };
   });
-  const onDelta = vi.fn(
-    async (_delta: { textDelta: string; reset?: true }) => undefined,
-  );
   const toolExecutor = {
     execute: vi.fn(),
     getToolInfo: () => ({
@@ -167,7 +164,6 @@ async function run(
       hookPipeline: pipeline,
       llm: { generate, stream },
       toolExecutor,
-      onDelta,
       loadRuntime: async () => ({
         manifest: { ...story, maxSteps },
         promptTemplate: "Continue the scene.",
@@ -197,7 +193,6 @@ async function run(
     stream,
     toolExecutor,
     store,
-    onDelta,
     reviews,
   };
 }
@@ -331,22 +326,19 @@ describe("plugin response validation", () => {
       providerContinuation,
     });
   });
-  it("streams drafts and resets the rejected one before the accepted story", async () => {
-    const { result, stream, onDelta } = await run(
+  it("discards a rejected streamed draft before committing the accepted story", async () => {
+    const { result, stream, committed, store } = await run(
       [text("Rejected draft"), submitted("I watch the harbor.")],
       6,
       { streaming: true },
     );
     expect(stream).toHaveBeenCalledTimes(2);
+    expect(committed.status).toBe("committed");
+    const messages = await store.listMessages("review");
     expect(
-      onDelta.mock.calls.map(([delta]) => [
-        delta.textDelta,
-        delta.reset ?? false,
-      ]),
-    ).toEqual([
-      ["Rejected draft", false],
-      ["", true],
-    ]);
+      messages.filter((message) => message.role === "assistant"),
+    ).toHaveLength(1);
+    expect(JSON.stringify(messages)).not.toContain("Rejected draft");
     expect(result.runtimeResults[0]).toMatchObject({
       status: "success",
       output: { narrativeOutput: "I watch the harbor." },

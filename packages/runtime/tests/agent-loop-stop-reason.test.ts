@@ -303,7 +303,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
       failedToolCalls: [],
       pendingProposals: [],
       emittedEvents: [],
-      streamDeltaCount: 0,
+
       stop: { reason: "deadline" },
       effectiveMaxSteps: 5,
       deadline: Date.now(),

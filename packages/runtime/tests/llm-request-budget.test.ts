@@ -64,9 +64,6 @@ describe("agent request recovery budgets", () => {
       deadline: Date.now() + 120_000,
       useStreaming,
       reportRetry: vi.fn(),
-      onStreamDelta: async () => {},
-      deliversDeltas: true,
-      allowTruncatedText: false,
     });
   }
 
@@ -156,9 +153,6 @@ describe("agent request recovery budgets", () => {
       deadline: Date.now() + 240_000,
       useStreaming: true,
       reportRetry: vi.fn(),
-      onStreamDelta: async () => {},
-      deliversDeltas: true,
-      allowTruncatedText: false,
     });
     await vi.advanceTimersByTimeAsync(120_000);
     expect((await pending).content).toBe("recovered");
@@ -194,9 +188,7 @@ describe("agent request recovery budgets", () => {
       deadline: Date.now() + 240_000,
       useStreaming: true,
       reportRetry: vi.fn(),
-      onStreamDelta: async () => {},
-      deliversDeltas: true,
-      allowTruncatedText: false,
+
       onStreamTime,
     });
     await vi.advanceTimersByTimeAsync(600_000);

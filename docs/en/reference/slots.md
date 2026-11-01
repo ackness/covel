@@ -882,15 +882,15 @@ Agent completion uses the schema in tool arguments without `responseFormat`, `te
 
 ## Provider streaming responses
 
-Every agent runtime uses streaming whenever the adapter offers a streaming interface. Only the story runtime forwards text deltas to the player's screen. This leads to these rules:
+All agent runtimes use provider streaming when the adapter supports it. Text, reasoning and payload-free tool-argument activity refresh first-output/idle guards. The runtime buffers the entire response and executes calls only after a valid provider terminal result. Players receive the complete story after acceptance and commit.
 
-| Situation                                                                               | What happens                                                                                                                                                                                                                                                              |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The stream breaks after some output has already arrived                                 | The story runtime does not retry. Other runtimes discard the partial output and retry according to `maxRetries`                                                                                                                                                           |
-| The result is cut off by `length` / `max_tokens`                                        | Handled by the profile: a story may retain its text with an incomplete warning, subject to output checks and commit. Runtimes requiring complete results correct or fail according to their truncation policy without saving partial structures. No non-streaming restart |
-| The stream fails before any output, and the retries are used up                         | Switches to one non-streaming call                                                                                                                                                                                                                                        |
-| The provider clearly rejects the request itself (401, 400, or a config or schema error) | Does not switch to a non-streaming call, because the same request would fail the same way                                                                                                                                                                                 |
-| An HTTP 200 response carries a provider error                                           | Keeps the message and the code/type. A definite rejection does not turn into an empty, retryable error                                                                                                                                                                    |
+| Case                                                                               | Behavior                                                                                            |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| A stream fails after partial output                                                | Discard every buffer and retry within `maxRetries`; never execute partial calls or combine attempts |
+| `length` / `max_tokens` truncation                                                 | Retry at most once, then fail; no partial story and no non-stream rescue                            |
+| Transient stream failure exhausts retries                                          | Use bounded non-stream recovery if budget remains; failed output was never player-visible           |
+| The provider rejects the request (401, 400, configuration/schema error or refusal) | Do not repeat the same request through non-stream recovery                                          |
+| HTTP 200 contains a provider error                                                 | Retain the error classification and any reported usage; do not report success                       |
 
 Other rules:
 
@@ -979,8 +979,8 @@ The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `t
 
 **Only `stop` and `tool_calls` mean the answer is finished** (`isCompleteFinishReason` in `@covel/shared`). `other` is not a normal end: the provider did not say why it stopped (for example Anthropic's `pause_turn` or DeepSeek's `insufficient_system_resource`), and the answer may stop anywhere.
 
-- Story: the text already written is kept. `llm.responded` carries `finishReason: other` and `rawFinishReason`, the app says that this part is not finished, and the player can retry the turn. A story cut at the output limit (`length`) is kept too, with a different notice.
-- Every other answer in the runtime (one with tool calls, one that must be JSON, a runtime that does not keep cut text), world generation and the history summary: the call fails. No half result is saved, and the call is not retried on its own.
+- Every agent runtime rejects incomplete responses, including prose and otherwise complete tool arguments. Failed attempts never become committed narrative.
+- World generation and history summaries also require complete results. Function gateway calls retain their separate public text/object/stream APIs.
 - A function plugin gets `other` as it is through `ctx.gateway` and decides for itself. A background output should fail in the same way.
 
 **Diagnostics.** The text and object return values of the four built-in text protocols, and the `done` event of a stream, can carry `diagnostics`. They include the provider's and request's warnings, URL and document sources, and citation positions. The runtime bridge and the LLM trace keep this information.

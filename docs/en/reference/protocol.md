@@ -37,7 +37,7 @@ SSE is the way the server keeps pushing text over one HTTP connection. Covel has
 | Other                 | The stream ends when the action ends                         | Subscribed by topic. The server sends `system.connected` on connect and `system.heartbeat` every 30 seconds. A reconnect with `lastEventId` can replay missed events |
 
 > [!WARNING]
-> Frames on `/api/actions` have no `event:` header. So `EventSource.addEventListener('narrative.delta', …)` **never** fires on this stream. To read events inside a turn, use `sendAction` in `apps/web/src/services/api/actions.ts` (it parses a ReadableStream), or call `fetch()` yourself and read the `data:` lines. Subscribing by event name only works for `/api/events/stream`.
+> Frames on `/api/actions` have no `event:` header. So `EventSource.addEventListener('narrative.completed', …)` **never** fires on this stream. To read events inside a turn, use `sendAction` in `apps/web/src/services/api/actions.ts` (it parses a ReadableStream), or call `fetch()` yourself and read the `data:` lines. Subscribing by event name only works for `/api/events/stream`.
 
 ## Host execution and commit boundary
 
@@ -135,18 +135,16 @@ In the tables, "S→C" means sent from the server to the client.
 
 ### Narrative events
 
-| Event type            | Dir. | Description                        | Payload                                                                             |
-| --------------------- | ---- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta, reset?, segment? }`                            |
-| `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
+| Event type            | Direction | Description                  | Payload                                                                             |
+| --------------------- | --------- | ---------------------------- | ----------------------------------------------------------------------------------- |
+| `narrative.completed` | S→C       | Complete committed narrative | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
-- `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
-- `narrative.delta` can carry `reset: true`. In that case `delta` is usually an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown and its paragraph metadata, then take in the later pieces.
-- The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
-- For a segmented story (a story runtime with a declared output schema, such as the `segments` of `narrative-engine@2`), `delta` carries only segment text, with a blank line between segments, matching `content`. JSON keys, speakers and `cues` never reach `delta`. See [Story output](./plugins.md#story-output).
-- Such a story's `narrative.delta` also carries `segment: { index, kind, speaker? }`, naming the paragraph the text belongs to. `index` starts at 0 and counts only paragraphs that showed text, so it equals the paragraph's position when the streamed text is split at blank lines. The event with each paragraph's first visible character carries the `kind` and `speaker` known so far; when `kind` or `speaker` is finished after the text, one more event with an empty `delta` carries the updated `segment`. The rules match commit: an unknown `kind` counts as `narration`, narration has no speaker, and a speaker is trimmed and cut to 80 characters. `speaker` is the name as the model wrote it, unresolved; the `segments` of `narrative.completed` carry the resolved names. Events of a prose story have no `segment`.
+- `narrative.completed` and `runtime.started` carry `kind`; clients read it directly.
+- A story becomes visible only after its durable commit. Submission acceptance and `runtime.completed` describe computation, and do not publish a story. Rollback, refusal and cancellation publish no candidate.
+- Actions, setup/opening, resume and state subscriptions use the same commit boundary. A resumed HTTP response returns committed events; recovery reads saved messages. Child output remains private to its parent until composition and commit.
+- While waiting, runtime/step/tool/job events report progress. `step.completed.notes` can carry `output-rejected` with a safe reason and integer attempt count; it never carries reviewer text or arguments and implies no percentage.
+- `narrative.delta`, its reset/segment payloads and the host `onDelta` callback are removed. Clients must update with the server; no alias is accepted. Provider streaming remains an internal transport.
 - When a speaker or present name in the story could not be resolved to a character (no match, or more than one), `narrative.completed` carries `unresolvedSpeakers`: those names in order of first appearance; it is omitted when there are none.
-- A story's `narrative.completed` carries `segments`: the segments with the speakers resolved at commit, in the same shape as `segments` from `/messages` (see [api.md](./api.md#get-apisessionsidmessages)). The client uses them to show nameplates and the speaker for the turn it just watched without reading messages again; events of other kinds have no such field.
 
 ### Interaction events
 
@@ -716,7 +714,7 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 - `trace` (from TurnEmitter) and `hooks` (from the hook pipeline) are internal observation topics of the runtime. `job` carries `job-status.updated`.
 - `apps/web/src/services/subscription.ts` subscribes by default to `runtime / state / game / plugin / session / system`. It does not include `store`. To recover background tasks, the session store subscribes to `job` explicitly as well.
 - The client dispatches by `event.topic`. When you add a new topic or event, **you must update this file at the same time**.
-- In-turn events on `/api/actions` (`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
+- In-turn events on `/api/actions` (`narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
 - The `game` event `turn.completed` reports a committed turn. An observing web client rereads the session snapshot to update messages and the turn count, including turns without character or dimension writes. Existing recovery generation and execution ownership checks preserve a healthy local action stream.
 
 **Authentication**
@@ -752,8 +750,8 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 **Recovery after the stream drops (web app)**
 
 - After the web app gets a reset or reconnects, it refetches, checking revisions: the session snapshot, the plugin list, the data for every enabled plugin, unresolved suspensions, and the world. Live events that arrive during this are buffered first, and replayed afterwards.
-- The streamed placeholder is replaced with the saved final narrative for the same `turnId/runtimeId` only when the access generation and execution ownership still match. The external text of that placeholder and its pending fragments are removed. A new, healthy POST stream still owns its own live output.
-- After an error or stream loss, only authoritative recovery confirming a failed or interrupted turn without matching saved prose moves the displayed text to an “Unsaved” area and clears its placeholder and streaming buffers. This local copy lasts until leaving the session and never enters story history, stage content or plugin data. A retry appears beside it when recovery supplies an action. Unknown network state does not enable retry; saved prose still replaces placeholders as above. Player aborts and normal `committed: false` keep their existing removal behavior.
+- Recovery merges committed messages by durable message ID after checking session and execution ownership; repeated delivery does not duplicate a story.
+- Stream loss, failure and cancellation create no draft message. Keep the previous committed story and recover progress through the read-only execution endpoint; retry is available only after authoritative failure or interruption.
 - If the most recent window of the recovered snapshot does not join up with the history already loaded, the client first fills in older messages through the existing message pagination endpoint, read-only, up to the old anchor, and then merges and publishes. It does not delete the old window, and it does not resend the action.
 
 **For hosts that embed `@covel/events`**
@@ -1198,7 +1196,6 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 `handleSseEvent` is the only handler for in-turn events. By event type, it passes each event to the matching state slice:
 
 ```
-narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
 event.emitted         → gameState.events
@@ -1209,7 +1206,7 @@ runtime.deferred      → executionSteps (pending, attached to the source turn b
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
 job-status.updated    → executionSteps (background terminal state, by data.originTurnId)
-execution.completed   → committed=true: finalize; committed=false: discard optimistic stream + executionError; both set executing=false
+execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false
 error.occurred        → executionError
 ```
 
@@ -1316,6 +1313,8 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 - `trace_events`, used by the `/api/traces` read endpoints and the `/debug` inspector.
 - The global `EventBus`. The `/api/actions` SSE route then forwards them according to `FORWARDED_EVENT_TYPES` (the set generated from `COVEL_EVENT_META[type].forwardToActionStream`).
 
+The table lists full diagnostic payloads. Gameplay streams use the content-free projection described below.
+
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
@@ -1324,11 +1323,11 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`. A temporary display signal after `emit-event` passes validation. Persistent business state is still committed by the normal event chain |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`. `slot` is the role the runtime requests. In production, the gateway resolves it to `model` / `provider` before the call. A custom adapter that does not support role resolution can omit `provider` |
-| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. With `agent.loop.truncation: accept`, `finishReason: length` can report a reply kept at the output limit; it must still pass final output and commit checks. With `reject`, truncation is reported as failure. The story profile accepts by default; the other profiles reject, and authors can override this |
+| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. Incomplete provider responses fail; no truncated narrative is retained. |
 | `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`. Sent after `PreStep` and before `llm.calling` for ordinary requests. The single reserve carries `finalizer: true`, offers only submission and uses `toolChoice: { name: "submit-output" }`. |
 | `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`. Closes each started step exactly once after its tool events. `toolCalls` is `[{ name, success }]`, including submission attempts; `retries` is `[{ attempt, reason }]`. `notes` is `[{ kind, count?, ignored?, reason?, attempt? }]` with kinds `output-rejected`, `submission-only`, `loop-perturbation`, `late-steering`, `tool-activated`, `tool-narrowed`; only categories and counts are included. `stopReason` appears only on the terminal step. |
 | `gateway.responded` | The success result of a function-runtime gateway. Text and object calls carry `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`. `model/provider` is the target actually hit after fallback. Transcription calls also carry `usage/model/provider` when available. Old traces, or custom gateways that do not support this metadata, may lack them |
-| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
+| `message.completed` | `{ runtimeId, pluginId, turnId, runId, content, len }`. Trace-only accepted computation, recorded before commit; never forwarded as player narrative. |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`. The action stream and `state` topic send the same committed payload; the block ID and metadata come from the commit result |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
@@ -1340,7 +1339,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 
 `tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure. A call that never executed emits a `tool.calling` / `tool.failed` pair without `tool.completed`. Both carry `skipped: true`, `skipReason` (`hook-aborted`, `suspended`, `terminated` or `aborted`), `durationMs: 0` and `approvalStatus: "auto-allowed"`. They appear only in the transcript and trace, not executed tool records, failure accounting or `step.completed.toolCalls`; concealed runtimes still strip `code`, `error`, `skipped` and `skipReason`.
 
-Narrative fragments are still sent live to the interface through `narrative.delta`. To keep `trace_events` lean, only `message.completed` is saved.
+Gameplay action streams and ordinary state subscriptions strip prompt/reply text, arguments, results and review details from LLM/tool/hook/child/function/gateway progress. Full diagnostic payloads remain in traces and explicit `topics=trace` subscriptions, subject to concealed and delegation privacy. They must never be projected into player story messages. `message.completed` records acceptance timing; committed `narrative.completed` records presentation timing.
 
 **`command.*`**
 

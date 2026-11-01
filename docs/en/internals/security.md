@@ -17,6 +17,8 @@ Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is 
 
 Plugin file references follow the [declaration-directory rules](../reference/plugins.md#declaration-paths) and must remain inside the package after real-path resolution. Conventional `output.schema.json` cannot escape through a symlink or be inherited from a parent repository.
 
+Gameplay action streams and ordinary subscriptions carry content-free model/tool/hook/child/gateway progress. Accepted output is visible as story only after commit; submission arguments and raw review details cannot enter player story projection. Full diagnostic traces and explicit trace subscriptions retain their existing access and concealed/delegation privacy rules. See [protocol](../reference/protocol.md#narrative-events).
+
 ## Declarative execution boundary
 
 [Declarative classification](../reference/plugin-installation.md#declarative-plugins) requires a complete, bounded inventory that does not follow links and a content digest matching the loaded definition. Changed before/after signatures, registry replacement and failed reads cannot retain an old positive proof. Authorization reads live publication; execution snapshots freeze artifacts, not authority. Code-era runtime, tool and service snapshots cannot borrow a newer declarative exemption; cached code runtimes and actual module imports still require real code/runtime grants.

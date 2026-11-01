@@ -40,8 +40,8 @@ export interface AgentLoopDefaults {
 
 /**
  * `agent.loop` defaults by visibility. A `story` agent writes the player's
- * narrative in one long streamed call, so it gets more time per call and one
- * retry; every other agent gets the limits most bundled agents used to write.
+ * narrative with longer provider responses, so it gets more time per call
+ * and one retry; other agents get the usual task limits.
  */
 export const AGENT_LOOP_DEFAULTS: Readonly<
   Record<RuntimeVisibility, AgentLoopDefaults>
@@ -59,21 +59,16 @@ export function defaultAgentLoop(
 
 /**
  * The built-in agent loop profiles (`agent.loop.profile`). A `story` loop
- * streams its text to the player, merges the player's interjections and keeps
- * a reply cut at the output limit; `actor` and `system` do none of that.
- * `story` and `actor` continue without tools when a tool loop repeats;
- * `system` fails.
+ * merges player interjections; `actor` and `system` do not.
+ * `story` and `actor` request submission when a tool loop repeats; `system`
+ * fails. Every agent requires complete, accepted output before commit.
  */
 export type LoopPresetId = "story" | "actor" | "system";
 
 /** Every loop behaviour a profile sets, with no field left out. */
 export interface LoopPresetValues {
-  /** Forward the model's text deltas to the player's narrative feed. */
-  readonly stream: boolean;
   /** Merge queued player interjections into the transcript. */
   readonly steering: boolean;
-  /** Incomplete provider responses fail; only `reject` is supported. */
-  readonly truncation: "reject";
   /**
    * `submit-output` offers only submit-output for the final result when
    * a tool loop repeats; `fail` stops the runtime with `loop-detected`.
@@ -108,9 +103,7 @@ function frozenPreset(values: LoopPresetValues): LoopPresetValues {
 export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
   Object.freeze({
     story: frozenPreset({
-      stream: true,
       steering: true,
-      truncation: "reject",
       fallback: "submit-output",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
       corrections: {
@@ -121,9 +114,7 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
       },
     }),
     actor: frozenPreset({
-      stream: false,
       steering: false,
-      truncation: "reject",
       fallback: "submit-output",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
       corrections: {
@@ -134,9 +125,7 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
       },
     }),
     system: frozenPreset({
-      stream: false,
       steering: false,
-      truncation: "reject",
       fallback: "fail",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
       corrections: {

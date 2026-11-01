@@ -806,7 +806,7 @@ async function runProvider({
       sessionId: input.sessionId,
       turnId: input.turnId,
     }),
-    // A sub-agent acts a part: no streaming, no steering, unless the
+    // A sub-agent acts a part: no player presentation, no steering, unless the
     // provider names a profile itself.
     loopProfile: {
       ...provider.loopProfile,
@@ -871,7 +871,6 @@ async function runProvider({
       : undefined;
     const subDeps: TurnExecutorDeps = {
       ...deps,
-      onDelta: undefined,
       emitter,
       // The player's abort and the caller's cancellation reach the sub-agent;
       // the steering queue does not.

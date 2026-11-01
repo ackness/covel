@@ -179,9 +179,7 @@ export type OutputKind = "story" | "system";
  */
 export interface LoopProfileSpec {
   readonly preset?: LoopPresetId;
-  readonly stream?: LoopPresetValues["stream"];
   readonly steering?: LoopPresetValues["steering"];
-  readonly truncation?: LoopPresetValues["truncation"];
   readonly fallback?: LoopPresetValues["fallback"];
   readonly finalizer?: Partial<LoopPresetValues["finalizer"]>;
   readonly corrections?: Partial<LoopPresetValues["corrections"]>;
@@ -590,7 +588,7 @@ export interface RuntimeManifest {
   readonly completeAfterTools?: readonly string[];
   /**
    * Agent runtimes only. The loop behaviour the author wrote under
-   * `agent.loop` (`profile`, `stream`, `steering`, `truncation`, `fallback`,
+   * `agent.loop` (`profile`, `steering`, `fallback`,
    * `finalizer`), with nothing filled in. The agent loop resolves it over the
    * named preset, or over the preset of `outputKind` (`story` for a story,
    * `system` otherwise) when no preset is named.

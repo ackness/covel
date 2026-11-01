@@ -145,107 +145,57 @@ describe("function and guard stories", () => {
     });
   });
 
-  it("streams only the segment text of an agent's JSON story", async () => {
-    const agent: RuntimeManifest = {
-      ...teller,
-      runtimeType: "agent",
-      outputContract: undefined,
-      output: { schema: "contract:narrative-engine@2" },
-    } as RuntimeManifest;
-    const answer = JSON.stringify({
-      ...written,
-      cues: { present: ["阿雅"], scene: "旧港" },
-    });
-    const chunks = answer.match(/.{1,7}/gsu) ?? [];
-    const deltas: { textDelta: string; reset?: true }[] = [];
-    const result = (
-      await runTurnPipeline(turn, [agent], {
-        store: createMemoryStore(),
-        llm: {
-          generate: async () => {
-            throw new Error("streaming expected");
+  it.each([true, false])(
+    "accepts complete story submissions with segments preserved (schema: %s)",
+    async (structured) => {
+      const agent: RuntimeManifest = {
+        ...teller,
+        runtimeType: "agent",
+        outputContract: undefined,
+        output: structured
+          ? { schema: "contract:narrative-engine@2" }
+          : undefined,
+      };
+      const value = structured
+        ? { ...written, cues: { present: ["阿雅"], scene: "旧港" } }
+        : { narrativeOutput: "雨停了。\n\n「走吧。」" };
+      const result = (
+        await runTurnPipeline(turn, [agent], {
+          store: createMemoryStore(),
+          llm: {
+            generate: async () => {
+              throw new Error("streaming expected");
+            },
+            stream: async function* () {
+              yield { type: "tool-argument-delta" as const };
+              yield {
+                type: "tool-call" as const,
+                id: "submit",
+                name: "submit-output",
+                arguments: JSON.stringify(value),
+              };
+              yield {
+                type: "done" as const,
+                finishReason: "tool_calls" as const,
+              };
+            },
           },
-          stream: async function* () {
-            for (const textDelta of chunks)
-              yield { type: "text-delta" as const, textDelta };
-            yield { type: "done" as const, finishReason: "stop" as const };
-          },
-        },
-        onDelta: async (delta) => {
-          deltas.push({
-            textDelta: delta.textDelta,
-            ...(delta.reset ? { reset: true as const } : {}),
-          });
-        },
-        loadRuntime: async () => ({
-          manifest: agent,
-          promptTemplate: "Write the story.",
-          outputSchema: storyOutputJsonSchema(),
-        }),
-      })
-    ).runtimeResults[0];
-    expect(result?.status).toBe("success");
-    const shown = deltas.map((delta) => delta.textDelta).join("");
-    expect(shown).toBe("雨停了。\n\n「走吧。」");
-    expect(shown).toBe(
-      (result!.output as { narrativeOutput: string }).narrativeOutput,
-    );
-    expect(shown).not.toContain('阿雅"');
-    expect(shown).not.toContain("旧港");
-  });
-
-  it("passes each paragraph's metadata to onDelta for a JSON story only", async () => {
-    const agent = {
-      ...teller,
-      runtimeType: "agent",
-      outputContract: undefined,
-      output: { schema: "contract:narrative-engine@2" },
-    } as RuntimeManifest;
-    const run = async (
-      answer: string,
-      outputSchema?: Readonly<Record<string, unknown>>,
-    ) => {
-      const deltas: { textDelta: string; segment?: unknown }[] = [];
-      await runTurnPipeline(turn, [agent], {
-        store: createMemoryStore(),
-        llm: {
-          generate: async () => {
-            throw new Error("streaming expected");
-          },
-          stream: async function* () {
-            for (const textDelta of answer.match(/.{1,5}/gsu) ?? [])
-              yield { type: "text-delta" as const, textDelta };
-            yield { type: "done" as const, finishReason: "stop" as const };
-          },
-        },
-        onDelta: async (delta) => {
-          deltas.push({
-            textDelta: delta.textDelta,
-            ...(delta.segment ? { segment: delta.segment } : {}),
-          });
-        },
-        loadRuntime: async () => ({
-          manifest: agent,
-          promptTemplate: "Write the story.",
-          ...(outputSchema ? { outputSchema } : {}),
-        }),
+          loadRuntime: async () => ({
+            manifest: agent,
+            promptTemplate: "Submit the story.",
+            ...(structured ? { outputSchema: storyOutputJsonSchema() } : {}),
+          }),
+        })
+      ).runtimeResults[0];
+      expect(result?.status).toBe("success");
+      expect(result?.output).toMatchObject({
+        narrativeOutput: "雨停了。\n\n「走吧。」",
       });
-      return deltas;
-    };
-    const segmented = await run(
-      JSON.stringify(written),
-      storyOutputJsonSchema(),
-    );
-    expect(
-      segmented.flatMap((delta) => (delta.segment ? [delta.segment] : [])),
-    ).toEqual([
-      { index: 0, kind: "narration" },
-      { index: 1, kind: "dialogue", speaker: "阿雅" },
-    ]);
-    const prose = await run("雨停了。\n\n「走吧。」");
-    expect(prose.map((delta) => delta.textDelta).join("")).toBe(
-      "雨停了。\n\n「走吧。」",
-    );
-    expect(prose.every((delta) => !("segment" in delta))).toBe(true);
-  });
+      if (structured)
+        expect(result?.output).toMatchObject({
+          segments: written.segments,
+          cues: { present: ["阿雅"], scene: "旧港" },
+        });
+    },
+  );
 });

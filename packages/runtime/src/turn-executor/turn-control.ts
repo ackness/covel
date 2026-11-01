@@ -18,9 +18,8 @@ export { PLAYER_ABORT_REASON } from "@covel/shared";
 export interface TurnControl {
   /**
    * Fired when the player aborts the turn. Cuts the in-flight LLM call /
-   * stream immediately (threaded into the retry layer's per-attempt signal;
-   * bypasses the partial-content salvage path so no partial narrative is
-   * ever committed) and stops scheduling further runtimes.
+   * stream immediately through the retry layer's per-attempt signal,
+   * discards the in-flight response and stops scheduling further runtimes.
    */
   readonly signal?: AbortSignal;
   /**

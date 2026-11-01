@@ -127,7 +127,6 @@ export async function finalizeRuntimeResult(
   options: {
     readonly cause?: unknown;
     readonly lastTarget?: LLMTargetIdentity;
-    readonly deltaCount?: number;
     readonly outputContractSchema?: Readonly<Record<string, unknown>>;
     readonly outputSchema?: Readonly<Record<string, unknown>>;
     /**
@@ -369,12 +368,7 @@ export async function finalizeRuntimeResult(
           ? output.content
           : "";
     try {
-      await emitMessageCompleted(
-        deps.emitter,
-        finalized,
-        content,
-        options.deltaCount ?? 0,
-      );
+      await emitMessageCompleted(deps.emitter, finalized, content);
     } catch {
       // Trace delivery cannot turn a finished execution into another Hook run.
       console.warn("[runtime-telemetry] message delivery failed", {

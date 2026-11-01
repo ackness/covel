@@ -215,7 +215,7 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `agent.reasoning` | `true`: the model's own reasoning setting applies |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
-| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.steering`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -403,8 +403,7 @@ A streaming call is limited by how long it goes without output: a model that kee
 
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
-- A runtime that streams its text to the player (the `story` profile, `stream: true`) is not retried, because the player has already read that text.
-- For other runtimes, the output was not shown to anyone, so it is discarded and the call is retried according to `maxRetries`. The time spent producing the output that was already written does not count toward `timeoutMs`. Silence after that does count.
+- Every runtime discards the failed attempt completely and retries within `maxRetries`. No partial call executes. Time spent writing does not count toward `timeoutMs`; the following silence does. See [Provider streaming](./slots.md#provider-streaming-responses).
 
 **A non-streaming call** gives no progress signal, so `callTimeoutMs` limits the total duration of a single call.
 
@@ -597,7 +596,7 @@ The kernel derives `narrativeOutput` by joining each segment’s `text` with bla
 - The story message's metadata records `segments`, `cues`, `yield` and the presence record `presentCharacterIds`: the resolved speakers and the characters in `cues.present`. The presence record is only stored for now, ready for per-character history later.
 - Story messages on `/messages` and `/view` carry `segments` (see [API](./api.md)). Character IDs never reach model-facing text.
 
-**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the streamed text. Each paragraph's kind and speaker as written travel in the `segment` of `narrative.delta`, so the stage shows name tags while the story streams and replaces them with the resolved names at commit (see [protocol](./protocol.md#narrative-events)). A prose answer streams as before, without `segment`.
+**Presentation.** The complete accepted story is published after commit through `narrative.completed`, including resolved speakers and segments. Provider text and tool arguments stay internal; they never create a draft message. Progress stays visible while waiting. See [protocol](./protocol.md#narrative-events).
 
 #### Function output
 
@@ -839,7 +838,7 @@ No bundled plugin uses the fields below, and a first plugin does not need them. 
 | `agent.loop.firstTokenTimeoutMs`, `idleTimeoutMs` | The wait limits of a streaming call. See [Wait limits of a streaming call](#wait-limits-of-a-streaming-call). |
 | `agent.loop.loopDetection` | How many identical calls in a row count as a loop. The default is 3; `0` turns the check off. |
 | `agent.loop.maxRecursionDepth` | How deep `ctx.recursiveCall()` may nest. The default is 10. |
-| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer`, `corrections` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.profile`, `steering`, `fallback`, `finalizer`, `corrections` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
 
 ### Wait limits of a streaming call
 
@@ -861,15 +860,13 @@ So when a provider accepts the request but never produces any text, there is sti
 
 ### Loop profile (`agent.loop.profile`)
 
-The loop profile controls steering, repeated-tool fallback, finalization and correction budgets. Without `profile`, story runtimes use `story` and other runtimes use `system`; child agents default to `actor`. Every profile completes through `submit-output`. Truncated or refused provider responses cannot succeed.
+The loop profile controls steering, repeated-tool fallback, finalization and correction budgets. Without `profile`, story runtimes use `story` and other runtimes use `system`; child agents default to `actor`. Every profile completes through `submit-output`. Truncated or refused provider responses cannot succeed. `agent.loop.stream` and `agent.loop.truncation` are removed. Transport streaming and tool-argument heartbeats still enforce request timeouts; `steering` remains independent.
 
 <!-- prettier-ignore -->
 | Field | Meaning |
 | --- | --- |
 | `profile` | `story`, `actor` or `system`; other fields override that preset |
-| `stream` | Whether model text is forwarded; only story runtimes may enable it |
 | `steering` | Merge player interjections; new input before acceptance supersedes the candidate and requires another ordinary step |
-| `truncation` | Only `reject` is supported; a complete, non-refused provider response is required |
 | `fallback` | `submit-output`: offer only submission after repeated business calls; `fail`: stop with `loop-detected` |
 | `finalizer.maxSteps` | At most one extra submission request after step exhaustion or context overflow when eligible; default `true` |
 | `finalizer.deadlineReserveMs` | Switch to one submission request inside this reserve; default `0`, clamped to half the runtime timeout |
@@ -881,15 +878,13 @@ The loop profile controls steering, repeated-tool fallback, finalization and cor
 <!-- prettier-ignore -->
 | Field | `story` | `actor` | `system` |
 | --- | --- | --- | --- |
-| `stream` | `true` | `false` | `false` |
 | `steering` | `true` | `false` | `false` |
-| `truncation` | `reject` | `reject` | `reject` |
 | `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`profile: story`, `stream: true` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
+`profile: story` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
 
 **Correction budgets and output repair.** A rejection by the real response's `PostLLMResponse` runs first. Otherwise, classify in order: batch, JSON/schema/story shape, required work, output review. Each rejection consumes at most one category. The four counters are independent and spent only when scheduling another attempt. Corrections consume ordinary steps and the same deadline, without extra network retries or repeated successful business writes. Exhausting one category is terminal even when another has room. Valid JSON in reply content is also missing submission. Function and gateway structured-output APIs are unchanged.
 

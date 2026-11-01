@@ -244,13 +244,14 @@ export function createCommitPipeline(
     // the same barrier — its contract is "the state IS committed", which is
     // only true once the enclosing transaction has resolved.
     const runPostCommit = async (): Promise<void> => {
-      // Manual/background RPC has no action stream. Publish committed UI on
+      // Manual/background RPC has no action stream. Publish committed content on
       // the persistent state subscription, behind the same rollback barrier.
       const event = result.event;
       if (
         result.committed &&
         event &&
-        (event.type === "interaction.requested" ||
+        (event.type === "narrative.completed" ||
+          event.type === "interaction.requested" ||
           event.type === "ui.rendered" ||
           event.type === "dimensions.changed" ||
           event.type === "dimensions.settlement.changed")
@@ -263,6 +264,7 @@ export function createCommitPipeline(
           timestamp: event.timestamp,
           payload: {
             ...event.payload,
+            ...(event.type === "narrative.completed" ? event.source : {}),
             turnId: event.turnId,
             _subType: event.type,
           },

@@ -1148,9 +1148,7 @@ interface ManifestCrossFieldView {
   readonly timeoutMs?: number;
   readonly loopProfile?: {
     readonly preset?: string;
-    readonly stream?: boolean;
     readonly steering?: boolean;
-    readonly truncation?: string;
     readonly finalizer?: { readonly deadlineReserveMs?: number };
   };
   readonly turnCompletion?: NonNullable<RuntimeRuleView["detached"]> & {
@@ -1201,9 +1199,7 @@ function addIrRuleIssues(
         ? {
             loop: {
               preset: loopProfile.preset,
-              stream: loopProfile.stream,
               steering: loopProfile.steering,
-              truncation: loopProfile.truncation,
               deadlineReserveMs: loopProfile.finalizer?.deadlineReserveMs,
               timeoutMs,
             },
@@ -1373,9 +1369,7 @@ export const runtimeManifestInputSchema = z
     loopProfile: z
       .strictObject({
         preset: z.enum(["story", "actor", "system"]).optional(),
-        stream: z.boolean().optional(),
         steering: z.boolean().optional(),
-        truncation: z.literal("reject").optional(),
         fallback: z.enum(["submit-output", "fail"]).optional(),
         corrections: z
           .strictObject({

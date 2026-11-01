@@ -46,7 +46,6 @@ const CONTENT_FREE_TRACE_FIELDS = new Set([
   "step",
   "stopReason",
   "finalizer",
-  "repair",
   "retries",
   "notes",
   // Sub-agent call tree: identities and how a run ended, never its brief or

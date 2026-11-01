@@ -75,9 +75,7 @@ function agentLoopProfile(agent: AuthoredAgent | undefined) {
     );
   const profile = {
     ...(loop?.profile ? { preset: loop.profile } : {}),
-    ...(loop?.stream !== undefined ? { stream: loop.stream } : {}),
     ...(loop?.steering !== undefined ? { steering: loop.steering } : {}),
-    ...(loop?.truncation ? { truncation: loop.truncation } : {}),
     ...(loop?.fallback ? { fallback: loop.fallback } : {}),
     ...(finalizer && Object.keys(finalizer).length ? { finalizer } : {}),
     ...(corrections && Object.keys(corrections).length ? { corrections } : {}),

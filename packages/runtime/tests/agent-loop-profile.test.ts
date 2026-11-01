@@ -92,15 +92,13 @@ describe("resolveLoopProfile", () => {
       resolveLoopProfile({
         outputKind: "story",
         loopProfile: {
-          stream: false,
+          steering: false,
           finalizer: { deadlineReserveMs: 5_000 },
         },
       }),
     ).toEqual({
       preset: "story",
-      stream: false,
-      steering: true,
-      truncation: "reject",
+      steering: false,
       fallback: "submit-output",
       finalizer: { maxSteps: true, deadlineReserveMs: 5_000 },
       corrections: LOOP_PRESETS.story.corrections,
@@ -110,7 +108,7 @@ describe("resolveLoopProfile", () => {
         outputKind: "system",
         loopProfile: { preset: "actor", fallback: "fail" },
       }),
-    ).toMatchObject({ preset: "actor", fallback: "fail", stream: false });
+    ).toMatchObject({ preset: "actor", fallback: "fail", steering: false });
   });
 
   it("keeps the preset table frozen", () => {
@@ -121,8 +119,7 @@ describe("resolveLoopProfile", () => {
 });
 
 describe("the loop core under a profile", () => {
-  it("(i) a story with stream: false forwards no text and keeps its content", async () => {
-    const onDelta = vi.fn();
+  it("a story buffers provider text and accepts only the complete submission", async () => {
     const llm: LLMAdapter = {
       generate: async () => submitted("fallback"),
       stream: async function* () {
@@ -141,12 +138,10 @@ describe("the loop core under a profile", () => {
     };
     const result = await runLoop({
       llm,
-      // g3: a story that stops streaming also rejects truncated text.
-      manifest: story({ loopProfile: { stream: false, truncation: "reject" } }),
-      deps: { toolExecutor: undefined, onDelta },
+      manifest: story(),
+      deps: { toolExecutor: undefined },
     });
-    expect(onDelta).not.toHaveBeenCalled();
-    expect(result.streamDeltaCount).toBe(0);
+
     expect(result.acceptedOutput?.narrativeOutput).toBe("Once upon");
     expect(result.stop).toEqual({ reason: "completed" });
   });
@@ -233,7 +228,7 @@ describe("the loop core under a profile", () => {
     expect(settled.kind).toBe("failed");
   });
 
-  it("(vii) truncation: reject on a story fails a reply cut at the output limit", async () => {
+  it("a story rejects a submission cut at the provider output limit", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const cut: LLMResponse = {
       ...submitted("The fog rolls"),
@@ -242,7 +237,7 @@ describe("the loop core under a profile", () => {
     const error = await thrownBy(
       runLoop({
         llm: queuedLLM([cut]),
-        manifest: story({ loopProfile: { truncation: "reject" } }),
+        manifest: story(),
         deps: { toolExecutor: undefined },
       }),
     );
@@ -445,7 +440,7 @@ describe("settling a deadline", () => {
       failedToolCalls: [],
       pendingProposals: [],
       emittedEvents: [],
-      streamDeltaCount: 0,
+
       stop,
       effectiveMaxSteps: 5,
       deadline: Date.now(),

@@ -4257,7 +4257,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 故事消息还可带 `operationFailures: { count: number }`，对应存储里的 `metadata.operationFailures`。它只用于 `assistant` 的 `kind: "story"` 消息，`count` 必须是正的安全整数，对象不能带其他字段；非法值和其他种类的消息不投影这个字段。完整历史、`/messages/page` 和 `/view` 用同一校验规则，只返回这个计数，不返回操作记录或任意 metadata。没有该字段表示没有记录提示，旧消息不会补写。
 
-提示描述这条故事提交时未生效的附带操作；之后成功的操作或重试不会清除它。物化快照仍只捕获显示消息的边界，分叉只复制边界内的消息及其提示，并分配新消息 ID。完整 checkpoint 的导出、校验与替换保留 metadata；恢复不会重播操作或通知。重连合并同 ID 消息时补齐缺失的提示，保留实时正文和已加载的历史；较旧响应缺少字段不会清掉已有提示。恢复回执中迟到的 `narrative.completed` 若缺少提示，也保留同一持久消息 ID 已恢复的有效提示，并合并对应的流式占位，避免重复故事。完整状态替换按恢复内容替换消息。提示不进入模型对话日志。归属和计数见[事务](./transactions.md#写服务的操作)，实时传递见[协议](./protocol.md)。
+提示描述这条故事提交时未生效的附带操作；之后成功的操作或重试不会清除它。物化快照仍只捕获显示消息的边界，分叉只复制边界内的消息及其提示，并分配新消息 ID。完整 checkpoint 的导出、校验与替换保留 metadata；恢复不会重播操作或通知。重连合并同 ID 消息时补齐缺失的提示，保留实时正文和已加载的历史；较旧响应缺少字段不会清掉已有提示。恢复回执中迟到的 `narrative.completed` 若缺少提示，也保留同一持久消息 ID 已恢复的有效提示，并按消息 ID 合并，避免重复故事。完整状态替换按恢复内容替换消息。提示不进入模型对话日志。归属和计数见[事务](./transactions.md#写服务的操作)，实时传递见[协议](./protocol.md)。
 
 ```json
 {
@@ -4501,6 +4501,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 #### `POST /api/sessions/:id/suspensions/:suspensionId/resume`
 
 用玩家提交的数据让一个挂起的 runtime 继续运行。
+
+故事只在本次恢复的事务提交后返回，并通过状态订阅发布完整的 `narrative.completed`。失败或再次挂起不会暴露候选；恢复期间沿用安全的 runtime/step/tool 进度，不发送叙事增量。
 
 - **agent runtime**：从保存下来的工具调用记录接着跑。
 - **function runtime**：重新调用 handler，本次数据通过 `ctx.resumeData` 和 `ctx.resumedFromSuspensionId` 传入，不会进入模型循环。handler 挂起前用 `ctx.recursiveCall` 调用的子 runtime，写入随挂起项保存，恢复成功时先于 handler 自己的写入一起提交；恢复失败时这些保存的写入仍扣在未解决的挂起项里，之后可重试；放弃挂起项时一起丢弃。
@@ -5134,6 +5136,8 @@ id: example-epoch:2
 ### Actions（SSE 桥接）
 
 #### `POST /api/actions`
+
+provider 运行期间，流只报告 runtime/step/tool 进度。每次执行提交后才发布完整的 `narrative.completed`，准备阶段与接力开场也遵守这个边界。拒绝、回滚和取消不发布故事草稿。重连后读取已保存消息，不能把诊断事件当作已提交消息。
 
 玩家的每一个游戏动作都从这里进来：说话、行动、执行命令、回答交互、开局、重试。服务端把动作变成一次回合执行，用 SSE 把结果一段一段地返回。内置前端主要用的就是这个端点。
 
@@ -6235,7 +6239,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `POST /api/actions`      | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`       | 回合内的主流     |
 | `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`）   | `SubscriptionEvent` | 回合外的辅助通道 |
 
-- **`POST /api/actions`**：信封带 `requestId` / `traceId` / `flowId` / `seq`。它承载一个回合里的叙事文本、runtime 生命周期、工具调用 trace 等。
+- **`POST /api/actions`**：信封带 `requestId` / `traceId` / `flowId` / `seq`。它承载提交后的完整叙事、runtime 生命周期和不含正文的模型/工具进度；不发送故事草稿。
 - **`GET /api/events/stream`**：信封带 `id` / `topic` / `type`，事件由 EventBus 广播。它承载跨会话通知、持久订阅和断线重连后的补发。
 - 两条流在 Web 客户端里都用 `fetch()` + `ReadableStream` 读取（`api.ts` 的 `sendAction` 和 `subscription.ts`）。
 
@@ -6291,8 +6295,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 <!-- prettier-ignore -->
 | 类型 | 分类 | 说明 |
 | --- | --- | --- |
-| `narrative.delta` | 叙事 | 叙事文本增量（逐 token 流式） |
-| `narrative.completed` | 叙事 | 叙事文本完成 |
+| `narrative.completed` | 叙事 | 提交后的完整叙事，携带持久消息 ID、段落和说话人 |
 | `interaction.requested` | 交互 | 请求玩家输入（表单/选择/确认） |
 | `ui.rendered` | UI | `ui.render` proposal 提交后发出 |
 | `ui.part.update` | UI | UI part 状态更新（每个 part 一条） |

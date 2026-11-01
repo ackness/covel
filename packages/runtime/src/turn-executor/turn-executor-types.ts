@@ -51,16 +51,7 @@ export interface AgentLoopDeps {
   ) => string | undefined;
   /** Optional EventBus for emitting subscription events during turn execution. */
   readonly eventBus?: EventBus;
-  /** Called for each LLM text delta during streaming (narrative-only runtimes). */
-  readonly onDelta?: (delta: {
-    runtimeId: string;
-    pluginId: string;
-    textDelta: string;
-    /** Drop the text streamed so far for this runtime before appending. */
-    reset?: true;
-    /** The story paragraph this text belongs to (segmented stories only). */
-    segment?: import("@covel/shared").NarrativeDeltaSegment;
-  }) => Promise<void>;
+
   /** Called when a runtime completes execution (e.g. on suspension). */
   readonly onRuntimeComplete?: (info: {
     runtimeId: string;

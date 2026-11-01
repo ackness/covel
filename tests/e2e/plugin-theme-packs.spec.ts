@@ -22,7 +22,7 @@ import {
 import {
   sandboxThemeFixture,
   startThemeOrchestrationHost,
-  streamingThemeStory,
+  committedThemeStory,
   themeSecrets,
 } from "./helpers/theme-orchestration.js";
 
@@ -1167,7 +1167,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
         });
       // A real second delta follows the full-state baseline on the same port.
       const envelopes = (await portMessages(frame!)).length;
-      fixture.nextDelta(turn);
+      fixture.continueArguments(turn);
       await expect
         .poll(async () =>
           (await portMessages(frame!))
@@ -1180,7 +1180,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
         )
         .toBe(true);
       await expect(sandbox.locator("#story")).toContainText(
-        streamingThemeStory,
+        committedThemeStory,
       );
       const stop = controls.getByRole("button", { name: "停止", exact: true });
       await hit(stop);
@@ -1225,7 +1225,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
         .toBe(true);
       const story = page
         .locator('[data-covel-theme-part="story"]')
-        .filter({ hasText: streamingThemeStory });
+        .filter({ hasText: committedThemeStory });
       await expect(story.last()).toHaveCSS("color", "rgb(245, 234, 210)");
       expect(
         (await host.store.getSession(host.sessionId))?.completedPlayerTurns,
@@ -1333,8 +1333,8 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       ).length,
     ).toBe(1);
   } finally {
-    fixture.nextDelta(0);
-    fixture.nextDelta(1);
+    fixture.continueArguments(0);
+    fixture.continueArguments(1);
     fixture.release(0);
     fixture.release(1);
     await page.goto("about:blank");

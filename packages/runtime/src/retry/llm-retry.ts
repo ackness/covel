@@ -106,34 +106,15 @@ const TRUNCATION_RETRIES = 1;
 /**
  * The finish reason of a response that may be used, in the kernel's terms.
  *
- * Only `stop` and `tool_calls` end a whole answer. A response cut at the
- * output limit (`length`) or ended for a reason the vocabulary does not know
- * (`other`, such as Anthropic's `pause_turn`) is an error: a cut tool call has
- * broken arguments, and cut JSON is not the runtime's result. The exception
- * is text the caller asked to keep (`keptText`), with no tool call beside it:
- * a story the player has already read as it streamed stays, and the caller is
- * told by the reason it returns that it is not whole.
+ * Only `stop` and `tool_calls` end a whole answer. Truncated, refused or
+ * otherwise incomplete responses cannot execute tools or supply output.
  */
-function requireCompleteOutput(
-  reason: string,
-  keptText?: {
-    readonly allowed: boolean | undefined;
-    readonly text: string | null | undefined;
-    readonly toolCalls: number;
-  },
-): LLMResponse["finishReason"] {
+function requireCompleteOutput(reason: string): LLMResponse["finishReason"] {
   const unified = unifyFinishReason(reason);
   if (isCompleteFinishReason(unified)) return unified;
   if (unified === "error") {
     throw new Error("PROVIDER_ERROR: model generation ended with an error");
   }
-  if (
-    (unified === "length" || unified === "other") &&
-    keptText?.allowed &&
-    keptText.toolCalls === 0 &&
-    keptText.text?.trim()
-  )
-    return unified;
   if (unified === "length") {
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
@@ -167,12 +148,6 @@ export interface CallLLMWithRetryParams {
   /** Cache-routing key of the runtime's requests; see `promptCacheKeyFor`. */
   readonly promptCacheKey?: string;
   readonly defaults?: import("@covel/shared").LLMRequestDefaults;
-  /**
-   * Keep text that was cut at the output limit instead of failing the call.
-   * For a runtime whose result is prose; the response then finishes with
-   * `length`.
-   */
-  readonly allowTruncatedText?: boolean;
   readonly policy: RetryPolicy;
   /**
    * Called with the queue wait (ms) each time an attempt had to wait for an
@@ -379,11 +354,6 @@ export async function callLLMWithRetry(
           throwIfTurnAborted(params.abortSignal);
           requireCompleteOutput(
             response.rawFinishReason ?? response.finishReason,
-            {
-              allowed: params.allowTruncatedText,
-              text: response.content,
-              toolCalls: response.toolCalls.length,
-            },
           );
           await trace.ensureCalling();
           await emitLlmRespondedSuccess(params.emitter, {
@@ -476,15 +446,6 @@ function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
 // ── Streaming retry (with first-token guard) ────────────────────────
 
 export interface StreamLLMWithRetryParams extends CallLLMWithRetryParams {
-  /** Optional sink for text deltas so streaming can keep its UX. */
-  readonly onDelta?: (delta: string) => void | Promise<void>;
-  /**
-   * Whether `onDelta` puts text in front of the player. Then a stream that
-   * failed after its first output is not retried: the player already read
-   * it. When nothing reached anyone, the partial output is dropped and the
-   * call retried like any other failure. Defaults to `onDelta` being set.
-   */
-  readonly deliversDeltas?: boolean;
   /**
    * Called with the time (ms) a completed stream spent delivering output. The
    * loop extends its OWN deadline by it, and a caller holding an enclosing
@@ -506,18 +467,13 @@ export interface StreamLLMResult {
  * ceiling ends a model that never stops. Returns the fully reassembled
  * response once the stream completes.
  *
- * The caller is responsible for replaying deltas via `onDelta` — we forward
- * every text-delta as it arrives on the first attempt. On retry we
- * intentionally stop forwarding so the user does not see duplicate text;
- * perturbation + a fresh retry means the second stream is treated as the
- * source of truth.
+ * Every attempt is buffered privately and returned only after a valid
+ * terminal event. A failed attempt is discarded in full before retrying.
  */
 export async function streamLLMWithRetry(
   params: StreamLLMWithRetryParams,
 ): Promise<StreamLLMResult> {
-  const { llm, model, messages, tools, policy, deadline, onDelta, onRetry } =
-    params;
-  const deliversDeltas = params.deliversDeltas ?? onDelta !== undefined;
+  const { llm, model, messages, tools, policy, deadline, onRetry } = params;
   let effectiveDeadline = deadline;
   if (!llm.stream) {
     // No streaming support — fall back to non-streaming retry so callers can
@@ -537,8 +493,6 @@ export async function streamLLMWithRetry(
   });
 
   try {
-    // Text of a failed attempt that already went to `onDelta` is not sent again.
-    let deltasForwarded = false;
     for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
       throwIfTurnAborted(params.abortSignal);
       assertLlmRequestBudget(requestScope.budget, {
@@ -622,14 +576,12 @@ export async function streamLLMWithRetry(
       };
 
       let firstTokenSeen = false;
-      // Output handed to the caller. Argument activity keeps the timers
-      // alive without being output, so a stream that broke there retries.
-      let outputDelivered = false;
+      // Text, reasoning and payload-free argument activity all refresh the
+      // silence guards. None is delivered outside this attempt.
       let firstOutputAt: number | undefined;
       let lastOutputAt: number | undefined;
       let idleHandle: ReturnType<typeof setTimeout> | undefined;
-      const noteOutput = (delivered = true): void => {
-        if (delivered) outputDelivered = true;
+      const noteOutput = (): void => {
         if (!firstTokenSeen) {
           firstTokenSeen = true;
           firstOutputAt = Date.now();
@@ -662,7 +614,6 @@ export async function streamLLMWithRetry(
         lastReason,
         params.locale,
       );
-      const forwardDeltas = !deltasForwarded;
       const streamStart = Date.now();
       const trace = createAttemptTrace(
         params,
@@ -700,20 +651,16 @@ export async function streamLLMWithRetry(
         )) {
           if (event.type === "tool-argument-delta") {
             // The model is writing a tool call: not silence, and not output.
-            noteOutput(false);
+            noteOutput();
           } else if (event.type === "text-delta") {
             if (event.textDelta.length > 0) noteOutput();
             streamedContent += event.textDelta;
             if (event.textDelta.length > 0) {
               await trace.ensureCalling();
-              if (forwardDeltas && onDelta) {
-                deltasForwarded = true;
-                await onDelta(event.textDelta);
-              }
             }
           } else if (event.type === "reasoning-delta") {
             // Reasoning goes to no one: a stream that broke there retries.
-            if (event.reasoningDelta.length > 0) noteOutput(false);
+            if (event.reasoningDelta.length > 0) noteOutput();
             streamedReasoningContent += event.reasoningDelta;
           } else if (event.type === "tool-call") {
             noteOutput();
@@ -729,11 +676,6 @@ export async function streamLLMWithRetry(
             if (event.usage) streamedUsage = event.usage;
             streamFinishReason = requireCompleteOutput(
               event.rawFinishReason ?? event.finishReason,
-              {
-                allowed: params.allowTruncatedText,
-                text: streamedContent,
-                toolCalls: streamedToolCalls.length,
-              },
             );
             streamRawFinishReason = event.rawFinishReason;
             if (event.reasoningContent)
@@ -815,20 +757,11 @@ export async function streamLLMWithRetry(
           streaming: true,
         });
 
-        // Partial output must never become a successful response or be spliced
-        // into a retry. Output the player has read ends the call; output
-        // nobody saw is dropped and the call retried under the policy.
+        // Discard all text, calls and continuation from this failed attempt.
+        // Retry uses fresh buffers under the same request and runtime budgets.
         throwIfTurnAborted(params.abortSignal);
         requestScope.signal.throwIfAborted();
         if (isTerminalLlmRequestError(err)) throw err;
-        if (outputDelivered && deliversDeltas) {
-          throw new LLMRetryError({
-            reason: lastReason,
-            attempts: attempt + 1,
-            cause: err,
-            hasPartialOutput: true,
-          });
-        }
 
         if (attempt >= policy.maxRetries) {
           throw new LLMRetryError({

@@ -52,7 +52,6 @@ import {
   createLoopContextPolicy,
   hasToolStepGroup,
 } from "./loop-context-policy.js";
-import { createDeltaForwarder } from "./delta-forwarder.js";
 import {
   deferredToolDefinitions,
   executeToolSearch,
@@ -115,7 +114,6 @@ export interface AgentToolLoopCompleted {
   readonly pendingProposals: Proposal[];
   /** Domain events emitted via `emit-event` tool calls this loop — merged into `effects.events` at finalize. */
   readonly emittedEvents: EmittedEvent[];
-  readonly streamDeltaCount: number;
   /** How the loop ended. */
   readonly stop: LoopStop;
   /** The PreStep cancellation message or the context overflow text. */
@@ -369,14 +367,6 @@ async function runAgentToolLoopWithinBudget(
       ? [...(toolDefs ?? []), ...restoredTools]
       : toolDefs;
 
-  // The loop's single narrative outlet — counts chunks for `message.completed`.
-  // Only a profile that streams to the player forwards text.
-  const delta = createDeltaForwarder({
-    onDelta: profile.stream ? deps.onDelta : undefined,
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-  });
-
   const reportRetry = (info: RetryInfo): void => {
     const cause =
       info.error instanceof Error ? info.error.message : String(info.error);
@@ -547,9 +537,6 @@ async function runAgentToolLoopWithinBudget(
           onStreamTime: budget.extend,
           useStreaming: useStreaming && llmRequest.stream !== false,
           reportRetry,
-          onStreamDelta: profile.stream ? delta.forward : async () => {},
-          deliversDeltas: profile.stream,
-          allowTruncatedText: false,
           requireToolCall: step.requireToolCall,
           submissionRequested: step.submissionRequested,
           ...(step.toolChoice ? { toolChoice: step.toolChoice } : {}),
@@ -771,7 +758,6 @@ async function runAgentToolLoopWithinBudget(
       return;
     }
     toolCallRequested = false;
-    await delta.reset();
     const preOutcomes = new Map<
       number,
       Awaited<ReturnType<typeof runPreToolUseHook>>
@@ -1443,7 +1429,6 @@ async function runAgentToolLoopWithinBudget(
     failedToolCalls,
     pendingProposals,
     emittedEvents,
-    streamDeltaCount: delta.count(),
     stop: loop.stop,
     ...(stopMessage ? { stopMessage } : {}),
     effectiveMaxSteps,

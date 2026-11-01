@@ -11,8 +11,8 @@ import {
  * One agent step issues exactly one LLM response. It goes through one of two
  * paths, chosen by `useStreaming` (see agent-loop-policy.ts):
  *   - streaming — with a non-stream fallback when the stream exhausts retries
- *     or finishes empty with tool_calls but no parsed calls. Only a loop
- *     profile with `stream` forwards the text deltas to the player;
+ *     or finishes with tool_calls but no parsed calls. All output stays
+ *     internal until a complete response is accepted and committed;
  *   - non-streaming — with the shared transient-error retry policy.
  *
  * Extracted from `turn-agent-tool-loop.ts` so the main loop body reads as a
@@ -52,15 +52,6 @@ export interface RequestLLMResponseOptions {
   readonly onQueueWait?: (waitedMs: number) => void;
   /** Forwards the time a stream spent writing, for the same extension. */
   readonly onStreamTime?: (streamedMs: number) => void;
-  /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
-  readonly onStreamDelta: (textDelta: string) => Promise<void>;
-  /** Whether `onStreamDelta` shows text to the player (profile `stream`). */
-  readonly deliversDeltas: boolean;
-  /**
-   * Keep a reply cut at the output limit, marked `length` (profile
-   * `truncation: accept`). Otherwise the output must be whole.
-   */
-  readonly allowTruncatedText: boolean;
   /**
    * A correction just asked the model to call a tool, so this request
    * requires one (`toolChoice: "required"`, as in the AI SDK) instead of
@@ -125,7 +116,6 @@ export async function requestLLMResponse(
     deadline,
     useStreaming,
     reportRetry,
-    onStreamDelta,
     onQueueWait,
   } = opts;
   // Target resolution enriches telemetry only. A custom resolver failure must
@@ -166,9 +156,6 @@ export async function requestLLMResponse(
     ),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(opts.promptCacheKey ? { promptCacheKey: opts.promptCacheKey } : {}),
-    // The player has read a story as it streamed. Cut at the output limit,
-    // it is kept and marked `length`; any other output must be whole.
-    allowTruncatedText: opts.allowTruncatedText,
     policy: retryPolicy,
     deadline,
     requestBudget: requestScope.budget,
@@ -193,7 +180,7 @@ export async function requestLLMResponse(
   try {
     const response = await awaitLlmRequest(
       useStreaming
-        ? requestStreaming(opts, callParams, onStreamDelta)
+        ? requestStreaming(opts, callParams)
         : callLLMWithRetry(callParams),
       requestScope.signal,
     );
@@ -208,30 +195,23 @@ type CallParams = Parameters<typeof callLLMWithRetry>[0];
 async function requestStreaming(
   opts: RequestLLMResponseOptions,
   callParams: CallParams,
-  onStreamDelta: (textDelta: string) => Promise<void>,
 ): Promise<LLMResponse> {
   const { manifest, deadline, toolDefs } = opts;
   let response: LLMResponse;
   let usedNonStreamFallback = false;
 
-  // Streaming path: helper enforces the first-token (TTFB) and idle guards,
-  // retries on transient failures, and forwards text deltas to
-  // the caller on the first attempt. If streaming exhausts its retries
-  // without output the player saw, fall back to a non-stream call — except
-  // after a cut at the output limit or a provider error that refuses the
-  // request itself (401, 400), which a non-stream call would repeat.
+  // The helper preserves silence guards, usage and bounded retries while
+  // discarding each failed attempt. A transient exhausted stream may use
+  // non-stream recovery; a truncated or refused request must fail.
   try {
     const streamed = await streamLLMWithRetry({
       ...callParams,
-      onDelta: onStreamDelta,
-      deliversDeltas: opts.deliversDeltas,
       onStreamTime: opts.onStreamTime,
     });
     response = streamed.response;
   } catch (streamError) {
     if (
       streamError instanceof LLMRetryError &&
-      !streamError.hasPartialOutput &&
       streamError.reason !== "output-truncated" &&
       isStreamRecoveryAllowed(streamError) &&
       Date.now() < deadline
@@ -246,19 +226,13 @@ async function requestStreaming(
     }
   }
 
-  // Some providers finish with tool_calls but omit the structured payload on
-  // SSE. Only an entirely empty stream can be replaced: text has already been
-  // forwarded to the player, and reasoning is part of this response's output.
+  // Some providers omit structured calls on SSE. The response has reached
+  // nobody, so discard it and use a single non-stream recovery request.
   if (
     response.finishReason === "tool_calls" &&
     response.toolCalls.length === 0 &&
     toolDefs
   ) {
-    if (response.content || response.reasoningContent) {
-      throw new Error(
-        "PROVIDER_ERROR: model stream ended with tool_calls but no structured calls after producing output",
-      );
-    }
     if (
       usedNonStreamFallback ||
       !opts.deps.llm.stream ||

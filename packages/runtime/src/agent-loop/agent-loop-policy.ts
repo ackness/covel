@@ -3,9 +3,8 @@
  *
  * Everything the loop needs to decide HOW to run — tool surface, response
  * format, model override, streaming gate, step/retry budgets, tool-use
- * enforcement, and the loop profile (streaming to the player, steering,
- * truncation, fallback, finalizer) — is derived here, in one place, from the manifest + turn
- * input. The loop body (`turn-agent-tool-loop.ts`) only consumes the
+ * enforcement, and the loop profile (steering, fallback, finalizer) — is
+ * derived here, in one place, from the manifest and turn input. The loop body (`turn-agent-tool-loop.ts`) only consumes the
  * resulting `AgentLoopPolicy`, so its `while` reads as control flow rather
  * than policy derivation, and the loop core can be instantiated in tests
  * with a hand-built policy + minimal `AgentLoopDeps` fixture.
@@ -54,12 +53,9 @@ export interface AgentLoopPolicy {
    */
   readonly runtimeModelOverride: string | undefined;
   /**
-   * Stream whenever the LLM client can stream (`deps.llm.stream`), for every
-   * runtime kind. Only a profile with `stream` (the `story` preset) forwards
-   * the streamed text to the player's narrative feed: a plugin runtime's raw
-   * text is reasoning chatter that feeds into structured tool calls, so it is
-   * consumed without being shown. The request layer falls back to generate() when the provider
-   * cannot parse tool calls out of stream chunks.
+   * Use provider streaming whenever available, to track first-output/idle
+   * timeouts and complete tool calls. Output remains internal until accepted
+   * and committed; no transport delta is sent to the player.
    */
   readonly useStreaming: boolean;
   /**

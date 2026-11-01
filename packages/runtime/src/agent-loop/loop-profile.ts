@@ -1,7 +1,7 @@
 /**
  * The agent loop's behaviour as data: a resolved loop profile.
  *
- * The loop reads streaming, steering, truncation, the tool-loop fallback and
+ * The loop reads steering, the tool-loop fallback and
  * the finalizer from here, never from `outputKind`. A runtime gets the preset
  * it names in `agent.loop.profile`, or the one of its visibility (`story` for
  * a story, `system` otherwise), with the author's overrides merged field by
@@ -34,9 +34,7 @@ export function resolveLoopProfile(
   const base = LOOP_PRESETS[preset];
   return {
     preset,
-    stream: spec?.stream ?? base.stream,
     steering: spec?.steering ?? base.steering,
-    truncation: spec?.truncation ?? base.truncation,
     fallback: spec?.fallback ?? base.fallback,
     finalizer: {
       maxSteps: spec?.finalizer?.maxSteps ?? base.finalizer.maxSteps,

@@ -1,3 +1,4 @@
+import { executionProgressPayload } from "./execution-progress.js";
 /**
  * API Subscription routes — unified SSE stream with topic filtering and replay.
  *
@@ -253,10 +254,16 @@ subscribeRoutes.get(
           )
             return Promise.resolve();
           if (trackReplay) sentIds.add(event.id);
+          // An explicit trace subscription is a diagnostic reader. Ordinary
+          // gameplay/recovery subscriptions receive only safe progress.
+          const payload = topics?.has("trace")
+            ? event.payload
+            : executionProgressPayload(event.type, event.payload);
+          if (!payload) return Promise.resolve();
           return stream.writeSSE({
             id: event.id,
             event: deriveSseEventName(event),
-            data: JSON.stringify(event),
+            data: JSON.stringify({ ...event, payload }),
           });
         };
 

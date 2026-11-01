@@ -1,16 +1,8 @@
-/**
- * Tests for TurnExecutor resilience — verifies that callback failures
- * (onRuntimeStart, onDelta, eventBus.emit) don't crash the runtime.
- *
- * Covers:
- * - H2: onRuntimeStart failure should not kill the runtime
- * - M1: onDelta error during streaming should not kill the runtime
- */
+import { manifest, submitted } from "./_helpers/agent-loop-fixture.js";
+/** Runtime lifecycle observer failures cannot discard accepted output. */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import path from "node:path";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
@@ -38,12 +30,7 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
 // ── Mock LLM ─────────────────────────────────────────────────────
 
 class MockLLM implements LLMAdapter {
-  response: LLMResponse = {
-    content: "Narrative output text.",
-    toolCalls: [],
-    finishReason: "stop",
-    usage: { inputTokens: 10, outputTokens: 5 },
-  };
+  response: LLMResponse = submitted("Narrative output text.");
 
   async generate(): Promise<LLMResponse> {
     return this.response;
@@ -52,24 +39,21 @@ class MockLLM implements LLMAdapter {
 
 class StreamingMockLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
-    return {
-      content: "fallback",
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 10, outputTokens: 5 },
-    };
+    return submitted("fallback");
   }
 
   async *stream(): AsyncGenerator<LLMStreamEvent> {
     yield { type: "text-delta" as const, textDelta: "Hello " };
     yield { type: "text-delta" as const, textDelta: "world" };
-    yield { type: "done" as const, finishReason: "stop" };
+    yield {
+      type: "tool-call" as const,
+      ...submitted("Hello world").toolCalls[0]!,
+    };
+    yield { type: "done" as const, finishReason: "tool_calls" };
   }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
-
-const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
 function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   return {
@@ -91,15 +75,15 @@ describe("TurnExecutor Resilience", () => {
   beforeEach(async () => {
     mockLLM = new MockLLM();
 
-    const discoveries = await discoverPlugins(PLUGINS_DIR);
-    const narratorDiscovery = discoveries.find((d) => d.id === "narrator");
-    expect(narratorDiscovery).toBeDefined();
-
-    const manifests = await loadPluginManifest(narratorDiscovery!);
-    narratorManifest = manifests[0]!.manifest;
+    narratorManifest = manifest({
+      name: "narrator",
+      pluginId: "narrator",
+      outputKind: "story",
+      tools: {},
+    });
     narratorLoaded = {
       manifest: narratorManifest,
-      promptTemplate: manifests[0]!.promptTemplate,
+      promptTemplate: "Submit a story.",
     };
   });
 
@@ -144,16 +128,16 @@ describe("TurnExecutor Resilience", () => {
     });
   });
 
-  describe("M1: onDelta error during streaming should not kill the runtime", () => {
-    it("should complete streaming even when onDelta throws", async () => {
+  describe("completion observer resilience", () => {
+    it("keeps accepted streamed output when the completion observer throws", async () => {
       const streamingLLM = new StreamingMockLLM();
-      let deltaCallCount = 0;
+      let completeCallCount = 0;
 
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => narratorLoaded,
         llm: streamingLLM,
-        onDelta: async () => {
-          deltaCallCount++;
+        onRuntimeComplete: async () => {
+          completeCallCount++;
           throw new Error("Client disconnected");
         },
         store: await createMainLoopStore("sess-1"),
@@ -173,8 +157,7 @@ describe("TurnExecutor Resilience", () => {
 
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.runtimeResults[0]!.status).toBe("success");
-      // onDelta should have been called (even though it threw)
-      expect(deltaCallCount).toBeGreaterThan(0);
+      expect(completeCallCount).toBeGreaterThan(0);
       // Content should still be accumulated
       const output = result.runtimeResults[0]!.output as Record<
         string,

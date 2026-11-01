@@ -23,7 +23,7 @@
 6. **运行一个 runtime。** 内核先检查它需要的东西齐不齐，再准备它能看到的内容：世界设定、历史对话、上游 runtime 的结果、玩家这句话。`agent` 把这些交给模型，模型可以调用工具，直到给出最终结果；`function` 直接运行函数。
 7. **领域写入先暂存。** 正文、表单和插件数据的写入先变成提案，尚未生效。执行结果、诊断和已确认的玩家输入可能已经单独保存；它们不等于领域写入已提交。
 8. **提交存档。** 内核在同一个事务里写入被接受的提案、执行日志和会话时钟。有有效故事时，可选 runtime 的写入可以单独丢弃；故事或 setup 单元被拒、基础设施出错时，整次事务回滚。已单独保存的玩家输入保留。
-9. **确认画面。** 正文可以在提交前流式显示。提交后的事件给出最终正文、待填表单和面板数据；前端据此确认内容，或撤下未提交的结果。
+9. **显示已提交内容。** 执行期间显示进度；提交后的事件才发布完整故事、表单和面板数据。失败或取消不创建草稿故事。
 10. **收尾。** 最后一条事件是 `execution.completed`，其中的 `committed` 说明这一回合有没有真正保存。耗时的收尾工作（例如整理记忆）可以转到后台去做，玩家不用等。
 
 开局稍有不同。新会话先处在“准备阶段”（`setup`）：只运行准备用的 runtime，例如生成角色表单。全部准备完成后，会话才进入“游玩阶段”（`playing`），开始上面这种四阶段的回合。
@@ -221,7 +221,7 @@ stateDiagram-v2
 - 子调用先前发出的成功是计算结果。保存挂起项之后，内核按原来的 `(turnId, runtimeId, runId)` 追加 `suspended` 生命周期修正，并让这些调用自己的任务等待。恢复失败或提交回滚时追加失败；之后重试提交成功可修正为成功，再次挂起则恢复等待，放弃、过期或作废则取消。原有 trace 保留为历史。独立调用即使 runtime 相同，也不跟着改变状态。
 - continuation 保存当前挂起的 run 和整条链的任务所有者。进度记录的内核元数据保留调用身份及收尾来源，插件不能伪造；因此恢复可以修正内核上一次写下的失败，而不会复活插件明确报告的失败或取消。任务的公共去重身份和根进度范围不变。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
-- `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
+- `execution.completed.committed` 是客户端的终态信号：前端据此结算进度；故事正文来自提交后的通知或保存的消息。
 - 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
 
 成功、写入后跳过的 guard 和真正挂起的结果，在内核私有符号下携带读取依赖。执行在复制提交计划前收集它们；普通公开结果与 continuation 不存图。提交也检查持有挂起项但没有领域提案的单元，丢弃依赖已拒绝生产者的辅助挂起项，复用作业与时钟结算。恢复读当前已提交世界和自己的保存缓冲，源生产者已经结算，所以恢复计划没有历史生产者 ID。
@@ -230,7 +230,7 @@ stateDiagram-v2
 
 向客户端投递事件，不负责“业务是否完成”：
 
-- `onFinalized` 确认结果已经持久保存后，把事件放进一个有上限的队列。runtime 的增量和生命周期事件同样只入队。这些回调不等 SSE 的网络写入。
+- `onFinalized` 确认结果已经持久保存后，把事件放进一个有上限的队列。runtime 的进度和生命周期事件同样只入队。这些回调不等 SSE 的网络写入。
 - 提案、日志、时钟的事务和自动快照仍在原来的会话锁内完成。事件信封的身份和 `seq` 在这次执行持有锁的时候取得。
 - 最后把队列发完这一步在锁外进行。连接慢到超时或断开，不改变已提交的内容，不重跑模型，也不会让只读恢复把成功的执行当成可重试的失败。
 
@@ -300,7 +300,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
+    Commit --> SSE["发 SessionEvent<br/>narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
     PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
     PreGameTick -->|否| Keep["保持 phase 不变"]
@@ -724,7 +724,6 @@ io:
 │  SSE 事件                  消息转换层                 渲染层       │
 │  ──────────               ────────                 ──────        │
 │                                                                  │
-│  narrative.delta    ──►  appendDelta()      ──►  Prose           │
 │  narrative.completed ──► addMessage(story)  ──►  组件            │
 │                                                                  │
 │  interaction.requested ──► addMessage(block) ──► messageToSpec() │
@@ -762,7 +761,7 @@ io:
 组件清单见 [UI 组件](../reference/ui-components.md)。
 
 > [!IMPORTANT]
-> `narrative.delta` 只有启用了流式输出的 runtime 才发。插件可以在 `PreLLMCall` 里用 `replace.stream: false` 关掉流式，所以客户端不能指望每回合都收到 delta。内置叙事插件边写边流式输出，草稿被退回时先发 `reset`。
+> 玩家故事正文只在持久提交后出现。等待期间通过 runtime/step/tool/job 事件显示进度，包括安全的提交拒绝提示。provider 流式传输、工具参数心跳和 `PreLLMCall.replace.stream` 只决定内部传输，不向故事界面发送草稿或 reset。
 >
 > 只有 `execution.completed.committed` 或已提交的记录，才能确认本回合已经保存。单个 runtime 的成功事件不是整个回合的提交凭据。
 
@@ -1038,7 +1037,7 @@ turn_messages (canonical 追加式执行日志):
 
 runtime 的生命周期事件由 `TraceRecorder` 写入，恢复入口也记录开始和终态。保存的递归工作在提交或退出挂起之后追加同一 run 的有效状态修正，先持久化，再送到订阅客户端和发起动作的流，每条流只转发一次。修正不重新提交提案、不执行 Hook，也不增加子调用的插件故障计数。
 
-流式的叙事增量不保存。每个 runtime 只保存最终的那条 `message.completed`，这样表不会膨胀。
+不产生叙事增量。接受后的 story runtime 在 trace 中记录一条 `message.completed`；只有提交后的 `narrative.completed` 进入玩家故事。
 
 事件的完整 payload 见[协议参考](../reference/protocol.md)的“转发的运行时内部事件”一节。
 
@@ -1080,12 +1079,12 @@ sequenceDiagram
             LLM-->>Plugin: tool 结果 / finishReason=stop
             Plugin-->>Kernel: RuntimeOutput<br/>(segments / narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (仅流式 runtime；分段故事只发段落正文)
-        Kernel-->>Web: SSE: narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
+        Kernel-->>Web: SSE: step.started / step.completed (progress only)
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     Kernel->>Server: 登记 setupRuntimes 完成镜像；未集齐则 phase 保持 'setup'
+    Kernel->>Kernel: 原子提交准备结果
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
     end
     Server-->>Web: SSE: execution.completed
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
@@ -1112,12 +1111,11 @@ sequenceDiagram
             Plugin-->>Kernel: Agent 协议 → output / effects / completion
         end
         Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
-        Kernel-->>Web: SSE: narrative.delta / narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
-        Kernel-->>Web: SSE: plugin-data.changed (数据集工具等写入提交后)
-        Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
+    Kernel->>Kernel: 原子提交执行结果
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
+    Kernel-->>Web: SSE: plugin-data.changed / event.emitted (after commit)
     end
 
     opt 某个 runtime 挂起

@@ -37,7 +37,7 @@ SSE 是服务端在一条 HTTP 连接上持续推送文本的方式。Covel 有�
 | 其他       | 流随动作结束而结束                                            | 按 topic 订阅；连接时发 `system.connected`，每 30 秒发 `system.heartbeat`；带 `lastEventId` 重连可以补发 |
 
 > [!WARNING]
-> `/api/actions` 的帧没有 `event:` 头。所以 `EventSource.addEventListener('narrative.delta', …)` 这种按事件名订阅的写法，在这条流上**永远不会**触发。读回合内的事件，请用 `apps/web/src/services/api/actions.ts` 的 `sendAction`（它用 ReadableStream 解析），或者自己用 `fetch()` 读 `data:` 行。按事件名订阅只对 `/api/events/stream` 有效。
+> `/api/actions` 的帧没有 `event:` 头。所以 `EventSource.addEventListener('narrative.completed', …)` 这种按事件名订阅的写法，在这条流上**永远不会**触发。读回合内的事件，请用 `apps/web/src/services/api/actions.ts` 的 `sendAction`（它用 ReadableStream 解析），或者自己用 `fetch()` 读 `data:` 行。按事件名订阅只对 `/api/events/stream` 有效。
 
 ## 宿主执行与提交边界
 
@@ -137,14 +137,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 | 事件类型              | 方向 | 描述             | 负载                                                                                |
 | --------------------- | ---- | ---------------- | ----------------------------------------------------------------------------------- |
-| `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta, reset?, segment? }`                            |
-| `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
+| `narrative.completed` | S→C  | 完整的已提交叙事 | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
-- `narrative.delta`、`narrative.completed` 和 `runtime.started` 都必须带 `kind`；客户端直接读取它，不从 `label` 推断。
-- `narrative.delta` 可以带 `reset: true`，这时 `delta` 通常是空字符串。意思是：同一个 runtime 已经流出来的文字属于工具调用之前的准备步骤，或者是被审查驳回的草稿，不会成为最终的叙事。客户端应该清掉已经显示的部分和段落信息，再接收后面的片段。
-- `narrative.completed` 的 `content` 始终是审查通过之后的最终文本。它替换流式显示的内容。
-- 分段故事（声明了输出 schema 的故事 runtime，例如 `narrative-engine@2` 的 `segments`）的 `delta` 只带段落正文，段与段之间是空行，和 `content` 一致；JSON 的键、说话人和 `cues` 不进入 `delta`。见[故事输出](./plugins.md#故事输出)。
-- 这类故事的 `narrative.delta` 另带 `segment: { index, kind, speaker? }`，说明这段文字属于哪个段落。`index` 从 0 开始，只数显示出文字的段落，所以等于流式正文里按空行切出的段落序号。每个段落第一个可见字符所在的事件带上已知的 `kind` 和 `speaker`；`kind` 或 `speaker` 在正文之后才写完时，再发一个 `delta` 为空的事件带上更新后的 `segment`。规则和提交时相同：未知的 `kind` 算 `narration`，旁白没有说话人，说话人去掉首尾空白并截到 80 个字符。`speaker` 是模型写的名字，没有解析；`narrative.completed` 的 `segments` 带解析后的名字。纯文本故事的事件没有 `segment`。
+- `narrative.completed` 和 `runtime.started` 带 `kind`，客户端直接读取。
+- 故事只有持久提交后才对玩家可见。提交工具接受值和 `runtime.completed` 只说明计算结束，不发布故事。回滚、拒答和取消都不发布候选。
+- action、准备/开场、恢复和状态订阅使用同一提交边界。恢复 HTTP 响应返回已提交事件，断线恢复读取已保存消息。子 agent 的输出只交给父方，经过组合与提交后才成为玩家故事。
+- 等待期间使用 runtime/step/tool/job 事件显示进度。`step.completed.notes` 的 `output-rejected` 只带安全类别和整数尝试次数，不带审查文字或参数，也不表示百分比。
+- 删除 `narrative.delta`、它的 reset/segment 负载和宿主 `onDelta` 回调。客户端必须与服务端同步升级，不接受别名。provider 流式响应仍是内部传输。
 - 故事里有说话人或在场名字没能解析成角色（没有匹配，或匹配到多个）时，`narrative.completed` 带 `unresolvedSpeakers`：这些名字按首次出现的顺序排列，没有时省略。
 - 故事的 `narrative.completed` 带 `segments`：提交时解析过说话人的段落，形状和 `/messages` 的 `segments` 相同（见 [api.md](./api.md#get-apisessionsidmessages)）。客户端用它给刚看完的这一回合显示名牌和说话人，不必再读消息；其他 `kind` 的事件没有这个字段。
 
@@ -716,7 +715,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - `trace`（来自 TurnEmitter）和 `hooks`（来自 hook 管线）是运行时内部的观测 topic。`job` 承载 `job-status.updated`。
 - `apps/web/src/services/subscription.ts` 默认订阅 `runtime / state / game / plugin / session / system`，不含 `store`。session store 为了恢复后台任务，另外明确订阅 `job`。
 - 客户端按 `event.topic` 分发。新增 topic 或事件时，**必须同时更新这个文件**。
-- `/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）由 `sendAction` 的回调处理，不经过 `subscription.ts`。
+- `/api/actions` 的回合内事件（`narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）由 `sendAction` 的回调处理，不经过 `subscription.ts`。
 - `game` 的 `turn.completed` 表示回合已提交。旁观该会话的网页端收到后重读会话快照，更新消息和回合数；即使回合没有角色或维度写入也会刷新。复用现有的恢复代次和执行所有权检查，保留正在进行的本地 action 流。
 
 **鉴权**
@@ -752,8 +751,8 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 **断流之后的恢复（网页端）**
 
 - 网页端收到 reset 或重连之后，带着 revision 检查重新拉取：会话快照、插件列表、所有启用插件的数据、没解决的 suspension 和世界。这期间到达的实时事件先缓冲，之后再重放。
-- 只有访问代次和执行所有权仍然对得上时，才用同一个 `turnId/runtimeId` 的已保存终态叙事替换流式占位，并移除这个占位的外部文本和待刷新的片段。一条新的、健康的 POST 流仍然拥有自己现场的输出。
-- 出错或断流后，只有恢复确认回合失败或中断、且没有对应的已保存故事时，才把已显示的文字移到“未保存”区域，清除占位和流式缓存。文字只保留到离开会话，不进入故事历史、舞台或插件数据；有可恢复动作时，旁边提供重试。未知网络状态不开放重试，已保存故事仍按上面的规则替换。玩家主动中止和正常 `committed: false` 的撤回规则不变。
+- 恢复时先核对会话与执行所有权，再按持久消息 ID 合并已提交消息；重复投递不会产生重复故事。
+- 断流、失败和取消不创建草稿消息。保留先前的已提交故事，通过只读执行接口恢复进度；只有权威状态确认失败或中断后才开放重试。
 - 恢复快照的最近窗口如果和已加载的历史接不上，客户端先通过现有的消息分页接口只读地补到旧的锚点，再合并发布。它不删除旧窗口，也不重新发送动作。
 
 **给嵌入 `@covel/events` 的宿主**
@@ -1198,7 +1197,6 @@ interface SseEnvelope {
 `handleSseEvent` 是回合内事件唯一的处理器。它按事件类型，把事件交给对应的状态片段：
 
 ```
-narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
 event.emitted         → gameState.events
@@ -1209,7 +1207,7 @@ runtime.deferred      → executionSteps (pending, attached to the source turn b
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
 job-status.updated    → executionSteps (background terminal state, by data.originTurnId)
-execution.completed   → committed=true: finalize; committed=false: discard optimistic stream + executionError; both set executing=false
+execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false
 error.occurred        → executionError
 ```
 
@@ -1287,7 +1285,7 @@ error.occurred        → executionError
 
 **`reasoning-delta` 和超时**
 
-`LLMStreamEvent.reasoning-delta` 和叙事的片段是两种事件。它算作“服务商有动静”：
+`LLMStreamEvent.reasoning-delta` 和 `text-delta` 都是 provider 内部事件。它们算作“服务商有动静”：
 
 - 它计入首 token 超时；第一次输出之后，它也计入空闲超时。
 - 文本、思考和工具调用事件，每一个都让空闲等待重新开始。所以一条一直在写的流没有总时长的限制。
@@ -1316,6 +1314,8 @@ error.occurred        → executionError
 - `trace_events`，供 `/api/traces` 读取接口和 `/debug` 检查器使用。
 - 全局的 `EventBus`。`/api/actions` 的 SSE 路由再按 `FORWARDED_EVENT_TYPES`（由 `COVEL_EVENT_META[type].forwardToActionStream` 生成的集合）转发它们。
 
+下表列出完整诊断负载。游戏流使用后文说明的不含正文的进度投影。
+
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
@@ -1324,11 +1324,11 @@ error.occurred        → executionError
 | `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` 使用 `ToolErrorCode`；`error` 是完整消息，`hint` 是可选修正提示。错误码为 `invalid-input`、`not-found`、`ambiguous`、`refused`、`unavailable`、`timeout`、`conflict`、`cancelled`、`internal`。 |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
-| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`agent.loop.truncation: accept` 时可报告 `finishReason: length`：回复在输出上限处被截断，但被保留，仍须通过最终输出和提交检查；`reject` 时按失败上报。story profile 默认接受，其他 profile 默认拒绝，作者可覆盖 |
+| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。不完整的 provider 响应按失败上报，不保留截断叙事。 |
 | `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`。每个普通请求在 `PreStep` 后、`llm.calling` 前发出；单次收尾带 `finalizer: true`，仅提供提交工具，`toolChoice: { name: "submit-output" }`。 |
 | `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`。每个开始的步骤在全部工具事件后恰好关闭一次。`toolCalls` 为 `[{ name, success }]`，包括提交尝试；`retries` 为 `[{ attempt, reason }]`。`notes` 为 `[{ kind, count?, ignored?, reason?, attempt? }]`，kind 为 `output-rejected`、`submission-only`、`loop-perturbation`、`late-steering`、`tool-activated`、`tool-narrowed`，只含类别和计数。`stopReason` 只在终止步骤出现。 |
 | `gateway.responded` | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们 |
-| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
+| `message.completed` | `{ runtimeId, pluginId, turnId, runId, content, len }`。仅进 trace，记录提交前已接受的计算结果，不转发为玩家叙事。 |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`。action 流和 `state` topic 发送相同的已提交负载；`block` 的 ID 和元数据来自提交结果 |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
@@ -1340,7 +1340,7 @@ error.occurred        → executionError
 
 `tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。没有执行的调用发出 `tool.calling` / `tool.failed` 一对事件，不发 `tool.completed`；两者都带 `skipped: true`、`skipReason`（`hook-aborted`、`suspended`、`terminated` 或 `aborted`）、`durationMs: 0` 和 `approvalStatus: "auto-allowed"`。它们只进入对话和 trace，不进入已执行工具记录、失败计数或 `step.completed.toolCalls`；concealed runtime 仍会剥除 `code`、`error`、`skipped` 和 `skipReason`。
 
-叙事的片段继续通过 `narrative.delta` 实时发给界面。为了让 `trace_events` 保持精简，只保存 `message.completed`。
+游戏 action 流和普通状态订阅会移除 LLM/tool/hook/子调用/function/gateway 进度中的提示词、回复、参数、结果及审查细节。完整诊断仍保存在 trace 和显式 `topics=trace` 订阅中，遵守 concealed 与委托隐私规则，不能投影为玩家故事。`message.completed` 记录接受时刻；提交后的 `narrative.completed` 记录显示时刻。
 
 **`command.*`**
 
@@ -1530,10 +1530,10 @@ runtime 的终态：
 
 网页端提交新输入时，先停止旧请求并等浏览器 checkpoint 完成，再发送已接收的输入。等待期间再次提交会显示会话忙碌提示，保留新的文字、字段和排队选择。提交调用返回未接收时，输入框不能清空草稿。
 
-| 事件                        | 载荷                                                                                                                                                                  | 客户端处理                                     |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `execution.round.completed` | `requestId`, `rootId`, `turnId`, `round`, `limit`，以及完成载荷 `runtimeCount`, `resultCount`, `durationMs`, `committed`, `error?`, `abortReason?`, `resyncRequired?` | 只结算指定执行的消息、步骤和增量；保持请求运行 |
-| `execution.advance`         | `requestId`, `rootId`, `phase: waiting \| running \| stopped`, `round`, `limit`, `turnId?`；停止时还有 `reason`                                                       | 显示或清除推进进度；不生成故事文字             |
+| 事件                        | 载荷                                                                                                                                                                  | 客户端处理                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `execution.round.completed` | `requestId`, `rootId`, `turnId`, `round`, `limit`，以及完成载荷 `runtimeCount`, `resultCount`, `durationMs`, `committed`, `error?`, `abortReason?`, `resyncRequired?` | 只结算指定执行的消息和步骤；保持请求运行 |
+| `execution.advance`         | `requestId`, `rootId`, `phase: waiting \| running \| stopped`, `round`, `limit`, `turnId?`；停止时还有 `reason`                                                       | 显示或清除推进进度；不生成故事文字       |
 
 根执行和 setup/开场也各发出一条 round 完成事件，自动轮从 `round: 1` 开始。顺序为：根执行 started → round completed → advance waiting → 下一轮 started → advance running → runtime/故事事件 → round completed；可重复下一轮，最后 advance stopped → 唯一一条请求终态 `execution.completed`。开场接力仍保留原来的未开始即停止标记。基础设施错误保留 `error.occurred` 路径；已开始请求仍收尾。没有开始执行的拒绝不产生 round 事件。
 

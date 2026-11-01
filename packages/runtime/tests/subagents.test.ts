@@ -800,15 +800,13 @@ describe("delegate", () => {
     expect(requests.filter((r) => r.mark === PARENT_MARK)).toHaveLength(2);
   });
 
-  it("streams the caller's text to the player and none of the sub-agent's", async () => {
-    // Both runtimes stream from the adapter; only the caller's profile
-    // forwards deltas, and a sub-agent never does, whatever profile it names.
+  it("keeps streamed parent and child outputs private and reports child corrections", async () => {
+    // Both runtimes use provider streaming; child output belongs to the parent.
     const lead: RuntimeManifest = {
       ...director({ builtin: ["delegate"] }),
       loopProfile: { preset: "story" },
     };
     const run = async (provider: RuntimeManifest) => {
-      const deltas: { runtimeId: string; textDelta: string }[] = [];
       const { llm, requests } = streamingLLM({
         [PARENT_MARK]: (_params, index) =>
           index === 0
@@ -818,10 +816,10 @@ describe("delegate", () => {
                 id: "tc-stream",
               })
             : { ...json({ line: "LEAD-LINE" }), content: "LEAD-LINE" },
-        [ACTOR_MARK]: () => ({
-          ...json({ line: "GUARD-LINE" }),
-          content: "GUARD-LINE",
-        }),
+        [ACTOR_MARK]: (_params, index) =>
+          index === 0
+            ? json({ line: 42 })
+            : { ...json({ line: "GUARD-LINE" }), content: "GUARD-LINE" },
       });
       const emitter = makeEmitterSpy();
       const result = await runTurnPipeline(
@@ -831,35 +829,41 @@ describe("delegate", () => {
           llm,
           runtimes: [{ manifest: lead }, { manifest: provider }],
           emitter,
-          extra: {
-            onDelta: async ({ runtimeId, textDelta }) => {
-              deltas.push({ runtimeId, textDelta });
-            },
-          },
         }),
       );
-      return { result, deltas, requests, emitter };
+      return { result, requests, emitter };
     };
 
     for (const provider of [
       actor(),
       actor(undefined, { loopProfile: { preset: "story" } }),
     ]) {
-      const { result, deltas, requests, emitter } = await run(provider);
+      const { result, requests, emitter } = await run(provider);
       expect(result.runtimeResults[0]?.output).toEqual({ line: "LEAD-LINE" });
       // The sub-agent answered through the stream path all the same.
-      expect(requests.filter((r) => r.mark === ACTOR_MARK)).toHaveLength(1);
+      expect(requests.filter((r) => r.mark === ACTOR_MARK)).toHaveLength(2);
       expect(
         eventsOf(emitter, "tool.completed").find(
           (e) => e.payload.toolName === "delegate",
         )?.payload.result,
       ).toBe('{"data":{"line":"GUARD-LINE"}}');
-      const streamed = deltas.map((d) => d.textDelta).join("");
-      expect(streamed).toContain("LEAD-LINE");
-      expect(streamed).not.toContain("GUARD");
-      expect(new Set(deltas.map((d) => d.runtimeId))).toEqual(
-        new Set(["director/lead"]),
+      expect(eventsOf(emitter, "narrative.completed")).toEqual([]);
+      const child = eventsOf(emitter, "subagent.started")[0]?.payload;
+      const rejected = eventsOf(emitter, "step.completed").find(
+        (event) => event.payload.runtimeId === provider.name,
       );
+      expect(rejected?.payload).toMatchObject({
+        runtimeId: provider.name,
+        pluginId: provider.pluginId,
+        runId: child?.subagentCallId,
+        subagentCallId: child?.subagentCallId,
+        parentRuntimeId: lead.name,
+        turnId: input.turnId,
+        step: 1,
+        notes: [
+          { kind: "output-rejected", reason: "invalid-output", attempt: 1 },
+        ],
+      });
     }
   });
 

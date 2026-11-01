@@ -254,7 +254,7 @@ describe("runAgentToolLoop core", () => {
     expect(llm.calls).toBe(1);
     expect(result.acceptedOutput?.narrativeOutput).toBe("done story");
     expect(result.stop).toEqual({ reason: "completed" });
-    expect(result.streamDeltaCount).toBe(0);
+
     expect(result.collectedToolCalls.map((call) => call.toolName)).toEqual([
       "submit-output",
     ]);
@@ -518,9 +518,7 @@ describe("runAgentToolLoop core", () => {
     expect(result.stop.reason).toBe("max-steps");
   });
 
-  it("streams deltas for story runtimes with identity attached", async () => {
-    const seen: { runtimeId: string; pluginId: string; textDelta: string }[] =
-      [];
+  it("buffers transport text while accepting a complete story submission", async () => {
     const llm: LLMAdapter = {
       generate: async () => submitted("fallback"),
       stream: async function* (): AsyncIterable<LLMStreamEvent> {
@@ -540,19 +538,9 @@ describe("runAgentToolLoop core", () => {
       manifest: m,
       deps: {
         toolExecutor: undefined,
-        onDelta: async (d: (typeof seen)[number]) => {
-          seen.push(d);
-        },
       },
     });
 
-    expect(result.streamDeltaCount).toBe(2);
-    expect(seen).toHaveLength(3);
-    expect(seen[0]).toMatchObject({
-      runtimeId: "plug/story",
-      pluginId: "plug",
-      textDelta: "Once ",
-    });
     expect(result.acceptedOutput?.narrativeOutput).toBe("Once upon");
   });
 
@@ -724,7 +712,6 @@ describe("runAgentToolLoop core", () => {
       };
       yield { type: "done" as const, finishReason: "tool_calls" };
     });
-    const onDelta = vi.fn();
     const llm: LLMAdapter = {
       generate: async () => submitted("plugin chatter"),
       stream: streamSpy,
@@ -732,12 +719,11 @@ describe("runAgentToolLoop core", () => {
     const result = await run({
       llm,
       manifest: manifest({ tools: {} }),
-      deps: { toolExecutor: undefined, onDelta },
+      deps: { toolExecutor: undefined },
     });
 
     expect(streamSpy).toHaveBeenCalledOnce();
-    expect(onDelta).not.toHaveBeenCalled();
-    expect(result.streamDeltaCount).toBe(0);
+
     expect(result.acceptedOutput?.narrativeOutput).toBe("plugin chatter");
   });
 
@@ -860,7 +846,6 @@ describe("runAgentToolLoop core", () => {
         manifest: m,
         deps: {
           toolExecutor: undefined,
-          onDelta: async () => {},
           emitter,
           turnControl: { signal: controller.signal },
         },

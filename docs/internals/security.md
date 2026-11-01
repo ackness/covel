@@ -17,6 +17,8 @@
 
 插件文件引用按[声明目录规则](../reference/plugins.md#declaration-paths)解析，并检查解析后的真实路径仍在包内。约定的 `output.schema.json` 也不能通过符号链接逃出包，或从父仓库继承。
 
+游戏 action 流和普通订阅只携带不含正文的模型/工具/Hook/子调用/gateway 进度。接受值只有提交后才作为故事可见，提交参数和原始审查细节不能投影为玩家故事。完整诊断 trace 与显式 trace 订阅仍遵守原有访问、concealed 和委托隐私规则。见[协议](../reference/protocol.md#叙事事件)。
+
 ## 声明式执行边界
 
 [声明式分类](../reference/plugin-installation.md#声明式插件)需要完整、有界、不跟随链接的文件清单，以及与加载定义一致的内容摘要。扫描前后签名不一致、当前 registry 替换或文件读取失败，都不能沿用旧的正面证明。授权读取当前发布的 registry；执行快照只冻结运行材料，不冻结权限。旧代码快照的 runtime、工具和服务不能借用新声明式版本的免审批资格；缓存的代码 runtime 和每次实际模块导入仍要求真实代码与 runtime 授权。

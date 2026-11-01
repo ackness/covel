@@ -21,7 +21,7 @@ export const themeSecrets = [
   "delegate-brief-theme-sentinel",
   "private-reasoning-theme-sentinel",
 ] as const;
-export const streamingThemeStory = "Public streaming theme story.";
+export const committedThemeStory = "Public committed theme story.";
 
 /** Real delegate and write-service paths, scripted like the orchestration API fixtures. */
 export async function startThemeOrchestrationHost() {
@@ -111,7 +111,14 @@ Private theme planning.
         : { action: "continue" },
   });
   const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
-  const deltas = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+  const argumentsReady = [
+    Promise.withResolvers<void>(),
+    Promise.withResolvers<void>(),
+  ];
+  const argumentsContinue = [
+    Promise.withResolvers<void>(),
+    Promise.withResolvers<void>(),
+  ];
   const calls: string[] = [];
   let turn = 0;
   let step = 0;
@@ -121,6 +128,13 @@ Private theme planning.
     finishReason: "stop",
     usage: { inputTokens: 1, outputTokens: 1 },
   });
+  const submit = (value: Record<string, unknown>): LLMResponse => ({
+    ...prose(""),
+    toolCalls: [
+      { id: "submit", name: "submit-output", arguments: JSON.stringify(value) },
+    ],
+    finishReason: "tool_calls",
+  });
   const generate: LLMAdapter["generate"] = async ({ messages }) => {
     const prompt = messages
       .filter((message) => message.role === "system")
@@ -128,16 +142,14 @@ Private theme planning.
       .join("\n");
     if (prompt.includes("Private theme planning.")) {
       calls.push("concealed");
-      return prose(JSON.stringify({ text: themeSecrets[1] }));
+      return submit({ text: themeSecrets[1] });
     }
     if (prompt.includes("Play only the character assigned")) {
       calls.push("actor");
-      return prose(
-        JSON.stringify({
-          segments: [{ kind: "dialogue", text: "A public actor reply." }],
-          intent: themeSecrets[2],
-        }),
-      );
+      return submit({
+        segments: [{ kind: "dialogue", text: "A public actor reply." }],
+        intent: themeSecrets[2],
+      });
     }
     const actorReceipt = messages.find(
       (message) =>
@@ -177,41 +189,34 @@ Private theme planning.
       String(actorReceipt.content),
     );
     const actor = characterActorOutputSchema.parse(envelope.data);
-    return prose(
-      JSON.stringify({
-        segments: [
-          { kind: "narration", text: streamingThemeStory },
-          ...actor.segments.map((segment) => ({ ...segment, speaker: "Mira" })),
-        ],
-        cues: { scene: "Library", present: ["Mira"] },
-        yield: "user",
-      }),
-    );
+    return submit({
+      segments: [
+        { kind: "narration", text: committedThemeStory },
+        ...actor.segments.map((segment) => ({ ...segment, speaker: "Mira" })),
+      ],
+      cues: { scene: "Library", present: ["Mira"] },
+      yield: "user",
+    });
   };
   const llmAdapter: LLMAdapter = {
     generate,
     async *stream(request) {
       const response = await generate(request);
       yield { type: "reasoning-delta", reasoningDelta: themeSecrets[4] };
-      for (const call of response.toolCalls)
-        yield { type: "tool-call", ...call };
-      if (response.content) {
-        const start = response.content.indexOf(streamingThemeStory);
-        const split = start + "Public streaming ".length;
-        if (start >= 0) {
-          yield {
-            type: "text-delta",
-            textDelta: response.content.slice(0, split),
-          };
-          await deltas[turn - 1]?.promise;
+      for (const call of response.toolCalls) {
+        if (
+          call.name === "submit-output" &&
+          call.arguments.includes(committedThemeStory)
+        ) {
+          yield { type: "tool-argument-delta" };
+          argumentsReady[turn - 1]?.resolve();
+          await argumentsContinue[turn - 1]?.promise;
           request.signal?.throwIfAborted();
-          yield {
-            type: "text-delta",
-            textDelta: response.content.slice(split),
-          };
+          yield { type: "tool-argument-delta" };
           await gates[turn - 1]?.promise;
           request.signal?.throwIfAborted();
-        } else yield { type: "text-delta", textDelta: response.content };
+        }
+        yield { type: "tool-call", ...call };
       }
       yield {
         type: "done",
@@ -243,14 +248,17 @@ Private theme planning.
       allowChange() {
         rejectChange = false;
       },
-      nextDelta(index: number) {
-        deltas[index]?.resolve();
+      waitForSubmission(index: number) {
+        return argumentsReady[index]?.promise;
+      },
+      continueArguments(index: number) {
+        argumentsContinue[index]?.resolve();
       },
       release(index: number) {
         gates[index]?.resolve();
       },
       async close() {
-        for (const gate of deltas) gate.resolve();
+        for (const gate of argumentsContinue) gate.resolve();
         for (const gate of gates) gate.resolve();
         await host.close();
         await rm(root, { recursive: true, force: true });

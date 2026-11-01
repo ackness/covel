@@ -1,6 +1,5 @@
 import type {
   StoryMessageSegment,
-  StorySegmentKind,
   TurnAction,
 } from "@covel/plugin-handlers-utils";
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
@@ -48,39 +47,6 @@ import type {
  *  loose `SseEnvelope.payload` carried over the wire. */
 export type CovelEventPayload = Readonly<Record<string, unknown>>;
 
-export interface NarrativeDeltaPayload {
-  readonly runtimeId: string;
-  readonly pluginId: string;
-  readonly kind: string;
-  readonly delta: string;
-  /**
-   * Discard the text streamed so far for this runtime before appending
-   * `delta`: the previous model step (preparation before tool calls, or a
-   * draft rejected by review) will not be part of the final narrative.
-   * It also drops the paragraph metadata streamed so far.
-   */
-  readonly reset?: true;
-  /**
-   * The paragraph this delta belongs to, on a story whose runtime declares
-   * an output schema. Sent with the first visible character of each
-   * paragraph, and again (with an empty `delta`) when its `kind` or `speaker`
-   * arrives after that. Absent on prose.
-   */
-  readonly segment?: NarrativeDeltaSegment;
-}
-
-/**
- * Live metadata of one story paragraph. `index` counts the paragraphs shown
- * so far (a segment without visible text has none), so it equals the
- * paragraph's position in the streamed text. The speaker is the name as the
- * model wrote it; `narrative.completed` carries the resolved one.
- */
-export interface NarrativeDeltaSegment {
-  readonly index: number;
-  readonly kind: StorySegmentKind;
-  readonly speaker?: string;
-}
-
 export interface NarrativeCompletedPayload {
   readonly runtimeId: string;
   readonly content: string;
@@ -124,8 +90,7 @@ export interface ExecutionStartedPayload {
  * `ExecutionCompletedPayload.abortReason` value for a player-initiated abort
  * (Stop button / POST /abort). Wire-protocol constant: the runtime stamps it
  * on `TurnResult.abortReason` and the web client keys its non-error abort
- * terminal state on it (discard the uncommitted streaming placeholder instead
- * of showing a retryable error).
+ * terminal state on it.
  */
 export const PLAYER_ABORT_REASON = "aborted-by-player";
 
@@ -228,12 +193,7 @@ export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
 export type StepNoteKind =
   | "output-rejected"
   | "submission-only"
-  | "output-repair"
-  | "review-rejected"
-  | "no-tool-correction"
-  | "runtime-done-correction"
   | "loop-perturbation"
-  | "story-without-tools"
   | "late-steering"
   | "tool-activated"
   | "tool-narrowed";
@@ -263,12 +223,10 @@ interface StepIdentity {
   readonly pluginId: string;
   readonly turnId: string;
   readonly runId: string;
-  /** 1-based step number, including finalizer and repair requests. */
+  /** 1-based step number, including the submission-only finalizer. */
   readonly step: number;
-  /** Set on the finalizer step: tools off, final answer now. */
+  /** Set on the finalizer step: only submit-output is offered. */
   readonly finalizer?: true;
-  /** Set on an output repair request, with tools off. */
-  readonly repair?: true;
 }
 
 /** An agent-loop step is about to call the model. */
@@ -407,10 +365,6 @@ export interface DomainEventPreviewedPayload {
 
 export type CovelEvent =
   // Narrative
-  | {
-      readonly type: "narrative.delta";
-      readonly payload: NarrativeDeltaPayload;
-    }
   | {
       readonly type: "narrative.completed";
       readonly payload: NarrativeCompletedPayload;
@@ -698,7 +652,6 @@ export const COVEL_EVENT_META = {
   "plugin.fault.counted": { forwardToActionStream: false },
   "plugin.fault.latched": { forwardToActionStream: true },
   "plugin.fault.cleared": { forwardToActionStream: true },
-  "narrative.delta": { forwardToActionStream: false },
   "narrative.completed": { forwardToActionStream: false },
   "interaction.requested": { forwardToActionStream: false },
   "ui.rendered": { forwardToActionStream: true },
@@ -746,7 +699,8 @@ export const COVEL_EVENT_META = {
   "llm.responded": { forwardToActionStream: true },
   "step.started": { forwardToActionStream: true },
   "step.completed": { forwardToActionStream: true },
-  "message.completed": { forwardToActionStream: true },
+  // Accepted computation is trace-only; narrative.completed follows commit.
+  "message.completed": { forwardToActionStream: false },
   "block.emitted": { forwardToActionStream: true },
   "hook.fired": { forwardToActionStream: true },
   "hook.rewrote": { forwardToActionStream: false },

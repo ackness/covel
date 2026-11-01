@@ -215,7 +215,7 @@ permissions:
 | `agent.reasoning` | `true`：沿用模型自己的思考设置 |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
 | `agent.loop.profile` | `io.visibility: story` 的 runtime 用 `story`，其他用 `system` |
-| `agent.loop.stream`、`steering`、`truncation`、`fallback`、`finalizer.*`、`corrections.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
+| `agent.loop.steering`、`fallback`、`finalizer.*`、`corrections.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -403,8 +403,7 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 **流式调用在已有输出之后中断**（连接断开，或静默超过 `idleTimeoutMs`）。
 
-- 把文字流式显示给玩家的 runtime（`story` profile，`stream: true`）不重试，因为玩家已经读到那段文字。
-- 其他 runtime 的输出没有给任何人看，丢弃后按 `maxRetries` 重试。已经写出内容的那段时间同样不计入 `timeoutMs`，之后的静默计入。
+- 所有 runtime 都完整丢弃失败尝试，按 `maxRetries` 重试，不执行部分调用。已经输出的时间不计入 `timeoutMs`，之后的静默计入。见[provider 流式响应](./slots.md#provider-流式响应)。
 
 **非流式调用**没有进度信号，由 `callTimeoutMs` 限制单次调用的总时长。
 
@@ -597,7 +596,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 - 故事消息的元数据记下 `segments`、`cues`、`yield`，以及在场记录 `presentCharacterIds`：解析成功的说话人和 `cues.present` 里的角色。在场记录现在只保存，留给以后的按角色历史使用。
 - `/messages` 和 `/view` 的故事消息带 `segments`（见 [API](./api.md)）。角色 ID 不进入模型看到的文字。
 
-**流式显示。** 回复是分段 JSON 时，叙事流只转发各段的 `text`，段与段之间是空行，和提交后的正文一致；JSON 的键、`speaker` 和 `cues` 不会出现在流的正文里。每段的类型和模型写的说话人放在 `narrative.delta` 的 `segment` 里，舞台据此在流式时显示名牌，提交后换成解析后的名字（见[协议](./protocol.md#叙事事件)）。纯文本回复照常流式显示，不带 `segment`。
+**显示时机。** 接受后的完整故事在提交后通过 `narrative.completed` 发布，携带解析后的说话人和段落。provider 文本和工具参数留在内部，不创建草稿消息。等待期间仍显示进度。见[协议](./protocol.md#叙事事件)。
 
 #### Function 的输出
 
@@ -839,7 +838,7 @@ const result = await ctx.agents?.run({
 | `agent.loop.firstTokenTimeoutMs`、`idleTimeoutMs` | 流式调用的等待时限，见[流式调用的等待时限](#流式调用的等待时限) |
 | `agent.loop.loopDetection` | 模型连续重复同一个调用多少次算打转。默认 3，`0` 关闭检测 |
 | `agent.loop.maxRecursionDepth` | `ctx.recursiveCall()` 最多嵌套几层。默认 10 |
-| `agent.loop.profile`、`stream`、`steering`、`truncation`、`fallback`、`finalizer`、`corrections` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
+| `agent.loop.profile`、`steering`、`fallback`、`finalizer`、`corrections` | 循环的行为，见[循环 profile](#循环-profileagentloopprofile) |
 
 ### 流式调用的等待时限
 
@@ -861,15 +860,13 @@ const result = await ctx.agents?.run({
 
 ### 循环 profile（`agent.loop.profile`）
 
-循环 profile 决定插话、工具循环回退、收尾和纠正预算。不写 `profile` 时，story runtime 用 `story`，其他用 `system`；子 agent 默认用 `actor`。三个 profile 都必须通过 `submit-output` 完成，截断或拒绝的供应商响应不能成功。
+循环 profile 决定插话、工具循环回退、收尾和纠正预算。不写 `profile` 时，story runtime 用 `story`，其他用 `system`；子 agent 默认用 `actor`。三个 profile 都必须通过 `submit-output` 完成，截断或拒绝的供应商响应不能成功。删除 `agent.loop.stream` 和 `agent.loop.truncation`。内部流式传输和工具参数心跳仍用于请求时限，`steering` 独立保留。
 
 <!-- prettier-ignore -->
 | 字段 | 作用 |
 | --- | --- |
 | `profile` | `story`、`actor` 或 `system`，其他字段在它的基础上覆盖 |
-| `stream` | 是否转发模型文字；仅 story 可开启 |
 | `steering` | 并入玩家插话；接受前收到的新插话会使当前提交作废，下一普通步骤重新提交 |
-| `truncation` | 只支持 `reject`；必须收到完整、未被供应商拒绝的响应 |
 | `fallback` | `submit-output`：重复业务调用后只提供提交工具；`fail`：以 `loop-detected` 失败 |
 | `finalizer.maxSteps` | 步数耗尽或上下文超限时，满足条件后最多再请求一次提交；默认 `true` |
 | `finalizer.deadlineReserveMs` | 剩余时间不足预留时，改为一次提交请求；默认 `0`，最多使用时限的一半 |
@@ -881,15 +878,13 @@ const result = await ctx.agents?.run({
 <!-- prettier-ignore -->
 | 字段 | `story` | `actor` | `system` |
 | --- | --- | --- | --- |
-| `stream` | `true` | `false` | `false` |
 | `steering` | `true` | `false` | `false` |
-| `truncation` | `reject` | `reject` | `reject` |
 | `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`profile: story`、`stream: true` 和 `steering: true` 要求 story visibility。预留必须是非负整数且小于 runtime 时限。
+`profile: story` 和 `steering: true` 要求 story visibility。预留必须是非负整数且小于 runtime 时限。
 
 **纠正预算与输出修复。** 先处理真实响应的 `PostLLMResponse` 拒绝；没有拒绝时，依次检查批次、JSON/schema/故事格式、必需工作和输出审查。每次只归入一种纠正预算。四个计数互相独立，仅在安排下一次尝试时消耗；纠正使用普通步数和同一截止时间，不增加网络重试，也不重复已成功的业务写入。同类预算用尽就失败，不能借用其他预算。有效 JSON 回复正文也不算提交。函数和 gateway 的结构化输出 API 不受影响。
 

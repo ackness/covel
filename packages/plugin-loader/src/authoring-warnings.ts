@@ -117,7 +117,7 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
         ? (named as LoopPresetId)
         : visibilityPreset
     ];
-  for (const field of ["stream", "steering", "truncation", "fallback"] as const)
+  for (const field of ["steering", "fallback"] as const)
     out.check(at(`agent.loop.${field}`), loop?.[field], preset[field]);
   const finalizer = record(loop?.finalizer);
   for (const field of ["maxSteps", "deadlineReserveMs"] as const)

@@ -23,7 +23,7 @@ The player types "I go explore the swamp" and presses send. Then these things ha
 6. **A runtime runs.** The kernel first checks that everything the runtime needs is there. Then it prepares what the runtime can see: the world setting, the earlier conversation, the results of upstream runtimes, and the player's sentence. An `agent` gives all of this to the model. The model can call tools until it gives a final result. A `function` simply runs its function.
 7. **Domain writes are staged.** Story text, forms and plugin data become proposals and have not taken effect yet. Execution results, diagnostics and confirmed player input may already be saved separately; those records do not confirm that domain writes committed.
 8. **The save is committed.** Accepted proposals, the execution journal and the session clock share one transaction. With a valid story, optional runtime writes can be discarded separately. A rejected story or setup unit, or an infrastructure failure, rolls back the whole transaction. Player input saved separately is retained.
-9. **The screen is confirmed.** Story text can stream before commit. Committed events provide the final text, forms and panel data. The frontend confirms that content, or removes results that did not commit.
+9. **The screen receives committed content.** Progress is visible during execution. Only post-commit events publish the complete story, forms and panel data; failure or cancellation creates no draft story.
 10. **Wrap-up.** The last event is `execution.completed`. Its `committed` field says whether this turn was really saved. Slow wrap-up work, such as tidying up memory, can move to the background, so the player does not have to wait for it.
 
 The start is a little different. A new session starts in the "setup" phase (`setup`). Only the runtimes for setup run during this phase, for example the one that generates the character form. When all the setup is done, the session enters the "playing" phase (`playing`) and starts the four-stage turns described above.
@@ -299,7 +299,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story output → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["Emit SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
+    Commit --> SSE["Emit SessionEvent<br/>narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' and<br/>all setup runtimes<br/>have reported completion?"}
     PreGameTick -->|yes| Advance["setup commit: phase setup → playing<br/>completedPlayerTurns stays 0"]
     PreGameTick -->|no| Keep["Keep phase unchanged"]
@@ -725,7 +725,6 @@ When the frontend receives an SSE event, it first turns the event into a message
 │  SSE events                  Message layer                  Render layer         │
 │  ──────────                  ─────────────                  ────────────         │
 │                                                                                  │
-│  narrative.delta         ──►  appendDelta()           ──►  Prose                 │
 │  narrative.completed     ──►  addMessage(story)       ──►  Components            │
 │                                                                                  │
 │  interaction.requested   ──►  addMessage(block)       ──►  messageToSpec()       │
@@ -763,7 +762,7 @@ When the frontend receives an SSE event, it first turns the event into a message
 For the list of components, see [UI components](../reference/ui-components.md).
 
 > [!IMPORTANT]
-> `narrative.delta` is sent only by runtimes that have streaming output turned on. A plugin can turn streaming off in `PreLLMCall` with `replace.stream: false`, so the client cannot count on receiving deltas in every turn. The built-in narrative plugins stream while they write and send a `reset` first when a draft is rejected.
+> Player story text appears only after durable commit. Runtime/step/tool/job events report progress while waiting, including safe submission-rejection notes. Provider streaming, tool-argument heartbeats and `PreLLMCall.replace.stream` select internal transport only; no draft or reset reaches the story pane.
 >
 > Only `execution.completed.committed` or a committed record confirms that this turn was saved. A success event from a single runtime is not proof that the whole turn was committed.
 
@@ -1039,7 +1038,7 @@ The events it emits include:
 
 Runtime lifecycle events use `TraceRecorder`, including starts and terminals at the resume entry. After commit or a suspension exit, saved recursive work appends an effective-status correction for the same run, persisting it before delivery to subscribers and the initiating action stream, once per stream. Corrections do not recommit proposals, rerun Hooks or count innocent child runs as plugin faults.
 
-Streamed story deltas are not saved. Each runtime saves only its final `message.completed`, so the table does not grow too large.
+Story deltas do not exist. Each accepted story runtime records one `message.completed` in traces; only a committed `narrative.completed` enters the player story feed.
 
 For the full payloads of the events, see the section "Forwarded runtime internal events" in the [protocol reference](../reference/protocol.md).
 
@@ -1081,12 +1080,12 @@ sequenceDiagram
             LLM-->>Plugin: tool result / finishReason=stop
             Plugin-->>Kernel: RuntimeOutput<br/>(segments / narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (streaming runtimes only; a segmented story sends only segment text)
-        Kernel-->>Web: SSE: narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (if there is a form/button)
+        Kernel-->>Web: SSE: step.started / step.completed (progress only)
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     Kernel->>Server: Record the setupRuntimes completion mirror, if not all are done, phase stays 'setup'
+    Kernel->>Kernel: Commit setup atomically
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
     end
     Server-->>Web: SSE: execution.completed
     Note over Web: Render narrative (Prose) + form (Form)<br/>pluginData updates → right panel + message panel
@@ -1113,12 +1112,11 @@ sequenceDiagram
             Plugin-->>Kernel: Agent protocol → output / effects / completion
         end
         Note over Kernel: Only explicit effects and story narrative produce Proposal[], committed together
-        Kernel-->>Web: SSE: narrative.delta / narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (e.g. the guide's action cards)
-        Kernel-->>Web: SSE: plugin-data.changed (after a commit of writes such as dataset tools)
-        Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
+    Kernel->>Kernel: Commit the execution atomically
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
+    Kernel-->>Web: SSE: plugin-data.changed / event.emitted (after commit)
     end
 
     opt a runtime suspends

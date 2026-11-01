@@ -229,6 +229,19 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
       stop: { reason: "invalid-output" },
     });
     expect(requests).toHaveLength(1);
+    const rejection = f.events.find(
+      (event) =>
+        event.type === "step.completed" &&
+        event.payload.runId === execution.result.runId,
+    );
+    expect(rejection?.payload).toMatchObject({
+      runtimeId: f.rt.name,
+      pluginId: f.rt.pluginId,
+      turnId: saved.turnId,
+      runId: execution.result.runId,
+      step: 3,
+      notes: [{ kind: "output-rejected", reason: "invalid-json", attempt: 2 }],
+    });
     expect((await f.commit(execution, saved)).status).toBe("failed");
     await f.assertEmpty();
     const traces = await f.store.listTraceEvents("session");

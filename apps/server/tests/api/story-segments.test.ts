@@ -1,14 +1,12 @@
-/**
- * A narrator that answers with story segments, through the API: the stream
- * carries each paragraph's speaker as written, the committed message carries
- * the segments with resolved speakers, the journal and the next turn's
- * history read the joined text, and no character ID reaches model-facing
- * text.
- */
+/** Committed story segments and progress through the socket-free API. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import path from "node:path";
 import type { Hono } from "hono";
-import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import {
+  createHookPipeline,
+  type LLMAdapter,
+  type LLMResponse,
+} from "@covel/runtime";
 import type {
   LLMMessage,
   LLMMessageContent,
@@ -26,13 +24,10 @@ const text = (content: LLMMessageContent): string =>
     ? content
     : content.map((part) => (part.type === "text" ? part.text : "")).join("");
 
-const PROSE = "风从海上吹来。\n\n船慢慢离岸。";
-
 /** Answers every narrator request with one segmented story, streamed. */
 class SegmentedNarrator implements LLMAdapter {
   requests: { role: string; content: string }[][] = [];
-  /** Answer in prose instead of segments. */
-  prose = false;
+  rejectNext = false;
   private answer(params: { messages: readonly LLMMessage[] }): string {
     this.requests.push(
       params.messages.map((message) => ({
@@ -40,7 +35,10 @@ class SegmentedNarrator implements LLMAdapter {
         content: text(message.content),
       })),
     );
-    if (this.prose) return PROSE;
+    if (this.rejectNext) {
+      this.rejectNext = false;
+      return JSON.stringify({ segments: [] });
+    }
     return JSON.stringify({
       segments: [
         { kind: "narration", text: "雨停了，港口的灯一盏盏亮起。" },
@@ -54,18 +52,25 @@ class SegmentedNarrator implements LLMAdapter {
     params: Parameters<LLMAdapter["generate"]>[0],
   ): Promise<LLMResponse> {
     return {
-      content: this.answer(params),
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        { id: "submit", name: "submit-output", arguments: this.answer(params) },
+      ],
+      finishReason: "tool_calls",
       usage: { inputTokens: 10, outputTokens: 10 },
     };
   }
   async *stream(
     params: Parameters<NonNullable<LLMAdapter["stream"]>>[0],
   ): AsyncIterable<LLMStreamEvent> {
-    for (const textDelta of this.answer(params).match(/.{1,6}/gsu) ?? [])
-      yield { type: "text-delta", textDelta };
-    yield { type: "done", finishReason: "stop" };
+    yield { type: "tool-argument-delta" };
+    yield {
+      type: "tool-call",
+      id: "submit",
+      name: "submit-output",
+      arguments: this.answer(params),
+    };
+    yield { type: "done", finishReason: "tool_calls" };
   }
 }
 
@@ -84,15 +89,23 @@ async function frames(res: Response): Promise<Frame[]> {
     .map((line) => JSON.parse(line.slice(6)) as Frame);
 }
 
-const deltaFrames = (events: readonly Frame[]) =>
-  events.filter((event) => event.type === "narrative.delta");
-
 describe("segmented stories through the API", () => {
   let boot: Awaited<ReturnType<typeof bootstrapApi>>;
   let app: Hono;
   let llm: SegmentedNarrator;
   let sessionId: string;
   let firstTurn: Frame[];
+  let rejectCommit = false;
+  const committedReadbacks: Promise<boolean>[] = [];
+  const hooks = createHookPipeline();
+  hooks.register({
+    id: "story-commit",
+    event: "PreStateCommit",
+    handler: async () =>
+      rejectCommit
+        ? { action: "abort", reason: "Commit refused." }
+        : { action: "continue" },
+  });
 
   const turn = async (requestId: string, words: string) => {
     const res = await app.request("/api/actions", {
@@ -116,6 +129,12 @@ describe("segmented stories through the API", () => {
       llmAdapter: llm,
       store: createMemoryStore(),
       storeBackend: "memory",
+      perRequestMiddleware: [
+        async (c, next) => {
+          c.set("hookPipeline", hooks);
+          await next();
+        },
+      ],
     });
     app = boot.app;
     boot.registry.syncSessionActivations("__global__", ["narrator"]);
@@ -173,6 +192,20 @@ describe("segmented stories through the API", () => {
       ),
       updatedAt: now,
     });
+    boot.eventBus.onEmit((event) => {
+      if (event.type === "narrative.completed" && event.sessionId === sessionId)
+        committedReadbacks.push(
+          boot.store
+            .listMessages(sessionId)
+            .then((messages) =>
+              messages.some(
+                (message) =>
+                  message.id === event.payload.messageId &&
+                  message.content === event.payload.content,
+              ),
+            ),
+        );
+    });
     firstTurn = await turn("req-story-1", "跟上阿雅");
   });
 
@@ -192,25 +225,36 @@ describe("segmented stories through the API", () => {
     { kind: "dialogue", speaker: "陌生人", text: "「等等！」" },
   ];
 
-  it("streams each paragraph's kind and written speaker on narrative.delta", async () => {
-    const deltas = deltaFrames(firstTurn);
-    expect(deltas.length).toBeGreaterThan(0);
-    expect(deltas.every((frame) => frame.payload.kind === "story")).toBe(true);
-    expect(
-      deltas.flatMap((frame) =>
-        frame.payload.segment ? [frame.payload.segment] : [],
-      ),
-    ).toEqual([
-      { index: 0, kind: "narration" },
-      // The name as written; the committed segment resolves it.
-      { index: 1, kind: "dialogue", speaker: "小雅" },
-      { index: 2, kind: "dialogue", speaker: "陌生人" },
-    ]);
-    expect(deltas.map((frame) => frame.payload.delta).join("")).toBe(JOINED);
-    const completed = firstTurn.find(
+  it("reports progress then one complete story with resolved speakers after durable commit", async () => {
+    expect(firstTurn.some((frame) => frame.type === "narrative.delta")).toBe(
+      false,
+    );
+    expect(firstTurn.some((frame) => frame.type === "step.started")).toBe(true);
+    expect(firstTurn.some((frame) => frame.type === "tool.completed")).toBe(
+      true,
+    );
+    const completed = firstTurn.filter(
       (frame) => frame.type === "narrative.completed",
     );
-    expect(completed?.payload.segments).toEqual(expectedSegments);
+    expect(completed).toHaveLength(1);
+    expect(completed[0]?.payload).toMatchObject({
+      content: JOINED,
+      segments: expectedSegments,
+    });
+    expect(
+      firstTurn.find((frame) => frame.type === "execution.completed")?.payload
+        .committed,
+    ).toBe(true);
+    const beforeStory = firstTurn.slice(
+      0,
+      firstTurn.findIndex((frame) => frame.type === "narrative.completed"),
+    );
+    expect(JSON.stringify(beforeStory)).not.toContain("雨停了，港口");
+    expect(JSON.stringify(beforeStory)).not.toContain('"arguments"');
+    expect(firstTurn.some((frame) => frame.type === "message.completed")).toBe(
+      false,
+    );
+    expect(await Promise.all(committedReadbacks)).toEqual([true]);
   });
 
   it("returns the segments with names and resolved IDs on /messages and /view", async () => {
@@ -259,10 +303,83 @@ describe("segmented stories through the API", () => {
     expect(JSON.stringify(history)).not.toContain(AYA_ID);
   });
 
-  it("streams a prose answer with no paragraph metadata", async () => {
-    llm.prose = true;
-    const deltas = deltaFrames(await turn("req-story-prose", "看海"));
-    expect(deltas.length).toBeGreaterThan(0);
-    expect(deltas.some((frame) => "segment" in frame.payload)).toBe(false);
+  it("reports a safe rejection note, then publishes only the accepted story", async () => {
+    llm.rejectNext = true;
+    const events = await turn("req-story-revise", "看海");
+    const rejection = events.find((frame) => frame.type === "step.completed");
+    expect(rejection?.payload.notes).toEqual([
+      { kind: "output-rejected", reason: "invalid-output", attempt: 1 },
+    ]);
+    expect(events.some((frame) => frame.type === "narrative.delta")).toBe(
+      false,
+    );
+    expect(
+      events.filter((frame) => frame.type === "narrative.completed"),
+    ).toHaveLength(1);
+  });
+
+  it("withholds accepted output when the real commit is rejected", async () => {
+    rejectCommit = true;
+    const before = await boot.store.listMessages(sessionId);
+    try {
+      const events = await turn("req-story-rollback", "上岸");
+      expect(events.some((frame) => frame.type.startsWith("narrative."))).toBe(
+        false,
+      );
+      expect(
+        events.find((frame) => frame.type === "execution.completed")?.payload
+          .committed,
+      ).toBe(false);
+      expect(await boot.store.listMessages(sessionId)).toEqual(before);
+    } finally {
+      rejectCommit = false;
+    }
+  });
+
+  it("delivers a new session's opening as one committed story", async () => {
+    const created = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        locale: "zh-CN",
+        plugins: ["narrator"],
+        excludedPlugins: [...boot.registry.getAll().keys()].filter(
+          (id) => id !== "narrator",
+        ),
+      }),
+    });
+    expect(created.status).toBe(201);
+    const openingId = ((await created.json()) as { id: string }).id;
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-opening",
+        type: "start_session",
+        sessionId: openingId,
+        payload: {},
+      }),
+    });
+    expect(response.status).toBe(200);
+    const events = await frames(response);
+    const stories = events.filter(
+      (event) => event.type === "narrative.completed",
+    );
+    expect(stories).toHaveLength(1);
+    expect(events.some((event) => event.type === "narrative.delta")).toBe(
+      false,
+    );
+    expect(
+      events.find((event) => event.type === "execution.completed")?.payload
+        .committed,
+    ).toBe(true);
+    expect(
+      (await boot.store.listMessages(openingId))
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.content),
+    ).toEqual([JOINED]);
+    expect((await boot.store.getSession(openingId))?.completedPlayerTurns).toBe(
+      0,
+    );
   });
 });

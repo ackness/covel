@@ -32,9 +32,7 @@ function authoredLoopView(
   loop:
     | {
         readonly profile?: string;
-        readonly stream?: boolean;
         readonly steering?: boolean;
-        readonly truncation?: string;
         readonly timeoutMs?: number;
         readonly finalizer?: { readonly deadlineReserveMs?: number };
       }
@@ -42,9 +40,7 @@ function authoredLoopView(
 ) {
   return {
     preset: loop?.profile,
-    stream: loop?.stream,
     steering: loop?.steering,
-    truncation: loop?.truncation,
     deadlineReserveMs: loop?.finalizer?.deadlineReserveMs,
     timeoutMs: loop?.timeoutMs,
   };
@@ -387,25 +383,13 @@ export const runtimeAuthoringManifestSchema = z
             profile: z
               .enum(["story", "actor", "system"])
               .describe(
-                "Loop profile the other loop behaviour keys override. `story` streams to the player, reads interjections and keeps a cut reply; `actor` and `system` do neither, and `actor` answers without tools where `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`.",
-              )
-              .optional(),
-            stream: z
-              .boolean()
-              .describe(
-                "Show the model's text to the player as it streams. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
+                "Loop profile the other loop behaviour keys override. `story` reads player interjections; `actor` and `system` do not. `story` and `actor` request submission when a tool loop repeats; `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`.",
               )
               .optional(),
             steering: z
               .boolean()
               .describe(
-                "Merge the player's interjections into the transcript before each step and after a prose finish. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
-              )
-              .optional(),
-            truncation: z
-              .literal("reject")
-              .describe(
-                "Incomplete provider responses always fail. Only `reject` is supported.",
+                "Merge the player's interjections into the transcript before submission acceptance. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
               )
               .optional(),
             fallback: z

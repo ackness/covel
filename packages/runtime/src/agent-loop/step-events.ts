@@ -35,7 +35,6 @@ interface StepIdentity {
 interface OpenStep {
   readonly step: number;
   readonly finalizer: boolean;
-  readonly repair: boolean;
   readonly startedAt: number;
   finishReason?: string;
   usage?: LLMUsageSummary;
@@ -52,7 +51,6 @@ export interface StepRecorder {
     readonly toolCount: number;
     readonly toolChoice: StepToolChoice;
     readonly finalizer?: boolean;
-    readonly repair?: boolean;
   }): Promise<void>;
   /** Record a note on the open step; kept for the next step when none is open. */
   note(note: StepNote): void;
@@ -106,7 +104,6 @@ export function createStepRecorder(
       ...identity,
       step: step.step,
       ...(step.finalizer ? { finalizer: true as const } : {}),
-      ...(step.repair ? { repair: true as const } : {}),
       durationMs: Date.now() - step.startedAt,
       ...(step.finishReason !== undefined
         ? { finishReason: step.finishReason }
@@ -128,7 +125,6 @@ export function createStepRecorder(
       current = {
         step: info.step,
         finalizer: info.finalizer === true,
-        repair: info.repair === true,
         startedAt: Date.now(),
         toolCalls: [],
         retries: [],
@@ -139,7 +135,6 @@ export function createStepRecorder(
         ...identity,
         step: info.step,
         ...(info.finalizer ? { finalizer: true as const } : {}),
-        ...(info.repair ? { repair: true as const } : {}),
         maxSteps: info.maxSteps,
         toolCount: info.toolCount,
         toolChoice: info.toolChoice,

@@ -176,11 +176,9 @@ async function executeResumedRuntime(
   );
   const hookPipeline = deps.hookPipeline;
   let lastTarget: LLMTargetIdentity | undefined;
-  let deltaCount = 0;
 
   const postRuntimeOptions = () => ({
     lastTarget,
-    deltaCount,
     outputContractSchema: loaded?.outputContractSchema,
     ...(loaded && manifest.runtimeType !== "function"
       ? { agentOutputSchema: agentOutputContract(loaded).schema }
@@ -480,7 +478,6 @@ async function executeResumedRuntime(
     return keepSavedReads(toolLoop);
   }
   lastTarget = toolLoop.lastTarget;
-  deltaCount = toolLoop.streamDeltaCount;
 
   const settled = settleAgentLoop({
     manifest,

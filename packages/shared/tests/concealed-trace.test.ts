@@ -38,19 +38,19 @@ describe("concealTracePayload", () => {
   });
 });
 
-it("preserves the repair identity and note without exposing content", () => {
+it("preserves rejection identity and safe progress without exposing content", () => {
   expect(
     concealTracePayload({
       step: 2,
-      repair: true,
-      notes: [{ kind: "output-repair" }],
+      notes: [
+        { kind: "output-rejected", reason: "review-rejected", attempt: 1 },
+      ],
       text: "private draft",
       messages: [{ role: "system", content: "private errors" }],
     }),
   ).toEqual({
     concealed: true,
     step: 2,
-    repair: true,
-    notes: [{ kind: "output-repair" }],
+    notes: [{ kind: "output-rejected", reason: "review-rejected", attempt: 1 }],
   });
 });
