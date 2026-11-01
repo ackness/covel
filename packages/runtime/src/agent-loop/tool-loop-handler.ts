@@ -67,6 +67,8 @@ export interface RequestLLMResponseOptions {
    * leaving the choice to a model that already answered in prose.
    */
   readonly requireToolCall?: boolean;
+  /** Prerequisites are satisfied and this request should prefer final submission. */
+  readonly submissionRequested?: boolean;
   /**
    * This step's tool choice from a PreStep hook. It replaces the manifest's
    * `llm.toolChoice` for the request; `"auto"` sends none. A correction's
@@ -77,14 +79,15 @@ export interface RequestLLMResponseOptions {
 
 /**
  * The runtime's request defaults, with a tool call required when a
- * correction asked for one. A tool the manifest names stays the choice, and
- * the adapters still drop a required choice for a model that is thinking.
+ * correction asked for one. Submission can replace a named business tool;
+ * adapters narrow the requested choice to the target's thinking capabilities.
  */
-function requestDefaults(
+export function requestDefaults(
   manifest: RuntimeManifest,
   requireToolCall: boolean | undefined,
   toolDefs: readonly LLMToolDefinition[] | undefined,
   stepToolChoice?: RequestLLMResponseOptions["toolChoice"],
+  submissionRequested = false,
 ): LLMRequestDefaults | undefined {
   let defaults = manifest.llm;
   if (stepToolChoice === "auto") {
@@ -95,6 +98,9 @@ function requestDefaults(
   } else if (stepToolChoice !== undefined && toolDefs?.length) {
     defaults = { ...defaults, toolChoice: stepToolChoice };
   }
+  const submission = toolDefs?.find((tool) => tool.name === "submit-output");
+  if (submission && (submissionRequested || toolDefs?.length === 1))
+    return { ...defaults, toolChoice: { name: submission.name } };
   if (!requireToolCall || !toolDefs?.length || defaults?.toolChoice)
     return defaults;
   return { ...defaults, toolChoice: "required" };
@@ -156,6 +162,7 @@ export async function requestLLMResponse(
       opts.requireToolCall,
       toolDefs,
       opts.toolChoice,
+      opts.submissionRequested,
     ),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(opts.promptCacheKey ? { promptCacheKey: opts.promptCacheKey } : {}),

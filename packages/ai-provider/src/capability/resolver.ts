@@ -41,6 +41,7 @@ export interface ManualCapabilityOverride {
   input?: InputModality[];
   output?: OutputModality[];
   features?: ModelFeature[];
+  strictTools?: ModelCapability["strictTools"];
   contextWindow?: number;
   maxOutputTokens?: number;
   pricing?: Partial<ModelPricing>;
@@ -64,6 +65,7 @@ export function mergeRequestCapabilityOverride(
 ): ModelCapability {
   if (policy === "full") {
     return {
+      ...(base.strictTools ? { strictTools: base.strictTools } : {}),
       input: [...(override.input ?? base.input)],
       output: [...(override.output ?? base.output)],
       ...((override.features ?? base.features)
@@ -101,6 +103,7 @@ export function mergeRequestCapabilityOverride(
   return {
     input,
     output,
+    ...(base.strictTools ? { strictTools: base.strictTools } : {}),
     ...(features ? { features } : {}),
     ...(contextWindow !== undefined ? { contextWindow } : {}),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
@@ -307,6 +310,7 @@ export function resolveCapabilityDetails(
         input: manual.input ?? base.input,
         output: manual.output ?? base.output,
         features: manual.features ?? base.features,
+        strictTools: manual.strictTools ?? base.strictTools,
         contextWindow: manual.contextWindow ?? base.contextWindow,
         maxOutputTokens: manual.maxOutputTokens ?? base.maxOutputTokens,
         pricing: manual.pricing

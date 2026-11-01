@@ -428,6 +428,8 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
 
+实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
+
 没有输出 schema 时，宿主提供默认对象：
 
 - 故事 agent：必需的非空白 `narrativeOutput: string`，可选 `yield: user | continue`。

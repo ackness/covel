@@ -169,7 +169,13 @@ function attachOpenAiTools(
   defaults: import("@covel/shared").LLMRequestDefaults | undefined,
 ): void {
   if (!tools || tools.length === 0) return;
-  body.tools = tools;
+  body.tools = tools.map((tool) => {
+    const { strict, ...definition } = tool.function;
+    return {
+      type: tool.type,
+      function: { ...definition, ...(strict === true ? { strict: true } : {}) },
+    };
+  });
   body.tool_choice ??= defaultToolChoice(
     defaults,
     body,

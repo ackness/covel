@@ -30,6 +30,7 @@ import type {
   CapabilityOverridePolicy,
   GatewayOptions,
   ProviderRelay,
+  ToolDefinition,
 } from "@covel/ai-provider";
 
 interface GatewayTextInput {
@@ -43,14 +44,7 @@ interface GatewayTextInput {
     reasoningContent?: string;
     providerContinuation?: LLMProviderContinuation;
   }>;
-  tools?: Array<{
-    type: "function";
-    function: {
-      name: string;
-      description?: string;
-      parameters?: Record<string, unknown>;
-    };
-  }>;
+  tools?: ToolDefinition[];
   responseFormat?: LLMResponseFormat;
   providerRequestMetadata?: Record<string, unknown>;
   defaults?: LLMRequestDefaults;
@@ -236,6 +230,11 @@ export function createGatewayAdapter(
     },
 
     async generate(params): Promise<LLMResponse> {
+      const responseFormat = params.tools?.some(
+        (tool) => tool.name === "submit-output",
+      )
+        ? undefined
+        : params.responseFormat;
       // Convert LLMToolDefinition[] → gateway ToolDefinition[]
       const tools = params.tools?.map(toGatewayTool);
 
@@ -243,7 +242,7 @@ export function createGatewayAdapter(
       const messages = toGatewayMessages(
         withResponseFormatInstruction(
           params.messages,
-          params.responseFormat,
+          responseFormat,
           params.locale,
         ),
       );
@@ -255,7 +254,7 @@ export function createGatewayAdapter(
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
-          responseFormat: params.responseFormat,
+          responseFormat,
           ...(params.promptCacheKey
             ? { promptCacheKey: params.promptCacheKey }
             : {}),
@@ -289,11 +288,16 @@ export function createGatewayAdapter(
       if (!gateway.streamText) {
         throw new Error("Gateway does not support streaming");
       }
+      const responseFormat = params.tools?.some(
+        (tool) => tool.name === "submit-output",
+      )
+        ? undefined
+        : params.responseFormat;
 
       const messages = toGatewayMessages(
         withResponseFormatInstruction(
           params.messages,
-          params.responseFormat,
+          responseFormat,
           params.locale,
         ),
       );
@@ -306,7 +310,7 @@ export function createGatewayAdapter(
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
-          responseFormat: params.responseFormat,
+          responseFormat,
           ...(params.promptCacheKey
             ? { promptCacheKey: params.promptCacheKey }
             : {}),
@@ -423,6 +427,7 @@ function toGatewayMessages(
 function toGatewayTool(tool: LLMToolDefinition) {
   return {
     type: "function" as const,
+    ...(tool.strict ? { strict: tool.strict } : {}),
     function: {
       name: tool.name,
       description: tool.description,

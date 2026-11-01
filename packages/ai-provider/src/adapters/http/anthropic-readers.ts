@@ -37,6 +37,7 @@ export function toAnthropicTools(
   return tools.map((t) => ({
     name: t.function.name,
     ...(t.function.description ? { description: t.function.description } : {}),
+    ...(t.function.strict === true ? { strict: true } : {}),
     // Anthropic requires an object schema even for a no-argument tool.
     input_schema: t.function.parameters ?? {
       type: "object",

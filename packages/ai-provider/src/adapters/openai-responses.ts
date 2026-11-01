@@ -426,10 +426,8 @@ async function postResponses(
  * The Responses API flattens the `function` envelope: `name`, `description`,
  * and `parameters` live at the top level of each tool object.
  *
- * `strict: false` is explicit: the Responses API treats a function tool as
- * strict when the field is absent (Chat does the opposite), and a strict
- * schema makes every optional property required, so the model fills each one
- * with an empty value that the tool then rejects.
+ * Non-strict is explicit because omission can enable strict normalization of
+ * optional fields and open objects. Only a target-checked schema opts in.
  */
 function serializeResponsesTools(tools: ToolDefinition[]): unknown[] {
   return tools.map((tool) => ({
@@ -439,7 +437,7 @@ function serializeResponsesTools(tools: ToolDefinition[]): unknown[] {
       ? { description: tool.function.description }
       : {}),
     parameters: tool.function.parameters ?? {},
-    strict: false,
+    strict: tool.function.strict ?? false,
   }));
 }
 

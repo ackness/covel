@@ -57,7 +57,11 @@ describe("generated output contract", () => {
         outputSchema: schema,
       });
       expect(result.toolDefs).toEqual([
-        expect.objectContaining({ name: "submit-output", parameters: schema }),
+        expect.objectContaining({
+          name: "submit-output",
+          parameters: schema,
+          strict: "auto",
+        }),
       ]);
       expect(result.responseFormat).toBeUndefined();
       expect([...result.authorizedToolNames]).toEqual(["submit-output"]);

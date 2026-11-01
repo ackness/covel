@@ -8,6 +8,7 @@ import {
   isProviderProtocolId,
 } from "@covel/shared";
 import { REASONING_EFFORT_VALUES } from "../reasoning-effort.js";
+import { strictToolCapabilitySchema } from "../capability/strict-tools.js";
 
 /**
  * A built-in protocol, or `<pluginId>/<wireId>` for a text protocol a plugin
@@ -92,6 +93,8 @@ const slotFieldsSchema = z.object({
   output: z.array(outputModalitySchema).optional(),
   /** Feature flags */
   features: z.array(modelFeatureSchema).optional(),
+  /** Host-verified strict schema profile, scoped to the exact resolved target. */
+  strictTools: strictToolCapabilitySchema.optional(),
   /** Max input context window (tokens) */
   contextWindow: z.number().int().positive().optional(),
   /** Max output tokens */

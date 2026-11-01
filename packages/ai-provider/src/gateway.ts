@@ -38,6 +38,7 @@ import {
 } from "./protocol-registry.js";
 import { withProviderWarnings } from "./provider-warnings.js";
 import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
+import { selectStrictTools } from "./capability/strict-tools.js";
 import {
   resolveProviderOptions,
   validateParameterMetadata,
@@ -193,6 +194,8 @@ export function createGateway(deps: GatewayDependencies) {
         ? resolveSlotOrPassthrough(role.slotId, role.tag, options)
         : fallback.preset?.id;
       const target = deps.presetRegistry.resolveTextTarget({ presetId: id });
+      if ((target.preset?.tag ?? "text") !== (primary.preset?.tag ?? "text"))
+        continue;
       if (seen.has(target.preset?.id)) continue;
       seen.add(target.preset?.id);
       targets.push(target);
@@ -293,7 +296,7 @@ export function createGateway(deps: GatewayDependencies) {
               model: targetModel(target),
               messages: request.messages,
               instructionLocale: input.instructionLocale,
-              tools: input.tools,
+              tools: request.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
               providerRequestMetadata: request.metadata,
@@ -523,7 +526,7 @@ export function createGateway(deps: GatewayDependencies) {
               model: targetModel(target),
               messages: request.messages,
               instructionLocale: input.instructionLocale,
-              tools: input.tools,
+              tools: request.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
               providerRequestMetadata: request.metadata,
@@ -1102,10 +1105,38 @@ export function createGateway(deps: GatewayDependencies) {
   ): {
     /** The messages this target is sent: see `messagesForTarget`. */
     messages: TextMessage[];
+    tools: ToolDefinition[] | undefined;
     metadata: Record<string, unknown>;
     warnings: LLMProviderWarning[];
   } {
     const provider = targetProvider(target);
+    const capability = textContext(target, resolved, "text").preset?.capability;
+    if (
+      input.tools?.length &&
+      capability?.features &&
+      !capability.features.includes("function_calling")
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider,
+        model: targetModel(target),
+        retriable: false,
+        message:
+          "This target does not support function calling. Select a tool-capable text model for agent submission.",
+        details: { unsupportedCapability: "function_calling" },
+      });
+    }
+    const selected = selectStrictTools(
+      input.tools,
+      capability?.strictTools,
+      {
+        provider,
+        model: targetModel(target),
+        protocol: resolved.protocol,
+        baseUrl: resolved.config.baseUrl,
+      },
+      resolved.usesBuiltinAdapter === true,
+    );
     const presetOptions = resolveProviderOptions(
       target.preset?.providerOptions,
       provider,
@@ -1116,7 +1147,11 @@ export function createGateway(deps: GatewayDependencies) {
       provider,
       resolved.protocol,
     );
-    const warnings = [...presetOptions.warnings, ...callOptions.warnings];
+    const warnings = [
+      ...presetOptions.warnings,
+      ...callOptions.warnings,
+      ...selected.warnings,
+    ];
     let callMetadata = input.providerRequestMetadata;
     if (
       metadataTarget !== metadataTargetIdentity(target, resolved) &&
@@ -1231,7 +1266,12 @@ export function createGateway(deps: GatewayDependencies) {
           "The selected model does not use this reasoning effort setting; the provider default applies.",
       });
     }
-    return { messages: input.messages, metadata, warnings };
+    return {
+      messages: input.messages,
+      tools: selected.tools,
+      metadata,
+      warnings,
+    };
   }
 
   /** Merge abort signal from gateway options into provider config. */
