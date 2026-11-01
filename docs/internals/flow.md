@@ -143,6 +143,8 @@ stateDiagram-v2
 
 内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单作为 `submit_actions` 里的行动提交。
 
+已启用的准备 runtime 返回 `pending` 时仍会挡住开场，框架不把缺少前置数据当作完成。尝试后既无消息也无待答交互时，界面同样显示未完成提示，可继续准备或关闭对应插件。还没执行过的会话只显示“开始冒险”。没有 setup 的组合不会仅因世界数据而增加准备步骤，见[数据接收规则](../reference/world-data.md#data-receivers)。
+
 失败时的规则：
 
 - 失败但还有重试次数：保持 `pending`，记下 `lastError`。再发一次 `start_session` 只重跑没完成的 runtime，不新建会话，也不记录玩家消息。

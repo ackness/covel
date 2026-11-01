@@ -136,6 +136,65 @@ it("requires a player or pack selection for presentation receivers", () => {
   ).toEqual([]);
 });
 
+it("does not introduce setup through world data into a composition without setup", () => {
+  const setup = receiver("allocation", { runtimes: [{ stage: "setup" }] });
+  const automatic = resolve([setup]);
+  expect(automatic.active).toEqual(["story"]);
+  expect(automatic.unmetData).toEqual([
+    {
+      contract: "notes@1",
+      code: "missing-provider",
+      candidates: ["allocation"],
+    },
+  ]);
+  expect(
+    resolve([setup], { requested: ["story", "allocation"] }).active,
+  ).toEqual(["story", "allocation"]);
+  expect(
+    resolve([
+      setup,
+      candidate("creator", { kind: "core", runtimes: [{ stage: "setup" }] }),
+    ]).active,
+  ).toEqual(["story", "creator", "allocation"]);
+  expect(
+    resolve([{ ...setup, source: "community", authorized: false }]).rejected,
+  ).toEqual([]);
+});
+
+it("does not introduce setup through a data receiver's dependency", () => {
+  const plugins = [
+    receiver("receiver", { requires: ["init@1"] }),
+    candidate("initializer", {
+      provides: ["init@1"],
+      runtimes: [{ stage: "setup" }],
+    }),
+  ];
+  expect(resolve(plugins).active).toEqual(["story"]);
+  expect(resolve(plugins, { requested: ["story", "receiver"] }).active).toEqual(
+    ["story", "receiver", "initializer"],
+  );
+});
+
+it("retains data setup when the selected gameplay requires a setup provider", () => {
+  const plan = resolve(
+    [
+      receiver("allocation", { runtimes: [{ stage: "setup" }] }),
+      candidate("gameplay", { requires: ["creator@1"] }),
+      candidate("creator", {
+        provides: ["creator@1"],
+        runtimes: [{ stage: "setup" }],
+      }),
+    ],
+    { requested: ["story", "gameplay"] },
+  );
+  expect([...plan.active].sort()).toEqual([
+    "allocation",
+    "creator",
+    "gameplay",
+    "story",
+  ]);
+});
+
 it("does not add new world providers or core defaults during unrelated live changes", () => {
   const plan = resolveSessionPlugins({
     requested: ["story", "consumer"],

@@ -16,7 +16,10 @@ export interface SessionPluginCandidate {
   readonly provides?: PluginManifest["provides"];
   /** Data destinations, separate from runtime and service capabilities. */
   readonly acceptsWorldData?: readonly string[];
-  readonly runtimes?: readonly Pick<PluginRuntimeSummary, "presentation">[];
+  readonly runtimes?: readonly Pick<
+    PluginRuntimeSummary,
+    "presentation" | "stage"
+  >[];
   readonly requires?: readonly string[];
   readonly conflicts?: readonly string[];
   readonly extensions?: readonly ExtensionDeclaration[];
@@ -153,9 +156,6 @@ export function resolveSessionPlugins(args: {
     !rejected.has(p.id);
   const allowedAutomatically = (plugin: SessionPluginCandidate) =>
     !args.automaticPluginIds || args.automaticPluginIds.includes(plugin.id);
-  const canInferDataReceiver = (plugin: SessionPluginCandidate) =>
-    allowedAutomatically(plugin) &&
-    !plugin.runtimes?.some((runtime) => runtime.presentation !== undefined);
   const add = (id: string, automatic: boolean) => {
     const p = registry.get(id);
     if (!p) {
@@ -221,6 +221,31 @@ export function resolveSessionPlugins(args: {
     const { choice } = chooseProvider(contract, true);
     if (choice) add(choice.id, true);
   }
+
+  // Data may enrich a selected setup flow, but cannot introduce one into a
+  // composition that has none. Freeze this before inferring any receivers so
+  // their ordering cannot turn data into consent to start setup.
+  const addsSetup = (
+    plugin: SessionPluginCandidate,
+    visited = new Set<string>(),
+  ): boolean => {
+    if (visited.has(plugin.id)) return false;
+    visited.add(plugin.id);
+    if (plugin.runtimes?.some((runtime) => runtime.stage === "setup"))
+      return true;
+    return (plugin.requires ?? []).some((contract) => {
+      if (provided(contract)) return false;
+      const { choice } = chooseProvider(contract);
+      return choice !== undefined && addsSetup(choice, visited);
+    });
+  };
+  const hasSelectedSetup = [...active].some((id) =>
+    addsSetup(registry.get(id)!),
+  );
+  const canInferDataReceiver = (plugin: SessionPluginCandidate) =>
+    allowedAutomatically(plugin) &&
+    !plugin.runtimes?.some((runtime) => runtime.presentation !== undefined) &&
+    (hasSelectedSetup || !addsSetup(plugin));
 
   for (const contract of fixed ? [] : dataRequired) {
     if (

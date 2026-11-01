@@ -142,6 +142,8 @@ A setup runtime reports "I am done" with one of three clear signals:
 
 The kernel records the result in `setupRuntimes`. The player can move setup forward by submitting a form or a message several times. For example, the form of `char-creator` is submitted as an action of `submit_actions`.
 
+An enabled setup runtime returning `pending` still blocks the opening; missing prerequisite data does not count as completion. After an attempt with neither messages nor an unanswered interaction, the UI also shows the unfinished notice, allowing the player to continue setup or disable the corresponding plugin. A session that has never run only shows Begin Adventure. World data alone cannot add preparation to a composition without setup; see [receiver selection](../reference/world-data.md#data-receivers).
+
 Rules for failure:
 
 - Failed, but retries are left: the runtime stays `pending`, and `lastError` is recorded. Sending `start_session` again reruns only the runtimes that are not done. It does not create a new session and does not record a player message again.

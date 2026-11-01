@@ -1526,6 +1526,8 @@ The root, setup and opening each emit their own round completion. Automatic roun
 
 Stop reasons form a finite enum: `yielded-to-player`, `no-eligible-story`, `ambiguous-story`, `limit`, `disabled`, `player-stop`, `new-input`, `pending-input`, `session-unavailable`, `execution-failed`, `prerequisite-unavailable`. Reasons contain no model content. Reaching the cap or yielding to the player is a normal end. A later failure discards only that round's uncommitted content; terminal `resync: true` aggregates post-commit publication failures from any round.
 
+After a setup execution, `no-eligible-story` does not prove setup is complete. The client still checks the session clock; an attempted but unfinished setup with no unanswered interaction shows the [setup notice](./api.md#setup-runtime-control-retry--skip), even when the message list is empty.
+
 Recovery's optional `advance` uses the same payload; `unknown` does not establish completion. Clients handle events under request ownership and ignore old request cleanup and regressive progress. New events contain no prompts, tool arguments, operation summaries or concealed content. Foreground rounds share one fault identity: faults count immediately once, while clean verdicts reset only when the group closes; a newer background verdict survives old group cleanup. Setup is excluded and background jobs retain separate accounting.
 
 ## Private delegation projections
