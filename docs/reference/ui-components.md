@@ -239,7 +239,7 @@
 <!-- prettier-ignore -->
 | 组件 | 属性 | 显示内容 |
 | --- | --- | --- |
-| `SessionMessages` | 仅可选的字面量 `content: "story" \| "pending"`，默认 `"story"` | 公开故事/玩家消息和当前故事流，或待处理的公开交互；没有待处理交互时显示空状态 |
+| `SessionMessages` | 仅可选的字面量 `content: "story" \| "pending"`，默认 `"story"` | 完整已提交的公开故事/玩家消息，或待处理的公开交互；没有待处理交互时显示空状态 |
 | `SessionComposer` | 空对象 `{}`，也可省略 `props` | 当前会话共享的模式栏、字段、输入、排队草稿和反馈 |
 
 这些组件只用于实时声明式 `contributes.ui.view`。每份视图最多一个故事区域、一个待处理区域和一个输入框；不能直接带 `repeat`、放在重复祖先下或 `FilterContainer.props.itemTemplate` 中。`component` 和 `type` 写法都校验，具名 slots 和行模板内的错误带精确路径。其他 props（包括会话、座位、角色、来源和行动参数）会被拒绝，不能用表达式选择 `content`。这里的 `content` 是控制值，不做翻译；区域标题用普通文本组件翻译。

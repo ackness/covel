@@ -42,7 +42,7 @@ const input = (
   messages: [],
   messageSeqs: createSessionMessageOrdinals()(extra.messages ?? []),
   submittedBlockIds: new Set(),
-  streamingText: undefined,
+
   characters: [],
   slots: [],
   ...extra,
@@ -75,15 +75,18 @@ describe("public session projection", () => {
     expect(result.turn).toBe(4);
     expect(sessionProjectionSchema.safeParse(result).success).toBe(true);
   });
-  it("puts the placeholder only in streaming and reads the live text", () => {
+  it("accepts only version 3 complete state with no streaming field", () => {
     const result = buildSessionProjection(
-      input({
-        messages: [message("one"), message("stream_secret", "old")],
-        streamingText: "new",
-      }),
+      input({ messages: [message("one")] }),
     );
-    expect(result.messages).toHaveLength(1);
-    expect(result.streaming).toEqual({ seq: 2, text: "new" });
+    expect(result.version).toBe(3);
+    expect(result).not.toHaveProperty("streaming");
+    expect(
+      sessionProjectionSchema.safeParse({ ...result, version: 2 }).success,
+    ).toBe(false);
+    expect(
+      sessionProjectionSchema.safeParse({ ...result, streaming: null }).success,
+    ).toBe(false);
   });
   it("keeps full visible sequence numbers when the 200-message window slides", () => {
     const result = buildSessionProjection(
@@ -162,25 +165,25 @@ describe("public session projection", () => {
     expect(new Set(after.messages.map((row) => row.seq)).size).toBe(4);
     expect(after.messages.slice(0, 2).map((row) => row.seq)).toEqual([3, 4]);
   });
-  it("carries a streaming ordinal into the durable story message", () => {
+  it("keeps durable ordinals across repeated completion and identical-runtime messages", () => {
     const assign = createSessionMessageOrdinals();
-    const live = [message("stream_turn_runtime", "draft")];
+    const first = [message("saved", "Full story")];
     const before = buildSessionProjection(
-      input({ messages: live, messageSeqs: assign(live) }),
+      input({ messages: first, messageSeqs: assign(first) }),
     );
-    const durable = [message("durable", "Final")];
+    const second = [...first, message("next", "Next story")];
     const after = buildSessionProjection(
-      input({ messages: durable, messageSeqs: assign(durable) }),
+      input({ messages: second, messageSeqs: assign(second) }),
     );
-    expect(after.messages[0]?.seq).toBe(before.streaming?.seq);
+    expect(after.messages[0]?.seq).toBe(before.messages[0]?.seq);
+    expect(after.messages[1]?.seq).not.toBe(before.messages[0]?.seq);
   });
-  it("enforces UTF-8 byte limits on individual, total and streaming text", () => {
+  it("enforces UTF-8 byte limits on individual and total committed text", () => {
     const result = buildSessionProjection(
       input({
         messages: Array.from({ length: 12 }, (_, index) =>
           message(String(index), "字".repeat(12000)),
-        ).concat(message("stream_x")),
-        streamingText: "x".repeat(70000),
+        ),
       }),
     );
     expect(result.messages).toHaveLength(8);
@@ -191,7 +194,7 @@ describe("public session projection", () => {
           item.truncated && new TextEncoder().encode(item.text).length <= 32768,
       ),
     ).toBe(true);
-    expect(result.streaming?.text.length).toBe(65536);
+    expect(result).not.toHaveProperty("streaming");
   });
   it("selects unanswered interaction blocks and sanitises nested values", () => {
     const result = buildSessionProjection(

@@ -24,11 +24,10 @@ describe("operation failure notice", () => {
       const dispatch = vi.fn();
       const handler = createSseEventHandler({
         dispatch,
-        ds: {} as SseEventHandlerDeps["ds"],
+
         stateRef: { current: { ...initialState } },
         sessionIdRef: { current: "session" },
-        deltaBufferRef: { current: new Map() },
-        deltaRafRef: { current: null },
+
         lastBackfilledTurnIdRef: { current: null },
       });
       const toast = vi.fn();
@@ -69,11 +68,10 @@ describe("operation failure notice", () => {
       dispatch: (action: SessionAction) => {
         state = reducer(state, action);
       },
-      ds: {} as SseEventHandlerDeps["ds"],
+
       stateRef: { current: state },
       sessionIdRef: { current: "session" },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
+
       lastBackfilledTurnIdRef: { current: null },
     });
     const toast = vi.fn();
@@ -177,18 +175,17 @@ describe("durable operation failure receipts", () => {
         row("user", { role: "user" }),
         row("system", { role: "system" }),
         row("plugin", { kind: "plugin" }),
-        row("stream_story"),
+        row("unrelated-story", { turnId: "unrelated-turn" }),
       ],
     };
     const handler = createSseEventHandler({
       dispatch: (action) => {
         state = reducer(state, action) as typeof state;
       },
-      ds: {} as SseEventHandlerDeps["ds"],
+
       stateRef: { current: state },
       sessionIdRef: { current: "session" },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
+
       lastBackfilledTurnIdRef: { current: null },
     });
     const send = (messages: unknown[], extra: Record<string, unknown> = {}) =>

@@ -68,15 +68,15 @@ describe("live message window cap", () => {
     expect(next.olderMessagesCursor).toBeNull();
   });
 
-  it("skips capping when a streaming placeholder would be dropped", () => {
+  it("caps committed history without exempting any message ID", () => {
     configureMessagesWindowCap(CAP_MIN);
-    const withPlaceholder = stateWith([
-      msg(0, { id: "stream_t1_narrator" }),
+    const withHistory = stateWith([
+      msg(0, { id: "saved-story" }),
       ...Array.from({ length: CAP_MIN - 1 }, (_, i) => msg(i + 1)),
     ]);
-    const next = addMessage(withPlaceholder, msg(CAP_MIN));
-    expect(next.messages).toHaveLength(CAP_MIN + 1);
-    expect(next.messages[0]!.id).toBe("stream_t1_narrator");
+    const next = addMessage(withHistory, msg(CAP_MIN));
+    expect(next.messages).toHaveLength(CAP_MIN);
+    expect(next.messages.some((m) => m.id === "saved-story")).toBe(false);
   });
 
   it("PREPEND_MESSAGES never caps (explicit history load)", () => {

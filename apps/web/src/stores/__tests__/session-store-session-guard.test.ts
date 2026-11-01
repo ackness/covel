@@ -35,11 +35,10 @@ function makeDeps(
 ): SseEventHandlerDeps {
   return {
     dispatch,
-    ds: { addMessage } as unknown as SseEventHandlerDeps["ds"],
+
     sessionIdRef: { current: currentSessionId },
     stateRef: { current: initialState },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   };
 }
@@ -217,15 +216,14 @@ describe("runtime RPC — originating session", () => {
       stateRef: { current: state },
       sessionIdRef,
       sessionGenerationRef: { current: 0 },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
+
       lastBackfilledTurnIdRef: { current: null },
     };
     const { result } = renderHook(() =>
       useBuildSessionActions({
         state,
         dispatch,
-        ds: {} as SseEventHandlerDeps["ds"],
+        ds: {} as import("@/services/data-service.js").DataService,
         workspace: {
           hydrate: vi.fn(),
           run: async (_id, _request, mutate) => {

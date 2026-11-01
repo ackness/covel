@@ -190,11 +190,10 @@ describe("bundled dialogue actor settlement notices", () => {
         dispatch: (action) => {
           stateRef.current = reducer(stateRef.current, action);
         },
-        ds: {} as SseEventHandlerDeps["ds"],
+
         stateRef,
         sessionIdRef: { current: "scene" },
-        deltaBufferRef: { current: new Map() },
-        deltaRafRef: { current: null },
+
         lastBackfilledTurnIdRef: { current: null },
       });
       const toast = vi.fn();

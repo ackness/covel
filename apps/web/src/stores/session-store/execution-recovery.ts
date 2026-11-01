@@ -14,7 +14,6 @@ import {
   publishRecoveredMessages,
   readRecoveredSnapshot,
 } from "./recovered-snapshot.js";
-import type { DeltaBufferRef, DeltaRafRef } from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import type { MutableRef } from "./runtime-refs.js";
 import type { SessionDispatch, SessionState } from "./types.js";
@@ -29,8 +28,6 @@ interface RecoveryOptions {
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
-  deltaBufferRef: DeltaBufferRef;
-  deltaRafRef: DeltaRafRef;
   dispatch: SessionDispatch;
   workspace: SessionWorkspace;
 }
@@ -39,10 +36,7 @@ interface RecoveryOptions {
 async function refreshRecoveredExecution(
   sessionId: string,
   status: SessionExecutionStatus,
-  options: Pick<
-    RecoveryOptions,
-    "stateRef" | "dispatch" | "workspace" | "deltaBufferRef" | "deltaRafRef"
-  >,
+  options: Pick<RecoveryOptions, "stateRef" | "dispatch" | "workspace">,
   isCurrent: () => boolean,
 ): Promise<SessionExecutionStatus> {
   if (!executionMayBeRunning(status))
@@ -66,15 +60,7 @@ async function refreshRecoveredExecution(
       apply: ([snapshot, session]) => {
         authoritative = snapshot.execution ?? status;
         options.dispatch({ type: "SET_SESSION", session });
-        publishRecoveredMessages(
-          options.dispatch,
-          options.stateRef.current,
-          snapshot,
-          authoritative,
-          true,
-          options.deltaBufferRef,
-          options.deltaRafRef,
-        );
+        publishRecoveredMessages(options.dispatch, snapshot);
         publishSessionGameState(
           options.dispatch,
           sessionId,
@@ -100,8 +86,6 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
     stateRef,
     sessionIdRef,
     sessionGenerationRef,
-    deltaBufferRef,
-    deltaRafRef,
     dispatch,
     workspace,
   } = options;
@@ -152,8 +136,6 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
               dispatch,
               stateRef,
               workspace,
-              deltaBufferRef,
-              deltaRafRef,
             },
             isCurrent,
           );
@@ -220,7 +202,5 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
     sessionGenerationRef,
     sessionGeneration,
     actionGeneration,
-    deltaBufferRef,
-    deltaRafRef,
   ]);
 }

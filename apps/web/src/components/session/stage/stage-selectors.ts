@@ -29,22 +29,18 @@ export {
   type StageTransition,
 } from "./stage-direction-selectors.js";
 
-/** Stable key for the story currently presented on stage. A turn id survives
- * the streaming-placeholder to durable-message swap; the message id covers
- * restored legacy rows without a turn id. */
+/** Durable message identity distinguishes multiple stories in the same turn. */
 export function stageStoryKey(
   message: Pick<StreamMessage, "id" | "turnId"> | undefined,
 ): string | undefined {
-  return message ? (message.turnId ?? message.id) : undefined;
+  return message?.id;
 }
 
-/** Durable history present when Stage mounts has already been read elsewhere.
- * A streaming placeholder can also be present on the first render, but its
- * partial narrative must still pass through the typewriter. */
+/** History already present at mount has been read elsewhere. */
 export function initialStageReadStoryKey(
   message: Pick<StreamMessage, "id" | "turnId"> | undefined,
 ): string | undefined {
-  return message?.id.startsWith("stream_") ? undefined : stageStoryKey(message);
+  return stageStoryKey(message);
 }
 
 // ── Backdrop (stage.backdrop@1) ──────────────────────

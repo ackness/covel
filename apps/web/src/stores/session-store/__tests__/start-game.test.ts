@@ -267,12 +267,10 @@ describe("startGameSession bootstrap order", () => {
           runActionStream(
             { requestId, type: "start_session", sessionId: id, payload: {} },
             createSseEventHandler({
-              ds,
               dispatch,
               stateRef,
               sessionIdRef,
-              deltaBufferRef: { current: new Map() },
-              deltaRafRef: { current: null },
+
               lastBackfilledTurnIdRef: { current: null },
             }),
             dispatch,

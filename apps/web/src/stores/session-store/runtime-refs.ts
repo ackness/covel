@@ -1,12 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { clearUiSlots } from "@/stores/ui-slot-store.js";
-import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
-import {
-  clearNarrativeDeltaBuffer,
-  type DeltaBufferRef,
-  type DeltaRafRef,
-} from "./sse-handler.js";
 import type { SessionState } from "./types.js";
 
 export interface MutableRef<T> {
@@ -42,8 +36,6 @@ export interface SessionRuntimeRefs {
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
-  deltaBufferRef: DeltaBufferRef;
-  deltaRafRef: DeltaRafRef;
   lastBackfilledTurnIdRef: MutableRef<string | null>;
 }
 
@@ -59,8 +51,6 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   const sessionIdRef = useRef<string | null>(null);
   const sessionGenerationRef = useRef(0);
   const publishedSessionIdRef = useRef<string | null>(null);
-  const deltaBufferRef = useRef<DeltaBufferRef["current"]>(new Map());
-  const deltaRafRef = useRef<DeltaRafRef["current"]>(null);
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
 
   useEffect(
@@ -89,8 +79,6 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
       clearUiSlots(previousId);
     }
     setActivePluginDataSession(nextId);
-    clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);
-    clearAllStreamingText();
   }, [
     state.session,
     state.executionRecovery?.hydrating,
@@ -102,8 +90,6 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
       stateRef,
       sessionIdRef,
       sessionGenerationRef,
-      deltaBufferRef,
-      deltaRafRef,
       lastBackfilledTurnIdRef,
     }),
     [],

@@ -218,7 +218,6 @@ function ConsentedView({
         onRetry={onRetry}
         sessionBridge={{
           projection: bridge.projection,
-          stream: bridge.stream,
           handlers: bridge.handlers,
           isCurrent: bridge.isCurrent,
         }}

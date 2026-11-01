@@ -344,11 +344,10 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
   const sessionIdRef = { current: request.sessionId as string | null };
   const handle = createSseEventHandler({
     dispatch,
-    ds: {} as SseEventHandlerDeps["ds"],
+
     sessionIdRef,
     stateRef: { current: state },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   });
   const pending = runSingleSessionAction({

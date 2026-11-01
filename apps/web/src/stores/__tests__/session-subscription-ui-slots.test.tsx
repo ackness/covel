@@ -119,8 +119,6 @@ function setup() {
       sessionGenerationRef,
       stateRef,
       activeTurnIdRef,
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
     });
     return slots;
   });

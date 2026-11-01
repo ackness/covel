@@ -191,7 +191,7 @@ Fields of `execution.completed`:
 
 | Field         | Meaning                                                                                                                                                                                                                                                           |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `committed`   | Describes the final actual execution: `true` means its proposals, journal and clock are saved; `false` removes only its uncommitted streamed content. Earlier committed rounds remain saved                                                                       |
+| `committed`   | Describes the final actual execution: `true` means its proposals, journal and clock are saved; `false` marks that execution as failed. Earlier committed messages remain saved                                                                                    |
 | `error`       | Present when `committed: false`. It holds the proposal error or a general transaction error                                                                                                                                                                       |
 | `abortReason` | Appears only when the turn was stopped. When the player stops it, the value is `"aborted-by-player"`                                                                                                                                                              |
 | `resync`      | `true` when events from any committed round in this request could not be published. The data is saved, so the client should read the saved state and not wait for those events. The subscription stream also gets `system.reset`, with `reason: "publish-failed"` |
@@ -244,7 +244,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 **steer: the player interjects during a turn** (`POST /api/sessions/:id/steer`)
 
 - The message goes into the queue for this session on the server. Before the next model call, the story runtime merges the queued content into the live conversation record.
-- If the interjection arrives while the final answer is still streaming, the story runtime makes one more model call to handle it before it finishes (limited by maxSteps).
+- If the interjection arrives before final output is accepted, the story runtime makes one more model call to handle it before it finishes (limited by maxSteps).
 - The interjection is saved with its turn. When the turn commits, it is written in the same transaction to the conversation history (after the player's message of the turn) and to the chat log, so later turns read it. An interjection does not count as a new player turn. When the turn is stopped, fails or is rolled back, neither keeps it.
 - The client shows the interjection locally itself. There is no new SSE event.
 
@@ -258,7 +258,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 
 When the client receives this value, it treats the end as caused by the player, not as an error:
 
-- It drops the streamed placeholder message for this turn that was not committed. The server never commits a half-finished narrative, and keeping it would make it disappear after a refresh.
+- Keep previous committed messages and end progress without retaining an unsaved draft story.
 - It shows "Stopped; turn not committed" and a clear retry action. It does not show the general error message. For a stopped opening continuation, "Continue" in the recovery notice uses the confirmed `retry_turn` action without a page refresh.
 - If the request ends with a player stop before any `execution.started`, the echoed player message returns to the input box. The client preserves newer draft text and does not query the previous turn for a recovery action.
 - Other `abortReason` values (for example, a TurnStart hook aborted the turn) are still shown as errors.
@@ -680,7 +680,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 
 `operation.failed.messages` is a required safe receipt list containing only the IDs of saved, annotated story messages and positive safe integer counts. The event follows the successful transaction and the corresponding `narrative.completed` publications. Each committed execution still emits one event and one immediate toast; direct action routing and `forwardToActionStream: false` are unchanged. `count` retains its execution-wide failure total. Auxiliary unit failures or the absence of a public story can leave `messages` empty, and targeted counts may sum to less than the total. Each auto-advance round uses its own turn and message receipts.
 
-Clients set or replace counts by session, turn and durable message ID. Duplicate receipts never add counts; clients neither guess the latest story nor annotate streaming placeholders. Unknown or unloaded IDs wait for ordinary history recovery. A lost event recovers through the [persisted message field](./api.md#get-apisessionsidmessages), without rerunning operations. Non-action commits retain their existing session-view and subscription recovery and never reopen a stream. Server and Web must update together; the old event shape is not accepted.
+Clients set or replace counts by session, turn and durable message ID. Duplicate receipts never add counts; clients do not guess the latest story. Unknown or unloaded IDs wait for ordinary history recovery. A lost event recovers through the [persisted message field](./api.md#get-apisessionsidmessages), without rerunning operations. Non-action commits retain their existing session-view and subscription recovery and never reopen a stream. Server and Web must update together; the old event shape is not accepted.
 
 A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state. Read-baseline `conflict` uses these same proposal and operation boundaries, with no new event or client fingerprint argument; see [Transactions](./transactions.md#read-baselines).
 
@@ -1521,7 +1521,7 @@ How snapshots are saved:
 
 Declarative [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components) render directly through the host, without this port. Input reuses player-source `submit_actions` and existing interaction responses. Refusal or busy admission retains drafts; UI callbacks are not plugin RPC and do not imply persistence.
 
-Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Consented session pages expose only their declared, schema-validated public methods and safe outcomes; ordinary panel handlers remain separate. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
+Plugin views reuse the sandbox MessagePort. Complete `{ type: "state", value }` messages carry version 3 in `value.session`, with committed messages only. There is no story append channel. This adds no HTTP or SSE endpoint. Reading requires player consent bound to plugin ID and the spec plus HTML content hash; revocation closes the page. Declared, validated public methods return safe outcomes. See [Plugin views](./ui-panels.md#plugin-views) for the authoritative projection and consent rules.
 
 <a id="auto-advance-events"></a>
 
@@ -1579,7 +1579,7 @@ The event contains no raw input, free-text reason, asset path, reply or credenti
 
 ## Sandbox session page protocol
 
-Ordinary session webviews use one MessagePort and public projection version 2. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-2). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
+Ordinary session webviews use one MessagePort and public projection version 3. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-3). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
 
 ### Session theme snapshots
 

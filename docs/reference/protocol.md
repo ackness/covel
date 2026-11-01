@@ -192,7 +192,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 | 字段          | 含义                                                                                                                                                                       |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `committed`   | 描述最后一个实际执行：`true` 表示它的 proposal、journal 和时钟已保存；`false` 只撤掉该执行未提交的流式内容，之前已提交的轮次仍然保留                                       |
+| `committed`   | 描述最后一个实际执行：`true` 表示它的 proposal、journal 和时钟已保存；`false` 表示该执行失败，之前已提交的消息仍然保留                                                     |
 | `error`       | `committed: false` 时带上 proposal 错误或通用的事务错误                                                                                                                    |
 | `abortReason` | 只在回合被中止时出现。玩家主动停止时，值是 `"aborted-by-player"`                                                                                                           |
 | `resync`      | 请求中任意一轮提交后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
@@ -245,7 +245,7 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 **steer：玩家在回合进行中插话**（`POST /api/sessions/:id/steer`）
 
 - 消息进入服务端里这个会话的队列。story runtime 在下一次调用模型之前，把队列里的内容并进实时的对话记录。
-- 如果插话在最终回答的流式输出期间才到，story runtime 会在收尾之前多做一步模型调用来处理它（受 maxSteps 限制）。
+- 如果插话在最终输出被接受之前到达，story runtime 会在收尾之前多做一步模型调用来处理它（受 maxSteps 限制）。
 - 插话跟着回合一起保存。回合提交时，它在同一个事务里写进对话历史（排在玩家这一回合的消息之后），也写进聊天记录，之后的回合能读到它。插话不算一个新的玩家回合。回合被停止、失败或回滚时，两边都不留它。
 - 客户端自己在本地显示这条插话就行，没有新增的 SSE 事件。
 
@@ -259,7 +259,7 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 
 客户端收到这个值时，把它当成玩家主动造成的结束，不是错误：
 
-- 丢掉这一回合没有提交的流式占位消息。服务端从不提交半截叙事，留着它会在刷新后消失。
+- 保留之前已提交的消息并结束进度，不保留未保存的故事草稿。
 - 显示“已停止，本轮未提交”和一个明确的重试入口，不显示通用的错误提示。开场接力停止时，恢复提示里的“继续”使用已确认的 `retry_turn` 动作；不需要刷新页面。
 - 如果这次请求尚未收到 `execution.started`，就以玩家停止结束，玩家消息从先行显示的列表退回输入框。客户端保留后来新写的草稿，不查询上一回合的恢复动作。
 - 其他的 `abortReason`（例如 TurnStart hook 中止了回合）仍然按错误显示。
@@ -681,7 +681,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 `operation.failed.messages` 是必填的安全回执列表，只含已保存提示的故事消息 ID 和正的安全整数计数。事件在事务成功、对应的 `narrative.completed` 发布之后发送，每次已提交执行仍只发一次并显示一个即时通知；直接 action 路由规则和 `forwardToActionStream: false` 不变。`count` 保持整次执行的失败操作总数，辅助单元失败或没有公开故事时 `messages` 可以为空，各消息计数之和也可以小于总数。自动推进每轮用自己的 turn 和消息回执。
 
-客户端按会话、turn 和持久消息 ID 设置或替换计数；重复回执不累加，不猜测最新故事，不标记流式占位。未知或未加载的 ID 等普通历史恢复。丢失事件时通过[保存的消息字段](./api.md#get-apisessionsidmessages)恢复提示，不重跑操作。非 action 提交沿用会话视图和订阅恢复，不重开流。服务端和 Web 必须一起更新，不接收旧事件形状。
+客户端按会话、turn 和持久消息 ID 设置或替换计数；重复回执不累加，不猜测最新故事。未知或未加载的 ID 等普通历史恢复。丢失事件时通过[保存的消息字段](./api.md#get-apisessionsidmessages)恢复提示，不重跑操作。非 action 提交沿用会话视图和订阅恢复，不重开流。服务端和 Web 必须一起更新，不接收旧事件形状。
 
 提交失败会扣住“执行完成”这一步，客户端把错误显示成执行失败。故事附带的写服务操作只因自身写入被拒而丢弃时不算执行失败：action 流不发它的 `proposal.failed`，只发一次 `operation.failed`，回合照常提交。后台的结果不能重新打开已经结束的 action 流，重连时用保存下来的会话状态恢复。 读取基线的 `conflict` 沿用这些提案和操作边界，不新增事件或客户端指纹参数，见[事务](./transactions.md#read-baselines)。
 
@@ -1522,7 +1522,7 @@ runtime 的终态：
 
 声明式 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件) 由宿主直接渲染，不使用此端口。输入复用 `submit_actions` 的玩家来源行动和现有交互协议，拒绝或忙碌时保留草稿；UI 回调不是插件 RPC，也不代表已经提交。
 
-插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中带会话投影，流式消息是 `{ type: "stream", seq, append }`。这不是新的 HTTP 或 SSE 端点。读取能力在首次挂载前取得玩家授权，绑定插件 ID 与 spec + HTML 内容哈希；撤销后关闭页面。会话页面只暴露逐项授权、经 schema 校验的公开方法与安全结果；普通面板处理器保持独立。投影、节流与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
+插件视图复用沙箱的 MessagePort：完整 `{ type: "state", value }` 在 `value.session` 中携带版本 3 投影，只包含完整已提交消息，没有故事追加通道。这不是新的 HTTP 或 SSE 端点。读取能力绑定插件 ID 与 spec + HTML 内容哈希，撤销后关闭页面。逐项声明、经校验的公开方法只返回安全结果。投影与授权规则统一见[插件视图](./ui-panels.md#插件视图)。
 
 <a id="auto-advance-events"></a>
 
@@ -1580,7 +1580,7 @@ setup 执行后的 `no-eligible-story` 不证明准备完成。客户端仍检�
 
 ## 沙箱会话页面协议
 
-普通会话 webview 使用单一 MessagePort，公开投影升级到版本 2；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-2)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。
+普通会话 webview 使用单一 MessagePort，公开投影升级到版本 3；`pending[].interaction` 和当前 frame 的不透明句柄替代原始 block，`input` 提供人类座位和当前可用行动。逐能力授权后，页面可请求玩家行动、交互回答、所属插件的手动 runtime、停止和所属面板导航。回复仅含固定安全结果，不传递执行内部对象。协议、上限、重放限制与失效规则的唯一字段表见[会话界面桥](./ui-panels.md#sessionprojection版本-3)。正常 HTTP/SSE 协议和服务端鉴权、提案提交保持原边界。
 
 ### 会话主题快照
 

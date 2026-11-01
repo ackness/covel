@@ -7,11 +7,6 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import {
-  appendStreamingText,
-  clearAllStreamingText,
-  setStreamingSegment,
-} from "@/stores/streaming-text-store.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { StageView, type StageViewProps } from "../StageView.js";
 
@@ -52,7 +47,6 @@ vi.mock("@/stores/ui-slot-store.js", () => ({
 
 afterEach(() => {
   cleanup();
-  clearAllStreamingText();
   stageSlots.items = [];
   stageSlots.realSprites = false;
   stageSlots.reduce = true;
@@ -239,34 +233,19 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-dialog")).toBeNull();
     expect(screen.getByTestId("stage-thinking")).toBeDefined();
 
-    const stream: StreamMessage = {
-      ...previousStory,
-      id: "stream_next-turn_narrator",
-      turnId: "next-turn",
-      content: "",
-    };
-    props = { ...props, messages: [previousStory, stream] };
-    rerender(<StageView {...props} />);
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
-    expect(screen.getByTestId("stage-thinking")).toBeDefined();
-
-    const stageRenders = stageSlots.renders.mock.calls.length;
+    expect(screen.getByText(previousStory.content)).toBeDefined();
     const nextStory = "You enter the library.\n\nThe librarian looks up.";
-    act(() => {
-      appendStreamingText(stream.id, nextStory);
-    });
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(screen.queryByTestId("stage-thinking")).toBeNull();
-    expect(stageSlots.renders).toHaveBeenCalledTimes(stageRenders);
-
     // Narration commits before the remaining plugins finish.
     props = {
       ...props,
       messages: [
         previousStory,
-        { ...stream, id: "next-story", content: nextStory },
+        {
+          ...previousStory,
+          turnId: "next-turn",
+          id: "next-story",
+          content: nextStory,
+        },
       ],
     };
     rerender(<StageView {...props} />);
@@ -284,62 +263,27 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-thinking")).toBeNull();
   });
 
-  it("names paragraphs with live speakers while streaming, then the resolved names", () => {
-    let props = { ...fixture(), executing: true };
-    const stream: StreamMessage = {
+  it("names committed paragraphs using resolved speakers", () => {
+    const props = { ...fixture(), executing: true };
+    const view = render(<StageView {...props} />);
+    const story: StreamMessage = {
       ...previousStory,
-      id: "stream_next-turn_narrator",
+      id: "next-story",
       turnId: "next-turn",
-      content: "",
-    };
-    props = { ...props, messages: [previousStory, stream] };
-    const { rerender } = render(<StageView {...props} />);
-    const text = "雨停了。\n\n「走吧。」";
-    act(() => {
-      setStreamingSegment(stream.id, { index: 0, kind: "narration" });
-      appendStreamingText(stream.id, "雨停了。");
-    });
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    // A second paragraph whose metadata has not arrived names nobody, so
-    // it never borrows another paragraph's speaker.
-    act(() => {
-      appendStreamingText(stream.id, "\n\n「走吧。」");
-    });
-    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    // Its live speaker is the name as the model wrote it.
-    act(() => {
-      setStreamingSegment(stream.id, {
-        index: 1,
-        kind: "dialogue",
-        speaker: "小雅",
-      });
-    });
-    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("小雅");
-
-    props = {
-      ...props,
-      messages: [
-        previousStory,
+      content: "雨停了。\n\n「走吧。」",
+      segments: [
+        { kind: "narration", text: "雨停了。" },
         {
-          ...stream,
-          id: "next-story",
-          content: text,
-          segments: [
-            { kind: "narration", text: "雨停了。" },
-            {
-              kind: "dialogue",
-              speaker: "阿雅",
-              speakerId: "char-aya",
-              text: "「走吧。」",
-            },
-          ],
+          kind: "dialogue",
+          speaker: "阿雅",
+          speakerId: "char-aya",
+          text: "「走吧。」",
         },
       ],
     };
-    rerender(<StageView {...props} />);
-    // Commit replaces the written alias with the resolved name.
+    view.rerender(<StageView {...props} messages={[previousStory, story]} />);
+    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
     expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("阿雅");
   });
 

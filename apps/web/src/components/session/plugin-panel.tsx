@@ -1,6 +1,5 @@
 import type { SessionProjection } from "./session-bridge.js";
 import type { PluginBridgeHandler } from "./plugin-bridge.js";
-import type { StreamFeed } from "./session-bridge-stream.js";
 /**
  * PluginPanel — renders a single plugin panel from a json-render spec.
  *
@@ -77,7 +76,6 @@ export interface PluginPanelProps {
   fill?: boolean;
   sessionBridge?: {
     projection: SessionProjection;
-    stream: StreamFeed;
     handlers?: Readonly<Record<string, PluginBridgeHandler>>;
     isCurrent?: () => boolean;
   };
@@ -136,7 +134,6 @@ function SessionPluginPanel(props: PluginPanelProps) {
       fill={props.fill}
       onRetry={props.onRetry}
       onPageFailure={props.onPageFailure}
-      stream={session.stream}
       sessionPage
       isCurrent={session.isCurrent}
       locked={false}

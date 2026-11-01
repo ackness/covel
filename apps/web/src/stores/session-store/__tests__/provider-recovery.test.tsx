@@ -2,10 +2,6 @@ import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SessionState } from "../types.js";
 import type { useBuildSessionActions } from "../actions.js";
-import {
-  clearAllStreamingText,
-  getStreamingText,
-} from "@/stores/streaming-text-store.js";
 
 const captured = vi.hoisted(() => ({
   options: null as Parameters<typeof useBuildSessionActions>[0] | null,
@@ -75,20 +71,10 @@ beforeEach(() => {
   captured.options = null;
 });
 afterEach(() => {
-  clearAllStreamingText();
   vi.restoreAllMocks();
 });
 
-it("the production provider passes ownership and delta refs to terminal recovery", async () => {
-  const frames = new Map<number, FrameRequestCallback>();
-  let next = 0;
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-    frames.set(++next, callback);
-    return next;
-  });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
-    frames.delete(id);
-  });
+it("the production provider recovers full committed history after progress", async () => {
   api.getSessionExecution.mockResolvedValue({
     state: "completed",
     turnId: "turn",
@@ -121,8 +107,8 @@ it("the production provider passes ownership and delta refs to terminal recovery
     captured.options!.dispatch({ type: "SET_SESSION", session });
     captured.options!.dispatch({ type: "SET_EXECUTING", value: true });
   });
-  const delta = {
-    type: "narrative.delta",
+  const progress = {
+    type: "runtime.started",
     sessionId: "s",
     turnId: "turn",
     requestId: "request",
@@ -134,17 +120,16 @@ it("the production provider passes ownership and delta refs to terminal recovery
       kind: "story",
       runtimeId: "story/main",
       pluginId: "story",
-      delta: "partial",
+      status: "running",
     },
   } as const;
   act(() => {
-    captured.options!.handleSseEvent(delta);
-    for (const callback of [...frames.values()]) callback(0);
+    captured.options!.handleSseEvent(progress);
   });
-  expect(published.messages[0]?.id).toBe("stream_turn_story/main");
-  expect(getStreamingText("stream_turn_story/main")).toBe("partial");
+  expect(published.messages).toEqual([]);
+  expect(published.executionSteps[0]?.status).toBe("running");
   act(() => {
-    captured.options!.handleSseEvent({ ...delta, seq: 2 });
+    captured.options!.handleSseEvent({ ...progress, seq: 2 });
     captured.options!.dispatch({
       type: "SET_EXECUTION_RECOVERY",
       recovery: {
@@ -159,8 +144,6 @@ it("the production provider passes ownership and delta refs to terminal recovery
     expect(published.messages[0]?.content).toBe("Full committed narrative"),
   );
   expect(published.executing).toBe(false);
-  expect(getStreamingText("stream_turn_story/main")).toBeUndefined();
-  expect(captured.options!.refs.deltaBufferRef.current.size).toBe(0);
-  expect(frames.size).toBe(0);
+
   expect(workspace.run).not.toHaveBeenCalled();
 });

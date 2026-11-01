@@ -239,7 +239,7 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 <!-- prettier-ignore -->
 | Component | Props | Content |
 | --- | --- | --- |
-| `SessionMessages` | Only optional literal `content: "story" \| "pending"`, default `"story"` | Public story/player messages and current story stream, or pending public interactions with an empty state |
+| `SessionMessages` | Only optional literal `content: "story" \| "pending"`, default `"story"` | Complete committed public story/player messages, or pending public interactions with an empty state |
 | `SessionComposer` | Empty object `{}`; `props` may be omitted | The current session's shared mode bar, fields, input, queued drafts and feedback |
 
 These components are valid only in live declarative `contributes.ui.view`. Each view allows at most one story region, one pending region and one composer. They cannot use `repeat`, have a repeated ancestor, or occur inside `FilterContainer.props.itemTemplate`. Both `component` and `type` are checked, including named slots and row templates, with exact diagnostic paths. Other props, including session, seat, actor, source and action parameters, are rejected. Expressions cannot select `content`. This control value is never translated; translate region headings through ordinary text components.

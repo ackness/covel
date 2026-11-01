@@ -34,10 +34,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
-import {
-  useStreamingSpeakers,
-  useStreamingText,
-} from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -116,9 +112,7 @@ export interface StageViewProps {
   readonly messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
-/** Latest `story` message drives the dialog; a `stream_`-prefixed id while
- *  the turn is still executing means the text is mid-stream (no dedicated
- *  streaming flag exists — see reducer.ts). */
+/** The latest committed story drives the dialog. */
 function findLatestStory(
   messages: readonly StreamMessage[],
 ): StreamMessage | undefined {
@@ -190,22 +184,10 @@ export function StageView(props: StageViewProps): ReactElement {
       [slots],
     );
 
-  // ── Latest story text + stream state ──────────────────────────
-  // Streaming tokens no longer live in `messages[].content` — the placeholder
-  // carries empty content and the live text is held in a fine-grained external
-  // store. Only the dialog child subscribes to the live text.
   const storyMsg = findLatestStory(messages);
   const storyTurnId = storyMsg?.turnId;
   const storyKey = stageStoryKey(storyMsg);
-  const isStreaming =
-    executing && (storyMsg?.id.startsWith("stream_") ?? false);
-  // Nameplates come from the committed story's segments. While the story
-  // streams they are the live speakers as written; commit replaces them with
-  // the resolved names.
-  const liveSpeakers = useStreamingSpeakers(storyMsg?.id ?? "");
-  const segmentSpeakers = isStreaming
-    ? liveSpeakers
-    : storyParagraphSpeakers(storyMsg);
+  const segmentSpeakers = storyParagraphSpeakers(storyMsg);
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
@@ -272,7 +254,7 @@ export function StageView(props: StageViewProps): ReactElement {
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
   // Hide the previous decision, including plugin surfaces, as soon as a turn
-  // starts. Keep already-read narration hidden while waiting for the new story.
+  // starts. Keep the previous committed story visible while waiting.
   const choicesVisible = advancing || (!executing && allRead);
 
   return (
@@ -307,13 +289,12 @@ export function StageView(props: StageViewProps): ReactElement {
           onToggleImmersive={onToggleImmersive}
           onExit={() => onViewModeChange("parsed")}
         />
-        <LiveStageDialog
+        <CommittedStageDialog
           sessionId={session.id}
           message={storyMsg}
           allRead={allRead}
           executing={executing}
           turnId={storyTurnId}
-          streamEnded={!isStreaming}
           segmentSpeakers={segmentSpeakers}
           autoPlay={autoPlay}
           reducedMotion={reducedMotion}
@@ -323,14 +304,13 @@ export function StageView(props: StageViewProps): ReactElement {
           hideInput={props.composerReplaced}
           storyReview={
             allRead && !executing && storyKey === reviewStoryKey ? (
-              <LiveStageDialog
+              <CommittedStageDialog
                 inline
                 sessionId={session.id}
                 message={storyMsg}
                 allRead={false}
                 executing={false}
                 turnId={storyTurnId}
-                streamEnded
                 segmentSpeakers={segmentSpeakers}
                 autoPlay={autoPlay}
                 reducedMotion={reducedMotion}
@@ -367,8 +347,7 @@ export function StageView(props: StageViewProps): ReactElement {
       </div>
 
       {storyMsg &&
-        projectStoryOperationFailures(storyMsg).operationFailures &&
-        !storyMsg.id.startsWith("stream_") && (
+        projectStoryOperationFailures(storyMsg).operationFailures && (
           <div className="shrink-0 border-t border-border bg-background px-4 py-2">
             <StoryOperationFailureNotice message={storyMsg} />
           </div>
@@ -429,8 +408,8 @@ export function StageView(props: StageViewProps): ReactElement {
   );
 }
 
-/** Live tokens update only the dialog and its waiting indicator. */
-function LiveStageDialog({
+/** Story text always comes from a complete committed message. */
+function CommittedStageDialog({
   message,
   allRead,
   executing,
@@ -441,20 +420,29 @@ function LiveStageDialog({
   executing: boolean;
 }) {
   const { t } = useTranslation();
-  const liveText = useStreamingText(message?.id ?? "");
-  const storyText = message ? (liveText ?? message.content) : "";
+  const storyText = message?.content ?? "";
   if (!allRead && storyText.trim().length > 0)
     return <StageDialog {...dialogProps} storyText={storyText} />;
   if (!executing) return null;
   return (
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
-      data-testid="stage-thinking"
-    >
-      <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-        <span>{t("stage.thinkingLabel")}</span>
+    <>
+      {storyText && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-4">
+          <p className="ui-stage-panel w-full max-w-3xl whitespace-pre-line p-4 text-sm">
+            {storyText}
+          </p>
+        </div>
+      )}
+
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
+        data-testid="stage-thinking"
+      >
+        <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          <span>{t("stage.thinkingLabel")}</span>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -14,7 +14,6 @@ export interface StageDialogProps {
   readonly sessionId?: string;
   readonly turnId?: string;
   readonly storyText: string;
-  readonly streamEnded: boolean;
   readonly segmentSpeakers?: readonly (string | null)[];
   readonly autoPlay: boolean;
   readonly reducedMotion?: boolean;
@@ -30,7 +29,6 @@ export function StageDialog({
   sessionId,
   turnId,
   storyText,
-  streamEnded,
   segmentSpeakers,
   autoPlay,
   reducedMotion = false,
@@ -40,14 +38,13 @@ export function StageDialog({
   const themePart = usePluginThemePart(sessionId, "dialogue");
   const { visible, segmentIndex, status, advance, skip } = useTypewriter(
     storyText,
-    streamEnded,
+    true,
     { turnId, reducedMotion },
   );
   const speakerName = stageParagraphSpeakerName(
     segmentSpeakers,
     storyText,
     segmentIndex,
-    streamEnded,
   );
 
   const prevStatusRef = useRef(status);

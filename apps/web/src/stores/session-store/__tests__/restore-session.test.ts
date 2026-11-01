@@ -20,9 +20,6 @@ const pluginData = vi.hoisted(() => ({
 
 vi.mock("@/services/api", () => api);
 vi.mock("@/stores/plugin-data-store.js", () => pluginData);
-vi.mock("@/stores/streaming-text-store.js", () => ({
-  clearAllStreamingText: vi.fn(),
-}));
 
 const { restoreSessionState, toStreamMessages } =
   await import("../restore-session.js");

@@ -16,11 +16,6 @@ import type { SessionState } from "../types.js";
 import { initialState, reducer } from "../reducer.js";
 import { useSessionRuntimeRefs } from "../runtime-refs.js";
 import { createSseEventHandler } from "../sse-handler.js";
-import {
-  getStreamingText,
-  clearAllStreamingText,
-} from "@/stores/streaming-text-store.js";
-import type { DataService } from "@/services/data-service.js";
 
 const api = vi.hoisted(() => ({
   sendAction: vi.fn(),
@@ -112,8 +107,7 @@ function setup(overrides: Partial<SessionState> = {}) {
       stateRef,
       sessionIdRef,
       sessionGenerationRef: useRef(0),
-      deltaBufferRef: useRef(new Map()),
-      deltaRafRef: useRef<number | null>(null),
+
       workspace,
     });
     return state;
@@ -127,7 +121,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  clearAllStreamingText();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -159,8 +152,7 @@ describe("read-only execution recovery", () => {
         stateRef,
         sessionIdRef: useRef<string | null>("s"),
         sessionGenerationRef: useRef(0),
-        deltaBufferRef: useRef(new Map()),
-        deltaRafRef: useRef<number | null>(null),
+
         workspace,
       });
       return { state, dispatch };
@@ -248,87 +240,24 @@ describe("read-only execution recovery", () => {
   });
 });
 
-it("terminal recovery replaces a real delta placeholder and clears queued text", async () => {
-  const frames = new Map<number, FrameRequestCallback>();
-  let frameId = 0;
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
-    frames.set(++frameId, cb);
-    return frameId;
-  });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
-    frames.delete(id);
-  });
-  const hook = renderHook(() => {
-    const [state, dispatch] = useReducer(reducer, {
-      ...initialState,
-      session,
-      executing: true,
-    });
-    const refs = useSessionRuntimeRefs(state);
-    const stream = createSseEventHandler({
-      ...refs,
-      dispatch,
-      ds: {} as DataService,
-    });
-    useExecutionRecovery({ state, dispatch, ...refs, workspace });
-    return { state, dispatch, stream, refs };
-  });
-  const delta = {
-    type: "narrative.delta",
-    sessionId: "s",
-    turnId: "t",
-    requestId: "request",
-    traceId: "trace",
-    flowId: "flow",
-    seq: 1,
-    timestamp: "2026-01-01T00:00:00Z",
-    payload: {
-      runtimeId: "story/main",
-      pluginId: "story",
-      kind: "story",
-      delta: "partial",
-    },
-  } as const;
-  act(() => {
-    hook.result.current.stream(delta);
-    for (const cb of [...frames.values()]) cb(0);
-  });
-  expect(hook.result.current.state.messages[0]?.id).toBe("stream_t_story/main");
-  expect(getStreamingText("stream_t_story/main")).toBe("partial");
+it("terminal recovery publishes complete prose once without any live story row", async () => {
   api.getSessionExecution.mockResolvedValue({
     state: "completed",
     turnId: "t",
   });
   api.getSessionView.mockResolvedValue(snapshot("completed"));
+  const { result, recover, progress } = ownedRecovery();
   act(() => {
-    hook.result.current.stream({
-      ...delta,
-      seq: 2,
-      payload: { ...delta.payload, delta: " queued" },
-    });
-    hook.result.current.dispatch({
-      type: "SET_EXECUTION_RECOVERY",
-      recovery: {
-        sessionId: "s",
-        status: null,
-        checking: true,
-        hydrating: false,
-      },
-    });
+    progress("t");
+    recover();
   });
   await waitFor(() =>
-    expect(hook.result.current.state.messages[0]?.content).toBe(
-      "Recovered prose",
-    ),
+    expect(result.current.state.messages[0]?.content).toBe("Recovered prose"),
   );
-  expect(getStreamingText("stream_t_story/main")).toBeUndefined();
-  expect(hook.result.current.refs.deltaBufferRef.current.size).toBe(0);
-  act(() => {
-    for (const cb of [...frames.values()]) cb(1);
-  });
-  expect(hook.result.current.state.messages).toHaveLength(1);
+  act(recover);
+  await waitFor(() => expect(result.current.state.executing).toBe(false));
+  expect(result.current.state.messages).toHaveLength(1);
   expect(workspace.run).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
 });
 
 function deferred<T>() {
@@ -339,15 +268,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 function ownedRecovery() {
-  const frames = new Map<number, FrameRequestCallback>();
-  let frameId = 0;
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
-    frames.set(++frameId, cb);
-    return frameId;
-  });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
-    frames.delete(id);
-  });
   const hook = renderHook(() => {
     const [state, dispatch] = useReducer(reducer, {
       ...initialState,
@@ -358,31 +278,27 @@ function ownedRecovery() {
     const stream = createSseEventHandler({
       ...refs,
       dispatch,
-      ds: {} as DataService,
     });
     useExecutionRecovery({ state, dispatch, ...refs, workspace });
     return { state, dispatch, refs, stream };
   });
-  const delta = (turnId: string, text: string) =>
+  const progress = (turnId: string) =>
     hook.result.current.stream({
-      type: "narrative.delta",
+      type: "runtime.started",
       sessionId: "s",
       turnId,
-      requestId: "request",
-      traceId: "trace",
-      flowId: "flow",
+      requestId: "r",
+      traceId: "t",
+      flowId: "f",
       seq: 1,
       timestamp: session.createdAt,
       payload: {
         runtimeId: "story/main",
         pluginId: "story",
-        kind: "story",
-        delta: text,
+        runId: turnId,
+        status: "running",
       },
     });
-  const flush = () => {
-    for (const cb of [...frames.values()]) cb(0);
-  };
   const recover = () =>
     hook.result.current.dispatch({
       type: "SET_EXECUTION_RECOVERY",
@@ -393,7 +309,7 @@ function ownedRecovery() {
         hydrating: false,
       },
     });
-  return { ...hook, delta, flush, recover, frames };
+  return { ...hook, progress, recover };
 }
 
 it.each(["new action", "revisit"])(
@@ -405,10 +321,10 @@ it.each(["new action", "revisit"])(
       turnId: "t",
     });
     api.getSessionView.mockReturnValueOnce(pending.promise);
-    const { result, delta, flush, recover } = ownedRecovery();
+    const { result, progress, recover } = ownedRecovery();
     act(() => {
-      delta("t", "old partial");
-      flush();
+      progress("t");
+
       recover();
     });
     await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
@@ -420,9 +336,9 @@ it.each(["new action", "revisit"])(
         recovery: null,
       });
       result.current.dispatch({ type: "SET_EXECUTING", value: true });
-      delta("new", "healthy");
-      flush();
-      delta("new", " queued");
+      progress("new");
+
+      progress("new");
     });
     await act(async () => {
       pending.resolve(snapshot("completed"));
@@ -430,36 +346,35 @@ it.each(["new action", "revisit"])(
     expect(result.current.state.executing).toBe(true);
     expect(result.current.state.executionRecovery).toBeNull();
     expect(result.current.state.messages.some((m) => m.id === "m")).toBe(false);
-    expect(getStreamingText("stream_new_story/main")).toBe("healthy");
-    expect(result.current.refs.deltaBufferRef.current.size).toBe(1);
+    expect(result.current.state.executionSteps).toContainEqual(
+      expect.objectContaining({ turnId: "new", status: "running" }),
+    );
   },
 );
 
-it("recovery cleans only the adopted turn/runtime and preserves another scheduled flush", async () => {
+it("recovery deduplicates redelivered committed history", async () => {
   api.getSessionExecution.mockResolvedValue({
     state: "completed",
     turnId: "t",
   });
   api.getSessionView.mockResolvedValue(snapshot("completed"));
-  const { result, delta, flush, recover, frames } = ownedRecovery();
+  const { result, recover } = ownedRecovery();
   act(() => {
-    delta("t", "old partial");
-    flush();
-    delta("t", " queued");
-    delta("other", "unrelated");
+    result.current.dispatch({
+      type: "ADD_MESSAGE",
+      message: {
+        id: "m",
+        role: "assistant",
+        kind: "story",
+        content: "Recovered prose",
+        turnId: "t",
+        timestamp: session.createdAt,
+      },
+    });
     recover();
   });
-  await waitFor(() =>
-    expect(result.current.state.messages[0]?.content).toBe("Recovered prose"),
-  );
-  expect(getStreamingText("stream_t_story/main")).toBeUndefined();
-  expect(result.current.refs.deltaBufferRef.current.size).toBe(1);
-  expect(frames.size).toBe(1);
-  act(flush);
-  expect(getStreamingText("stream_other_story/main")).toBe("unrelated");
-  expect(
-    result.current.state.messages.filter((m) => m.turnId === "t"),
-  ).toHaveLength(1);
+  await waitFor(() => expect(result.current.state.executing).toBe(false));
+  expect(result.current.state.messages.map((m) => m.id)).toEqual(["m"]);
 });
 
 it("terminal polling retries a failed bridge read without publishing a discontinuous window", async () => {
@@ -587,35 +502,26 @@ it("does not overlap a pending recovery read when visibility changes", async () 
 });
 
 it.each(["failed", "interrupted"] as const)(
-  "keeps unmatched %s prose as an unsaved local copy and drains its stream",
+  "recovers %s status without retaining an unsaved draft",
   async (state) => {
     api.getSessionExecution.mockResolvedValue({ state, turnId: "t" });
     api.getSessionView.mockResolvedValue({
       ...snapshot("running"),
       execution: { state, turnId: "t" },
     });
-    const { result, delta, flush, recover, frames } = ownedRecovery();
+    const { result, progress, recover } = ownedRecovery();
     act(() => {
-      delta("t", "Already read");
-      flush();
-      delta("t", " queued");
+      progress("t");
+
+      progress("t");
       recover();
     });
     await waitFor(() => expect(result.current.state.executing).toBe(false));
-    expect(result.current.state.unsavedNarratives).toEqual([
-      expect.objectContaining({ turnId: "t", content: "Already read queued" }),
-    ]);
-    expect(result.current.state.messages).toEqual([]);
-    expect(getStreamingText("stream_t_story/main")).toBeUndefined();
-    expect(result.current.refs.deltaBufferRef.current.size).toBe(0);
-    expect(result.current.refs.deltaRafRef.current).toBeNull();
-    act(() => {
-      for (const cb of frames.values()) cb(1);
-    });
+    expect(result.current.state).not.toHaveProperty("unsavedNarratives");
     expect(result.current.state.messages).toEqual([]);
     expect(workspace.run).not.toHaveBeenCalled();
     act(() => result.current.dispatch({ type: "RESET_SESSION" }));
-    expect(result.current.state.unsavedNarratives).toEqual([]);
+    expect(result.current.state).not.toHaveProperty("unsavedNarratives");
   },
 );
 
@@ -653,8 +559,7 @@ describe("a status the server could not check (F-203)", () => {
         stateRef,
         sessionIdRef: useRef<string | null>("s"),
         sessionGenerationRef: useRef(0),
-        deltaBufferRef: useRef(new Map()),
-        deltaRafRef: useRef<number | null>(null),
+
         workspace,
       });
       const actions = useExecutionRecoveryActions({
@@ -730,19 +635,19 @@ describe("a status the server could not check (F-203)", () => {
     },
   );
 
-  it("keeps the turn's streamed prose and running steps without finishing them", async () => {
-    const { result, delta, flush, recover } = ownedRecovery();
+  it("keeps running steps without inventing a completed story", async () => {
+    const { result, progress, recover } = ownedRecovery();
     act(() => {
-      delta("t", "Already read");
-      flush();
+      progress("t");
+
       recover();
     });
     await waitFor(() =>
       expect(result.current.state.executionRecovery?.status).toEqual(unknown),
     );
     expect(result.current.state.executing).toBe(true);
-    expect(result.current.state.unsavedNarratives).toEqual([]);
-    expect(getStreamingText("stream_t_story/main")).toBe("Already read");
+    expect(result.current.state).not.toHaveProperty("unsavedNarratives");
+    expect(result.current.state.messages).toEqual([]);
     expect(result.current.state.executionSteps).not.toHaveLength(0);
     expect(
       result.current.state.executionSteps.map((step) => step.status),
@@ -777,7 +682,6 @@ it("offers Continue for a live stopped opening with no runtime steps, using the 
     const refs = useSessionRuntimeRefs(state);
     const handle = createSseEventHandler({
       dispatch,
-      ds: {} as DataService,
       ...refs,
     });
     useExecutionRecovery({ state, dispatch, ...refs, workspace });

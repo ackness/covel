@@ -26,28 +26,17 @@ function liveSession() {
     current: {
       ...initialState,
       executing: true,
-      messages: [
-        {
-          id: "stream_turn-1_narrator",
-          role: "assistant",
-          content: "雨停了。\n\n「走",
-          kind: "story",
-          timestamp: "2026-10-30T00:00:00.000Z",
-          turnId: "turn-1",
-          runtimeId: "narrator",
-        },
-      ],
+      messages: [],
     },
   };
   const deps: SseEventHandlerDeps = {
     dispatch: (action) => {
       stateRef.current = reducer(stateRef.current, action);
     },
-    ds: {} as SseEventHandlerDeps["ds"],
+
     sessionIdRef: { current: "sess-1" },
     stateRef,
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   };
   const completed = (payload: Record<string, unknown>): SseEnvelope => ({
@@ -77,6 +66,8 @@ describe("speakers of a story completed live", () => {
   it("shows nameplates and the speaking marker from the completion event", () => {
     const { stateRef, handle, completed } = liveSession();
     handle(completed({ segments }));
+    handle(completed({ segments }));
+    expect(stateRef.current.messages).toHaveLength(1);
     const message = story(stateRef.current);
     expect(message?.segments).toEqual(segments);
     expect(storyParagraphSpeakers(message)).toEqual([null, "阿雅"]);

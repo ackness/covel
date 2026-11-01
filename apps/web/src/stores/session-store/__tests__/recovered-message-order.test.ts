@@ -46,7 +46,7 @@ describe("reload hydration order", () => {
   });
 });
 
-it("recovers a missing marker without losing live text, loaded pages, segments or actions", () => {
+it("recovers a missing marker without losing committed text, loaded pages, segments or actions", () => {
   const story: StreamMessage = {
     ...row("story", "assistant", "story", "turn", "now"),
     content: "Live text.",
@@ -80,7 +80,7 @@ it("recovers a missing marker without losing live text, loaded pages, segments o
   expect(reset.messages).toEqual([]);
 });
 
-it("replaces a closed stream with its durable annotated row after losing the notice event", () => {
+it("restores a durable annotated row after losing the completion event", () => {
   const story = {
     ...row("saved", "assistant", "story", "turn", "now"),
     runtimeId: "teller",
@@ -89,14 +89,7 @@ it("replaces a closed stream with its durable annotated row after losing the not
   const state = reducer(
     {
       ...initialState,
-      messages: [
-        {
-          ...story,
-          id: "stream_turn_teller",
-          content: "",
-          operationFailures: undefined,
-        },
-      ],
+      messages: [],
     },
     { type: "MERGE_RECOVERED_MESSAGES", messages: [story] },
   );
@@ -125,42 +118,33 @@ it("fills a missing notice on a page overlap while retaining the loaded window a
   expect(result.olderMessagesCursor).toBe("next-page");
 });
 
-it.each([false, true])(
-  "completes a recovered durable story once even with a placeholder: %s",
-  (withPlaceholder) => {
-    const story: StreamMessage = {
-      ...row("saved", "assistant", "story", "turn", "now"),
+it("completes a recovered durable story once", () => {
+  const story: StreamMessage = {
+    ...row("saved", "assistant", "story", "turn", "now"),
+    runtimeId: "teller",
+    content: "Final story.",
+    segments: [{ kind: "narration", text: "Final story." }],
+  };
+  const saved = { ...story, operationFailures: { count: 1 } };
+  const state = reducer(
+    {
+      ...initialState,
+      messages: [saved],
+    },
+    {
+      type: "COMPLETE_MESSAGE",
+      turnId: "turn",
       runtimeId: "teller",
-      content: "Final story.",
-      segments: [{ kind: "narration", text: "Final story." }],
-    };
-    const saved = { ...story, operationFailures: { count: 1 } };
-    const placeholder = {
-      ...story,
-      id: "stream_turn_teller",
-      content: "Partial",
-      segments: undefined,
-    };
-    const state = reducer(
-      {
-        ...initialState,
-        messages: withPlaceholder ? [saved, placeholder] : [saved],
-      },
-      {
-        type: "COMPLETE_MESSAGE",
-        turnId: "turn",
-        runtimeId: "teller",
-        message: story,
-      },
-    );
-    expect(state.messages).toEqual([saved]);
-    const replaced = reducer(reducer(state, { type: "RESET_SESSION" }), {
-      type: "MERGE_RECOVERED_MESSAGES",
-      messages: [story],
-    });
-    expect(replaced.messages).toEqual([story]);
-  },
-);
+      message: story,
+    },
+  );
+  expect(state.messages).toEqual([saved]);
+  const replaced = reducer(reducer(state, { type: "RESET_SESSION" }), {
+    type: "MERGE_RECOVERED_MESSAGES",
+    messages: [story],
+  });
+  expect(replaced.messages).toEqual([story]);
+});
 
 it.each([
   { role: "user" as const, operationFailures: { count: 1 } },

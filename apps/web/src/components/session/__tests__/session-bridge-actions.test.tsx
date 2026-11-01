@@ -426,7 +426,7 @@ describe("session bridge actions", () => {
         { ...form, id: "story", block: undefined, kind: "story" },
       ]),
       submittedBlockIds: new Set(),
-      streamingText: undefined,
+
       characters: [
         {
           id: "hero",
@@ -570,7 +570,7 @@ it("keeps every page-script port message public through the mounted host and ses
       ds,
       workspace,
       refs,
-      handleSseEvent: createSseEventHandler({ ...refs, dispatch: update, ds }),
+      handleSseEvent: createSseEventHandler({ ...refs, dispatch: update }),
     });
     return (
       <SessionStateContext value={state}>
@@ -756,12 +756,27 @@ it("keeps every page-script port message public through the mounted host and ses
       },
       handle: expect.any(String),
     });
-    bridge.pushStream(42, "Public stream");
+    act(() =>
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          id: "public-story",
+          role: "assistant",
+          kind: "story",
+          content: "Public committed story",
+          timestamp: "now",
+        },
+      }),
+    );
+    await pushProjection();
     await vi.waitFor(() =>
-      expect(page.covel!.getState().session?.streaming?.text).toBe(
-        "Public stream",
+      expect(page.covel!.getState().session?.messages).toContainEqual(
+        expect.objectContaining({ text: "Public committed story" }),
       ),
     );
+    expect(
+      captured.some((value) => (value as { type: string }).type === "stream"),
+    ).toBe(false);
     expect(captured).toContainEqual(
       expect.objectContaining({
         type: "result",

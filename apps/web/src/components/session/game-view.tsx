@@ -1,3 +1,4 @@
+import { ExecutionTimeline } from "./execution-timeline.js";
 import { usePluginThemes } from "./game-view/use-plugin-themes.js";
 import { SessionThemeSettings } from "./session-theme-settings.js";
 import { SessionRecoveryControls } from "./session-recovery-controls.js";
@@ -31,7 +32,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
-import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { MemoryIndexNotice } from "./memory-index-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
@@ -879,6 +879,22 @@ export function GameView({
               notices={surfaceNotices}
             />
           )}
+          {activePluginView && (
+            <div
+              data-covel-host-controls=""
+              className="shrink-0 border-b border-border px-4"
+              role="status"
+            >
+              <ExecutionTimeline
+                steps={executionSteps}
+                executing={executing}
+                plugins={plugins}
+                messages={messages}
+                onRetryRuntime={onRetryRuntime}
+                recoveryTurnId={recoveryTurnId}
+              />
+            </div>
+          )}
           <SessionRecoveryControls theme={pluginThemes.source} />
           <AutoAdvanceControl key={`auto-advance:${session.id}`} />
 
@@ -925,12 +941,6 @@ export function GameView({
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}
-          <UnsavedNarratives
-            messages={state.unsavedNarratives ?? []}
-            recovery={state.executionRecovery}
-            executing={state.executing}
-            onRetry={retryInterruptedTurn}
-          />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             steps={executionSteps}

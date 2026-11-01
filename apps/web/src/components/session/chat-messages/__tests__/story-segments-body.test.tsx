@@ -276,12 +276,12 @@ describe("story segment templates in the chat view", () => {
     expect(screen.queryByTestId("story-segments")).toBeNull();
   });
 
-  it("never draws a streaming story through templates", () => {
+  it("draws full committed story through templates regardless of its durable ID", () => {
     renderMessage(
-      { ...story, id: "stream_turn-1_narrator" },
+      { ...story, id: "another-durable-id" },
       { specs: [{ pluginId: "plates", specs: [nameplate] }] },
     );
-    expect(screen.queryByTestId("story-segments")).toBeNull();
+    expect(screen.getByTestId("story-segments")).toBeDefined();
   });
 
   it("shows the segments in the raw view", () => {

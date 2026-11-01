@@ -18,35 +18,22 @@ const message = (
 });
 
 describe("story and derived message order", () => {
-  it("places a late streaming story before an already received plugin surface", () => {
+  it("deduplicates a late committed story before its plugin surface", () => {
     const surface = message("surface", "plugin-message");
-    const state = reducer(
-      { ...initialState, messages: [surface] },
-      {
-        type: "APPEND_DELTA",
-        turnId: "turn-1",
-        runtimeId: "story-runtime",
-        pluginId: "story-plugin",
-        delta: "Opening",
-      },
-    );
-    expect(state.messages.map((m) => m.kind)).toEqual([
-      "story",
-      "plugin-message",
-    ]);
-    const completed = reducer(state, {
-      type: "COMPLETE_MESSAGE",
+    const action = {
+      type: "COMPLETE_MESSAGE" as const,
       turnId: "turn-1",
       runtimeId: "story-runtime",
       message: message("final-story", "story"),
-    });
-    expect(completed.messages.map((m) => m.id)).toEqual([
+    };
+    const state = reducer({ ...initialState, messages: [surface] }, action);
+    expect(reducer(state, action).messages.map((m) => m.id)).toEqual([
       "final-story",
       "surface",
     ]);
   });
 
-  it("also orders a non-streamed completion without disturbing other turns", () => {
+  it("also orders a committed completion without disturbing other turns", () => {
     const earlier = message("earlier", "story", "turn-0");
     const first = message("first-surface", "plugin-message");
     const second = message("second-surface", "plugin-message");

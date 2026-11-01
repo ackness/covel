@@ -6,7 +6,6 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
 import { getDataService } from "@/services/data-service.js";
 import { mergeChatExportMessages } from "@/lib/chat-export.js";
-import { getStreamingText } from "@/stores/streaming-text-store.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSessionNavigation } from "@/hooks/use-session-navigation.js";
@@ -183,13 +182,7 @@ function SessionScreen() {
           }
           try {
             const text = msgs
-              // A message still streaming has an empty `content` (live text
-              // lives in the external store); resolve it so a mid-stream export
-              // keeps the partial assistant text instead of a blank row.
-              .map(
-                (m) =>
-                  `[${m.role}] ${m.content || getStreamingText(m.id) || ""}`,
-              )
+              .map((m) => `[${m.role}] ${m.content}`)
               .join("\n\n");
             const blob = new Blob([text], { type: "text/plain" });
             const url = URL.createObjectURL(blob);

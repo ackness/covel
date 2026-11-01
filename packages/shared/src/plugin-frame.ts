@@ -112,14 +112,9 @@ export const PLUGIN_BRIDGE_SCRIPT = `
         for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error("Plugin UI is not connected")); }
         pending.clear(); port.close();
       } else if (data?.type === "state") {
+        if (data.value?.session && data.value.session.version !== 3) return;
         state = data.value;
         applyTheme(state.theme);
-        for (const fn of listeners) fn(state);
-      } else if (data?.type === "stream") {
-        if (!state.session) return;
-        state = { ...state, session: { ...state.session, streaming: {
-          seq: data.seq, text: (state.session.streaming?.seq === data.seq ? state.session.streaming.text : "") + data.append
-        } } };
         for (const fn of listeners) fn(state);
       } else if (data?.type === "result") {
         const request = pending.get(data.id);

@@ -37,45 +37,26 @@ describe("story segment speakers", () => {
     expect(
       lastStorySpeaker({ id: "msg-1", segments: segments.slice(0, 2) }),
     ).toEqual({ name: "阿雅", characterId: "char-aya" });
-    // Live speakers belong to a streaming story only.
-    expect(
-      lastStorySpeaker({ id: "msg-1", segments: [] }, ["小雅"]),
-    ).toBeUndefined();
+    expect(lastStorySpeaker({ id: "msg-1", segments: [] })).toBeUndefined();
     expect(lastStorySpeaker(undefined)).toBeUndefined();
-  });
-
-  it("reads a streaming story's last live speaker by name, or nobody", () => {
-    const stream = { id: "stream_turn_narrator" };
-    // The placeholder's segments are never read; its live speakers are.
-    expect(lastStorySpeaker({ ...stream, segments })).toBeUndefined();
-    expect(lastStorySpeaker(stream, [null, "小雅", null])).toEqual({
-      name: "小雅",
-    });
-    expect(lastStorySpeaker(stream, [null])).toBeUndefined();
-    expect(lastStorySpeaker(stream, [])).toBeUndefined();
   });
 });
 
 describe("stage paragraph presentation", () => {
-  it("attributes streaming paragraphs, then drops the whole map if final boundaries disagree", () => {
+  it("attributes complete paragraphs only when segment boundaries match", () => {
     const names = ["Mio", "Rin", null];
-    expect(stageParagraphSpeakerName(names, "First", 0, false)).toBe("Mio");
+    expect(stageParagraphSpeakerName(names, "First", 0)).toBeUndefined();
     expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond\n\nNarration", 1, true),
+      stageParagraphSpeakerName(names, "First\n\nSecond\n\nNarration", 1),
     ).toBe("Rin");
     expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond\n\nNarration", 2, true),
+      stageParagraphSpeakerName(names, "First\n\nSecond\n\nNarration", 2),
     ).toBeUndefined();
     expect(
-      stageParagraphSpeakerName(names, "First\n\nSecond", 0, true),
+      stageParagraphSpeakerName(names, "First\n\nSecond", 0),
     ).toBeUndefined();
     expect(
-      stageParagraphSpeakerName(
-        names,
-        "First\n\nSecond\n\nThird\n\nFourth",
-        0,
-        false,
-      ),
+      stageParagraphSpeakerName(names, "First\n\nSecond\n\nThird\n\nFourth", 0),
     ).toBeUndefined();
   });
 

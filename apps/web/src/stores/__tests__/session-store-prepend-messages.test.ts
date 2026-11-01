@@ -97,7 +97,7 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
       ...initialState,
       // Placeholder's client timestamp (2020) is absurdly behind the real
       // server createdAt of the older page (2026).
-      messages: [msg("stream_x", "2020-01-01")],
+      messages: [msg("pending-input", "2020-01-01")],
       olderMessagesCursor: cursor("2026-01-02", "b"),
     };
     const next = reducer(state, {
@@ -106,7 +106,7 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
       cursor: null,
     });
     // Older history stays in front; the skewed placeholder stays last.
-    expect(next.messages.map((m) => m.id)).toEqual(["a", "stream_x"]);
+    expect(next.messages.map((m) => m.id)).toEqual(["a", "pending-input"]);
   });
 
   it("only advances the cursor (no message churn) when every row is a dup", () => {

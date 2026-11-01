@@ -29,11 +29,6 @@ import type {
 import { GameView } from "../game-view.js";
 import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
 import {
-  appendStreamingText,
-  resetStreamingText,
-  clearAllStreamingText,
-} from "@/stores/streaming-text-store.js";
-import {
   setActiveSession,
   replaceSessionPluginData,
 } from "@/stores/plugin-data-store.js";
@@ -249,7 +244,6 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
-  clearAllStreamingText();
   clearUiSlots();
   setActiveSession(null);
 });
@@ -395,7 +389,7 @@ it.each(["host", "spectator", "player"] as const)(
   },
 );
 
-it("renders public cast, a separate pending interaction and stream resets, while excluding private data", async () => {
+it("renders public cast, a separate pending interaction and committed story updates, while excluding private data", async () => {
   const form = {
     ...message("form", "", "plugin"),
     turnId: "turn",
@@ -423,7 +417,6 @@ it("renders public cast, a separate pending interaction and stream resets, while
     ...state,
     messages: [
       ...state.messages,
-      message("stream_turn_story", "", "story"),
       message("concealed", "CONCEALED-SECRET", "concealed"),
       {
         ...message("unknown-block", "", "plugin"),
@@ -507,14 +500,25 @@ it("renders public cast, a separate pending interaction and stream resets, while
   view.rerender(shell(<GameView session={state.session!} />));
   expect(screen.getByText("No pending interactions.")).toBeTruthy();
 
-  act(() => appendStreamingText("stream_turn_story", "Discarded prefix"));
-  expect(screen.getByText("Discarded prefix")).toBeTruthy();
-  act(() => {
-    resetStreamingText("stream_turn_story");
-    appendStreamingText("stream_turn_story", "Replacement stream");
-  });
-  expect(screen.queryByText("Discarded prefix")).toBeNull();
-  expect(screen.getByText("Replacement stream")).toBeTruthy();
+  state = {
+    ...state,
+    executing: true,
+    executionSteps: [
+      {
+        runtimeId: "p/story",
+        pluginId: "p",
+        runId: "run",
+        turnId: "turn",
+        status: "running",
+        revising: true,
+      },
+    ],
+  };
+  view.rerender(shell(<GameView session={state.session!} />));
+  expect(screen.getByText("PUBLIC-STORY")).toBeTruthy();
+  expect(screen.queryByText("Rejected draft")).toBeNull();
+  expect(screen.getByText("Revising response")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Stop$/ })).toBeTruthy();
   state = {
     ...state,
     submittedBlockIds: new Set(),
@@ -526,7 +530,6 @@ it("renders public cast, a separate pending interaction and stream resets, while
   };
   view.rerender(shell(<GameView session={state.session!} />));
   expect(screen.getByText("FINAL-STORY")).toBeTruthy();
-  expect(screen.queryByText("Replacement stream")).toBeNull();
   expect(screen.getByText("No pending interactions.")).toBeTruthy();
   for (const secret of [
     "TOOL-SECRET",

@@ -88,15 +88,15 @@ describe("execution presentation", () => {
         executing: true,
         steps: [{ runtimeId: "story", pluginId: "story", status: "completed" }],
         messages: [
-          { ...story, id: "stream_old_story", runtimeId: "story", content: "" },
+          { ...story, id: "saved-story", runtimeId: "story", content: "" },
         ],
       }),
-    ).toBe("updating");
+    ).toBe("generating");
     expect(
       executionPresentation({
         executing: true,
         steps: [],
-        messages: [{ ...story, id: "stream_old_story" }],
+        messages: [{ ...story, id: "saved-story", content: "" }],
       }),
     ).toBe("generating");
     expect(

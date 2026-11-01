@@ -1,9 +1,4 @@
 import { sessionProjectionSchema } from "./session-bridge.js";
-import {
-  createStreamPump,
-  SESSION_BRIDGE_STREAM_INTERVAL_MS,
-  type StreamFeed,
-} from "./session-bridge-stream.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
@@ -41,7 +36,6 @@ export function PluginWebview(props: {
   /** Take the room of a large container instead of the declared height. */
   expanded?: boolean;
   fill?: boolean;
-  stream?: StreamFeed;
   state: Readonly<Record<string, unknown>>;
   locked: boolean;
   sessionPage?: boolean;
@@ -79,17 +73,8 @@ export function PluginWebview(props: {
   );
   const current = useRef({ ...props, state });
   current.current = { ...props, state };
-  const pump = useRef<ReturnType<
-    typeof createStreamPump<ReturnType<typeof setTimeout>>
-  > | null>(null);
-  const unsubscribe = useRef<(() => void) | null>(null);
   const connectedFrame = useRef<HTMLIFrameElement | null>(null);
   const warned = useRef(false);
-  const sessionSent = useRef(false);
-  const activeFeed = useRef<StreamFeed | undefined>(undefined);
-  const fullTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
   const isCurrent = () =>
     owner.active && !owner.failed && (current.current.isCurrent?.() ?? true);
   const fail = () => {
@@ -97,8 +82,6 @@ export function PluginWebview(props: {
     if (current.current.onPageFailure) owner.failed = true;
     clearTimeout(readyTimer.current);
     clearTimeout(heartbeatTimer.current);
-    clearTimeout(fullTimer.current);
-    stopStream();
     bridge.current?.close();
     bridge.current = null;
     setPageStatus("failed");
@@ -132,16 +115,12 @@ export function PluginWebview(props: {
   };
   const fullState = () => {
     const snapshot = current.current.state;
-    const feed = current.current.stream;
     if (!snapshot.session) {
       if (current.current.sessionPage && current.current.onPageFailure) fail();
       return snapshot;
     }
-    if (!feed && !current.current.sessionPage) return snapshot;
-    const parsed = sessionProjectionSchema.safeParse({
-      ...(snapshot.session as Record<string, unknown>),
-      ...(feed ? { streaming: feed.read() } : {}),
-    });
+    if (!current.current.sessionPage) return snapshot;
+    const parsed = sessionProjectionSchema.safeParse(snapshot.session);
     if (parsed.success) return { ...snapshot, session: parsed.data };
     if (!warned.current) {
       warned.current = true;
@@ -153,91 +132,26 @@ export function PluginWebview(props: {
     const { session: _, ...withoutSession } = snapshot;
     return withoutSession;
   };
-  const baseline = (snapshot: Readonly<Record<string, unknown>>) => {
-    const value = (
-      snapshot.session as
-        { streaming?: { seq: number; text: string } } | undefined
-    )?.streaming;
-    pump.current?.baseline(value?.seq ?? 0, value?.text.length ?? 0);
-    current.current.stream?.onBaseline?.(
-      value?.seq ?? 0,
-      value?.text.length ?? 0,
-    );
-  };
   const pushFullState = () => {
     if (!bridge.current || !isCurrent()) return;
     const snapshot = fullState();
-    if (!isCurrent()) return;
-    bridge.current?.pushState(snapshot);
-    sessionSent.current = Boolean(snapshot.session);
-    baseline(snapshot);
-  };
-  const stopStream = () => {
-    unsubscribe.current?.();
-    unsubscribe.current = null;
-    pump.current?.dispose();
-    pump.current = null;
-    activeFeed.current = undefined;
-  };
-  const bindStream = () => {
-    const feed = current.current.stream;
-    if (!bridge.current || activeFeed.current === feed) return;
-    stopStream();
-    if (!feed) return;
-    activeFeed.current = feed;
-    pump.current = createStreamPump({
-      read: feed.read,
-      send: ({ seq, append }) => {
-        // A feed cannot send on the append lane without validated session state.
-        if (isCurrent() && sessionSent.current)
-          bridge.current?.pushStream(seq, append);
-      },
-      resync: pushFullState,
-      intervalMs: SESSION_BRIDGE_STREAM_INTERVAL_MS,
-      setTimer: (callback, delay) => setTimeout(callback, delay),
-      clearTimer: (timer) => clearTimeout(timer),
-    });
-    baseline(fullState());
-    if (!isCurrent()) {
-      stopStream();
-      return;
-    }
-    unsubscribe.current = feed.subscribe((change) =>
-      pump.current?.notify(change),
-    );
+    if (isCurrent()) bridge.current?.pushState(snapshot);
   };
   useEffect(() => {
-    bindStream();
-    if (!bridge.current) return;
     if (!isCurrent()) {
-      stopStream();
       bridge.current?.close();
       return;
     }
-    if (!current.current.stream?.read()) {
-      clearTimeout(fullTimer.current);
-      fullTimer.current = undefined;
-      pump.current?.flush();
-      pushFullState();
-    } else if (fullTimer.current === undefined) {
-      fullTimer.current = setTimeout(() => {
-        fullTimer.current = undefined;
-        pushFullState();
-      }, SESSION_BRIDGE_STREAM_INTERVAL_MS);
-    }
-  }, [state, props.stream]);
+    pushFullState();
+  }, [state]);
   useLayoutEffect(() => {
     owner.active = true;
     return () => {
       owner.active = false;
       clearTimeout(heartbeatTimer.current);
       clearTimeout(readyTimer.current);
-      clearTimeout(fullTimer.current);
-      fullTimer.current = undefined;
-      stopStream();
       bridge.current?.close();
       bridge.current = null;
-      sessionSent.current = false;
       connectedFrame.current = null;
     };
   }, [owner]);
@@ -339,8 +253,6 @@ export function PluginWebview(props: {
         },
       },
     );
-    sessionSent.current = Boolean(initialState.session);
-    bindStream();
   };
 
   const iframe = (

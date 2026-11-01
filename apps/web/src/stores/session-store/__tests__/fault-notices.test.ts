@@ -18,11 +18,10 @@ function fixture() {
   const dispatch = vi.fn();
   const deps: SseEventHandlerDeps = {
     dispatch,
-    ds: {} as SseEventHandlerDeps["ds"],
+
     stateRef: { current: { ...initialState } },
     sessionIdRef: { current: "s" },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   };
   const handler = createSseEventHandler(deps);

@@ -610,7 +610,8 @@
       "apply": "Apply",
       "draftUnavailable": "Selection unavailable. Choose a current theme.",
       "saving": "Saving…"
-    }
+    },
+    "revisingResponse": "Revising response"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

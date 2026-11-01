@@ -55,8 +55,7 @@ function observer(session: NonNullable<SessionState["session"]>) {
     stateRef,
     dispatch,
     activeTurnIdRef: { current: null as string | null },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     storageMode: "remote" as const,
     workspace: {
       hydrate: vi.fn(),
@@ -113,7 +112,7 @@ it.each(["recovery first", "resume first"])(
     const { options } = observer(session);
     const handle = createSseEventHandler({
       ...options,
-      ds: {} as SseEventHandlerDeps["ds"],
+
       lastBackfilledTurnIdRef: { current: null },
     });
     const replay = () =>
@@ -180,8 +179,8 @@ it.each([false, true])(
       expect(outcome.operations).toMatchObject([
         { status: "failed", reason: "rejected" },
       ]);
-      // Execution progress carries no saved messages. Suspension is the only
-      // commit notification; no unrelated state write can mask a missed read.
+      // Only committed delivery publishes a saved story; suspension also
+      // triggers a snapshot read for notices and remaining execution state.
       expect(
         events
           .map((event) => event.type)
@@ -193,7 +192,7 @@ it.each([false, true])(
                 "runtime.completed",
               ].includes(type),
           ),
-      ).toEqual(["turn.suspended"]);
+      ).toEqual(["narrative.completed", "turn.suspended"]);
       expect(await fixture.store.listPluginData("session", "provider")).toEqual(
         [],
       );

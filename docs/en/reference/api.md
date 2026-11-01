@@ -896,7 +896,7 @@ This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks
 - If another process still holds the lock, it returns `running`. In that case there may be no turn identifier.
 - If the lock connection pool cannot hand out a connection within a short wait (200 ms), it returns `unknown`. The server could not check and does not know whether a turn is running; it never reports `idle` because it found no records.
 
-The client treats `unknown` as a turn that may still be running: it offers no retry, does not move unsaved text away, and does not mark steps as finished. It checks again after a delay that grows each time. After five `unknown` answers in a row it stops checking on its own and asks the player to choose "Check status".
+The client treats `unknown` as a turn that may still be running: it offers no retry, keeps committed stories, and does not mark steps as finished. It checks again after a delay that grows each time. After five `unknown` answers in a row it stops checking on its own and asks the player to choose "Check status".
 
 #### Session replaced during the query
 
@@ -954,7 +954,7 @@ Both endpoints return `409` when no turn is in progress. `abort` stops the playe
 
 - The message is merged into the story runtime's next LLM call. When the turn commits, it is saved in the same transaction to the conversation history and the chat log; when the turn does not commit, it is not saved.
 - It applies only to runtimes with `outputKind: story`. Any other runtime runs a structured task and does not accept interjections.
-- When an interjection arrives while the final response is streaming, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
+- When an interjection arrives before final output is accepted, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
 
 `abort` (stop):
 

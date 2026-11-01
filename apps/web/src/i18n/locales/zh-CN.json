@@ -564,7 +564,8 @@
       "apply": "应用",
       "draftUnavailable": "此选择不可用，请选择当前主题。",
       "saving": "正在保存…"
-    }
+    },
+    "revisingResponse": "正在修改回复"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

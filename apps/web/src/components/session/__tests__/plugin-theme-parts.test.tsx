@@ -196,7 +196,7 @@ it("keeps stage narration and its sibling advance control separate and retains h
       <StageDialog
         sessionId="session-one"
         storyText={"First paragraph.\n\nNext paragraph."}
-        streamEnded
+
         autoPlay={false}
         reducedMotion
         onAllRead={() => {}}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Sticky-bottom auto-scroll for streaming message lists.
+ * Sticky-bottom auto-scroll for message lists.
  *
  * Tracks whether the user is "pinned" to the bottom of a scroll container
  * (within `thresholdPx` tolerance). Auto-follows new content only while
@@ -12,8 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * `scrollIntoView` — the latter also scrolls the document and can shove the
  * full-height app shell off-screen.
  *
- * High-frequency delta updates use `behavior: "auto"` to avoid the jittery
- * smooth-scroll animation; the explicit jump action uses `"smooth"`.
+ * New messages use `behavior: "auto"`; the explicit jump action uses `"smooth"`.
  */
 
 const DEFAULT_THRESHOLD_PX = 80;
@@ -28,16 +27,15 @@ export interface AutoScrollResult {
 }
 
 export function useAutoScroll(
-  /** Value(s) that change as new content streams in (e.g. messages). */
+  /** Value(s) that change when content arrives (e.g. messages). */
   dep: unknown,
   options?: {
     thresholdPx?: number;
-    subscribeToStreaming?: (listener: () => void) => () => void;
   },
 ): AutoScrollResult {
   const thresholdPx = options?.thresholdPx ?? DEFAULT_THRESHOLD_PX;
   const viewportRef = useRef<HTMLElement | null>(null);
-  // Default to pinned: a fresh session should follow the stream.
+  // Default to pinned: a fresh session should follow new messages.
   const isPinnedRef = useRef(true);
   const [showJumpButton, setShowJumpButton] = useState(false);
 
@@ -92,34 +90,11 @@ export function useAutoScroll(
     scrollViewportToBottom(prefersReducedMotion ? "auto" : "smooth");
   }, [scrollViewportToBottom]);
 
-  // Follow new content only while pinned. Use "auto" during streaming so
-  // rapid deltas don't queue competing smooth-scroll animations.
+  // Follow new content only while pinned.
   useEffect(() => {
     if (!isPinnedRef.current) return;
     scrollViewportToBottom("auto");
   }, [dep, scrollViewportToBottom]);
-
-  // Streaming text lives outside React session state. Follow it imperatively so
-  // token arrival does not re-render and reconcile the complete message history.
-  useEffect(() => {
-    const subscribe = options?.subscribeToStreaming;
-    if (!subscribe) return;
-    let frameId: number | null = null;
-    const unsubscribe = subscribe(() => {
-      if (!isPinnedRef.current || frameId !== null) return;
-      // A provider can deliver several deltas inside one display frame. Batch
-      // their scrollHeight read + scrollTo into one animation-frame callback
-      // so streaming text does not force layout for every token chunk.
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        if (isPinnedRef.current) scrollViewportToBottom("auto");
-      });
-    });
-    return () => {
-      unsubscribe();
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-    };
-  }, [options?.subscribeToStreaming, scrollViewportToBottom]);
 
   return { scrollRef, showJumpButton, jumpToBottom };
 }

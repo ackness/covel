@@ -7,7 +7,6 @@ afterEach(cleanup);
 const baseProps = {
   turnId: "turn-1",
   storyText: "Mio speaks.\n\nRin answers.\n\nThe wind quiets.",
-  streamEnded: true,
   autoPlay: false,
   reducedMotion: true,
   onAllRead: vi.fn(),

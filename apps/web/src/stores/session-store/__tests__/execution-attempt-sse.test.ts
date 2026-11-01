@@ -40,12 +40,11 @@ function harness(retrying = true) {
     dispatch: (action: SessionAction) => {
       state = reducer(state, action);
     },
-    ds: {} as SseEventHandlerDeps["ds"],
+
     sessionIdRef: { current: "session" },
     // Intentionally not updated: React may batch every event before rendering.
     stateRef: { current: state },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: "attempt" },
   };
   const handler = createSseEventHandler(deps);
@@ -133,11 +132,10 @@ it.each(["quota", "auth", "unknown"])(
   },
 );
 
-describe("a story cut at the output limit", () => {
+describe("provider completion does not imply a visible partial story", () => {
   it.each([
-    { finishReason: "length", notices: 1 },
-    // Ended for a reason the provider did not explain: kept, but not whole.
-    { finishReason: "other", notices: 1 },
+    { finishReason: "length", notices: 0 },
+    { finishReason: "other", notices: 0 },
     { finishReason: "stop", notices: 0 },
   ])(
     "shows $notices notice(s) for a response that finished with $finishReason",
@@ -156,7 +154,7 @@ describe("a story cut at the output limit", () => {
 
 describe("SSE retry commit settlement", () => {
   it.each(["player-aborted", "commit rejected"])(
-    "removes all uncommitted assistant output but retains player input: %s",
+    "retains committed history and player input when a later execution fails: %s",
     (abortReason) => {
       const h = harness(false);
       for (const [id, role, turnId] of [
@@ -174,6 +172,8 @@ describe("SSE retry commit settlement", () => {
       expect(h.getState().messages.map((message) => message.id)).toEqual([
         "old-story",
         "input",
+        "story",
+        "form",
       ]);
     },
   );

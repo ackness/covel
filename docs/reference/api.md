@@ -896,7 +896,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 另一个进程还持有锁时，返回 `running`，这时可能没有回合标识。
 - 锁连接池在很短的等待（200 毫秒）里给不出连接时，返回 `unknown`。这表示服务端没能检查，不知道有没有回合在跑；它不会因为没查到记录就报 `idle`。
 
-客户端把 `unknown` 当成回合可能还在跑：不提供重试，不移走未保存的文字，也不把步骤标成结束。它隔一段时间再查，间隔逐次加长；连续五次都是 `unknown`，就停止自动检查，提示玩家点“检查状态”再查。
+客户端把 `unknown` 当成回合可能还在跑：不提供重试，保留已提交的故事，也不把步骤标成结束。它隔一段时间再查，间隔逐次加长；连续五次都是 `unknown`，就停止自动检查，提示玩家点“检查状态”再查。
 
 #### 会话在查询期间被替换
 
@@ -954,7 +954,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 - 消息并入 story runtime 的下一次 LLM 调用。回合提交时，它和回合在同一个事务里保存到对话历史和聊天记录；回合没有提交，就不保存。
 - 只对 `outputKind: story` 的 runtime 生效。其他 runtime 执行的是结构化任务，不接受插话。
-- 插话在最终响应流式输出期间到达时，story runtime 在收尾前追加一步 LLM 调用来消化它（受 maxSteps 约束）。
+- 插话在最终输出被接受之前到达时，story runtime 在收尾前追加一步 LLM 调用来消化它（受 maxSteps 约束）。
 
 `abort`（中止）：
 

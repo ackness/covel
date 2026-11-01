@@ -81,7 +81,7 @@ describe("reconnect message recovery", () => {
     expect(next[0]!.content).toBe("Full story committed-story");
   });
 
-  it("retains older loaded history, fresh live messages and the pagination cursor", () => {
+  it("retains older loaded history, fresh committed messages and the pagination cursor", () => {
     const old = story("old", "turn-0", "2026-09-04T00:00:00.000Z");
     const pending: StreamMessage = {
       id: "pending-user",
@@ -90,8 +90,8 @@ describe("reconnect message recovery", () => {
       timestamp: "2020-01-01T00:00:00.000Z",
     };
     const stream = {
-      ...story("stream_turn-2_narrator", "turn-2", "2020-01-01T00:00:00.000Z"),
-      content: "Live partial",
+      ...story("next-committed", "turn-2", "2020-01-01T00:00:00.000Z"),
+      content: "Full next story",
     };
     const state = {
       ...initialState,
@@ -114,34 +114,19 @@ describe("reconnect message recovery", () => {
     expect(state.messages).toEqual([old, pending, stream]);
   });
 
-  it("does not overwrite a newer completion or an active stream with a stale snapshot", () => {
-    const live = { ...story("completed"), content: "New live completion" };
-    const stream = {
-      ...story("stream_turn-2_narrator", "turn-2"),
-      content: "Still streaming",
-    };
-    const recovered = [story("completed"), story("server-turn-2", "turn-2")];
-    const next = merge([live, stream], recovered, true);
-    expect(next).toEqual([live, stream]);
+  it("retains a newer completion and adds distinct durable rows from the same runtime", () => {
+    const live = { ...story("completed"), content: "New completion" };
+    const other = story("other", "turn-2");
+    const recovered = [story("completed"), other];
+    const next = merge([live], recovered, true);
+    expect(next).toEqual([live, other]);
     expect(merge(next, recovered, true)).toBe(next);
-  });
-
-  it("recovers a closed stream from its authoritative committed message", () => {
-    const stream = { ...story("stream_turn-1_narrator"), content: "Partial" };
-    const full = story("committed");
-    const next = merge([stream], [full]);
-    expect(next).toEqual([full]);
-    expect(merge(next, [full])).toBe(next);
   });
 
   it("fills gaps using shared server IDs without reordering live rows by client clocks", () => {
     const a = story("a", "turn-a");
     const d = story("d", "turn-d");
-    const live = story(
-      "stream_turn-e_narrator",
-      "turn-e",
-      "2010-01-01T00:00:00.000Z",
-    );
+    const live = story("newest", "turn-e", "2010-01-01T00:00:00.000Z");
     const next = merge(
       [a, d, live],
       [a, story("b", "turn-b"), story("c", "turn-c"), d],

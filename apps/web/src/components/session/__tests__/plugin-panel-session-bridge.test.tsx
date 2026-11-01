@@ -25,9 +25,8 @@ vi.mock("@/stores/session-store.js", () => ({
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 afterEach(cleanup);
 it.each([viewEntry, pageViewEntry])(
-  "forwards session projection and stream only for an opted-in spec and fills the view ($spec.webview)",
+  "forwards session projection only for an opted-in spec and fills the view ($spec.webview)",
   (entry) => {
-    const stream = { subscribe: () => () => {}, read: () => null };
     const spec = { ...entry.spec };
     const onRetry = vi.fn();
     const values = {
@@ -36,7 +35,7 @@ it.each([viewEntry, pageViewEntry])(
       onRetry,
       spec,
       fill: true,
-      sessionBridge: { projection, stream },
+      sessionBridge: { projection },
       stateOverride: { private: "credential-sentinel" },
       surfaceContext: { secret: "credential-sentinel" },
       handlers: { invokePluginAction: vi.fn() },
@@ -52,7 +51,7 @@ it.each([viewEntry, pageViewEntry])(
     expect(JSON.stringify(captured.props?.state)).not.toContain(
       "credential-sentinel",
     );
-    expect(captured.props?.stream).toBe(stream);
+    expect(captured.props).not.toHaveProperty("stream");
     expect(captured.props?.fill).toBe(true);
     expect(captured.props?.src).toBe(spec.webview?.url);
     expect(captured.props?.html).toBe(spec.webview?.html);
@@ -62,7 +61,7 @@ it.each([viewEntry, pageViewEntry])(
       <PluginPanel {...values} spec={{ ...spec, bridge: undefined }} />,
     );
     expect(captured.props?.state).not.toHaveProperty("session");
-    expect(captured.props?.stream).toBeUndefined();
+    expect(captured.props).not.toHaveProperty("stream");
     view.rerender(<PluginPanel {...values} sessionBridge={undefined} />);
     expect(captured.props?.state).not.toHaveProperty("session");
   },

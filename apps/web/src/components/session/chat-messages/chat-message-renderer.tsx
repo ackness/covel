@@ -5,7 +5,6 @@ import type { TFunction } from "i18next";
 import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import type { StreamMessage } from "@/stores/session-store.js";
-import { useStreamingText } from "@/stores/streaming-text-store.js";
 import { PlayerMessageLabel } from "./player-message-label.js";
 import {
   NarrativeMessageBody,
@@ -34,7 +33,7 @@ export interface ChatMessageRendererProps {
  *   raw      — show every message as JSON for inspection.
  */
 export const ChatMessageRenderer = memo(function ChatMessageRenderer({
-  msg: rawMessage,
+  msg,
   viewMode,
   isImageGenActive,
   sessionId,
@@ -43,11 +42,6 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
   onGenerateImage,
   t,
 }: ChatMessageRendererProps) {
-  const liveText = useStreamingText(rawMessage.id);
-  const msg =
-    liveText === undefined || liveText === rawMessage.content
-      ? rawMessage
-      : { ...rawMessage, content: liveText };
   // Raw mode: show everything as JSON, no filtering
   if (viewMode === "raw") {
     return (
@@ -148,13 +142,8 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
         )}
       </span>
 
-      {/* A committed story may draw its segments through plugin
-          templates; a live one always streams as plain text. */}
-      {isAssistant &&
-      msg.kind === "story" &&
-      msg.segments?.length &&
-      liveText === undefined &&
-      !msg.id.startsWith("stream_") ? (
+      {/* Committed segments may use declarative plugin templates. */}
+      {isAssistant && msg.kind === "story" && msg.segments?.length ? (
         <StoryMessageBody message={msg} sessionId={sessionId} />
       ) : (
         <NarrativeMessageBody

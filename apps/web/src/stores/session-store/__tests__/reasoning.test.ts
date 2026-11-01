@@ -35,11 +35,10 @@ describe("reasoning live and recovery", () => {
       dispatch: (action) => {
         state = reducer(state, action);
       },
-      ds: {} as SseEventHandlerDeps["ds"],
+
       sessionIdRef: { current: "session" },
       stateRef: { current: state },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
+
       lastBackfilledTurnIdRef: { current: "turn" },
     });
     const event = {

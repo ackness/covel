@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import { initialState, reducer } from "../reducer.js";
 import type { StreamMessage } from "../types.js";
 
-const STREAM_ID_PREFIX = "stream_";
-
 describe("a player interjection", () => {
-  it("goes above the text its turn is still streaming, where the commit saves it", () => {
+  it("goes before a committed assistant response from its turn", () => {
     const messages: StreamMessage[] = [
       {
         id: "u1",
@@ -16,9 +14,9 @@ describe("a player interjection", () => {
         turnId: "turn-1",
       },
       {
-        id: `${STREAM_ID_PREFIX}turn-1_plug/story`,
+        id: "saved-story",
         role: "assistant",
-        content: "",
+        content: "Full story",
         timestamp: "t2",
         turnId: "turn-1",
       },
@@ -39,11 +37,11 @@ describe("a player interjection", () => {
     expect(state.messages.map((m) => m.id)).toEqual([
       "u1",
       "steer",
-      `${STREAM_ID_PREFIX}turn-1_plug/story`,
+      "saved-story",
     ]);
   });
 
-  it("is appended when its turn streams nothing yet", () => {
+  it("is appended when its turn has no committed response yet", () => {
     const state = reducer(initialState, {
       type: "ADD_STEER_MESSAGE",
       message: {

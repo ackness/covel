@@ -261,63 +261,6 @@ export function fmtDuration(startIso: string, endIso: string): string {
   }
 }
 
-export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
-  const result: api.TraceEvent[] = [];
-  let i = 0;
-
-  while (i < events.length) {
-    const event = events[i]!;
-    const innerType = getDisplayType(event);
-
-    if (innerType !== "message.delta") {
-      result.push(event);
-      i++;
-      continue;
-    }
-
-    const runtimeId = event.payload.runtimeId as string;
-    let text = String((event.payload.delta as string) || "");
-    let count = 1;
-    let j = i + 1;
-
-    while (j < events.length) {
-      const next = events[j]!;
-      const nextType = getDisplayType(next);
-      if (
-        nextType !== "message.delta" ||
-        (next.payload.runtimeId as string) !== runtimeId
-      ) {
-        break;
-      }
-      text += String((next.payload.delta as string) || "");
-      count++;
-      j++;
-    }
-
-    result.push({
-      ...event,
-      ...(event.diagnostic
-        ? {
-            diagnostic: {
-              ...event.diagnostic,
-              displayType: "message.completed",
-            },
-          }
-        : {}),
-      payload: {
-        ...event.payload,
-        type: "message.completed",
-        content: text,
-        _aggregated: count,
-        _originalType: "message.delta",
-      },
-    });
-    i = j;
-  }
-
-  return result;
-}
-
 export function extractDetail(event: api.TraceEvent): string {
   const payload = getTraceData(event.payload);
   const innerType = getDisplayType(event);
@@ -369,16 +312,10 @@ export function extractDetail(event: api.TraceEvent): string {
       const preview = resultStr.slice(0, 80);
       return `${payload.label || payload.toolName || ""} -> ${preview}${resultStr.length > 80 ? "..." : ""}`;
     }
-    case "message.delta":
-      return `${payload.runtimeId || ""} +${String((payload.delta as string) || "").length} chars`;
     case "message.completed": {
       const content = (payload.content as string) || "";
-      const aggregated = payload._aggregated as number | undefined;
-      const prefix = aggregated
-        ? `${payload.runtimeId || ""} ${content.length} chars (${aggregated} deltas) - `
-        : "";
       const preview = content.slice(0, 80);
-      return `${prefix}${preview}${content.length > 80 ? "..." : ""}`;
+      return `${preview}${content.length > 80 ? "..." : ""}`;
     }
     case "block.emitted": {
       const block = payload.block as Record<string, unknown> | undefined;

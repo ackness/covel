@@ -5,7 +5,6 @@ import { Media } from "@/components/Media.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { useUiSlot, useUiSlots } from "@/stores/ui-slot-store.js";
 import { useSession } from "@/stores/session-store.js";
-import { useStreamingSpeakers } from "@/stores/streaming-text-store.js";
 import { lastStorySpeaker } from "./stage/stage-dialogue-selectors.js";
 import {
   PlayerItems,
@@ -70,12 +69,10 @@ export function SceneHud({ sessionId }: { readonly sessionId: string }) {
     .slice(0, MAX_CAST);
 
   // The last attributed segment of the latest story names who is speaking;
-  // while it streams, the last live speaker does.
   const latestStory = state.messages.findLast(
     (message) => message.kind === "story",
   );
-  const liveSpeakers = useStreamingSpeakers(latestStory?.id ?? "");
-  const lastSpeaker = lastStorySpeaker(latestStory, liveSpeakers);
+  const lastSpeaker = lastStorySpeaker(latestStory);
   const speakingId = actors.find((actor) =>
     lastSpeaker?.characterId
       ? actor.characterId === lastSpeaker.characterId
