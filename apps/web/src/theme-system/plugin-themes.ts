@@ -212,7 +212,6 @@ export class PluginThemeSession {
     this.resourceAbort = new AbortController();
     this.resources.clear();
     this.readyResources.clear();
-    this.mutation++;
     if (this.pendingWrites === 0) this.readChoice();
     const accepted: SessionThemePack[] = [];
     const seen = new Set<string>();
@@ -232,7 +231,6 @@ export class PluginThemeSession {
       ...this.state,
       packs: status === "ready" ? accepted : [],
       status,
-      saving: false,
       error: this.state.error === "resource" ? null : this.state.error,
     };
     this.publish();
@@ -432,31 +430,29 @@ export class PluginThemeSession {
             theme.contentHash === choice.contentHash,
         );
       if (pack && !(await this.prepareResources(pack.theme))) {
-        if (
-          this.alive &&
-          mutation === this.mutation &&
-          generation === this.generation
-        ) {
-          this.state = { ...this.state, saving: false, error: "resource" };
+        if (this.alive && mutation === this.mutation) {
+          this.state = {
+            ...this.state,
+            saving: false,
+            error:
+              generation === this.generation ? "resource" : this.state.error,
+          };
           this.publish();
         }
         return false;
       }
-      if (
-        !this.alive ||
-        mutation !== this.mutation ||
-        generation !== this.generation
-      )
+      if (!this.alive || mutation !== this.mutation) return false;
+      if (generation !== this.generation) {
+        this.state = { ...this.state, saving: false };
+        this.publish();
         return false;
+      }
+      // Discovery can retire resource probes, but a dispatched settings write
+      // still belongs to this selection until a newer selection supersedes it.
       if (choice === null)
         await this.store.clear(sessionThemeKey(this.sessionId));
       else await this.store.set(sessionThemeKey(this.sessionId), choice);
-      if (
-        !this.alive ||
-        mutation !== this.mutation ||
-        generation !== this.generation
-      )
-        return false;
+      if (!this.alive || mutation !== this.mutation) return false;
       if (pendingFor(this.store).get(this.sessionId)?.token === token)
         pendingFor(this.store).delete(this.sessionId);
       this.blocked = false;
@@ -465,12 +461,7 @@ export class PluginThemeSession {
       this.publish();
       return true;
     } catch {
-      if (
-        !this.alive ||
-        mutation !== this.mutation ||
-        generation !== this.generation
-      )
-        return false;
+      if (!this.alive || mutation !== this.mutation) return false;
       if (pendingFor(this.store).get(this.sessionId)?.token === token)
         pendingFor(this.store).delete(this.sessionId);
       // The store owns conflict resolution. Read its confirmed rollback, never merge.

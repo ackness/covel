@@ -41,6 +41,15 @@ const track = (source: PluginThemeSession) => {
   sources.push(source);
   return source;
 };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
 
 it("starts off, persists only the exact identity, and mounts one session source apart from the global library", async () => {
   const { store, adapter } = await themeStore();
@@ -231,6 +240,100 @@ it("waits for confirmed writes and ignores late selection after Off or another s
   expect(
     document.querySelector("style[data-plugin-theme-style]")!.textContent,
   ).toContain(next.scope);
+});
+
+it.each([
+  { off: false, fail: false },
+  { off: false, fail: true },
+  { off: true, fail: false },
+  { off: true, fail: true },
+])(
+  "settles a delayed choice across discovery refresh (off=$off, fail=$fail)",
+  async ({ off, fail }) => {
+    const { store, save, adapter } = await themeStore();
+    const source = track(await openTheme(store));
+    const choice = choiceOf(themeFixture());
+    if (off) expect(await source.select(choice)).toBe(true);
+    const gate = deferred<void>();
+    const persist = save.getMockImplementation()!;
+    save.mockImplementationOnce(async (entries) => {
+      await gate.promise;
+      await persist(entries);
+    });
+    const write = source.select(off ? null : choice);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(off ? 2 : 1));
+
+    source.replace([], "loading");
+    expect(source.state.saving).toBe(true);
+    expect(source.state.effective).toBeNull();
+    source.replace([{ theme: themeFixture(), owner: "Author" }], "ready");
+    expect(source.state.saving).toBe(true);
+    expect(source.state.effective).toBeNull();
+
+    if (fail) gate.reject(new Error("disk unavailable"));
+    else gate.resolve();
+    expect(await write).toBe(!fail);
+    expect(source.state.saving).toBe(false);
+    expect(source.state.error).toBe(fail ? (off ? "off-save" : "save") : null);
+    const confirmed = off === fail ? choice : null;
+    expect(source.state.selected).toEqual(confirmed);
+    expect(store.get(sessionThemeKey(source.sessionId))).toEqual(confirmed);
+    await vi.waitFor(() =>
+      expect(source.state.effective?.themeId ?? null).toBe(
+        !off && !fail ? "reading" : null,
+      ),
+    );
+    source.replace([{ theme: themeFixture(), owner: "Author" }], "ready");
+    await store.set("ui.scheme", "light");
+    expect(source.state.error).toBe(fail ? (off ? "off-save" : "save") : null);
+    if (off) expect(source.state.effective).toBeNull();
+    const reloaded = new SettingsStore(adapter);
+    primeThemeRegistry(reloaded);
+    await reloaded.init();
+    const restored = track(await openTheme(reloaded));
+    expect(restored.state.selected).toEqual(confirmed);
+    await vi.waitFor(() =>
+      expect(restored.state.effective?.themeId ?? null).toBe(
+        confirmed ? "reading" : null,
+      ),
+    );
+  },
+);
+
+it("does not persist a choice whose resource check was retired by discovery", async () => {
+  const { store, save } = await themeStore();
+  const source = track(await openTheme(store));
+  const gate = deferred<Response>();
+  vi.mocked(fetch).mockImplementationOnce(() => gate.promise);
+  const write = source.select(choiceOf(themeFixture()));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+  source.replace([], "loading");
+  gate.resolve(new Response(null, { status: 404 }));
+  expect(await write).toBe(false);
+  expect(save).not.toHaveBeenCalled();
+  expect(source.state.saving).toBe(false);
+  expect(source.state.error).toBeNull();
+});
+
+it("confirms a saved choice during discovery without reviving an unavailable pack", async () => {
+  const { store, save } = await themeStore();
+  const source = track(await openTheme(store));
+  const gate = deferred<void>();
+  save.mockImplementationOnce(() => gate.promise);
+  const write = source.select(choiceOf(themeFixture()));
+  await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  source.replace([], "loading");
+  gate.resolve();
+  expect(await write).toBe(true);
+  expect(source.state.saving).toBe(false);
+  expect(source.state.selected).toEqual(choiceOf(themeFixture()));
+  expect(source.state.effective).toBeNull();
+  source.replace([], "ready");
+  expect(source.state.effective).toBeNull();
+  source.replace([{ theme: themeFixture(), owner: "Author" }], "ready");
+  await vi.waitFor(() =>
+    expect(source.state.effective?.themeId).toBe("reading"),
+  );
 });
 
 it("restores the last confirmed source on failed selection and validates imported choices", async () => {

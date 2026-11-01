@@ -1,9 +1,10 @@
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
-import type { StageCastModel } from "@covel/shared";
+import type { LLMAdapter, StageCastModel } from "@covel/shared";
+import type { MiddlewareHandler } from "hono";
 import { createPluginAssetRoutes } from "../../src/routes/plugin-assets.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
@@ -14,6 +15,9 @@ interface StageRenderFixtureOptions {
   narration?: string;
   plugins?: readonly string[];
   beforeGenerate?: (call: number) => Promise<void>;
+  fixturePlugins?: readonly string[];
+  llmAdapter?: LLMAdapter;
+  perRequestMiddleware?: readonly MiddlewareHandler[];
 }
 
 /** Real bundled projections and template loading, with deterministic story output. */
@@ -25,6 +29,8 @@ export async function createStageRenderFixture(
     user = join(root, "user");
   await mkdir(join(builtin, "story-probe"), { recursive: true });
   await mkdir(user);
+  for (const path of options.fixturePlugins ?? [])
+    await cp(path, join(builtin, basename(path)), { recursive: true });
   for (const id of [
     "scene-stage",
     "character-blueprint",
@@ -68,7 +74,8 @@ Tell the public scene story.
       storeBackend: "memory",
       pluginsDir: builtin,
       pluginsDirs: [builtin, user],
-      llmAdapter: {
+      perRequestMiddleware: options.perRequestMiddleware,
+      llmAdapter: options.llmAdapter ?? {
         generate: async () => {
           const index = ++calls;
           await options.beforeGenerate?.(index);
@@ -139,6 +146,7 @@ Tell the public scene story.
         "scene-stage",
         "character-blueprint",
         ...(options.plugins ?? []),
+        ...(options.fixturePlugins ?? []).map((path) => basename(path)),
       ],
       autoAdvanceLimit: 0,
       locale: "en-US",

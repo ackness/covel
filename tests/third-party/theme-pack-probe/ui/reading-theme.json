@@ -4,8 +4,16 @@
   "label": "Reading room",
   "description": "Quiet colors for the story and stage text.",
   "tokens": {
-    "light": { "--story-color": "#302818", "--surface-story": "#fff5dd" },
-    "dark": { "--story-color": "#f5ead2", "--surface-story": "#24201a" }
+    "light": {
+      "--story-color": "#302818",
+      "--surface-story": "#fff5dd",
+      "--surface-page": "#fff5dd"
+    },
+    "dark": {
+      "--story-color": "#f5ead2",
+      "--surface-story": "#24201a",
+      "--surface-page": "#24201a"
+    }
   },
   "layout": { "preset": "book" },
   "css": "./ui/reading-theme.css",
