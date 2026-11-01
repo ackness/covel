@@ -14,6 +14,7 @@ import {
   PluginServiceRegistry,
 } from "@covel/runtime";
 import { z } from "zod";
+import { selfDataBaselineSuite } from "../../../../packages/runtime/tests/helpers/selfdata-baseline-suite.js";
 import { createPgAdvisorySessionLock } from "../../src/lib/pg-session-lock.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
@@ -37,6 +38,12 @@ try {
 afterAll(async () => {
   await database?.cleanup();
 }, 90_000);
+
+describe.skipIf(!database)("selfData PostgreSQL parity", () => {
+  selfDataBaselineSuite("postgres", () =>
+    createPgStore(database!.url, { freshSchema: true }),
+  );
+});
 
 const open: DataStore[] = [];
 afterEach(async () => {

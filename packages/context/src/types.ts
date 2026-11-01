@@ -216,6 +216,11 @@ export interface ContextBuildParams {
    * `DataStore` from `@covel/store` satisfies this shape via structural typing.
    */
   readonly store?: SessionContextStore;
+  /** Host-only observation of the exact selfData window, before model projection. */
+  readonly onSelfDataRead?: (
+    namespace: string,
+    entries: readonly { readonly key: string; readonly value: unknown }[],
+  ) => void;
   /** Pre-assembled committed session context. */
   readonly sessionContext?: SessionContextSnapshot;
   /**

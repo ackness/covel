@@ -227,6 +227,8 @@ io:
 
 写入有两种方式：函数里调用 `ctx.pluginData.set(namespace, key, value)`，或者由工具提交一条“我想写这个”的请求（proposal）。两者都在回合结束时一起保存。runtime 失败时，它的写入一条都不会留下。新值要从旧值算出来（比如金币减 3）时，用 `ctx.pluginData.update` 交一串操作，见[改数据](./local-code.md#改数据)。
 
+Agent 同时有对应数据空间的写工具时，`io.selfData` 注入的键也算读取。根据注入旧值计算的替换遇到并发改动会以 `conflict` 拒绝，保留旁边的故事；明确重试会从当前值重新计算。无需额外调用读取工具，窗口外的键仍需显式读取。见 [`io.selfData`](../reference/plugins.md#ioselfdata)。
+
 要记住的限制：
 
 - 一个值转成 JSON 后最多 256 KiB。超过时写入失败，错误里写明插件、`namespace/key`、实际大小和上限。原值不变，也不会被截断。会不断变长的列表要拆到多个键里，或者自己裁剪。

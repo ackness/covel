@@ -487,6 +487,10 @@ io:
     recordAs: latest-facts
 ```
 
+#### `io.selfData`
+
+`io.selfData` 把指定 namespace 中有界的一页自有数据放进 agent 提示词。`maxEntries` 决定窗口，`format` 决定显示方式。若 runtime 同时持有该 namespace 的写工具，注入的键也计入读取基线：模型请求期间同一个键变化后，依赖旧值的替换以 `conflict` 拒绝。无需为了启用保护再调用一次读取工具。没有对应写工具时不记录注入基线；窗口外的键仍需显式读取。完整值、缺失和提交隔离的规则见[读取基线前提条件](./transactions.md#read-baselines)。
+
 #### 输入怎样读取
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
@@ -986,7 +990,7 @@ homepage: https://example.com/tidefall
 
 提交规则见[回合级单事务](./transactions.md#回合级单事务)。
 
-**读后计算的替换。** 显式读取同一个键后，后续替换自动受保护，包括带派生值的 `inc` + `merge` 列表。盲写和纯相对操作保持原有语义。放行 agent 的 guard 不把自己的读取作用域交给 agent。见[读取基线前提条件](./transactions.md#read-baselines)。
+**读后计算的替换。** 显式读取同一个键后，后续替换自动受保护，包括带派生值的 `inc` + `merge` 列表。持有对应写工具的 agent 收到 `io.selfData` 注入时也一样。盲写和纯相对操作保持原有语义。放行 agent 的 guard 不把自己的读取作用域交给 agent。见[读取基线前提条件](./transactions.md#read-baselines)。
 
 ### 动态维度
 
