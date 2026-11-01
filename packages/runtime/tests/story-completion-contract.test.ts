@@ -337,9 +337,8 @@ describe("story completion contract", () => {
   it("rejects story envelopes without prose while leaving system tool output valid", () => {
     const params = {
       manifest,
-      finalContent: '{"toolCalls":[]}',
+      acceptedOutput: { toolCalls: [] },
       executedToolCalls: [],
-      failedToolCalls: [],
       pendingProposals: [],
     };
     expect(finalizeAgentOutput(params)).toMatchObject({
@@ -354,12 +353,12 @@ describe("story completion contract", () => {
   });
 
   it.each([null, { error: "Invalid field" }])(
-    "does not treat preparatory prose as success when all system tools failed (%j)",
+    "does not extract business effects from failed tools (%j)",
     (toolResult) => {
       expect(
         finalizeAgentOutput({
           manifest: { ...manifest, outputKind: "system" },
-          finalContent: "I will create the opening form now.",
+          acceptedOutput: {},
           executedToolCalls: [
             {
               name: "create-form",
@@ -368,12 +367,9 @@ describe("story completion contract", () => {
               result: toolResult,
             },
           ],
-          failedToolCalls: [
-            { toolName: "create-form", message: "Invalid field" },
-          ],
           pendingProposals: [],
         }),
-      ).toEqual({ kind: "tool-failed" });
+      ).toEqual({ kind: "ok", output: {} });
     },
   );
 });

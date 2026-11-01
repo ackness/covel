@@ -395,9 +395,9 @@ A streaming call is limited by how long it goes without output: a model that kee
 
 - The call is retried as a new attempt, with one added line that says "write only what the task needs". A model that loops or repeats itself usually finishes on a second try.
 - The call fails only if it is cut off again. The error message suggests raising the output limit. If the limit is really too small, the second attempt will not finish either.
-- The one exception: a runtime on the `story` profile (`truncation: accept`) produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence. A runtime with `io.visibility: story` uses this profile by default.
+- Every profile rejects incomplete provider responses; only a complete `submit-output` call can enter acceptance.
 
-**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime on the `story` profile that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
+**The provider did not say why it stopped (`finishReason: other`).** The call fails without retry; its content cannot become a successful output. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
 
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
@@ -575,16 +575,16 @@ Each segment is `{ kind, speaker?, text }`:
 
 The kernel derives `narrativeOutput` by joining each segment’s `text` with blank lines. Consumers needing only prose can use `select: /narrativeOutput`. Consumers extracting who spoke, acted, or changed state should use `select: /segments`, reading `kind`, `speaker`, and `text` together; quoted first-person speech does not automatically belong to the player. The public contract validates the full output before `select`, so consumers need no duplicate segment schema. The original player message may be absent from an extractor’s inputs; do not infer commitments from missing text. Requests, attempts, and promises do not establish successful outcomes. Dialogue logs, next-turn history, `turn-digest@1`, and memory still read the joined prose, not JSON.
 
-**Lenient normalization.** Before commit, the kernel tidies the story:
+**Deterministic normalization.** Accepted story objects are normalized before commit. Functions and guards retain their existing lenient normalization; agents must first pass the schema and story invariants, so normalization cannot bypass validation:
 
-- Prose is still a valid story: each paragraph becomes one `narration` segment.
-- An unknown `kind` is read as `narration`. A dialogue without a `speaker` is kept, unattributed.
+- An accepted object’s `narrativeOutput` becomes one `narration` segment per paragraph; functions may still return prose directly.
+- For functions and guards, unknown `kind` becomes `narration` and dialogue without a speaker stays unattributed. Agent submissions must correct these errors before acceptance.
 - The `speaker` of a `narration` segment is dropped.
 - A `text` over 4000 characters is split at newlines into several segments. Above 60 segments, neighbours of the same kind and speaker are merged first; trailing segments are dropped only if the story still does not fit.
 - A trailing paragraph that lists options for the player ("What do you do?") is removed.
 - A story with no text left fails with the "no narrative output" error, including when a PostRuntime hook empties it.
 
-**Repair requests.** A story agent that declares `io.output.schema: contract:narrative-engine@2` sends that schema to the model as the response format. When the answer has problems (a dialogue without a speaker, an unknown `kind`, prose where `segments` were asked for, or an empty `segments` array), the kernel sends one repair request through the existing output repair flow, listing at most five problems. Once the repair budget is spent, the story commits under the lenient rules above.
+**Submission validation.** Story arguments first pass the effective output schema, then nonempty text, segment kind and dialogue-speaker checks. Errors return as tool results for correction on the next ordinary step. Exhaustion fails; invalid arguments and ordinary reply content are never normalized into successful stories. Accepted values and function output retain deterministic story normalization.
 
 **Speaker resolution.** At commit, the kernel resolves `speaker` and `cues.present` to characters of the session by name. Only a full character ID, name or alias matches; there is no partial matching.
 
@@ -856,50 +856,39 @@ So when a provider accepts the request but never produces any text, there is sti
 
 ### Loop profile (`agent.loop.profile`)
 
-A profile decides how an agent loop runs: whether its text is shown to the player as it is written, whether it reads the player's interjections, whether a reply cut off at the output limit is kept, what happens when the model keeps calling the same tool, and when the tools are turned off to ask for a final answer. Without one, the profile follows `io.visibility`: `story` for a story runtime, `system` for any other. Both bundled narrative runtimes get theirs this way, with nothing written in their manifests.
-
-When only one thing differs from the profile, write only that key; the rest keep the profile's values:
+The loop profile controls steering, repeated-tool fallback, finalization and correction budgets. Without `profile`, story runtimes use `story` and other runtimes use `system`; child agents default to `actor`. Every profile completes through `submit-output`. Truncated or refused provider responses cannot succeed.
 
 <!-- prettier-ignore -->
-| Field | Effect |
+| Field | Meaning |
 | --- | --- |
-| `profile` | `story`, `actor` or `system`; the other keys override it |
-| `stream` | Show the model's text to the player as it is written |
-| `steering` | Merge the player's queued interjections into the conversation before each step and after the story text is written |
-| `truncation` | `accept`: story text cut off at the output limit is kept; `reject`: it fails |
-| `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
-| `finalizer.maxSteps` | At the step limit or when the request no longer fits the model context, turn tools off and ask once for the final answer, subject to the finalizer conditions. Overflow rescue requires a complete tool step and trims tool groups as needed under [prompt budgeting](./prompt-structure.md#budget). `false` disables both rescues |
-| `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
-| `corrections.toolUse` | Corrections for missing required tool work. Integer 0–3, default 1 |
-| `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |
-| `corrections.loopPerturbation` | Perturbations of a repeated tool loop before `fallback`. Integer 0–3, default 1 |
-| `corrections.outputRepair` | Requests with tools off for a complete replacement of invalid output. Integer 0–3, default 1 |
-
-The values of the three profiles:
+| `profile` | `story`, `actor` or `system`; other fields override that preset |
+| `stream` | Whether model text is forwarded; only story runtimes may enable it |
+| `steering` | Merge player interjections; new input before acceptance supersedes the candidate and requires another ordinary step |
+| `truncation` | Only `reject` is supported; a complete, non-refused provider response is required |
+| `fallback` | `submit-output`: offer only submission after repeated business calls; `fail`: stop with `loop-detected` |
+| `finalizer.maxSteps` | At most one extra submission request after step exhaustion or context overflow when eligible; default `true` |
+| `finalizer.deadlineReserveMs` | Switch to one submission request inside this reserve; default `0`, clamped to half the runtime timeout |
+| `corrections.outputRepair` | Missing submission, mixed batch, JSON/schema/story shape failure; integer 0–3, default 1 |
+| `corrections.review` | Shared by `PostLLMResponse` and `ReviewAgentOutput`; integer 0–5, default 2 |
+| `corrections.toolUse` | Missing required business work; integer 0–3, default 1 |
+| `corrections.loopPerturbation` | Perturbations before repeated-tool fallback; integer 0–3, default 1 |
 
 <!-- prettier-ignore -->
 | Field | `story` | `actor` | `system` |
 | --- | --- | --- | --- |
 | `stream` | `true` | `false` | `false` |
 | `steering` | `true` | `false` | `false` |
-| `truncation` | `accept` | `reject` | `reject` |
-| `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
+| `truncation` | `reject` | `reject` | `reject` |
+| `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` is for an agent that only answers a brief and writes no story text. A [sub-agent](#sub-agents) that names no profile uses it.
+`profile: story`, `stream: true` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
 
-Loading checks these rules and rejects a manifest that breaks one:
+**Correction budgets and output repair.** A rejection by the real response's `PostLLMResponse` runs first. Otherwise, classify in order: batch, JSON/schema/story shape, required work, output review. Each rejection consumes at most one category. The four counters are independent and spent only when scheduling another attempt. Corrections consume ordinary steps and the same deadline, without extra network retries or repeated successful business writes. Exhausting one category is terminal even when another has room. Valid JSON in reply content is also missing submission. Function and gateway structured-output APIs are unchanged.
 
-- `profile: story` requires `io.visibility: story`.
-- A `stream` or `steering` that ends up `true` requires `io.visibility: story`: only a story writes the narrative feed and reads the player's interjections.
-- A `truncation` that ends up `accept` requires a `stream` that ends up `true`: only text the player read as it was written is kept. A story that writes `stream: false` therefore also writes `truncation: reject`.
-- `finalizer.deadlineReserveMs` is a non-negative integer smaller than `timeoutMs` (compared with the default time limit when `timeoutMs` is not written).
-
-**Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse`) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
-
-**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. Missing required business work uses the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit. Each new loop starts fresh budgets; a resumed execution is not a new loop and keeps counting from what it spent before the suspension.
+**Finishing before the time limit (`deadlineReserveMs`).** With required work complete and at least 3 seconds left, a step limit, deadline reserve or context overflow can admit one request offering only `submit-output`; overflow also requires a complete tool step. It uses the same validation and review, and `PreLLMCall` cannot restore business tools. Success keeps the original stop reason with `stop.finalizer: true`. It does not invoke `PreStep`, and rejection never starts another repair request. Real timeout, cancellation and model errors retain their causes; an oversized finalizer preserves the original overflow. See [stop reasons](./protocol.md#stop-reasons).
 
 ### Author information
 

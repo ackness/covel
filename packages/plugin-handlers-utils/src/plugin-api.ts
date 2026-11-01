@@ -24,6 +24,7 @@ export type HookEventName =
   | "PreStep"
   | "PreLLMCall"
   | "PostLLMResponse"
+  | "ReviewAgentOutput"
   | "PostRuntime"
   | "PreToolUse"
   | "PostToolUse"
@@ -31,6 +32,21 @@ export type HookEventName =
   | "PostStateCommit"
   | "TurnStop"
   | "SessionEnd";
+
+/** Final model-authored output, after schema and required-work validation. */
+export interface ReviewAgentOutputPayload {
+  readonly output: Readonly<Record<string, unknown>>;
+  /** Provider-issued identity, before hook rewrites. */
+  readonly toolCall: { readonly id: string; readonly name: string };
+  /** Already-public results of this runtime's own completed calls, excluding submissions. */
+  readonly toolResults: readonly {
+    readonly toolCallId: string;
+    readonly toolName: string;
+    readonly output: unknown;
+  }[];
+  /** The only accepted replacement: ask for a bounded resubmission. */
+  readonly correction?: string;
+}
 
 export type HookEnforce = "pre" | "normal" | "post";
 export interface PluginHookContext {

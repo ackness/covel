@@ -46,10 +46,11 @@ describe("plugin manifest dataSchemas", () => {
     ).toThrow(/must be last/);
   });
 
-  it("accepts single-shot agent tool completion", () => {
+  it("accepts authorized business work before output submission", () => {
     const manifest = runtimeManifestInputSchema.parse({
       name: "single-shot-tool-runtime",
-      description: "Calls one tool and finishes",
+      description: "Calls a business tool before submitting",
+      tools: { plugin: ["persist-result"] },
       stage: "post-turn",
       completeAfterTools: ["persist-result"],
       llm: {

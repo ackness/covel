@@ -35,6 +35,8 @@
 
 `submit-output` 是每次 agent 运行的私有控制工具，不在全局注册表里。自动授权只增加该工具，不扩大业务白名单；函数调用被拒绝。提交参数保留模型来源，不能通过工具结果通道冒充可信 effects。
 
+接受值由内核独立持有，schema、必需工作和审查全部通过后才设定。`PostToolUse` 不能替换它或把失败变成功，`PostRuntime` 不能把未提交的 agent 恢复为成功。输出审查只收到 JSON 复制后的公开自有工具结果，不收到符号属性里的提交元数据和私有子调用值。混合提交先拒绝整批，再执行任何业务工作。concealed trace 隐藏参数、候选值和审查文字，保留不含内容的拒绝类别与次数。
+
 ## Host profile
 
 服务端在启动时只做一次判断：把部署档位、实际用的存储和几个开关合成一份宿主配置（host profile，`apps/server/src/host-profile.ts`），放进每个请求。路由的权限检查、媒体路由、服务端设置、请求自带的模型设置和 trace 保留期都问它，不再各自读环境变量。`@covel/ai-provider` 在启动时拿到属于它的那部分（`configureProviderHostPolicy`）。桌面客户端启动服务端时固定传 `DEPLOYMENT_TIER=self`。

@@ -403,15 +403,15 @@ export const runtimeAuthoringManifestSchema = z
               )
               .optional(),
             truncation: z
-              .enum(["accept", "reject"])
+              .literal("reject")
               .describe(
-                "`accept` keeps a reply cut at the output limit; `reject` fails it. `accept` needs streaming. Defaults to `accept` for `story`, otherwise `reject`.",
+                "Incomplete provider responses always fail. Only `reject` is supported.",
               )
               .optional(),
             fallback: z
-              .enum(["answer-without-tools", "fail"])
+              .enum(["submit-output", "fail"])
               .describe(
-                "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`.",
+                "What a repeated tool loop does: `submit-output` offers only submit-output for the final result; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `submit-output`.",
               )
               .optional(),
             corrections: z
@@ -431,7 +431,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(5)
                   .describe(
-                    "Corrections after a PostLLMResponse rejection. Defaults to 2.",
+                    "Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2.",
                   )
                   .optional(),
                 loopPerturbation: z

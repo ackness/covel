@@ -460,7 +460,7 @@ export async function executeAgentRuntime({
       deltaCount: toolLoop.streamDeltaCount,
       outputContractSchema: loaded.outputContractSchema,
       ...(settled.kind === "success" && loaded.outputSchema
-        ? { agentOutputSchema: loaded.outputSchema }
+        ? { agentOutputSchema: agentOutputContract(loaded).schema }
         : {}),
     },
   );

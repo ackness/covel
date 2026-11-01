@@ -226,6 +226,8 @@ export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
 
 /** What a step note records; never a tool name or any model content. */
 export type StepNoteKind =
+  | "output-rejected"
+  | "submission-only"
   | "output-repair"
   | "review-rejected"
   | "no-tool-correction"
@@ -239,6 +241,17 @@ export type StepNoteKind =
 /** Something the loop did inside one step that is not a stop. */
 export interface StepNote {
   readonly kind: StepNoteKind;
+  /** Safe output rejection category; never candidate or reviewer text. */
+  readonly reason?:
+    | "invalid-json"
+    | "invalid-output"
+    | "missing-submission"
+    | "required-work"
+    | "review-rejected"
+    | "submission-batch"
+    | "superseded";
+  /** Number of rejected responses so far in this loop. */
+  readonly attempt?: number;
   /** How many tools or messages the note is about, when that applies. */
   readonly count?: number;
   /** `tool-narrowed`: names the hook gave that were not offered this step. */

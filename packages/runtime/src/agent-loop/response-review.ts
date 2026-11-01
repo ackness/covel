@@ -1,60 +1,32 @@
-import { instructionLocaleFor } from "@covel/shared";
-import type { LLMMessage, LLMResponse, LLMResponseFormat } from "@covel/shared";
+import type { LLMMessage, LLMResponse } from "@covel/shared";
 import { runPostLLMResponseHook } from "../hooks/wire-helpers.js";
-import type { CorrectionPolicy } from "./correction-policy.js";
-import { outputFormatProblems } from "./output-format-diagnostics.js";
 
-/** Rejected drafts never dispatch tools or become the committed narrative. */
+/** Review the actual response once. The loop owns correlated rejection results. */
 export function createResponseReviewer(
   opts: Parameters<typeof runPostLLMResponseHook>[0],
-  transcript: LLMMessage[],
-  locale: string | undefined,
-  policy: CorrectionPolicy,
-  responseFormat?: LLMResponseFormat,
 ) {
-  const notAccepted =
-    instructionLocaleFor(locale) === "zh"
-      ? "草稿未被接受。改正后重新发送完整的回复——被拒绝的草稿不会被执行，也不会被提交。不要描述改正的过程。"
-      : "The draft was not accepted. Correct it and resend the complete response — the rejected draft will not be executed or committed. Do not describe the correction process.";
   return async (
     response: LLMResponse,
     requestMessages: readonly LLMMessage[],
-  ): Promise<LLMResponse | undefined> => {
+  ) => {
     const reviewed = await runPostLLMResponseHook(
       opts,
       response,
       requestMessages,
     );
-    if (!reviewed.correction) return reviewed.response;
-    if (!policy.take("review")) {
-      throw new Error(`Response validation failed: ${reviewed.correction}`);
-    }
-    // No tool-call IDs: this rejected batch was deliberately not executed.
-    // The reasoning goes back with the draft: thinking-mode providers
-    // (DeepSeek, DashScope Qwen) reject an assistant turn without it, and the
-    // continuation tells the adapter which wire field carries it.
-    if (reviewed.response.content) {
-      const { reasoningContent, providerContinuation } = reviewed.response;
-      transcript.push({
-        role: "assistant",
-        content: reviewed.response.content,
-        ...(reasoningContent ? { reasoningContent } : {}),
-        ...(providerContinuation ? { providerContinuation } : {}),
-      });
-    }
-    transcript.push({
-      role: "system",
-      content: [
-        notAccepted,
-        reviewed.correction,
-        ...(await outputFormatProblems({
-          content: reviewed.response.content,
-          hasToolCalls: reviewed.response.toolCalls.length > 0,
-          responseFormat,
-          locale,
+    return {
+      response: {
+        ...reviewed.response,
+        // A response hook cannot invent provider calls or change their identity.
+        // Name/argument rewrites still pass the effective-name authorization gate.
+        toolCalls: response.toolCalls.map((call, index) => ({
+          ...(reviewed.response.toolCalls[index] ?? call),
+          id: call.id,
         })),
-      ].join("\n"),
-    });
-    return undefined;
+        reasoningContent: response.reasoningContent,
+        providerContinuation: response.providerContinuation,
+      },
+      correction: reviewed.correction?.slice(0, 2000),
+    };
   };
 }

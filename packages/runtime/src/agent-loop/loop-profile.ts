@@ -23,20 +23,12 @@ export { LOOP_PRESETS, type LoopPresetId };
 export interface ResolvedLoopProfile extends LoopPresetValues {
   /** The preset the overrides were merged over. */
   readonly preset: LoopPresetId;
-  /**
-   * Derived from `outputKind`, never authored: which answer the loop asks
-   * for when it takes the tools away. `story` asks for the narrative and
-   * corrects a `runtime-done` that came without one; `answer` asks for the
-   * final answer in the required output format.
-   */
-  readonly answerPrompt: "story" | "answer";
 }
 
 /** Resolve a runtime's loop profile. Pure and deterministic. */
 export function resolveLoopProfile(
   manifest: Pick<RuntimeManifest, "outputKind" | "loopProfile">,
 ): ResolvedLoopProfile {
-  const story = manifest.outputKind === "story";
   const spec = manifest.loopProfile;
   const preset = spec?.preset ?? defaultLoopPreset(manifest.outputKind);
   const base = LOOP_PRESETS[preset];
@@ -60,6 +52,5 @@ export function resolveLoopProfile(
       outputRepair:
         spec?.corrections?.outputRepair ?? base.corrections.outputRepair,
     },
-    answerPrompt: story ? "story" : "answer",
   };
 }

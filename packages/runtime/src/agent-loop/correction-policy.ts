@@ -4,6 +4,7 @@ export type CorrectionBudgets = LoopPresetValues["corrections"];
 export type CorrectionKind = keyof CorrectionBudgets;
 
 export interface CorrectionPolicy {
+  canTake(kind: CorrectionKind): boolean;
   take(kind: CorrectionKind): boolean;
   used(kind: CorrectionKind): number;
   snapshot(): Readonly<Record<CorrectionKind, number>>;
@@ -26,6 +27,7 @@ export function createCorrectionPolicy(
     outputRepair: used?.outputRepair ?? 0,
   };
   return {
+    canTake: (kind) => counts[kind] < limits[kind],
     take(kind) {
       if (counts[kind] >= limits[kind]) return false;
       counts[kind]++;

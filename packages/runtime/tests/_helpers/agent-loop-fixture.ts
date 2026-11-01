@@ -123,6 +123,11 @@ export function prose(content: string): LLMResponse {
   };
 }
 
+/** A successful host-default submission. Content-only responses use prose(). */
+export function submitted(content: string): LLMResponse {
+  return toolCall("submit-output", { narrativeOutput: content }, "submit");
+}
+
 export function toolCall(
   name: string,
   args: Record<string, unknown>,

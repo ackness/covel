@@ -9,108 +9,7 @@ import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { completionContractError } from "./runtime-completion.js";
-import { createAgentSchemaGate } from "./runtime-output-validator.js";
-import { schemaAsksForSegments } from "./story-output.js";
-import { outputFormatProblems } from "./output-format-diagnostics.js";
 import type { AgentToolLoopCompleted } from "./turn-agent-tool-loop.js";
-
-interface AgentOutputArgs {
-  readonly manifest: RuntimeManifest;
-  readonly input: TurnInput;
-  readonly runId: string;
-  readonly startTime: number;
-  readonly toolLoop: Pick<
-    AgentToolLoopCompleted,
-    | "finalContent"
-    | "finalToolOutput"
-    | "executedToolCalls"
-    | "failedToolCalls"
-    | "pendingProposals"
-    | "emittedEvents"
-    | "collectedToolCalls"
-  >;
-  readonly outputSchema?: Record<string, unknown>;
-  readonly priorToolCalls?: readonly ToolCallRecord[];
-  readonly finalResponseHasToolCalls?: boolean;
-}
-
-/** One output gate for settlement and the silent pre-settlement repair check. */
-function evaluateAgentOutput(args: AgentOutputArgs, silent = false) {
-  const {
-    manifest,
-    input,
-    runId,
-    startTime,
-    toolLoop,
-    outputSchema,
-    priorToolCalls,
-  } = args;
-  let errors: readonly string[] = [];
-  const finalized = finalizeAgentOutput({
-    manifest,
-    finalContent: toolLoop.finalContent,
-    ...(toolLoop.finalToolOutput
-      ? { preferredOutput: toolLoop.finalToolOutput }
-      : {}),
-    executedToolCalls: toolLoop.executedToolCalls,
-    priorToolCalls,
-    failedToolCalls: toolLoop.failedToolCalls,
-    pendingProposals: toolLoop.pendingProposals,
-    emittedEvents: toolLoop.emittedEvents,
-    dedupeInteractions: true,
-    silent,
-    // Only the repair check is strict; settlement commits the lenient story.
-    ...(silent
-      ? {
-          strictStory: {
-            segmentsRequired: schemaAsksForSegments(outputSchema),
-          },
-        }
-      : {}),
-    schemaGate: createAgentSchemaGate({
-      manifest,
-      input,
-      runId,
-      startTime,
-      collectedToolCalls: toolLoop.collectedToolCalls,
-      outputSchema,
-      onValidationErrors: (problems) => {
-        errors = problems;
-      },
-    }),
-  });
-  if (finalized.kind === "invalid-output") errors = finalized.problems;
-  return { finalized, errors };
-}
-
-/** Test the output gates only; tool failures and completion contracts settle separately. */
-export async function checkAgentOutput(
-  args: AgentOutputArgs,
-): Promise<
-  | { readonly ok: true }
-  | { readonly ok: false; readonly errors: readonly string[] }
-> {
-  const { finalized, errors } = evaluateAgentOutput(args, true);
-  return finalized.kind === "invalid-output" ||
-    finalized.kind === "short-circuit"
-    ? {
-        ok: false,
-        errors: await outputFormatProblems({
-          content: args.toolLoop.finalContent,
-          responseFormat:
-            args.outputSchema && !args.toolLoop.finalToolOutput
-              ? { type: "json_schema", schema: args.outputSchema }
-              : undefined,
-          hasToolCalls:
-            args.finalResponseHasToolCalls ??
-            (!args.toolLoop.finalContent &&
-              args.toolLoop.executedToolCalls.length > 0),
-          locale: args.input.locale,
-          problems: errors,
-        }),
-      }
-    : { ok: true };
-}
 
 /** Settle ordinary and resumed loops before their caller runs hooks and telemetry. */
 export function settleAgentLoop(args: {
@@ -177,6 +76,13 @@ export function settleAgentLoop(args: {
           failedToolCalls,
         }),
       );
+    case "invalid-output":
+      return fail(
+        toolLoop.stopMessage ?? "Output submission was not accepted.",
+      );
+    case "model-error":
+    case "loop-detected":
+      return fail("Agent ended without an accepted submission.");
     default:
       break;
   }
@@ -184,24 +90,23 @@ export function settleAgentLoop(args: {
   const completionError = completionContractError(manifest, toolLoop);
   if (completionError) return fail(completionError);
 
-  const { finalized } = evaluateAgentOutput(args);
-  if (finalized.kind === "tool-failed") {
+  if (!toolLoop.acceptedOutput)
     return fail(
-      formatToolLoopFailure({
-        runtimeId: manifest.name,
-        reason: "tool_failed_without_output",
-        failedToolCalls,
-      }),
+      toolLoop.stopMessage ??
+        "Agent ended without an accepted submit-output call.",
+      { reason: "invalid-output" },
     );
-  }
-  // The output gate failed, not the loop.
+  const finalized = finalizeAgentOutput({
+    manifest,
+    acceptedOutput: toolLoop.acceptedOutput,
+    executedToolCalls: toolLoop.executedToolCalls,
+    priorToolCalls: args.priorToolCalls,
+    pendingProposals: toolLoop.pendingProposals,
+    emittedEvents: toolLoop.emittedEvents,
+    dedupeInteractions: true,
+  });
   if (finalized.kind === "invalid-output")
     return fail(finalized.error, { reason: "invalid-output" });
-  if (finalized.kind === "short-circuit")
-    return {
-      kind: "failed",
-      result: { ...finalized.result, stop: { reason: "invalid-output" } },
-    };
   return {
     kind: "success",
     result: {

@@ -655,6 +655,32 @@ export async function runPostLLMResponseHook(
   };
 }
 
+// ── ReviewAgentOutput ─────────────────────────────────────────────
+
+export type { ReviewAgentOutputPayload } from "@covel/plugin-handlers-utils";
+
+export async function runReviewAgentOutputHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  payload: import("@covel/plugin-handlers-utils").ReviewAgentOutputPayload,
+): Promise<string | undefined> {
+  const result = await runHook(opts, "ReviewAgentOutput", payload, {
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  });
+  // A broken reviewer fails closed; it is not a model-correctable rejection.
+  if (result?.action === "abort") {
+    console.warn("[runtime] agent output review aborted", {
+      runtimeId: opts.runtimeId,
+      reason: result.reason,
+    });
+    throw new Error("Agent output review aborted", { cause: result.reason });
+  }
+  const correction = hookReplace(result)?.correction;
+  return typeof correction === "string"
+    ? correction.trim().slice(0, 2000) || undefined
+    : undefined;
+}
+
 // ── PreToolUse ───────────────────────────────────────────────────
 
 interface PreToolUsePayload {

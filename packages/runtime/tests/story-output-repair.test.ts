@@ -11,7 +11,7 @@ import { executeTurn } from "../src/execution.js";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { settleAgentLoop } from "../src/agent-loop/settle-agent-loop.js";
 import { STORY_EMPTY_ERROR } from "../src/agent-loop/story-output.js";
-import { outputFormatProblems } from "../src/agent-loop/output-format-diagnostics.js";
+import { submissionSyntaxProblems } from "../src/agent-loop/output-format-diagnostics.js";
 import {
   doneTool,
   input,
@@ -37,7 +37,12 @@ const segmented: LoadedRuntime = {
   promptTemplate: "Write the story.",
   outputSchema: storySchema,
 };
-const json = (value: unknown) => prose(JSON.stringify(value));
+const json = (value: Record<string, unknown>) =>
+  toolCall("submit-output", value);
+const malformed = (text: string): LLMResponse => ({
+  ...json({}),
+  toolCalls: [{ id: "malformed", name: "submit-output", arguments: text }],
+});
 const validStory = json({
   segments: [
     { kind: "narration", text: "雨停了。" },
@@ -153,7 +158,7 @@ describe("segmented story repair", () => {
         streaming,
       );
       expect(llm.requests).toHaveLength(2);
-      expect(lastMessage(llm, 1)).toContain("the segments array is missing");
+      expect(lastMessage(llm, 1)).toContain("segments");
       expect(lastMessage(llm, 1)).not.toMatch(/JSON syntax/i);
       expect(committed.status).toBe("committed");
     },
@@ -162,12 +167,13 @@ describe("segmented story repair", () => {
   it.each(["en-US", "zh-CN"])(
     "omits fragment schema complaints from syntax feedback in %s",
     async (locale) => {
-      const problems = await outputFormatProblems({
-        content: earlyClosedStory,
-        responseFormat: { type: "json_schema", schema: storySchema },
-        locale,
-        problems: ["the segments array is missing", "/cues must be a string"],
-      });
+      let syntaxError: unknown;
+      try {
+        JSON.parse(earlyClosedStory);
+      } catch (error) {
+        syntaxError = error;
+      }
+      const problems = await submissionSyntaxProblems(syntaxError, locale);
       expect(problems).toHaveLength(2);
       expect(problems[0]).toContain(
         locale === "zh-CN" ? "JSON 语法错误" : "JSON syntax error",
@@ -181,7 +187,7 @@ describe("segmented story repair", () => {
     "explains an early root close and commits the complete replacement (streaming: %s)",
     async (streaming) => {
       const { llm, committed, result, store } = await commitStory(
-        [prose(earlyClosedStory), json(completeStory)],
+        [malformed(earlyClosedStory), json(completeStory)],
         streaming,
       );
       expect(llm.requests).toHaveLength(2);
@@ -189,7 +195,9 @@ describe("segmented story repair", () => {
       expect(llm.requests[1]?.responseFormat).toEqual(
         llm.requests[0]?.responseFormat,
       );
-      expect(llm.requests[1]?.tools).toBeUndefined();
+      expect(
+        llm.requests[1]?.tools?.some((tool) => tool.name === "submit-output"),
+      ).toBe(true);
       expect(result).toMatchObject({
         status: "success",
         output: completeStory,
@@ -209,8 +217,8 @@ describe("segmented story repair", () => {
   it("keeps a staged business write uncommitted after repeated early root closes", async () => {
     const { llm, result, committed, store } = await commitStory([
       toolCall("mark", { note: "pending marker" }),
-      prose(earlyClosedStory),
-      prose(earlyClosedStory),
+      malformed(earlyClosedStory),
+      malformed(earlyClosedStory),
     ]);
     expect(llm.requests).toHaveLength(3);
     expect(result?.toolCalls).toContainEqual(
@@ -235,12 +243,14 @@ describe("segmented story repair", () => {
     expect(
       (await store.getSession(input.sessionId))?.completedPlayerTurns,
     ).toBe(0);
-    expect(llm.requests[2]?.tools).toBeUndefined();
+    expect(
+      llm.requests[2]?.tools?.some((tool) => tool.name === "submit-output"),
+    ).toBe(true);
     expect(
       llm.requests.flatMap((request) =>
         request.messages.flatMap((message) => message.toolCalls ?? []),
       ),
-    ).toHaveLength(2); // The same one-time call is retained in both later requests.
+    ).toHaveLength(3); // Prior work and the rejected submission remain correlated.
     expectSyntaxCorrection(lastMessage(llm, 2));
   });
 
@@ -251,61 +261,60 @@ describe("segmented story repair", () => {
       const { result } = await run({ llm });
       expect(llm.requests).toHaveLength(2);
       expect(result.status).toBe("success");
-      expect(lastMessage(llm, 1)).toMatch(/empty or whitespace-only/i);
-      expect(lastMessage(llm, 1)).toMatch(/no JSON object was returned/i);
-      expect(lastMessage(llm, 1)).toMatch(/complete object.*schema.*segments/i);
+      expect(lastMessage(llm, 1)).toContain("submit-output");
     },
   );
 
-  it("asks for segments as the response format and accepts a valid story in one call", async () => {
+  it("advertises segments in the submission schema and accepts a valid story in one call", async () => {
     const llm = queuedLLM([validStory]);
     const { result } = await run({ llm });
     expect(llm.requests).toHaveLength(1);
     const format = llm.requests[0]?.responseFormat;
-    expect(format?.type).toBe("json_schema");
-    expect(format?.schema).toHaveProperty("properties.segments");
+    expect(format).toBeUndefined();
+    expect(
+      llm.requests[0]?.tools?.find((tool) => tool.name === "submit-output")
+        ?.parameters,
+    ).toHaveProperty("properties.segments");
     expect(result.status).toBe("success");
     expect(result.output).toMatchObject({
       narrativeOutput: "雨停了。\n\n「走吧。」",
     });
   });
 
-  it("repairs a dialogue without a speaker once, with tools off", async () => {
+  it("repairs a dialogue without a speaker once, in the ordinary loop", async () => {
     const llm = queuedLLM([
       json({ segments: [{ kind: "dialogue", text: "「走吧。」" }] }),
       validStory,
     ]);
     const { result, loop } = await run({ llm });
     expect(llm.requests).toHaveLength(2);
-    expect(llm.requests[1]?.tools).toBeUndefined();
+    expect(
+      llm.requests[1]?.tools?.some((tool) => tool.name === "submit-output"),
+    ).toBe(true);
     expect(lastMessage(llm, 1)).toContain(
       "segment 1 is dialogue without a speaker; name who speaks",
     );
-    expect(loop.stop).toEqual({ reason: "completed", repaired: true });
-    expect(result.stop).toEqual({ reason: "completed", repaired: true });
+    expect(loop.stop).toEqual({ reason: "completed" });
+    expect(result.stop).toEqual({ reason: "completed" });
     expect(result.status).toBe("success");
   });
 
-  it("commits prose as narration once the repair budget is spent", async () => {
+  it("fails content-only prose after the missing-submission budget is spent", async () => {
     const llm = queuedLLM([
       prose("雨停了。"),
-      prose("雨停了。\n\n她转身离开。"),
+      prose("她转身离开。"),
       validStory,
     ]);
     const { result } = await run({ llm });
     expect(llm.requests).toHaveLength(2);
-    expect(lastMessage(llm, 1)).toContain("plain prose");
-    expect(result.status).toBe("success");
-    expect(result.output).toMatchObject({
-      segments: [
-        { kind: "narration", text: "雨停了。" },
-        { kind: "narration", text: "她转身离开。" },
-      ],
-    });
+    expect(result.status).toBe("failed");
+    expect(result.output).toBeNull();
   });
 
-  it("accepts prose without repair from a runtime that asked for no schema", async () => {
-    const llm = queuedLLM([prose("雨停了。\n\n她转身离开。")]);
+  it("accepts submitted narrativeOutput from a runtime with the host default schema", async () => {
+    const llm = queuedLLM([
+      json({ narrativeOutput: "雨停了。\n\n她转身离开。" }),
+    ]);
     const runtime = story({ output: undefined });
     const { result } = await run({
       llm,
@@ -322,7 +331,7 @@ describe("segmented story repair", () => {
     });
   });
 
-  it("keeps an unattributed line when repair is turned off", async () => {
+  it("rejects an unattributed line when repair is turned off", async () => {
     const llm = queuedLLM([
       json({ segments: [{ kind: "dialogue", text: "「走吧。」" }] }),
     ]);
@@ -331,10 +340,8 @@ describe("segmented story repair", () => {
     });
     const { result } = await run({ llm, runtime });
     expect(llm.requests).toHaveLength(1);
-    expect(result.status).toBe("success");
-    expect(result.output).toMatchObject({
-      segments: [{ kind: "dialogue", text: "「走吧。」" }],
-    });
+    expect(result.status).toBe("failed");
+    expect(result.output).toBeNull();
   });
 
   it("fails with the empty-story error when no text is left after the repair", async () => {
@@ -343,21 +350,15 @@ describe("segmented story repair", () => {
     const { result } = await run({ llm });
     expect(llm.requests).toHaveLength(2);
     expect(result.status).toBe("failed");
-    expect(result.error).toBe(STORY_EMPTY_ERROR);
+    expect(result.error).toContain("invalid-output");
     expect(result.stop).toEqual({ reason: "invalid-output" });
   });
 
-  it("answers an early runtime-done by asking for the story, not with an authorization error", async () => {
-    const llm = queuedLLM([toolCall("runtime-done", {}), validStory]);
-    const { result } = await run({
-      llm,
-      deps: { toolExecutor: makeExecutor([markTool, doneTool]) },
-    });
+  it("rejects an empty submitted story before accepting the next candidate", async () => {
+    const llm = queuedLLM([json({ segments: [] }), validStory]);
+    const { result } = await run({ llm });
     expect(result.status).toBe("success");
     expect(llm.requests).toHaveLength(2);
-    expect(lastMessage(llm, 1)).toContain("have not written the story");
-    expect(JSON.stringify(llm.requests[1]?.messages)).not.toMatch(
-      /not authorized|not allowed/i,
-    );
+    expect(lastMessage(llm, 1)).toContain("invalid-output");
   });
 });

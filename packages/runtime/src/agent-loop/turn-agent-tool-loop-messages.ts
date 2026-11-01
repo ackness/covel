@@ -1,7 +1,6 @@
 import { renderToolError, renderToolSuccess } from "./tool-result-text.js";
 import type { SkipReason } from "./tool-batch.js";
-import { parseJsonText } from "@covel/tools";
-import type { LLMMessage, LLMResponse, LLMToolCall } from "@covel/shared";
+import type { LLMMessage, LLMResponse } from "@covel/shared";
 
 type ToolCallResponse = Pick<
   LLMResponse,
@@ -17,25 +16,13 @@ export function buildAssistantToolCallMessage(
       ? { providerContinuation: response.providerContinuation }
       : {}),
     content: response.content ?? "",
-    toolCalls: response.toolCalls.map(normalizeAssistantToolCall),
+    ...(response.toolCalls.length
+      ? { toolCalls: response.toolCalls.map((call) => ({ ...call })) }
+      : {}),
     ...(response.reasoningContent
       ? { reasoningContent: response.reasoningContent }
       : {}),
   };
-}
-
-/** Keep history valid JSON without changing what the executor receives. */
-export function normalizeAssistantToolCall(call: LLMToolCall): LLMToolCall {
-  // Replay the same parsed value the executor sees. Keep an invalid call's
-  // original text as a JSON string, paired with its invalid-input result;
-  // never invent an empty object that appears to have been executed.
-  let value: unknown;
-  try {
-    value = parseJsonText(call.arguments);
-  } catch {
-    value = call.arguments;
-  }
-  return { ...call, arguments: JSON.stringify(value) };
 }
 
 export function buildToolResultMessage(args: {

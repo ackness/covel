@@ -72,13 +72,13 @@ export interface LoopPresetValues {
   readonly stream: boolean;
   /** Merge queued player interjections into the transcript. */
   readonly steering: boolean;
-  /** `accept` keeps a reply cut at the output limit; `reject` fails it. */
-  readonly truncation: "accept" | "reject";
+  /** Incomplete provider responses fail; only `reject` is supported. */
+  readonly truncation: "reject";
   /**
-   * `answer-without-tools` takes the tools away and asks for the answer when
+   * `submit-output` offers only submit-output for the final result when
    * a tool loop repeats; `fail` stops the runtime with `loop-detected`.
    */
-  readonly fallback: "answer-without-tools" | "fail";
+  readonly fallback: "submit-output" | "fail";
   readonly corrections: {
     readonly toolUse: number;
     readonly review: number;
@@ -86,11 +86,11 @@ export interface LoopPresetValues {
     readonly outputRepair: number;
   };
   readonly finalizer: {
-    /** Ask once for the answer, tools off, at the step limit. */
+    /** Ask once for the final submission, at the step limit. */
     readonly maxSteps: boolean;
     /**
      * Stop starting steps this many ms before the deadline and ask for the
-     * answer, tools off. `0` turns it off.
+     * final submission. `0` turns it off.
      */
     readonly deadlineReserveMs: number;
   };
@@ -110,8 +110,8 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
     story: frozenPreset({
       stream: true,
       steering: true,
-      truncation: "accept",
-      fallback: "answer-without-tools",
+      truncation: "reject",
+      fallback: "submit-output",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
       corrections: {
         toolUse: 1,
@@ -124,7 +124,7 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
       stream: false,
       steering: false,
       truncation: "reject",
-      fallback: "answer-without-tools",
+      fallback: "submit-output",
       finalizer: { maxSteps: true, deadlineReserveMs: 0 },
       corrections: {
         toolUse: 1,

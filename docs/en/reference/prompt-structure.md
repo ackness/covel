@@ -21,6 +21,8 @@ During one execution, the history is handled in this order:
 
 Agent completion instructions consistently ask for `submit-output` after required business tool work. The loaded output schema is fixed before assembly and appears only in that tool’s parameters; the preamble neither duplicates it nor requests JSON reply content. Submit `{}` for no business output when the schema permits it. The tool name, description, schema and order remain stable for an admitted runtime to preserve prompt caching. See [completion conditions](./plugins.md#agent-output-submission).
 
+Rejected submissions retain the real assistant tool message, original call IDs, reasoning and provider continuation, followed by correlated error results. A response without calls gets correction instructions without invented IDs. Corrections use ordinary steps. Finalization offers the same submission tool without duplicating its schema, and there is no post-loop repair request. Functions and gateway `generateObject` retain structured response formats.
+
 ### This turn's story text
 
 Committed history goes only up to the previous turn. The messages of this turn are written to the database only after the execution commits. So the framework also puts the not-yet-committed parts of the execution journal into the conversation:
@@ -269,11 +271,12 @@ api.provideExtension("prompt.segment@1", "status", {
 
 `PostContextAssembly` can rewrite the final `systemPrompt` / `messages`. But the framework preamble cannot be discarded. It has three blocks. All three are written in the session's [instruction language](./i18n.md). A Simplified Chinese session is entirely in Chinese:
 
-| Block          | Content                                                                                                                                                                                                                                                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `[RUNTIME]`    | The runtime framework                                                                                                                                                                                                                                                                                  |
-| `[LANGUAGE]`   | The output language instruction                                                                                                                                                                                                                                                                        |
-| `[COMPLETION]` | The completion convention. There are three forms depending on how the runtime ends: a runtime with an output schema ends with JSON or a completion tool; a story runtime ends with the story in its reply, written in the output format required by the instructions; the rest end with `runtime-done` |
+| Block        | Content                         |
+| ------------ | ------------------------------- |
+| `[RUNTIME]`  | The runtime framework           |
+| `[LANGUAGE]` | The output language instruction |
+
+- Do not force a business tool to express “no change”. Resolve required work, then submit output matching the schema. Failed writes must be corrected; submission does not cancel them.
 
 - If the `systemPrompt` returned by a hook does not start with it, the framework puts it back at the very front. So a trimming hook that returns only its own body does not need to remove it, and it cannot remove it.
 - `frameworkHead` is an internal assembly field. It is not exposed in the Hook payload or accepted as a replacement.
@@ -291,7 +294,7 @@ The `agent` group of a runtime can declare two request preferences:
 **When to force a tool.** A bookkeeping runtime after the narrative receives a conversation whose latest text is the story text. If the tool is not forced, the model tends to just continue the plot.
 
 - `required` suits a runtime where "no change" is also expressed through the same write tool (for example `update-dimensions({updates: []})`).
-- If "no change" is instead expressed by calling `runtime-done`, a forced tool makes the model first submit a rejected empty write. A failed write cannot be cancelled by the `runtime-done` that follows.
+- Do not force a business tool to express “no change”. Resolve required work, then submit output matching the schema. Failed writes must be corrected; submission does not cancel them.
 
 **Scope of this preference.**
 
@@ -448,7 +451,7 @@ Budget trimming runs only when there is an estimator and a context budget. Budge
 - **Protected content.** The current user turn (including the turn context before it, this turn's story text, and the ending hint) and the summary envelope are protected during ordinary history trimming. A tool call and its result must be kept as a pair.
 - **Trimming order.** Replay the per-run ledger first. When estimated input exceeds the input limit (context window minus response reserve), elide old tool results, keeping the newest two complete tool groups. If needed, collapse older groups, keeping the newest group with its reasoning and provider continuation. Work oldest first toward 70% of the input limit. Then apply the existing history pruning, followed by head/tail truncation of tool results and compacted-history envelopes. A request under the limit only replays the ledger. Finalizer requests use the same overflow trigger and 70% stopping condition; emergency mode only makes the newest tool groups eligible too. Canonical messages and stored records stay unchanged.
 - **Frozen digests.** Each collapse event inserts one system message with a localized header and one line per tool call: tool name, arguments preview (at most 120 characters), and `ok` with summary (at most 80 characters) or `failed` with error code. The digest is deterministic, without a model call, IDs or timestamps. Elision replaces only `data` in a JSON envelope, preserving `summary`, `error` and `staged`; other string results become a localized omission marker. Non-string results stay unchanged. Only complete, correctly ordered call/result groups qualify. The ledger identifies groups by call IDs, tool names, arguments and result content, independently of their position in the request. The ledger only grows; when hooks remove or rewrite groups, missing or ambiguous elisions and frozen digests are silently skipped instead of applied to another call reusing the ID. Resume starts a new ledger.
-- **Still over the limit.** Return a `context-overflow` stop with the overflow text before sending to the provider. When `finalizer.maxSteps` is on, at least one complete tool group exists and the normal finalizer conditions hold, try once with tools off, eliding results or collapsing steps under the budget conditions above, with the newest group also eligible. A rescued answer succeeds; otherwise the original overflow text becomes the runtime failure. Invalid token limits still throw a configuration error.
+- **Still over the limit.** Return `context-overflow` before sending to the provider. With a complete tool group and the normal finalizer conditions met, try at most one reserve request offering only `submit-output`, eliding results or collapsing steps as needed, including the newest group. Another overflow keeps the original error; cancellation, refusal and provider errors retain their own attribution. Invalid token limits still throw a configuration error.
 - **Output limit.** The response reserve also limits the maximum output of this request.
 - **Hard trimming.** Hard trimming keeps room for later turns. The trim marker does not contain a message count that changes.
 

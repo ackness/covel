@@ -37,7 +37,7 @@ export interface AgentLoopPolicy {
    * (deferred schemas withheld, `search-tools` appended); the loop grows its
    * own working copy as searches activate tools mid-run.
    */
-  readonly toolDefs: readonly LLMToolDefinition[] | undefined;
+  readonly toolDefs: readonly LLMToolDefinition[];
   /**
    * Tool names withheld from the initial advertisement (`tools.defer`).
    * Non-empty ⇒ the loop intercepts `search-tools` calls and activates

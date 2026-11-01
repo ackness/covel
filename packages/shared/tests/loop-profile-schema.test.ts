@@ -53,8 +53,8 @@ describe("authored agent.loop profile keys", () => {
         profile: "story",
         stream: true,
         steering: true,
-        truncation: "accept",
-        fallback: "answer-without-tools",
+        truncation: "reject",
+        fallback: "submit-output",
         finalizer: { maxSteps: false, deadlineReserveMs: 5_000 },
       },
       "story",
@@ -65,9 +65,10 @@ describe("authored agent.loop profile keys", () => {
       "story",
     ],
     ["an actor", { profile: "actor" }, undefined],
+    ["a story with streaming off", { stream: false }, "story"],
     [
-      "a system agent that answers without tools",
-      { fallback: "answer-without-tools" },
+      "a system agent with submission fallback",
+      { fallback: "submit-output" },
       "system",
     ],
     [
@@ -112,18 +113,6 @@ describe("authored agent.loop profile keys", () => {
       { stream: false, truncation: "accept" },
       "story",
       "agent.loop.truncation",
-    ],
-    [
-      "g3: a story with stream off that keeps the inherited truncation",
-      { stream: false },
-      "story",
-      "agent.loop.stream",
-    ],
-    [
-      "g3: a story profile with stream off and truncation omitted",
-      { profile: "story", stream: false },
-      "story",
-      "agent.loop.stream",
     ],
     [
       "g4: a reserve not below the written limit",
@@ -184,6 +173,7 @@ describe("compiled loopProfile", () => {
   it.each<[string, Loop, "story" | "system", number?]>([
     ["a story's overrides", { stream: false, truncation: "reject" }, "story"],
     ["an actor", { preset: "actor", fallback: "fail" }, "system"],
+    ["a story with streaming off", { stream: false }, "story"],
     [
       "a reserve below the limit",
       { finalizer: { deadlineReserveMs: 5_000 } },
@@ -222,12 +212,6 @@ describe("compiled loopProfile", () => {
       "loopProfile.truncation",
     ],
     [
-      "g3: a story with stream off and truncation omitted",
-      { stream: false },
-      "story",
-      "loopProfile.stream",
-    ],
-    [
       "g4: a reserve not below the limit",
       { finalizer: { deadlineReserveMs: 10_000 } },
       "system",
@@ -245,11 +229,11 @@ describe("compiled loopProfile", () => {
 });
 
 describe("LOOP_PRESETS", () => {
-  it("streams, steers and keeps truncated text only in the story preset", () => {
+  it("streams and steers only in the story preset, and rejects all truncation", () => {
     expect(LOOP_PRESETS.story).toMatchObject({
       stream: true,
       steering: true,
-      truncation: "accept",
+      truncation: "reject",
     });
     for (const preset of [LOOP_PRESETS.actor, LOOP_PRESETS.system])
       expect(preset).toMatchObject({
@@ -258,7 +242,7 @@ describe("LOOP_PRESETS", () => {
         truncation: "reject",
       });
     expect(LOOP_PRESETS.system.fallback).toBe("fail");
-    expect(LOOP_PRESETS.actor.fallback).toBe("answer-without-tools");
+    expect(LOOP_PRESETS.actor.fallback).toBe("submit-output");
   });
 });
 

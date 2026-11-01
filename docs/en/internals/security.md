@@ -35,6 +35,8 @@ A story operation failure notice projects only a validated positive safe integer
 
 `submit-output` is a private control tool for each admitted agent run, absent from the global registry. Automatic authorization adds only this tool and does not widen business allowlists; function calls are rejected. Arguments retain model provenance and cannot become trusted effects through the tool-result channel.
 
+The kernel owns acceptance independently and sets it only after schema, required-work and review gates. `PostToolUse` cannot replace it or promote failure; `PostRuntime` cannot recover an unsubmitted agent into success. Output review receives JSON-owned public results of this runtime’s tools, never symbol-keyed commit metadata or private child values. Mixed submissions reject the entire batch before business work. Concealed trace projections hide arguments, candidates and review text while retaining content-free rejection categories and counts.
+
 ## Host profile
 
 The server decides once, at startup: it combines the deployment tier, the storage it actually uses and a few switches into a host profile (`apps/server/src/host-profile.ts`) and puts it in every request. Route permission checks, the media routes, the server settings, a request's own model settings and the trace retention all ask it, and no longer read environment variables themselves. `@covel/ai-provider` receives its own part at startup (`configureProviderHostPolicy`). The desktop app always passes `DEPLOYMENT_TIER=self` when it starts the server.

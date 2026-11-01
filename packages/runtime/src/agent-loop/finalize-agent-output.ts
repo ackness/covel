@@ -1,95 +1,31 @@
-/**
- * Output finalization for the agent tool-call loop.
- *
- * Both the normal execution path (`executeAgentRuntime`) and the resume path
- * (`resumeSuspendedRuntime`) end the same way: turn the loop's final content +
- * executed tool calls into separate business output and runtime effects. This module owns that
- * shared transform so the two paths cannot drift apart again (they had — resume
- * was a hand-copied, slowly diverging clone of the main finalize block).
- *
- * The transform:
- *   1. Build the envelope from finalContent (parsed) or the last presentable /
- *      structured tool output, or fail when only failed tool calls remain.
- *   2. Run the shared schema gate between build and decoration when a private
- *      output schema is declared. A gate hit short-circuits finalize.
- *   3. Drop effect-shaped fields from an envelope the model wrote, extract
- *      tool-emitted effects, normalize a story into segments and its derived
- *      `narrativeOutput`, attach buffered proposals to the business output.
- *
- * Effects come from tools only. `agent.tools` is the complete list of what a
- * model can write, so a field of the model's final JSON that is shaped like an
- * effect (`pluginData`, an event with a `topic`, …) does
- * nothing, as an effect-shaped field of a function handler's `value` does
- * nothing. The completion signal (`preGameDone` / `completion`) is not an
- * effect and is still read from the envelope.
- */
-
+/** Assemble accepted model output and independently owned business effects. */
+import { isBusinessTool } from "./runtime-completion.js";
 import type {
   JsonValue,
   Proposal,
   RuntimeEffects,
   RuntimeManifest,
-  RuntimeResult,
   ToolCallRecord,
 } from "@covel/shared";
-import {
-  normalizeStoryOutput,
-  STORY_EMPTY_ERROR,
-  storyOutputProblems,
-} from "./story-output.js";
+import { normalizeStoryOutput, STORY_EMPTY_ERROR } from "./story-output.js";
 import type { EmittedEvent } from "@covel/tools";
 import { collectUiBlocks } from "../session/session-kernel-helpers.js";
-import {
-  findLastStructuredToolOutput,
-  findPresentableToolOutput,
-  parseFinalOutputEnvelope,
-  shouldSuppressToolLoopNarrative,
-  type ExecutedToolCallState,
-  type FailedToolCallState,
-} from "../turn-executor/turn-output-helpers.js";
+import { type ExecutedToolCallState } from "../turn-executor/turn-output-helpers.js";
 
 export interface FinalizeAgentOutputParams {
   readonly manifest: RuntimeManifest;
-  readonly finalContent: string | null;
-  /** Prefer this completing-tool result over incidental assistant prose. */
-  readonly preferredOutput?: Record<string, unknown>;
+  /** Validated model-authored submission; its fields cannot produce effects. */
+  readonly acceptedOutput: Readonly<Record<string, unknown>>;
   readonly executedToolCalls: readonly ExecutedToolCallState[];
   /** Tool results persisted before a suspension, unavailable in executedToolCalls. */
   readonly priorToolCalls?: readonly ToolCallRecord[];
-  readonly failedToolCalls: readonly FailedToolCallState[];
   readonly pendingProposals: readonly Proposal[];
   /** Events emitted via `emit-event` tool calls — appended to `effects.events`. */
   readonly emittedEvents?: readonly EmittedEvent[];
   /** Dedupe repeated tool interactions by `interactionId`. */
   readonly dedupeInteractions?: boolean;
-  /** A validation dry run neither warns nor mutates tool-owned output. */
-  readonly silent?: boolean;
-  /**
-   * Check a story strictly, for the repair request: structural segment
-   * problems fail with `problems`. Without it a story is normalized leniently
-   * and fails only when it has no text.
-   */
-  readonly strictStory?: { readonly segmentsRequired: boolean };
-  /**
-   * Optional schema gate, invoked after any candidate output has been
-   * converted into the output envelope. Returning a failed
-   * RuntimeResult short-circuits finalize; the caller is responsible for any
-   * telemetry + PostRuntime wrapping.
-   */
-  readonly schemaGate?: (args: {
-    readonly output: Record<string, unknown>;
-    readonly parsedAsJson: boolean;
-    readonly finalContent: string | null;
-  }) => RuntimeResult | undefined;
 }
 
-/**
- * Result of {@link finalizeAgentOutput}:
- *  - `ok` — the decorated runtime output object.
- *  - `tool-failed` — no final content and only failed tool calls; the caller
- *    builds the `tool_failed_without_output` failure result.
- *  - `short-circuit` — the schema gate produced a failed RuntimeResult.
- */
 export type FinalizeAgentOutput =
   | {
       readonly kind: "ok";
@@ -98,98 +34,28 @@ export type FinalizeAgentOutput =
       readonly effects?: RuntimeEffects;
       readonly completion?: "done" | "pending";
     }
-  | { readonly kind: "tool-failed" }
   | {
       readonly kind: "invalid-output";
       readonly error: string;
-      /** Model-facing problems for the repair request. */
       readonly problems: readonly string[];
-    }
-  | { readonly kind: "short-circuit"; readonly result: RuntimeResult };
+    };
 
 export function finalizeAgentOutput(
   params: FinalizeAgentOutputParams,
 ): FinalizeAgentOutput {
   const {
     manifest,
-    finalContent,
-    preferredOutput,
+    acceptedOutput,
     executedToolCalls,
     priorToolCalls = [],
-    failedToolCalls,
     pendingProposals,
     emittedEvents = [],
     dedupeInteractions = false,
-    schemaGate,
   } = params;
-
-  const presentable = findPresentableToolOutput(executedToolCalls);
-  const structured = findLastStructuredToolOutput(executedToolCalls);
-
-  let output: Record<string, unknown>;
-  let parsedAsJson = true;
-  let schemaFinalContent: string | null = null;
-  // Whether `output` is JSON the model wrote, not the result of a tool.
-  let modelAuthored = false;
-  if (preferredOutput) {
-    output = { ...preferredOutput };
-  } else if (finalContent) {
-    const parsed = parseFinalOutputEnvelope(finalContent);
-    parsedAsJson = parsed.parsedAsJson;
-    schemaFinalContent = finalContent;
-    const suppressNarrative = shouldSuppressToolLoopNarrative({
-      outputKind: manifest.outputKind,
-      executedToolCalls,
-      parsedAsJson: parsed.parsedAsJson,
-    });
-    // Preparation prose cannot turn a failed form/write tool into empty success.
-    if (
-      suppressNarrative &&
-      !structured &&
-      !presentable &&
-      failedToolCalls.length
-    )
-      return { kind: "tool-failed" };
-    output = suppressNarrative
-      ? (structured ?? presentable ?? { narrativeOutput: "" })
-      : parsed.output;
-    modelAuthored = !suppressNarrative && parsed.parsedAsJson;
-  } else if (failedToolCalls.length > 0) {
-    return { kind: "tool-failed" };
-  } else {
-    output = presentable ?? { narrativeOutput: "" };
-  }
-
-  if (params.silent) output = { ...output };
-
-  if (schemaGate) {
-    const failed = schemaGate({
-      output,
-      parsedAsJson,
-      finalContent: schemaFinalContent,
-    });
-    if (failed) return { kind: "short-circuit", result: failed };
-  }
-
-  if (modelAuthored)
-    dropModelAuthoredEffects(output, manifest.name, params.silent);
-
-  const declaredEvents = Array.isArray(output.events) ? output.events : [];
-  const effectEvents = declaredEvents.filter(isEffectEvent);
-  if (effectEvents.length > 0) {
-    const businessEvents = declaredEvents.filter(
-      (event) => !isEffectEvent(event),
-    );
-    if (businessEvents.length > 0) output.events = businessEvents;
-    else delete output.events;
-  }
-
-  // An event of a tool's own result precedes an `emit-event` event with the
-  // same topic, preserving the turn-event-chain's first-wins order.
+  let output: Record<string, unknown> = structuredClone(acceptedOutput);
+  dropModelAuthoredEffects(output, manifest.name);
   const effects: Record<string, unknown> = {};
-  if (effectEvents.length > 0 || emittedEvents.length > 0) {
-    effects.events = [...effectEvents, ...emittedEvents];
-  }
+  if (emittedEvents.length) effects.events = [...emittedEvents];
 
   // A resumed loop starts its executedToolCalls afresh; earlier successful
   // tool outputs survive only as ToolCallRecords. Failed calls have null or
@@ -197,6 +63,7 @@ export function finalizeAgentOutput(
   const priorToolResults = priorToolCalls
     .filter(
       (call) =>
+        isBusinessTool(call.toolName) &&
         call.output !== null &&
         typeof call.output === "object" &&
         !Array.isArray(call.output),
@@ -206,38 +73,38 @@ export function finalizeAgentOutput(
       result: call.output,
       success: true,
     }));
-  const toolResults = [...priorToolResults, ...executedToolCalls];
-  const toolInteractions = extractInteractions(toolResults, dedupeInteractions);
-  const declaredInteractions = Array.isArray(output.interactions)
-    ? output.interactions
-    : [];
-  const interactions =
-    toolInteractions.length > 0 ? toolInteractions : declaredInteractions;
-  if (interactions.length > 0) {
-    effects.interactions = interactions;
-    if (finalContent && !parsedAsJson && !output.narrativeOutput) {
-      output.narrativeOutput = finalContent;
-    }
-  }
-  delete output.interactions;
-  delete output.interaction;
-
-  const ui = collectUiBlocks(
-    output,
-    toolResults
-      .filter((call) => call.success)
-      .map((call) => ({ output: call.result })),
+  const toolResults = [...priorToolResults, ...executedToolCalls].filter(
+    (call) => isBusinessTool(call.name),
   );
-  if (ui.length > 0) effects.ui = ui;
-  delete output.ui;
-
-  for (const key of [
-    "assetGenerations",
-    "pluginData",
-    "notifications",
-  ] as const) {
-    if (Array.isArray(output[key])) effects[key] = output[key];
-    delete output[key];
+  const toolInteractions = extractInteractions(toolResults, dedupeInteractions);
+  if (toolInteractions.length) effects.interactions = toolInteractions;
+  const successfulTools = toolResults.filter((call) => call.success);
+  const ui = collectUiBlocks(
+    {},
+    successfulTools.map((call) => ({ output: call.result })),
+  );
+  if (ui.length) effects.ui = ui;
+  for (const call of successfulTools) {
+    if (
+      !call.result ||
+      typeof call.result !== "object" ||
+      Array.isArray(call.result)
+    )
+      continue;
+    const result = call.result as Record<string, unknown>;
+    for (const key of [
+      "assetGenerations",
+      "pluginData",
+      "notifications",
+    ] as const) {
+      if (Array.isArray(result[key]))
+        effects[key] = [...((effects[key] as unknown[]) ?? []), ...result[key]];
+    }
+    if (Array.isArray(result.events)) {
+      const events = result.events.filter(isEffectEvent);
+      if (events.length)
+        effects.events = [...events, ...((effects.events as unknown[]) ?? [])];
+    }
   }
 
   const completion =
@@ -250,14 +117,6 @@ export function finalizeAgentOutput(
   if (completion) delete output.completion;
 
   if (manifest.outputKind === "story") {
-    if (params.strictStory) {
-      const problems = storyOutputProblems(output, {
-        segmentsRequired: params.strictStory.segmentsRequired,
-        prose: !parsedAsJson,
-      });
-      if (problems.length > 0)
-        return { kind: "invalid-output", error: STORY_EMPTY_ERROR, problems };
-    }
     const story = normalizeStoryOutput(output);
     if (!story)
       return {

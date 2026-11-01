@@ -292,6 +292,7 @@ describe("HookPipeline", () => {
         PreStep: "sequential",
         PreLLMCall: "sequential",
         PostLLMResponse: "sequential",
+        ReviewAgentOutput: "sequential",
         PostRuntime: "sequential",
         PreToolUse: "sequential",
         PostToolUse: "sequential",

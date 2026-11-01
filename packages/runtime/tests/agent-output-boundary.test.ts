@@ -12,21 +12,14 @@ const manifest = {
 } as RuntimeManifest;
 
 describe("agent output boundary", () => {
-  it("checks the raw envelope, ignores effects the model wrote and keeps tool-emitted ones", () => {
+  it("ignores effects in an accepted model candidate and keeps tool-emitted ones", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const declaredEvent = { topic: "world.changed", data: { value: 1 } };
     const toolEvent = { topic: "world.updated", data: { value: 2 } };
     const worldEvent = { id: "birth", description: "a world fact" };
-    let schemaInput: Record<string, unknown> | undefined;
-    const schemaGate = vi.fn(
-      ({ output }: { output: Record<string, unknown> }) => {
-        schemaInput = structuredClone(output);
-        return undefined;
-      },
-    );
     const finalized = finalizeAgentOutput({
       manifest,
-      finalContent: JSON.stringify({
+      acceptedOutput: {
         name: "Atlas",
         statePatches: [{ table: "world", field: "name", value: "Atlas" }],
         events: [worldEvent, declaredEvent],
@@ -47,7 +40,7 @@ describe("agent output boundary", () => {
         assetGenerations: [{ ref: "asset-1", modality: "image" }],
         notifications: [{ message: "Ready" }],
         preGameDone: true,
-      }),
+      },
       executedToolCalls: [
         {
           name: "show-form",
@@ -70,18 +63,10 @@ describe("agent output boundary", () => {
           },
         },
       ],
-      failedToolCalls: [],
       pendingProposals: [],
       emittedEvents: [toolEvent],
-      schemaGate,
     });
 
-    expect(schemaGate).toHaveBeenCalledOnce();
-    expect(schemaInput).toMatchObject({
-      events: [worldEvent, declaredEvent],
-      preGameDone: true,
-      statePatches: expect.any(Array),
-    });
     expect(finalized.kind).toBe("ok");
     if (finalized.kind !== "ok") return;
     expect(finalized.output).toEqual({
@@ -119,16 +104,18 @@ describe("agent output boundary", () => {
     warn.mockRestore();
   });
 
-  it("keeps the effects of a completing tool's own result", () => {
+  it("keeps independently owned business-tool effects", () => {
     const finalized = finalizeAgentOutput({
       manifest,
-      finalContent: "Done.",
-      preferredOutput: {
-        saved: true,
-        notifications: [{ message: "Saved" }],
-      },
-      executedToolCalls: [],
-      failedToolCalls: [],
+      acceptedOutput: { saved: true },
+      executedToolCalls: [
+        {
+          name: "save",
+          arguments: "{}",
+          success: true,
+          result: { notifications: [{ message: "Saved" }] },
+        },
+      ],
       pendingProposals: [],
     });
     expect(finalized).toEqual({
@@ -142,9 +129,8 @@ describe("agent output boundary", () => {
     const events = [{ id: "birth", description: "a world fact" }];
     const finalized = finalizeAgentOutput({
       manifest,
-      finalContent: JSON.stringify({ schemaVersion: 1, events }),
+      acceptedOutput: { schemaVersion: 1, events },
       executedToolCalls: [],
-      failedToolCalls: [],
       pendingProposals: [],
     });
     expect(finalized).toEqual({
@@ -156,9 +142,9 @@ describe("agent output boundary", () => {
   it("keeps the last successful interaction revision across resume", () => {
     const finalized = finalizeAgentOutput({
       manifest,
-      finalContent: JSON.stringify({
+      acceptedOutput: {
         interactions: [{ interactionId: "same", type: "form" }],
-      }),
+      },
       priorToolCalls: [
         {
           toolCallId: "before-suspend",
@@ -207,7 +193,6 @@ describe("agent output boundary", () => {
           success: true,
         },
       ],
-      failedToolCalls: [],
       pendingProposals: [],
       dedupeInteractions: true,
     });

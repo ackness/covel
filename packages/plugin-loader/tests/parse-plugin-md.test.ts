@@ -200,7 +200,11 @@ describe("current authoring manifests", () => {
       md({
         ...root,
         contributes: {
-          hooks: ["PreToolUse", { event: "PostToolUse", enforce: "post" }],
+          hooks: [
+            "PreToolUse",
+            "ReviewAgentOutput",
+            { event: "PostToolUse", enforce: "post" },
+          ],
           extensions: [
             "prompt.segment@1/notes",
             { point: "ui.slot@1", id: "panel", slot: "session.summary@1" },
@@ -211,6 +215,7 @@ describe("current authoring manifests", () => {
     );
     expect(parsed.plugin.contributes?.hooks).toEqual([
       { event: "PreToolUse" },
+      { event: "ReviewAgentOutput" },
       { event: "PostToolUse", enforce: "post" },
     ]);
     expect(parsed.manifest.extensions).toEqual([

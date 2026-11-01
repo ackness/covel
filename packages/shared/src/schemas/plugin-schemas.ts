@@ -1375,8 +1375,8 @@ export const runtimeManifestInputSchema = z
         preset: z.enum(["story", "actor", "system"]).optional(),
         stream: z.boolean().optional(),
         steering: z.boolean().optional(),
-        truncation: z.enum(["accept", "reject"]).optional(),
-        fallback: z.enum(["answer-without-tools", "fail"]).optional(),
+        truncation: z.literal("reject").optional(),
+        fallback: z.enum(["submit-output", "fail"]).optional(),
         corrections: z
           .strictObject({
             toolUse: z.number().int().min(0).max(3).optional(),

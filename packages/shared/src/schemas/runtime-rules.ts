@@ -266,22 +266,10 @@ function loopProfileIssues(
         `${name("loop", "steering")}: true requires ${name("visibility")} 'story'; ${storyOnly}`,
       );
   }
-  // The preset's truncation counts too: turning a story's streaming off
-  // without also rejecting truncation would keep a reply nobody read.
-  const keptCut = `only a reply the player read as it streamed is kept when cut`;
-  if (loop.truncation === "accept" && !stream)
+  if (loop.truncation !== undefined && loop.truncation !== "reject")
     add(
       at("loop", "truncation"),
-      `${name("loop", "truncation")} 'accept' requires ${name("loop", "stream")}: true; ${keptCut}`,
-    );
-  else if (
-    loop.truncation === undefined &&
-    preset.truncation === "accept" &&
-    !stream
-  )
-    add(
-      at("loop", "stream"),
-      `${name("loop", "stream")}: false also needs ${name("loop", "truncation")} 'reject', since the profile keeps a truncated reply; ${keptCut}`,
+      `${name("loop", "truncation")} only supports 'reject'; output submissions must be complete`,
     );
   const reserve = loop.deadlineReserveMs;
   // The loader fills an agent's default time limit, so an authored runtime

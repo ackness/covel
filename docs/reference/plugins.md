@@ -395,9 +395,9 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 - 这次调用以一次新的尝试重试一遍，附一句“只写任务需要的内容”的提示。打转或重复输出的模型重来一次通常就能写完。
 - 再次被截断才判为失败，错误信息提示调大输出上限。额度真的太小时，第二次也写不完。
-- 唯一的例外：`story` profile 的 runtime（`truncation: accept`）只输出了正文、没有工具调用。这时正文保留并提交，玩家看到一条“可能停在半句”的提示。`io.visibility: story` 的 runtime 默认用这个 profile。
+- 所有 profile 都拒绝不完整的供应商响应；只有完整的 `submit-output` 调用才能进入接受流程。
 
-**服务商没说清为什么停（`finishReason: other`）。** 回复可能停在任何地方。和截断一样，`story` profile 的 runtime 只输出了正文、没有工具调用时，正文保留并提交，玩家会看到提示：这段没写完，可以重试这一回合。其他情况判为失败，不重试。详见 [slots.md](./slots.md#结束原因诊断与拒绝)。
+**服务商没说清为什么停（`finishReason: other`）。** 判为失败，不保留正文作为成功，也不重试。详见 [slots.md](./slots.md#结束原因诊断与拒绝)。
 
 **流式调用在已有输出之后中断**（连接断开，或静默超过 `idleTimeoutMs`）。
 
@@ -575,16 +575,16 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 内核从 `segments` 推出 `narrativeOutput`：各段 `text` 用空行连接。只需要正文的插件可用 `select: /narrativeOutput` 拿到字符串；提取说话、动作或状态归属的插件应选择 `select: /segments`，连同 `kind`、`speaker` 和 `text` 阅读，不能把引语中的第一人称自动归给玩家。公共契约在 `select` 之前校验完整输出，不需要复制段落 schema。原玩家消息未必包含在提取器的输入中，不能从缺失内容推测承诺；请求、尝试和承诺不等于行动成功。对话日志、下一回合的历史、`turn-digest@1` 和记忆仍读连接后的正文，不会看到 JSON。
 
-**宽松规整。** 提交前，内核这样整理故事：
+**确定性规整。** 已接受的故事对象在提交前进行以下整理。函数与 guard 保留原有宽松规整；agent 必须先通过 schema 和故事不变量，不能靠规整绕过检查：
 
-- 纯文本故事仍然合法：每个段落成为一段 `narration`。
-- 未知的 `kind` 按 `narration` 处理；没写 `speaker` 的对白照样保留，只是不署名。
+- 已接受对象中的 `narrativeOutput` 按段落成为 `narration`；函数仍可直接返回纯文本。
+- 函数与 guard 的未知 `kind` 按 `narration` 处理，没写 `speaker` 的对白保留但不署名；agent 提交中的这两类错误必须先修正。
 - `narration` 段的 `speaker` 被去掉。
 - 超过 4000 字符的 `text` 在换行处拆成几段；超过 60 段时先合并相邻的同类、同说话人段落，仍然超出才丢掉末尾的段落。
 - 末尾“你会怎么做？”一类替玩家列选项的段落被去掉。
 - 没有任何正文的故事以“没有正文”失败，PostRuntime hook 把故事清空也一样。
 
-**修复请求。** 声明 `io.output.schema: contract:narrative-engine@2` 的 story agent 会把这份 schema 作为回复格式交给模型。模型的回复有问题时（对白没写说话人、`kind` 不认识、该写 `segments` 却写了纯文本、`segments` 为空），内核用现有的输出修复流程发一次修复请求，列出最多 5 条问题。修复次数用完后按上面的宽松规则提交。
+**提交校验。** story agent 的参数先通过实际输出 schema，再检查非空正文、段落种类和对白说话人。错误在工具结果中返回，下一普通步骤可修正。预算耗尽就失败，不把无效参数或普通回复规整成成功故事。已接受的值和函数输出仍使用确定性故事规整。
 
 **说话人解析。** 提交时，内核按名字把 `speaker` 和 `cues.present` 解析成本会话的角色：只认完整的角色 ID、名字或别名，不做部分匹配。
 
@@ -856,50 +856,39 @@ const result = await ctx.agents?.run({
 
 ### 循环 profile（`agent.loop.profile`）
 
-Agent 循环怎么跑由一个 profile 决定：文字是否流式显示给玩家、是否读玩家的插话、被截断的回复是否保留、工具调用打转时怎么办、什么时候关掉工具要最终答案。不写时按 `io.visibility` 取：`story` runtime 用 `story`，其他用 `system`。内置的两个叙事 runtime 都靠这条推导，清单里没有写。
-
-只有一项和 profile 不同时，写那一项即可，其余仍取 profile 的值：
+循环 profile 决定插话、工具循环回退、收尾和纠正预算。不写 `profile` 时，story runtime 用 `story`，其他用 `system`；子 agent 默认用 `actor`。三个 profile 都必须通过 `submit-output` 完成，截断或拒绝的供应商响应不能成功。
 
 <!-- prettier-ignore -->
 | 字段 | 作用 |
 | --- | --- |
 | `profile` | `story`、`actor` 或 `system`，其他字段在它的基础上覆盖 |
-| `stream` | 把模型的文字边写边显示给玩家 |
-| `steering` | 每步之前、以及写完正文之后，把玩家排队的插话并入对话 |
-| `truncation` | `accept`：在输出上限处被截断的正文保留；`reject`：判为失败 |
-| `fallback` | 模型反复调用同一个工具时：`answer-without-tools` 关掉工具、要答案；`fail` 以 `loop-detected` 失败 |
-| `finalizer.maxSteps` | 到步数上限或请求不再装得进模型上下文时，在满足收尾条件后关闭工具再要一次最终答案。超限收尾要求已有完整工具步骤，按[提示词预算](./prompt-structure.md#预算)按需裁剪工具组。`false` 关闭这两种收尾 |
-| `finalizer.deadlineReserveMs` | 离时限只剩这么多毫秒时不再开始新的一步，关掉工具要最终答案。`0` 关闭 |
-| `corrections.toolUse` | 缺少必需的工具工作时的纠正次数。整数 0–3，默认 1 |
-| `corrections.review` | `PostLLMResponse` 退回草稿后的纠正次数。整数 0–5，默认 2 |
-| `corrections.loopPerturbation` | 工具循环打转时，进入 `fallback` 前的扰动次数。整数 0–3，默认 1 |
-| `corrections.outputRepair` | 输出无效时关闭工具重新请求完整答案的次数。整数 0–3，默认 1 |
-
-三个 profile 的取值：
+| `stream` | 是否转发模型文字；仅 story 可开启 |
+| `steering` | 并入玩家插话；接受前收到的新插话会使当前提交作废，下一普通步骤重新提交 |
+| `truncation` | 只支持 `reject`；必须收到完整、未被供应商拒绝的响应 |
+| `fallback` | `submit-output`：重复业务调用后只提供提交工具；`fail`：以 `loop-detected` 失败 |
+| `finalizer.maxSteps` | 步数耗尽或上下文超限时，满足条件后最多再请求一次提交；默认 `true` |
+| `finalizer.deadlineReserveMs` | 剩余时间不足预留时，改为一次提交请求；默认 `0`，最多使用时限的一半 |
+| `corrections.outputRepair` | 缺少提交、混合批次、JSON/schema/故事格式失败；整数 0–3，默认 1 |
+| `corrections.review` | `PostLLMResponse` 与 `ReviewAgentOutput` 共用；整数 0–5，默认 2 |
+| `corrections.toolUse` | 缺少必需业务工作；整数 0–3，默认 1 |
+| `corrections.loopPerturbation` | 进入重复工具回退前的扰动；整数 0–3，默认 1 |
 
 <!-- prettier-ignore -->
 | 字段 | `story` | `actor` | `system` |
 | --- | --- | --- | --- |
 | `stream` | `true` | `false` | `false` |
 | `steering` | `true` | `false` | `false` |
-| `truncation` | `accept` | `reject` | `reject` |
-| `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
+| `truncation` | `reject` | `reject` | `reject` |
+| `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` 给只回答一段简报、不写正文的 agent 用。[子 agent](#子-agent) 没写 profile 时就用它。
+`profile: story`、`stream: true` 和 `steering: true` 要求 story visibility。预留必须是非负整数且小于 runtime 时限。
 
-加载时检查这几条，不满足的清单被拒绝：
+**纠正预算与输出修复。** 先处理真实响应的 `PostLLMResponse` 拒绝；没有拒绝时，依次检查批次、JSON/schema/故事格式、必需工作和输出审查。每次只归入一种纠正预算。四个计数互相独立，仅在安排下一次尝试时消耗；纠正使用普通步数和同一截止时间，不增加网络重试，也不重复已成功的业务写入。同类预算用尽就失败，不能借用其他预算。有效 JSON 回复正文也不算提交。函数和 gateway 的结构化输出 API 不受影响。
 
-- `profile: story` 要求 `io.visibility: story`。
-- 最终取值为 `true` 的 `stream` 或 `steering` 要求 `io.visibility: story`：只有故事写叙事流、读玩家的插话。
-- 最终取值为 `accept` 的 `truncation` 要求最终的 `stream` 为 `true`：只保留玩家边写边读过的正文。所以故事写 `stream: false` 时也要写 `truncation: reject`。
-- `finalizer.deadlineReserveMs` 是非负整数，并且小于 `timeoutMs`（没写时按默认时限比较）。
-
-**时限前的收尾（`deadlineReserveMs`）。** 剩余时间少于这个值、而且这时一段文字就能完成 runtime（没有未完成的 `requireToolUse`），并且至少还剩 3 秒写答案，循环就不再开始新的一步，改为关掉工具要最终答案。profile 开了 `steering` 时，上一步期间排队的玩家插话先并入对话，收尾请求能读到。写出了答案，runtime 成功，结束原因是 `deadline`，并带 `finalizer: true`。没写出答案时仍按超时失败。实际使用的值最多是 `timeoutMs` 的一半；剩余时间按排队和流式输出顺延后的时限计算。条件不满足时循环照常走到真正的时限。
-
-**纠正预算与输出修复。** `agent.loop.corrections` 的四项预算互不占用，`0` 关闭对应的纠正；只写要覆盖的键。缺少必需业务工作时使用 `toolUse` 预算。循环及收尾步骤结束后，输出若不符合 schema，或故事正文为空，默认再发一次关闭工具的请求，带上校验错误，要求重新给出完整答案；仍不合格时以 `invalid-output` 失败。修复不追加旧草稿或插话前的正文。只有原本成功结束、必需的工具工作与完成条件已满足、且还剩至少 3 秒时才尝试；异常、取消和真正超时不修复。每次修复消耗一个 `outputRepair` 预算。每个新的循环重新计数；恢复执行不算新的循环，接着挂起前用掉的次数计数。
+**时限前的收尾（`deadlineReserveMs`）。** 必需工作已完成且至少还有 3 秒时，可在步数上限、时限预留或上下文超限处安排一次只提供 `submit-output` 的收尾请求；上下文超限还要求已有完整工具步骤。它经过同一校验和审查，`PreLLMCall` 不能恢复业务工具。成功时保留原结束原因并设 `stop.finalizer: true`。收尾不触发 `PreStep`，拒绝后不再发修复请求。真正的超时、取消和模型错误保持自身原因；收尾也装不下时保留原超限原因。细节见[结束原因](./protocol.md#stop-reasons)。
 
 ### 作者信息
 

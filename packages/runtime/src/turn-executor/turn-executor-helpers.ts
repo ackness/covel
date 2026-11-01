@@ -66,7 +66,7 @@ export function buildToolDefinitions(
   toolExecutor: ToolExecutor | undefined,
   context: ToolCallContext,
   output: EffectiveAgentOutput,
-): LLMToolDefinition[] | undefined {
+): LLMToolDefinition[] {
   for (const name of [
     ...(manifest.tools?.builtin ?? []),
     ...(manifest.tools?.plugin ?? []),

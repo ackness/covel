@@ -44,6 +44,7 @@ export type {
   PluginInputSlot,
   PluginInputSource,
   PluginHookContext,
+  ReviewAgentOutputPayload,
   PluginHookHandler,
   PluginHookResult,
   PluginHookOptions,

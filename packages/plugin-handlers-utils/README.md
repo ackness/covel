@@ -11,6 +11,8 @@ The root exports input normalization, locale selection, cancellation, typed prop
 
 The root and `plugin-api` subpath also export `PluginAPI` and `PluginEntryFactory` for a unified server `entry` module. These cover lifecycle cleanup, tools, hooks, RPC, form validators, services, HTTP helpers, media wires, and known extension points. Authoring against the full entry facade requires the public `zod` peer package (`^4.6.7`) for precise schema and tool argument inference, including recursive JSON types under TypeScript 7.1. The emitted declarations require no database, kernel, or private workspace package.
 
+`ReviewAgentOutputPayload` types the `ReviewAgentOutput` hook for validated agent submissions. Return a bounded correction to request another ordinary loop step; the hook cannot replace the candidate or produce effects. See the [output review contract](../../docs/en/reference/hooks.md#reviewagentoutput).
+
 ```js
 /** @type {import("@covel/plugin-handlers-utils").PluginEntryFactory} */
 export default function (covel) {

@@ -168,10 +168,10 @@ describe("loop perturbation survives a suspension", () => {
     expect(llm.requests).toHaveLength(1);
   });
 
-  it("takes the tools away at the next repeat for the answer-without-tools fallback", async () => {
+  it("takes the tools away at the next repeat for the submit-output fallback", async () => {
     const rt = runtime({
       loopDetectionThreshold: 2,
-      loopProfile: { fallback: "answer-without-tools" },
+      loopProfile: { fallback: "submit-output" },
     });
     const record = await suspended(rt);
     const llm = queuedLLM([

@@ -99,13 +99,15 @@ If a declared `tools.plugin` tool is not registered, even when deferred by `tool
 
 ## Execution within one batch
 
+Every `PreToolUse` hook in the batch runs once in model order before any business dispatch. If an original or rewritten name is `submit-output`, it must be the sole call. Otherwise the entire batch is rejected, every original call ID receives an error, and work from earlier steps is retained.
+
 One model reply can contain several agent tool calls. After `PreToolUse` rewrites a call, it joins the parallel pool only when the runtime authorizes its name and the tool declares both `readOnly: true` and `concurrencySafe: true`. Consecutive eligible calls form one pool, with at most 8 running at once. `concurrencySafe` is the author's promise that concurrent reads do not cause side effects through shared state. The kernel rejects writes and events returned by a read-only tool, but cannot inspect external side effects.
 
 Every other call is a barrier and runs alone: it waits for the preceding pool to finish, and later calls wait for the barrier. Unknown tools, undeclared names and the loop-handled `search-tools`, `suspend` and `submit-output` calls are barriers. `delegate` and `delegate-batch` are barriers. Only the children inside one batch run concurrently.
 
 Tool messages, call records, proposals and events are collected in model order, regardless of completion order. A pooled call that exceeds its own `timeoutMs` returns `timeout` and counts as a failed call; its siblings and the loop continue. There is no default per-tool timeout. Omitting it keeps the runtime deadline as the limit; concurrent tools that wait on network reads should set `timeoutMs`.
 
-Calls skipped by a hook, suspension or loop termination still receive tool results and trace events explaining the reason. They do not count as executed calls, failures or step tool statistics. Before another model request, including output repair, the loop answers every unanswered call without executing it again.
+Calls skipped by a hook, suspension or loop termination still receive tool results and trace events explaining the reason. They do not count as executed calls, failures or step tool statistics. Before another model request, including a corrected submission, the loop answers every unanswered call without executing it again.
 
 ## How tool calls work
 
@@ -189,7 +191,7 @@ Two related points:
 
 The argument JSON a model writes often has a few typos that come up again and again. Each one has only one reasonable meaning. The framework fixes them while it parses, which saves a round where the model has to resend. The fixed content must still pass the tool's schema.
 
-Repaired arguments are written back to model history as valid JSON, including tool names and arguments rewritten by `PreToolUse`. An unrepairable call still returns `invalid-input`; history preserves its original text as a JSON string rather than an empty object that appears to have been executed. The original response and tool-call traces retain diagnostic evidence. The framework does not resend an unchanged request after the provider rejects history arguments.
+Ordinary business tools still repair the argument mistakes below. Assistant history preserves provider arguments and IDs; execution uses repaired or `PreToolUse`-rewritten arguments. Submission does not use this tolerant parser. Unrepairable business arguments return `invalid-input`.
 
 | Typo                                                   | Example                                                | How it is fixed                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -469,6 +471,8 @@ Every agent automatically receives this host control tool. Its parameters are th
 Complete required business tool work, read the results, then call `submit-output` alone. Pass `{}` for no business output when the schema permits it. If rejected, correct the reported problems and call again. Success ends computation; it does not confirm that data has been saved.
 
 Arguments are always model-authored data. The host does not extract proposals, UI, interactions, notifications or events from them. Tool success and save commit remain separate. `submit-output` is not business work, cannot be deferred, and cannot appear in plugin tool, service import, dataset names or explicit tool allowlists.
+
+Arguments must be one complete JSON object: no fence stripping, prefix extraction or truncated JSON repair. Classify once in batch/JSON/schema/story-shape, required-work, then `ReviewAgentOutput` order. Error codes are `invalid-json`, `invalid-output`, `required-work`, `review-rejected` or `submission-batch`, with bounded field or position guidance. Mixed or duplicate submissions reject before any same-batch business call executes, answering every original call ID. Earlier successful work is retained. `PostToolUse` may rewrite visible text but cannot change private acceptance; termination without acceptance fails.
 
 The former `runtime-done` tool has been removed. Do not register a replacement or keep sending old completion calls.
 
