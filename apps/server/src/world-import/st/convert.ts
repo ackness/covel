@@ -205,6 +205,17 @@ export async function convertStImport(input: {
     | undefined;
   let firstBookName = "";
   let author = "";
+  const parsedSources: {
+    source: string;
+    name: string;
+    processor: ReturnType<typeof sourceText>;
+    reporter: ImportReporter;
+    card?: ParsedCard;
+    book?: ParsedLorebook;
+    png?: Uint8Array;
+  }[] = [];
+  let cardCount = 0;
+  // Decode and validate each upload once before choosing a standalone context.
   for (const file of input.files) {
     const reporter = new ImportReporter();
     if (file.bytes.byteLength > MAX_ST_FILE_BYTES)
@@ -271,12 +282,33 @@ export async function convertStImport(input: {
           "Character card must have a non-empty name",
         );
       processor.setName(name);
-      if (characters.length >= 6)
+      if (cardCount >= 6)
         throw new StImportError(
           "cards-limit",
           "At most 6 character cards may be imported",
         );
+      cardCount++;
       sources.push({ file: source, kind: card.kind, name });
+      if (card.character_book) book = parseLorebook(card.character_book);
+    }
+    parsedSources.push({
+      source,
+      name,
+      processor,
+      reporter,
+      card,
+      book,
+      ...(png ? { png: file.bytes } : {}),
+    });
+  }
+  const standaloneName =
+    cardCount === 1
+      ? parsedSources.find((source) => source.card)?.name
+      : undefined;
+  for (const parsed of parsedSources) {
+    const { source, name, processor, reporter, card, book, png } = parsed;
+    const { text } = processor;
+    if (card) {
       if (card.kind === "card-v1")
         reporter.add(
           "info",
@@ -389,9 +421,8 @@ export async function convertStImport(input: {
           "extensions",
           extensionKeys.length,
         );
-      if (card.character_book) book = parseLorebook(card.character_book);
       if (png) {
-        if (!cover) cover = stripPngTextChunks(file.bytes);
+        if (!cover) cover = stripPngTextChunks(png);
         else
           reporter.add(
             "info",
@@ -417,7 +448,10 @@ export async function convertStImport(input: {
         );
       if (normalized) tags.add(cutText(normalized, 32));
     }
-    if (book)
+    if (book) {
+      // Book identity and tags retain their source-local rules. Only entry
+      // fields share the sole card's accepted name; embedded books keep theirs.
+      if (!card && standaloneName) processor.setName(standaloneName);
       lore.push(
         ...convertLorebook(book, {
           source,
@@ -428,6 +462,7 @@ export async function convertStImport(input: {
           budget,
         }),
       );
+    }
     processor.finish();
     requestReporter.items.push(...reporter.items);
   }

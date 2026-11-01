@@ -535,6 +535,8 @@ A `bridge: session` view in `contributes.ui.view` can additionally read a valida
 
 ## Importing third-party content: data conversion only
 
+Fixed character tokens receive literal substitutions: embedded books use their owner, while standalone books use a sanitized card name only when the same request contains exactly one card. With no cards or multiple cards, standalone character tokens are removed and reported. Replacement text is never expanded as macros again, and results still pass through sanitizing and length limits. This provides no SillyTavern extension or macro execution compatibility.
+
 SillyTavern content import uses bounded PNG chunk walking (including remaining-length checks before reading data), bounded JSON with Zod validation, fixed output paths, text sanitizing and fixed macro substitutions. PNG cover files have text and other metadata removed. No extension, script, card regex or executable macro runs. Unsupported fields and conversion losses are reported. Preview writes nothing; import uses the ZIP world's existing validation and activation under the world lock, guarded by `host.files` and `world.write`. Sanitizing does not make prompts trustworthy: lore and narration notes enter model context at the same trust level as other third-party world packages. See [the import guide](../worlds/import-sillytavern.md).
 
 ## Character perspective and private delegation

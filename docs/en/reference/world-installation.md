@@ -49,6 +49,8 @@ Rules:
 
 In **Settings → Install & manage**, choose character cards or lorebooks under **Import SillyTavern content**, preview the report, then import them as one world. This performs data conversion without executing scripts. The world is available immediately. See [the import guide](../worlds/import-sillytavern.md) for mapping, omissions and samples. Browser-private BrowserVault import is not supported.
 
+Standalone lorebooks use a character's name for fixed token substitutions only when the same import contains exactly one card. Embedded books use their owner. With no cards or multiple cards, standalone character tokens are removed and reported; see [lorebook conversion](../worlds/import-sillytavern.md#how-lorebooks-map).
+
 ## API
 
 These endpoints are controlled by the "allow install" switch. Writing a world also has to follow the global world write permission.

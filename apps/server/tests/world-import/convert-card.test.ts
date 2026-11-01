@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import { worldManifestSchema, ST_IMPORT_CODES } from "@covel/shared";
 import { convertStImport } from "../../src/world-import/st/convert.js";
@@ -10,6 +10,7 @@ import {
   v1Card,
   v2Card,
   v3Card,
+  worldInfo,
 } from "../helpers/st-card-fixtures.js";
 function file(
   result: Awaited<ReturnType<typeof convert>>,
@@ -304,3 +305,122 @@ it("detects JSON after long whitespace and a BOM", async () => {
   });
   expect(result.report.world.id).toBe("mira");
 });
+it("sanitizes a shared card name once and never expands replacement text again", async () => {
+  const result = await convert([
+    worldInfo([
+      {
+        key: ["{{char}}", "<BOT>"],
+        comment: "{{char}}",
+        content: "{{char}} / <BOT> {{getvar::PRIVATE}}<b>safe</b>",
+      },
+    ]),
+    v2Card({
+      name: "<b>Mira</b> & [Keeper](javascript:alert(1)) {<i>{user}</i>} {{setvar::PRIVATE}}",
+    }),
+  ]);
+  const name = "Mira & Keeper {{user}}";
+  expect(result.report.sources[1]?.name).toBe(name);
+  expect(parse(file(result, "data/lorebook.yaml"))[0]).toMatchObject({
+    title: name,
+    keys: [name],
+    content: `${name} / ${name} safe`,
+  });
+  expect(
+    result.report.items.filter((item) => item.code === "html-removed"),
+  ).toEqual([
+    expect.objectContaining({ source: "card0.json", count: 2 }),
+    expect.objectContaining({ source: "card1.json", count: 5 }),
+  ]);
+  expect(
+    result.report.items.filter((item) => item.code === "macros-removed"),
+  ).toEqual([
+    expect.objectContaining({ source: "card0.json", count: 1 }),
+    expect.objectContaining({ source: "card1.json", count: 1 }),
+  ]);
+  expect(JSON.stringify(result.report)).not.toContain("PRIVATE");
+  for (const entry of result.entries)
+    expect(entry.content.toString()).not.toMatch(/<b>|<i>|javascript:/);
+});
+it("bounds the accepted name and each standalone lore destination after substitution", async () => {
+  const result = await convert([
+    worldInfo([
+      {
+        content: "{{char}}".repeat(300),
+        comment: "<BOT>".repeat(2),
+        key: ["{{char}}".repeat(4)],
+      },
+    ]),
+    v2Card({ name: "Q".repeat(90) }),
+  ]);
+  expect(result.report.sources[1]?.name).toBe("Q".repeat(80));
+  expect(parse(file(result, "data/lorebook.yaml"))[0]).toMatchObject({
+    content: "Q".repeat(20000),
+    title: "Q".repeat(120),
+    keys: ["Q".repeat(200)],
+  });
+  expect(
+    result.report.items.filter((item) => item.code === "text-truncated"),
+  ).toEqual([
+    expect.objectContaining({
+      source: "card0.json",
+      field: "content",
+      count: 1,
+    }),
+    expect.objectContaining({ source: "card0.json", field: "keys", count: 1 }),
+    expect.objectContaining({ source: "card0.json", field: "title", count: 1 }),
+    expect.objectContaining({ source: "card1.json", field: "name", count: 1 }),
+  ]);
+  expect(
+    result.report.items.some((item) => item.code === "macros-removed"),
+  ).toBe(false);
+});
+it.each([
+  [v2Card({ name: "<script>bad</script>" }), "card-no-name"],
+  [v2Card({ name: "{{char}}" }), "card-no-name"],
+  [v2Card({ tags: [1] }), "card-invalid"],
+])(
+  "rejects an invalid later card instead of using the earlier name",
+  async (invalid, code) => {
+    await expect(
+      convert([
+        v2Card(),
+        worldInfo([{ content: "{{char}} keeps the key.", constant: true }]),
+        invalid,
+      ]),
+    ).rejects.toMatchObject({ code });
+  },
+);
+it.each([
+  [Buffer.from('{"name":'), "json-invalid"],
+  [
+    Buffer.from(
+      JSON.stringify(v2Card({ description: "x".repeat(3 * 1024 * 1024) })),
+    ),
+    "json-too-large",
+  ],
+  [Buffer.alloc(8 * 1024 * 1024 + 1), "file-too-large"],
+  [makePng(v2Card()).subarray(0, -2), "png-invalid"],
+  [
+    makePng(v2Card({ description: "x".repeat(3 * 1024 * 1024) })),
+    "json-too-large",
+  ],
+])(
+  "rejects malformed or oversized later inputs before allocating a world id",
+  async (bytes, code) => {
+    const isIdTaken = vi.fn(async () => false);
+    await expect(
+      convertStImport({
+        files: [
+          {
+            name: "book.json",
+            bytes: Buffer.from(JSON.stringify(worldInfo())),
+          },
+          { name: "card.json", bytes },
+        ],
+        locale: "en-US",
+        isIdTaken,
+      }),
+    ).rejects.toMatchObject({ code });
+    expect(isIdTaken).not.toHaveBeenCalled();
+  },
+);
