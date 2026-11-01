@@ -6,6 +6,23 @@ import {
 } from "../src/narrative-review.js";
 import type { LLMResponse } from "@covel/shared";
 
+const possessiveDialogue = [
+  "‘The guards’ keys are mine,’ she said.",
+  "'The guards' keys are mine,' she said.",
+];
+const ambiguousDialogue = [
+  "‘The guards’ keys are mine’ she said.",
+  "'The guards' keys are mine' she said.",
+  "‘These are mine’ she said.",
+  "'These are mine' she said.",
+];
+const reviewDrafts = (text: string): string[] => [
+  text,
+  ...["narration", "dialogue", "action"].map((kind) =>
+    JSON.stringify({ segments: [{ kind, text }] }),
+  ),
+];
+
 describe("narrative perspective review", () => {
   it("distinguishes narration from direct speech, nested quotes, and apostrophes", () => {
     expect(
@@ -44,6 +61,162 @@ describe("narrative perspective review", () => {
     expect(
       perspectiveError("她忘我地端详迷你潮灯。", "character-third"),
     ).toBeUndefined();
+  });
+
+  it.each(possessiveDialogue)(
+    "keeps plural possessives inside single-quoted dialogue: %s",
+    (text) => {
+      expect(perspectiveError(text, "character-second")).toBeUndefined();
+      const narration = outsideDialogue(text);
+      expect(narration).not.toContain("mine");
+      expect(narration).not.toContain("keys are");
+      expect(narration).toContain("she said.");
+      for (const story of [`I wait. ${text}`, `${text} I step away.`]) {
+        expect(outsideDialogue(story)).toContain("I ");
+        expect(perspectiveError(story, "character-second")).toContain("second");
+      }
+    },
+  );
+
+  it.each(ambiguousDialogue)(
+    "keeps unresolved apostrophes out of perspective enforcement: %s",
+    (text) => {
+      expect(outsideDialogue(text)).not.toContain("mine");
+      expect(perspectiveError(text, "character-second")).toBeUndefined();
+      expect(outsideDialogue(`I wait. ${text}`)).toContain("I wait.");
+      expect(perspectiveError(`I wait. ${text}`, "character-second")).toContain(
+        "second",
+      );
+    },
+  );
+
+  it.each([" ", "\t", " \t ", "\u00a0", "\n", "\r\n"])(
+    "recognizes possessive apostrophes before whitespace %j",
+    (whitespace) => {
+      for (const [open, close] of [
+        ["‘", "’"],
+        ["'", "'"],
+      ]) {
+        const text = `${open}The guards${close}${whitespace}keys are mine,${close} she said.`;
+        expect(perspectiveError(text, "character-second")).toBeUndefined();
+        expect(outsideDialogue(text)).not.toContain("mine");
+        expect(outsideDialogue(text)).toContain("she said.");
+      }
+    },
+  );
+
+  it("preserves contractions, singular possessives and nested mixed quotes", () => {
+    for (const text of [
+      "'I'm taking Aya's coat; it is mine,' she said.",
+      "‘I’m taking Aya’s coat; it is mine,’ she said.",
+      "“She says, ‘The guards’ keys are mine,’ quietly.”",
+      '‘She says, "The guards\' keys are mine," quietly.’',
+      "「‘The guards’ keys are mine,’」她说。",
+    ]) {
+      expect(perspectiveError(text, "character-second"), text).toBeUndefined();
+      expect(outsideDialogue(text), text).not.toContain("mine");
+      expect(
+        perspectiveError(`${text} I step away.`, "character-second"),
+        text,
+      ).toContain("second");
+    }
+    for (const text of [
+      "The guards' keys are mine.",
+      "The guards’ keys are mine.",
+    ]) {
+      expect(outsideDialogue(text)).toBe(text);
+      expect(perspectiveError(text, "character-second")).toContain("second");
+    }
+  });
+
+  it("keeps script-aware delimiters and narration between quoted spans", () => {
+    for (const text of ["‘我的船’吗？你望着门。", "'我的船'吗？你望着门。"]) {
+      expect(outsideDialogue(text)).toContain("吗？你望着门。");
+      expect(outsideDialogue(text)).not.toContain("我的船");
+      expect(perspectiveError(text, "character-second")).toBeUndefined();
+      expect(perspectiveError(text, "character-third")).toContain("third");
+    }
+    const text = `${possessiveDialogue.join(" You wait. ")} I step away. ‘My coat is here,’ she added.`;
+    expect(outsideDialogue(text)).toContain("You wait.");
+    expect(outsideDialogue(text)).toContain("I step away.");
+    expect(outsideDialogue(text)).not.toMatch(/mine|My coat/);
+    expect(perspectiveError(text, "character-second")).toContain("second");
+  });
+
+  it("validates unambiguous unclosed tails and scopes unresolved apostrophes", () => {
+    for (const text of possessiveDialogue) {
+      const story = `${text} ‘I step away.`;
+      expect(outsideDialogue(story)).not.toContain("mine");
+      expect(outsideDialogue(story)).toContain("I step away.");
+      expect(perspectiveError(story, "character-second")).toContain("second");
+    }
+    // An apostrophe only makes its matching, still-open quotation ambiguous.
+    for (const text of [
+      "“The guards’ keys are mine",
+      "‘The guards' keys are mine",
+      "'The guards’ keys are mine",
+    ]) {
+      expect(outsideDialogue(text)).toContain("mine");
+      expect(perspectiveError(text, "character-second")).toContain("second");
+    }
+    const nested = "“I wait as she says, ‘The guards’ keys are mine’ she said.";
+    expect(outsideDialogue(nested)).toContain("I wait as she says,");
+    expect(outsideDialogue(nested)).not.toContain("mine");
+    expect(perspectiveError(nested, "character-second")).toContain("second");
+  });
+
+  it.each([...possessiveDialogue, ...ambiguousDialogue])(
+    "does not request perspective repairs for dialogue apostrophes: %s",
+    (text) => {
+      const review = createNarrativeReview("story");
+      const ctx = {
+        pluginId: "story",
+        locale: "en",
+        getOwnSettings: () => ({ perspective: "character-second" }),
+      };
+      for (const content of reviewDrafts(text)) {
+        const response = { content, toolCalls: [] };
+        for (let attempt = 0; attempt < 3; attempt++)
+          expect(
+            review.review(ctx, { messages: [], response }),
+            content,
+          ).toEqual({ action: "continue" });
+        expect(response.content).toBe(content);
+      }
+      const stories = [`I wait. ${text}`];
+      if (possessiveDialogue.includes(text))
+        stories.push(`${text} I step away.`);
+      for (const story of stories)
+        for (const content of reviewDrafts(story))
+          expect(
+            review.review(ctx, {
+              messages: [],
+              response: { content, toolCalls: [] },
+            }).replace?.correction,
+            content,
+          ).toContain("violates second-person perspective");
+    },
+  );
+
+  it("checks unquoted possessives in narration and action segments", () => {
+    const review = createNarrativeReview("story");
+    for (const kind of ["narration", "action"])
+      for (const text of [
+        "The guards' keys are mine.",
+        "The guards’ keys are mine.",
+      ])
+        expect(
+          review.review(
+            { pluginId: "story" },
+            {
+              messages: [],
+              response: {
+                content: JSON.stringify({ segments: [{ kind, text }] }),
+                toolCalls: [],
+              },
+            },
+          ).replace?.correction,
+        ).toContain("violates second-person perspective");
   });
 
   it("an unclosed trailing quote validates its tail without un-hiding closed dialogue", () => {
