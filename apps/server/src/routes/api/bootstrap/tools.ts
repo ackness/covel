@@ -52,12 +52,16 @@ export async function setupPluginTools(
   // `findTool` resolver below checks this cache before falling back to the
   // generic tool registry. Action handlers call `prepareToolsForSession` before
   // every `executeTurn` so the LLM always gets the freshest schema.
-  const sessionToolOverrides = new Map<string, Map<string, ToolModule>>();
+  // An explicit undefined suppresses the registry fallback for this session.
+  const sessionToolOverrides = new Map<
+    string,
+    Map<string, ToolModule | undefined>
+  >();
   const SESSION_OVERRIDABLE_TOOLS = new Set(["sync-characters", "emit-event"]);
 
   async function prepareToolsForSession(sessionId: string): Promise<void> {
     const value = await store.getCharacterSchema(sessionId);
-    const overrides = new Map<string, ToolModule>();
+    const overrides = new Map<string, ToolModule | undefined>();
     if (value) {
       for (const tool of buildSessionCharacterWriteTools(store, value)) {
         overrides.set(tool.name, tool);
@@ -69,6 +73,7 @@ export async function setupPluginTools(
         topics &&
         buildSessionEmitEventTool({ directory: eventDirectory }, topics);
       if (emit) overrides.set(emit.name, emit);
+      else if (topics?.length) overrides.set("emit-event", undefined);
     } catch {
       // The generic tool still validates topics and payloads at execution time.
     }
@@ -85,8 +90,8 @@ export async function setupPluginTools(
     findTool: (name, context) => {
       // Session variants advertise current character constraints and event topics.
       if (SESSION_OVERRIDABLE_TOOLS.has(name)) {
-        const override = sessionToolOverrides.get(context.sessionId)?.get(name);
-        if (override) return override;
+        const overrides = sessionToolOverrides.get(context.sessionId);
+        if (overrides?.has(name)) return overrides.get(name);
       }
       return tools.find(name, context.pluginId);
     },
