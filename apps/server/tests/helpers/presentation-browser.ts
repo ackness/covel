@@ -27,16 +27,25 @@ export async function createPresentationBrowserFixture(
     user = join(root, "user");
   await mkdir(join(builtin, "story-probe"), { recursive: true });
   await mkdir(user);
+  await cp(
+    resolve(
+      import.meta.dirname,
+      "../../../../plugins/narrator/schemas/narrative-engine.schema.json",
+    ),
+    join(builtin, "story-probe", "narrative-engine.schema.json"),
+  );
   await writeFile(
     join(builtin, "story-probe", "PLUGIN.md"),
     `---
 id: story-probe
 description: Scripted public presentation story
+contracts:
+  narrative-engine@2: { schema: ./narrative-engine.schema.json }
 runtime:
   schedule: { stage: narrative }
   io:
     visibility: story
-    output: { contract: narrative-engine@2 }
+    output: { contract: narrative-engine@2, schema: "contract:narrative-engine@2" }
   ${options.failOperation ? "agent: { tools: { services: [{ contract: purchase@1, as: purchase }] } }" : ""}
 ---
 Tell a public scene story.
@@ -226,7 +235,6 @@ contributes:
         const index = ++calls;
         return submittedOutput(
           {
-            narrativeOutput: `Public library story ${index}.`,
             segments: [
               { kind: "narration", text: `Public library story ${index}.` },
             ],

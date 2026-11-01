@@ -10,6 +10,7 @@ import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 import { closeTestApi } from "./close-api.js";
+import { submittedOutput } from "./output-submission.js";
 
 interface StageRenderFixtureOptions {
   narration?: string;
@@ -29,6 +30,13 @@ export async function createStageRenderFixture(
     user = join(root, "user");
   await mkdir(join(builtin, "story-probe"), { recursive: true });
   await mkdir(user);
+  await cp(
+    resolve(
+      import.meta.dirname,
+      "../../../../plugins/narrator/schemas/narrative-engine.schema.json",
+    ),
+    join(builtin, "story-probe", "narrative-engine.schema.json"),
+  );
   for (const path of options.fixturePlugins ?? [])
     await cp(path, join(builtin, basename(path)), { recursive: true });
   for (const id of [
@@ -47,11 +55,13 @@ export async function createStageRenderFixture(
     `---
 id: story-probe
 description: Scripted public stage story
+contracts:
+  narrative-engine@2: { schema: ./narrative-engine.schema.json }
 runtime:
   schedule: { stage: narrative }
   io:
     visibility: story
-    output: { contract: narrative-engine@2 }
+    output: { contract: narrative-engine@2, schema: "contract:narrative-engine@2" }
 ---
 Tell the public scene story.
 `,
@@ -79,8 +89,8 @@ Tell the public scene story.
         generate: async () => {
           const index = ++calls;
           await options.beforeGenerate?.(index);
-          return {
-            content: JSON.stringify({
+          return submittedOutput(
+            {
               segments: [
                 ...(options.narration
                   ? [{ kind: "narration", text: options.narration }]
@@ -101,11 +111,9 @@ Tell the public scene story.
                 present: index === 1 ? ["Mira", "Theo"] : ["Mira"],
               },
               yield: "user",
-            }),
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          };
+            },
+            { inputTokens: 1, outputTokens: 1 },
+          );
         },
       },
     });

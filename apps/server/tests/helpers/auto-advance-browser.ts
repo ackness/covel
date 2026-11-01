@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 import { closeTestApi } from "./close-api.js";
+import { submittedOutput } from "./output-submission.js";
 
 /** The browser fixture's API, also exercised without sockets by its boot regression. */
 export async function createAdvancementBrowserFixture() {
@@ -14,16 +15,25 @@ export async function createAdvancementBrowserFixture() {
     user = join(root, "user");
   await mkdir(join(builtin, "story-probe"), { recursive: true });
   await mkdir(user);
+  await cp(
+    resolve(
+      import.meta.dirname,
+      "../../../../plugins/narrator/schemas/narrative-engine.schema.json",
+    ),
+    join(builtin, "story-probe", "narrative-engine.schema.json"),
+  );
   await writeFile(
     join(builtin, "story-probe", "PLUGIN.md"),
     `---
 id: story-probe
 description: Scripted advancement story
+contracts:
+  narrative-engine@2: { schema: ./narrative-engine.schema.json }
 runtime:
   schedule: { stage: narrative }
   io:
     visibility: story
-    output: { contract: narrative-engine@2 }
+    output: { contract: narrative-engine@2, schema: "contract:narrative-engine@2" }
 ---
 Tell a short story.
 `,
@@ -61,15 +71,13 @@ Tell a short story.
                 });
             }),
           ]);
-        return {
-          content: JSON.stringify({
+        return submittedOutput(
+          {
             segments: [{ kind: "narration", text: `Saved scene ${index}.` }],
             yield: "continue",
-          }),
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+          },
+          { inputTokens: 1, outputTokens: 1 },
+        );
       },
     },
   });

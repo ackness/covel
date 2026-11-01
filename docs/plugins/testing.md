@@ -128,6 +128,8 @@ it("returns one plugin.data proposal", async () => {
 
 工具的返回值有两部分。用 `getToolContent(result)` 取“返回给模型的内容”，用 `getPendingProposals(result)` 取“想写入的数据”。不要把整个返回值当成业务内容来断言。
 
+函数 runtime 的回归测试还要覆盖宿主的返回值校验。角色缺少属性等合法输入，既要得到正确的业务结果，也要能通过[函数返回值契约](./local-code.md#写一个函数)；只断言候选名单会漏掉嵌套的 `undefined`。
+
 ### 测一个工具，并且真的保存
 
 上面的测试只看工具返回了什么。想确认这些写入真的能通过检查并保存下来，用 `executeToolAndCommit`。它用一个内存里的存档，走和游戏里相同的执行和保存流程：

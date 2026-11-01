@@ -128,6 +128,8 @@ it("returns one plugin.data proposal", async () => {
 
 A tool's return value has two parts. Use `getToolContent(result)` to get the "content returned to the model", and use `getPendingProposals(result)` to get the "data it wants to write". Do not assert on the whole return value as if it were the business content.
 
+Tests for function runtimes should also exercise the host's return value validation. Valid inputs such as characters without attributes must produce the expected business result and satisfy the [function result contract](./local-code.md#write-a-function). Checking only the selected cast can miss nested `undefined` values.
+
 ### Test a tool and really save
 
 The test above only checks what the tool returned. To confirm that these writes really pass the checks and get saved, use `executeToolAndCommit`. It uses an in-memory store, and it goes through the same execution and save flow as in the game:

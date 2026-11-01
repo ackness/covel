@@ -52,4 +52,19 @@ describe("classifyActionableError", () => {
       ),
     ).toBe("invalid-output");
   });
+
+  it.each([
+    "invalid-json",
+    "invalid-output",
+    "missing-submission",
+    "required-work",
+    "review-rejected",
+    "submission-batch",
+  ])("recognises rejected agent submissions (%s)", (reason) => {
+    expect(
+      classifyActionableError(
+        `[provider: fixture-provider, model: failed-model] Output rejected (${reason}).`,
+      ),
+    ).toBe("invalid-output");
+  });
 });
