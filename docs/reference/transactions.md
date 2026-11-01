@@ -108,7 +108,9 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 
 先读一条记录，再根据它计算替换值时，内核自动保护这次计算的依据。`ctx.pluginData`、`ctx.store`、工具和服务中的显式 `get` / `list` 都会记录读取基线。具体键的缺失和存储的 JSON `null` 不同；列表只记录返回的键，不记录假想的缺失键。数据集写工具为校验而做的内部读取不算作者读取。
 
-同一作用域读过的同一个插件数据键，随后通过 `plugin.data`、batch 条目、delete，或含 `set`、`merge`、`upsertItem`、`delete` 的 `plugin.data.update` 改写时，内核给 proposal 信封加上私有前提条件。例如 `[inc +15, merge {bar: 125}]` 的整个列表一起受保护。只含 `inc`、`append`、`insert`、`remove` 的列表继续作用于提交时的最新值。没有相同键的显式读取就是盲写，沿用覆盖或操作语义。
+Agent 通过 `io.selfData` 收到自有数据、且持有该 namespace 的写工具时，注入的行也算读取。基线来自同一次提示词读取的完整存储值，在模型投影和摘要截断之前记录；只保护实际注入窗口里的键，不保护未展示的键或列表幻影。键随后被删除也算变化，JSON `null` 仍不同于缺失。没有对应写工具的 runtime 不为注入记录基线。数据集按所选写工具和允许操作确定 namespace；能暂存 proposal 的插件入口工具可以写任意自有 namespace，因此其注入的自有数据都计入读取。
+
+同一作用域读过的同一个插件数据键，随后通过 `plugin.data`、batch 条目、delete，或含 `set`、`merge`、`upsertItem`、`delete` 的 `plugin.data.update` 改写时，内核给 proposal 信封加上私有前提条件。例如 `[inc +15, merge {bar: 125}]` 的整个列表一起受保护。只含 `inc`、`append`、`insert`、`remove` 的列表继续作用于提交时的最新值。没有相同键的显式读取或上述注入读取就是盲写，沿用覆盖或操作语义。
 
 插件数据目标由宿主重绑定后的来源插件和 payload 的 `namespace` / `key` 确定；payload 或 batch 条目里额外的 `pluginId` / `kind` 字段不能改变保护目标。格式错误的 payload 交给普通 proposal 校验，以 `proposal-invalid` 拒绝，沿用所属单元的回滚边界，不会在提取目标时中止有效故事的提交。
 

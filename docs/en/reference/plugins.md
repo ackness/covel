@@ -487,6 +487,10 @@ io:
     recordAs: latest-facts
 ```
 
+#### `io.selfData`
+
+`io.selfData` puts a bounded page of own data from the named namespace into the agent prompt. `maxEntries` sets the window and `format` sets its display. If the runtime also holds write tools for that namespace, injected keys count toward its read baseline: a replacement based on an old value fails with `conflict` if the same key changes during the model request. An extra read-tool call is not needed to enable protection. Without corresponding write tools, injection records no baseline; keys outside the window still need explicit reads. See [read-baseline preconditions](./transactions.md#read-baselines) for full-value, absence and commit-isolation rules.
+
 #### How inputs are read
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
@@ -988,7 +992,7 @@ Upstream writes are only read. They never enter the reader's own buffer, so noth
 
 The commit rules are under [Turn-level single transaction](./transactions.md#turn-level-single-transaction).
 
-**Read-derived replacements.** Explicit same-key reads automatically guard later replacements, including derived `inc` + `merge` lists. Blind writes and pure relative lists keep their existing semantics. Guards and the agent they allow to run have separate scopes. See [read-baseline preconditions](./transactions.md#read-baselines).
+**Read-derived replacements.** Explicit same-key reads automatically guard later replacements, including derived `inc` + `merge` lists. The same applies to `io.selfData` injected into agents holding corresponding write tools. Blind writes and pure relative lists keep their existing semantics. Guards and the agent they allow to run have separate scopes. See [read-baseline preconditions](./transactions.md#read-baselines).
 
 ### Dynamic dimensions
 

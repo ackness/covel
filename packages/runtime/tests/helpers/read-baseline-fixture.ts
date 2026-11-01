@@ -12,9 +12,9 @@ afterEach(async () => {
 });
 
 export async function readBaselineFixture(
-  create: () => DataStore = createMemoryStore,
+  create: () => DataStore | Promise<DataStore> = createMemoryStore,
 ) {
-  const store = create();
+  const store = await create();
   opened.push(store);
   const now = "2026-10-30T00:00:00.000Z";
   await store.createSession({
