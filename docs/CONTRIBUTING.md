@@ -129,17 +129,17 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。CI（[`ci.yml`](../.github/workflows/ci.yml)）只对 `@covel/runtime` 强制覆盖率下限：`pnpm test:coverage:runtime` 带覆盖率运行它的测试，低于 `packages/runtime/vitest.config.ts` 里的 `thresholds` 即失败；下限比实测值低几个百分点，用来拦截下降，覆盖率上升后应随之调高。其余包的 ≥ 80% 仍是参考目标，未强制。
 
-PR、main 推送、发布、每日 UTC 03:17 的定时运行及手动运行统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再另跑 Docs 验证工作流。每种范围都运行完整的 `pnpm check`。纯文档随后运行 `pnpm test:docs:packages`；源码、混合改动、未知范围、显式 commit 和发布运行完整套件；定时与手动运行即使位于纯文档提交也选择完整范围。手动运行使用所选 ref，不接受命令或路径输入。分类复用 pre-push 的 `scripts/lib/change-scope.mjs`；读取文档的包测试必须列进 `test:docs:packages`，由 `scripts/tests/change-scope.test.mjs` 检查。
+PR、main 推送、发布、每日 UTC 03:17 的定时运行及手动运行使用 [`ci.yml`](../.github/workflows/ci.yml)。源码、混合改动、未知范围、显式 commit 和发布运行完整静态检查和全部套件。纯文档跳过源码 CI，只运行 schema 引用与变更日志检查、`pnpm test:docs` 和 Site 构建。定时与手动运行即使位于纯文档提交也选择完整范围。工作流保留无条件触发，由 `scripts/lib/change-scope.mjs` 在 job 层过滤路径，避免跳过必需检查导致 PR 一直 Pending，也不受 GitHub 触发器只比较前 300 个文件的限制。手动运行使用所选 ref，不接受命令或路径输入。读取文档的包测试必须列进 `test:docs:packages`，由脚本测试检查。
 
-完整路径中，`verify` 运行静态检查，与 `tests` 的其余套件及构建并行；两者只等待范围选择，各用独立 Turbo 缓存键，且都必须成功才能通过 `Verification`。纯文档的包测试和发布 preflight 留在 `verify`。`tests` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 独立运行。`e2e` 用四个互不共享检出、构建或数据目录的 shard 执行完整 `pnpm e2e`，保留 `chromium` 和 `chromium-dev` 自动路由，每个 runner 一个 worker。`browser` 收集后各运行一次 smoke 和全部 `pnpm e2e:extensions`；smoke 失败后，只要准备成功且未取消，仍尝试扩展验收，任一失败都会使任务失败。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
+完整路径中，`verify` 运行静态检查，与 `tests` 的其余套件及构建并行；两者只等待范围选择，各用独立 Turbo 缓存键，且都必须成功才能通过 `Verification`。纯文档测试和发布 preflight 留在 `verify`。`tests` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 用两个独立 runner 分片，`runtime` 在另一个 runner 带覆盖率运行一次并执行原下限；PostgreSQL 独立运行。`e2e` 用八个独立 runner 执行完整 `pnpm e2e`，保留两个 project 和一个 worker。分片按实测文件耗时平衡，详见[浏览器测试](./internals/e2e-testing.md#ci-执行与失败证据)。完整清单、八片并集和扩展文件覆盖在静态检查 runner 集中校验，浏览器任务不再额外 `--list`。`browser` 矩阵的两个独立 runner 分别运行一次 smoke 和全部扩展验收，不互相等待或因对方失败而取消，任一失败都阻止通过。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
 
 完整 shard、smoke 和扩展验收都通过同一个 `scripts/e2e-cpu-list.mjs` 从允许的 CPU 集合选前两个逻辑 CPU，再用 `taskset` 限制测试、子服务和 Chromium；只有一个时会记录限制，解析失败不能无约束运行。定时与手动运行还把沙箱延迟审批正反例、桌面和移动宽度的独立区域测试各重复三次，一个 worker、零重试，输出单独保存。普通扩展验收始终一个 worker、零重试；完整套件在 CI 可重试两次，报告分别显示 flaky 和重试，不能把重试通过当作压力验证通过。每个 shard 的任务上限 40 分钟，`browser` 25 分钟，合并门禁 65 分钟。测试、expect 和服务启动预算见[浏览器测试](./internals/e2e-testing.md#ci-执行与失败证据)。
 
 失败产物保留七天，包含首次失败 trace、截图和 HTML 报告；在 Actions 运行页的 Artifacts 下载带 shard、run 和 attempt 的产物，普通扩展与压力输出分开。本地所有固定端口浏览器命令用 `flock /tmp/covel-e2e.lock` 顺序运行，不能在同一检出并发跑 shard。工作流、脚本、E2E 或配置改动可不选任何包单元测试，这是本地静态检查与收集覆盖；它们仍属于源码，CI 必须执行完整浏览器和扩展验收。
 
-非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务用 Turbo 并行构建；纯文档改动也必须通过该任务。输入相同时恢复已有产物，仍须成功完成 Site 任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
+非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回桌面 staging。Site 用 Turbo 并行构建官网和文档站，纯文档也必须通过；GitHub 缓存键使用这两个任务的输入 hash，相同输入不再为每个提交复制一次缓存。输入包含文档、站点配置、`SITE_BASE`、环境文件、lockfile 和工具链；恢复后仍由 Turbo 校验，最后才组装发布目录。独立 `pnpm build` 仍构建全部目标。本地缓存限制为 7 天、2GB；CI 为 2 天、500MB，Site 进一步限制到 128MB。Turbo 在写入本次产物前淘汰，因此快照还可能增加一份本次产物。不要把不使用的二进制或桌面 staging 放进 Actions 缓存；仓库默认总容量只有 10GB。
 
-main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推送替换正在等待的文档部署。定时和手动 CI 只构建 Site，不发布 Pages；部署仍只允许 main 的 push。Site 的非 PR、仅构建运行也使用独立组，不会挤掉待部署运行；需要部署的运行仍按分支共用一组，保留原有 Site 的等待替换行为。PR 的新提交仍会取消旧运行。
+main 的每次推送使用独立的 CI 并发组；Site 的所有非 PR 运行（包括部署）也使用独立组，避免同组后续运行替换排队提交。仅设 `cancel-in-progress: false` 不能阻止 GitHub 替换同组的旧 pending 运行。PR 新提交用 `cancel-in-progress` 取消旧运行。定时和手动 CI 只构建 Site，不发布 Pages；CI 部署仍只允许 main 的 push。
 
 范围选择只有需要比较 PR 或 main 推送时获取完整的提交与树历史；发布或显式 commit 请求直接选完整范围，浅检出即可。范围选择、结果汇总和合并门禁只稀疏检出所需的控制脚本，checkout 使用 blob 过滤，避免下载无关历史文件内容或展开整个工作树。控制脚本仍来自工作流自身的版本。
 
@@ -151,7 +151,7 @@ Turbo、Electron、Chromium 和 Site 的任务缓存各用一次 restore；普�
 
 macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界选择、开局准备和刷新，再检查应用及其进程组退出；截图和日志独立上传。它不验证 Gatekeeper、DMG 安装交互或原生窗口可见性。Windows 发布任务运行桌面回归测试，并在含空格和中文的 ZIP 解压路径验证 Electron 后端；记录产物与 ZIP 解压体积。它还启动实际 ZIP 和自解压 EXE，检查原生准备画面、可见应用窗口、世界选择与开局按钮，以及进程树退出。它需要未锁定的交互式 Windows 桌面；无法观察时失败，不能用 API 或渲染器截图替代。原生截图与日志独立上传，不进入发布资产。打包改动的 PR 必须注明实际验证的平台；添加工作流不等于已通过 Windows 验证。
 
-`Verification` 汇总所选任务，包括每次非发布 CI 的 Site 和完整范围的全部浏览器 shard；任一 shard 失败、超时或取消会阻止通过，纯文档 PR/main 可跳过浏览器任务。必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
+`Verification` 汇总所选任务，包括每次非发布 CI 的 Site 和完整范围的全部浏览器 shard；任一 shard 失败、超时或取消会阻止通过，纯文档 PR/main 跳过源码检查与浏览器任务，仍要求文档验证和 Site 成功。必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
 
 ### Dagger 连接验证
 

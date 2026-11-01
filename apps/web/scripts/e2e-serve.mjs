@@ -16,9 +16,11 @@
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { build, preview } from "vite";
+import { spawnCommand } from "../../../scripts/lib/command-shim.mjs";
 
 const { values } = parseArgs({
   options: {
+    "build-only": { type: "boolean", default: false },
     host: { type: "string", default: "127.0.0.1" },
     port: { type: "string", default: "5183" },
   },
@@ -26,7 +28,26 @@ const { values } = parseArgs({
 process.env.NODE_ENV = "production";
 const outDir = fileURLToPath(new URL("../../../dist/web-e2e", import.meta.url));
 
-await build({ logLevel: "warn", build: { outDir, emptyOutDir: true } });
+if (values["build-only"]) {
+  await build({ logLevel: "warn", build: { outDir, emptyOutDir: true } });
+  process.exit(0);
+}
+
+// Content-addressed output, rather than an existence check: edits invalidate
+// the build, while smoke/acceptance/stress can serve the same fresh bundle.
+const status = await new Promise((resolve, reject) => {
+  const child = spawnCommand(
+    "pnpm",
+    ["exec", "turbo", "build:e2e", "--filter=@covel/web"],
+    {
+      cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+      stdio: "inherit",
+    },
+  );
+  child.once("error", reject);
+  child.once("exit", (code) => resolve(code ?? 1));
+});
+if (status !== 0) process.exit(status);
 const server = await preview({
   build: { outDir },
   preview: { host: values.host, port: Number(values.port), strictPort: true },

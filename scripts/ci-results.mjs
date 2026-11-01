@@ -1,7 +1,15 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const fullJobs = ["tests", "web", "server", "postgres", "browser", "e2e"];
+const fullJobs = [
+  "tests",
+  "web",
+  "server",
+  "runtime",
+  "postgres",
+  "browser",
+  "e2e",
+];
 
 /** Validate native jobs.needs results, including jobs GitHub skipped. */
 export function verificationFailures(needs, release = false) {
