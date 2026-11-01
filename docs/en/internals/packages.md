@@ -81,6 +81,8 @@ The host is an application that assembles these packages and runs them: the serv
 
 The desktop shell depends on Zod directly to validate the window state saved locally. The window position and size belong to the Electron host. They are not exposed as a shared domain schema.
 
+Main reads shared helpers through `@covel/shared/locale`, `@covel/shared/provider-keys` and `@covel/shared/system-proxy-ipc`. These public entries bypass the shared barrel so theme CSS validation and its parser stay out of main. Shared still owns theme validation for server consumers.
+
 The desktop shell's HTTP client for its sidecar depends directly on npm Undici, not Electron's built-in `fetch`. The outbound transport in `ai-provider` also explicitly depends on npm Undici; upgrading Node or Electron does not replace either dependency. The main-process ESM build provides a native `require` bridge so the bundled Undici can load Node built-in modules.
 
 These shell dependencies are listed as development dependencies in `apps/desktop/package.json` because they are already bundled into main/preload; the installer does not carry another desktop `node_modules` tree. The server owns its complete runtime dependencies, including `tsx` / esbuild and the public SDK for community TypeScript plugins. See the [staging rules](./desktop-packaging.md#rules-for-the-staging-directory) for pruning boundaries.

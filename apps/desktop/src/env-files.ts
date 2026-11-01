@@ -6,7 +6,7 @@ import {
   parseProviderKeysEnv,
   providerKeyToId,
   toApiKeyEnvMap,
-} from "@covel/shared";
+} from "@covel/shared/provider-keys";
 
 function loadEnvFiles(baseDir: string): Record<string, string> {
   const result: Record<string, string> = {};

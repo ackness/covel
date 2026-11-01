@@ -35,6 +35,7 @@ import {
 import { ensureElectronBinary } from "./ensure-electron.mjs";
 import { verifyRuntimeFile } from "../src/runtime-integrity.ts";
 import { verifyPackagedMain } from "./packaged-main.mjs";
+import { assertMainBundle } from "./main-bundle.mjs";
 import { fetchJsonWithTimeout } from "../src/network.ts";
 import { stopServerProcess } from "../src/server-shutdown.ts";
 
@@ -80,6 +81,8 @@ if (packaged) {
     path.join(desktopRoot, "dist/preload.mjs"),
     selection.preloadSha256,
   );
+  const mainFile = path.join(desktopRoot, "dist/main.mjs");
+  assertMainBundle(fs.readFileSync(mainFile, "utf8"), mainFile);
 }
 const electronExecutable = packaged
   ? packagedElectronExecutable(runtimeResources, options)
