@@ -31,11 +31,6 @@ export async function runValidateManifest(
       if (visited.has(rootPath)) continue;
       visited.add(rootPath);
       const report = await validatePluginPackage(rootPath);
-      output.stdout.write(`  execution: ${report.execution.mode}\n`);
-      for (const issue of report.execution.diagnostics)
-        output.stdout.write(
-          `  ${issue.file}${issue.field ? ": " + issue.field : ""}: ${issue.message}\n`,
-        );
       if (!report.ok) {
         output.stderr.write(`✗ ${report.cliFailure}\n`);
         status = 1;

@@ -135,6 +135,11 @@ describe("package validation endpoints", () => {
       expect(response.status).toBe(200);
       const result = packageValidationReportSchema.parse(await response.json());
       const core = await validatePluginPackage(dir);
+      expect(core.execution.mode).toBe("declarative");
+      expect(result.summary).toMatchObject({
+        executionMode: "declarative",
+        executionDiagnostics: [],
+      });
       expect(result).toEqual(
         validationReport("plugin", dir, core.issues, "probe", {
           version: core.version,
@@ -145,6 +150,43 @@ describe("package validation endpoints", () => {
       );
     },
   );
+  it("preserves incomplete inspection for a linked dependency without host paths or CLI data", async () => {
+    const dir = await plugin();
+    await mkdir(path.join(dir, "node_modules"));
+    await symlink("../PLUGIN.md", path.join(dir, "node_modules/linked.md"));
+    const core = await validatePluginPackage(dir);
+    const execution = {
+      mode: "unknown",
+      diagnostics: [
+        {
+          file: "PLUGIN.md",
+          message:
+            "Package inspection is incomplete or changed; reload a readable, stable package.",
+        },
+      ],
+    };
+    expect(core.ok).toBe(true);
+    expect(core.execution).toEqual(execution);
+    const response = await post("plugin", { kind: "installed", id: "probe" });
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const result = packageValidationReportSchema.parse(JSON.parse(text));
+    expect(result).toMatchObject({ kind: "plugin", id: "probe", ok: true });
+    expect(result.summary).toEqual({
+      languages: "text en; instructions en",
+      executionMode: "unknown",
+      executionDiagnostics: execution.diagnostics,
+    });
+    for (const value of [
+      root,
+      os.tmpdir(),
+      os.homedir(),
+      "rootPath",
+      "cliFailure",
+      "cliWarnings",
+    ])
+      expect(text).not.toContain(value);
+  });
   it("reports several independent failures with HTTP 200 and no host paths", async () => {
     const dir = await plugin({
       future: true,
