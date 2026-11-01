@@ -187,6 +187,8 @@ The story interface also provides the host’s [advancement and Stop controls](.
 
 ## Ensemble dialogue and character actors
 
+Without an eligible sub-agent target, the narrator receives no delegation tools. If the tools omit the actor target required by a plan, it also narrates alone and yields to the player.
+
 Dialogue Narrator remains playable alone. With optional Character Actor (`character-agent`) and Turn Policy (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. Parallel plans use one bounded `delegate-batch`; sequential plans retain single `delegate` calls. Successful contributions stay in plan order. Concurrent dispatch does not reduce actor model calls or token costs; director adds another model call. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
 
 Turn Policy offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).

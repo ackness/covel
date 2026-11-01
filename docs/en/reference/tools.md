@@ -749,6 +749,8 @@ The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the
 
 An agent runtime uses it to hand a job to a [sub-agent](./plugins.md#sub-agents): another agent runtime runs with the brief inside this execution and returns its output. List `delegate` in `agent.tools.builtin` to call it.
 
+`delegate` and `delegate-batch` are offered only when this execution's frozen session registry has an eligible target. With none, both tools are absent and the runtime continues normally. Targets must be active `subagentOnly` agents, excluding functions and presentation runtimes. Their `target` schemas list only uniquely resolved contracts and runtime IDs in the caller's own package. Missing, paused or ambiguous contracts are omitted; paused providers still participate in ambiguity checks. Preloading and deferred search use the same rule. Prompts should check that the tool and required target are offered, otherwise complete the task themselves. Calls still resolve their targets again: a target that disappears returns `not-found` without throwing.
+
 | Parameter   | Type   | Required | Description                                                                                           |
 | ----------- | ------ | -------- | ----------------------------------------------------------------------------------------------------- |
 | target      | object | ✓        | `{ contract }` (the contract's provider, any package) or `{ runtimeId }` (own package), never both    |
@@ -780,7 +782,6 @@ The execution's existing runner claims requests in input order before starting p
 Successful reads, baselines and write-service operations remain speculative until the enclosing live tool succeeds. Failed children contribute none; a cancelled outer tool discards even successful children's evidence and operations. The existing per-caller/provider service lock and operation sequence still apply; plan order does not promise service effect order. Both delegation tools keep `readOnly:false`, `stagesWrites:true`, `idempotent:false`, `concurrencySafe:false`, and are unavailable to sub-agents and presentation contexts.
 
 If any entry resolves to a private actor or concealed provider, the whole batch's arguments and results are redacted from persisted/public copies, including malformed entries with known targets. The authorized live parent can use accepted outputs. `completeAfterTools` projects a private batch to `{}` before output validation. See [trace correlation and privacy](./protocol.md#sub-agent-events).
-
 
 ## Character management tools
 

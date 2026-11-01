@@ -147,6 +147,7 @@ describe("bundled orchestration", () => {
       });
       const actorRequests: string[] = [];
       const parentRequests: string[] = [];
+      const parentToolNames: string[][] = [];
       const directorRequests: string[] = [];
       const adapter: ModelProviderAdapter = {
         generateText: async () => {
@@ -350,6 +351,7 @@ describe("bundled orchestration", () => {
             );
           }
           parentRequests.push(text);
+          parentToolNames.push((request.tools ?? []).map((tool) => tool.name));
           const block = request.messages
             .map((message) =>
               typeof message.content === "string" ? message.content : "",
@@ -661,6 +663,13 @@ describe("bundled orchestration", () => {
           mode === "zero-caps"
         )
           expect(content).toContain('"yield":"user"');
+        if (mode === "missing-actor") {
+          expect(parentToolNames.length).toBeGreaterThan(0);
+          for (const offered of parentToolNames) {
+            expect(offered).not.toContain("delegate");
+            expect(offered).not.toContain("delegate-batch");
+          }
+        }
         expect(delegates).toEqual(
           [
             "missing-policy",

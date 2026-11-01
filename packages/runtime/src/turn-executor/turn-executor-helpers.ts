@@ -6,6 +6,7 @@ import { isValidPluginSetting } from "@covel/shared";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import { isSetupRuntime } from "@covel/shared";
 import { resolveFrameworkCompletion } from "@covel/context";
+import { DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME } from "@covel/tools";
 import type {
   ToolCallContext,
   ToolExecutor,
@@ -138,8 +139,11 @@ export function buildToolDefinitions(
         description: info.description,
         parameters: info.jsonSchema as Record<string, unknown>,
       });
-    } else if (generated.has(name)) {
-      // A generated tool that did not resolve is left out for this run.
+    } else if (
+      generated.has(name) ||
+      [DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(name)
+    ) {
+      // Optional imports and delegation targets can be absent for this run.
     } else if (frameworkNames.has(name)) {
       // Framework-contracted sentinel pushed above, not a manifest
       // declaration — keep a minimal definition even when the hosting
