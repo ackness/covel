@@ -436,6 +436,8 @@ Who calls it:
 
 Character and character-schema property reads use the same recorder, retaining producers across plugins. Tool and service reads belong to the calling runtime; host copying does not count. See [World Model](./world-model.md) for granularity. Successful child world-property reads join the caller's real `runId` while the invocation is still live; no child commit unit is created. Failed children discard their observations and operations without changing existing parent observations. The recorder travels only in the kernel's execution commit plan, never in public results or suspension payloads.
 
+For [`delegate-batch`](./tools.md#delegate-batch), child acceptance first joins a speculative batch scope. Outer cancellation/failure discards even completed children’s evidence and staged operations. Successful operations still attach to the story’s commit unit with the original provider locks and sequence; a commit-time operation refusal preserves the story and unrelated operations.
+
 - `get` depends only on the upstream writes that still shape the returned value. When the runtime first wrote the whole key itself (`set`, a delete, or an operation list containing either) and then read it, there is no dependency.
 - `list` depends on every upstream that wrote that namespace. A list without a namespace depends on every upstream that wrote plugin data.
 - At commit, an auxiliary unit with any member that read a dropped upstream outside the unit is dropped too, with the error `read data of <upstream runtime> that did not commit`.

@@ -55,6 +55,7 @@ agent:
       - memory-search
       - emit-event
       - delegate
+      - delegate-batch
   advertiseEvents: true
 ---
 
@@ -77,9 +78,9 @@ Only a genuine opening without actions begins the opening scene. An `advance` ac
 
 Read the optional `runtime-inputs.plan.value` once. Its cast contains names only. An unavailable or absent plan means ordinary narrator-only play and `yield: user`. For `status: invalid-selection`, ask the player to correct the actor names, narrate a small connective beat without actor calls, and yield user.
 
-For each planned actor, call `delegate` exactly once in plan order with `target: { contract: "character-actor@1" }`, `character: <planned name>`, the short observable `brief` and that actor's optional `instruction`. Never pass `data`, characterId, provider/runtime IDs, the parent transcript, the hidden story cue, world dumps or another actor's intent. A private host direction belongs only to its intended actor. The runner supplies that actor's profile and witnessed history. Even `order: parallel` is advice: dispatch sequentially with this tool. Keep contributions short enough for the normal story budget. Later actors may hear earlier accepted public segments as new observations, never intent.
+For a nonempty available `order: parallel` plan, call one `delegate-batch` with a `requests` array in plan order. For a sequential plan, call `delegate` exactly once per planned actor in plan order. Each request uses `target: { contract: "character-actor@1" }`, `character: <planned name>`, the short observable `brief` and that actor's optional `instruction`. Never pass `data`, characterId, provider/runtime IDs, the parent transcript, the hidden story cue, world dumps or another actor's intent. A private host direction belongs only to its intended actor. The runner supplies that actor's profile and witnessed history. Parallel siblings receive only their own observable brief and instruction: never include earlier sibling segments, hidden story cues or intent. Keep contributions short enough for the normal story budget. Only sequential actors may hear earlier accepted public segments as new observations, never intent.
 
-Copy each successful actor's accepted dialogue/action text in order, attaching the chosen canonical name as speaker. Add connective narration before or after according to the plan; `narrator: none` permits actor-only output. A failed, invalid, timed-out, missing, ambiguous or cap-refused actor contributes nothing: do not retry, switch providers or invent that actor's line. Cancellation ends this execution normally. If every actor fails or none is selected, produce a valid narrator-only story and yield user, including for a none plan. Missing companions never block narration.
+Read parallel `results` by input index, skipping failed entries. Copy each successful actor's accepted dialogue/action text in plan order, attaching the chosen canonical name as speaker. Add connective narration before or after according to the plan; `narrator: none` permits actor-only output. A failed, invalid, timed-out, missing, ambiguous or cap-refused actor contributes nothing: do not retry, switch providers or invent that actor's line. Cancellation ends this execution normally. If every actor fails or none is selected, produce a valid narrator-only story and yield user, including for a none plan. Missing companions never block narration.
 
 Keep all actually present cast names in `cues.present`, including silent or failed actors; failure is not departure. Never copy policy reasons, intent, receipts or failures into segments, cues, exports or other storage. Discard private intent after using the live reply. Successful optional staged operations remain subject to commit; do not duplicate them. With a successful nonempty contribution batch, the final story may use the plan's yieldHint as `yield`; stop sooner when a player response is needed. Never schedule advancement yourself.
 

@@ -713,7 +713,7 @@ export default async function compose(ctx) {
 }
 ```
 
-Alternatively replace the story RUNTIME.md with this agent version; do not install two story runtimes together. Delegate remains sequential:
+Alternatively replace the story RUNTIME.md with this agent version; do not install two story runtimes together. Use a batch for a parallel plan:
 
 <!-- orchestration-agent -->
 
@@ -727,12 +727,15 @@ io:
     contract: narrative-engine@2
 agent:
   tools:
-    builtin: [delegate]
+    builtin: [delegate, delegate-batch]
     services:
       - { contract: turn-policy@1, as: choose-speakers }
 ---
 Call choose-speakers with present character names and recent story segments.
-Delegate each planned reply with target contract character-actor@1 and character name.
+For a nonempty parallel plan, call delegate-batch once with requests in plan order.
+For a sequential plan, call delegate once per actor in plan order.
+Each request uses target contract character-actor@1, character name and an observable brief.
+Never share sibling replies, private cues or intent in a parallel brief.
 Combine successful segments in policy order, supply speaker names, and add narration.
 Keep intent private. If a policy or actor is unavailable, continue with a valid narrator fallback.
 ```

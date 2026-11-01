@@ -10,6 +10,8 @@
 
 要让另一个 agent 回答一段简报时，不需要扩展点：提供方是声明了 `schedule.subagentOnly` 和 `io.output.contract` 的 agent runtime，调用方用 `ctx.agents.run` 或 `delegate` 工具把它作为[子 agent](./plugins.md#子-agent) 运行。子 agent 在调用方的执行里运行，按契约可以找到其他包的提供方，交回输出；允许时可通过写服务暂存操作，随调用方一起提交。
 
+独立的 agent 工作可以使用 [`delegate-batch`](./tools.md#delegate-batch) 有界并发。它复用子 agent 准入和隔离，不增加扩展点或调度器。
+
 框架拥有 schema 不代表内核扩展点：[`turn-policy@1` 与 `character-actor@1`](./plugin-extensions.md#orchestration-contracts) 是可选的服务/runtime 契约，不享有故事依赖的扩展点豁免。
 
 ## 声明式消费者

@@ -1,5 +1,5 @@
 ---
-version: 0.0.42
+version: 0.0.43
 displayName: Dialogue Narrator
 description: >-
   Makes the story feel more like character dialogue, suited for play focused on

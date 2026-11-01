@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CHARACTER_ACTOR_CONTRACT, type RuntimeManifest } from "@covel/shared";
 import type { LLMMessage } from "@covel/shared";
 import { createLoopContextPolicy } from "../src/agent-loop/loop-context-policy.js";
 import { PrivateDelegationProjection } from "../src/orchestration/private-projections.js";
@@ -24,9 +25,13 @@ describe("private delegation transcript copies", () => {
     expect(inner.events[0]?.payload.messages).toEqual(messages);
   });
 
-  it.each(["normal", "emergency"] as const)(
-    "projects private digest lines and replays their provenance in %s mode",
-    async (mode) => {
+  it.each(
+    (["normal", "emergency"] as const).flatMap((mode) =>
+      ["delegate", "delegate-batch"].map((name) => ({ mode, name })),
+    ),
+  )(
+    "projects private digest lines and replays their provenance in $mode mode with $name",
+    async ({ mode, name }) => {
       const transcript: LLMMessage[] = [
         {
           role: "assistant",
@@ -34,7 +39,7 @@ describe("private delegation transcript copies", () => {
           toolCalls: [
             {
               id: "private-call",
-              name: "delegate",
+              name,
               arguments: '{"brief":"PRIVATE-BRIEF"}',
             },
             {
@@ -97,4 +102,84 @@ describe("private delegation transcript copies", () => {
       expect(transcript).toEqual(original);
     },
   );
+});
+
+it("learns private batch provenance before tracing malformed mixed entries and safely completes", async () => {
+  const privacy = new PrivateDelegationProjection();
+  const inner = makeEmitterSpy();
+  const providers: RuntimeManifest[] = [
+    {
+      name: "actor/play",
+      pluginId: "actor",
+      description: "actor",
+      runtimeType: "agent",
+      outputContract: CHARACTER_ACTOR_CONTRACT,
+      subagentOnly: true,
+      trigger: { type: "manual" },
+    },
+    {
+      name: "secret/play",
+      pluginId: "secret",
+      description: "secret",
+      runtimeType: "agent",
+      outputContract: "test.concealed@1",
+      concealed: true,
+      subagentOnly: true,
+      trigger: { type: "manual" },
+    },
+  ];
+  const emitter = privacy.emitter(inner, providers)!;
+  for (const contract of [CHARACTER_ACTOR_CONTRACT, "test.concealed@1"]) {
+    const id = `batch-${contract}`;
+    const args = JSON.stringify({
+      requests: [
+        { target: { contract: "test.generic@1" }, brief: "GENERIC-BRIEF" },
+        { target: { contract }, brief: 123, instruction: "PRIVATE-BRIEF" },
+      ],
+    });
+    await emitter.emit("llm.responded", {
+      runtimeId: "parent",
+      pluginId: "caller",
+      toolCalls: [{ id, name: "delegate-batch", arguments: args }],
+      reasoningContent: "PRIVATE-REASONING",
+      providerContinuation: { secret: "PRIVATE-NATIVE" },
+    });
+    expect(privacy.calls.has(id)).toBe(true);
+    await emitter.emit("tool.calling", { toolCallId: id, arguments: args });
+    await emitter.emit("tool.completed", {
+      toolCallId: id,
+      result: "PRIVATE-INTENT",
+    });
+    await emitter.emit("llm.calling", {
+      messages: [
+        {
+          role: "assistant",
+          toolCalls: [{ id, name: "delegate-batch", arguments: args }],
+        },
+        { role: "tool", toolCallId: id, content: "PRIVATE-INTENT" },
+      ],
+      providerRequests: ["PRIVATE-WIRE"],
+    });
+    expect(
+      privacy.completion(id, {
+        results: [{ ok: true, output: { intent: "PRIVATE-INTENT" } }],
+      }),
+    ).toEqual({});
+    expect(
+      privacy.record({
+        toolCallId: id,
+        toolName: "delegate-batch",
+        pluginId: "caller",
+        runtimeId: "parent",
+        turnId: "turn",
+        input: args,
+        output: "PRIVATE-INTENT",
+        approvalStatus: "auto-allowed",
+        timestamp: "",
+        durationMs: 0,
+      }),
+    ).toMatchObject({ input: null, output: null });
+  }
+  expect(JSON.stringify(inner.events)).not.toMatch(/PRIVATE-|GENERIC-BRIEF/);
+  expect(inner.events.some((e) => e.payload.concealed === true)).toBe(true);
 });

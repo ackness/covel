@@ -1385,6 +1385,8 @@ runtime 的终态：
 
 ### 子 agent 事件
 
+`delegate-batch` 沿用现有工具/子 agent 事件。每个尝试项都有唯一 `subagentCallId`，`parentCallId` 指向外层 batch 工具，并在子事件中携带无内容的零起始 `batchIndex`，拒绝项也一样。完成顺序可以交错；子项完成仍须等外层工具成功才能接受，其终态事件不会因外层取消而重复发出。根执行委托用量按名额认领计数，不按事件总数。费用只累计已报告的叶子 `llm.responded` / gateway 用量一次，包括后来失败前已完成的步骤；子 agent 摘要与工具结果不增加计费调用。
+
 [子 agent](./plugins.md#子-agent) 的一次运行发出 `subagent.*`。它们和 `recursive.*` 一样只进 trace（`forwardToActionStream: false`）。
 
 <!-- prettier-ignore -->

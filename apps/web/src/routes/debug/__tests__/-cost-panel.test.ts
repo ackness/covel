@@ -379,3 +379,62 @@ it("prices cache reads and writes independently, including a zero write price", 
     }),
   ).toEqual({ usd: 1.72, pricedTokens: 1_100_000, unpricedTokens: 0 });
 });
+
+it.each([false, true])(
+  "counts interleaved same-runtime batch leaves once, including a later failed actor (%s)",
+  (failed) => {
+    const tree = (id: string, index: number) => ({
+      subagentCallId: id,
+      parentCallId: "batch",
+      batchIndex: index,
+    });
+    const model = aggregate([
+      turn(1, "t", [
+        evt("llm.calling", {
+          runtimeId: "actor",
+          model: "fixture",
+          ...tree("a", 0),
+        }),
+        evt("llm.calling", {
+          runtimeId: "actor",
+          model: "fixture",
+          ...tree("b", 1),
+        }),
+        evt("llm.responded", {
+          runtimeId: "actor",
+          ...tree("b", 1),
+          ...usage(11, 5),
+        }),
+        evt("llm.responded", {
+          runtimeId: "actor",
+          ...tree("a", 0),
+          ...usage(7, 3),
+        }),
+        evt(failed ? "subagent.failed" : "subagent.completed", {
+          runtimeId: "actor",
+          ...tree("a", 0),
+          ...usage(7, 3),
+        }),
+        evt("subagent.completed", {
+          runtimeId: "actor",
+          ...tree("b", 1),
+          ...usage(11, 5),
+        }),
+        evt("subagent.failed", {
+          runtimeId: "actor",
+          ...tree("refused", 2),
+          code: "unavailable",
+        }),
+        evt("tool.completed", {
+          runtimeId: "narrator",
+          toolName: "delegate-batch",
+          ...usage(18, 8),
+        }),
+        evt("llm.responded", { runtimeId: "narrator", ...usage(13, 7) }),
+      ]),
+    ]);
+    expect([model.totalInput, model.totalOutput, model.totalCalls]).toEqual([
+      31, 15, 3,
+    ]);
+  },
+);

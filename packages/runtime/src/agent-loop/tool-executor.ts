@@ -892,6 +892,7 @@ async function recordCall(
 ): Promise<void> {
   if (!store) return;
   try {
+    const privateCall = context.delegation?.privacy.calls.has(call.toolCallId);
     await store.saveToolCall({
       id: crypto.randomUUID(),
       sessionId: context.sessionId,
@@ -899,8 +900,8 @@ async function recordCall(
       toolName: call.name,
       pluginId: context.pluginId,
       runtimeId: context.runtimeId,
-      input: call.arguments,
-      output: result,
+      input: privateCall ? "{}" : call.arguments,
+      output: privateCall ? "{}" : result,
       durationMs: Date.now() - startTime,
       approvalStatus,
       createdAt: new Date().toISOString(),

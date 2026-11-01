@@ -15,6 +15,7 @@ export const FRAMEWORK_TOOL_NAMES = [
   "world-dimension-get",
   "world-dimension-list",
   "delegate",
+  "delegate-batch",
 ] as const;
 
 /** Reviewed framework capabilities; generated datasets and imports have their own scopes. */
@@ -41,6 +42,7 @@ export const FRAMEWORK_TOOL_CAPABILITIES: Readonly<
   "world-dimension-get": "read",
   "world-dimension-list": "read",
   delegate: "control",
+  "delegate-batch": "control",
 };
 
 export function isDeclarativeFrameworkTool(name: string): boolean {

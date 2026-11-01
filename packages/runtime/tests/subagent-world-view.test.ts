@@ -58,7 +58,7 @@ function viewValue(world: WorldModelView) {
 
 describe("sub-agent world snapshots", () => {
   it.each(
-    (["run", "delegate"] as const).flatMap((route) =>
+    (["run", "delegate", "delegate-batch"] as const).flatMap((route) =>
       (["success", "failure", "idle"] as const).flatMap((childOutcome) =>
         [false, true].map((changed) => ({ route, childOutcome, changed })),
       ),
@@ -91,13 +91,18 @@ describe("sub-agent world snapshots", () => {
       let childEvidence = "";
       const llm: LLMAdapter = {
         generate: async (request) => {
-          if (request.tools?.some((t) => t.name === "delegate")) {
+          if (
+            request.tools?.some((t) =>
+              ["delegate", "delegate-batch"].includes(t.name),
+            )
+          ) {
             switch (parentCalls++) {
               case 0:
-                return toolCall("delegate", {
-                  target,
-                  brief: "A constant brief",
-                });
+                return route === "delegate-batch"
+                  ? toolCall("delegate-batch", {
+                      requests: [{ target, brief: "A constant brief" }],
+                    })
+                  : toolCall("delegate", { target, brief: "A constant brief" });
               case 1:
                 return toolCall("stage-character", {
                   id: "source",
@@ -126,10 +131,10 @@ describe("sub-agent world snapshots", () => {
       };
       const reader = fn(
         "read",
-        route === "delegate"
+        route !== "run"
           ? {
               runtimeType: "agent",
-              tools: { builtin: ["delegate", "stage-character"] },
+              tools: { builtin: [route, "stage-character"] },
             }
           : {},
       );
@@ -687,6 +692,7 @@ describe("sub-agent world snapshots", () => {
       const abort = new AbortController();
       let modelCalls = 0;
       const startedAt = Date.now();
+      const terminals: string[] = [];
       const result = await runner.run({
         caller: { pluginId: "observer", runtimeId: "observer/read", depth: 0 },
         request: { target: { contract: target.contract }, brief: "Constant" },
@@ -713,6 +719,8 @@ describe("sub-agent world snapshots", () => {
             sessionId: SESSION,
             turnId: input.turnId,
             emit: async (type) => {
+              if (type === "subagent.completed" || type === "subagent.failed")
+                terminals.push(type);
               if (type !== "subagent.completed") return;
               if (exit === "cancelled") abort.abort(new Error("caller ended"));
               if (exit === "deadline")
@@ -721,6 +729,7 @@ describe("sub-agent world snapshots", () => {
           },
         },
       });
+      expect(terminals).toHaveLength(1);
       expect(modelCalls).toBe(exit === "load-failure" ? 0 : 2);
       expect(observations).toBe(exit === "load-failure" ? 0 : 1);
       expect(result.ok).toBe(exit === "success");
@@ -853,70 +862,91 @@ describe("sub-agent world snapshots", () => {
       ).toBe(false);
     }
   });
-  it("keeps story text when a successful child's attached service operation is refused", async () => {
-    const registry = services();
-    let serviceCalls = 0;
-    registry.register("service", {
-      name: "write",
-      contract: "test.write@1",
-      access: "write",
-      modelFacing: true,
-      description: "Stage a world observation",
-      input: z.object({}),
-      output: z.object({ observed: z.string() }),
-      handler: async (_args, ctx) => {
-        serviceCalls++;
-        const observed = ctx.world.characters.find(
-          (c) => c.id === "source",
-        )?.description;
-        expect(observed).toBe("staged");
-        await ctx.pluginData.set("notes", "child", observed!);
-        return { observed: observed! };
-      },
-    });
-    let modelCalls = 0;
-    const f = await fixture({
-      deps: {
-        services: registry,
-        llm: {
-          generate: async () =>
-            modelCalls++ === 0 ? toolCall("record", {}) : prose("Complete"),
-        },
-      },
-    });
-    const actor = {
-      ...child,
-      outputContract: target.contract,
-      tools: { services: [{ contract: "test.write@1", name: "record" }] },
-    };
-    const r = await f.execute([producer, story, actor], {
-      [producer.name]: async () => writes(character()),
-      [story.name]: async (ctx) => {
-        expect(
-          (await ctx.agents!.run({ target, brief: "Constant safe brief" })).ok,
-        ).toBe(true);
-        return tell(ctx);
-      },
-    });
-    expect(serviceCalls).toBe(1);
-    expect(modelCalls).toBe(2);
-    expect(r.edges(story)).toEqual([r.resultOf(producer).runId]);
-    const outcome = await r.commit((p) =>
-      p.source.pluginId === "service" ? "operation refused" : undefined,
-    );
-    expect(outcome.status).toBe("committed");
-    expect(await f.notes("service")).toEqual({});
-    expect(
-      (await f.store.listMessages(SESSION)).map((m) => m.content),
-    ).toContain("The story continues.");
-    expect(outcome.operations).toEqual([
-      expect.objectContaining({
+  it.each(["run", "delegate-batch"] as const)(
+    "keeps story text when a successful child's service operation is refused via %s",
+    async (route) => {
+      const registry = services();
+      let serviceCalls = 0;
+      registry.register("service", {
+        name: "write",
         contract: "test.write@1",
-        status: "failed",
-        reason: "rejected",
-      }),
-    ]);
-  });
+        access: "write",
+        modelFacing: true,
+        description: "Stage a world observation",
+        input: z.object({}),
+        output: z.object({ observed: z.string() }),
+        handler: async (_args, ctx) => {
+          serviceCalls++;
+          const observed = ctx.world.characters.find(
+            (c) => c.id === "source",
+          )?.description;
+          expect(observed).toBe("staged");
+          await ctx.pluginData.set("notes", "child", observed!);
+          return { observed: observed! };
+        },
+      });
+      let modelCalls = 0;
+      const f = await fixture({
+        deps: {
+          services: registry,
+          llm: {
+            generate: async (request) => {
+              if (request.tools?.some((t) => t.name === "delegate-batch"))
+                return request.messages.some((m) => m.role === "tool")
+                  ? prose("The story continues.")
+                  : toolCall("delegate-batch", {
+                      requests: [{ target, brief: "Constant safe brief" }],
+                    });
+              return modelCalls++ === 0
+                ? toolCall("record", {})
+                : prose("Complete");
+            },
+          },
+        },
+      });
+      const actor = {
+        ...child,
+        outputContract: target.contract,
+        tools: { services: [{ contract: "test.write@1", name: "record" }] },
+      };
+      const owner =
+        route === "delegate-batch"
+          ? {
+              ...story,
+              runtimeType: "agent" as const,
+              tools: { builtin: ["delegate-batch"] },
+            }
+          : story;
+      const r = await f.execute([producer, owner, actor], {
+        [producer.name]: async () => writes(character()),
+        [story.name]: async (ctx) => {
+          expect(
+            (await ctx.agents!.run({ target, brief: "Constant safe brief" }))
+              .ok,
+          ).toBe(true);
+          return tell(ctx);
+        },
+      });
+      expect(serviceCalls).toBe(1);
+      expect(modelCalls).toBe(2);
+      expect(r.edges(story)).toEqual([r.resultOf(producer).runId]);
+      const outcome = await r.commit((p) =>
+        p.source.pluginId === "service" ? "operation refused" : undefined,
+      );
+      expect(outcome.status).toBe("committed");
+      expect(await f.notes("service")).toEqual({});
+      expect(
+        (await f.store.listMessages(SESSION)).map((m) => m.content),
+      ).toContain("The story continues.");
+      expect(outcome.operations).toEqual([
+        expect.objectContaining({
+          contract: "test.write@1",
+          status: "failed",
+          reason: "rejected",
+        }),
+      ]);
+    },
+  );
   it("discards a saved auxiliary suspension whose only world read came from a successful child", async () => {
     let calls = 0;
     const f = await fixture({

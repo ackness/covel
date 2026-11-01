@@ -1,3 +1,4 @@
+import { runDelegateBatch } from "./subagent-delegate-batch.js";
 import { forkWorldModelView } from "../function-runtime/world-model-view.js";
 import { characterByName } from "../orchestration/policy-tools.js";
 import { ToolError } from "@covel/shared";
@@ -20,6 +21,7 @@ import type {
 import { renderToolSuccess, renderToolError } from "./tool-result-text.js";
 import {
   DELEGATE_TOOL_NAME,
+  DELEGATE_BATCH_TOOL_NAME,
   delegateParametersSchema,
   parseJsonText,
 } from "@covel/tools";
@@ -57,15 +59,53 @@ export function withSubagentDelegate(
   return {
     getToolInfo: (name, context) => inner.getToolInfo(name, context),
     async execute(call, context) {
-      // An undeclared `delegate` goes to the executor, which refuses it.
-      if (
-        call.name !== DELEGATE_TOOL_NAME ||
-        context.authorizedToolNames?.has(DELEGATE_TOOL_NAME) !== true
-      )
+      if (![DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(call.name))
         return inner.execute(call, context);
-      return runDelegate(call, context, runner, scope);
+      markPrivateDelegation(call, runner, scope);
+      // Refusals still use the normal final authorization boundary. Learn
+      // provenance first so its persistence cannot expose private arguments.
+      if (context.authorizedToolNames?.has(call.name) !== true)
+        return inner.execute(call, context);
+      return call.name === DELEGATE_BATCH_TOOL_NAME
+        ? runDelegateBatch(call, context, runner, scope)
+        : runDelegate(call, context, runner, scope);
     },
   };
+}
+
+function markPrivateDelegation(
+  call: ToolCall,
+  runner: SubagentRunner,
+  scope: SubagentDelegateScope,
+): void {
+  let args: unknown;
+  try {
+    args = parseJsonText(call.arguments);
+  } catch {
+    return;
+  }
+  const entries: unknown[] =
+    call.name === DELEGATE_BATCH_TOOL_NAME
+      ? args &&
+        typeof args === "object" &&
+        "requests" in args &&
+        Array.isArray(args.requests)
+        ? args.requests
+        : []
+      : [args];
+  for (const entry of entries) {
+    const target = delegateParametersSchema.shape.target.safeParse(
+      entry && typeof entry === "object" && "target" in entry
+        ? entry.target
+        : undefined,
+    );
+    if (!target.success) continue;
+    const kind = runner.privateTargetKind(
+      { target: target.data, brief: "Private delegation" },
+      scope.caller,
+    );
+    if (kind) scope.deps.delegation?.privacy.mark(call.toolCallId, kind);
+  }
 }
 
 async function runDelegate(
@@ -87,19 +127,6 @@ async function runDelegate(
         message: `Arguments for tool "${call.name}" are not valid JSON. Ensure the arguments object is properly formatted JSON.`,
       },
     });
-  }
-  const privateTarget = delegateParametersSchema.shape.target.safeParse(
-    args && typeof args === "object"
-      ? (args as { target?: unknown }).target
-      : undefined,
-  );
-  if (privateTarget.success) {
-    const privateKind = runner.privateTargetKind(
-      { target: privateTarget.data, brief: "Private delegation" },
-      scope.caller,
-    );
-    if (privateKind)
-      scope.deps.delegation?.privacy.mark(call.toolCallId, privateKind);
   }
   const parsed = delegateParametersSchema.safeParse(args);
   if (!parsed.success) {
@@ -213,7 +240,7 @@ async function runDelegate(
  * A failed `delegate` call. Only an invalid request is the model's own
  * mistake to correct; the other errors are refusals it can work around.
  */
-async function failed(
+export async function failed(
   call: ToolCall,
   context: ToolCallContext,
   startTime: number,
@@ -239,7 +266,7 @@ async function failed(
 }
 
 /** The identity envelope `ToolExecutor` traces every tool call with. */
-async function emitToolEvent(
+export async function emitToolEvent(
   context: ToolCallContext,
   call: ToolCall,
   type: "tool.calling" | "tool.completed" | "tool.failed",

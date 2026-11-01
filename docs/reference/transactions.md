@@ -436,6 +436,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 角色和角色 schema 的属性读取也使用同一个记录器，跨插件保留生产者身份。工具和服务的读取归调用 runtime；宿主复制不算读取。粒度见 [World Model](./world-model.md)。子 agent 的世界属性读取在成功且调用仍有效时归调用方真实 `runId`，不建立子 agent 提交单元。失败子 agent 的观察和操作一起撤回；父方已有观察不变。记录器只在内核的执行提交计划中传递，不写进公开结果或挂起载荷。
 
+[`delegate-batch`](./tools.md#delegate-batch) 先把成功子项归入待定的 batch 范围。外层取消或失败时，已完成子项的证据和暂存操作也丢弃。成功操作仍按原提供方锁和序号附带在故事提交单元上；提交时拒绝某个操作仍保留故事及无关操作。
+
 - `get` 只依赖还影响返回值的上游。runtime 自己先整体写了这个键（`set`、删除，或含有其中之一的操作列表）再读，就没有依赖。
 - `list` 依赖写过这个 namespace 的全部上游。不带 namespace 的列表依赖写过插件数据的全部上游。
 - 提交时，辅助单元里任一成员读过单元外、已被丢弃的上游，这个单元就一起丢弃，错误是 `read data of <上游 runtime> that did not commit`。
