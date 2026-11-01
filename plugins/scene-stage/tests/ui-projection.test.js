@@ -18,6 +18,27 @@ const context = (data) => ({
   },
 });
 describe("stage UI projections", () => {
+  it("opts actual cast and direction values into host-owned fades", async () => {
+    const ctx = context({
+      "active-cast/current": { speakers: [{ id: "rin", name: "Rin" }] },
+      "direction/current": {
+        actors: [{ characterId: "rin", displayName: "Rin" }],
+      },
+    });
+    const cast = await handlers.get("cast")({}, ctx);
+    expect(cast).toEqual({
+      actors: [{ characterId: "rin", displayName: "Rin", active: true }],
+      retainWhenEmpty: true,
+      exitTransition: "fade",
+    });
+    expect(
+      await handlers.get("direction")({ previous: cast, events: [] }, ctx),
+    ).toEqual({
+      actors: cast.actors,
+      retainWhenEmpty: false,
+      exitTransition: "fade",
+    });
+  });
   const oldActor = { characterId: "rin", displayName: "Rin", active: true };
   const sceneEvent = {
     topic: "scene.set",
@@ -90,6 +111,7 @@ describe("stage UI projections", () => {
         { characterId: "session-hero", displayName: "Hero", active: true },
       ],
       retainWhenEmpty: false,
+      exitTransition: "fade",
     };
     expect(await project()).toEqual(expected);
     expect(await project()).toEqual(expected);
@@ -118,7 +140,7 @@ describe("stage UI projections", () => {
     for (const events of [[], [leave]])
       expect(
         await handlers.get("direction")({ previous: null, events }, ctx),
-      ).toEqual({ actors: [], retainWhenEmpty: false });
+      ).toEqual({ actors: [], retainWhenEmpty: false, exitTransition: "fade" });
   });
 
   it("does not project the new viewpoint from saved actors or cast selection", async () => {
@@ -139,7 +161,11 @@ describe("stage UI projections", () => {
     ];
     ctx.world.seats[0].currentCharacterId = "rin";
     const cast = await handlers.get("cast")({}, ctx);
-    expect(cast).toEqual({ actors: [], retainWhenEmpty: false });
+    expect(cast).toEqual({
+      actors: [],
+      retainWhenEmpty: false,
+      exitTransition: "fade",
+    });
     const direction = await handlers.get("direction")(
       { previous: cast, events: [] },
       ctx,
@@ -167,6 +193,7 @@ describe("stage UI projections", () => {
       expect(value).toMatchObject({
         actors: [{ characterId: "session-hero", displayName: "Hero" }],
         retainWhenEmpty: false,
+        exitTransition: "fade",
       });
       expect(value.actors).toHaveLength(1);
     },
@@ -181,12 +208,16 @@ describe("stage UI projections", () => {
         },
         context(scenes),
       ),
-    ).toEqual({ actors: [], retainWhenEmpty: false });
+    ).toEqual({ actors: [], retainWhenEmpty: false, exitTransition: "fade" });
   });
 
   it("preserves cast fallback for a world without direction state", async () => {
     const { "direction/current": _direction, ...withoutDirection } = scenes;
-    const previous = { actors: [oldActor], retainWhenEmpty: true };
+    const previous = {
+      actors: [oldActor],
+      retainWhenEmpty: true,
+      exitTransition: "none",
+    };
     expect(
       await handlers.get("direction")(
         { previous, events: [sceneEvent] },
@@ -217,7 +248,11 @@ describe("stage UI projections", () => {
   );
 
   it("keeps fallback when a first focus-only cue cannot establish direction", async () => {
-    const previous = { actors: [oldActor], retainWhenEmpty: true };
+    const previous = {
+      actors: [oldActor],
+      retainWhenEmpty: true,
+      exitTransition: "none",
+    };
     const { "direction/current": _direction, ...withoutDirection } = scenes;
     expect(
       await handlers.get("direction")(
@@ -301,7 +336,7 @@ describe("stage UI projections", () => {
         },
         context({}),
       ),
-    ).toEqual({ actors: [], retainWhenEmpty: false });
+    ).toEqual({ actors: [], retainWhenEmpty: false, exitTransition: "fade" });
   });
   it("lets an explicit empty direction clear an earlier cast provider", async () => {
     const value = await handlers.get("direction")(
@@ -314,6 +349,10 @@ describe("stage UI projections", () => {
       },
       context({ "direction/current": { actors: [], schemaVersion: 1 } }),
     );
-    expect(value).toEqual({ actors: [], retainWhenEmpty: false });
+    expect(value).toEqual({
+      actors: [],
+      retainWhenEmpty: false,
+      exitTransition: "fade",
+    });
   });
 });

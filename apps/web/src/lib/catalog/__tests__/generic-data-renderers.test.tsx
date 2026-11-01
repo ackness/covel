@@ -5,6 +5,7 @@ import { EntryList, SceneCastList } from "../character-renderers.js";
 import { MediaGalleryPanel } from "@/components/session/image-plugin-panels/image-gallery-panel.js";
 import { JobListPanel } from "@/components/session/image-plugin-panels/image-jobs-panel.js";
 import { invokeCatalogAction } from "../catalog-actions.js";
+vi.mock("@/hooks/use-media-query.js", () => ({ useMediaQuery: () => false }));
 vi.mock("../catalog-actions.js", async (original) => ({
   ...(await original<typeof import("../catalog-actions.js")>()),
   invokeCatalogAction: vi.fn(async () => {}),

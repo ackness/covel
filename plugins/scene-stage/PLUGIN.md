@@ -1,5 +1,5 @@
 ---
-version: 0.0.43
+version: 0.0.44
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual

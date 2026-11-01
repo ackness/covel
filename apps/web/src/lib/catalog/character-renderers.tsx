@@ -1,3 +1,8 @@
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
+import {
+  KEYED_EXIT_ANIMATION,
+  useKeyedExitTransitions,
+} from "@/lib/use-keyed-exit-transitions.js";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { entryListPropsSchema, type StageCastModel } from "@covel/shared";
@@ -12,15 +17,24 @@ const text = (value: unknown) =>
     : typeof value === "object"
       ? JSON.stringify(value)
       : String(value);
+type EntryListProps = ReturnType<typeof entryListPropsSchema.parse>;
+interface EntryRow {
+  readonly content: ReactNode;
+  readonly top?: number;
+}
+
 export const EntryList: ComponentRenderer = ({ element }) => {
-  const resolve = useI18nResolver();
   const parsed = entryListPropsSchema.safeParse(element.props);
-  if (!parsed.success) return null;
-  const props = parsed.data;
-  const entries = catalogItems(props.items);
-  return (
-    <div className="ui-frame divide-y divide-border/50 overflow-hidden">
-      {entries.map((entry, index) => {
+  return parsed.success ? <EntryRows props={parsed.data} /> : null;
+};
+
+function EntryRows({ props }: { props: EntryListProps }) {
+  const resolve = useI18nResolver();
+  const sessionId = useActiveSessionId();
+  const rows = useRef(new Map<string, HTMLDivElement>());
+  const values = useMemo(
+    () =>
+      catalogItems(props.items).map((entry) => {
         const title = text(resolvePath(entry, props.titleField));
         const description = props.descriptionFields
           ?.map((field) => resolvePath(entry, field))
@@ -31,11 +45,8 @@ export const EntryList: ComponentRenderer = ({ element }) => {
             return Array.isArray(value) ? value : value ? [value] : [];
           }) ?? [];
         const date = props.dateField && resolvePath(entry, props.dateField);
-        return (
-          <div
-            key={text(resolvePath(entry, props.idField)) || String(index)}
-            className="px-3 py-2.5 space-y-2 bg-background/20"
-          >
+        const content = (
+          <>
             <div className="flex items-center justify-between gap-2 min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -83,12 +94,75 @@ export const EntryList: ComponentRenderer = ({ element }) => {
                 {text(resolvePath(entry, props.footerField))}
               </div>
             ) : null}
+          </>
+        );
+        const id = resolvePath(entry, props.idField);
+        const key =
+          typeof id === "string" ||
+          (typeof id === "number" && Number.isFinite(id))
+            ? String(id)
+            : "";
+        const value: EntryRow = { content };
+        return { key, value };
+      }),
+    [props, resolve],
+  );
+  const snapshot = useCallback(
+    () => ({ live: values, context: undefined }),
+    [values],
+  );
+  const captureDeparture = useCallback(
+    (value: EntryRow, key: string): EntryRow => ({
+      ...value,
+      top: rows.current.get(key)?.offsetTop ?? 0,
+    }),
+    [],
+  );
+  const { live, outgoing, validKeys, finish } = useKeyedExitTransitions({
+    scope: JSON.stringify([sessionId, props.idField]),
+    initialContext: undefined,
+    resolve: snapshot,
+    exitTransition: props.exitTransition,
+    captureDeparture,
+  });
+  return (
+    <div
+      className={`ui-frame relative divide-y divide-border/50${outgoing.length ? "" : " overflow-hidden"}`}
+    >
+      {[...outgoing, ...live].map((entry, index) => {
+        const generation =
+          "generation" in entry && typeof entry.generation === "number"
+            ? entry.generation
+            : undefined;
+        const exiting = generation !== undefined;
+        return (
+          <div
+            key={validKeys ? entry.key : index}
+            ref={(node) => {
+              if (node) rows.current.set(entry.key, node);
+              else rows.current.delete(entry.key);
+            }}
+            className={`ui-entry-row px-3 py-2.5 space-y-2 bg-background/20${exiting ? " ui-keyed-exit" : ""}`}
+            data-phase={exiting ? "exit" : "present"}
+            aria-hidden={exiting || undefined}
+            inert={exiting || undefined}
+            style={exiting ? { top: entry.value.top } : undefined}
+            onAnimationEnd={(event) => {
+              if (
+                generation !== undefined &&
+                event.target === event.currentTarget &&
+                event.animationName === KEYED_EXIT_ANIMATION
+              )
+                finish(generation);
+            }}
+          >
+            {entry.value.content}
           </div>
         );
       })}
     </div>
   );
-};
+}
 
 // ── SceneCastList ────────────────────────────────────────────────
 
