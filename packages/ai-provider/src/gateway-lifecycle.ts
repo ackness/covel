@@ -38,6 +38,11 @@ export function notifyTargetAttempt(
 }
 
 export function shouldFallback(error: AiProviderError): boolean {
+  if (
+    error.code === "CONFIG_ERROR" &&
+    error.details?.unsupportedCapability === "function_calling"
+  )
+    return true;
   if (error.code === "MISSING_API_KEY") return true;
   if (error.code === "REFUSAL" || error.code === "REQUEST_BUDGET_EXCEEDED") {
     return false;

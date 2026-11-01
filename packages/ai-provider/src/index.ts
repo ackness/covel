@@ -218,6 +218,14 @@ export {
 
 // Capability
 export {
+  checkStrictToolSchema,
+  strictToolCapabilitySchema,
+  strictToolProfileSchema,
+  type StrictToolCapability,
+  type StrictToolProfile,
+  type StrictSchemaIssue,
+} from "./capability/strict-tools.js";
+export {
   projectCapabilityForBuiltinAdapter,
   modelLookupCandidateDetails,
   modelLookupCandidates,

@@ -428,6 +428,8 @@ Every agent submits its final result with the host-generated `submit-output` too
 
 Parameters come from the actual loaded output schema: explicit files, `contract:` references and the `output.schema.json` convention take precedence. The schema must describe an object, not a scalar or array, and is neither wrapped nor rewritten. It appears only in the tool definition; agent completion requests no JSON content response format.
 
+The actual model must support tools. Strict and non-strict submissions use the same host validation, preserving optional properties and open objects. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for target checks, same-tag fallback and strict profiles. Submission steps prefer a named `submit-output` choice, narrowed to `required` or `auto` when thinking capabilities require it; the player's reasoning choice is never disabled to force submission.
+
 Without an output schema, the host supplies an object default:
 
 - Story agent: required nonblank `narrativeOutput: string`, optional `yield: user | continue`.

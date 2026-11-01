@@ -1294,6 +1294,8 @@ The field used to send thinking back is determined by the endpoint address, so C
 
 **`providerContinuation`: passing native content back on tool continuation**
 
+Provider streams remain internal transport. `tool-argument-delta` reports activity without argument fragments. Complete calls reach the loop only after protocol terminal and refusal checks; a later refusal fails the request even after a full tool block arrives. Usage, reasoning continuation and idle timers remain intact, and tool arguments never become player story text. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for strict selection and endpoint scope.
+
 - It saves the provider's native answer entries in their original order, including signed and encrypted thinking. It is used for a tool continuation only when the protocol, model, and address are all the same.
 - A native Gemini tool turn keeps its ordered parts, which carry `thoughtSignature`.
 - When a native Gemini continuation arrives, and the protocol is unchanged but the model or address has changed, a continuation with a signature fails with `CONFIG_ERROR`.

@@ -1294,6 +1294,8 @@ error.occurred        → executionError
 
 **`providerContinuation`：工具续调时带回原生内容**
 
+服务商流保持内部传输用途。`tool-argument-delta` 只报告活动，不携带参数片段；完整调用等待协议终态和拒绝检查之后才交给循环。即使完整工具块已到达，后续拒绝仍使本次调用失败。用量、思考续调和空闲计时保留，工具参数不变成玩家正文。strict 选择与端点范围见[工具提交能力](./slots.md#tool-submission-capabilities)。
+
 - 它按原顺序保存服务商原生的回答条目，包括签名和加密的思考。只在协议、模型和地址都相同时，用于工具续调。
 - Gemini 原生的工具回合保留带 `thoughtSignature` 的、有顺序的 part。
 - 一个 Gemini 原生的 continuation 进来时，协议没变但模型或地址变了，带签名的续调以 `CONFIG_ERROR` 失败。

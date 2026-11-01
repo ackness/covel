@@ -26,6 +26,8 @@
 
 ## 概览
 
+`submit-output` 的 schema 保持作者定义的含义；strict 只在实际目标的能力和 schema 都允许时启用，其他情况仍由宿主验证。工具支持检查、后备选择和配置方式见[工具提交能力](./slots.md#tool-submission-capabilities)。
+
 <!-- prettier-ignore -->
 | 工具名 | 来源 | 所属插件 | 审批策略 | 描述 | annotations |
 | --- | --- | --- | --- | --- | --- |

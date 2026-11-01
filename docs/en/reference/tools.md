@@ -26,6 +26,8 @@ Dataset tools write only datasets declared by the caller's package. Arguments st
 
 ## Overview
 
+The `submit-output` schema preserves its authored meaning. Strict is selected only when the actual target capability and schema both allow it; host validation applies in every case. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for tool support checks, fallback selection and configuration.
+
 <!-- prettier-ignore -->
 | Tool name | Source | Plugin | Approval policy | Description | annotations |
 | --- | --- | --- | --- | --- | --- |

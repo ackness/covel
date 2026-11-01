@@ -7,6 +7,56 @@ import {
 } from "../src/llm/gateway-llm-adapter.js";
 
 describe("createGatewayAdapter target resolution", () => {
+  it("carries the submission schema and strict policy without JSON-content instructions", async () => {
+    const requests: Parameters<GatewayLike["generateText"]>[0][] = [];
+    const gateway: GatewayLike = {
+      resolveSlot: () => null,
+      async generateText(input) {
+        requests.push(input);
+        return {
+          text: "",
+          finishReason: "tool_calls",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+      async *streamText(input) {
+        requests.push(input);
+        yield { type: "tool-argument-delta" };
+        yield { type: "done", finishReason: "tool_calls" };
+      },
+    };
+    const adapter = createGatewayAdapter(gateway);
+    const schema = {
+      type: "object",
+      properties: { optional: { type: "string" } },
+    };
+    const params = {
+      messages: [
+        { role: "system" as const, content: "Submit the final result." },
+      ],
+      tools: [
+        {
+          name: "submit-output",
+          description: "Submit",
+          parameters: schema,
+          strict: "auto" as const,
+        },
+      ],
+      responseFormat: { type: "json_schema" as const, schema },
+    };
+    await adapter.generate(params);
+    expect(await Array.fromAsync(adapter.stream!(params))).toContainEqual({
+      type: "tool-argument-delta",
+    });
+    for (const request of requests) {
+      expect(request.tools?.[0]).toMatchObject({
+        strict: "auto",
+        function: { parameters: schema },
+      });
+      expect(request.responseFormat).toBeUndefined();
+      expect(request.messages).toEqual(params.messages);
+    }
+  });
   it("preserves diagnostics and shares the request budget for generate and stream", async () => {
     const diagnostics: LLMDiagnostics = {
       warnings: [{ type: "compatibility", message: "Synthetic warning" }],
