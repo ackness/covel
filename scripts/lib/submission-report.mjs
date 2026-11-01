@@ -131,9 +131,9 @@ export function submissionReport({ events, turns, sample }) {
     }
     if (event.type === "turn.completed" && number(p.durationMs) !== undefined)
       commitDurations.push(p.durationMs);
-    if (event.type === "llm.calling") modelCalls++;
+    if (["llm.calling", "gateway.calling"].includes(event.type)) modelCalls++;
     if (
-      ["llm.responded", "gateway.completed", "gateway.failed"].includes(
+      ["llm.responded", "gateway.responded", "gateway.failed"].includes(
         event.type,
       )
     ) {
@@ -188,7 +188,11 @@ export function submissionReport({ events, turns, sample }) {
     const submissions = (Array.isArray(p.toolCalls) ? p.toolCalls : []).filter(
       (call) => call?.name === "submit-output",
     );
-    if (!rejection && !submissions.length) continue;
+    // Concealment retains only this disposition, never business tool names.
+    const accepted =
+      p.submissionAccepted === true ||
+      submissions.some((call) => call.success === true);
+    if (!rejection && !submissions.length && !accepted) continue;
     run.attempts++;
     if (rejection?.reason !== "superseded") run.eligibleAttempts++;
     if (rejection) {
@@ -204,8 +208,7 @@ export function submissionReport({ events, turns, sample }) {
         run.rejected++;
         if (run.eligibleAttempts === 1) run.firstRejected = true;
       }
-    } else if (submissions.some((call) => call.success === true))
-      run.accepted = true;
+    } else if (accepted) run.accepted = true;
   }
   const commitOutcomes = Object.fromEntries(
     [...ORIGINS, "other"].map((origin) => [

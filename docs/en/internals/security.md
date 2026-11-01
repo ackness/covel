@@ -17,7 +17,7 @@ Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is 
 
 Plugin file references follow the [declaration-directory rules](../reference/plugins.md#declaration-paths) and must remain inside the package after real-path resolution. Conventional `output.schema.json` cannot escape through a symlink or be inherited from a parent repository.
 
-Gameplay action streams and ordinary subscriptions carry content-free model/tool/hook/child/gateway progress. Accepted output is visible as story only after commit; submission arguments and raw review details cannot enter player story projection. Full diagnostic traces and explicit trace subscriptions retain their existing access and concealed/delegation privacy rules. See [protocol](../reference/protocol.md#narrative-events).
+Gameplay action streams and ordinary subscriptions carry content-free step/model/tool/hook/child/gateway progress. The public `runtime` topic caches only safe copies of step and tool activity, keeping trace content out of replay; step notes contain only fixed rejection categories and counts. Concealed steps retain successful submission disposition as the boolean `submissionAccepted`, without a tool list. Accepted output is visible as story only after commit; submission arguments and raw review details cannot enter player story projection. Full diagnostic traces and explicit trace subscriptions retain their existing access and concealed/delegation privacy rules. See [protocol](../reference/protocol.md#narrative-events).
 
 ## Declarative execution boundary
 
