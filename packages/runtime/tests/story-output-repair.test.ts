@@ -219,8 +219,9 @@ describe("segmented story repair", () => {
       malformed(earlyClosedStory),
       malformed(earlyClosedStory),
       malformed(earlyClosedStory),
+      malformed(earlyClosedStory),
     ]);
-    expect(llm.requests).toHaveLength(4);
+    expect(llm.requests).toHaveLength(5);
     expect(result?.toolCalls).toContainEqual(
       expect.objectContaining({
         toolName: "mark",
@@ -244,12 +245,12 @@ describe("segmented story repair", () => {
       (await store.getSession(input.sessionId))?.completedPlayerTurns,
     ).toBe(0);
     expect(
-      llm.requests[3]?.tools?.some((tool) => tool.name === "submit-output"),
+      llm.requests[4]?.tools?.some((tool) => tool.name === "submit-output"),
     ).toBe(true);
     expect(
-      llm.requests[3]?.messages.flatMap((message) => message.toolCalls ?? []),
-    ).toHaveLength(3); // Prior work and the rejected submissions remain correlated.
-    expectSyntaxCorrection(lastMessage(llm, 3));
+      llm.requests[4]?.messages.flatMap((message) => message.toolCalls ?? []),
+    ).toHaveLength(4); // Prior work and the rejected submissions remain correlated.
+    expectSyntaxCorrection(lastMessage(llm, 4));
   });
 
   it.each([null, "", " \n\t "])(
@@ -302,10 +303,11 @@ describe("segmented story repair", () => {
       prose("雨停了。"),
       prose("她转身离开。"),
       prose("灯灭了。"),
+      prose("风停了。"),
       validStory,
     ]);
     const { result } = await run({ llm });
-    expect(llm.requests).toHaveLength(3);
+    expect(llm.requests).toHaveLength(4);
     expect(result.status).toBe("failed");
     expect(result.output).toBeNull();
   });
@@ -362,9 +364,9 @@ describe("segmented story repair", () => {
 
   it("fails with the empty-story error when no text is left after the repair", async () => {
     const empty = json({ segments: [{ kind: "narration", text: " " }] });
-    const llm = queuedLLM([empty, empty, empty]);
+    const llm = queuedLLM([empty, empty, empty, empty]);
     const { result } = await run({ llm });
-    expect(llm.requests).toHaveLength(3);
+    expect(llm.requests).toHaveLength(4);
     expect(result.status).toBe("failed");
     expect(result.error).toContain("invalid-output");
     expect(result.stop).toEqual({ reason: "invalid-output" });

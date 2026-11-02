@@ -881,7 +881,7 @@ The loop profile controls steering, repeated-tool fallback, finalization and cor
 | `fallback` | `submit-output`: offer only submission after repeated business calls; `fail`: stop with `loop-detected` |
 | `finalizer.maxSteps` | At most one extra submission request after step exhaustion or context overflow when eligible; default `true` |
 | `finalizer.deadlineReserveMs` | Switch to one submission request inside this reserve; default `0`, clamped to half the runtime timeout |
-| `corrections.outputRepair` | Missing submission, mixed batch, JSON/schema/story shape failure; integer 0–3, default 2 for `story` and `actor`, 1 for `system` |
+| `corrections.outputRepair` | Missing submission, mixed batch, JSON/schema/story shape failure; integer 0–3, default 3 for `story` and `actor`, 1 for `system` |
 | `corrections.review` | Shared by `PostLLMResponse` and `ReviewAgentOutput`; integer 0–5, default 2 |
 | `corrections.toolUse` | Missing required business work; integer 0–3, default 1 |
 | `corrections.loopPerturbation` | Perturbations before repeated-tool fallback; integer 0–3, default 1 |
@@ -893,7 +893,7 @@ The loop profile controls steering, repeated-tool fallback, finalization and cor
 | `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
-| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 2 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 2 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 3 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 3 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
 `profile: story` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
 

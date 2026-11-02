@@ -446,7 +446,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(3)
                   .describe(
-                    "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 2 for the story and actor profiles and 1 for system.",
+                    "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 3 for the story and actor profiles and 1 for system.",
                   )
                   .optional(),
               })

@@ -881,7 +881,7 @@ const result = await ctx.agents?.run({
 | `fallback` | `submit-output`：重复业务调用后只提供提交工具；`fail`：以 `loop-detected` 失败 |
 | `finalizer.maxSteps` | 步数耗尽或上下文超限时，满足条件后最多再请求一次提交；默认 `true` |
 | `finalizer.deadlineReserveMs` | 剩余时间不足预留时，改为一次提交请求；默认 `0`，最多使用时限的一半 |
-| `corrections.outputRepair` | 缺少提交、混合批次、JSON/schema/故事格式失败；整数 0–3，`story` 和 `actor` 默认 2，`system` 默认 1 |
+| `corrections.outputRepair` | 缺少提交、混合批次、JSON/schema/故事格式失败；整数 0–3，`story` 和 `actor` 默认 3，`system` 默认 1 |
 | `corrections.review` | `PostLLMResponse` 与 `ReviewAgentOutput` 共用；整数 0–5，默认 2 |
 | `corrections.toolUse` | 缺少必需业务工作；整数 0–3，默认 1 |
 | `corrections.loopPerturbation` | 进入重复工具回退前的扰动；整数 0–3，默认 1 |
@@ -893,7 +893,7 @@ const result = await ctx.agents?.run({
 | `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
-| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 2 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 2 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 3 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 3 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
 `profile: story` 和 `steering: true` 要求 story visibility。预留必须是非负整数且小于 runtime 时限。
 

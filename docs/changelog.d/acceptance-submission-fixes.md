@@ -6,7 +6,7 @@
 
 ### Changed
 
-- **Story and actor agents get two output repairs instead of one.** The `story` and `actor` loop profiles now default to `corrections.outputRepair: 2`; `system` stays at 1. A model that first answers in plain prose and then sends cut-off submission JSON can still finish the turn instead of losing it. Authors can still set the value per runtime. See [loop profiles](../en/reference/plugins.md#agent-loop-profiles).
+- **Story and actor agents get three output repairs instead of one.** The `story` and `actor` loop profiles now default to `corrections.outputRepair: 3`, the highest value the manifest allows; `system` stays at 1. A model that first answers in plain prose and then sends cut-off submission JSON can still finish the turn instead of losing it. Each repair returns the error inside the same conversation; it never replays the original request. Authors can still set the value per runtime. See [loop profiles](../en/reference/plugins.md#agent-loop-profiles).
 
 ### Documentation
 

@@ -1947,7 +1947,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 3,
-                      "description": "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 2 for the story and actor profiles and 1 for system."
+                      "description": "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 3 for the story and actor profiles and 1 for system."
                     }
                   },
                   "additionalProperties": false,
