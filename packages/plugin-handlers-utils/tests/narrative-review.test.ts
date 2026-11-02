@@ -544,6 +544,76 @@ describe("narrative perspective review", () => {
     ).toContain("违反了第二人称视角");
   });
 
+  it("treats quotes inside a speaker's words as quotations, not narration", () => {
+    const review = createNarrativeReview("story");
+    const check = (
+      perspective: string,
+      locale: string,
+      text: string,
+      speaker = "朝仓凛",
+    ) =>
+      review.review(
+        {
+          pluginId: "story",
+          locale,
+          getOwnSettings: () => ({ perspective }),
+        },
+        submission({
+          segments: [
+            { kind: "narration", text: locale === "en" ? "She glances at the stairs." : "她瞥了一眼楼梯。" },
+            { kind: "dialogue", speaker, text },
+          ],
+        }),
+      );
+    const speech: [string, string][] = [
+      ["zh-CN", "那箱子搬下来那天我正好在楼下。学生会说只是『暂存』"],
+      ["zh-CN", "那箱子搬下来那天我正好在楼下。学生会说只是“暂存”。"],
+      ["zh-CN", "「那天我正好在楼下。学生会说只是『暂存』。」"],
+      ["zh-CN", "你们都听过‘暂存’这个说法吧，我可不信。"],
+      ["en", 'I was downstairs. They called it "temporary storage".'],
+      ["en", "I'm sure they called it 'storage', and I didn't buy it."],
+      ["en", "I told him, \"wait,\" and you saw what he did."],
+      ["en", '"I was downstairs. They called it \'temporary storage\'."'],
+      ["en", "Aya's coat is mine; they called it 'borrowed'."],
+    ];
+    for (const perspective of [
+      "character-first",
+      "character-second",
+      "character-third",
+      "omniscient",
+      "dm",
+    ])
+      for (const [locale, text] of speech)
+        expect(check(perspective, locale, text), `${perspective}: ${text}`).toEqual({
+          action: "continue",
+        });
+    // Without a speaker the segment cannot claim the words as speech.
+    expect(
+      review.review(
+        { pluginId: "story", locale: "en" },
+        submission({
+          segments: [
+            {
+              kind: "dialogue",
+              text: 'I was downstairs. They called it "temporary storage".',
+            },
+          ],
+        }),
+      ).replace?.correction,
+    ).toContain("violates second-person perspective");
+    // Narration around a quotation inside a dialogue segment is still checked.
+    for (const [locale, text, fragment] of [
+      ["zh-CN", "「走吧。」我说。", "违反了第二人称视角"],
+      ["zh-CN", "我说：「走吧。」", "违反了第二人称视角"],
+      ["en", 'I say, "Let\'s go."', "violates second-person perspective"],
+      ["en", '"Let\'s go," I say.', "violates second-person perspective"],
+    ] as const)
+      expect(
+        check("character-second", locale, text).replace?.correction,
+        text,
+      ).toContain(fragment);
+  });
+
   it("reads character second person when no perspective is set", () => {
     const review = createNarrativeReview("story");
     const added = String(

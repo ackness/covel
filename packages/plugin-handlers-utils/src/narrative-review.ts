@@ -103,10 +103,19 @@ const isLetter = (char: string | undefined): boolean =>
  * after dialogue punctuation still closes the quote. A straight `'` opens
  * a quote only when no letter precedes it.
  */
-function scanDialogue(text: string): { narration: string; opened: boolean } {
+function scanDialogue(text: string): {
+  narration: string;
+  opened: boolean;
+  /** Index of the first opening quote mark. */
+  firstOpen?: number;
+  /** Index of the mark that closes the first outermost quotation. */
+  firstClose?: number;
+} {
   const stack: { closer: string; start: number; ambiguous: boolean }[] = [];
   let result = "";
   let opened = false;
+  let firstOpen: number | undefined;
+  let firstClose: number | undefined;
   for (let i = 0; i < text.length; i++) {
     const char = text[i]!;
     const quote = stack.at(-1);
@@ -122,6 +131,7 @@ function scanDialogue(text: string): { narration: string; opened: boolean } {
     const apostrophe = afterLetter && isLetter(text[next]);
     if (!apostrophe && char === quote?.closer) {
       stack.pop();
+      if (!stack.length) firstClose ??= i;
       result += " ";
     } else if (
       !apostrophe &&
@@ -130,6 +140,7 @@ function scanDialogue(text: string): { narration: string; opened: boolean } {
     ) {
       stack.push({ closer: QUOTE_PAIRS[char]!, start: i, ambiguous: false });
       opened = true;
+      firstOpen ??= i;
     } else if (!stack.length) result += char;
   }
   // Validate an unclosed tail without un-hiding earlier closed dialogue.
@@ -144,7 +155,34 @@ function scanDialogue(text: string): { narration: string; opened: boolean } {
         ? result
         : result + text.slice(openStart, ambiguousStart ?? text.length),
     opened,
+    ...(firstOpen !== undefined ? { firstOpen } : {}),
+    ...(firstClose !== undefined ? { firstClose } : {}),
   };
+}
+
+/**
+ * Whether a `dialogue` segment carries narration beside its quotes. A segment
+ * that names its speaker holds that speaker's words, so text that starts
+ * unquoted is speech and any quote marks inside it quote someone within that
+ * speech (学生会说只是『暂存』, They called it "temporary storage").
+ *
+ * Narration is assumed when the segment is shaped like a quote with narration
+ * around it: it opens with the quotation (「走吧。」我说。, "I'm ready," I say.),
+ * or a lead-in introduces a quotation with a colon (我说：「走吧。」) or with a
+ * comma when the quotation then ends the segment (I say, "Let's go."). Without
+ * a speaker, any quotation means the text outside it is narration.
+ */
+function dialogueHasNarration(text: string, speaker: unknown): boolean {
+  const scan = scanDialogue(text);
+  if (!scan.opened || scan.firstOpen === undefined) return false;
+  const lead = text.slice(0, scan.firstOpen).trim();
+  if (!lead || typeof speaker !== "string" || !speaker.trim()) return true;
+  if (/[:：]$/u.test(lead)) return true;
+  return (
+    /[,，]$/u.test(lead) &&
+    scan.firstClose !== undefined &&
+    /^[\s\p{P}]*$/u.test(text.slice(scan.firstClose + 1))
+  );
 }
 
 /** Inspect narration without changing dialogue or the original story text. */
@@ -197,17 +235,21 @@ export function perspectiveError(
     : `Narration violates ${personNames[person].en} perspective near: ${near}. Fix narration only; keep quoted speakers' pronouns.`;
 }
 
-/** Read validated output directly; unquoted dialogue is spoken words only. */
+/** Read validated output directly; dialogue speech is checked by dialogueHasNarration. */
 function outputTexts(output: ReviewAgentOutputPayload["output"]) {
   if (Array.isArray(output.segments)) {
     return output.segments.flatMap((segment: unknown) => {
       if (!segment || typeof segment !== "object") return [];
-      const { kind, text } = segment as { kind?: unknown; text?: unknown };
-      return typeof text === "string" ? [{ kind, text }] : [];
+      const { kind, speaker, text } = segment as {
+        kind?: unknown;
+        speaker?: unknown;
+        text?: unknown;
+      };
+      return typeof text === "string" ? [{ kind, speaker, text }] : [];
     });
   }
   return typeof output.narrativeOutput === "string"
-    ? [{ kind: "narration", text: output.narrativeOutput }]
+    ? [{ kind: "narration", speaker: undefined, text: output.narrativeOutput }]
     : [];
 }
 
@@ -287,8 +329,8 @@ export function createNarrativeReview(pluginId: string) {
               ? "只输出游戏内的故事正文。去掉内部指令标签和说明文字。"
               : "Output only the in-world story. Remove internal instruction tags and commentary."
             : texts
-                .flatMap(({ kind, text }) =>
-                  kind === "dialogue" && !scanDialogue(text).opened
+                .flatMap(({ kind, speaker, text }) =>
+                  kind === "dialogue" && !dialogueHasNarration(text, speaker)
                     ? []
                     : [perspectiveError(text, perspective, zh ? "zh" : "en")],
                 )
