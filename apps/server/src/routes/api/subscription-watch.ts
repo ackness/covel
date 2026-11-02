@@ -2,7 +2,9 @@ import type { EventBus } from "@covel/events";
 import type { SubscriptionEvent } from "@covel/shared";
 import { SSE_WRITE_QUEUE_MAX } from "./sse-delivery.js";
 
-type Reset = Parameters<Parameters<NonNullable<EventBus["onReset"]>>[0]>[0];
+type Reset = Parameters<Parameters<NonNullable<EventBus["onReset"]>>[0]>[0] & {
+  readonly source?: "handshake-overflow";
+};
 
 /** Observe before reading authorization; hand the bounded handshake buffer to SSE. */
 export function watchSubscription(bus: EventBus, sessionId: string) {
@@ -14,7 +16,12 @@ export function watchSubscription(bus: EventBus, sessionId: string) {
     if (event.sessionId !== sessionId) return;
     if (receive) receive(event);
     else if (pending.length < SSE_WRITE_QUEUE_MAX) pending.push(event);
-    else reset = { sessionId, reason: "transport-gap" };
+    else
+      reset = {
+        sessionId,
+        reason: "transport-gap",
+        source: "handshake-overflow",
+      };
   });
   const offReset = bus.onReset?.((event) => {
     if (event.sessionId !== undefined && event.sessionId !== sessionId) return;

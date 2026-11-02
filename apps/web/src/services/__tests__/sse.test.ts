@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { parseJsonSseData, readSseStream } from "../sse.js";
+import { parseJsonSseData, readSseStream, type SseDiagnostic } from "../sse.js";
 
 function responseFromChunks(chunks: readonly string[]): Response {
   const encoder = new TextEncoder();
@@ -15,6 +15,81 @@ function responseFromChunks(chunks: readonly string[]): Response {
 }
 
 describe("readSseStream", () => {
+  it.each(["read-error", "parse-error", "message-error"] as const)(
+    "reports %s and preserves the original rejection",
+    async (kind) => {
+      const error = new Error("PRIVATE_MESSAGE");
+      error.name = "PRIVATE_NAME";
+      const diagnostics: SseDiagnostic[] = [];
+      const response = new Response(
+        new ReadableStream({
+          start(controller) {
+            if (kind === "read-error") controller.error(error);
+            else
+              controller.enqueue(
+                new TextEncoder().encode("data: PRIVATE_PAYLOAD\n\n"),
+              );
+          },
+        }),
+      );
+      await expect(
+        readSseStream({
+          response,
+          parse(data) {
+            if (kind === "parse-error") throw error;
+            return data;
+          },
+          onMessage() {
+            if (kind === "message-error") throw error;
+          },
+          onDiagnostic: (value) => diagnostics.push(value),
+        }),
+      ).rejects.toBe(error);
+      expect(diagnostics[0]).toEqual({ type: kind, errorKind: "error" });
+      expect(diagnostics).toContainEqual({ type: "cancel" });
+      expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_");
+      expect(response.body?.locked).toBe(false);
+    },
+  );
+
+  it("distinguishes clean EOF, abort cancellation and cancellation failure", async () => {
+    const eof = vi.fn();
+    await readSseStream({
+      response: responseFromChunks([]),
+      parse: (data) => data,
+      onMessage() {},
+      onDiagnostic: eof,
+    });
+    expect(eof).toHaveBeenCalledExactlyOnceWith({ type: "reader-done" });
+    const controller = new AbortController();
+    const diagnostics = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        cancel() {
+          throw new Error("PRIVATE_CANCEL");
+        },
+      }),
+    );
+    const pending = readSseStream({
+      response,
+      signal: controller.signal,
+      parse: (data) => data,
+      onMessage() {},
+      onDiagnostic: diagnostics,
+    });
+    controller.abort();
+    await pending;
+    expect(diagnostics).toHaveBeenCalledWith({ type: "abort" });
+    await vi.waitFor(() =>
+      expect(diagnostics).toHaveBeenCalledWith({
+        type: "cancel-error",
+        errorKind: "error",
+      }),
+    );
+    expect(diagnostics).not.toHaveBeenCalledWith({ type: "reader-done" });
+    expect(JSON.stringify(diagnostics.mock.calls)).not.toContain("PRIVATE_");
+  });
+
   it("handles split CRLF and CR boundaries and discards an incomplete final frame", async () => {
     const messages: string[] = [];
     const response = responseFromChunks([

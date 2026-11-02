@@ -123,6 +123,8 @@ contributes:
 
 ## 模型能用哪些工具
 
+agent 提交时，先按实际 schema 选择可省略字段。完成字段的含义与合法组合见[完成条件](../reference/plugins.md#agent-output-submission)；不要用 `preGameDone: false` 表示“当前不是 setup”。故事段落的内部引用与旁白边界见[故事输出](../reference/plugins.md#故事输出)。
+
 有两份清单，用途不同：
 
 | 清单                | 写在哪里             | 意思                        |

@@ -438,6 +438,8 @@ Without an output schema, the host supplies an object default:
 - Story agent: required nonblank `narrativeOutput: string`, optional `yield: user | continue`.
 - System agent: an open object with optional `narrativeOutput: string`, `completion: done | pending`, `preGameDone: boolean`, and other business fields. `{}` means no business output. Declare a schema for typed downstream output.
 
+**Completion fields.** The first advertised `submit-output` description and default system schema explain these rules. Follow the actual schema’s required fields and allowed values. When optional, omit `preGameDone` outside setup and omit `completion` when no completion signal is needed. `preGameDone: false` means setup is still waiting, not “this is not setup.” Use `completion: "pending"` while waiting and `"done"` when finished. If both fields are present, only `false + "pending"` or `true + "done"` are valid. The host still rejects contradictions; acceptance cannot complete setup early or confirm persistence.
+
 `submit-output` is automatically available. Do not put it in allowlists, registrations or `defer`. Functions still return handler results and cannot call it. Submitted fields shaped like `pluginData`, UI or events cannot produce writes.
 
 `agent.completion` declares only business work required before submission:
@@ -581,6 +583,8 @@ Each segment is `{ kind, speaker?, text }`:
 - `kind` is `narration`, `dialogue` or `action`.
 - `speaker` is the name of the character who speaks or acts (≤80 characters). Write a name, never an ID. Narration has no speaker.
 - `text` is the segment's text (≤4000 characters). Blank lines inside a segment fold to a single newline, so each segment is exactly one paragraph the player sees.
+
+**Dialogue and narration.** A named `dialogue` segment contains that character’s speech, including internal quotations such as `I have one request: "Please keep this out of the paper."` Put narrative lead-ins and actions in separate `narration` / `action` segments. The SDK’s `createNarrativeReview` applies conservative syntax checks to mixed text: suffixes outside an opening quotation, colon prefixes ending in an explicit speech verb (such as `我说：「走吧。」` / `I say: "Let’s go."`), and comma-led quotations ending the segment still receive narration perspective checks. A colon alone does not establish narration. This is not complete semantic language analysis; split ambiguous constructions into separate segments. The five perspective rules and internal instruction-tag checks across all segments remain unchanged.
 
 The kernel derives `narrativeOutput` by joining each segment’s `text` with blank lines. Consumers needing only prose can use `select: /narrativeOutput`. Consumers extracting who spoke, acted, or changed state should use `select: /segments`, reading `kind`, `speaker`, and `text` together; quoted first-person speech does not automatically belong to the player. The public contract validates the full output before `select`, so consumers need no duplicate segment schema. The original player message may be absent from an extractor’s inputs; do not infer commitments from missing text. Requests, attempts, and promises do not establish successful outcomes. Dialogue logs, next-turn history, `turn-digest@1`, and memory still read the joined prose, not JSON.
 

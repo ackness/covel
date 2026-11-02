@@ -268,11 +268,16 @@ describe("cleanup on handshake/replay failure", () => {
     await vi.waitFor(() => {
       expect(counts()).toEqual({ listeners: 0, pins: 0 });
     });
-    // The route logged the failure with session context.
+    // Correlation never requires raw exception text or a sensitive request URL.
     expect(errSpy).toHaveBeenCalledWith(
-      expect.stringContaining(SESSION_ID),
-      expect.any(Error),
+      "[subscribe] stream failed",
+      expect.objectContaining({
+        connectionId: expect.any(String),
+        phase: "handshake",
+        errorKind: "error",
+      }),
     );
+    expect(JSON.stringify(errSpy.mock.calls)).not.toContain("replay boom");
     errSpy.mockRestore();
   });
 

@@ -398,6 +398,8 @@ For `pnpm e2e:replay`, the requests from the two runs are in `debugs/llm-replay/
 
 A successful model tool call does not confirm persistence. Compare submission attempts, `execution.completed.committed`, saved messages and proposal readback. Complete offline tests before checking current provider specifications and the actual target’s capabilities. [Strict configuration](../reference/slots.md#tool-submission-capabilities) defaults to off; no online capability evidence ships with the repository. A compatible closed synthetic schema can test strict, while the existing narrative schema retains its optional/open fields and non-strict submission. Never rewrite schemas or switch endpoints to pass acceptance.
 
+Recovering from `missing-submission → invalid-json` within the repair budget proves that sample eventually validated and committed, not that the upstream model stopped producing malformed JSON. An offline regression proving completion rules reach the first prompt proves delivery only. Claims of fewer first-attempt conflicts, round trips or lower latency still need controlled comparisons with the same model, parameters and inputs. Retain rejected and exhausted samples; do not remove contradiction checks, treat false as done or increase budgets without evidence to obtain a pass.
+
 ### Fixed samples and budgets
 
 Use four separate local configurations: official `deepseek-flash`, your test relay’s `deepseek-v4.1-flash`, the same relay’s `gpt-6-luna`, and OpenAI `gpt-6-luna`. Publish only the fixed labels below, without relay identity, endpoint or credentials. Mark unavailable lanes unrun. Do not use Kimi or treat unit fixtures as online capability evidence.

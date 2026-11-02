@@ -11,6 +11,7 @@
 
 import {
   parseSubscriptionEventId,
+  diagnosticErrorKind,
   type SubscriptionEvent,
   type SubscriptionTopic,
 } from "@covel/shared";
@@ -88,6 +89,9 @@ export interface SessionSubscription {
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
 const BACKOFF_MULTIPLIER = 2;
+// Page-local attempts cover failures before response headers arrive. The
+// server's connectionId correlates established streams across both logs.
+let nextAttemptId = 0;
 
 const activeActionStreams = new Map<string, number>();
 const refreshPauseState = new Set<() => void>();
@@ -135,6 +139,13 @@ export function createSessionSubscription(
 
   let connectionState: ConnectionState = "connecting";
   let abortController: AbortController | null = null;
+  type AbortReason =
+    | "close"
+    | "manual-reconnect"
+    | "visibility-hidden"
+    | "action-pause"
+    | "client-error-limit";
+  const abortReasons = new WeakMap<AbortController, AbortReason>();
   let lastEventId = "";
   let backoffMs = INITIAL_BACKOFF_MS;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -170,7 +181,10 @@ export function createSessionSubscription(
     onStateChange?.(next);
   }
 
-  function dispatch(event: SubscriptionEvent): void {
+  function dispatch(
+    event: SubscriptionEvent,
+    onError: (error: unknown) => void,
+  ): void {
     for (const topic of [event.topic, "*"]) {
       for (const handler of handlers.get(topic) ?? []) {
         try {
@@ -178,12 +192,7 @@ export function createSessionSubscription(
         } catch (error) {
           // Keep subscribers isolated without logging player content or the
           // thrown message, which can contain the event's private payload.
-          console.warn("[subscription] event handler failed", {
-            sessionId: event.sessionId,
-            eventType: event.type,
-            eventId: event.id,
-            errorType: error instanceof Error ? error.name : typeof error,
-          });
+          onError(error);
         }
       }
     }
@@ -213,6 +222,25 @@ export function createSessionSubscription(
     if (closed || paused) return;
 
     const controller = new AbortController();
+    const attemptId = `attempt-${++nextAttemptId}`;
+    let connectionId: string | undefined;
+    const startedAt = Date.now();
+    let termination: string | undefined;
+    let reading = false;
+    const diagnose = (type: string, errorKind?: string): void => {
+      const metadata = {
+        attemptId,
+        connectionId,
+        type,
+        ...(errorKind ? { errorKind } : {}),
+        ...(controller.signal.aborted
+          ? { abortReason: abortReasons.get(controller) }
+          : {}),
+      };
+      if (type.endsWith("error") || type === "parse-rejected")
+        console.warn("[subscription] stream diagnostic", metadata);
+      else console.info("[subscription] stream diagnostic", metadata);
+    };
     abortController = controller;
     if (!silent)
       setState(
@@ -239,12 +267,27 @@ export function createSessionSubscription(
         silentErrors: true,
         retry: false,
       });
+      const id = res.headers.get("X-Covel-Subscription-Id");
+      // Do not log arbitrary header values from an upstream proxy.
+      if (
+        id &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          id,
+        )
+      )
+        connectionId = id;
       if (
         closed ||
         controller.signal.aborted ||
         controller !== abortController
       ) {
-        await res.body?.cancel().catch(() => {});
+        termination = "response-superseded";
+        diagnose("cancel");
+        await res.body
+          ?.cancel()
+          .catch((error: unknown) =>
+            diagnose("cancel-error", diagnosticErrorKind(error)),
+          );
         return;
       }
 
@@ -253,11 +296,20 @@ export function createSessionSubscription(
       backoffMs = INITIAL_BACKOFF_MS;
       clientErrorStreak = 0;
 
+      reading = true;
       await readSseStream({
         response: res,
         signal: controller.signal,
+        onDiagnostic: ({ type, errorKind }) => {
+          if (!["cancel", "cancel-error"].includes(type)) termination ??= type;
+          diagnose(type, errorKind);
+        },
         parse: (data, message) => {
-          const parsed = parseJsonSseData<Record<string, unknown>>(data);
+          const parsed = parseJsonSseData<Record<string, unknown>>(
+            data,
+            message,
+            () => diagnose("parse-rejected", "syntax"),
+          );
           if (!parsed) return undefined;
 
           const eventType =
@@ -299,7 +351,9 @@ export function createSessionSubscription(
         },
         onMessage: (event) => {
           if (closed || paused || controller !== abortController) return;
-          dispatch(event);
+          dispatch(event, (error) =>
+            diagnose("handler-error", diagnosticErrorKind(error)),
+          );
           if (event.type === "system.connected") checkSnapshotCursor();
         },
       });
@@ -309,6 +363,12 @@ export function createSessionSubscription(
         scheduleReconnect();
       }
     } catch (err) {
+      termination ??= controller.signal.aborted
+        ? "abort"
+        : reading
+          ? "stream-error"
+          : "request-error";
+      if (!reading) diagnose(termination, diagnosticErrorKind(err));
       if (
         closed ||
         paused ||
@@ -337,9 +397,10 @@ export function createSessionSubscription(
             snapshotChecked = true;
             return true;
           })
-          .catch(() => {
+          .catch((error: unknown) => {
             // Retry with the normal bounded backoff. Never leak upload errors
             // (which may contain private checkpoint content) into the UI/log.
+            diagnose("mirror-recovery-error", diagnosticErrorKind(error));
             return false;
           })
           .finally(() => {
@@ -356,11 +417,14 @@ export function createSessionSubscription(
           // Not self-healing: the session is really gone, or the token is
           // really wrong. Retrying every 30s for the life of the tab just
           // leaves the UI stuck on "reconnecting" forever.
-          console.error(
-            `[subscription] giving up after ${clientErrorStreak} client errors: SSE stream ${err.status} ${err.body}`,
-          );
+          console.error("[subscription] client error limit reached", {
+            attemptId,
+            connectionId,
+            status: err.status,
+            attempts: clientErrorStreak,
+          });
           closed = true;
-          stopConnection();
+          stopConnection("client-error-limit");
           setState("closed");
           return;
         }
@@ -368,6 +432,16 @@ export function createSessionSubscription(
       if (!closed) {
         scheduleReconnect();
       }
+    } finally {
+      console.info("[subscription] stream closed", {
+        attemptId,
+        connectionId,
+        reason: termination ?? "superseded",
+        ...(controller.signal.aborted
+          ? { abortReason: abortReasons.get(controller) }
+          : {}),
+        durationMs: Date.now() - startedAt,
+      });
     }
   }
 
@@ -381,12 +455,15 @@ export function createSessionSubscription(
     backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
   }
 
-  function stopConnection(): void {
+  function stopConnection(reason: AbortReason): void {
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
-    abortController?.abort();
+    if (abortController) {
+      abortReasons.set(abortController, reason);
+      abortController.abort();
+    }
     abortController = null;
   }
 
@@ -404,7 +481,7 @@ export function createSessionSubscription(
         connectionState === "connected";
       // One tab needs only its action stream while executing. Otherwise even
       // three visible tabs can exhaust HTTP/1.1 slots needed by stop/read APIs.
-      stopConnection();
+      stopConnection(tabIsHidden ? "visibility-hidden" : "action-pause");
       if (!resumeActionSilently) setState("paused");
     } else {
       backoffMs = INITIAL_BACKOFF_MS;
@@ -420,7 +497,7 @@ export function createSessionSubscription(
       document.removeEventListener("visibilitychange", handlePauseChange);
     }
     refreshPauseState.delete(handlePauseChange);
-    stopConnection();
+    stopConnection("close");
     setState("closed");
     handlers.clear();
   }
@@ -463,7 +540,7 @@ export function createSessionSubscription(
     },
 
     reconnect() {
-      stopConnection();
+      stopConnection("manual-reconnect");
       closed = false;
       clientErrorStreak = 0;
       backoffMs = INITIAL_BACKOFF_MS;

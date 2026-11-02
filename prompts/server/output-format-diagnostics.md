@@ -4,14 +4,14 @@ One key: value entry per line, as in action-labels.md.
 Submission guidance and normalized parser reasons use these templates.
 -->
 
-tool-description: Submit the final result for this runtime after required tool work is complete. Arguments must match this schema. If the submission is rejected, correct the reported problems and call this tool again. A successful submission ends the runtime; it does not confirm that changes have been saved.
+tool-description: Submit the final result for this runtime after required tool work is complete. Arguments must match this schema. If the submission is rejected, correct the reported problems and call this tool again. A successful submission ends the runtime; it does not confirm that changes have been saved. Follow the schema for completion fields. When optional, omit preGameDone outside setup, and omit completion when no completion signal is needed. preGameDone false means setup is still waiting, not "this is not setup". Use completion "pending" while waiting and "done" when finished; if both fields are present, only false + "pending" or true + "done" are valid.
 tool-source-description: After {{ tool }} succeeds, call this tool alone with {}. The host submits that business tool's latest successful canonical result. Correct any reported rejection. Acceptance does not confirm persistence.
 source-empty: Call submit-output with {} only; the host supplies the output from the business tool.
 source-required: Call {{ tool }} successfully before calling submit-output with {}.
 object-required: Arguments must be one complete JSON object.
 required-work: Complete required business tool work successfully and resolve failed business calls before submitting. Do not repeat successful writes.
 required-work-tools: Complete required business tool work ({{ tools }}) successfully and resolve failed business calls before submitting. Do not repeat successful writes.
-completion-conflict: preGameDone and completion contradict each other. Send only the state this runtime is in: preGameDone false (or completion "pending") while waiting, preGameDone true (or completion "done") when finished.
+completion-conflict: preGameDone and completion contradict each other. Follow the schema for completion fields. When optional, omit preGameDone outside setup, and omit completion when no completion signal is needed. preGameDone false means setup is still waiting, not "this is not setup". Use completion "pending" while waiting and "done" when finished; if both fields are present, only false + "pending" or true + "done" are valid.
 contract-invalid: The output does not match the public {{ contract }} contract after protocol fields are removed: {{ problems }}. Correct these fields and submit again.
 after-root-object: unexpected content after a closed root object; expected end-of-input
 unexpected-end: unexpected end of JSON input; expected a complete JSON value

@@ -78,3 +78,5 @@ covel.on("TurnStop", review.cleanup);
 ```
 
 Declare these hooks in `PLUGIN.md`. Final review reads validated `output.segments` or host-default `output.narrativeOutput`; it returns correction only. Perspective settings, quoted dialogue and session-local player context remain supported. Agents submit through the host-generated `submit-output` tool after optional business work. Do not contribute or allowlist that tool. Function runtimes return output directly.
+
+Named dialogue keeps the speaker’s pronouns across internal quotations, including colon-led requests. Explicit narrative reporting clauses and suffixes still receive perspective checks; separate narration from speech when a construction is ambiguous. See [Story output](../../docs/en/reference/plugins.md#story-output) for the syntax boundary.

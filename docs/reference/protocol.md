@@ -745,6 +745,17 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 订阅流的 connected、补发、reset 和 heartbeat 帧也受同样的限制。
 - 监听器、pin、heartbeat 和连接额度在清理时释放。
 
+**订阅关闭诊断**
+
+服务端为每条获准的订阅生成随机 `connectionId`，放在响应头 `X-Covel-Subscription-Id` 和 `system.connected` 中。该响应头对获准的跨源请求可读；它只用于两端日志关联，不参与鉴权、游标或重连决策。客户端另记页面内的 `attemptId`，用于响应头尚未到达的请求。
+
+- 服务端控制台 `[subscribe] stream opened` / `stream closed` 标记真实流生命周期，关闭记录含阶段与时长。固定原因区分 `session-invalidated`、`session-missing`、`session-replaced`、`identity-read-error`、`event-bus-reset`、`handshake-overflow`、`live-buffer-overflow`、`recheck-buffer-overflow`、`queue-overflow`、`write-error`、`write-deadline`、`drain-deadline`、`host-shutdown`、`peer-abort`、`stream-error` 与 `server-complete`。reset 另记总线的 `transport-gap` / `publish-failed`。收尾错误和截止以同一连接的 `cleanup failed` 记录，保留最初关闭原因。
+- EventBus 记录 reset 的固定原因与范围；订阅回调把它关联到各条连接。握手时旧游标产生的 reset 不关流，不能把它当作实时总线失效。
+- 浏览器控制台 `[subscription] stream diagnostic` 区分 `reader-done`、`read-error`、`parse-error`、`message-error`、`body-missing`、`abort`、`cancel` 和 `cancel-error`。非法 JSON 的 `parse-rejected` 与隔离订阅处理器的 `handler-error` 仍保留原来的跳过/隔离行为，不触发额外重连。`stream closed` 标记退出原因；主动终止另记关闭、手动重连、标签隐藏、action 暂停或客户端错误上限。
+- 日志只含连接标识、固定类别、阶段、状态码、计数和时长。错误名也归一化为固定类别，不记录原始异常、事件正文、密钥、owner token 或 URL。`peer-abort` 只说明服务端观察到对端断开，无法单凭它判断浏览器、代理或网络谁先触发；需对照同一连接的客户端日志。
+
+健康空闲连接不产生关闭记录。此诊断不改变退避、心跳、deadline 或重连策略。没有原始异常连接的双端证据时，反复重连仍属待定位；健康测试通过不能证明根因已修复。
+
 **action 流和业务执行互不拖累**
 
 - action 流里每一帧的 seq、回合和 trace 身份、负载，都在入队那一刻定下来。已接受的帧按队列顺序写出。

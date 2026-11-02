@@ -468,6 +468,8 @@ interface UIRenderPart {
 
 ### submit-output
 
+模型第一次看到 `submit-output` 时就会得到[完成字段规则](./plugins.md#agent-output-submission)，不必先触发一次拒绝。声明输出来源的 `{}` 提交仍由宿主读取工具的规范结果。
+
 每个 agent 都自动获得这个宿主控制工具，未声明输出来源时，参数就是该 runtime 实际加载的输出 schema；没有 schema 时使用[宿主默认对象](./plugins.md#agent-output-submission)。它不在全局工具注册表里，各次运行持有独立且冻结的定义。函数不能调用它。
 
 声明 `io.output.from: { tool: name }` 时，生成的参数 schema 仍声明严格的空对象 `{}`，宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本。宿主采用该工具在本循环中最近一次成功返回的公共正文，不采用模型视图包装或 Hook 改写的显示内容；恢复后的成功结果也可用。没有成功调用时返回 `required-work` 并使用 `toolUse` 预算。规范结果仍须通过输出 schema、必需工作和 `ReviewAgentOutput`。字段限制见[输出来源](./plugins.md#agent-output-submission)。

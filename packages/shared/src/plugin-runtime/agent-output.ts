@@ -101,8 +101,17 @@ const systemSchema = {
   type: "object",
   properties: {
     narrativeOutput: { type: "string" },
-    completion: { type: "string", enum: ["done", "pending"] },
-    preGameDone: { type: "boolean" },
+    completion: {
+      type: "string",
+      enum: ["done", "pending"],
+      description:
+        'Optional completion state: "pending" while waiting, "done" when finished. If preGameDone is also present, false requires "pending" and true requires "done". Omit when no completion signal is needed.',
+    },
+    preGameDone: {
+      type: "boolean",
+      description:
+        'Setup completion only: false means setup is still waiting, true means setup is finished. Outside setup, omit this field; false does not mean "not setup". If completion is also present, it must agree.',
+    },
   },
   additionalProperties: true,
 };

@@ -123,6 +123,8 @@ contributes:
 
 ## Which tools the model can use
 
+When an agent submits output, follow its actual schema when omitting fields. See [completion conditions](../reference/plugins.md#agent-output-submission) for completion meanings and valid combinations; `preGameDone: false` does not mean “this is not setup.” See [Story output](../reference/plugins.md#story-output) for internal quotations and narration boundaries.
+
 There are two lists, with different jobs:
 
 | List                | Where it is written        | What it means                   |

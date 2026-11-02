@@ -168,8 +168,8 @@ function scanDialogue(text: string): {
  *
  * Narration is assumed when the segment is shaped like a quote with narration
  * around it: it opens with the quotation (「走吧。」我说。, "I'm ready," I say.),
- * or a lead-in introduces a quotation with a colon (我说：「走吧。」) or with a
- * comma when the quotation then ends the segment (I say, "Let's go."). Without
+ * or a reporting clause introduces a quotation with a colon (我说：「走吧。」),
+ * or a comma introduces a quotation that ends the segment (I say, "Let's go."). Without
  * a speaker, any quotation means the text outside it is narration.
  */
 function dialogueHasNarration(text: string, speaker: unknown): boolean {
@@ -177,7 +177,14 @@ function dialogueHasNarration(text: string, speaker: unknown): boolean {
   if (!scan.opened || scan.firstOpen === undefined) return false;
   const lead = text.slice(0, scan.firstOpen).trim();
   if (!lead || typeof speaker !== "string" || !speaker.trim()) return true;
-  if (/[:：]$/u.test(lead)) return true;
+  // A colon alone also introduces an internal quotation in direct speech
+  // (I have one request: "…"). Only explicit
+  // reporting verbs make a colon lead-in narration. This is a conservative
+  // syntax check, not a semantic parser; authors should separate narration.
+  if (/[:：]$/u.test(lead))
+    return /(?:说|说道|问|问道|答|答道|回答|喊|喊道|叫道|低语|补充|解释|提醒|\b(?:say|says|said|ask|asks|asked|reply|replies|replied|shout|shouts|shouted|whisper|whispers|whispered))\s*[:：]$/iu.test(
+      lead,
+    );
   return (
     /[,，]$/u.test(lead) &&
     scan.firstClose !== undefined &&

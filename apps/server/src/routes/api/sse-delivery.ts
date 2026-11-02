@@ -8,8 +8,12 @@ const SSE_DELIVERY_DEADLINE_MS = 2000;
 export interface BoundedSerialQueueOptions {
   readonly capacity: number;
   readonly onOverflow: () => void;
-  readonly onError?: (error: unknown) => void;
+  readonly onError?: (error: unknown, reason: SseQueueFailure) => void;
 }
+
+export type SseQueueFailure =
+  "write-error" | "write-deadline" | "drain-deadline";
+type CloseFailure = "close-error" | "close-deadline";
 
 /** One physical writer. A deadline stops intake, never starts a replacement writer. */
 export function createBoundedSerialQueue(options: BoundedSerialQueueOptions) {
@@ -33,11 +37,11 @@ export function createBoundedSerialQueue(options: BoundedSerialQueueOptions) {
     for (const task of tasks.splice(0)) task.done();
     settleIdle();
   }
-  function fail(error: unknown) {
+  function fail(error: unknown, reason: SseQueueFailure = "write-error") {
     if (expired) return;
     expired = true;
     close();
-    options.onError?.(error);
+    options.onError?.(error, reason);
   }
   function pump() {
     if (running || closed) return;
@@ -49,7 +53,7 @@ export function createBoundedSerialQueue(options: BoundedSerialQueueOptions) {
     running = true;
     const timer = setTimeout(() => {
       task.done();
-      fail(new Error("SSE delivery deadline exceeded"));
+      fail(new Error("SSE delivery deadline exceeded"), "write-deadline");
     }, SSE_DELIVERY_DEADLINE_MS);
     void Promise.resolve()
       .then(task.run)
@@ -97,7 +101,8 @@ export function createBoundedSerialQueue(options: BoundedSerialQueueOptions) {
         });
         idle = { promise, resolve };
         drainTimer = setTimeout(
-          () => fail(new Error("SSE drain deadline exceeded")),
+          () =>
+            fail(new Error("SSE drain deadline exceeded"), "drain-deadline"),
           SSE_DELIVERY_DEADLINE_MS,
         );
       }
@@ -112,24 +117,34 @@ export function createBoundedSerialQueue(options: BoundedSerialQueueOptions) {
 const closes = new WeakMap<SSEStreamingApi, Promise<void>>();
 
 /** Close is observation too: abort the underlying reader if graceful close stalls. */
-export function closeSseDelivery(stream: SSEStreamingApi): Promise<void> {
+export function closeSseDelivery(
+  stream: SSEStreamingApi,
+  onFailure?: (reason: CloseFailure, error?: unknown) => void,
+): Promise<void> {
   let close = closes.get(stream);
   if (!close) {
-    close = closeWithinDeadline(stream);
+    close = closeWithinDeadline(stream, onFailure);
     closes.set(stream, close);
   }
   return close;
 }
 
-async function closeWithinDeadline(stream: SSEStreamingApi): Promise<void> {
+async function closeWithinDeadline(
+  stream: SSEStreamingApi,
+  onFailure?: (reason: CloseFailure, error?: unknown) => void,
+): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       Promise.resolve()
         .then(() => stream.close())
-        .catch(() => stream.abort()),
+        .catch((error) => {
+          onFailure?.("close-error", error);
+          stream.abort();
+        }),
       new Promise<void>((resolve) => {
         timer = setTimeout(() => {
+          onFailure?.("close-deadline");
           stream.abort();
           resolve();
         }, SSE_DELIVERY_DEADLINE_MS);

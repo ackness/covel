@@ -43,6 +43,7 @@
 
 import { Buffer } from "node:buffer";
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
+import { diagnosticErrorKind } from "@covel/shared";
 import type { EventStore, EventStoreRecord } from "./event-store.js";
 import { RingBuffer } from "./ring-buffer.js";
 
@@ -405,7 +406,9 @@ export function createEventBus(
       try {
         cb(event);
       } catch (err) {
-        console.error("[EventBus] onEmit callback error:", err);
+        console.error("[EventBus] onEmit callback failed", {
+          errorKind: diagnosticErrorKind(err),
+        });
       }
     }
   }
@@ -425,11 +428,17 @@ export function createEventBus(
   }
 
   function broadcastReset(reset: EventBusReset): void {
+    console.info("[EventBus] replay reset", {
+      reason: reset.reason,
+      scope: reset.sessionId === undefined ? "all-sessions" : "session",
+    });
     for (const cb of resetCallbacks) {
       try {
         cb(reset);
       } catch (err) {
-        console.error("[EventBus] onReset callback error:", err);
+        console.error("[EventBus] onReset callback failed", {
+          errorKind: diagnosticErrorKind(err),
+        });
       }
     }
   }
@@ -656,7 +665,9 @@ export function createEventBus(
     rs.chain = rs.chain
       .then(() => deliverFrame(frame))
       .catch((err) => {
-        console.error("[EventBus] transport frame delivery failed:", err);
+        console.error("[EventBus] transport frame delivery failed", {
+          errorKind: diagnosticErrorKind(err),
+        });
         // A received ref can still be unreadable or gone from storage. Its
         // origin seq has already advanced, so invalidate here on the delivery
         // chain before successors receive apparently contiguous replay ids.
@@ -693,7 +704,9 @@ export function createEventBus(
         if (!closed) invalidateReplay(rs.sessionId);
       })
       .catch((err) => {
-        console.error("[EventBus] replay invalidation failed:", err);
+        console.error("[EventBus] replay invalidation failed", {
+          errorKind: diagnosticErrorKind(err),
+        });
       });
     for (const seq of seqs) {
       scheduleDeliver(rs, rs.pending.get(seq)!);

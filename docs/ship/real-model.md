@@ -398,6 +398,8 @@ pnpm llm:replay:diff debugs/llm-replay/demo.record.requests debugs/llm-replay/de
 
 模型工具调用成功不代表回合已保存。验收须同时核对提交尝试、`execution.completed.committed`、持久化消息和 proposal 读回。先完成离线测试，再验证当前服务商说明与实际目标的能力；[strict 配置](../reference/slots.md#tool-submission-capabilities)默认关闭，没有随仓库发布的在线能力证明。兼容的封闭测试 schema 可验证 strict，原有叙事 schema 的可选字段和开放对象则保留非 strict，不能为通过测试而改写 schema 或切换端点。
 
+有界纠错恢复了 `missing-submission → invalid-json`，只证明该样本最终通过校验并提交，不证明上游模型不再产生坏 JSON。首次提示携带完成字段规则的离线回归，只证明规则确实送达；减少初次冲突、往返或延迟仍需同模型、参数和输入的受控对照。保留拒绝与预算耗尽样本，不用取消矛盾检查、把 false 当 done 或无依据增加预算来换取通过。
+
 ### 固定样本与预算
 
 用四个独立的本地配置：官方 `deepseek-flash`、自有测试中转的 `deepseek-v4.1-flash`、同一中转的 `gpt-6-luna`、OpenAI 的 `gpt-6-luna`。报告只用下面的固定标签，不保存中转身份、端点或凭据。没有可用配置的 lane 明确记为未运行。不要使用 Kimi，也不要把单元测试当作在线能力证明。

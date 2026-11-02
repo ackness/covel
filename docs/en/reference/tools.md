@@ -468,6 +468,8 @@ The tool returns `{ ui: [{ parts, layout? }] }`, and the framework builds a `ui.
 
 ### submit-output
 
+The first advertised `submit-output` definition includes the [completion-field rules](./plugins.md#agent-output-submission), before any rejection. With an output source, `{}` still submits the business tool’s canonical result through the host.
+
 Every agent automatically receives this host control tool. Without an output source, its parameters are the runtime’s actual loaded output schema, or the [host object default](./plugins.md#agent-output-submission) when none was authored. It is absent from the global registry; each admitted run owns its frozen definition. Functions cannot call it.
 
 With `io.output.from: { tool: name }`, the generated parameter schema still advertises a strict empty object `{}`. The host ignores all call arguments, including `parameters` / `arguments` wrappers, extra fields and malformed JSON text. The host uses that tool’s latest successful public content in this loop, including restored results, rather than model-view wrappers or hook-rewritten display content. No successful call produces `required-work` using the `toolUse` budget. The canonical result still passes the output schema, required work and `ReviewAgentOutput`. See [output sources](./plugins.md#agent-output-submission) for declaration constraints.

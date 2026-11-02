@@ -6,6 +6,7 @@ import {
 } from "../src/narrative-review.js";
 import type { LLMResponse } from "@covel/shared";
 import type { ReviewAgentOutputPayload } from "../src/plugin-api.js";
+import { storyOutputSchema } from "../src/story-schemas.js";
 function submission(
   output: string | Record<string, unknown>,
 ): ReviewAgentOutputPayload {
@@ -558,22 +559,37 @@ describe("narrative perspective review", () => {
           locale,
           getOwnSettings: () => ({ perspective }),
         },
-        submission({
-          segments: [
-            { kind: "narration", text: locale === "en" ? "She glances at the stairs." : "她瞥了一眼楼梯。" },
-            { kind: "dialogue", speaker, text },
-          ],
-        }),
+        submission(
+          storyOutputSchema.parse({
+            segments: [
+              {
+                kind: "narration",
+                text:
+                  locale === "en"
+                    ? "She glances at the stairs."
+                    : "她瞥了一眼楼梯。",
+              },
+              { kind: "dialogue", speaker, text },
+            ],
+          }),
+        ),
       );
     const speech: [string, string][] = [
+      ["zh-CN", "我只有一个请求：『别把这件事写进报道。』"],
+      ["zh-CN", "「我只有一个请求：『别把这件事写进报道。』」"],
+      ["en", 'I have one request: "Please keep this out of the paper."'],
+      [
+        "en",
+        'I have one request: "Please keep this out of the paper." You know why.',
+      ],
       ["zh-CN", "那箱子搬下来那天我正好在楼下。学生会说只是『暂存』"],
       ["zh-CN", "那箱子搬下来那天我正好在楼下。学生会说只是“暂存”。"],
       ["zh-CN", "「那天我正好在楼下。学生会说只是『暂存』。」"],
       ["zh-CN", "你们都听过‘暂存’这个说法吧，我可不信。"],
       ["en", 'I was downstairs. They called it "temporary storage".'],
       ["en", "I'm sure they called it 'storage', and I didn't buy it."],
-      ["en", "I told him, \"wait,\" and you saw what he did."],
-      ["en", '"I was downstairs. They called it \'temporary storage\'."'],
+      ["en", 'I told him, "wait," and you saw what he did.'],
+      ["en", "\"I was downstairs. They called it 'temporary storage'.\""],
       ["en", "Aya's coat is mine; they called it 'borrowed'."],
     ];
     for (const perspective of [
@@ -584,7 +600,10 @@ describe("narrative perspective review", () => {
       "dm",
     ])
       for (const [locale, text] of speech)
-        expect(check(perspective, locale, text), `${perspective}: ${text}`).toEqual({
+        expect(
+          check(perspective, locale, text),
+          `${perspective}: ${text}`,
+        ).toEqual({
           action: "continue",
         });
     // Without a speaker the segment cannot claim the words as speech.
@@ -605,6 +624,9 @@ describe("narrative perspective review", () => {
     for (const [locale, text, fragment] of [
       ["zh-CN", "「走吧。」我说。", "违反了第二人称视角"],
       ["zh-CN", "我说：「走吧。」", "违反了第二人称视角"],
+      ["zh-CN", "我低声问：『你要走吗？』", "违反了第二人称视角"],
+      ["en", 'I say: "Let\'s go."', "violates second-person perspective"],
+      ["en", 'I whisper: "Let\'s go."', "violates second-person perspective"],
       ["en", 'I say, "Let\'s go."', "violates second-person perspective"],
       ["en", '"Let\'s go," I say.', "violates second-person perspective"],
     ] as const)
