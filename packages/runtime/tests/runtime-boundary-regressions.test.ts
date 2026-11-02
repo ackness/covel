@@ -256,7 +256,8 @@ describe("terminal domain boundaries", () => {
         }),
       });
       expect(turn.runtimeResults[0]?.status).toBe("failed");
-      expect(generate).toHaveBeenCalledTimes(mode === "generate" ? 1 : 2);
+      // Prose is a missing submission: the story profile asks three more times.
+      expect(generate).toHaveBeenCalledTimes(mode === "generate" ? 1 : 4);
       const committed = await finalizeExecution({
         store,
         sessionId: input.sessionId,

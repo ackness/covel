@@ -22,6 +22,7 @@ import {
   loadPluginManifest,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
+import { validateOutput } from "@covel/tools";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
@@ -90,6 +91,39 @@ describe("char-creator plugin", () => {
           (input) => input.kind === "plugin-data",
         ),
       ).toBe(false);
+    });
+
+    it("keeps setup pending while the form waits for the player", () => {
+      // Only the guard finishes setup, after the answer creates the player.
+      // A model that submits done would skip character creation entirely.
+      expect(manifest.output?.schema).toBe("./output.schema.json");
+      const schema = JSON.parse(
+        fs.readFileSync(
+          path.join(
+            discovery.rootPath,
+            "runtimes",
+            "player-init",
+            "output.schema.json",
+          ),
+          "utf8",
+        ),
+      );
+      for (const value of [
+        { preGameDone: false },
+        { preGameDone: false, completion: "pending" },
+      ])
+        expect(validateOutput(value, schema).valid, JSON.stringify(value)).toBe(
+          true,
+        );
+      for (const value of [
+        {},
+        { preGameDone: true },
+        { preGameDone: false, completion: "done" },
+        { completion: "done" },
+      ])
+        expect(validateOutput(value, schema).valid, JSON.stringify(value)).toBe(
+          false,
+        );
     });
 
     it("orders initial setup without requiring completed providers on form submission", () => {

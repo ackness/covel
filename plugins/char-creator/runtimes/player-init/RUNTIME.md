@@ -15,6 +15,7 @@ io:
       select: /narrativeOutput
       required: false
   output:
+    schema: ./output.schema.json
     contract: character-creation@1
 agent:
   tools:
@@ -68,5 +69,5 @@ Form rules:
 Runtime workflow:
 
 - Use `create-character-form` to prepare the opening form and fix issues found in its preview. Tool success leaves time to review `filledNarrative` before finishing.
-- Emit `preGameDone: false` — Pre-Game is not yet done because the player hasn't submitted.
+- Emit `preGameDone: false` — Pre-Game is not yet done because the player hasn't submitted. Never submit `preGameDone: true` or `completion: "done"`; setup finishes only after the player's answer creates the character.
 - The player's submission is turned into a real character by guard.js on the NEXT turn (deterministic, no LLM). DO NOT create the character yourself.

@@ -110,7 +110,7 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
         toolUse: 1,
         review: 2,
         loopPerturbation: 1,
-        outputRepair: 1,
+        outputRepair: 3,
       },
     }),
     actor: frozenPreset({
@@ -121,7 +121,7 @@ export const LOOP_PRESETS: Readonly<Record<LoopPresetId, LoopPresetValues>> =
         toolUse: 1,
         review: 2,
         loopPerturbation: 1,
-        outputRepair: 1,
+        outputRepair: 3,
       },
     }),
     system: frozenPreset({

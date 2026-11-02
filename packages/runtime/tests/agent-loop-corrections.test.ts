@@ -79,11 +79,14 @@ describe("correction policy", () => {
 
   it("preserves every preset's budgets and merges only authored keys", () => {
     for (const preset of ["story", "actor", "system"] as const) {
+      // Player-visible profiles get extra output repairs: a missed
+      // submission plus cut-off JSON must not lose the turn.
+      const outputRepair = preset === "system" ? 1 : 3;
       expect(LOOP_PRESETS[preset].corrections).toEqual({
         toolUse: 1,
         review: 2,
         loopPerturbation: 1,
-        outputRepair: 1,
+        outputRepair,
       });
       expect(Object.isFrozen(LOOP_PRESETS[preset].corrections)).toBe(true);
       expect(
@@ -94,7 +97,7 @@ describe("correction policy", () => {
         toolUse: 1,
         review: 0,
         loopPerturbation: 1,
-        outputRepair: 1,
+        outputRepair,
       });
     }
   });

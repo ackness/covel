@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "char-creator/player-init output",
+  "description": "The agent only shows the opening form, so setup stays pending. The guard creates the character and finishes setup once the player answers.",
+  "type": "object",
+  "required": ["preGameDone"],
+  "additionalProperties": false,
+  "properties": {
+    "preGameDone": {
+      "type": "boolean",
+      "const": false
+    },
+    "completion": {
+      "type": "string",
+      "const": "pending"
+    },
+    "narrativeOutput": {
+      "type": "string"
+    }
+  }
+}

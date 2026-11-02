@@ -620,7 +620,7 @@ The output contract of a function is based on the `value` that the handler retur
 
 An agent's side effects come only from its tools. What the model can write is decided by the `agent.tools` allowlist.
 
-- The execution boundary puts side effects from tool results (proposals returned by tools, events sent by `emit-event`, forms and UI blocks) into `effects`. It turns `preGameDone: true` or `completion` in the final output into a completion signal.
+- The execution boundary puts side effects from tool results (proposals returned by tools, events sent by `emit-event`, forms and UI blocks) into `effects`. It turns `preGameDone: true` or `completion` in the final output into a completion signal; when the two contradict each other, the submission is rejected and never counts as completion.
 - The model's final JSON fields `statePatches`, `pluginData`, `notifications`, `assetGenerations`, `interactions`, `ui`, and `events` that carry a `topic` have no effect. This is the same as the fields with these names in a function's business value. These fields are removed during the split, and the server log records a warning with the runtime name and the field name.
 - `events` without a `topic` (for example, business events of WorldIR) stay in `output.events`.
 - When a tool that ends the run returns its own value as the output, the side-effect fields in that value take effect as usual, because the tool is on the allowlist.
@@ -632,8 +632,13 @@ An agent's side effects come only from its tools. What the model can write is de
 - Changing only `output` discards the business value. It stops the export and the downstream value bindings. When there is a public output contract, it also fails because the contract value is missing.
 - `PostRuntime` cannot add or rewrite `pendingProposals`, `effects`, or `completion`; those channels always come from the runtime's original result. To block or rewrite a proposal, use [`PreStateCommit`](./hooks.md#prestatecommit).
 - The side effects of a failed runtime are not committed, and its events do not trigger the runtimes that follow it.
-- Normal execution and resume share the output schema check for agents. A non-story agent that declares a private `io.output.schema` first validates the candidate protocol output, and only then splits out the business value and the side effects. A final output with no story text, or with empty story text, is also accepted by the validation. If it does not match the schema, the run fails, and the writes accumulated while it was paused are not committed.
-- A story agent does not use the private schema check; it uses the checks and repair of [Story output](#story-output) instead.
+- Normal execution and resume check an agent's submission at the same `submit-output` boundary, in this order for story and system agents alike:
+  1. The candidate passes the actual output schema: the private `io.output.schema` when declared, otherwise the public contract's schema, otherwise the host default schema.
+  2. A story agent then passes the [Story output](#story-output) invariants: non-empty text, segment kinds and dialogue speakers.
+  3. The business value is split out: protocol fields such as `preGameDone` and `completion`, and effect fields the model wrote, are removed. `preGameDone: false` with `completion: "done"`, or `true` with `"pending"`, contradict each other and the submission is rejected.
+  4. When `io.output.contract` is declared and the contract has a schema, it validates the business value; the value does not need the protocol fields.
+  5. Only after required tool work is done does `ReviewAgentOutput` review it.
+- A failure at any step comes back as the `submit-output` tool result, so a later step can correct it within the correction budget; a candidate that breaks the public contract never reaches review. The run fails only when the budget runs out, and writes accumulated while it was paused are not committed. The final commit boundary checks the schema and the public contract again.
 
 > [!NOTE]
 > After a change to the internal result structure, rebuild the affected development execution results, exports, background jobs, and snapshots. The old flat side-effect results cannot be read.
@@ -876,7 +881,7 @@ The loop profile controls steering, repeated-tool fallback, finalization and cor
 | `fallback` | `submit-output`: offer only submission after repeated business calls; `fail`: stop with `loop-detected` |
 | `finalizer.maxSteps` | At most one extra submission request after step exhaustion or context overflow when eligible; default `true` |
 | `finalizer.deadlineReserveMs` | Switch to one submission request inside this reserve; default `0`, clamped to half the runtime timeout |
-| `corrections.outputRepair` | Missing submission, mixed batch, JSON/schema/story shape failure; integer 0–3, default 1 |
+| `corrections.outputRepair` | Missing submission, mixed batch, JSON/schema/story shape failure; integer 0–3, default 3 for `story` and `actor`, 1 for `system` |
 | `corrections.review` | Shared by `PostLLMResponse` and `ReviewAgentOutput`; integer 0–5, default 2 |
 | `corrections.toolUse` | Missing required business work; integer 0–3, default 1 |
 | `corrections.loopPerturbation` | Perturbations before repeated-tool fallback; integer 0–3, default 1 |
@@ -888,7 +893,7 @@ The loop profile controls steering, repeated-tool fallback, finalization and cor
 | `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
-| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 3 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 3 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
 `profile: story` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
 

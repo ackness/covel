@@ -42,5 +42,5 @@
 本 runtime 工作流：
 
 - 调用 `create-character-form` 准备开场表单，必要时再次调用以修改；工具成功后先复核 `filledNarrative`，再结束
-- `preGameDone: false`（玩家未提交 → Pre-Game 仍未结束）
+- `preGameDone: false`（玩家未提交 → Pre-Game 仍未结束）。不要提交 `preGameDone: true` 或 `completion: "done"`；只有玩家回答并创建角色后，setup 才会完成。
 - 角色落库由 guard.js 在玩家提交下一回合时自动完成，**不要自行创建角色**
