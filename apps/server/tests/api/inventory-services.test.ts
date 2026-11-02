@@ -81,7 +81,7 @@ describe("bundled inventory services through the action API", () => {
   let beforeProse: (() => Promise<void>) | undefined;
   const requests = new Map<string, Parameters<LLMAdapter["generate"]>[0][]>();
   const generate: LLMAdapter["generate"] = async (request) => {
-    // The bundled extractor's terminal tool identifies its runtime request.
+    // The bundled extractor's business tool identifies its runtime request.
     const runtimeId = request.tools?.some(
       ({ name }) => name === "submit-world-facts",
     )
@@ -93,8 +93,7 @@ describe("bundled inventory services through the action API", () => {
         request.messages,
         "submit-world-facts",
       );
-      if (output)
-        return submittedOutput(output.facts as Record<string, unknown>);
+      if (output) return submittedOutput({});
       const input = JSON.parse(
         textOf(request.messages.findLast(({ role }) => role === "user")!),
       ) as {

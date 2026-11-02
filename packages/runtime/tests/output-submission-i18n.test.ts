@@ -177,10 +177,10 @@ it.each(["en-US", "zh-CN"])(
       }),
     ).toMatchObject({
       rejection: {
-        code: "invalid-output",
-        correction: "outputRepair",
+        code: "required-work",
+        correction: "toolUse",
         message: expect.stringContaining(
-          locale === "zh-CN" ? "请只用 {}" : "with {} only",
+          locale === "zh-CN" ? "请先成功调用" : "Call mark successfully",
         ),
       },
     });

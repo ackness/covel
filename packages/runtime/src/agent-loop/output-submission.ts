@@ -71,31 +71,9 @@ export async function evaluateSubmission(args: {
   | { readonly rejection: OutputRejection }
 > {
   let candidate: unknown;
-  try {
-    candidate = JSON.parse(args.call.arguments);
-  } catch (error) {
-    return {
-      rejection: rejectOutput(
-        "invalid-json",
-        (await submissionSyntaxProblems(error, args.locale)).join("; "),
-      ),
-    };
-  }
-  if (!isRecord(candidate))
-    return {
-      rejection: rejectOutput(
-        "invalid-output",
-        (await loadOutputText(args.locale))("object-required"),
-      ),
-    };
   if (args.contract.from) {
-    if (Object.keys(candidate).length)
-      return {
-        rejection: rejectOutput(
-          "invalid-output",
-          (await loadOutputText(args.locale))("source-empty"),
-        ),
-      };
+    // Arguments carry no output in this mode, even when the provider wraps
+    // the advertised {} or emits malformed JSON. Only executor content counts.
     const tool = args.contract.from.tool;
     const source = [...args.businessCalls]
       .reverse()
@@ -108,6 +86,24 @@ export async function evaluateSubmission(args: {
         ),
       };
     candidate = source.result;
+  } else {
+    try {
+      candidate = JSON.parse(args.call.arguments);
+    } catch (error) {
+      return {
+        rejection: rejectOutput(
+          "invalid-json",
+          (await submissionSyntaxProblems(error, args.locale)).join("; "),
+        ),
+      };
+    }
+    if (!isRecord(candidate))
+      return {
+        rejection: rejectOutput(
+          "invalid-output",
+          (await loadOutputText(args.locale))("object-required"),
+        ),
+      };
   }
   const validation = args.contract.validate(candidate);
   if (!validation.valid)

@@ -71,14 +71,7 @@ class ChatModeMockLLM implements LLMAdapter {
       "sync-characters",
     ]) {
       const output = completedBusinessOutput(params.messages, name);
-      if (output)
-        return submittedOutput(
-          name === "submit-world-facts"
-            ? (output.facts as Record<string, unknown>)
-            : name === "sync-characters" || name === "update-dimensions"
-              ? {}
-              : output,
-        );
+      if (output) return submittedOutput({});
     }
     const systemPrompt =
       typeof params.messages[0]?.content === "string"

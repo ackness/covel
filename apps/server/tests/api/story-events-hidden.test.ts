@@ -53,14 +53,7 @@ class RecordingLLM implements LLMAdapter {
       "sync-characters",
     ]) {
       const output = completedBusinessOutput(params.messages, name);
-      if (output)
-        return submittedOutput(
-          name === "submit-world-facts"
-            ? (output.facts as Record<string, unknown>)
-            : name === "sync-characters" || name === "update-dimensions"
-              ? {}
-              : output,
-        );
+      if (output) return submittedOutput({});
     }
     const usage = { inputTokens: 10, outputTokens: 10 };
     if (/memory manager|记忆管理器/.test(text))

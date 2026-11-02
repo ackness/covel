@@ -208,13 +208,20 @@ export function validatePluginFiles(
     manifests,
   ))
     file(source, field, reference);
-  for (const [contract, declaration] of Object.entries(plugin.contracts ?? {}))
-    file(
+  const contractSchemas: Record<string, unknown> = {
+    ...packageManifest.contractSchemas,
+  };
+  for (const [contract, declaration] of Object.entries(
+    plugin.contracts ?? {},
+  )) {
+    const document = file(
       packageManifest.sourcePath,
       `contracts.${contract}.schema`,
       declaration.schema,
       true,
     );
+    if (document !== undefined) contractSchemas[contract] = document;
+  }
   for (const [namespace, declaration] of Object.entries(
     plugin.contributes?.data ?? {},
   ))
@@ -376,9 +383,7 @@ export function validatePluginFiles(
     );
     if (runtime.output?.schema?.startsWith("contract:"))
       outputSchema =
-        packageManifest.contractSchemas?.[
-          runtime.output.schema.slice("contract:".length)
-        ];
+        contractSchemas[runtime.output.schema.slice("contract:".length)];
     if (!runtime.output?.schema && parsed.sourcePath) {
       let convention: string | undefined;
       try {
@@ -397,7 +402,7 @@ export function validatePluginFiles(
       if (convention !== undefined) outputSchema = JSON.parse(convention);
     }
     if (outputSchema === undefined && runtime.outputContract)
-      outputSchema = packageManifest.contractSchemas?.[runtime.outputContract];
+      outputSchema = contractSchemas[runtime.outputContract];
     if (runtime.output?.from && outputSchema === undefined)
       throw new Error(
         `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,

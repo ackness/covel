@@ -8,8 +8,11 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
+import { parsePluginMd, compileInlineRuntime } from "../src/parse-plugin-md.js";
+import { validatePluginFiles } from "../src/static-validation.js";
 import {
   validatePluginPackage,
   parseIssueLocation,
@@ -661,22 +664,56 @@ describe("tool-sourced agent output", () => {
     expect(report.cliFailure).toContain(message);
   });
 
-  it("accepts a contract schema as the sole output validator", async () => {
-    const root = await fixture(
-      {
-        entry: "./server/index.js",
-        contracts: { "probe.result@1": { schema: "./result.schema.json" } },
-        contributes: { tools: ["calculate"] },
-        runtime: {
-          ...agentRuntime,
-          io: { output: { ...source, contract: "probe.result@1" } },
+  it.each(["schema", "contract"] as const)(
+    "resolves a package's own %s validator during installation without preloaded schemas",
+    async (field) => {
+      const root = await fixture(
+        {
+          entry: "./server/index.js",
+          contracts: { "probe.result@1": { schema: "./result.schema.json" } },
+          contributes: { tools: ["calculate"] },
+          runtime: {
+            ...agentRuntime,
+            io: {
+              output: {
+                ...source,
+                [field]:
+                  field === "schema"
+                    ? "contract:probe.result@1"
+                    : "probe.result@1",
+              },
+            },
+          },
         },
-      },
-      {
-        "server/index.js": "throw new Error('must never run')",
-        "result.schema.json": schema,
-      },
-    );
-    expect((await parity(root)).ok).toBe(true);
-  });
+        {
+          "server/index.js": "throw new Error('must never run')",
+          "result.schema.json": schema,
+        },
+      );
+      expect((await parity(root)).ok).toBe(true);
+      const manifestPath = path.join(root, "PLUGIN.md");
+      const parsed = parsePluginMd(
+        readFileSync(manifestPath, "utf8"),
+        manifestPath,
+      );
+      expect(parsed.contractSchemas).toBeUndefined();
+      const runtime = compileInlineRuntime(parsed);
+      if (!runtime) throw new Error("missing inline runtime");
+      expect(() =>
+        validatePluginFiles(parsed, [runtime], (file) =>
+          readFileSync(file, "utf8"),
+        ),
+      ).not.toThrow();
+      // Resolving the declaration must retain object-schema admission too.
+      await writeFile(
+        path.join(root, "result.schema.json"),
+        '{"type":"array"}',
+      );
+      expect(() =>
+        validatePluginFiles(parsed, [runtime], (file) =>
+          readFileSync(file, "utf8"),
+        ),
+      ).toThrow("must describe an object");
+    },
+  );
 });

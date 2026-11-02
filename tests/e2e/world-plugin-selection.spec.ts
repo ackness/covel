@@ -18,23 +18,13 @@ test("local world selection survives preparation, hydration, the opening, the fi
 }) => {
   const provider = await startFakeLlmProvider();
   provider.reply = (request) => {
-    const facts = completedBusinessData(request, "submit-world-facts");
-    if (facts) return submitOutputReply(facts.facts as Record<string, unknown>);
-    const initialized = completedBusinessData(request, "initialize-world");
-    if (initialized)
-      return submitOutputReply(
-        Object.fromEntries(
-          [
-            "success",
-            "preGameDone",
-            "worldSchema",
-            "attributeCount",
-            "dimensionCount",
-          ].map((key) => [key, initialized[key]]),
-        ),
-      );
-    const time = completedBusinessData(request, "advance-world-time");
-    if (time) return submitOutputReply(time);
+    for (const name of [
+      "submit-world-facts",
+      "initialize-world",
+      "advance-world-time",
+    ]) {
+      if (completedBusinessData(request, name)) return submitOutputReply({});
+    }
 
     const systemPrompt = request.rawMessages
       .filter(({ role }) => role === "system" || role === "developer")

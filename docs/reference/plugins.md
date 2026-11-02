@@ -429,7 +429,7 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 未声明输出来源时，工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
 
-若最终输出就是某个业务工具的结果，可声明 `io.output.from: { tool: save-facts }`。该工具必须在本 runtime 的自有／builtin 业务工具白名单内，不能是宿主控制工具或可选导入服务；函数 runtime 不能使用。必须实际加载输出 schema 或契约，约定的 `output.schema.json` 也可用。模型在工具成功后单独用 `{}` 调用 `submit-output`，不能传候选字段。宿主取本次循环中该工具最近一次成功调用的公共正文（不是 `summary` / `data` / `staged` 模型视图），按输出 schema 和既有契约门控校验，再照常运行 `ReviewAgentOutput`。没有成功调用时返回 `required-work`，消耗 `toolUse` 预算；多余字段返回 `invalid-output`。挂起保留输出来源与执行器结果，恢复后不用重跑成功工作。工具效果仍只通过原来的 proposal 提交。
+若最终输出就是某个业务工具的结果，可声明 `io.output.from: { tool: save-facts }`。该工具必须在本 runtime 的自有／builtin 业务工具白名单内，不能是宿主控制工具或可选导入服务；函数 runtime 不能使用。必须实际加载输出 schema 或契约，约定的 `output.schema.json` 也可用。模型在工具成功后单独用 `{}` 调用 `submit-output`。生成的参数 schema 仍声明空对象；此模式下宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本，参数不能替代规范结果。宿主取本次循环中该工具最近一次成功调用的公共正文（不是 `summary` / `data` / `staged` 模型视图），按输出 schema 和既有契约门控校验，再照常运行 `ReviewAgentOutput`。没有成功调用时返回 `required-work`，消耗 `toolUse` 预算。挂起保留输出来源与执行器结果，恢复后不用重跑成功工作。工具效果仍只通过原来的 proposal 提交。
 
 实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
 
@@ -460,7 +460,7 @@ agent:
 
 内置叙事器与群像叙事器保持 `narrative-engine@2` 的 `segments/cues/yield` 形状，通过最终提交交付。`createNarrativeReview` 注册到 `ReviewAgentOutput`，直接检查已校验的段落或默认 `narrativeOutput`，只返回 correction；不会改写回复或添加 effects。工具的准备说明不会进入故事。
 
-建议、事实抽取、隐藏事件规划、时间推进和世界初始化先成功完成必需的业务工具，再提交工具的规范结果。它们自己的输出审核阻止模型改写规范结果；只纠正最终提交，不重复成功的写入。好感、图鉴和关系图谱无变化时可直接提交 `{}`；角色追踪仍先同步空批次，维度追踪仍先结算 `updates: []`。世界初始化最终提交必须包含 `preGameDone: true`，角色表单准备提交 `preGameDone: false`，等待玩家完成表单。
+建议、事实抽取、隐藏事件规划、时间推进和世界初始化先成功完成必需的业务工具，再提交工具的规范结果。它们声明业务工具为输出来源，由宿主校验和审核规范结果；只纠正最终提交，不重复成功的写入。好感、图鉴和关系图谱无变化时可直接提交 `{}`；角色追踪仍先同步空批次，维度追踪仍先结算 `updates: []`。世界初始化的规范结果必须包含 `preGameDone: true`，角色表单准备提交 `preGameDone: false`，等待玩家完成表单。
 
 ### 工具选择和思考（`agent.toolChoice`、`agent.reasoning`）
 

@@ -470,13 +470,13 @@ interface UIRenderPart {
 
 每个 agent 都自动获得这个宿主控制工具，未声明输出来源时，参数就是该 runtime 实际加载的输出 schema；没有 schema 时使用[宿主默认对象](./plugins.md#agent-output-submission)。它不在全局工具注册表里，各次运行持有独立且冻结的定义。函数不能调用它。
 
-声明 `io.output.from: { tool: name }` 时，参数变为严格的空对象 `{}`。宿主采用该工具在本循环中最近一次成功返回的公共正文，不采用模型视图包装或 Hook 改写的显示内容；恢复后的成功结果也可用。没有成功调用时返回 `required-work` 并使用 `toolUse` 预算，多余字段按 `invalid-output` 拒绝。规范结果仍须通过输出 schema、必需工作和 `ReviewAgentOutput`。字段限制见[输出来源](./plugins.md#agent-output-submission)。
+声明 `io.output.from: { tool: name }` 时，生成的参数 schema 仍声明严格的空对象 `{}`，宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本。宿主采用该工具在本循环中最近一次成功返回的公共正文，不采用模型视图包装或 Hook 改写的显示内容；恢复后的成功结果也可用。没有成功调用时返回 `required-work` 并使用 `toolUse` 预算。规范结果仍须通过输出 schema、必需工作和 `ReviewAgentOutput`。字段限制见[输出来源](./plugins.md#agent-output-submission)。
 
 先完成必需的业务工具工作，读取结果，再单独调用 `submit-output`。无业务输出且 schema 允许时传 `{}`。提交被拒绝时按错误修正后再次调用。提交成功结束计算，不代表数据已保存。
 
 提交的数据不产生新的 proposal、UI、交互、通知或事件。工具成功与存档提交仍是两件事。`submit-output` 不算业务工作，不可延迟，也不能出现在插件工具、服务导入、数据集名字或显式工具白名单里。
 
-参数必须是一个完整 JSON 对象；不剥离围栏、不提取前缀、不修复截断内容。按批次/JSON/schema/故事格式、必需工作、`ReviewAgentOutput` 顺序判定一次。失败码为 `invalid-json`、`invalid-output`、`required-work`、`review-rejected` 或 `submission-batch`。错误只给有界字段或位置指导。混合或重复提交在任何同批业务调用执行前拒绝，并回答每个原调用 ID。此前成功的业务工作保留。`PostToolUse` 只改可见文本，不能改变内核私有的接受值；没有接受值的终止请求失败。
+未声明输出来源时，参数必须是一个完整 JSON 对象；不剥离围栏、不提取前缀、不修复截断内容。按批次/JSON/schema/故事格式、必需工作、`ReviewAgentOutput` 顺序判定一次。失败码为 `invalid-json`、`invalid-output`、`required-work`、`review-rejected` 或 `submission-batch`。错误只给有界字段或位置指导。混合或重复提交在任何同批业务调用执行前拒绝，并回答每个原调用 ID。此前成功的业务工作保留。`PostToolUse` 只改可见文本，不能改变内核私有的接受值；没有接受值的终止请求失败。
 
 旧工具 `runtime-done` 已移除；不要注册同名替代或继续发送旧完成调用。
 

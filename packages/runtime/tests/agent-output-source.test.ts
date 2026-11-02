@@ -59,6 +59,16 @@ function fixture(
 const work = (id = "work") => toolCall("calculate", {}, id);
 const submit = (value: Record<string, unknown> = {}, id = "submit") =>
   toolCall("submit-output", value, id);
+const rawSubmit = (argumentsJson: string, id = "submit") => {
+  const response = submit({}, id);
+  return {
+    ...response,
+    toolCalls: response.toolCalls.map((call) => ({
+      ...call,
+      arguments: argumentsJson,
+    })),
+  };
+};
 const errorFor = (
   llm: ReturnType<typeof queuedLLM>,
   request: number,
@@ -97,18 +107,34 @@ describe("tool-sourced output", () => {
       description: expect.stringContaining("calculate"),
     });
   });
-  it("rejects extra fields without repeating business work", async () => {
-    const f = fixture();
-    const llm = queuedLLM([work(), submit({ value: 99 }, "extra"), submit()]);
-    const result = await run(f, llm);
-    expect(errorFor(llm, 2, "extra")).toContain("invalid-output");
-    expect(result.acceptedOutput).toEqual({ value: 1 });
-    expect(llm.requests).toHaveLength(3);
-    expect(f.execute).toHaveBeenCalledOnce();
-  });
+  it.each([
+    '{"value":99}',
+    '{"parameters":{}}',
+    '{"arguments":{}}',
+    '{"unknown":true}',
+    '{"value":',
+    "",
+    "[]",
+    "null",
+    "42",
+  ])(
+    "ignores submission arguments %j without repeating business work",
+    async (argumentsJson) => {
+      const f = fixture();
+      const llm = queuedLLM([work(), rawSubmit(argumentsJson)]);
+      const result = await run(f, llm);
+      expect(result.acceptedOutput).toEqual({ value: 1 });
+      expect(llm.requests).toHaveLength(2);
+      expect(f.execute).toHaveBeenCalledOnce();
+    },
+  );
   it("charges missing work to toolUse then accepts after success", async () => {
     const f = fixture();
-    const llm = queuedLLM([submit({}, "early"), work(), submit()]);
+    const llm = queuedLLM([
+      rawSubmit('{"parameters":', "early"),
+      work(),
+      submit(),
+    ]);
     f.runtime = {
       ...f.runtime,
       loopProfile: { corrections: { outputRepair: 0, toolUse: 1 } },
@@ -175,7 +201,11 @@ describe("tool-sourced output", () => {
   });
   it("rejects schema-invalid canonical content", async () => {
     const f = fixture([{ value: "wrong" }]);
-    const llm = queuedLLM([work(), submit({}, "bad"), submit()]);
+    const llm = queuedLLM([
+      work(),
+      submit({ value: 1, parameters: {} }, "bad"),
+      rawSubmit("malformed"),
+    ]);
     const result = await run(f, llm);
     expect(errorFor(llm, 2, "bad")).toContain("invalid-output");
     expect(result.acceptedOutput).toBeNull();
@@ -200,8 +230,8 @@ describe("tool-sourced output", () => {
     });
     const llm = queuedLLM([
       work(),
-      submit({}, "rejected"),
-      submit({}, "accepted"),
+      submit({ parameters: {}, value: 99 }, "rejected"),
+      rawSubmit("malformed", "accepted"),
     ]);
     const result = await run(f, llm, pipeline);
     expect(errorFor(llm, 2, "rejected")).toContain("review-rejected");
