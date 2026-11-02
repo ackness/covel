@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-10-28T01:49:16.000Z",
-  "source": "https://raw.githubusercontent.com/BerriAI/litellm/017e08aba3e112cf89a545ca2991413c436e8542/model_prices_and_context_window.json",
-  "count": 4332,
+  "updatedAt": "2026-11-02T06:29:14.000Z",
+  "source": "https://raw.githubusercontent.com/BerriAI/litellm/ff3983c1f627ad09a5e36e45cc92a0cec91afb72/model_prices_and_context_window.json",
+  "count": 4552,
   "models": {
     "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0": {
       "input": [
@@ -3930,6 +3930,33 @@
       "inputPerMToken": 2,
       "outputPerMToken": 10
     },
+    "azure_ai/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "azure_ai",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
     "azure_ai/gpt-5.5": {
       "input": [
         "text",
@@ -7334,6 +7361,33 @@
       "inputPerMToken": 2,
       "outputPerMToken": 10
     },
+    "azure/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
     "azure/gpt-6.1-sol": {
       "input": [
         "text",
@@ -7388,6 +7442,33 @@
       "inputPerMToken": 2,
       "outputPerMToken": 10
     },
+    "azure/us/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.055,
+      "cacheWritePerMToken": 1.38,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.1,
+      "outputPerMToken": 5.5
+    },
     "azure/us/gpt-6.1-sol": {
       "input": [
         "text",
@@ -7415,6 +7496,33 @@
       "inputPerMToken": 2.2,
       "outputPerMToken": 11
     },
+    "azure/eu/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.06,
+      "cacheWritePerMToken": 1.5,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.2,
+      "outputPerMToken": 6
+    },
     "azure/eu/gpt-6.1-sol": {
       "input": [
         "text",
@@ -7441,6 +7549,33 @@
       "litellmProvider": "azure",
       "inputPerMToken": 2.4,
       "outputPerMToken": 12
+    },
+    "azure/apac/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.06,
+      "cacheWritePerMToken": 1.5,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.2,
+      "outputPerMToken": 6
     },
     "azure/apac/gpt-6.1-sol": {
       "input": [
@@ -13457,7 +13592,7 @@
         "computer_use"
       ],
       "contextWindow": 200000,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 64000,
       "mode": "chat",
       "cacheReadPerMToken": 0.36,
       "cacheWritePerMToken": 4.5,
@@ -13484,7 +13619,7 @@
         "computer_use"
       ],
       "contextWindow": 200000,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 64000,
       "mode": "chat",
       "cacheReadPerMToken": 0.36,
       "cacheWritePerMToken": 4.5,
@@ -13719,7 +13854,7 @@
         "computer_use"
       ],
       "contextWindow": 200000,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 64000,
       "mode": "chat",
       "cacheReadPerMToken": 0.36,
       "cacheWritePerMToken": 4.5,
@@ -13746,7 +13881,7 @@
         "computer_use"
       ],
       "contextWindow": 200000,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 64000,
       "mode": "chat",
       "cacheReadPerMToken": 0.36,
       "cacheWritePerMToken": 4.5,
@@ -13766,7 +13901,7 @@
         "streaming"
       ],
       "contextWindow": 8000,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 8192,
       "mode": "chat",
       "litellmProvider": "bedrock",
       "inputPerMToken": 2.65,
@@ -13784,7 +13919,7 @@
         "streaming"
       ],
       "contextWindow": 8000,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 8192,
       "mode": "chat",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.3,
@@ -17163,6 +17298,83 @@
       "mode": "image_generation",
       "litellmProvider": "dashscope"
     },
+    "dashscope/qwen3-tts-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "dashscope"
+    },
+    "dashscope/qwen-audio-3.1-tts-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "dashscope",
+      "inputPerMToken": 0.23,
+      "outputPerMToken": 1.87
+    },
+    "dashscope/qwen-audio-3.1-tts-plus": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "dashscope"
+    },
+    "dashscope/qwen-audio-3.0-tts-plus": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "dashscope"
+    },
+    "dashscope/qwen-audio-3.0-tts-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "dashscope"
+    },
     "dashscope/wan3.0-video": {
       "input": [
         "text",
@@ -19836,11 +20048,11 @@
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
       "mode": "chat",
-      "cacheReadPerMToken": 0.3,
-      "cacheWritePerMToken": 3.75,
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2.5,
       "litellmProvider": "databricks",
-      "inputPerMToken": 3,
-      "outputPerMToken": 15
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
     },
     "databricks/databricks-deepseek-v4-flash-0731": {
       "input": [
@@ -19976,7 +20188,8 @@
       "cacheWritePerMToken": 0.3125,
       "litellmProvider": "databricks",
       "inputPerMToken": 0.3125,
-      "outputPerMToken": 1.88
+      "outputPerMToken": 1.88,
+      "audioInputPerMToken": 0.625
     },
     "databricks/databricks-gemini-3-1-flash-image": {
       "input": [
@@ -19994,7 +20207,11 @@
       "contextWindow": 131072,
       "maxOutputTokens": 32768,
       "mode": "chat",
-      "litellmProvider": "databricks"
+      "cacheReadPerMToken": 0.625,
+      "cacheWritePerMToken": 0.625,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.625,
+      "outputPerMToken": 3.75
     },
     "databricks/databricks-gemini-3-pro-image": {
       "input": [
@@ -20012,7 +20229,11 @@
       "contextWindow": 65536,
       "maxOutputTokens": 32768,
       "mode": "chat",
-      "litellmProvider": "databricks"
+      "cacheReadPerMToken": 2.5,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2.5,
+      "outputPerMToken": 15
     },
     "databricks/databricks-gemini-3-1-pro": {
       "input": [
@@ -20063,7 +20284,8 @@
       "cacheWritePerMToken": 0.625,
       "litellmProvider": "databricks",
       "inputPerMToken": 0.625,
-      "outputPerMToken": 3.75
+      "outputPerMToken": 3.75,
+      "audioInputPerMToken": 1.25
     },
     "databricks/databricks-gemini-3-pro": {
       "input": [
@@ -20105,7 +20327,11 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "mode": "chat",
-      "litellmProvider": "databricks"
+      "cacheReadPerMToken": 0.075,
+      "cacheWritePerMToken": 0.75,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.75,
+      "outputPerMToken": 3.75
     },
     "databricks/databricks-gemini-3-7-flash": {
       "input": [
@@ -20126,7 +20352,11 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "mode": "chat",
-      "litellmProvider": "databricks"
+      "cacheReadPerMToken": 0.075,
+      "cacheWritePerMToken": 0.75,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.75,
+      "outputPerMToken": 3.75
     },
     "databricks/databricks-gemini-3-6-flash": {
       "input": [
@@ -20148,11 +20378,11 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "mode": "chat",
-      "cacheReadPerMToken": 0.1875,
-      "cacheWritePerMToken": 1.88,
+      "cacheReadPerMToken": 0.075,
+      "cacheWritePerMToken": 0.75,
       "litellmProvider": "databricks",
-      "inputPerMToken": 1.88,
-      "outputPerMToken": 9.38
+      "inputPerMToken": 0.75,
+      "outputPerMToken": 3.75
     },
     "databricks/databricks-gemini-3-5-flash": {
       "input": [
@@ -20493,11 +20723,11 @@
       "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
-      "cacheReadPerMToken": 0.25,
-      "cacheWritePerMToken": 3.13,
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2.5,
       "litellmProvider": "databricks",
-      "inputPerMToken": 2.5,
-      "outputPerMToken": 15
+      "inputPerMToken": 2,
+      "outputPerMToken": 12
     },
     "databricks/databricks-gpt-5-6-luna": {
       "input": [
@@ -20517,11 +20747,11 @@
       "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
-      "cacheReadPerMToken": 0.1,
-      "cacheWritePerMToken": 1.25,
+      "cacheReadPerMToken": 0.02,
+      "cacheWritePerMToken": 0.25,
       "litellmProvider": "databricks",
-      "inputPerMToken": 1,
-      "outputPerMToken": 6
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 1.2
     },
     "databricks/databricks-gpt-5-5": {
       "input": [
@@ -20891,6 +21121,27 @@
       "inputPerMToken": 0.042,
       "outputPerMToken": 0
     },
+    "databricks/databricks-typesafeai-jev-1-14-0": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "cacheReadPerMToken": 0.042,
+      "cacheWritePerMToken": 0.042,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.042,
+      "outputPerMToken": 0
+    },
     "databricks/ai_decide": {
       "input": [
         "text"
@@ -20941,6 +21192,36 @@
       "litellmProvider": "text-completion-openai",
       "inputPerMToken": 2,
       "outputPerMToken": 2
+    },
+    "deepgram/aura": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "chat",
+      "litellmProvider": "deepgram"
+    },
+    "deepgram/aura-2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "chat",
+      "litellmProvider": "deepgram"
     },
     "deepgram/base": {
       "input": [
@@ -28418,7 +28699,8 @@
     },
     "fireworks_ai/accounts/fireworks/models/minimax-m3": {
       "input": [
-        "text"
+        "text",
+        "image"
       ],
       "output": [
         "text"
@@ -28427,7 +28709,8 @@
         "function_calling",
         "structured_output",
         "streaming",
-        "reasoning"
+        "reasoning",
+        "vision"
       ],
       "contextWindow": 512000,
       "maxOutputTokens": 512000,
@@ -28791,7 +29074,8 @@
     },
     "fireworks_ai/minimax-m3": {
       "input": [
-        "text"
+        "text",
+        "image"
       ],
       "output": [
         "text"
@@ -28800,7 +29084,8 @@
         "function_calling",
         "structured_output",
         "streaming",
-        "reasoning"
+        "reasoning",
+        "vision"
       ],
       "contextWindow": 512000,
       "maxOutputTokens": 512000,
@@ -29581,7 +29866,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -29905,7 +30191,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65535,
@@ -29933,7 +30220,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65535,
@@ -29961,7 +30249,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -29988,7 +30277,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -30015,7 +30305,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -30866,7 +31157,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -30893,7 +31185,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -31003,7 +31296,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -31108,7 +31402,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65535,
@@ -31160,7 +31455,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65535,
@@ -31188,7 +31484,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -31215,7 +31512,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -31242,7 +31540,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -37114,6 +37413,7 @@
         "structured_output",
         "streaming",
         "reasoning",
+        "prompt_caching",
         "web_search"
       ],
       "contextWindow": 131072,
@@ -37136,6 +37436,7 @@
         "structured_output",
         "streaming",
         "reasoning",
+        "prompt_caching",
         "web_search"
       ],
       "contextWindow": 131072,
@@ -37158,6 +37459,7 @@
         "structured_output",
         "streaming",
         "reasoning",
+        "prompt_caching",
         "web_search"
       ],
       "contextWindow": 131072,
@@ -37339,6 +37641,88 @@
       "mode": "image_generation",
       "litellmProvider": "openai",
       "perImage": 0.25
+    },
+    "hostinger_router/gpt-5.2": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.21,
+      "litellmProvider": "hostinger_router",
+      "inputPerMToken": 2.1,
+      "outputPerMToken": 16.8
+    },
+    "hostinger_router/claude-sonnet-5": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.264,
+      "cacheWritePerMToken": 3.3,
+      "litellmProvider": "hostinger_router",
+      "inputPerMToken": 2.64,
+      "outputPerMToken": 13.2
+    },
+    "hostinger_router/text-embedding-3-large": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "embedding"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 8191,
+      "maxOutputTokens": 0,
+      "mode": "embedding",
+      "litellmProvider": "hostinger_router",
+      "inputPerMToken": 0.1716,
+      "outputPerMToken": 0
+    },
+    "hostinger_router/text-embedding-3-small": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "embedding"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 8191,
+      "maxOutputTokens": 0,
+      "mode": "embedding",
+      "litellmProvider": "hostinger_router",
+      "inputPerMToken": 0.03,
+      "outputPerMToken": 0
     },
     "hyperbolic/NousResearch/Hermes-3-Llama-3.1-70B": {
       "input": [
@@ -40462,6 +40846,114 @@
       "inputPerMToken": 0.1,
       "outputPerMToken": 0.3
     },
+    "bedrock/ap-southeast-2/mistral.voxtral-mini-3b-2507": {
+      "input": [
+        "text",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.0412,
+      "outputPerMToken": 0.0412
+    },
+    "bedrock/ap-southeast-2/mistral.voxtral-small-24b-2507": {
+      "input": [
+        "text",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.103,
+      "outputPerMToken": 0.309
+    },
+    "bedrock/ap-northeast-1/mistral.voxtral-mini-3b-2507": {
+      "input": [
+        "text",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.05,
+      "outputPerMToken": 0.05
+    },
+    "bedrock/ap-northeast-1/mistral.voxtral-small-24b-2507": {
+      "input": [
+        "text",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.12,
+      "outputPerMToken": 0.36
+    },
+    "bedrock/eu-west-2/mistral.voxtral-mini-3b-2507": {
+      "input": [
+        "text",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.06,
+      "outputPerMToken": 0.06
+    },
+    "bedrock/eu-west-2/mistral.voxtral-small-24b-2507": {
+      "input": [
+        "text",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.16,
+      "outputPerMToken": 0.47
+    },
     "mistral/codestral-2508": {
       "input": [
         "text"
@@ -40530,7 +41022,8 @@
       "features": [
         "function_calling",
         "structured_output",
-        "streaming"
+        "streaming",
+        "reasoning"
       ],
       "contextWindow": 256000,
       "maxOutputTokens": 256000,
@@ -40550,7 +41043,8 @@
       "features": [
         "function_calling",
         "structured_output",
-        "streaming"
+        "streaming",
+        "reasoning"
       ],
       "contextWindow": 256000,
       "maxOutputTokens": 256000,
@@ -40570,7 +41064,8 @@
       "features": [
         "function_calling",
         "structured_output",
-        "streaming"
+        "streaming",
+        "reasoning"
       ],
       "contextWindow": 256000,
       "maxOutputTokens": 256000,
@@ -40921,6 +41416,28 @@
       "inputPerMToken": 1.4,
       "outputPerMToken": 4.4
     },
+    "mistral/deepseek-v4-1-flash-1017": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.007,
+      "litellmProvider": "mistral",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
     "mistral/zai-glm-5-3": {
       "input": [
         "text"
@@ -41208,10 +41725,10 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 1048576,
       "mode": "chat",
-      "cacheReadPerMToken": 0.068,
+      "cacheReadPerMToken": 0.14,
       "litellmProvider": "mistral",
-      "inputPerMToken": 0.68,
-      "outputPerMToken": 2.09
+      "inputPerMToken": 1.36,
+      "outputPerMToken": 4.18
     },
     "mistral/mistral-large-4-0": {
       "input": [
@@ -41232,10 +41749,10 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 1048576,
       "mode": "chat",
-      "cacheReadPerMToken": 0.068,
+      "cacheReadPerMToken": 0.14,
       "litellmProvider": "mistral",
-      "inputPerMToken": 0.68,
-      "outputPerMToken": 2.09
+      "inputPerMToken": 1.36,
+      "outputPerMToken": 4.18
     },
     "mistral/mistral-large-latest": {
       "input": [
@@ -41405,7 +41922,8 @@
       "features": [
         "function_calling",
         "structured_output",
-        "streaming"
+        "streaming",
+        "reasoning"
       ],
       "contextWindow": 32000,
       "maxOutputTokens": 8191,
@@ -41719,6 +42237,31 @@
       "inputPerMToken": 0.95,
       "outputPerMToken": 4
     },
+    "moonshot/kimi-k3.1-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2,
+      "litellmProvider": "moonshot",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
     "moonshot/kimi-k3": {
       "input": [
         "text",
@@ -41732,12 +42275,14 @@
         "structured_output",
         "streaming",
         "reasoning",
-        "vision"
+        "vision",
+        "prompt_caching"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 1048576,
       "mode": "chat",
       "cacheReadPerMToken": 0.3,
+      "cacheWritePerMToken": 3,
       "litellmProvider": "moonshot",
       "inputPerMToken": 3,
       "outputPerMToken": 15
@@ -48148,6 +48693,40 @@
       "mode": "rerank",
       "litellmProvider": "cohere",
       "inputPerMToken": 0,
+      "outputPerMToken": 0
+    },
+    "rerank-v5.0-fast": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 32768,
+      "mode": "rerank",
+      "litellmProvider": "cohere",
+      "inputPerMToken": 0.02,
+      "outputPerMToken": 0
+    },
+    "rerank-v5.0-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 32768,
+      "mode": "rerank",
+      "litellmProvider": "cohere",
+      "inputPerMToken": 0.05,
       "outputPerMToken": 0
     },
     "nvidia_nim/nvidia/nv-rerankqa-mistral-4b-v3": {
@@ -55140,7 +55719,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -56683,7 +57263,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 131000,
+      "contextWindow": 128000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "litellmProvider": "wandb",
@@ -56701,7 +57281,7 @@
         "streaming",
         "reasoning"
       ],
-      "contextWindow": 161000,
+      "contextWindow": 128000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "litellmProvider": "wandb",
@@ -57658,6 +58238,7 @@
       ],
       "features": [
         "function_calling",
+        "structured_output",
         "streaming",
         "reasoning",
         "prompt_caching"
@@ -57681,6 +58262,7 @@
       ],
       "features": [
         "function_calling",
+        "structured_output",
         "streaming",
         "reasoning",
         "vision",
@@ -57694,6 +58276,29 @@
       "litellmProvider": "zai",
       "inputPerMToken": 0.15,
       "outputPerMToken": 0.5
+    },
+    "zai/glm-5v-turbo": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.24,
+      "litellmProvider": "zai",
+      "inputPerMToken": 1.2,
+      "outputPerMToken": 4
     },
     "zai/glm-5.1": {
       "input": [
@@ -65729,7 +66334,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 1.38,
@@ -67208,6 +67813,96 @@
       "mode": "audio_transcription",
       "litellmProvider": "soniox"
     },
+    "soniox/stt-rt-v5": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "soniox"
+    },
+    "soniox/stt-rt-preview": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "soniox"
+    },
+    "soniox/stt-rt-preview-v2": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "soniox"
+    },
+    "soniox/stt-rt-v3": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "soniox"
+    },
+    "soniox/stt-rt-v3-preview": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "soniox"
+    },
+    "soniox/stt-rt-v4": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "soniox"
+    },
     "tensormesh/Qwen/Qwen3.5-397B-A17B-FP8": {
       "input": [
         "text"
@@ -67451,6 +68146,572 @@
       "litellmProvider": "deepseek",
       "inputPerMToken": 0.3,
       "outputPerMToken": 1.2
+    },
+    "streamlake/deepseek-v4-flash-0731": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.014,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.44,
+      "outputPerMToken": 1.32
+    },
+    "streamlake/DeepSeek-V4-Pro-0813": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048566,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.044,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 1.32,
+      "outputPerMToken": 3.96
+    },
+    "streamlake/DeepSeek-V3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "prompt_caching"
+      ],
+      "contextWindow": 56000,
+      "maxOutputTokens": 8000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.114,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.286,
+      "outputPerMToken": 1.14
+    },
+    "streamlake/GLM-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.26,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 1.4,
+      "outputPerMToken": 4.4
+    },
+    "streamlake/GLM-5.3-Flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.5
+    },
+    "streamlake/Kimi-K2-Instruct-0905": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "prompt_caching"
+      ],
+      "contextWindow": 224000,
+      "maxOutputTokens": 32000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.143,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.571,
+      "outputPerMToken": 2.29
+    },
+    "streamlake/deepseek-r1": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 98304,
+      "maxOutputTokens": 16000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.229,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.571,
+      "outputPerMToken": 2.29
+    },
+    "streamlake/deepseek-v3.1": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 98304,
+      "maxOutputTokens": 32000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.229,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.571,
+      "outputPerMToken": 1.71
+    },
+    "streamlake/deepseek-v4-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.028,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.14,
+      "outputPerMToken": 0.28
+    },
+    "streamlake/deepseek-v4-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.145,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 1.74,
+      "outputPerMToken": 3.48
+    },
+    "streamlake/deepseek-v4.1-flash-1017": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.006,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "streamlake/deepseek-v4.1-flash-260910": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048568,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.006,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "streamlake/glm-5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 202752,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 1,
+      "outputPerMToken": 3.2
+    },
+    "streamlake/glm-5.1": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 202752,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.26,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 1.4,
+      "outputPerMToken": 4.4
+    },
+    "streamlake/glm-5.2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048566,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.26,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 1.4,
+      "outputPerMToken": 4.4
+    },
+    "streamlake/kimi-k2.6": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 256000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.16,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.95,
+      "outputPerMToken": 4
+    },
+    "streamlake/kimi-k2.7-code": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 32000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.19,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.95,
+      "outputPerMToken": 4
+    },
+    "streamlake/mimo-v2.6-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0028,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.14,
+      "outputPerMToken": 0.28
+    },
+    "streamlake/mimo-v2.6-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0036,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.435,
+      "outputPerMToken": 0.87
+    },
+    "streamlake/minimax-m2.5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 196608,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "cacheWritePerMToken": 0.375,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "streamlake/minimax-m3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 512000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.12,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.6,
+      "outputPerMToken": 2.4
+    },
+    "streamlake/qwen3.5-397b-a17b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 258048,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.12,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.6,
+      "outputPerMToken": 3.6
+    },
+    "streamlake/qwen3.6-27b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 229376,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.6,
+      "outputPerMToken": 3.6
+    },
+    "streamlake/qwen3.6-35b-a3b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 229376,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.375,
+      "outputPerMToken": 2.25
+    },
+    "streamlake/qwen3.8-2.4t-a95b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 983616,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.25,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 2,
+      "outputPerMToken": 6
+    },
+    "streamlake/qwen3.8-27b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 983616,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "cacheWritePerMToken": 0.625,
+      "litellmProvider": "streamlake",
+      "inputPerMToken": 0.5,
+      "outputPerMToken": 3
     },
     "deepseek-v4-flash": {
       "input": [
@@ -67926,6 +69187,51 @@
       "litellmProvider": "tencent",
       "inputPerMToken": 0.3,
       "outputPerMToken": 1.2
+    },
+    "tencent/seedream-image-v5.0-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "tencent"
+    },
+    "tencent/seedream-image-v5.0-lite": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "tencent"
+    },
+    "tencent/seedream-image-v5.0-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "tencent"
     },
     "cognition/swe-1.6": {
       "input": [
@@ -70842,7 +72148,7 @@
         "reasoning",
         "prompt_caching"
       ],
-      "contextWindow": 1049000,
+      "contextWindow": 262000,
       "maxOutputTokens": 262144,
       "mode": "chat",
       "cacheReadPerMToken": 0.14,
@@ -73003,7 +74309,8 @@
       "features": [
         "function_calling",
         "structured_output",
-        "streaming"
+        "streaming",
+        "reasoning"
       ],
       "contextWindow": 256000,
       "maxOutputTokens": 256000,
@@ -73450,6 +74757,276 @@
       "litellmProvider": "zai",
       "inputPerMToken": 1.4,
       "outputPerMToken": 4.4
+    },
+    "zerogpu/deepseek-v4.1-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.003,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "zerogpu/glm-5.3-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.015,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.35
+    },
+    "zerogpu/gpt-4.1-mini": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "prompt_caching"
+      ],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.4,
+      "outputPerMToken": 1.6
+    },
+    "zerogpu/gpt-5.4-nano": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.02,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 1.25
+    },
+    "zerogpu/gpt-5.6-luna": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 1.2
+    },
+    "zerogpu/gpt-6-luna": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.01,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.5
+    },
+    "zerogpu/gpt-oss-120b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.6
+    },
+    "zerogpu/LFM2.5-1.2B-Instruct": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.02,
+      "outputPerMToken": 0.05
+    },
+    "zerogpu/LFM2.5-1.2B-Thinking": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.02,
+      "outputPerMToken": 0.05
+    },
+    "zerogpu/llama-3.1-8b-instruct-fast": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.025,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.28
+    },
+    "zerogpu/llama-3.2-3b-instruct-fast": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.025,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.05,
+      "outputPerMToken": 0.3
+    },
+    "zerogpu/qwen3-30b-a3b-fp8": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.45
+    },
+    "zerogpu/qwen3.6-35b-a3b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "zerogpu",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 1.5
     },
     "together_ai/Qwen/Qwen3.8-Flash": {
       "input": [
@@ -79715,6 +81292,339 @@
       "inputPerMToken": 0.22,
       "outputPerMToken": 1.32
     },
+    "aiand/deepseek-ai/deepseek-v4-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.08,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.25
+    },
+    "aiand/deepseek-ai/deepseek-v4-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.25,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 1,
+      "outputPerMToken": 2.5
+    },
+    "aiand/deepseek-ai/deepseek-v4.1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.02,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 0.6
+    },
+    "aiand/deepseek-ai/deepseek-v4.1-flash-1017": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.02,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 0.6
+    },
+    "aiand/google/gemma-4-31b-it": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 0.5
+    },
+    "aiand/meta/muse-spark-open": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 943718,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.15,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 4.25
+    },
+    "aiand/moonshotai/kimi-k2.7-code": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.75,
+      "outputPerMToken": 3.5
+    },
+    "aiand/moonshotai/kimi-k3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.5,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 3,
+      "outputPerMToken": 12.5
+    },
+    "aiand/motif-technologies/motif-3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.5,
+      "outputPerMToken": 2
+    },
+    "aiand/openai/gpt-oss-120b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.08,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.6
+    },
+    "aiand/qwen/qwen3.6-27b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.32,
+      "outputPerMToken": 3.2
+    },
+    "aiand/qwen/qwen3.8-27b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.4,
+      "outputPerMToken": 3
+    },
+    "aiand/zai-org/glm-5.2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 1,
+      "outputPerMToken": 4
+    },
+    "aiand/zai-org/glm-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 1,
+      "outputPerMToken": 4
+    },
+    "aiand/zai-org/glm-5.3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048550,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "litellmProvider": "aiand",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.5
+    },
     "bespoke/nimble-latest": {
       "input": [
         "text"
@@ -79968,6 +81878,40 @@
       "mode": "evaluation",
       "litellmProvider": "typesafe",
       "inputPerMToken": 0.042,
+      "outputPerMToken": 0
+    },
+    "eu_jev/eu-jeff-1.0.0": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "eu_jev",
+      "inputPerMToken": 0.0415,
+      "outputPerMToken": 0
+    },
+    "eu_jev/eu-jeff-latest": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "eu_jev",
+      "inputPerMToken": 0.0415,
       "outputPerMToken": 0
     },
     "wandb/deepseek-ai/DeepSeek-V4.1-Flash": {
@@ -81846,7 +83790,7 @@
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
       "mode": "chat",
-      "cacheReadPerMToken": 0.2,
+      "cacheReadPerMToken": 0.1,
       "cacheWritePerMToken": 2.5,
       "litellmProvider": "azure_ai",
       "inputPerMToken": 2,
@@ -83484,7 +85428,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 131072,
       "maxOutputTokens": 65536,
@@ -83512,7 +85457,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 131072,
       "maxOutputTokens": 65536,
@@ -83540,7 +85486,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 1048576,
@@ -83567,7 +85514,8 @@
         "reasoning",
         "vision",
         "prompt_caching",
-        "web_search"
+        "web_search",
+        "computer_use"
       ],
       "contextWindow": 1048576,
       "maxOutputTokens": 1048576,
@@ -83906,10 +85854,10 @@
       "contextWindow": 1049000,
       "maxOutputTokens": 943718,
       "mode": "chat",
-      "cacheReadPerMToken": 0.02,
+      "cacheReadPerMToken": 0.05,
       "litellmProvider": "wandb",
-      "inputPerMToken": 0.15,
-      "outputPerMToken": 0.75
+      "inputPerMToken": 0.25,
+      "outputPerMToken": 1.5
     },
     "together_ai/reflection/Beam-1.0-501B-A23B": {
       "input": [
@@ -85484,7 +87432,7 @@
       "maxOutputTokens": 0,
       "mode": "decisions",
       "litellmProvider": "baseten",
-      "inputPerMToken": 0,
+      "inputPerMToken": 0.035,
       "outputPerMToken": 0
     },
     "baseten/decision-models/baseten-mammoth-27b-latest": {
@@ -85502,7 +87450,7 @@
       "maxOutputTokens": 0,
       "mode": "decisions",
       "litellmProvider": "baseten",
-      "inputPerMToken": 0,
+      "inputPerMToken": 0.1,
       "outputPerMToken": 0
     },
     "github_copilot/gpt-6.1-terra": {
@@ -85546,10 +87494,10 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 131072,
       "mode": "chat",
-      "cacheReadPerMToken": 0.25,
+      "cacheReadPerMToken": 0.15,
       "litellmProvider": "refuseless",
-      "inputPerMToken": 1.25,
-      "outputPerMToken": 2.25
+      "inputPerMToken": 1,
+      "outputPerMToken": 2
     },
     "refuseless/glm-5.3-flash-abliterated": {
       "input": [
@@ -85568,10 +87516,10 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 131072,
       "mode": "chat",
-      "cacheReadPerMToken": 0.15,
+      "cacheReadPerMToken": 0.04,
       "litellmProvider": "refuseless",
-      "inputPerMToken": 0.25,
-      "outputPerMToken": 0.8
+      "inputPerMToken": 0.12,
+      "outputPerMToken": 0.5
     },
     "refuseless/deepseek-v4.1-flash-abliterated": {
       "input": [
@@ -85590,10 +87538,10 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 130000,
       "mode": "chat",
-      "cacheReadPerMToken": 0.045,
+      "cacheReadPerMToken": 0.035,
       "litellmProvider": "refuseless",
-      "inputPerMToken": 0.22,
-      "outputPerMToken": 0.75
+      "inputPerMToken": 0.14,
+      "outputPerMToken": 0.5
     },
     "refuseless/deepseek-v4.1-flash-fast": {
       "input": [
@@ -85639,6 +87587,24 @@
       "inputPerMToken": 0.05,
       "outputPerMToken": 0.25
     },
+    "fireworks_ai/accounts/fireworks/models/rune": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 0,
+      "mode": "decisions",
+      "cacheReadPerMToken": 0.0084,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.042,
+      "outputPerMToken": 0
+    },
     "bedrock_mantle/openai.gpt-6.1-terra": {
       "input": [
         "text",
@@ -85663,6 +87629,2895 @@
       "litellmProvider": "bedrock_mantle",
       "inputPerMToken": 1.1,
       "outputPerMToken": 5.5
+    },
+    "clf_ai_gateway/glm-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.104,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.56,
+      "outputPerMToken": 1.76
+    },
+    "clf_ai_gateway/glm-5.3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.012,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.06,
+      "outputPerMToken": 0.2
+    },
+    "clf_ai_gateway/glm-5.2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.104,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.56,
+      "outputPerMToken": 1.76
+    },
+    "clf_ai_gateway/glm-4.7-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.024,
+      "outputPerMToken": 0.16
+    },
+    "clf_ai_gateway/deepseek-v4-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.017,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.528,
+      "outputPerMToken": 1.58
+    },
+    "clf_ai_gateway/deepseek-v4-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.005,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.176,
+      "outputPerMToken": 0.528
+    },
+    "clf_ai_gateway/deepseek-v4.1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.002,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.12,
+      "outputPerMToken": 0.48
+    },
+    "clf_ai_gateway/kimi-k2.6": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.064,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.38,
+      "outputPerMToken": 1.6
+    },
+    "clf_ai_gateway/kimi-k2.7-code": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.076,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.38,
+      "outputPerMToken": 1.6
+    },
+    "clf_ai_gateway/qwen3.8-27b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.02,
+      "litellmProvider": "clf_ai_gateway",
+      "inputPerMToken": 0.18,
+      "outputPerMToken": 1.28
+    },
+    "kyma/claude-fable-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 13.5,
+      "outputPerMToken": 67.5
+    },
+    "kyma/claude-fable-5.1": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 13.5,
+      "outputPerMToken": 67.5
+    },
+    "kyma/claude-haiku-4-5": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.35,
+      "outputPerMToken": 6.75
+    },
+    "kyma/claude-haiku-5.5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.135,
+      "outputPerMToken": 0.675
+    },
+    "kyma/claude-opus-4-7": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.675,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 6.75,
+      "outputPerMToken": 33.75
+    },
+    "kyma/claude-opus-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.675,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 6.75,
+      "outputPerMToken": 33.75
+    },
+    "kyma/claude-opus-5.5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 5.4,
+      "outputPerMToken": 27
+    },
+    "kyma/claude-sonnet-4-6": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.405,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 4.05,
+      "outputPerMToken": 20.25
+    },
+    "kyma/claude-sonnet-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 13.5
+    },
+    "kyma/claude-sonnet-5.5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 13.5
+    },
+    "kyma/deepseek-r1": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 64000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.7425,
+      "outputPerMToken": 2.96
+    },
+    "kyma/deepseek-v3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 160000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.518,
+      "outputPerMToken": 0.7571
+    },
+    "kyma/deepseek-v4-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0243,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.123,
+      "outputPerMToken": 0.2458
+    },
+    "kyma/deepseek-v4-flash-vision-exp": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.3892,
+      "outputPerMToken": 1.17
+    },
+    "kyma/deepseek-v4.1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.27,
+      "outputPerMToken": 0.81
+    },
+    "kyma/gemini-3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0675,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.675,
+      "outputPerMToken": 4.05
+    },
+    "kyma/gemini-3.1-pro": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 16.2
+    },
+    "kyma/gemini-3.5-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2025,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.02,
+      "outputPerMToken": 12.15
+    },
+    "kyma/gemini-3.5-flash-lite": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0405,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.405,
+      "outputPerMToken": 3.38
+    },
+    "kyma/gemini-3.6-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1012,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.01,
+      "outputPerMToken": 5.06
+    },
+    "kyma/gemini-3.7-flash": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1012,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.03,
+      "outputPerMToken": 10.13
+    },
+    "kyma/gemini-3.8-flash": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.03,
+      "outputPerMToken": 10.13
+    },
+    "kyma/gemini-4-argon": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 5.4,
+      "outputPerMToken": 27
+    },
+    "kyma/gemma-4-31b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1642,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.1642,
+      "outputPerMToken": 0.4689
+    },
+    "kyma/glm-4.5-air": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0338,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.1797,
+      "outputPerMToken": 1.18
+    },
+    "kyma/glm-4.7-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 203000,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.081,
+      "outputPerMToken": 0.54
+    },
+    "kyma/glm-5.1": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 203000,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2767,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.89,
+      "outputPerMToken": 5.94
+    },
+    "kyma/glm-5.2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2984,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.9029,
+      "outputPerMToken": 3.08
+    },
+    "kyma/glm-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1310720,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.18,
+      "outputPerMToken": 3.7
+    },
+    "kyma/glm-5.3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1310720,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.172,
+      "outputPerMToken": 0.5733
+    },
+    "kyma/gpt-5.6-luna": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.027,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.2944,
+      "outputPerMToken": 1.77
+    },
+    "kyma/gpt-5.6-luna-pro": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.027,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.2703,
+      "outputPerMToken": 1.62
+    },
+    "kyma/gpt-5.6-sol": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.675,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 5.4,
+      "outputPerMToken": 27
+    },
+    "kyma/gpt-5.6-sol-pro": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.675,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 5.4,
+      "outputPerMToken": 27
+    },
+    "kyma/gpt-5.6-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 16.2
+    },
+    "kyma/gpt-5.6-terra-pro": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 16.2
+    },
+    "kyma/gpt-6-astra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 1.35,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 13.5,
+      "outputPerMToken": 67.5
+    },
+    "kyma/gpt-6-luna": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.1639,
+      "outputPerMToken": 0.8195
+    },
+    "kyma/gpt-6.1-sol": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 13.5
+    },
+    "kyma/gpt-oss-120b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.0473,
+      "outputPerMToken": 0.2303
+    },
+    "kyma/grok-4.20": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 2000000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.76,
+      "outputPerMToken": 3.53
+    },
+    "kyma/grok-4.20-multi-agent": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 2000000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.77,
+      "outputPerMToken": 3.53
+    },
+    "kyma/grok-4.3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.92,
+      "outputPerMToken": 3.84
+    },
+    "kyma/grok-4.5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 500000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.73,
+      "outputPerMToken": 8.19
+    },
+    "kyma/grok-4.6": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 500000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.76,
+      "outputPerMToken": 8.27
+    },
+    "kyma/grok-4.7": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 500000,
+      "maxOutputTokens": 450000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.54,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.16,
+      "outputPerMToken": 6.48
+    },
+    "kyma/grok-build": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 256000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.39,
+      "outputPerMToken": 2.78
+    },
+    "kyma/hy3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.1594,
+      "outputPerMToken": 0.6576
+    },
+    "kyma/hy4-preview": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.13,
+      "outputPerMToken": 3.38
+    },
+    "kyma/kimi-k2.6": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.5909,
+      "outputPerMToken": 2.76
+    },
+    "kyma/kimi-k2.7-code": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.01,
+      "outputPerMToken": 4.77
+    },
+    "kyma/kimi-k3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.405,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 3.05,
+      "outputPerMToken": 15.26
+    },
+    "kyma/kimi-k3.1-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 943718,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.27,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.7,
+      "outputPerMToken": 13.5
+    },
+    "kyma/llama-3.3-70b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "prompt_caching"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.135,
+      "outputPerMToken": 0.432
+    },
+    "kyma/llama-4-maverick": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.3344,
+      "outputPerMToken": 1.34
+    },
+    "kyma/mimo-v2.5": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.1859,
+      "outputPerMToken": 0.3718
+    },
+    "kyma/mimo-v2.6-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.189,
+      "outputPerMToken": 0.378
+    },
+    "kyma/mimo-v2.6-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1050000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.5805,
+      "outputPerMToken": 1.17
+    },
+    "kyma/minimax-m2.5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 196608,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.4188,
+      "outputPerMToken": 1.68
+    },
+    "kyma/minimax-m2.7": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 204800,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.405,
+      "outputPerMToken": 1.62
+    },
+    "kyma/minimax-m3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0756,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.3956,
+      "outputPerMToken": 1.58
+    },
+    "kyma/minimax-m3.1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 524288,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0203,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.2025,
+      "outputPerMToken": 0.81
+    },
+    "kyma/muse-glimmer-30b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.4554,
+      "outputPerMToken": 1.82
+    },
+    "kyma/muse-spark-1.1": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.54,
+      "outputPerMToken": 5.24
+    },
+    "kyma/muse-spark-1.2": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.77,
+      "outputPerMToken": 6.03
+    },
+    "kyma/muse-spark-1.3": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.69,
+      "outputPerMToken": 5.74
+    },
+    "kyma/muse-spark-open": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 943718,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.69,
+      "outputPerMToken": 5.74
+    },
+    "kyma/muse-wonder": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 943718,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 5.4,
+      "outputPerMToken": 27
+    },
+    "kyma/nemotron-3-ultra-550b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.675,
+      "outputPerMToken": 3.38
+    },
+    "kyma/nemotron-3.5-super-vl": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 235929,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.081,
+      "outputPerMToken": 0.4725
+    },
+    "kyma/qwen-3-32b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 32768,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.108,
+      "outputPerMToken": 0.378
+    },
+    "kyma/qwen-3-coder": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "prompt_caching"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.3546,
+      "outputPerMToken": 1.61
+    },
+    "kyma/qwen-3.6-plus": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.4388,
+      "outputPerMToken": 2.63
+    },
+    "kyma/qwen-3.7-max": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1688,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.07,
+      "outputPerMToken": 6.21
+    },
+    "kyma/qwen-3.7-plus": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 32768,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0864,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.4325,
+      "outputPerMToken": 1.73
+    },
+    "kyma/qwen-3.8-max": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2781,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 2.23,
+      "outputPerMToken": 6.68
+    },
+    "kyma/qwen3.7-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0081,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.0435,
+      "outputPerMToken": 0.1886
+    },
+    "kyma/qwen3.8-27b": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.3826,
+      "outputPerMToken": 2.73
+    },
+    "kyma/qwen3.8-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.2045,
+      "outputPerMToken": 0.641
+    },
+    "kyma/sonar": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 127072,
+      "maxOutputTokens": 4096,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.35,
+      "outputPerMToken": 1.35
+    },
+    "kyma/sonar-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8000,
+      "mode": "chat",
+      "litellmProvider": "kyma",
+      "inputPerMToken": 4.05,
+      "outputPerMToken": 20.25
+    },
+    "kyma/step-3.7-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 256000,
+      "maxOutputTokens": 8192,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.054,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 0.2229,
+      "outputPerMToken": 1.28
+    },
+    "kyma/step-5-preview": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.135,
+      "litellmProvider": "kyma",
+      "inputPerMToken": 1.35,
+      "outputPerMToken": 3.65
+    },
+    "databricks/databricks-claude-haiku-5-5": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.01,
+      "cacheWritePerMToken": 0.125,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.5
+    },
+    "databricks/databricks-claude-sonnet-5-5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "databricks/databricks-deepseek-v4-1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "cacheWritePerMToken": 0.3,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "databricks/databricks-deepseek-v4-1-flash-1017": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.007,
+      "cacheWritePerMToken": 0.3,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "databricks/databricks-gemini-2-5-flash-lite": {
+      "input": [
+        "text",
+        "image",
+        "audio",
+        "video"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0125,
+      "cacheWritePerMToken": 0.125,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.125,
+      "outputPerMToken": 0.5,
+      "audioInputPerMToken": 0.375
+    },
+    "databricks/databricks-gemini-3-1-flash-lite-image": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text",
+        "image"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 4096,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3125,
+      "cacheWritePerMToken": 0.3125,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.3125,
+      "outputPerMToken": 1.88
+    },
+    "databricks/databricks-gemini-4-argon": {
+      "input": [
+        "text",
+        "image",
+        "audio",
+        "video"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.125,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2.5,
+      "outputPerMToken": 12.5
+    },
+    "databricks/databricks-gpt-5-4-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 30,
+      "cacheWritePerMToken": 30,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 30,
+      "outputPerMToken": 180
+    },
+    "databricks/databricks-gpt-6-1-sol": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.1,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "databricks/databricks-gpt-6-1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
+    "databricks/databricks-gpt-6-astra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 1,
+      "cacheWritePerMToken": 12.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 10,
+      "outputPerMToken": 50
+    },
+    "databricks/databricks-gpt-6-luna": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.01,
+      "cacheWritePerMToken": 0.125,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.5
+    },
+    "databricks/databricks-gpt-6-sol": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "databricks/databricks-gpt-image-1": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "cacheReadPerMToken": 1.25,
+      "cacheWritePerMToken": 5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 5
+    },
+    "databricks/databricks-gpt-image-1-5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "cacheReadPerMToken": 1.25,
+      "cacheWritePerMToken": 5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 5,
+      "outputPerMToken": 10
+    },
+    "databricks/databricks-gpt-image-1-mini": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2
+    },
+    "databricks/databricks-gpt-image-2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "cacheReadPerMToken": 1.25,
+      "cacheWritePerMToken": 5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 5
+    },
+    "databricks/databricks-grok-4-7": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 500000,
+      "maxOutputTokens": 500000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.625,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 2.5,
+      "outputPerMToken": 7.5
+    },
+    "databricks/databricks-kimi-k2-7": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.19,
+      "cacheWritePerMToken": 0.95,
+      "litellmProvider": "databricks",
+      "inputPerMToken": 0.95,
+      "outputPerMToken": 4
+    },
+    "fireworks_ai/accounts/fireworks/routers/spot-deepseek-v4-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.021,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.105,
+      "outputPerMToken": 0.21
+    },
+    "fireworks_ai/accounts/fireworks/routers/kimi-k3-spot": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.21,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 2.1,
+      "outputPerMToken": 10.5
+    },
+    "fireworks_ai/accounts/fireworks/routers/glm-5p3-spot": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.182,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.98,
+      "outputPerMToken": 3.08
+    },
+    "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-spot": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 393216,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0042,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.21,
+      "outputPerMToken": 0.84
+    },
+    "fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 393216,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0042,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.21,
+      "outputPerMToken": 0.84
+    },
+    "bigmodel/glm-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2857,
+      "litellmProvider": "bigmodel",
+      "inputPerMToken": 1.14,
+      "outputPerMToken": 4
+    },
+    "bigmodel/glm-5.3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0329,
+      "litellmProvider": "bigmodel",
+      "inputPerMToken": 0.1143,
+      "outputPerMToken": 0.4
+    },
+    "bigmodel/glm-5.3-flashx": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0814,
+      "litellmProvider": "bigmodel",
+      "inputPerMToken": 0.2857,
+      "outputPerMToken": 1
+    },
+    "fireworks_ai/accounts/fireworks/models/ultramarine-1-flash-us": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.045,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.225,
+      "outputPerMToken": 0.75
+    },
+    "baseten/decision-models/baseten-joey-2b-latest": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 16384,
+      "maxOutputTokens": 0,
+      "mode": "decisions",
+      "litellmProvider": "baseten",
+      "inputPerMToken": 0.01,
+      "outputPerMToken": 0
+    },
+    "gpt-6-rosalind": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 1.5,
+      "cacheWritePerMToken": 18.75,
+      "litellmProvider": "openai",
+      "inputPerMToken": 15,
+      "outputPerMToken": 75
+    },
+    "chatgpt/gpt-6-rosalind": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "litellmProvider": "chatgpt"
+    },
+    "gpt-6-astra-law": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 1,
+      "litellmProvider": "openai",
+      "inputPerMToken": 10,
+      "outputPerMToken": 50
+    },
+    "chatgpt/gpt-6-astra-law": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "litellmProvider": "chatgpt"
     }
   }
 }
