@@ -232,7 +232,7 @@ agent runtime 的工具循环每一种结束方式都对应一个结束原因（
 
 恢复的步号继续原循环。提交与 `suspend` 混在一个响应中会整批拒绝；已接受提交立即结束，因此不会随后挂起。计算完成仍可被 `PostRuntime`、proposal 校验或事务回滚拒绝；只有提交收据允许发布故事完成。
 
-**循环内纠正。** JSON/schema/故事形状、缺少提交或混合批次使用 `outputRepair`（默认 1）；`PostLLMResponse` 与 `ReviewAgentOutput` 共用 `review`（默认 2）；未完成必需工作使用 `toolUse`（默认 1）。一次拒绝只归入一个类别，在还能调度下一请求时扣一次，使用普通步骤和截止时间。`step.completed.notes` 中的 `output-rejected` 只带安全的 `reason` 类别和从 1 开始的 `attempt`，不带审查文字或参数；没有循环后的 `repair` 步骤或 `repaired` 成功。
+**循环内纠正。** JSON/schema/故事形状、缺少提交或混合批次使用 `outputRepair`（`story` 与 `actor` 默认 2，`system` 默认 1）；`PostLLMResponse` 与 `ReviewAgentOutput` 共用 `review`（默认 2）；未完成必需工作使用 `toolUse`（默认 1）。一次拒绝只归入一个类别，在还能调度下一请求时扣一次，使用普通步骤和截止时间。`step.completed.notes` 中的 `output-rejected` 只带安全的 `reason` 类别和从 1 开始的 `attempt`，不带审查文字或参数；没有循环后的 `repair` 步骤或 `repaired` 成功。
 
 **`runtime.deferred` 是“移交公告”**
 

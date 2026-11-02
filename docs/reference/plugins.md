@@ -620,7 +620,7 @@ Function 的输出契约以 handler 返回的 `value` 为准。它可以是标�
 
 Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白名单为准。
 
-- 执行边界把工具结果里的副作用（工具返回的 proposal、`emit-event` 发出的事件、表单和 UI 块）归入 `effects`，把最终输出里的 `preGameDone: true` 或 `completion` 转成完成信号。
+- 执行边界把工具结果里的副作用（工具返回的 proposal、`emit-event` 发出的事件、表单和 UI 块）归入 `effects`，把最终输出里的 `preGameDone: true` 或 `completion` 转成完成信号；两者矛盾时提交被拒绝，不会算作完成。
 - 模型在最终 JSON 里写的 `statePatches`、`pluginData`、`notifications`、`assetGenerations`、`interactions`、`ui` 和带 `topic` 的 `events` 不起作用，和 function 业务值里的同名字段一样。这些字段在拆分时被去掉，服务端日志记一条带 runtime 名和字段名的警告。
 - 不带 `topic` 的 `events`（例如 WorldIR 的业务事件）保留在 `output.events`。
 - 结束工具自己的返回值作为输出时，其中的副作用字段照常生效，因为它出自白名单里的工具。
@@ -632,8 +632,13 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 只改写 `output` 会撤销业务值，停止 export 和下游的值绑定。有公共输出契约时，还会因为缺少契约值而失败。
 - `PostRuntime` 不能新增或改写 `pendingProposals`、`effects` 或 `completion`；这些通道始终来自 runtime 原结果。要拦截或改写一条提案，用 [`PreStateCommit`](./hooks.md#prestatecommit)。
 - 失败 runtime 的副作用不提交，它的事件不触发后继 runtime。
-- 普通执行和 resume 共用 agent 的输出 schema 检查。非 story 的 agent 声明私有 `io.output.schema` 后，先校验候选的协议输出，再拆分业务值和副作用。最终没有正文或正文为空也接受校验；不符合 schema 就失败，暂停期间积累的写入不提交。
-- Story agent 不走私有 schema 检查，而是走[故事输出](#故事输出)的检查和修复。
+- 普通执行和 resume 在同一个 `submit-output` 边界检查 agent 的提交，story 和 system 都按这个顺序：
+  1. 候选通过实际输出 schema：有私有 `io.output.schema` 就用它，否则用公共契约的 schema，都没有时用宿主默认 schema。
+  2. Story agent 再检查[故事输出](#故事输出)的不变量：非空正文、段落种类和对白说话人。
+  3. 拆分出业务值：去掉 `preGameDone`、`completion` 这类协议字段和模型写的副作用字段。`preGameDone: false` 配 `completion: "done"`、`true` 配 `"pending"` 互相矛盾，提交被拒绝。
+  4. 声明了 `io.output.contract` 且契约带 schema 时，用它校验业务值，不要求业务值包含协议字段。
+  5. 必需的工具工作完成后，才交给 `ReviewAgentOutput` 审核。
+- 以上任何一步不通过，都作为 `submit-output` 的工具结果返回，下一步可以在纠错预算内修正；公共契约不符的候选不会进入审核。预算耗尽才失败，暂停期间积累的写入不提交。最终提交边界仍会复验 schema 和公共契约。
 
 > [!NOTE]
 > 内部结果结构变化之后，受影响的开发期执行结果、exports、后台作业和快照需要重建。旧的平铺副作用结果读不了。
@@ -876,7 +881,7 @@ const result = await ctx.agents?.run({
 | `fallback` | `submit-output`：重复业务调用后只提供提交工具；`fail`：以 `loop-detected` 失败 |
 | `finalizer.maxSteps` | 步数耗尽或上下文超限时，满足条件后最多再请求一次提交；默认 `true` |
 | `finalizer.deadlineReserveMs` | 剩余时间不足预留时，改为一次提交请求；默认 `0`，最多使用时限的一半 |
-| `corrections.outputRepair` | 缺少提交、混合批次、JSON/schema/故事格式失败；整数 0–3，默认 1 |
+| `corrections.outputRepair` | 缺少提交、混合批次、JSON/schema/故事格式失败；整数 0–3，`story` 和 `actor` 默认 2，`system` 默认 1 |
 | `corrections.review` | `PostLLMResponse` 与 `ReviewAgentOutput` 共用；整数 0–5，默认 2 |
 | `corrections.toolUse` | 缺少必需业务工作；整数 0–3，默认 1 |
 | `corrections.loopPerturbation` | 进入重复工具回退前的扰动；整数 0–3，默认 1 |
@@ -888,7 +893,7 @@ const result = await ctx.agents?.run({
 | `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
-| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
+| `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 2 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 2 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
 `profile: story` 和 `steering: true` 要求 story visibility。预留必须是非负整数且小于 runtime 时限。
 

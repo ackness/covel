@@ -231,7 +231,7 @@ Every way an agent runtime's tool loop can end maps to one stop reason (`StopRea
 
 Resumed step numbers continue the original loop. A response mixing submission with `suspend` is rejected as a batch; acceptance ends the loop immediately, so it cannot subsequently suspend. `PostRuntime`, proposal validation or transaction rollback can still reject completed computation. Only the commit receipt permits story completion to be published.
 
-**In-loop corrections.** JSON/schema/story shape, missing submission and mixed batches use `outputRepair` (default 1); `PostLLMResponse` and `ReviewAgentOutput` share `review` (default 2); unmet required work uses `toolUse` (default 1). Each rejection has one classification and spends one counter only when another request can be scheduled, within ordinary steps and the deadline. The `output-rejected` note in `step.completed.notes` carries only a safe `reason` category and a one-based `attempt`, never review text or arguments. There is no post-loop `repair` step or `repaired` success.
+**In-loop corrections.** JSON/schema/story shape, missing submission and mixed batches use `outputRepair` (default 2 for `story` and `actor`, 1 for `system`); `PostLLMResponse` and `ReviewAgentOutput` share `review` (default 2); unmet required work uses `toolUse` (default 1). Each rejection has one classification and spends one counter only when another request can be scheduled, within ordinary steps and the deadline. The `output-rejected` note in `step.completed.notes` carries only a safe `reason` category and a one-based `attempt`, never review text or arguments. There is no post-loop `repair` step or `repaired` success.
 
 **`runtime.deferred` is a "handoff notice"**
 

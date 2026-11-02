@@ -237,12 +237,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `agent.loop.corrections`
 
-| Field              | Type    | Required | Description                                                                                                 |
-| ------------------ | ------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `toolUse`          | integer | no       | Corrections for missing required business tool work. Defaults to 1.                                         |
-| `review`           | integer | no       | Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2.                      |
-| `loopPerturbation` | integer | no       | Perturbations before the repeated-tool fallback. Defaults to 1.                                             |
-| `outputRepair`     | integer | no       | In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 1. |
+| Field              | Type    | Required | Description                                                                                                                                                   |
+| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolUse`          | integer | no       | Corrections for missing required business tool work. Defaults to 1.                                                                                           |
+| `review`           | integer | no       | Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2.                                                                        |
+| `loopPerturbation` | integer | no       | Perturbations before the repeated-tool fallback. Defaults to 1.                                                                                               |
+| `outputRepair`     | integer | no       | In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 2 for the story and actor profiles and 1 for system. |
 
 ## `agent.loop.finalizer`
 
