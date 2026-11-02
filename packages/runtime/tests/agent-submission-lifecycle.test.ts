@@ -112,6 +112,7 @@ async function fixture(
     loadRuntime: async (runtime) => ({
       manifest: runtime,
       promptTemplate: "Do the work, then submit.",
+      ...(runtime.output?.from ? { outputSchema: { type: "object" } } : {}),
     }),
     onRuntimeStart: trace.runtimeStarted,
     onRuntimeComplete: async (info) => {
@@ -211,6 +212,45 @@ async function fixture(
 }
 
 describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
+  it("snapshots and restores tool-sourced output without repeating its business tool", async () => {
+    const f = await fixture(create, {
+      outputKind: "system",
+      output: { from: { tool: "mark" } },
+    });
+    const execution = await executeTurn(
+      f.input,
+      [f.rt],
+      f.deps([toolCall("mark", { note: "once" }), toolCall("suspend", ASK)]),
+    );
+    expect(await f.commit(execution)).toMatchObject({
+      status: "committed",
+      snapshotFailed: false,
+    });
+    expect(await f.store.listSnapshots("session")).toHaveLength(1);
+    const saved = await f.roundtrip();
+    expect(saved.pendingContinuation.loop?.outputContract).toMatchObject({
+      provenance: "tool-result",
+      from: { tool: "mark" },
+    });
+    const resumed = await f.resume(saved, [toolCall("submit-output", {})]);
+    expect(resumed.execution.result.status).toBe("success");
+    expect(await f.commit(resumed.execution, saved)).toMatchObject({
+      status: "committed",
+      snapshotFailed: false,
+    });
+    expect(f.work).toHaveBeenCalledOnce();
+    expect(
+      await f.store.getPluginData("session", "plug", "loop", "mark"),
+    ).toMatchObject({ value: "once" });
+    // Resolved continuations remain in portable checkpoints too.
+    await expect(
+      exportSessionCheckpoint(f.store, "session", {
+        revision: 2,
+        actionId: "resumed",
+      }),
+    ).resolves.toMatchObject({ sessionId: "session" });
+  });
+
   it("retains spent repair and steps through a checkpoint, and never revives a rejected candidate", async () => {
     const f = await fixture(create, {
       loopProfile: { corrections: { outputRepair: 1 } },

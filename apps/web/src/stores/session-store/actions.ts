@@ -52,11 +52,9 @@ import {
   type SessionRuntimeRefs,
 } from "./runtime-refs.js";
 import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
-import {
-  invalidateSessionResource,
-  refreshSessionResource,
-} from "./session-resource-reads.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import { canRunSessionAction } from "./selectors.js";
+import { useSeatSwitches } from "./seat-switches.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
 import { startGameSession } from "./start-game.js";
@@ -101,16 +99,8 @@ export function useBuildSessionActions({
     generation: number;
     token: symbol;
   } | null>(null);
-  // The character switch under way, which a submission waits for.
-  const pendingSeatSwitch = useRef<Promise<readonly Seat[] | undefined> | null>(
-    null,
-  );
-  const settleSeatSwitches = useCallback(async () => {
-    let seats: readonly Seat[] | undefined;
-    while (pendingSeatSwitch.current)
-      seats = (await pendingSeatSwitch.current) ?? seats;
-    return seats;
-  }, []);
+  const { hasPendingSeatSwitch, settleSeatSwitches, switchSeatCharacter } =
+    useSeatSwitches(workspace, dispatch, refs);
   const claimAction = useCallback(
     (sessionId: string, requestId?: string) =>
       claimSessionAction(
@@ -430,7 +420,7 @@ export function useBuildSessionActions({
               () => isCurrent() && (currentOwner?.() ?? true),
             );
             await workspace.settle?.(sessionId);
-            const seats = await settleSeatSwitches();
+            const seats = await settleSeatSwitches(sessionId, generation);
             if (isCurrent() && (currentOwner?.() ?? true))
               startActions(actions, seats, true, currentOwner);
           } catch (error) {
@@ -452,14 +442,14 @@ export function useBuildSessionActions({
         })();
         return true;
       }
-      if (!pendingSeatSwitch.current)
-        return startActions(actions, undefined, false, currentOwner);
       const sid = sessionIdRef.current;
       const generation = sessionGenerationRef.current;
       if (!sid) return false;
+      if (!hasPendingSeatSwitch(sid))
+        return startActions(actions, undefined, false, currentOwner);
       const token = Symbol("seat-input");
       pendingAdvanceInput.current = { sessionId: sid, generation, token };
-      void settleSeatSwitches()
+      void settleSeatSwitches(sid, generation)
         .then((seats) => {
           if (
             sessionIdRef.current === sid &&
@@ -481,6 +471,7 @@ export function useBuildSessionActions({
       workspace,
       dispatch,
       settleSeatSwitches,
+      hasPendingSeatSwitch,
     ],
   );
 
@@ -496,44 +487,6 @@ export function useBuildSessionActions({
     ) =>
       sendActions(composerActions(submission, opts?.drafts), opts?.isCurrent),
     [sendActions],
-  );
-
-  const switchSeatCharacter = useCallback(
-    async (seatId: string, characterId: string): Promise<void> => {
-      const sid = sessionIdRef.current;
-      if (!sid) return;
-      const generation = sessionGenerationRef.current;
-      // The checkpoint of a browser-private session is uploaded and taken
-      // back around the write, or the next upload would undo the switch.
-      const switching = workspace
-        .run(sid, `seat-switch:${crypto.randomUUID()}`, () =>
-          api.setSeatCurrentCharacter(sid, seatId, characterId),
-        )
-        .then(({ seats }) => {
-          if (
-            sessionIdRef.current === sid &&
-            sessionGenerationRef.current === generation
-          ) {
-            // A session read that began before the switch holds the old seats
-            // and would restore them when it lands; it reads again instead.
-            invalidateSessionResource(dispatch, ["game-state", sid]);
-            dispatch({ type: "SET_SESSION_SEATS", seats });
-          }
-          return seats;
-        });
-      const settled: Promise<readonly Seat[] | undefined> = switching
-        .then(
-          (seats) => seats,
-          () => undefined,
-        )
-        .finally(() => {
-          if (pendingSeatSwitch.current === settled)
-            pendingSeatSwitch.current = null;
-        });
-      pendingSeatSwitch.current = settled;
-      await switching;
-    },
-    [workspace, dispatch, sessionIdRef, sessionGenerationRef],
   );
 
   const steerMessage = useCallback(

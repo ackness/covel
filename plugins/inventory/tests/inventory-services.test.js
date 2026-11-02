@@ -7,6 +7,7 @@ import {
   makeTestServiceRegistry,
 } from "@covel/plugin-test-utils";
 import register from "../server/index.js";
+import { unappliedInventoryChanges } from "../lib/applied-operations.js";
 
 const definitions = [];
 register({
@@ -373,5 +374,46 @@ describe("inventory change service", () => {
   )("rejects changes outside the service contract: %j", async (changes) => {
     const { call } = await fixture([gold]);
     await expect(call("change", { changes })).rejects.toThrow();
+  });
+});
+
+it("deduplicates a successful exchange when long descriptions truncate its request", async () => {
+  const { registry, request, store } = await fixture();
+  const stage = createRootOperationStage({
+    caller,
+    sessionId: caller.sessionId,
+    turnId: caller.turnId,
+  });
+  const client = registry.createClient({
+    ...caller,
+    signal: new AbortController().signal,
+    reads: { store },
+    operations: stage,
+  });
+  const changes = Array.from({ length: 8 }, (_, index) => ({
+    op: "add",
+    item: `物品${index}`,
+    quantity: 1,
+    description: "精工制作的旅行用品，适合长途旅程。".repeat(12).slice(0, 200),
+  }));
+  expect(
+    (await client.call(request("change", { changes }))).results,
+  ).toHaveLength(8);
+  const carrier = {};
+  stage.attachTo(carrier, true);
+  expect(carrier.operations[0]).toMatchObject({
+    status: "staged",
+    truncated: true,
+  });
+  expect(carrier.operations[0]).not.toHaveProperty("request");
+  expect(carrier.operationWrites[carrier.operations[0].id]).toHaveLength(9);
+  const extracted = changes.map(({ op, item: name, quantity }) => ({
+    op,
+    name,
+    quantity,
+  }));
+  expect(unappliedInventoryChanges(extracted, carrier.operations)).toEqual({
+    changes: [],
+    alreadyApplied: 8,
   });
 });

@@ -254,6 +254,8 @@ covel.registerService({
 });
 ```
 
+A later ledger can use [`operations@1`](../reference/plugins.md#the-kernel-input-operations1) to recognize changes the service has already handled. Requests and results have independent size limits; if one is omitted, interpret the retained view under its contract to avoid duplicate bookkeeping. A result quantity that represents the final balance must not be applied again as a delta.
+
 Where it can be called, how it commits and what the model sees are in [Write services](../reference/plugin-extensions.md#write-services). You can test it without a turn: [`callTestService`](./testing.md#test-a-write-service).
 
 For the inputs and outputs of each extension point, how several providers are combined, and how errors are handled, see [Plugin extensions and communication](../reference/plugin-extensions.md) and the [Extension point reference](../reference/extension-points.md).

@@ -5,13 +5,15 @@ export function unappliedInventoryChanges(changes, operations = []) {
   const remaining = [...changes];
   let alreadyApplied = 0;
   for (const operation of operations) {
-    if (
-      operation.contract !== "inventory.change@1" ||
-      operation.truncated ||
-      !Array.isArray(operation.request?.changes)
-    )
-      continue;
-    for (const applied of operation.request.changes) {
+    if (operation.contract !== "inventory.change@1") continue;
+    // Request and result are bounded independently. Long descriptions can
+    // hide the request while the service's compact result still names every
+    // handled change. Its quantity is the final holding, not a delta.
+    const handled = Array.isArray(operation.request?.changes)
+      ? operation.request.changes
+      : operation.result?.results;
+    if (!Array.isArray(handled)) continue;
+    for (const applied of handled) {
       if (typeof applied?.item !== "string") continue;
       const index = remaining.findIndex(
         (change) =>

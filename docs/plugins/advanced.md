@@ -254,6 +254,8 @@ covel.registerService({
 });
 ```
 
+后续台账可通过 [`operations@1`](../reference/plugins.md#内核输入-operations1) 识别服务已处理的变化。请求和结果分别限长；某一份被省略时，仍可按契约读取另一份，避免把一次操作重复记账。结果数量若代表最终余额，不能当作增减量再扣一次。
+
 在哪里能调用、怎样提交、模型看到什么，见[写服务](../reference/plugin-extensions.md#写服务)。不用起一个回合就能测它：[`callTestService`](./testing.md#测一个写服务)。
 
 每个扩展点的输入、输出、多个提供者怎样合并、出错时怎样处理，见[插件扩展与通信](../reference/plugin-extensions.md)和[扩展点参考](../reference/extension-points.md)。

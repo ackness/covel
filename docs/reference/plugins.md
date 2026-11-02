@@ -429,7 +429,7 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 未声明输出来源时，工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
 
-若最终输出就是某个业务工具的结果，可声明 `io.output.from: { tool: save-facts }`。该工具必须在本 runtime 的自有／builtin 业务工具白名单内，不能是宿主控制工具或可选导入服务；函数 runtime 不能使用。必须实际加载输出 schema 或契约，约定的 `output.schema.json` 也可用。模型在工具成功后单独用 `{}` 调用 `submit-output`。生成的参数 schema 仍声明空对象；此模式下宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本，参数不能替代规范结果。宿主取本次循环中该工具最近一次成功调用的公共正文（不是 `summary` / `data` / `staged` 模型视图），按输出 schema 和既有契约门控校验，再照常运行 `ReviewAgentOutput`。没有成功调用时返回 `required-work`，消耗 `toolUse` 预算。挂起保留输出来源与执行器结果，恢复后不用重跑成功工作。工具效果仍只通过原来的 proposal 提交。
+若最终输出就是某个业务工具的结果，可声明 `io.output.from: { tool: save-facts }`。该工具必须在本 runtime 的自有／builtin 业务工具白名单内，不能是宿主控制工具或可选导入服务；函数 runtime 不能使用。必须实际加载输出 schema 或契约，约定的 `output.schema.json` 也可用。模型在工具成功后单独用 `{}` 调用 `submit-output`。生成的参数 schema 仍声明空对象；此模式下宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本，参数不能替代规范结果。宿主取本次循环中该工具最近一次成功调用的公共正文（不是 `summary` / `data` / `staged` 模型视图），按输出 schema 和既有契约门控校验，再照常运行 `ReviewAgentOutput`。没有成功调用时返回 `required-work`，消耗 `toolUse` 预算。挂起保留输出来源与执行器结果，快照和浏览器 checkpoint 同样保存这份合同，恢复后不用重跑成功工作。工具效果仍只通过原来的 proposal 提交。
 
 实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
 
@@ -826,7 +826,7 @@ const result = await ctx.agents?.run({
 
 `io.inputs.operations: { from: { kernel: operations@1 } }` 读取本次执行里已完成、可提交的上游 runtime 暂存的操作。函数通过 `ctx.inputs.operations.value` 读取，agent 在 `runtime-inputs` 块中读取；工具拿不到这个输入。
 
-值总是存在，形状为 `{ operations: [{ contract, summary, request?, result?, truncated? }] }`，没有操作时数组为空。内核按调用顺序复制并深度冻结它，不带操作 ID、插件 ID、runtime ID 或 run ID。`request`、`result` 是操作记录已有的模型视图；超过大小限制而省略时带 `truncated: true`。
+值总是存在，形状为 `{ operations: [{ contract, summary, request?, result?, truncated? }] }`，没有操作时数组为空。内核按调用顺序复制并深度冻结它，不带操作 ID、插件 ID、runtime ID 或 run ID。`request`、`result` 是操作记录已有的模型视图，各自独立限长；其中任一视图超过大小限制而省略时带 `truncated: true`，另一份视图仍可保留。消费者应按服务契约读取保留的明细，不能仅凭这个标记认定整个操作缺失。
 
 它不增加调度依赖，但增加提交依赖：读者依赖它读到的每个本次执行的暂存操作，内核在值之外记下这些操作的 ID。操作在提交时没有落库，辅助读者一起丢弃；story 或 setup 读者照常提交并记 `read-dependency.kept`（见[事务 · 回合级单事务](./transactions.md#回合级单事务)）。读者自己的写入被拒绝，不影响它读到的操作。绑定时只收集已结束、可提交的结果，包括嵌套结果；本次执行只保留 `staged` 操作，排除 `discarded` 操作。较早启动的同阶段兄弟 runtime 看不到尚未完成的操作；`post-turn` runtime 能读到 narrative 阶段全部已完成的操作。需要稳定的先后顺序时，声明 `schedule.after` 或使用后续阶段。
 
