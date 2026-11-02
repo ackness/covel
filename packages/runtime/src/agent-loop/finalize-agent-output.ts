@@ -37,6 +37,79 @@ export type FinalizeAgentOutput =
       readonly problems: readonly string[];
     };
 
+export type AgentSubmissionSplit =
+  | {
+      readonly kind: "ok";
+      /** The business value: what output schemas, contracts and consumers read. */
+      readonly output: Record<string, unknown>;
+      readonly completion?: "done" | "pending";
+    }
+  | {
+      readonly kind: "invalid-output";
+      readonly error: string;
+      readonly problems: readonly string[];
+    };
+
+export const COMPLETION_CONFLICT_ERROR =
+  "completion fields disagree: preGameDone and completion must not contradict each other";
+
+/**
+ * The completion signal of an agent submission. `preGameDone: false` with
+ * `completion: "done"` (or `true` with `"pending"`) is a contradiction the
+ * agent must correct, never a completion.
+ */
+export function agentCompletionSignal(
+  output: Readonly<Record<string, unknown>>,
+): { readonly completion?: "done" | "pending" } | { readonly conflict: true } {
+  const { preGameDone, completion } = output;
+  if (
+    (preGameDone === false && completion === "done") ||
+    (preGameDone === true && completion === "pending")
+  )
+    return { conflict: true };
+  if (preGameDone === true || completion === "done")
+    return { completion: "done" };
+  if (completion === "pending") return { completion: "pending" };
+  return {};
+}
+
+/**
+ * Split an accepted submission into its business value and completion signal.
+ * Pure apart from the optional author warning, so the loop can check public
+ * contracts before review with the same value finalization will commit.
+ */
+export function splitAgentSubmission(
+  manifest: Pick<RuntimeManifest, "name" | "outputKind">,
+  submission: Readonly<Record<string, unknown>>,
+  options: { readonly silent?: boolean } = {},
+): AgentSubmissionSplit {
+  let output: Record<string, unknown> = structuredClone(
+    submission as Record<string, unknown>,
+  );
+  dropModelAuthoredEffects(output, manifest.name, options.silent);
+  const signal = agentCompletionSignal(output);
+  if ("conflict" in signal)
+    return {
+      kind: "invalid-output",
+      error: COMPLETION_CONFLICT_ERROR,
+      problems: [COMPLETION_CONFLICT_ERROR],
+    };
+  const { completion } = signal;
+  delete output.preGameDone;
+  if (completion) delete output.completion;
+  if (manifest.outputKind === "story") {
+    const story = normalizeStoryOutput(output);
+    if (!story)
+      return {
+        kind: "invalid-output",
+        error: STORY_EMPTY_ERROR,
+        problems: ["the story text is empty"],
+      };
+    output = story;
+  }
+  return { kind: "ok", output, ...(completion ? { completion } : {}) };
+}
+
 export function finalizeAgentOutput(
   params: FinalizeAgentOutputParams,
 ): FinalizeAgentOutput {
@@ -48,8 +121,9 @@ export function finalizeAgentOutput(
     emittedEvents = [],
     dedupeInteractions = false,
   } = params;
-  let output: Record<string, unknown> = structuredClone(acceptedOutput);
-  dropModelAuthoredEffects(output, manifest.name);
+  const split = splitAgentSubmission(manifest, acceptedOutput);
+  if (split.kind === "invalid-output") return split;
+  const { output, completion } = split;
   const effects: Record<string, unknown> = {};
   const toolEvents: JsonValue[] = [];
 
@@ -89,26 +163,6 @@ export function finalizeAgentOutput(
   // channel keeps its execution order (event fan-out is first-emission-wins).
   if (toolEvents.length || emittedEvents.length)
     effects.events = [...toolEvents, ...emittedEvents];
-
-  const completion =
-    output.preGameDone === true || output.completion === "done"
-      ? "done"
-      : output.completion === "pending"
-        ? "pending"
-        : undefined;
-  delete output.preGameDone;
-  if (completion) delete output.completion;
-
-  if (manifest.outputKind === "story") {
-    const story = normalizeStoryOutput(output);
-    if (!story)
-      return {
-        kind: "invalid-output",
-        error: STORY_EMPTY_ERROR,
-        problems: ["the story text is empty"],
-      };
-    output = story;
-  }
 
   return {
     kind: "ok",

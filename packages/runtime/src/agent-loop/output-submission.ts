@@ -13,6 +13,10 @@ import {
   submissionSyntaxProblems,
 } from "./output-format-diagnostics.js";
 import { schemaAsksForSegments, storyOutputProblems } from "./story-output.js";
+import {
+  COMPLETION_CONFLICT_ERROR,
+  splitAgentSubmission,
+} from "./finalize-agent-output.js";
 
 export interface OutputRejection {
   readonly code:
@@ -131,6 +135,42 @@ export async function evaluateSubmission(args: {
     });
     if (problems.length)
       return { rejection: rejectOutput("invalid-output", problems.join("; ")) };
+  }
+  // Check the business value finalization will commit: contradictory completion
+  // fields and the public contract stay correctable inside the loop.
+  const split = splitAgentSubmission(args.manifest, candidate, {
+    silent: true,
+  });
+  if (split.kind === "invalid-output") {
+    const text = await loadOutputText(args.locale);
+    return {
+      rejection: rejectOutput(
+        "invalid-output",
+        split.error === COMPLETION_CONFLICT_ERROR
+          ? text("completion-conflict")
+          : split.problems.join("; "),
+      ),
+    };
+  }
+  if (args.contract.validateContract) {
+    const contractValidation = args.contract.validateContract(split.output);
+    if (!contractValidation.valid)
+      return {
+        rejection: rejectOutput(
+          "invalid-output",
+          (await loadOutputText(args.locale))("contract-invalid", {
+            contract: args.manifest.outputContract ?? "",
+            problems: (
+              contractValidation.errors ?? [
+                "Output does not match the contract schema.",
+              ]
+            )
+              .slice(0, 5)
+              .map((error) => error.slice(0, 200))
+              .join("; "),
+          }),
+        ),
+      };
   }
   if (!args.requiredWorkMet) {
     const tools = args.contract.requiredWork.toolNames.join(", ");

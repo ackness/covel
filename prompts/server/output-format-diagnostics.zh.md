@@ -11,6 +11,8 @@ source-required: 请先成功调用 {{ tool }}，再用 {} 调用 submit-output�
 object-required: 参数必须是一个完整 JSON 对象。
 required-work: 请先成功完成必需的业务工具工作，并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
 required-work-tools: 请先成功完成必需的业务工具工作（{{ tools }}），并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
+completion-conflict: preGameDone 与 completion 互相矛盾。只提交本 runtime 当前所处的状态：仍在等待时用 preGameDone false（或 completion "pending"），已完成时用 preGameDone true（或 completion "done"）。
+contract-invalid: 去掉协议字段后，输出不符合公共契约 {{ contract }}：{{ problems }}。请修正这些字段后重新提交。
 after-root-object: 根对象已闭合后仍有内容；此处应为输入结束
 unexpected-end: JSON 输入意外结束；需要完整的 JSON 值
 unterminated-string: JSON 字符串未闭合；需要结束双引号

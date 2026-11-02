@@ -545,3 +545,82 @@ it.each(["throw", "abort"] as const)(
     }
   },
 );
+
+describe("submission business value checks", () => {
+  it("rejects contradictory completion fields as a correctable submission", async () => {
+    for (const [conflict, fixed] of [
+      [{ preGameDone: false, completion: "done" }, { preGameDone: false }],
+      [{ preGameDone: true, completion: "pending" }, { preGameDone: true }],
+    ] as const) {
+      const llm = queuedLLM([submit(conflict, "conflict"), submit(fixed)]);
+      const result = await runLoop({ llm });
+      expect(result.acceptedOutput).toEqual(fixed);
+      expect(llm.requests).toHaveLength(2);
+      expect(resultFor(llm.requests[1]!, "conflict")).toContain(
+        "contradict each other",
+      );
+    }
+  });
+
+  it("keeps a waiting setup pending and still lets a consistent submission finish", async () => {
+    for (const [value, completion] of [
+      [{ preGameDone: false }, undefined],
+      [{ preGameDone: false, completion: "pending" }, "pending"],
+      [{ preGameDone: true }, "done"],
+      [{ completion: "done" }, "done"],
+      [{ preGameDone: true, completion: "done" }, "done"],
+    ] as const) {
+      const result = await runRuntime({ llm: queuedLLM([submit(value)]) });
+      expect(result.status, JSON.stringify(value)).toBe("success");
+      expect(result.completion, JSON.stringify(value)).toBe(completion);
+      expect(result.output).toEqual({});
+    }
+  });
+
+  it("checks the public contract before review and asks for a corrected candidate", async () => {
+    const pipeline = createHookPipeline();
+    const reviewed: unknown[] = [];
+    pipeline.register<ReviewAgentOutputPayload>({
+      id: "review",
+      event: "ReviewAgentOutput",
+      handler: async (_ctx, payload) => {
+        reviewed.push(payload.output);
+        return { action: "continue" };
+      },
+    });
+    const runtime = manifest({ outputContract: "example.value@1" });
+    const llm = queuedLLM([
+      submit({ completion: "done" }, "missing"),
+      submit({ value: 1, completion: "done" }),
+    ]);
+    const result = await runLoop({
+      llm,
+      manifest: runtime,
+      hookPipeline: pipeline,
+      loaded: {
+        manifest: runtime,
+        promptTemplate: "prompt",
+        outputSchema: {
+          type: "object",
+          properties: {
+            value: { type: "number" },
+            completion: { type: "string", enum: ["done", "pending"] },
+          },
+        },
+        // Protocol fields are not part of the business value the contract sees.
+        outputContractSchema: {
+          type: "object",
+          properties: { value: { type: "number" } },
+          required: ["value"],
+          additionalProperties: false,
+        },
+      },
+    });
+    expect(result.acceptedOutput).toEqual({ value: 1, completion: "done" });
+    expect(llm.requests).toHaveLength(2);
+    expect(resultFor(llm.requests[1]!, "missing")).toContain(
+      "example.value@1",
+    );
+    expect(reviewed).toEqual([{ value: 1, completion: "done" }]);
+  });
+});

@@ -11,6 +11,8 @@ source-required: Call {{ tool }} successfully before calling submit-output with 
 object-required: Arguments must be one complete JSON object.
 required-work: Complete required business tool work successfully and resolve failed business calls before submitting. Do not repeat successful writes.
 required-work-tools: Complete required business tool work ({{ tools }}) successfully and resolve failed business calls before submitting. Do not repeat successful writes.
+completion-conflict: preGameDone and completion contradict each other. Send only the state this runtime is in: preGameDone false (or completion "pending") while waiting, preGameDone true (or completion "done") when finished.
+contract-invalid: The output does not match the public {{ contract }} contract after protocol fields are removed: {{ problems }}. Correct these fields and submit again.
 after-root-object: unexpected content after a closed root object; expected end-of-input
 unexpected-end: unexpected end of JSON input; expected a complete JSON value
 unterminated-string: unterminated JSON string; expected a closing double quote

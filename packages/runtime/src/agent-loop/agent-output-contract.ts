@@ -10,6 +10,12 @@ import { loadOutputText } from "./output-format-diagnostics.js";
 /** Run-local control contract; the loop owns acceptance, never a business tool module. */
 export interface AgentOutputContract extends EffectiveAgentOutput {
   readonly validate: (candidate: unknown) => ValidationResult;
+  /**
+   * The public `io.output.contract` schema, checked against the business value
+   * (the submission minus protocol fields) before review, so a contract error
+   * stays correctable. Finalization still re-checks it.
+   */
+  readonly validateContract?: (value: unknown) => ValidationResult;
 }
 const contracts = new WeakMap<LoadedRuntime, AgentOutputContract>();
 
@@ -28,10 +34,27 @@ export function agentOutputContract(
       { cause },
     );
   }
-  const contract = Object.freeze({
+  const contractSchema = loaded.outputContractSchema;
+  if (contractSchema) {
+    try {
+      validateOutput({}, contractSchema);
+    } catch (cause) {
+      throw new Error(
+        `io.output.contract: invalid contract schema: ${cause instanceof Error ? cause.message : String(cause)}`,
+        { cause },
+      );
+    }
+  }
+  const contract: AgentOutputContract = Object.freeze({
     ...effective,
     validate: (candidate: unknown) =>
       validateOutput(candidate, effective.schema),
+    ...(contractSchema
+      ? {
+          validateContract: (value: unknown) =>
+            validateOutput(value, contractSchema),
+        }
+      : {}),
   });
   contracts.set(loaded, contract);
   return contract;
