@@ -77,11 +77,13 @@ function:
 
 What is new here:
 
-| This part             | Meaning                                                                                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `io.output.contract`  | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it.                    |
-| `io.output.schema`    | The shape the output must match. If it does not match, this run fails.                                                                             |
-| `io.output.recordAs`  | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                    |
+<!-- prettier-ignore -->
+| This part | Meaning |
+| --- | --- |
+| `io.output.contract` | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it. |
+| `io.output.schema` | The shape the output must match. If it does not match, this run fails. |
+| `io.output.from` | Takes a business tool’s canonical result; after success submit `{}`. See [output sources](../reference/plugins.md#agent-output-submission). |
+| `io.output.recordAs` | Saves the output under a name. Later turns can read it with `scope: committed`. |
 | `schedule.background` | Left out, the caller waits for it to finish. `true` moves it to the background. See [Background work and failures](#background-work-and-failures). |
 
 Rules:

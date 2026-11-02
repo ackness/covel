@@ -240,6 +240,7 @@ describe("core plugin manifest contract", () => {
       select: "/segments",
     });
     expect(worldIr.output).toEqual({
+      from: { tool: "submit-world-facts" },
       schema: "contract:world-ir@1",
       recordAs: "world-ir-v1",
     });
@@ -249,8 +250,7 @@ describe("core plugin manifest contract", () => {
     expect(
       requireRuntime(manifests, "world-init/dimension-tracker").llm,
     ).toEqual({ reasoningEffort: "disabled", toolChoice: "required" });
-    // finishWith makes the model call a tool on every step; the finishing
-    // tool is the only one the runtime sees.
+    // Business work precedes the separate empty final submission.
     expect(worldIr.llm).toEqual({
       reasoningEffort: "disabled",
       toolChoice: "required",

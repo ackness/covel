@@ -1,4 +1,3 @@
-import reviewOutput from "./review-output.js";
 import { resolveI18nText } from "@covel/plugin-handlers-utils";
 import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
@@ -216,7 +215,6 @@ export default function (covel) {
     },
   });
   covel.on("PreLLMCall", trackerTools);
-  covel.on("ReviewAgentOutput", reviewOutput);
   covel.registerTool(makeDimensionRuleGet(covel.toolkit));
   covel.registerTool(makeInitializeWorld(covel.toolkit));
   covel.registerTool(makeUpdateDimensions(covel.toolkit));

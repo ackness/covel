@@ -468,11 +468,13 @@ interface UIRenderPart {
 
 ### submit-output
 
-每个 agent 都自动获得这个宿主控制工具，参数就是该 runtime 实际加载的输出 schema；没有 schema 时使用[宿主默认对象](./plugins.md#agent-output-submission)。它不在全局工具注册表里，各次运行持有独立且冻结的定义。函数不能调用它。
+每个 agent 都自动获得这个宿主控制工具，未声明输出来源时，参数就是该 runtime 实际加载的输出 schema；没有 schema 时使用[宿主默认对象](./plugins.md#agent-output-submission)。它不在全局工具注册表里，各次运行持有独立且冻结的定义。函数不能调用它。
+
+声明 `io.output.from: { tool: name }` 时，参数变为严格的空对象 `{}`。宿主采用该工具在本循环中最近一次成功返回的公共正文，不采用模型视图包装或 Hook 改写的显示内容；恢复后的成功结果也可用。没有成功调用时返回 `required-work` 并使用 `toolUse` 预算，多余字段按 `invalid-output` 拒绝。规范结果仍须通过输出 schema、必需工作和 `ReviewAgentOutput`。字段限制见[输出来源](./plugins.md#agent-output-submission)。
 
 先完成必需的业务工具工作，读取结果，再单独调用 `submit-output`。无业务输出且 schema 允许时传 `{}`。提交被拒绝时按错误修正后再次调用。提交成功结束计算，不代表数据已保存。
 
-提交的参数始终是模型数据，不从中提取 proposal、UI、交互、通知或事件。工具成功与存档提交仍是两件事。`submit-output` 不算业务工作，不可延迟，也不能出现在插件工具、服务导入、数据集名字或显式工具白名单里。
+提交的数据不产生新的 proposal、UI、交互、通知或事件。工具成功与存档提交仍是两件事。`submit-output` 不算业务工作，不可延迟，也不能出现在插件工具、服务导入、数据集名字或显式工具白名单里。
 
 参数必须是一个完整 JSON 对象；不剥离围栏、不提取前缀、不修复截断内容。按批次/JSON/schema/故事格式、必需工作、`ReviewAgentOutput` 顺序判定一次。失败码为 `invalid-json`、`invalid-output`、`required-work`、`review-rejected` 或 `submission-batch`。错误只给有界字段或位置指导。混合或重复提交在任何同批业务调用执行前拒绝，并回答每个原调用 ID。此前成功的业务工作保留。`PostToolUse` 只改可见文本，不能改变内核私有的接受值；没有接受值的终止请求失败。
 
@@ -1325,7 +1327,7 @@ RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型同时看到 `data` 中的这份规范结果与 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`），以便通过 `submit-output` 原样提交并显式携带 `preGameDone: true`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
+**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型同时看到 `data` 中的这份规范结果与 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`）。成功后 agent 用 `{}` 调用 `submit-output`，宿主采用完整工具正文并保留 `preGameDone: true`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
 
 生成的 `defaultValue` 是每个新玩家和 NPC 的起始值，不是某个设定人物的示例。姓名、身份、背景等字段归入 `bio`，使用中性或空值。工具会把生成的 `bio` 字符串默认值清为空字符串，数组清为空数组，对象和 map 清为空对象，枚举则移除默认值；嵌套的个人信息采用同样的规则。数值和布尔默认值保留。世界作者提供的 schema 由 guard 原样采用，不经过这一步处理。
 
@@ -1337,7 +1339,7 @@ RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数
 
 `worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
 
-这个 runtime 要求 `initialize-world` 成功后再提交输出。agent 读取工具结果，再用 `submit-output` 提交符合输出 schema 的对象。
+这个 runtime 要求 `initialize-world` 成功后再提交输出。agent 在工具成功后用 `{}` 调用 `submit-output`，由声明的输出来源提供规范对象。
 
 **使用者**: `world-init/schema-gen`
 
@@ -1457,7 +1459,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 工具声明 `{stagesWrites:false, idempotent:true}`。补全后的引用校验失败报 `invalid-input`，提示在 `entities` 中声明每个引用的 id 后重试。
 
-工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。公共模型视图的 `data.facts` 是最终提交的规范事实；`data.entityReferences` 索引事实实体的业务身份，让普通模型投影保留必要的语义 ID，即使实体还没有入边。索引不属于最终输出，也不包含存储行元数据。`completion.afterTools: [submit-world-facts]` 要求先成功抽取，再通过 `submit-output` 提交 `data.facts`。插件的 `ReviewAgentOutput` 审核阻止改写规范结果；修正最终提交不重复抽取，`contract:world-ir@1` 的业务形状保持不变。
+工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。公共模型视图的 `data.facts` 是最终提交的规范事实；`data.entityReferences` 索引事实实体的业务身份，让普通模型投影保留必要的语义 ID，即使实体还没有入边。索引不属于最终输出，也不包含存储行元数据。`completion.afterTools: [submit-world-facts]` 要求先成功抽取，再用 `{}` 调用 `submit-output`。`io.output.from.tool: submit-world-facts` 直接采用规范事实，无需复制模型视图；修正最终提交不重复抽取，`contract:world-ir@1` 的业务形状保持不变。
 
 #### 逐目标评估
 

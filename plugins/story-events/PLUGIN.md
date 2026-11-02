@@ -1,5 +1,5 @@
 ---
-version: 0.1.8
+version: 0.1.9
 displayName: Hidden Story Events
 description: >-
   Keeps world-authored hidden story events out of prompts and player views until
@@ -17,8 +17,6 @@ contracts:
   story-event.plan@1:
     schema: ./schemas/story-event-plan.schema.json
 contributes:
-  hooks:
-    - ReviewAgentOutput
   tools:
     - plan-story-events
   settings:

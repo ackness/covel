@@ -101,6 +101,8 @@ As with "Narrator": the character sheet and the person check follow the characte
 
 ## Action Suggestions (`guide`)
 
+Action suggestions retain the complete validated generation result. Retrying final confirmation does not write the suggestions again.
+
 After each part of the story, recaps the relevant earlier events, explains the choice you are facing now, and then gives 3 to 4 short actions you can use right away.
 
 ### What you will see

@@ -22,4 +22,4 @@
 
 验证：`pnpm --filter @covel/plugin-world-time test`。
 
-`advance-world-time` 成功后，用 `submit-output` 提交工具的公共规范时钟结果。插件自己的 `ReviewAgentOutput` 阻止改写已计算的时间；只修正提交，不重复推进时钟。
+`advance-world-time` 成功后，用 `{}` 调用 `submit-output`。`io.output.from.tool: advance-world-time` 直接采用工具的公共规范时钟结果，不需要模型复制；只修正提交，不重复推进时钟。

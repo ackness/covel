@@ -139,13 +139,7 @@ export async function runAttributionTurn(
       ].find((n) => p.tools?.some((t) => t.name === n));
       assert.ok(tool, "only synthetic writer calls are allowed");
       const canonical = latestToolOutput(p.messages, tool);
-      if (canonical)
-        return toolCall(
-          "submit-output",
-          tool === "submit-world-facts"
-            ? (canonical.facts as Record<string, unknown>)
-            : {},
-        );
+      if (canonical) return toolCall("submit-output", {});
       calls.push({ tool, messages: p.messages });
       if (tool === "submit-world-facts" && failWorldIR) {
         failWorldIR = false;

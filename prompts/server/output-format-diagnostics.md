@@ -5,6 +5,9 @@ Submission guidance and normalized parser reasons use these templates.
 -->
 
 tool-description: Submit the final result for this runtime after required tool work is complete. Arguments must match this schema. If the submission is rejected, correct the reported problems and call this tool again. A successful submission ends the runtime; it does not confirm that changes have been saved.
+tool-source-description: After {{ tool }} succeeds, call this tool alone with {}. The host submits that business tool's latest successful canonical result. Correct any reported rejection. Acceptance does not confirm persistence.
+source-empty: Call submit-output with {} only; the host supplies the output from the business tool.
+source-required: Call {{ tool }} successfully before calling submit-output with {}.
 object-required: Arguments must be one complete JSON object.
 required-work: Complete required business tool work successfully and resolve failed business calls before submitting. Do not repeat successful writes.
 required-work-tools: Complete required business tool work ({{ tools }}) successfully and resolve failed business calls before submitting. Do not repeat successful writes.

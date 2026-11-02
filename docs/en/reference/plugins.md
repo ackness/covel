@@ -427,7 +427,9 @@ The budget decides how many retries can actually be used:
 
 Every agent submits its final result with the host-generated `submit-output` tool. Story and system agents use the same tool; reply content is not an output channel. Successful submission ends computation. Writes still require proposal validation and commit.
 
-Parameters come from the actual loaded output schema: explicit files, `contract:` references and the `output.schema.json` convention take precedence. The schema must describe an object, not a scalar or array, and is neither wrapped nor rewritten. It appears only in the tool definition; agent completion requests no JSON content response format.
+Without an output source, parameters come from the actual loaded output schema: explicit files, `contract:` references and the `output.schema.json` convention take precedence. The schema must describe an object, not a scalar or array, and is neither wrapped nor rewritten. It appears only in the tool definition; agent completion requests no JSON content response format.
+
+When final output is a business tool’s result, declare `io.output.from: { tool: save-facts }`. The tool must be an allowlisted own or builtin business tool, never a host control or optional service import; function runtimes cannot use this field. An output schema or contract must actually load, including the `output.schema.json` convention. After the tool succeeds, the model calls `submit-output` alone with `{}`, with no candidate fields. The host takes that tool’s latest successful public content in this loop (rather than the `summary` / `data` / `staged` model view), validates the output schema and existing contract gates, then runs `ReviewAgentOutput` as usual. With no successful call, `required-work` spends the `toolUse` budget; extra fields produce `invalid-output`. Suspension retains the source and executor results so resumed submission need not repeat work. Tool effects still require their original proposals and commit.
 
 The actual model must support tools. Strict and non-strict submissions use the same host validation, preserving optional properties and open objects. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for target checks, same-tag fallback and strict profiles. Submission steps prefer a named `submit-output` choice, narrowed to `required` or `auto` when thinking capabilities require it; the player's reasoning choice is never disabled to force submission.
 
@@ -436,7 +438,7 @@ Without an output schema, the host supplies an object default:
 - Story agent: required nonblank `narrativeOutput: string`, optional `yield: user | continue`.
 - System agent: an open object with optional `narrativeOutput: string`, `completion: done | pending`, `preGameDone: boolean`, and other business fields. `{}` means no business output. Declare a schema for typed downstream output.
 
-`submit-output` is automatically available. Do not put it in allowlists, registrations or `defer`. Functions still return handler results and cannot call it. Its arguments are always model-authored output; fields shaped like `pluginData`, UI or events cannot produce writes.
+`submit-output` is automatically available. Do not put it in allowlists, registrations or `defer`. Functions still return handler results and cannot call it. Submitted fields shaped like `pluginData`, UI or events cannot produce writes.
 
 `agent.completion` declares only business work required before submission:
 

@@ -1,5 +1,5 @@
 ---
-version: 0.0.41
+version: 0.0.42
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -11,8 +11,6 @@ license: MIT
 requires:
   - narrative-engine@2
 contributes:
-  hooks:
-    - ReviewAgentOutput
   extensions:
     - point: ui.slot@1
       id: choices
@@ -30,7 +28,7 @@ contributes:
         - You MUST complete exactly one successful `generate-guide` call, with a recap, the current decision, and replies the player can send.
         - Even when the narrative seems "calm", provide wait, probe, or prepare style replies.
         - If the tool returns a parameter validation error, correct the parameters and retry. Do not call it again after success.
-        - After success, read the canonical result and submit it through `submit-output`. Do not repeat the write to correct a final submission.
+        - After success, call `submit-output` with `{}`. The host uses the canonical tool result. Do not repeat the write to correct a final submission.
         - Do not emit any text before or after the tool call.
       position: post-history
   tools:
@@ -46,6 +44,8 @@ runtime:
         select: /narrativeOutput
         accepts: ./schemas/narrative-output.schema.json
     output:
+      from:
+        tool: generate-guide
       schema: ./schemas/scene-prompts-output.schema.json
       contract: scene-prompts@1
   agent:

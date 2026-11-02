@@ -183,6 +183,8 @@ Records relationships between people, groups and factions. It checks existing no
 
 ## World Fact Extraction (`world-ir`)
 
+World initialization, time advancement and fact extraction use validated tool results directly, retaining completed work when final confirmation is retried.
+
 You cannot see this plugin, and it has no panel. After each turn ends, it sorts out the people, relationships, events and clues from that turn into a list. It passes the list to the codex, relationship graph, quest log, inventory and similar plugins. This way, each plugin does not have to read the story again on its own.
 
 If you use any of these plugins, keep this one on. If you turn it off, the plugins that depend on it get no facts, and they cannot be turned on. It adds one model call per turn. If you want to save money, remove it together with the plugins that depend on it. The "Low Cost" pack is the simplest choice.

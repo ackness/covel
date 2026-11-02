@@ -116,7 +116,7 @@ async function fixture({
           {
             id: "final",
             name: "submit-output",
-            arguments: JSON.stringify(JSON.parse(latest.content).data),
+            arguments: "{}",
           },
         ],
         finishReason: "tool_calls",

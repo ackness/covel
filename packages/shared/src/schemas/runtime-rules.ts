@@ -91,7 +91,11 @@ export interface RuntimeRuleView extends PresentationRuleView {
   )[];
   /** Ordering-only upstreams. */
   readonly after?: readonly unknown[];
-  readonly output?: { readonly schema?: string; readonly recordAs?: string };
+  readonly output?: {
+    readonly schema?: string;
+    readonly recordAs?: string;
+    readonly from?: { readonly tool: string };
+  };
   /** `true` when a `manual` / `event` activation runs as a background job. */
   readonly background?: boolean;
   readonly builtinTools?: readonly string[];
@@ -474,6 +478,19 @@ export function runtimeRuleIssues(
     "delegate",
     "delegate-batch",
   ]);
+  if (m.output?.from) {
+    if (m.runtimeType === "function")
+      add(
+        at("output", "from"),
+        "output.from is only supported by agent runtimes",
+      );
+    const tool = m.output.from.tool;
+    if (controlTools.has(tool) || (!authoring && !businessTools.has(tool)))
+      add(
+        at("output", "from", "tool"),
+        "output source must name an authorized own or builtin business tool",
+      );
+  }
   for (const [i, tool] of (m.requiredBusinessTools ?? []).entries()) {
     if (controlTools.has(tool) || (!authoring && !businessTools.has(tool)))
       add(

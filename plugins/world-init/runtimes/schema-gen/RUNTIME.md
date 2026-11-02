@@ -10,6 +10,8 @@ schedule:
     - contract: session.opening@1
 io:
   output:
+    from:
+      tool: initialize-world
     schema: ./output.schema.json
     contract: world-data-provider@1
 agent:
@@ -29,4 +31,4 @@ Read world lore: {{ world.lore }}
 Supply at least 15 character attributes covering stats, bio, abilities, equipment, social.
 This is a shared schema for new, unnamed characters, not a sheet for a character in the lore. `defaultValue` is inherited by every new player and NPC. Keep identity fields (name, role, background) in `bio`, with neutral or empty starting values; never copy a named character's identity or personal history. The tool clears generated `bio` text and compound defaults and omits `bio` enum defaults. Numeric and boolean defaults remain; choose generic starting values, not one NPC's current stats.
 For lore-only worlds without authored dimensions, supply definitions keyed by stable custom IDs. Each definition has name, schema (the supported JSON Schema subset), initialValue and optionally updateRule. Do not invent unsupported setting details. Names are not restricted to nine categories.
-When author declarations exist, omit definitions: the tool adopts them verbatim. After success, read the canonical result and submit its success, counts and worldSchema through `submit-output`, including `preGameDone: true` explicitly. Do not repeat initialization to correct only the final submission.
+When author declarations exist, omit definitions: the tool adopts them verbatim. After success, call `submit-output` with `{}`. The host submits the canonical success, counts, worldSchema and `preGameDone: true` from the tool. Do not repeat initialization to correct only the final submission.

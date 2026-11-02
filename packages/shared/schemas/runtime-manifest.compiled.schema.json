@@ -789,6 +789,17 @@
     "output": {
       "type": "object",
       "properties": {
+        "from": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["tool"],
+          "additionalProperties": false
+        },
         "schema": {
           "type": "string",
           "minLength": 1

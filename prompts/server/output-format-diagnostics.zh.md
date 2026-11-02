@@ -5,6 +5,9 @@
 -->
 
 tool-description: 在完成必需的工具工作后，提交本 runtime 的最终结果。参数必须符合此 schema。若提交被拒绝，请修正报告的问题并再次调用此工具。提交成功会结束 runtime，但不代表更改已经保存。
+tool-source-description: 请在 {{ tool }} 成功后单独用 {} 调用本工具。宿主提交该业务工具最近一次成功返回的规范结果。被拒绝时按错误修正。提交成功不代表更改已保存。
+source-empty: 请只用 {} 调用 submit-output；宿主采用业务工具的规范结果。
+source-required: 请先成功调用 {{ tool }}，再用 {} 调用 submit-output。
 object-required: 参数必须是一个完整 JSON 对象。
 required-work: 请先成功完成必需的业务工具工作，并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
 required-work-tools: 请先成功完成必需的业务工具工作（{{ tools }}），并解决失败的业务调用，然后重新提交。不要重复已成功的写入。

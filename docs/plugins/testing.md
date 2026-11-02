@@ -577,3 +577,5 @@ pnpm test:plugin-lifecycle
 测试应加载真实清单，通过受限上下文执行 handler，再检查提交行和 `presentation.completed`，不能只测选图函数。先证明同一入口能提交合法自有状态，再测试缺少 / 歧义故事、隐藏输入、非法写入、Hook 改写、零额度、缓存命中、重试不补额度和提交时较新覆盖。使用假 gateway，断言实际派发次数；不需要付费模型。示例和契约见[进阶指南](./advanced.md#呈现选择器)与[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
 
 脚本中的 agent 成功回复应单独调用 `submit-output`，业务工具放在先前的回复里；修正最终提交时不要重复成功的写入。CLI 的 `llmObject` 构造最终提交，`llmContent` 刻意返回回复内容，用于拒绝测试。见[完成约定](../reference/plugins.md#agent-output-submission)。
+
+最终输出直接采用业务工具结果时，声明 [`io.output.from`](../reference/plugins.md#agent-output-submission)。工具成功后单独用 `{}` 调用 `submit-output`；离线假模型也提交 `{}`，不复制工具结果或模型视图包装。

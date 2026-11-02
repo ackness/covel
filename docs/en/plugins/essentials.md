@@ -153,6 +153,8 @@ For the list of built-in tools, see the [tools reference](../reference/tools.md)
 
 Every agent finishes with the host-generated `submit-output` tool. Use `completion.afterTools` for required business work before submission; see the [plugin reference](../reference/plugins.md#agent-output-submission).
 
+When final output comes directly from a business tool, declare [`io.output.from`](../reference/plugins.md#agent-output-submission). After tool success, call `submit-output` alone with `{}`. Scripted models also submit `{}` without copying tool content or model-view wrappers.
+
 ## How to use another plugin's results
 
 Find a plugin by capability, not by name. A capability has a versioned name, such as `narrative-engine@2`. To read the output of "the plugin that writes the story" for this turn, write three things:

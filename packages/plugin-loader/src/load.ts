@@ -840,6 +840,10 @@ export async function loadRuntime(
   if (parsed.manifest.runtimeType !== "function") {
     const effectiveSchema =
       outputSchema !== undefined ? outputSchema : outputContractSchema;
+    if (parsed.manifest.output?.from && effectiveSchema === undefined)
+      throw new Error(
+        `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
+      );
     if (effectiveSchema !== undefined) {
       try {
         assertAgentOutputObjectSchema(effectiveSchema);

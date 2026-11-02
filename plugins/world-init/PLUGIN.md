@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.47
+version: 0.0.48
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.
@@ -31,7 +31,6 @@ contributes:
     - update-dimensions
   hooks:
     - PreLLMCall
-    - ReviewAgentOutput
 ---
 
 # World Setup

@@ -259,7 +259,13 @@ export function compileRuntimeManifest(
     outputKind: visibility,
     ...(runtime.io?.concealed ? { concealed: true } : {}),
     ...(output
-      ? { output: { schema: output.schema, recordAs: output.recordAs } }
+      ? {
+          output: {
+            schema: output.schema,
+            recordAs: output.recordAs,
+            ...(output.from ? { from: output.from } : {}),
+          },
+        }
       : {}),
     ...(Object.keys(inputs).length ? { inputs } : {}),
     ...(inject.length || runtime.io?.payloadSchema

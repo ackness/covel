@@ -1,5 +1,3 @@
-import reviewWorldFacts from "../../../plugins/world-ir/server/review-output.js";
-import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { latestToolOutput, toolCall } from "./_helpers/agent-loop-fixture.js";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -68,7 +66,7 @@ class PipelineLLM implements LLMAdapter {
       if (canonical) {
         const output = this.tamper
           ? { ...canonical, summary: "Invented story facts." }
-          : canonical;
+          : {};
         this.tamper = false;
         return toolCall("submit-output", output);
       }
@@ -159,19 +157,6 @@ async function runPipeline(worldIrContent: string, tamper = false) {
     },
   };
   const llm = new PipelineLLM(worldIrContent, tamper);
-  const hookPipeline = createHookPipeline();
-  hookPipeline.register({
-    id: "own-facts-review",
-    pluginId: "world-ir",
-    event: "ReviewAgentOutput",
-    handler: async (ctx, payload) => {
-      const reviewed = reviewWorldFacts(ctx, payload);
-      return {
-        action: "continue",
-        ...(reviewed.replace ? { replace: reviewed.replace } : {}),
-      };
-    },
-  });
   const submitWorldFacts = makeSubmitWorldFacts({ tool });
   const toolExecutor = createToolExecutor({
     findTool: (name) =>
@@ -213,7 +198,6 @@ async function runPipeline(worldIrContent: string, tamper = false) {
     [narrator.manifest, worldIr.manifest, consumer],
     {
       llm,
-      hookPipeline,
       toolExecutor,
       store: await createMainLoopStore(),
       loadRuntime: async (manifest) => {
@@ -299,7 +283,7 @@ describe("shared WorldIR turn pipeline", () => {
       "submit-output",
     ]);
     expect(facts.toolCalls[1]?.output).toMatchObject({
-      error: { code: "review-rejected" },
+      error: { code: "invalid-output" },
     });
   });
 

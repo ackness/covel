@@ -238,3 +238,49 @@ describe("generated output contract", () => {
     }
   });
 });
+
+it("freezes the source identity with the admitted output schema", () => {
+  const from = { tool: "save-facts" };
+  const loaded = {
+    manifest: {
+      ...manifest,
+      tools: { plugin: ["save-facts"] },
+      output: { from },
+    },
+    promptTemplate: "",
+    outputSchema: schema,
+  };
+  const effective = resolveAgentOutput(loaded);
+  from.tool = "different";
+  expect(effective.from).toEqual({ tool: "save-facts" });
+  expect(Object.isFrozen(effective.from)).toBe(true);
+  expect(effective.provenance).toBe("tool-result");
+});
+
+it.each([
+  { output: { from: { tool: "save-facts" } }, tools: undefined },
+  {
+    output: { from: { tool: "submit-output" } },
+    tools: { plugin: ["submit-output"] },
+  },
+])("rejects programmatic invalid sources: %j", (fields) => {
+  expect(() =>
+    resolveAgentOutput({
+      manifest: { ...manifest, ...fields },
+      promptTemplate: "",
+      outputSchema: schema,
+    }),
+  ).toThrow(/authorized own or builtin/);
+});
+it("rejects a programmatic source without a loaded schema", () => {
+  expect(() =>
+    resolveAgentOutput({
+      manifest: {
+        ...manifest,
+        output: { from: { tool: "save-facts" } },
+        tools: { plugin: ["save-facts"] },
+      },
+      promptTemplate: "",
+    }),
+  ).toThrow(/requires a loaded output schema or contract/);
+});

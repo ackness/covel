@@ -144,3 +144,5 @@ Scene Stage dialogue templates use speaker-scoped portraits with local enlargeme
 Scene Stage also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly from the session theme menu and recoverable through Use default appearance.
 
 When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.
+
+World initialization, time, facts, event planning and action suggestions retain their validated tool results. Retrying final confirmation does not repeat successful business writes.

@@ -153,6 +153,8 @@ agent:
 
 每个 agent 都以宿主生成的 `submit-output` 提交最终输出。`completion.afterTools` 声明提交前必需的业务工作，见[插件参考](../reference/plugins.md#agent-output-submission)。
 
+最终输出直接采用业务工具结果时，声明 [`io.output.from`](../reference/plugins.md#agent-output-submission)。工具成功后单独用 `{}` 调用 `submit-output`；离线假模型也提交 `{}`，不复制工具结果或模型视图包装。
+
 ## 怎样用别的插件的结果
 
 按能力找，不按名字找。能力有一个带版本号的名字，例如 `narrative-engine@2`。要读“写故事的插件”这一回合的输出，写三处：

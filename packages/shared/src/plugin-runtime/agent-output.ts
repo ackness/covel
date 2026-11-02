@@ -14,7 +14,9 @@ export interface EffectiveAgentOutput {
   readonly toolName: typeof SUBMIT_OUTPUT_TOOL_NAME;
   readonly schema: Readonly<Record<string, unknown>>;
   readonly schemaSource: "loaded" | "host-story" | "host-system";
-  readonly provenance: "model-authored";
+  readonly provenance: "model-authored" | "tool-result";
+  /** Frozen source identity; parameters are {} while schema still validates the result. */
+  readonly from?: { readonly tool: string };
   readonly requiredWork: RequiredAgentWork;
 }
 
@@ -122,6 +124,33 @@ export function resolveAgentOutput(
     loaded.outputSchema !== undefined
       ? loaded.outputSchema
       : loaded.outputContractSchema;
+  const from = loaded.manifest.output?.from;
+  if (from) {
+    if (!declared)
+      throw new Error(
+        "io.output.from requires a loaded output schema or contract",
+      );
+    const tools = loaded.manifest.tools;
+    if (
+      ![
+        ...(tools?.builtin ?? []),
+        ...(tools?.plugin ?? []),
+        ...(tools?.datasets ?? []).flatMap(({ dataset, tools }) =>
+          tools.map((kind) => `${dataset}-${kind}`),
+        ),
+      ].includes(from.tool) ||
+      [
+        "submit-output",
+        "search-tools",
+        "suspend",
+        "delegate",
+        "delegate-batch",
+      ].includes(from.tool)
+    )
+      throw new Error(
+        "io.output.from.tool must name an authorized own or builtin business tool",
+      );
+  }
   const story = loaded.manifest.outputKind === "story";
   const schema =
     declared !== undefined ? declared : story ? storySchema : systemSchema;
@@ -130,7 +159,8 @@ export function resolveAgentOutput(
     toolName: SUBMIT_OUTPUT_TOOL_NAME,
     schema: freezeJson(structuredClone(schema)),
     schemaSource: declared ? "loaded" : story ? "host-story" : "host-system",
-    provenance: "model-authored",
+    provenance: from ? "tool-result" : "model-authored",
+    ...(from ? { from: Object.freeze({ tool: from.tool }) } : {}),
     requiredWork: requiredAgentWork(loaded.manifest),
   });
   effectiveOutputs.set(loaded, output);

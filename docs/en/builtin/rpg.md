@@ -249,6 +249,8 @@ The `id` and `name` must match the NPC's character setting. Later updates are ma
 
 ## Hidden Story Events (`story-events`)
 
+Event planning retains the validated tool result. Retrying final confirmation does not plan successful events again.
+
 World authors can set up plots that happen only when certain conditions are met. Until the conditions are met, neither the model nor the player can see the content. In the turn when the conditions are met, the narrative works the event into the story naturally.
 
 ### What you will see

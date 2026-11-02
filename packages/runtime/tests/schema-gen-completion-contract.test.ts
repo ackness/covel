@@ -27,7 +27,10 @@ const runtime: RuntimeManifest = {
   runtimeType: "agent",
   outputKind: "system",
   guard: "../../guard.js",
-  output: { schema: "./output.schema.json" },
+  output: {
+    schema: "./output.schema.json",
+    from: { tool: "initialize-world" },
+  },
   outputContract: "world-data-provider@1",
   tools: { plugin: ["initialize-world"] },
   requireToolUse: true,
@@ -87,7 +90,7 @@ describe("schema-gen completion and public output contract", () => {
           request.messages,
           "initialize-world",
         );
-        if (canonical) return toolCall("submit-output", canonical);
+        if (canonical) return toolCall("submit-output", {});
         return {
           content: "",
           toolCalls: [

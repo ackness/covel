@@ -77,12 +77,14 @@ function:
 
 这里新出现的东西：
 
-| 这一段                | 意思                                                                                    |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| `io.output.contract`  | 这个 runtime 的输出就是这项能力的内容。插件因此提供这项能力，别的插件可以 `requires` 它 |
-| `io.output.schema`    | 输出要符合的形状。不符合时这次运行失败                                                  |
-| `io.output.recordAs`  | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它                  |
-| `schedule.background` | 不写时调用方等它完成；写 `true` 是放到后台，见[后台工作与失败](#后台工作与失败)         |
+<!-- prettier-ignore -->
+| 这一段 | 意思 |
+| --- | --- |
+| `io.output.contract` | 这个 runtime 的输出就是这项能力的内容。插件因此提供这项能力，别的插件可以 `requires` 它 |
+| `io.output.schema` | 输出要符合的形状。不符合时这次运行失败 |
+| `io.output.from` | 直接采用业务工具的规范结果；成功后用 `{}` 调用提交工具，见[输出来源](../reference/plugins.md#agent-output-submission) |
+| `io.output.recordAs` | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它 |
+| `schedule.background` | 不写时调用方等它完成；写 `true` 是放到后台，见[后台工作与失败](#后台工作与失败) |
 
 规则：
 

@@ -47,6 +47,7 @@ describe("submission instruction language", () => {
           originalCall: call,
           requiredWorkMet: false,
           publicToolResults: [],
+          businessCalls: [],
           locale,
           hookOpts: {
             pipeline: undefined,
@@ -104,6 +105,7 @@ describe("submission instruction language", () => {
         originalCall: call,
         requiredWorkMet: false,
         publicToolResults: [],
+        businessCalls: [],
         locale,
         hookOpts: {
           pipeline: undefined,
@@ -126,3 +128,61 @@ describe("submission instruction language", () => {
     },
   );
 });
+
+it.each(["en-US", "zh-CN"])(
+  "localizes sourced submission instructions and rejections in %s",
+  async (locale) => {
+    const runtime = manifest({ output: { from: { tool: "mark" } } });
+    const contract = agentOutputContract({
+      manifest: runtime,
+      promptTemplate: "",
+      outputSchema: { type: "object" },
+    });
+    const definition = await outputToolDefinition(contract, locale);
+    expect(definition.description).toContain(
+      locale === "zh-CN" ? "成功后" : "succeeds",
+    );
+    expect(definition.description).toContain("mark");
+    const call = { id: "final", name: "submit-output", arguments: "{}" };
+    const args = {
+      contract,
+      manifest: runtime,
+      call,
+      originalCall: call,
+      requiredWorkMet: true,
+      publicToolResults: [],
+      businessCalls: [],
+      locale,
+      hookOpts: {
+        pipeline: undefined,
+        sessionId: "s",
+        turnId: "t",
+        pluginId: runtime.pluginId,
+        runtimeId: runtime.name,
+      },
+    };
+    expect(await evaluateSubmission(args)).toMatchObject({
+      rejection: {
+        code: "required-work",
+        correction: "toolUse",
+        message: expect.stringContaining(
+          locale === "zh-CN" ? "请先成功调用" : "Call mark successfully",
+        ),
+      },
+    });
+    expect(
+      await evaluateSubmission({
+        ...args,
+        call: { ...call, arguments: '{"extra":true}' },
+      }),
+    ).toMatchObject({
+      rejection: {
+        code: "invalid-output",
+        correction: "outputRepair",
+        message: expect.stringContaining(
+          locale === "zh-CN" ? "请只用 {}" : "with {} only",
+        ),
+      },
+    });
+  },
+);

@@ -430,11 +430,18 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.io.output`
 
-| Field      | Type   | Required | Description                                                                                          |
-| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
-| `contract` | string | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. |
-| `schema`   | string | no       | Private schema that validates the runtime's output.                                                  |
-| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.              |
+| Field      | Type   | Required | Description                                                                                                                                             |
+| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `from`     | object | no       | Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract. |
+| `contract` | string | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.                                                    |
+| `schema`   | string | no       | Private schema that validates the runtime's output.                                                                                                     |
+| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.                                                                 |
+
+## `runtime.io.output.from`
+
+| Field  | Type   | Required | Description                                                                                              |
+| ------ | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
+| `tool` | string | yes      | Name of the allowlisted own or builtin business tool whose latest successful public result is submitted. |
 
 ## `runtime.agent`
 

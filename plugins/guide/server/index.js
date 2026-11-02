@@ -1,4 +1,3 @@
-import reviewOutput from "./review-output.js";
 /**
  * Unified server entry (PLUGIN.md `entry`) — registers guide's local tool and
  * projects its latest suggestions into the stage choices slot.
@@ -6,7 +5,6 @@ import reviewOutput from "./review-output.js";
 import makeGenerateGuide from "../tools/generate-guide.js";
 
 export default function (covel) {
-  covel.on("ReviewAgentOutput", reviewOutput);
   covel.registerTool(makeGenerateGuide(covel.toolkit));
   covel.provideExtension("ui.slot@1", "choices", {
     async handler(_input, ctx) {

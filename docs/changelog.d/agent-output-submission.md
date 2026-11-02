@@ -1,5 +1,7 @@
 ### Added
 
+- **Agents can submit a business tool’s canonical result without copying it.** Declare `io.output.from: { tool: name }`, then call `submit-output` with `{}` after that tool succeeds. The host validates and reviews its latest successful public content, including results restored after suspension. Extra fields and missing work return correlated errors. Bundled world time, world facts, world initialization, story planning and action suggestions use this path. See [output sources](../en/reference/plugins.md#agent-output-submission).
+
 - **Final output has a dedicated review hook.** `ReviewAgentOutput` checks validated submissions using public results of the subject runtime’s own tools. It can request correction, without replacing accepted output or creating effects. `PostLLMResponse` continues to inspect actual provider responses. See [hooks](../en/reference/hooks.md#reviewagentoutput).
 - **Complete stories can opt into segment reveal.** The shared `Reveal` component and template metadata reveal whole blocks within two seconds, with Show all and a device-local Instant text override. Reduced motion, history, reconnect, reload and view remount are instant. Semantic content and copy/export remain complete. See [Reveal](../en/reference/ui-components.md#complete-content-reveal).
 

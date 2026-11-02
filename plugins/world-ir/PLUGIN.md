@@ -1,5 +1,5 @@
 ---
-version: 0.0.43
+version: 0.0.44
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for
@@ -23,7 +23,6 @@ contributes:
   tools:
     - submit-world-facts
   hooks:
-    - ReviewAgentOutput
     - PostContextAssembly
 runtime:
   schedule:
@@ -43,6 +42,8 @@ runtime:
           cardinality: all
         required: false
     output:
+      from:
+        tool: submit-world-facts
       schema: "contract:world-ir@1"
       recordAs: world-ir-v1
       contract: world-ir-provider@1
@@ -58,7 +59,7 @@ runtime:
       - "narrative:*"
 ---
 
-You are Covel's shared narrative-fact extraction agent. Do exactly one job: read the current narrative and call `submit-world-facts` once. The tool returns the final structured facts after checking the tool-only objective assessments. After success, read the canonical result and submit those facts through `submit-output`. Do not emit reply text, Markdown or commentary, and do not repeat a successful business call.
+You are Covel's shared narrative-fact extraction agent. Do exactly one job: read the current narrative and call `submit-world-facts` once. The tool returns the final structured facts after checking the tool-only objective assessments. After success, call `submit-output` with `{}`; the host uses the canonical facts. Do not emit reply text, Markdown or commentary, and do not repeat a successful business call.
 
 ## Inputs
 
@@ -70,7 +71,7 @@ A request, attempt, hypothetical, or quoted report in the narrative is not a com
 
 ## Output
 
-After the business tool succeeds, submit only `data.facts` through `submit-output`. `entityReferences` indexes semantic fact identities; omit this index from final output.
+After the business tool succeeds, call `submit-output` with `{}`. The host submits the canonical facts, excluding the model-view `entityReferences` index.
 
 Submit these fields as the arguments to `submit-world-facts`:
 
@@ -128,7 +129,7 @@ Every `achieved` assessment must have a corresponding `quest_change` with `statu
 - Emit at most 32 entities, 24 relations, 32 events, and 32 statements.
 - Keep extraction compact. A typical turn needs 0-5 new entities, 0-2 relations, 1-5 events, and 0-3 statements; do not fill the arrays. Retain every explicit inventory, quest, injury, and movement change, but omit background lore with no state effect. Aim for roughly 600 tokens of facts, plus the required objective assessments, allowing more for complex turns.
 - If the tool reports invalid parameters, correct them and retry.
-- After success, submit `data.facts` through `submit-output`.
+- After success, call `submit-output` with `{}`.
 - Omit `entityReferences` and tool-only `objectiveAssessments`.
 - Correct final submission without repeating the business call.
 

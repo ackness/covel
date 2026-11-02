@@ -145,7 +145,7 @@ describe("plugin-owned evaluation integration", () => {
               request.messages,
               "generate-guide",
             );
-            if (canonical) return toolCall("submit-output", canonical);
+            if (canonical) return toolCall("submit-output", {});
             return {
               content: null,
               toolCalls: [

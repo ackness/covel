@@ -108,7 +108,7 @@ import {
 } from "@covel/context";
 
 export interface AgentToolLoopCompleted {
-  /** Kernel-owned, schema-validated model output. Never a tool effect. */
+  /** Kernel-owned, schema-validated submitted output. Never a tool effect. */
   readonly acceptedOutput: Readonly<Record<string, unknown>> | null;
   readonly collectedToolCalls: ToolCallRecord[];
   readonly executedToolCalls: ExecutedToolCallState[];
@@ -876,6 +876,7 @@ async function runAgentToolLoopWithinBudget(
           call: soleOutcome.toolCall,
           originalCall: rawResponse.toolCalls[0]!,
           requiredWorkMet: requiredWorkMet(),
+          businessCalls: executedToolCalls,
           publicToolResults: collectedToolCalls.map(projectToolRecord),
           hookOpts,
           locale: input.locale,
@@ -1136,6 +1137,7 @@ async function runAgentToolLoopWithinBudget(
                     schemaSource: output.schemaSource,
                     provenance: output.provenance,
                     requiredWork: output.requiredWork,
+                    ...(output.from ? { from: output.from } : {}),
                   },
                 },
                 ...(promptSegments ? { promptSegments } : {}),

@@ -28,8 +28,8 @@
     "zh": "2fd6118f306caeaa"
   },
   "plugins/guide/PLUGIN.md": {
-    "en": "f89099fb9e657fb1",
-    "zh": "0649cc2df296b13f"
+    "en": "790374ead3f05950",
+    "zh": "4a35817f9e8cc160"
   },
   "plugins/history-compaction/prompts/server/compactor.md": {
     "en": "34bf821fd1dba882",
@@ -44,8 +44,8 @@
     "zh": "55bb29a2147b8b5c"
   },
   "plugins/story-events/runtimes/plot/RUNTIME.md": {
-    "en": "aca69cc592d600d7",
-    "zh": "ee325b67839ff3e2"
+    "en": "16a1f3d41c1a6feb",
+    "zh": "a7c522e2d39964d2"
   },
   "plugins/turn-policy/prompts/director.md": {
     "en": "793eb4a2c427ed05",
@@ -56,15 +56,15 @@
     "zh": "75efc4b6e63dcffc"
   },
   "plugins/world-init/runtimes/schema-gen/RUNTIME.md": {
-    "en": "531a54b06ce01092",
-    "zh": "5b2d1a0543deed66"
+    "en": "88f0eaa93b7dc51c",
+    "zh": "ae8fe8baed48508e"
   },
   "plugins/world-ir/PLUGIN.md": {
-    "en": "3fd69db32e2b0f06",
-    "zh": "427a5ff52da8c97a"
+    "en": "e5a57607b68c338e",
+    "zh": "f05d5c2e11c5dc39"
   },
   "plugins/world-time/runtimes/advance/RUNTIME.md": {
-    "en": "feeda476521b2eef",
-    "zh": "170ebd28ad205674"
+    "en": "b81aecacc5e5ebca",
+    "zh": "ae3ed7cc8376f48b"
   }
 }

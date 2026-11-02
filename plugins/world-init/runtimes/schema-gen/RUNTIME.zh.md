@@ -7,4 +7,4 @@
 至少提供 15 个角色属性，覆盖 stats、bio、abilities、equipment、social。
 这是供尚未命名的新角色共用的 schema，不是设定中某个人物的角色卡。每个新玩家和 NPC 都会继承 `defaultValue`。姓名、身份、背景等个人身份字段归入 `bio`，初始值应中性或留空；绝不能复制某个具名人物的身份或经历。工具会清空生成的 `bio` 文本和复合类型默认值，并移除 `bio` 枚举默认值。数值和布尔默认值会保留，应使用通用初始值，不要照搬某个 NPC 的当前数值。
 世界只有设定文本、没有作者声明的维度时，提供以稳定自定义 ID 为键的 definitions。每个 definition 包含 name、schema（受支持的 JSON Schema 子集）、initialValue，以及可选的 updateRule。不要编造设定中没有依据的细节。名称不限于九个类别。
-已有作者声明时省略 definitions：工具会原样采用作者声明。成功后读取工具的规范结果，用 `submit-output` 提交 success、数量和 worldSchema，并明确包含 `preGameDone: true`。修正最终提交时不要重复初始化。
+已有作者声明时省略 definitions：工具会原样采用作者声明。成功后用 `{}` 调用 `submit-output`。宿主采用工具的规范 success、数量、worldSchema 和 `preGameDone: true`。修正最终提交时不要重复初始化。

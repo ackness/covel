@@ -125,4 +125,4 @@ sources:
 
 `pnpm --filter @covel/plugin-story-events test` 运行条件判断、选择逻辑与策划工具的单元测试；`apps/server/tests/api/story-events-hidden.test.ts` 覆盖从规划、隐藏存储到揭示的完整链路。
 
-规划 agent 先成功调用 `plan-story-events`，再用 `submit-output` 提交规范事件计划。插件自己的 `ReviewAgentOutput` 阻止最终提交改写工具已校验的条件；函数 runtime 仍直接返回结果。
+规划 agent 先成功调用 `plan-story-events`，再用 `{}` 调用 `submit-output`。`io.output.from.tool: plan-story-events` 直接采用已校验的规范事件计划，不需要模型复制；函数 runtime 仍直接返回结果。

@@ -301,6 +301,7 @@ async function executeResumedRuntime(
     schemaSource: output.schemaSource,
     provenance: output.provenance,
     requiredWork: output.requiredWork,
+    ...(output.from ? { from: output.from } : {}),
   };
   const correctionKinds = [
     "toolUse",

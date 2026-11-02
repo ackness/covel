@@ -222,6 +222,19 @@ export const runtimeAuthoringManifestSchema = z
           .optional(),
         output: z
           .strictObject({
+            from: z
+              .strictObject({
+                tool: z
+                  .string()
+                  .min(1)
+                  .describe(
+                    "Name of the allowlisted own or builtin business tool whose latest successful public result is submitted.",
+                  ),
+              })
+              .describe(
+                "Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract.",
+              )
+              .optional(),
             contract: contractIdSchema
               .describe(
                 "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.",

@@ -44,8 +44,12 @@ export async function outputToolDefinition(
   const text = await loadOutputText(locale);
   return {
     name: output.toolName,
-    description: text("tool-description"),
-    parameters: output.schema,
+    description: output.from
+      ? text("tool-source-description", { tool: output.from.tool })
+      : text("tool-description"),
+    parameters: output.from
+      ? { type: "object", properties: {}, additionalProperties: false }
+      : output.schema,
     strict: "auto",
   };
 }

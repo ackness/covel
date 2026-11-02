@@ -396,6 +396,12 @@ export function validatePluginFiles(
       }
       if (convention !== undefined) outputSchema = JSON.parse(convention);
     }
+    if (outputSchema === undefined && runtime.outputContract)
+      outputSchema = packageManifest.contractSchemas?.[runtime.outputContract];
+    if (runtime.output?.from && outputSchema === undefined)
+      throw new Error(
+        `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
+      );
     if (runtime.runtimeType !== "function" && outputSchema !== undefined) {
       try {
         assertAgentOutputObjectSchema(outputSchema);

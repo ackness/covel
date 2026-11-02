@@ -423,8 +423,8 @@ export default function ({ tool }) {
         return withModelView(completed, {
           summary:
             instructionLocaleFor(context?.locale) === "zh"
-              ? "用 `submit-output` 原样提交 data.facts。entityReferences 标识事实实体，保留其中的业务引用；不要把这个索引放进最终输出。"
-              : "Submit data.facts unchanged through `submit-output`. entityReferences identifies fact entities and preserves their business references; do not include this index in final output.",
+              ? "成功后用 {} 调用 `submit-output`，宿主提交规范事实。entityReferences 标识事实实体，保留其中的业务引用；不要把这个索引放进最终输出。"
+              : "After success call `submit-output` with {}; the host submits the canonical facts. entityReferences identifies fact entities and preserves their business references; do not include this index in final output.",
           // Entity IDs are part of the fact contract, including an entity with no
           // incoming edge. This index makes their semantic references explicit
           // to the ordinary model projection; it contains no store row metadata.

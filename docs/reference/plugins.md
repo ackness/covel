@@ -427,7 +427,9 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 每个 agent 都用宿主生成的 `submit-output` 提交最终结果。故事和系统 agent 使用同一个工具；回复正文不是输出通道。提交成功只结束计算，写入仍要通过 proposal 校验和提交。
 
-工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
+未声明输出来源时，工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
+
+若最终输出就是某个业务工具的结果，可声明 `io.output.from: { tool: save-facts }`。该工具必须在本 runtime 的自有／builtin 业务工具白名单内，不能是宿主控制工具或可选导入服务；函数 runtime 不能使用。必须实际加载输出 schema 或契约，约定的 `output.schema.json` 也可用。模型在工具成功后单独用 `{}` 调用 `submit-output`，不能传候选字段。宿主取本次循环中该工具最近一次成功调用的公共正文（不是 `summary` / `data` / `staged` 模型视图），按输出 schema 和既有契约门控校验，再照常运行 `ReviewAgentOutput`。没有成功调用时返回 `required-work`，消耗 `toolUse` 预算；多余字段返回 `invalid-output`。挂起保留输出来源与执行器结果，恢复后不用重跑成功工作。工具效果仍只通过原来的 proposal 提交。
 
 实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
 
@@ -436,7 +438,7 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 - 故事 agent：必需的非空白 `narrativeOutput: string`，可选 `yield: user | continue`。
 - 系统 agent：开放对象，可选 `narrativeOutput: string`、`completion: done | pending`、`preGameDone: boolean`，允许其他业务字段。`{}` 表示没有业务输出。需要给下游提供类型化输出时应声明 schema。
 
-`submit-output` 自动可用，不写进工具白名单、注册声明或 `defer`。函数仍返回 handler 结果，不能调用这个工具。参数里的数据始终是模型输出，不能借 `pluginData`、UI 或事件形状产生写入。
+`submit-output` 自动可用，不写进工具白名单、注册声明或 `defer`。函数仍返回 handler 结果，不能调用这个工具。提交的数据不能借 `pluginData`、UI 或事件形状产生写入。
 
 `agent.completion` 只声明提交前必须完成的业务工作：
 

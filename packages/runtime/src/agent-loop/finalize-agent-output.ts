@@ -13,7 +13,7 @@ import { type ExecutedToolCallState } from "../turn-executor/turn-output-helpers
 
 export interface FinalizeAgentOutputParams {
   readonly manifest: RuntimeManifest;
-  /** Validated model-authored submission; its fields cannot produce effects. */
+  /** Validated submission; its fields cannot produce additional effects. */
   readonly acceptedOutput: Readonly<Record<string, unknown>>;
   readonly executedToolCalls: readonly ExecutedToolCallState[];
   readonly pendingProposals: readonly Proposal[];

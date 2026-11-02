@@ -468,11 +468,13 @@ The tool returns `{ ui: [{ parts, layout? }] }`, and the framework builds a `ui.
 
 ### submit-output
 
-Every agent automatically receives this host control tool. Its parameters are the runtime’s actual loaded output schema, or the [host object default](./plugins.md#agent-output-submission) when none was authored. It is absent from the global registry; each admitted run owns its frozen definition. Functions cannot call it.
+Every agent automatically receives this host control tool. Without an output source, its parameters are the runtime’s actual loaded output schema, or the [host object default](./plugins.md#agent-output-submission) when none was authored. It is absent from the global registry; each admitted run owns its frozen definition. Functions cannot call it.
+
+With `io.output.from: { tool: name }`, parameters become a strict empty object `{}`. The host uses that tool’s latest successful public content in this loop, including restored results, rather than model-view wrappers or hook-rewritten display content. No successful call produces `required-work` using the `toolUse` budget; extra fields produce `invalid-output`. The canonical result still passes the output schema, required work and `ReviewAgentOutput`. See [output sources](./plugins.md#agent-output-submission) for declaration constraints.
 
 Complete required business tool work, read the results, then call `submit-output` alone. Pass `{}` for no business output when the schema permits it. If rejected, correct the reported problems and call again. Success ends computation; it does not confirm that data has been saved.
 
-Arguments are always model-authored data. The host does not extract proposals, UI, interactions, notifications or events from them. Tool success and save commit remain separate. `submit-output` is not business work, cannot be deferred, and cannot appear in plugin tool, service import, dataset names or explicit tool allowlists.
+Submitted data creates no additional proposals, UI, interactions, notifications or events. Tool success and save commit remain separate. `submit-output` is not business work, cannot be deferred, and cannot appear in plugin tool, service import, dataset names or explicit tool allowlists.
 
 Arguments must be one complete JSON object: no fence stripping, prefix extraction or truncated JSON repair. Classify once in batch/JSON/schema/story-shape, required-work, then `ReviewAgentOutput` order. Error codes are `invalid-json`, `invalid-output`, `required-work`, `review-rejected` or `submission-batch`, with bounded field or position guidance. Mixed or duplicate submissions reject before any same-batch business call executes, answering every original call ID. Earlier successful work is retained. `PostToolUse` may rewrite visible text but cannot change private acceptance; termination without acceptance fails.
 
@@ -1325,7 +1327,7 @@ At the start of a game, it does two things at once: it sets the character attrib
 | valueType    | enum           |          | Value type of a `map` (`string` / `number` / `boolean`)               |
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
-**Content output**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`. Code and `world-data-provider@1` still read the complete content. The model sees this canonical result in `data` alongside `summary` (for example, `World initialized: 15 attributes, 2 dimensions.`), so it can submit it unchanged through `submit-output`, explicitly including `preGameDone: true`. The summary uses English or Simplified Chinese according to the instruction language. Staged changes still carry the `staged` notice.
+**Content output**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`. Code and `world-data-provider@1` still read the complete content. The model sees this canonical result in `data` alongside `summary` (for example, `World initialized: 15 attributes, 2 dimensions.`). After success, the agent calls `submit-output` with `{}` and the host uses the complete tool content, retaining `preGameDone: true`. The summary uses English or Simplified Chinese according to the instruction language. Staged changes still carry the `staged` notice.
 
 Generated `defaultValue`s are starting values for every new player and NPC, not examples of a person from the lore. Name, role, background, and other identity fields belong in `bio`, with neutral or empty values. The tool clears generated `bio` string defaults to empty strings, arrays to empty arrays, and objects and maps to empty objects; it removes enum defaults. Nested biography fields follow the same rules. Numeric and boolean defaults remain. The guard adopts author-provided schemas unchanged, without this normalization.
 
@@ -1337,7 +1339,7 @@ Whose dimension definitions are used:
 
 `worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
 
-This runtime requires `initialize-world` to succeed before final submission. The agent reads its result and calls `submit-output` with the object matching its output schema.
+This runtime requires `initialize-world` to succeed before final submission. After success, the agent calls `submit-output` with `{}`; its declared output source supplies the canonical object.
 
 **Used by**: `world-init/schema-gen`
 
@@ -1457,7 +1459,7 @@ The argument schema extends `worldIRV1Schema` with tool-only assessments, and ru
 
 The tool declares `{stagesWrites:false, idempotent:true}`. Reference validation after completion returns `invalid-input` with a hint to declare every referenced id in `entities` and retry.
 
-The tool returns filled-in, validated facts after removing assessments, without persistent proposals. The public model view exposes canonical facts in `data.facts`; `data.entityReferences` indexes semantic fact identities so ordinary projection retains required entity IDs even before an incoming edge exists. The index is not final output and contains no store row metadata. `completion.afterTools: [submit-world-facts]` requires successful extraction before submitting `data.facts` through `submit-output`. The plugin's `ReviewAgentOutput` rejects changes to the canonical result. Correcting final output does not repeat extraction, and the `contract:world-ir@1` business shape stays unchanged.
+The tool returns filled-in, validated facts after removing assessments, without persistent proposals. The public model view exposes canonical facts in `data.facts`; `data.entityReferences` indexes semantic fact identities so ordinary projection retains required entity IDs even before an incoming edge exists. The index is not final output and contains no store row metadata. `completion.afterTools: [submit-world-facts]` requires successful extraction before calling `submit-output` with `{}`. `io.output.from.tool: submit-world-facts` supplies the canonical facts directly without copying the model view. Correcting final output does not repeat extraction, and the `contract:world-ir@1` business shape stays unchanged.
 
 #### Per-objective assessment
 

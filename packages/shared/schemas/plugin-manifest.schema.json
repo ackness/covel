@@ -1638,6 +1638,19 @@
             "output": {
               "type": "object",
               "properties": {
+                "from": {
+                  "type": "object",
+                  "properties": {
+                    "tool": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Name of the allowlisted own or builtin business tool whose latest successful public result is submitted."
+                    }
+                  },
+                  "required": ["tool"],
+                  "additionalProperties": false,
+                  "description": "Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract."
+                },
                 "contract": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",

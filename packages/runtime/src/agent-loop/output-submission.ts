@@ -5,6 +5,7 @@ import type {
 } from "@covel/shared";
 import { runReviewAgentOutputHook } from "../hooks/wire-helpers.js";
 import { isRecord } from "../utils/is-record.js";
+import type { ExecutedToolCallState } from "../turn-executor/turn-output-helpers.js";
 import type { AgentOutputContract } from "./agent-output-contract.js";
 import type { CorrectionKind } from "./correction-policy.js";
 import {
@@ -62,6 +63,7 @@ export async function evaluateSubmission(args: {
   readonly originalCall: LLMToolCall;
   readonly requiredWorkMet: boolean;
   readonly publicToolResults: readonly ToolCallRecord[];
+  readonly businessCalls: readonly ExecutedToolCallState[];
   readonly hookOpts: Parameters<typeof runReviewAgentOutputHook>[0];
   readonly locale?: string;
 }): Promise<
@@ -86,6 +88,27 @@ export async function evaluateSubmission(args: {
         (await loadOutputText(args.locale))("object-required"),
       ),
     };
+  if (args.contract.from) {
+    if (Object.keys(candidate).length)
+      return {
+        rejection: rejectOutput(
+          "invalid-output",
+          (await loadOutputText(args.locale))("source-empty"),
+        ),
+      };
+    const tool = args.contract.from.tool;
+    const source = [...args.businessCalls]
+      .reverse()
+      .find((call) => call.name === tool && call.success && !call.refused);
+    if (!source)
+      return {
+        rejection: rejectOutput(
+          "required-work",
+          (await loadOutputText(args.locale))("source-required", { tool }),
+        ),
+      };
+    candidate = source.result;
+  }
   const validation = args.contract.validate(candidate);
   if (!validation.valid)
     return {
@@ -95,6 +118,14 @@ export async function evaluateSubmission(args: {
           .slice(0, 5)
           .map((error) => error.slice(0, 200))
           .join("; "),
+      ),
+    };
+  // The result can be any JSON value even though the admitted schema requires an object.
+  if (!isRecord(candidate))
+    return {
+      rejection: rejectOutput(
+        "invalid-output",
+        (await loadOutputText(args.locale))("object-required"),
       ),
     };
   if (args.manifest.outputKind === "story") {
