@@ -697,10 +697,12 @@ for (const width of [360, 1440])
         .getByRole("button", { name: "返回默认视图", exact: true })
         .click();
       await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      const currentParagraph = page
+        .getByTestId("stage-dialog")
+        .locator('[data-stage-paragraph][data-reader-current="true"]');
+      await expect(currentParagraph).toHaveText("Public reading theme story.");
       await expect(
-        page
-          .getByTestId("stage-dialog")
-          .locator('[data-covel-theme-part="dialogue"]'),
+        currentParagraph.locator('[data-covel-theme-part="dialogue"]'),
       ).toHaveCSS("color", "rgb(245, 234, 210)");
       await page.getByRole("button", { name: "全屏舞台", exact: true }).click();
       const reset = page.getByRole("button", {
@@ -832,10 +834,12 @@ for (const width of [360, 1440])
         .frameLocator("iframe")
         .getByRole("button", { name: "Fill viewport", exact: true })
         .click();
+      const currentParagraph = page
+        .getByTestId("stage-dialog")
+        .locator('[data-stage-paragraph][data-reader-current="true"]');
+      await expect(currentParagraph).toHaveText("Public reading theme story.");
       await expect(
-        page
-          .getByTestId("stage-dialog")
-          .locator('[data-covel-theme-part="dialogue"]'),
+        currentParagraph.locator('[data-covel-theme-part="dialogue"]'),
       ).toHaveCSS("color", "rgb(245, 234, 210)");
       await page.getByTestId("stage-immersive-toggle").click();
       await expectSandboxStory(input, "Public reading theme story.");

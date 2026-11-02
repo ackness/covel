@@ -320,6 +320,15 @@ export async function prepareEnsemble(
       .getByLabel("Strategy", { exact: true });
     await control.selectOption(value);
     await expect(control).toHaveValue(value);
+    if (value === "list") {
+      // An empty order preserves the incoming cast order, which follows salience.
+      const order = page
+        .getByRole("dialog")
+        .getByLabel("Actor order", { exact: true });
+      await order.fill("Mara\nIvo");
+      await order.blur();
+      await expect(order).toHaveValue("Mara\nIvo");
+    }
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Close", exact: true })
