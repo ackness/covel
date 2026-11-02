@@ -1,4 +1,4 @@
-# 4466 models; levels: provider-default disabled automatic none minimal low medium high xhigh max
+# 4686 models; levels: provider-default disabled automatic none minimal low medium high xhigh max
 
 # Offered levels and the fields each level sends, per provider and protocol
 
@@ -427,7 +427,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 08b51db5 (55 models, e.g. aihubmix/command-a-plus-05-2026)
+## fields 08b51db5 (69 models, e.g. aihubmix/command-a-plus-05-2026)
 provider custom:
   (no protocol)
     profile: compatible default=automatic [disabled automatic]
@@ -1259,7 +1259,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 0f922369 (14 models, e.g. baseten/zai-org/GLM-5.2)
+## fields 0f922369 (18 models, e.g. aiand/zai-org/glm-5.2)
 provider custom:
   (no protocol)
     profile: compatible default=max [disabled high max]
@@ -1885,7 +1885,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 12053068 (150 models, e.g. alibaba/unknown-model)
+## fields 12053068 (160 models, e.g. alibaba/unknown-model)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -2652,7 +2652,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 264adbd5 (10 models, e.g. aihubmix/gemini-3-flash-preview)
+## fields 264adbd5 (11 models, e.g. aihubmix/gemini-3-flash-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [minimal low medium high]
@@ -2760,7 +2760,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 292f9743 (54 models, e.g. DeepSeek-V4-Flash)
+## fields 292f9743 (68 models, e.g. DeepSeek-V4-Flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=high [disabled low high max]
@@ -2950,7 +2950,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 33c4e8ba (55 models, e.g. aihubmix/agnes-2.5-flash)
+## fields 33c4e8ba (57 models, e.g. aihubmix/agnes-2.5-flash)
 provider custom:
   (no protocol)
     profile: compatible default=- [disabled automatic]
@@ -3579,7 +3579,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 374a63ed (11 models, e.g. aihubmix/step-3.7-flash)
+## fields 374a63ed (13 models, e.g. aihubmix/step-3.7-flash)
 provider custom:
   (no protocol)
     profile: compatible default=- [low medium high]
@@ -3997,7 +3997,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 3af1460e (3 models, e.g. azure_ai/grok-4.3)
+## fields 3af1460e (4 models, e.g. azure_ai/grok-4.3)
 provider custom,openai,anthropic,deepseek,google,dashscope:
   (no protocol)
     profile: xai default=high [none low medium high]
@@ -4139,7 +4139,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 3e731a43 (66 models, e.g. aihubmix/grok-4.6)
+## fields 3e731a43 (71 models, e.g. aihubmix/grok-4.6)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: xai default=high [low medium high xhigh]
@@ -4188,7 +4188,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 40163ab7 (32 models, e.g. azure_ai/DeepSeek-V4-Flash-0731)
+## fields 40163ab7 (33 models, e.g. azure_ai/DeepSeek-V4-Flash-0731)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=high [none low high max]
@@ -4237,7 +4237,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 4020184b (1 models, e.g. qwen3.5-flash)
+## fields 4020184b (2 models, e.g. kyma/qwen3.7-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [disabled automatic low(2048) medium(8192) high(16384)]
@@ -4281,7 +4281,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 48046c0e (48 models, e.g. azure/eu/gpt-5)
+## fields 48046c0e (49 models, e.g. azure/eu/gpt-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [minimal low medium high]
@@ -4692,7 +4692,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 50665211 (136 models, e.g. azure/eu/gpt-5-codex)
+## fields 50665211 (139 models, e.g. aiand/openai/gpt-oss-120b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [low medium high]
@@ -5631,7 +5631,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 70282732 (26 models, e.g. aihubmix/qwen3.8-flash)
+## fields 70282732 (31 models, e.g. aiand/qwen/qwen3.8-27b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=xhigh [disabled automatic low medium xhigh]
@@ -5675,7 +5675,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 70600c84 (5 models, e.g. aihubmix/hy3)
+## fields 70600c84 (6 models, e.g. aihubmix/hy3)
 provider custom:
   (no protocol)
     profile: compatible default=- [none low high]
@@ -6739,7 +6739,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: high (<model> cannot disable thinking; using its lowest supported setting (high).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7af22a68 (297 models, e.g. aihubmix/claude-haiku-4-5)
+## fields 7af22a68 (302 models, e.g. aihubmix/claude-haiku-4-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -6776,7 +6776,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7b7c8300 (1 models, e.g. cerebras/gemma-4-31b)
+## fields 7b7c8300 (2 models, e.g. cerebras/gemma-4-31b)
 provider custom:
   (no protocol)
     profile: compatible default=- [none max]
@@ -7067,7 +7067,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7cd6eaf6 (86 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
+## fields 7cd6eaf6 (95 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=high [disabled high max]
@@ -7113,7 +7113,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7d4c23ed (1657 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
+## fields 7d4c23ed (1707 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
 provider custom:
   (no protocol)
     profile: none
@@ -7391,7 +7391,7 @@ provider dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7d8e3822 (78 models, e.g. aihubmix/claude-fable-5)
+## fields 7d8e3822 (83 models, e.g. aihubmix/claude-fable-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [low medium high xhigh max]
@@ -7443,7 +7443,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7dc075a1 (9 models, e.g. deepinfra/google/gemma-4-31B-it)
+## fields 7dc075a1 (10 models, e.g. aiand/google/gemma-4-31b-it)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=- [disabled automatic]
@@ -7485,7 +7485,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 842edcd7 (12 models, e.g. azure_ai/mistral-medium-3-5)
+## fields 842edcd7 (14 models, e.g. azure_ai/mistral-medium-3-5)
 provider custom:
   (no protocol)
     profile: compatible default=- [none low medium high max]
@@ -7895,7 +7895,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 890864de (13 models, e.g. anthropic.claude-opus-4-5-20251101-v1:0)
+## fields 890864de (14 models, e.g. anthropic.claude-opus-4-5-20251101-v1:0)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high]
@@ -7944,7 +7944,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8a110220 (164 models, e.g. aihubmix/gpt-5.3-codex)
+## fields 8a110220 (173 models, e.g. aihubmix/gpt-5.3-codex)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [none minimal low medium high xhigh]
@@ -7999,7 +7999,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8a49d307 (17 models, e.g. aihubmix/hy4-preview)
+## fields 8a49d307 (18 models, e.g. aihubmix/hy4-preview)
 provider custom:
   (no protocol)
     profile: compatible default=- [none high]
@@ -8290,7 +8290,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8a7ba322 (32 models, e.g. aihubmix/grok-4-20-non-reasoning)
+## fields 8a7ba322 (33 models, e.g. aihubmix/grok-4-20-non-reasoning)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: xai default=high [low medium high]
@@ -8336,7 +8336,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8dda78e5 (41 models, e.g. aihubmix/glm-5.3)
+## fields 8dda78e5 (56 models, e.g. aiand/moonshotai/kimi-k3)
 provider custom:
   (no protocol)
     profile: compatible default=max [low high max]
@@ -8743,7 +8743,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 92eae6cd (5 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
+## fields 92eae6cd (6 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=xhigh [automatic low medium xhigh]
@@ -8787,7 +8787,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 94a111ce (214 models, e.g. aihubmix/qwen3-coder-next)
+## fields 94a111ce (220 models, e.g. aiand/qwen/qwen3.6-27b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [disabled automatic]
@@ -9520,7 +9520,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9a276813 (477 models, e.g. 1024-x-1024/gpt-image-1.5)
+## fields 9a276813 (482 models, e.g. 1024-x-1024/gpt-image-1.5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -9566,7 +9566,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9ccac5f1 (25 models, e.g. azure_ai/deepseek-v3.1)
+## fields 9ccac5f1 (26 models, e.g. azure_ai/deepseek-v3.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=- [disabled automatic]
@@ -9607,7 +9607,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9f8e939c (35 models, e.g. aihubmix/grok-build-0.1)
+## fields 9f8e939c (36 models, e.g. aihubmix/grok-build-0.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -9742,7 +9742,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields ae431ad8 (7 models, e.g. aihubmix/gemini-3.1-pro-preview)
+## fields ae431ad8 (8 models, e.g. aihubmix/gemini-3.1-pro-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [low medium high]
@@ -9792,7 +9792,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields aeebecb0 (30 models, e.g. anthropic.claude-opus-4-6-v1)
+## fields aeebecb0 (31 models, e.g. anthropic.claude-opus-4-6-v1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high max]
@@ -10426,7 +10426,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields bdbd8944 (5 models, e.g. meta/muse-spark-1.3)
+## fields bdbd8944 (6 models, e.g. kyma/muse-spark-1.3)
 provider custom:
   (no protocol)
     profile: compatible default=- [minimal low medium high xhigh max]
@@ -10814,7 +10814,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields c454043e (6 models, e.g. abliteration/abliterated-model-large-v2)
+## fields c454043e (7 models, e.g. abliteration/abliterated-model-large-v2)
 provider custom:
   (no protocol)
     profile: compatible default=- [low high max]
@@ -11181,7 +11181,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields cb2d68dd (79 models, e.g. aihubmix/claude-opus-4-8-think)
+## fields cb2d68dd (83 models, e.g. aihubmix/claude-opus-4-8-think)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high xhigh max]
@@ -11536,7 +11536,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d08f0d07 (11 models, e.g. deepinfra/google/gemini-3.5-flash)
+## fields d08f0d07 (13 models, e.g. deepinfra/google/gemini-3.5-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=medium [minimal low medium high]
@@ -11589,7 +11589,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d0fa1e3c (15 models, e.g. aihubmix/gemini-3.7-flash)
+## fields d0fa1e3c (18 models, e.g. aihubmix/gemini-3.7-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=medium [low medium high]
@@ -11951,7 +11951,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d2a58336 (6 models, e.g. aihubmix/muse-spark-1.2)
+## fields d2a58336 (8 models, e.g. aihubmix/muse-spark-1.2)
 provider custom:
   (no protocol)
     profile: compatible default=- [minimal low medium high xhigh]
@@ -12317,7 +12317,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d2bd8e78 (25 models, e.g. azure/apac/gpt-6.1-sol)
+## fields d2bd8e78 (27 models, e.g. azure/apac/gpt-6.1-sol)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [low medium high xhigh max]
@@ -12421,7 +12421,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d94fe1b6 (1 models, e.g. baseten/meta-models/muse-spark-open)
+## fields d94fe1b6 (3 models, e.g. aiand/meta/muse-spark-open)
 provider custom:
   (no protocol)
     profile: compatible default=- [disabled low medium high max]
@@ -12830,7 +12830,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields df6a9622 (7 models, e.g. aihubmix/qwen3.5-397b-a17b)
+## fields df6a9622 (8 models, e.g. aihubmix/qwen3.5-397b-a17b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [none low medium high]
@@ -13532,7 +13532,59 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields e6790487 (15 models, e.g. aihubmix/gemini-3.5-flash-lite)
+## fields e45e1e54 (1 models, e.g. mistral/deepseek-v4-1-flash-1017)
+provider custom,openai,anthropic,deepseek,google,xai,dashscope:
+  (no protocol)
+    profile: deepseek default=high [none low medium high max]
+  openai-chat-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal,xhigh: {}
+    none: {"thinking":{"type":"disabled"}}
+    low: {"thinking":{"type":"enabled"},"reasoning_effort":"low"}
+    medium: {"thinking":{"type":"enabled"},"reasoning_effort":"medium"}
+    high: {"thinking":{"type":"enabled"},"reasoning_effort":"high"}
+    max: {"thinking":{"type":"enabled"},"reasoning_effort":"max"}
+  openai-responses-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal,xhigh: {}
+    none: {"reasoning":{"effort":"none"}}
+    low: {"reasoning":{"effort":"low"}}
+    medium: {"reasoning":{"effort":"medium"}}
+    high: {"reasoning":{"effort":"high"}}
+    max: {"reasoning":{"effort":"max"}}
+  anthropic-messages-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,minimal,xhigh: {}
+    none: {"thinking":{"type":"disabled"}}
+    low: {"thinking":{"type":"enabled"},"output_config":{"effort":"low"}}
+    medium: {"thinking":{"type":"enabled"},"output_config":{"effort":"medium"}}
+    high: {"thinking":{"type":"enabled"},"output_config":{"effort":"high"}}
+    max: {"thinking":{"type":"enabled"},"output_config":{"effort":"max"}}
+  google-generative-ai-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  typesafe-systemone-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  openrouter-decisions-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  vercel-evaluation-v4
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+  openai-decisions-v1
+    profile: deepseek default=high [none low medium high max]
+    runtime default off: none
+    provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
+
+## fields e6790487 (16 models, e.g. aihubmix/gemini-3.5-flash-lite)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=minimal [minimal low medium high]
@@ -13585,7 +13637,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields e7f5c7af (67 models, e.g. azure_ai/FW-DeepSeek-V3.2)
+## fields e7f5c7af (69 models, e.g. azure_ai/FW-DeepSeek-V3.2)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -14024,7 +14076,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields eeeb3b91 (3 models, e.g. opencode_go/minimax-m3.1-flash)
+## fields eeeb3b91 (4 models, e.g. kyma/minimax-m3.1-flash)
 provider custom:
   (no protocol)
     profile: compatible default=max [low medium high xhigh max]
@@ -14385,7 +14437,7 @@ provider dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields ef6e238b (2 models, e.g. gpt-6)
+## fields ef6e238b (11 models, e.g. chatgpt/gpt-6-astra-law)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=- [none low medium high xhigh max]
@@ -15276,7 +15328,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields fee21a4b (34 models, e.g. azure/eu/gpt-6-luna)
+## fields fee21a4b (41 models, e.g. azure/apac/gpt-6.1-terra)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [none low medium high xhigh max]
@@ -15365,7 +15417,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 09d01540 (13 models, e.g. baseten/zai-org/GLM-5.2)
+## bodies 09d01540 (17 models, e.g. aiand/zai-org/glm-5.2)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default,automatic,none,minimal,low,medium,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -15385,7 +15437,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 0a2c8a75 (2 models, e.g. gpt-6)
+## bodies 0a2c8a75 (4 models, e.g. gpt-6)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -15551,7 +15603,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 17fa4568 (8 models, e.g. aihubmix/claude-fable-5)
+## bodies 17fa4568 (9 models, e.g. aihubmix/claude-fable-5)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -15643,7 +15695,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 1e06d0f2 (14 models, e.g. aihubmix/kimi-k3)
+## bodies 1e06d0f2 (17 models, e.g. aiand/moonshotai/kimi-k3)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -15664,7 +15716,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 1e23948e (17 models, e.g. aihubmix/hy4-preview)
+## bodies 1e23948e (18 models, e.g. aihubmix/hy4-preview)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -15683,7 +15735,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 1edb4060 (707 models, e.g. aihubmix/claude-haiku-4-5)
+## bodies 1edb4060 (730 models, e.g. aihubmix/claude-haiku-4-5)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -15760,6 +15812,24 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
+
+## bodies 24daec1b (1 models, e.g. kyma/qwen3.7-flash)
+  openai-chat-v1
+    runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default,none,minimal,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    automatic: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    low: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"thinking_budget":2048,"tool_choice":"auto","top_p":0.9}
+    medium: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"thinking_budget":8192,"tool_choice":"auto","top_p":0.9}
+    high: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"thinking_budget":16384,"tool_choice":"auto","top_p":0.9}
+  openai-responses-v1
+    runtime default off,disabled: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default,automatic,none,minimal,low,medium,high,xhigh,max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
 ## bodies 262c2595 (7 models, e.g. azure/eu/gpt-5.1)
   openai-chat-v1
@@ -15883,7 +15953,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 29b7b224 (107 models, e.g. aihubmix/gemini-3.1-pro-preview-customtools)
+## bodies 29b7b224 (114 models, e.g. aiand/openai/gpt-oss-120b)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -15948,7 +16018,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 2c14bfab (17 models, e.g. azure/apac/gpt-6.1-sol)
+## bodies 2c14bfab (19 models, e.g. azure/apac/gpt-6.1-sol)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"auto"}
@@ -15999,7 +16069,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 2cb3ce58 (123 models, e.g. ai21.j2-mid-v1)
+## bodies 2cb3ce58 (125 models, e.g. ai21.j2-mid-v1)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16059,7 +16129,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 31fe7b7b (4 models, e.g. aihubmix/hy3)
+## bodies 31fe7b7b (5 models, e.g. aihubmix/hy3)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16107,7 +16177,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 32814560 (26 models, e.g. aihubmix/glm-5.3)
+## bodies 32814560 (38 models, e.g. aiand/zai-org/glm-5.3)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"auto","top_p":0.9}
     provider-default,disabled,automatic,none,minimal,medium,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16173,6 +16243,34 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     disabled,automatic,none,low,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
     medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
     high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
+
+## bodies 35c1592f (1 models, e.g. mistral/deepseek-v4-1-flash-1017)
+  openai-chat-v1
+    runtime default off,none: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":"auto","top_p":0.9}
+    medium: {"max_tokens":1000,"reasoning_effort":"medium","temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":"auto","top_p":0.9}
+    high: {"max_tokens":1000,"reasoning_effort":"high","temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":"auto","top_p":0.9}
+    max: {"max_tokens":1000,"reasoning_effort":"max","temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":"auto","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal,xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"thinking":{"type":"enabled"},"tool_choice":{"type":"auto"},"top_k":40,"top_p":0.9}
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
@@ -16321,7 +16419,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 3e88aa0e (82 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
+## bodies 3e88aa0e (91 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16561,7 +16659,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 48429573 (221 models, e.g. aihubmix/qwen3-coder-next)
+## bodies 48429573 (227 models, e.g. aiand/qwen/qwen3.6-27b)
   openai-chat-v1
     runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16622,7 +16720,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 4bda7ae1 (54 models, e.g. aihubmix/gpt-5.3-codex)
+## bodies 4bda7ae1 (56 models, e.g. aihubmix/gpt-5.3-codex)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16653,7 +16751,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 4d309c78 (40 models, e.g. aihubmix/claude-opus-4-8-think)
+## bodies 4d309c78 (44 models, e.g. aihubmix/claude-opus-4-8-think)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -16818,6 +16916,31 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
     automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
+
+## bodies 552da0e2 (2 models, e.g. chatgpt/gpt-6-astra-law)
+  openai-chat-v1
+    runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"auto","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
@@ -17088,7 +17211,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 60f187a5 (36 models, e.g. aihubmix/deepseek-v4-flash)
+## bodies 60f187a5 (46 models, e.g. aiand/deepseek-ai/deepseek-v4-flash)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default,automatic,none,minimal,medium,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17483,7 +17606,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 70c23fe0 (18 models, e.g. aihubmix/qwen3.8-flash)
+## bodies 70c23fe0 (23 models, e.g. aiand/qwen/qwen3.8-27b)
   openai-chat-v1
     runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default,none,minimal,high,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17587,7 +17710,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 75cb9506 (12 models, e.g. aihubmix/grok-4.6)
+## bodies 75cb9506 (15 models, e.g. aihubmix/grok-4.6)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17789,7 +17912,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 8258ad24 (1 models, e.g. cerebras/gemma-4-31b)
+## bodies 8258ad24 (2 models, e.g. cerebras/gemma-4-31b)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17808,7 +17931,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 8330afc8 (11 models, e.g. aihubmix/kimi-k2.6)
+## bodies 8330afc8 (14 models, e.g. aihubmix/kimi-k2.6)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"tool_choice":"auto"}
@@ -17822,7 +17945,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 83ae2dde (13 models, e.g. azure_ai/deepseek-v4.1-flash)
+## bodies 83ae2dde (17 models, e.g. aiand/deepseek-ai/deepseek-v4.1-flash)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17953,7 +18076,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 88b30671 (43 models, e.g. aihubmix/command-a-plus-05-2026)
+## bodies 88b30671 (54 models, e.g. aihubmix/command-a-plus-05-2026)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18071,7 +18194,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 8e102126 (1386 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
+## bodies 8e102126 (1427 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18140,7 +18263,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 9057ffce (3 models, e.g. meta/muse-spark-1.3)
+## bodies 9057ffce (4 models, e.g. kyma/muse-spark-1.3)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18171,7 +18294,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 9220eeb2 (3 models, e.g. github_copilot/gemini-4-argon)
+## bodies 9220eeb2 (4 models, e.g. github_copilot/gemini-4-argon)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required"}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto"}
@@ -18214,7 +18337,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 93e95360 (12 models, e.g. azure_ai/grok-4.3)
+## bodies 93e95360 (13 models, e.g. azure_ai/grok-4.3)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18258,7 +18381,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 98325674 (50 models, e.g. bedrock_mantle/us-gov-east-1/xai.grok-4.6)
+## bodies 98325674 (52 models, e.g. bedrock_mantle/us-gov-east-1/xai.grok-4.6)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18481,7 +18604,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies a6b734c3 (32 models, e.g. azure_ai/DeepSeek-V4-Flash-0731)
+## bodies a6b734c3 (33 models, e.g. azure_ai/DeepSeek-V4-Flash-0731)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18506,7 +18629,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies a70e0255 (26 models, e.g. azure_ai/claude-fable-5-1)
+## bodies a70e0255 (29 models, e.g. azure_ai/claude-fable-5-1)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -18534,7 +18657,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies a71f371e (20 models, e.g. azure/eu/gpt-6-luna)
+## bodies a71f371e (27 models, e.g. azure/apac/gpt-6.1-terra)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"auto"}
@@ -18587,7 +18710,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"medium"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"high"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies ae2de969 (2 models, e.g. baseten/meta-models/muse-spark-open)
+## bodies ae2de969 (4 models, e.g. aiand/meta/muse-spark-open)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18615,7 +18738,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies b0a532b9 (4 models, e.g. gemini/gemini-pro-latest)
+## bodies b0a532b9 (5 models, e.g. gemini/gemini-pro-latest)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18770,7 +18893,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"medium"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"high"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies bc3938d3 (80 models, e.g. aihubmix/kimi-k2.7-code-highspeed)
+## bodies bc3938d3 (87 models, e.g. aiand/moonshotai/kimi-k2.7-code)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -18892,7 +19015,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies c12f0780 (1 models, e.g. moonshot/kimi-k3)
+## bodies c12f0780 (2 models, e.g. moonshot/kimi-k3)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -18948,7 +19071,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies c9071d93 (29 models, e.g. aihubmix/gemini-3-flash-preview)
+## bodies c9071d93 (32 models, e.g. aihubmix/gemini-3-flash-preview)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18991,7 +19114,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies cbb882e7 (2 models, e.g. databricks/databricks-claude-fable-5-1)
+## bodies cbb882e7 (3 models, e.g. databricks/databricks-claude-fable-5-1)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19019,7 +19142,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies cc8ee188 (1 models, e.g. github_copilot/claude-haiku-5.5)
+## bodies cc8ee188 (2 models, e.g. github_copilot/claude-haiku-5.5)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -19069,7 +19192,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies cd1a0e5f (75 models, e.g. aihubmix/agnes-2.5-flash)
+## bodies cd1a0e5f (78 models, e.g. aiand/google/gemma-4-31b-it)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19164,7 +19287,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies d29204c4 (24 models, e.g. azure_ai/deepseek-v3.1)
+## bodies d29204c4 (25 models, e.g. azure_ai/deepseek-v3.1)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19228,6 +19351,31 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
+
+## bodies d3bf0b20 (5 models, e.g. databricks/databricks-gpt-6-1-sol)
+  openai-chat-v1
+    runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"auto","top_p":0.9}
+  openai-responses-v1
+    runtime default off,none: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
+    disabled,automatic,minimal: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    low: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"low"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    medium: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"medium"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    high: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"high"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    xhigh: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"xhigh"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+    max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"reasoning":{"effort":"max"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
+  anthropic-messages-v1
+    runtime default off,none: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
+    disabled,automatic,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    low: {"max_tokens":1000,"output_config":{"effort":"low"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    medium: {"max_tokens":1000,"output_config":{"effort":"medium"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    high: {"max_tokens":1000,"output_config":{"effort":"high"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    xhigh: {"max_tokens":1000,"output_config":{"effort":"xhigh"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+    max: {"max_tokens":1000,"output_config":{"effort":"max"},"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
+  google-generative-ai-v1
+    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
 ## bodies d401b332 (5 models, e.g. gemini-2.5-flash-latest)
   openai-chat-v1
@@ -19338,7 +19486,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies dd588f9f (15 models, e.g. azure_ai/claude-opus-4-6)
+## bodies dd588f9f (16 models, e.g. azure_ai/claude-opus-4-6)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19366,7 +19514,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e100688d (62 models, e.g. aihubmix/gpt-5.5)
+## bodies e100688d (69 models, e.g. aihubmix/gpt-5.5)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_completion_tokens":1000,"tool_choice":"auto"}
@@ -19397,7 +19545,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e12fe8e9 (3 models, e.g. opencode_go/minimax-m3.1-flash)
+## bodies e12fe8e9 (4 models, e.g. kyma/minimax-m3.1-flash)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"auto","top_p":0.9}
     provider-default,disabled,automatic,none,minimal: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19513,7 +19661,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e66c5443 (7 models, e.g. aihubmix/gemini-3.5-flash-lite)
+## bodies e66c5443 (9 models, e.g. aihubmix/gemini-3.5-flash-lite)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19551,7 +19699,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies e6ada834 (12 models, e.g. anthropic/claude-sonnet-4.6)
+## bodies e6ada834 (14 models, e.g. anthropic/claude-sonnet-4.6)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19579,7 +19727,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e6c12786 (7 models, e.g. aihubmix/qwen3.5-397b-a17b)
+## bodies e6c12786 (8 models, e.g. aihubmix/qwen3.5-397b-a17b)
   openai-chat-v1
     runtime default off,none: {"enable_thinking":false,"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19604,7 +19752,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e811cdaf (3 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
+## bodies e811cdaf (4 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,high,max: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19655,7 +19803,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies eb73dd32 (6 models, e.g. aihubmix/muse-spark-1.2)
+## bodies eb73dd32 (8 models, e.g. aihubmix/muse-spark-1.2)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19729,7 +19877,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies f250f9bc (9 models, e.g. aihubmix/gemini-3.1-pro-preview)
+## bodies f250f9bc (10 models, e.g. aihubmix/gemini-3.1-pro-preview)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19981,6 +20129,21 @@ ai21.j2-ultra-v1	7d4c23ed	2cb3ce58
 ai21.jamba-1-5-large-v1:0	7d4c23ed	8e102126
 ai21.jamba-1-5-mini-v1:0	7d4c23ed	8e102126
 ai21.jamba-instruct-v1:0	7d4c23ed	8e102126
+aiand/deepseek-ai/deepseek-v4-flash	292f9743	60f187a5
+aiand/deepseek-ai/deepseek-v4-pro	292f9743	60f187a5
+aiand/deepseek-ai/deepseek-v4.1-flash	292f9743	83ae2dde
+aiand/deepseek-ai/deepseek-v4.1-flash-1017	292f9743	60f187a5
+aiand/google/gemma-4-31b-it	7dc075a1	cd1a0e5f
+aiand/meta/muse-spark-open	d94fe1b6	ae2de969
+aiand/moonshotai/kimi-k2.7-code	7d4c23ed	bc3938d3
+aiand/moonshotai/kimi-k3	8dda78e5	1e06d0f2
+aiand/motif-technologies/motif-3	7d4c23ed	8e102126
+aiand/openai/gpt-oss-120b	50665211	29b7b224
+aiand/qwen/qwen3.6-27b	94a111ce	48429573
+aiand/qwen/qwen3.8-27b	70282732	70c23fe0
+aiand/zai-org/glm-5.2	0f922369	09d01540
+aiand/zai-org/glm-5.3	8dda78e5	32814560
+aiand/zai-org/glm-5.3-flash	8dda78e5	32814560
 aihubmix/agnes-2.5-flash	33c4e8ba	cd1a0e5f
 aihubmix/agnes-2.5-pro	7d4c23ed	8e102126
 aihubmix/cc-glm-5.1	7d4c23ed	8e102126
@@ -20177,6 +20340,7 @@ aws_polly/neural	7d4c23ed	8e102126
 aws_polly/standard	7d4c23ed	8e102126
 azure/ada	7d4c23ed	8e102126
 azure/apac/gpt-6.1-sol	d2bd8e78	2c14bfab
+azure/apac/gpt-6.1-terra	fee21a4b	a71f371e
 azure/chat-latest	7d4c23ed	bc3938d3
 azure/codex-mini	374a63ed	932f0b01
 azure/command-r-plus	7d4c23ed	8e102126
@@ -20231,6 +20395,7 @@ azure/eu/gpt-6-astra	d2bd8e78	2c14bfab
 azure/eu/gpt-6-luna	fee21a4b	a71f371e
 azure/eu/gpt-6-sol	fee21a4b	a71f371e
 azure/eu/gpt-6.1-sol	d2bd8e78	2c14bfab
+azure/eu/gpt-6.1-terra	fee21a4b	a71f371e
 azure/eu/o1	50665211	e1541ff5
 azure/eu/o1-2024-12-17	50665211	e1541ff5
 azure/eu/o1-mini	50665211	e1541ff5
@@ -20345,6 +20510,7 @@ azure/gpt-6-sol	fee21a4b	a71f371e
 azure/gpt-6-sol-2026-09-22	fee21a4b	a71f371e
 azure/gpt-6.1-sol	d2bd8e78	2c14bfab
 azure/gpt-6.1-sol-2026-09-29	d2bd8e78	2c14bfab
+azure/gpt-6.1-terra	fee21a4b	a71f371e
 azure/gpt-audio	9a276813	1edb4060
 azure/gpt-audio-1.5	9a276813	1edb4060
 azure/gpt-audio-1.5-2026-02-23	9a276813	1edb4060
@@ -20482,6 +20648,7 @@ azure/us/gpt-6-astra	d2bd8e78	2c14bfab
 azure/us/gpt-6-luna	fee21a4b	a71f371e
 azure/us/gpt-6-sol	fee21a4b	a71f371e
 azure/us/gpt-6.1-sol	d2bd8e78	2c14bfab
+azure/us/gpt-6.1-terra	fee21a4b	a71f371e
 azure/us/gpt-chat-latest	2c151ce5	7444fd5a
 azure/us/o1	50665211	e1541ff5
 azure/us/o1-2024-12-17	50665211	e1541ff5
@@ -20610,6 +20777,7 @@ azure_ai/gpt-6-astra	d2bd8e78	2c14bfab
 azure_ai/gpt-6-luna	fee21a4b	a71f371e
 azure_ai/gpt-6-sol	fee21a4b	a71f371e
 azure_ai/gpt-6.1-sol	d2bd8e78	2c14bfab
+azure_ai/gpt-6.1-terra	fee21a4b	a71f371e
 azure_ai/gpt-chat-latest	2c151ce5	7444fd5a
 azure_ai/gpt-image-2	9a276813	87c5ce34
 azure_ai/gpt-oss-120b	50665211	29b7b224
@@ -20652,6 +20820,7 @@ azure_ai/whisper	7d4c23ed	8e102126
 babbage-002	7d4c23ed	2cb3ce58
 baseten/MiniMaxAI/MiniMax-M2.5	7d4c23ed	8e102126
 baseten/decision-models/baseten-elephant-9b-latest	7d4c23ed	8e102126
+baseten/decision-models/baseten-joey-2b-latest	7d4c23ed	8e102126
 baseten/decision-models/baseten-mammoth-27b-latest	7d4c23ed	8e102126
 baseten/deepseek-ai/DeepSeek-V3-0324	e7f5c7af	1edb4060
 baseten/deepseek-ai/DeepSeek-V3.1	9ccac5f1	d29204c4
@@ -20700,6 +20869,8 @@ bedrock/ap-northeast-1/anthropic.claude-v2:1	7af22a68	1edb4060
 bedrock/ap-northeast-1/deepseek.v3.2	9ccac5f1	d29204c4
 bedrock/ap-northeast-1/minimax.minimax-m2.1	7d4c23ed	8e102126
 bedrock/ap-northeast-1/minimax.minimax-m2.5	7d4c23ed	8e102126
+bedrock/ap-northeast-1/mistral.voxtral-mini-3b-2507	7d4c23ed	8e102126
+bedrock/ap-northeast-1/mistral.voxtral-small-24b-2507	7d4c23ed	8e102126
 bedrock/ap-northeast-1/moonshotai.kimi-k2-thinking	7d4c23ed	8e102126
 bedrock/ap-northeast-1/moonshotai.kimi-k2.5	33c4e8ba	71e6128d
 bedrock/ap-northeast-1/qwen.qwen3-coder-next	94a111ce	48429573
@@ -20714,6 +20885,8 @@ bedrock/ap-south-1/moonshotai.kimi-k2.5	33c4e8ba	71e6128d
 bedrock/ap-south-1/qwen.qwen3-coder-next	94a111ce	48429573
 bedrock/ap-south-1/qwen.qwen3-next-80b-a3b	94a111ce	48429573
 bedrock/ap-southeast-2/minimax.minimax-m2.5	7d4c23ed	8e102126
+bedrock/ap-southeast-2/mistral.voxtral-mini-3b-2507	7d4c23ed	8e102126
+bedrock/ap-southeast-2/mistral.voxtral-small-24b-2507	7d4c23ed	8e102126
 bedrock/ap-southeast-2/qwen.qwen3-next-80b-a3b	94a111ce	48429573
 bedrock/ap-southeast-3/deepseek.v3.2	9ccac5f1	d29204c4
 bedrock/ap-southeast-3/minimax.minimax-m2.1	7d4c23ed	8e102126
@@ -20765,6 +20938,8 @@ bedrock/eu-west-2/meta.llama3-70b-instruct-v1:0	7d4c23ed	8e102126
 bedrock/eu-west-2/meta.llama3-8b-instruct-v1:0	7d4c23ed	8e102126
 bedrock/eu-west-2/minimax.minimax-m2.1	7d4c23ed	8e102126
 bedrock/eu-west-2/minimax.minimax-m2.5	7d4c23ed	8e102126
+bedrock/eu-west-2/mistral.voxtral-mini-3b-2507	7d4c23ed	8e102126
+bedrock/eu-west-2/mistral.voxtral-small-24b-2507	7d4c23ed	8e102126
 bedrock/eu-west-2/nvidia.nemotron-super-3-120b	7d4c23ed	8e102126
 bedrock/eu-west-2/qwen.qwen3-coder-next	94a111ce	48429573
 bedrock/eu-west-2/qwen.qwen3-next-80b-a3b	94a111ce	48429573
@@ -20937,6 +21112,9 @@ bedrock_mantle/xai.grok-4.6	3e731a43	98325674
 bespoke/bespokelabs/Bespoke-Nimble-9B	7d4c23ed	8e102126
 bespoke/nimble	7d4c23ed	8e102126
 bespoke/nimble-latest	7d4c23ed	8e102126
+bigmodel/glm-5.3	8dda78e5	32814560
+bigmodel/glm-5.3-flash	8dda78e5	32814560
+bigmodel/glm-5.3-flashx	8dda78e5	32814560
 bing_grounding/search	7d4c23ed	8e102126
 black_forest_labs/flux-dev	7d4c23ed	8e102126
 black_forest_labs/flux-kontext-max	7d4c23ed	8e102126
@@ -20975,7 +21153,9 @@ chatgpt/gpt-5.6-luna	8a110220	e100688d
 chatgpt/gpt-5.6-sol	8a110220	e100688d
 chatgpt/gpt-5.6-terra	8a110220	e100688d
 chatgpt/gpt-6-astra	d2bd8e78	2c14bfab
+chatgpt/gpt-6-astra-law	ef6e238b	552da0e2
 chatgpt/gpt-6-luna	fee21a4b	a71f371e
+chatgpt/gpt-6-rosalind	ef6e238b	552da0e2
 chatgpt/gpt-6-sol	fee21a4b	a71f371e
 chatgpt/gpt-6.1-sol	d2bd8e78	2c14bfab
 chatgpt/gpt-6.1-terra	fee21a4b	a71f371e
@@ -21023,6 +21203,16 @@ claude-sonnet-4-6	aeebecb0	6543a34c
 claude-sonnet-5	cb2d68dd	592f5614
 claude-sonnet-5-5	7d8e3822	e409a03e
 claude-sonnet-5.5	7d8e3822	e409a03e
+clf_ai_gateway/deepseek-v4-flash	292f9743	60f187a5
+clf_ai_gateway/deepseek-v4-pro	292f9743	60f187a5
+clf_ai_gateway/deepseek-v4.1-flash	292f9743	83ae2dde
+clf_ai_gateway/glm-4.7-flash	08b51db5	88b30671
+clf_ai_gateway/glm-5.2	0f922369	09d01540
+clf_ai_gateway/glm-5.3	8dda78e5	32814560
+clf_ai_gateway/glm-5.3-flash	8dda78e5	32814560
+clf_ai_gateway/kimi-k2.6	08b51db5	8330afc8
+clf_ai_gateway/kimi-k2.7-code	7d4c23ed	bc3938d3
+clf_ai_gateway/qwen3.8-27b	70282732	70c23fe0
 cloudflare/@cf/aisingapore/gemma-sea-lion-v4-27b-it	7d4c23ed	8e102126
 cloudflare/@cf/cloudflare/clairic	7d4c23ed	8e102126
 cloudflare/@cf/cloudflare/clef	7d4c23ed	6eacf031
@@ -21117,6 +21307,10 @@ dashscope/happyhorse-1.1-i2v	7d4c23ed	8e102126
 dashscope/happyhorse-1.1-r2v	7d4c23ed	8e102126
 dashscope/happyhorse-1.1-t2v	7d4c23ed	8e102126
 dashscope/kimi-k2.7-code	7d4c23ed	bc3938d3
+dashscope/qwen-audio-3.0-tts-flash	12053068	1edb4060
+dashscope/qwen-audio-3.0-tts-plus	12053068	1edb4060
+dashscope/qwen-audio-3.1-tts-flash	12053068	1edb4060
+dashscope/qwen-audio-3.1-tts-plus	12053068	1edb4060
 dashscope/qwen-coder	12053068	1edb4060
 dashscope/qwen-flash	0275c0a2	48429573
 dashscope/qwen-flash-2025-07-28	0275c0a2	48429573
@@ -21146,6 +21340,7 @@ dashscope/qwen3-max-2026-01-23	94a111ce	48429573
 dashscope/qwen3-max-preview	94a111ce	48429573
 dashscope/qwen3-next-80b-a3b-instruct	94a111ce	48429573
 dashscope/qwen3-next-80b-a3b-thinking	5242c02e	5feb3e82
+dashscope/qwen3-tts-flash	94a111ce	48429573
 dashscope/qwen3-vl-235b-a22b-instruct	94a111ce	48429573
 dashscope/qwen3-vl-235b-a22b-thinking	5242c02e	5feb3e82
 dashscope/qwen3-vl-32b-instruct	94a111ce	48429573
@@ -21168,6 +21363,7 @@ databricks/databricks-bge-large-en	7d4c23ed	8e102126
 databricks/databricks-claude-fable-5	7d8e3822	2c52eb91
 databricks/databricks-claude-fable-5-1	7d8e3822	cbb882e7
 databricks/databricks-claude-haiku-4-5	7af22a68	1edb4060
+databricks/databricks-claude-haiku-5-5	7af22a68	1edb4060
 databricks/databricks-claude-opus-4	7af22a68	1edb4060
 databricks/databricks-claude-opus-4-1	7af22a68	1edb4060
 databricks/databricks-claude-opus-4-5	890864de	ccbf4d97
@@ -21181,12 +21377,17 @@ databricks/databricks-claude-sonnet-4-1	7af22a68	1edb4060
 databricks/databricks-claude-sonnet-4-5	7af22a68	1edb4060
 databricks/databricks-claude-sonnet-4-6	aeebecb0	dd588f9f
 databricks/databricks-claude-sonnet-5	cb2d68dd	a3294578
+databricks/databricks-claude-sonnet-5-5	7d8e3822	cbb882e7
+databricks/databricks-deepseek-v4-1-flash	7cd6eaf6	3e88aa0e
+databricks/databricks-deepseek-v4-1-flash-1017	7cd6eaf6	3e88aa0e
 databricks/databricks-deepseek-v4-flash-0731	40163ab7	a6b734c3
 databricks/databricks-deepseek-v4-pro-0813	40163ab7	a6b734c3
 databricks/databricks-gemini-2-5-flash	7af22a68	1edb4060
+databricks/databricks-gemini-2-5-flash-lite	7af22a68	1edb4060
 databricks/databricks-gemini-2-5-pro	7af22a68	1edb4060
 databricks/databricks-gemini-3-1-flash-image	7af22a68	1edb4060
 databricks/databricks-gemini-3-1-flash-lite	85e2f5df	c9071d93
+databricks/databricks-gemini-3-1-flash-lite-image	7af22a68	1edb4060
 databricks/databricks-gemini-3-1-pro	85e2f5df	c9071d93
 databricks/databricks-gemini-3-5-flash	85e2f5df	c9071d93
 databricks/databricks-gemini-3-5-flash-lite	7af22a68	1edb4060
@@ -21196,6 +21397,7 @@ databricks/databricks-gemini-3-8-flash	7af22a68	1edb4060
 databricks/databricks-gemini-3-flash	85e2f5df	c9071d93
 databricks/databricks-gemini-3-pro	ecd991f9	29b7b224
 databricks/databricks-gemini-3-pro-image	7af22a68	1edb4060
+databricks/databricks-gemini-4-argon	7af22a68	1edb4060
 databricks/databricks-gemma-3-12b	7d4c23ed	8e102126
 databricks/databricks-glm-5-2	100a6ab8	86f26855
 databricks/databricks-glm-5-3	7d4c23ed	8e102126
@@ -21207,6 +21409,7 @@ databricks/databricks-gpt-5-3-codex	48046c0e	c9071d93
 databricks/databricks-gpt-5-4	50665211	29b7b224
 databricks/databricks-gpt-5-4-mini	50665211	29b7b224
 databricks/databricks-gpt-5-4-nano	50665211	29b7b224
+databricks/databricks-gpt-5-4-pro	48046c0e	c9071d93
 databricks/databricks-gpt-5-5	50665211	41c78f27
 databricks/databricks-gpt-5-5-pro	48046c0e	c9071d93
 databricks/databricks-gpt-5-6-luna	50665211	41c78f27
@@ -21214,11 +21417,22 @@ databricks/databricks-gpt-5-6-sol	64641bef	8a2e15a1
 databricks/databricks-gpt-5-6-terra	50665211	41c78f27
 databricks/databricks-gpt-5-mini	48046c0e	6fc41b74
 databricks/databricks-gpt-5-nano	48046c0e	6fc41b74
+databricks/databricks-gpt-6-1-sol	ef6e238b	d3bf0b20
+databricks/databricks-gpt-6-1-terra	ef6e238b	d3bf0b20
+databricks/databricks-gpt-6-astra	ef6e238b	d3bf0b20
+databricks/databricks-gpt-6-luna	ef6e238b	d3bf0b20
+databricks/databricks-gpt-6-sol	ef6e238b	d3bf0b20
+databricks/databricks-gpt-image-1	9a276813	1edb4060
+databricks/databricks-gpt-image-1-5	9a276813	1edb4060
+databricks/databricks-gpt-image-1-mini	9a276813	1edb4060
+databricks/databricks-gpt-image-2	9a276813	1edb4060
 databricks/databricks-gpt-oss-120b	50665211	29b7b224
 databricks/databricks-gpt-oss-20b	50665211	29b7b224
 databricks/databricks-grok-4-6	8a7ba322	29b7b224
+databricks/databricks-grok-4-7	8a7ba322	29b7b224
 databricks/databricks-gte-large-en	7d4c23ed	8e102126
 databricks/databricks-inkling	f9d47486	5d5f7689
+databricks/databricks-kimi-k2-7	7d4c23ed	8e102126
 databricks/databricks-kimi-k3	7d4c23ed	8e102126
 databricks/databricks-llama-4-maverick	7d4c23ed	8e102126
 databricks/databricks-meta-llama-3-1-8b-instruct	7d4c23ed	8e102126
@@ -21227,6 +21441,7 @@ databricks/databricks-openjev-qwen35-4b	94a111ce	48429573
 databricks/databricks-qwen3-embedding-0-6b	94a111ce	48429573
 databricks/databricks-qwen3-next-80b-a3b-instruct	94a111ce	48429573
 databricks/databricks-qwen35-122b-a10b	94a111ce	48429573
+databricks/databricks-typesafeai-jev-1-14-0	7d4c23ed	8e102126
 databricks/system.ai.deepseek-v4-flash-0731	7cd6eaf6	3e88aa0e
 databricks/system.ai.kimi-k3	7d4c23ed	8e102126
 dataforseo/search	7d4c23ed	8e102126
@@ -21234,6 +21449,8 @@ davinci-002	7d4c23ed	2cb3ce58
 daybreak-blue-latest	7d4c23ed	2cb3ce58
 daybreak-red-latest	7d4c23ed	2cb3ce58
 deep-research-pro-preview-12-2025	7d4c23ed	2cb3ce58
+deepgram/aura	7d4c23ed	8e102126
+deepgram/aura-2	7d4c23ed	bc3938d3
 deepgram/base	7d4c23ed	8e102126
 deepgram/base-conversationalai	7d4c23ed	8e102126
 deepgram/base-finance	7d4c23ed	8e102126
@@ -21494,6 +21711,8 @@ eu.mistral.pixtral-large-2502-v1:0	7d4c23ed	8e102126
 eu.twelvelabs.marengo-embed-2-7-v1:0	7d4c23ed	8e102126
 eu.twelvelabs.marengo-embed-3-0-v1:0	7d4c23ed	8e102126
 eu.twelvelabs.pegasus-1-2-v1:0	7d4c23ed	8e102126
+eu_jev/eu-jeff-1.0.0	7d4c23ed	8e102126
+eu_jev/eu-jeff-latest	7d4c23ed	8e102126
 exa_ai/search	7d4c23ed	8e102126
 fal_ai/bria/text-to-image/3.2	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.0/image-to-video	7d4c23ed	8e102126
@@ -21987,6 +22206,7 @@ fireworks_ai/accounts/fireworks/models/qwen3p7-plus	94a111ce	48429573
 fireworks_ai/accounts/fireworks/models/qwen3p8-max	94a111ce	48429573
 fireworks_ai/accounts/fireworks/models/qwq-32b	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/rolm-ocr	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/models/rune	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/snorkel-mistral-7b-pairrm-dpo	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/stable-diffusion-xl-1024-v1-0	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/stablecode-3b	7d4c23ed	8e102126
@@ -21996,6 +22216,7 @@ fireworks_ai/accounts/fireworks/models/starcoder2-15b	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/starcoder2-3b	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/starcoder2-7b	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/toppy-m-7b	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/models/ultramarine-1-flash-us	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/yi-34b	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/yi-34b-200k-capybara	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/yi-34b-chat	7d4c23ed	8e102126
@@ -22004,6 +22225,8 @@ fireworks_ai/accounts/fireworks/models/yi-large	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/zephyr-7b-beta	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/auto	7d4c23ed	6eacf031
 fireworks_ai/accounts/fireworks/routers/auto-instant	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot	7cd6eaf6	3e88aa0e
+fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-spot	7cd6eaf6	3e88aa0e
 fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-us	7cd6eaf6	3e88aa0e
 fireworks_ai/accounts/fireworks/routers/firerouter	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p1-fast	7d4c23ed	8e102126
@@ -22011,12 +22234,15 @@ fireworks_ai/accounts/fireworks/routers/glm-5p2-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p2-fast-us	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p3-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p3-flash-us	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/glm-5p3-spot	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p3-us	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k2p6-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k2p7-code-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k3-fast	7d4c23ed	bc3938d3
+fireworks_ai/accounts/fireworks/routers/kimi-k3-spot	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k3-us	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/rune	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/spot-deepseek-v4-flash	7cd6eaf6	3e88aa0e
 fireworks_ai/deepseek-v4-flash	292f9743	60f187a5
 fireworks_ai/deepseek-v4-flash-0731	40163ab7	a6b734c3
 fireworks_ai/deepseek-v4-flash-vision-exp	292f9743	60f187a5
@@ -22416,7 +22642,9 @@ gpt-5.6-sol	8a110220	5cafeaff
 gpt-5.6-terra	8a110220	5cafeaff
 gpt-6	ef6e238b	0a2c8a75
 gpt-6-astra	d2bd8e78	d131138b
+gpt-6-astra-law	ef6e238b	0a2c8a75
 gpt-6-luna	fee21a4b	63172d20
+gpt-6-rosalind	ef6e238b	0a2c8a75
 gpt-6-sol	fee21a4b	63172d20
 gpt-6.1-sol	d2bd8e78	d131138b
 gpt-6.1-terra	fee21a4b	63172d20
@@ -22500,6 +22728,10 @@ high/1024-x-1536/gpt-image-1.5-2025-12-16	9a276813	87c5ce34
 high/1536-x-1024/gpt-image-1	9a276813	87c5ce34
 high/1536-x-1024/gpt-image-1.5	9a276813	87c5ce34
 high/1536-x-1024/gpt-image-1.5-2025-12-16	9a276813	87c5ce34
+hostinger_router/claude-sonnet-5	cb2d68dd	4d309c78
+hostinger_router/gpt-5.2	8a110220	4bda7ae1
+hostinger_router/text-embedding-3-large	7d4c23ed	bc3938d3
+hostinger_router/text-embedding-3-small	7d4c23ed	bc3938d3
 hyperbolic/NousResearch/Hermes-3-Llama-3.1-70B	7d4c23ed	8e102126
 hyperbolic/Qwen/QwQ-32B	12053068	1edb4060
 hyperbolic/Qwen/Qwen2.5-72B-Instruct	12053068	1edb4060
@@ -22584,6 +22816,89 @@ jp.anthropic.claude-sonnet-5	cb2d68dd	592f5614
 jp.anthropic.claude-sonnet-5-5	7d8e3822	46fba062
 kimi-k2-thinking-251104	7d4c23ed	2cb3ce58
 kimi-k3	8dda78e5	a66a9088
+kyma/claude-fable-5	7d8e3822	17fa4568
+kyma/claude-fable-5.1	7d8e3822	a70e0255
+kyma/claude-haiku-4-5	7af22a68	1edb4060
+kyma/claude-haiku-5.5	890864de	cc8ee188
+kyma/claude-opus-4-7	cb2d68dd	4d309c78
+kyma/claude-opus-5	cb2d68dd	4d309c78
+kyma/claude-opus-5.5	7d8e3822	a70e0255
+kyma/claude-sonnet-4-6	aeebecb0	dd588f9f
+kyma/claude-sonnet-5	cb2d68dd	4d309c78
+kyma/claude-sonnet-5.5	7d8e3822	a70e0255
+kyma/deepseek-r1	7cd6eaf6	3e88aa0e
+kyma/deepseek-v3	e7f5c7af	1edb4060
+kyma/deepseek-v4-flash	292f9743	60f187a5
+kyma/deepseek-v4-flash-vision-exp	292f9743	60f187a5
+kyma/deepseek-v4.1-flash	292f9743	83ae2dde
+kyma/gemini-3-flash	264adbd5	c9071d93
+kyma/gemini-3.1-pro	ae431ad8	f250f9bc
+kyma/gemini-3.5-flash	d08f0d07	c9071d93
+kyma/gemini-3.5-flash-lite	e6790487	e66c5443
+kyma/gemini-3.6-flash	d08f0d07	e66c5443
+kyma/gemini-3.7-flash	d0fa1e3c	29b7b224
+kyma/gemini-3.8-flash	d0fa1e3c	b0a532b9
+kyma/gemini-4-argon	d0fa1e3c	9220eeb2
+kyma/gemma-4-31b	7b7c8300	8258ad24
+kyma/glm-4.5-air	08b51db5	88b30671
+kyma/glm-4.7-flash	08b51db5	88b30671
+kyma/glm-5.1	08b51db5	88b30671
+kyma/glm-5.2	0f922369	09d01540
+kyma/glm-5.3	8dda78e5	32814560
+kyma/glm-5.3-flash	8dda78e5	32814560
+kyma/gpt-5.6-luna	8a110220	e100688d
+kyma/gpt-5.6-luna-pro	8a110220	e100688d
+kyma/gpt-5.6-sol	8a110220	e100688d
+kyma/gpt-5.6-sol-pro	8a110220	e100688d
+kyma/gpt-5.6-terra	8a110220	e100688d
+kyma/gpt-5.6-terra-pro	8a110220	e100688d
+kyma/gpt-6-astra	d2bd8e78	2c14bfab
+kyma/gpt-6-luna	fee21a4b	a71f371e
+kyma/gpt-6.1-sol	d2bd8e78	2c14bfab
+kyma/gpt-oss-120b	50665211	29b7b224
+kyma/grok-4.20	3e731a43	98325674
+kyma/grok-4.20-multi-agent	3e731a43	98325674
+kyma/grok-4.3	3af1460e	93e95360
+kyma/grok-4.5	3e731a43	75cb9506
+kyma/grok-4.6	3e731a43	75cb9506
+kyma/grok-4.7	3e731a43	75cb9506
+kyma/grok-build	9f8e939c	1edb4060
+kyma/hy3	70600c84	31fe7b7b
+kyma/hy4-preview	8a49d307	1e23948e
+kyma/kimi-k2.6	08b51db5	8330afc8
+kyma/kimi-k2.7-code	7d4c23ed	bc3938d3
+kyma/kimi-k3	8dda78e5	1e06d0f2
+kyma/kimi-k3.1-pro	8dda78e5	1e06d0f2
+kyma/llama-3.3-70b	7d4c23ed	8e102126
+kyma/llama-4-maverick	7d4c23ed	8e102126
+kyma/mimo-v2.5	08b51db5	88b30671
+kyma/mimo-v2.6-flash	08b51db5	88b30671
+kyma/mimo-v2.6-pro	08b51db5	88b30671
+kyma/minimax-m2.5	7d4c23ed	8e102126
+kyma/minimax-m2.7	7d4c23ed	8e102126
+kyma/minimax-m3	33c4e8ba	cd1a0e5f
+kyma/minimax-m3.1-flash	eeeb3b91	e12fe8e9
+kyma/muse-glimmer-30b	842edcd7	e6ada834
+kyma/muse-spark-1.1	d2a58336	eb73dd32
+kyma/muse-spark-1.2	d2a58336	eb73dd32
+kyma/muse-spark-1.3	bdbd8944	9057ffce
+kyma/muse-spark-open	d94fe1b6	ae2de969
+kyma/muse-wonder	842edcd7	e6ada834
+kyma/nemotron-3-ultra-550b	7d4c23ed	8e102126
+kyma/nemotron-3.5-super-vl	7d4c23ed	8e102126
+kyma/qwen-3-32b	12053068	1edb4060
+kyma/qwen-3-coder	12053068	1edb4060
+kyma/qwen-3.6-plus	12053068	1edb4060
+kyma/qwen-3.7-max	12053068	1edb4060
+kyma/qwen-3.7-plus	12053068	1edb4060
+kyma/qwen-3.8-max	12053068	1edb4060
+kyma/qwen3.7-flash	4020184b	24daec1b
+kyma/qwen3.8-27b	70282732	70c23fe0
+kyma/qwen3.8-flash	70282732	70c23fe0
+kyma/sonar	7d4c23ed	8e102126
+kyma/sonar-pro	7d4c23ed	8e102126
+kyma/step-3.7-flash	374a63ed	29b7b224
+kyma/step-5-preview	374a63ed	29b7b224
 lambda_ai/deepseek-llama3.3-70b	e7f5c7af	1edb4060
 lambda_ai/deepseek-r1-0528	7cd6eaf6	3e88aa0e
 lambda_ai/deepseek-r1-671b	7cd6eaf6	3e88aa0e
@@ -22741,6 +23056,7 @@ mistral/codestral-embed	7d4c23ed	bc3938d3
 mistral/codestral-embed-2505	7d4c23ed	8e102126
 mistral/codestral-latest	7d4c23ed	8e102126
 mistral/codestral-mamba-latest	7d4c23ed	8e102126
+mistral/deepseek-v4-1-flash-1017	e45e1e54	35c1592f
 mistral/devstral-latest	842edcd7	e6ada834
 mistral/devstral-medium-latest	7d4c23ed	8e102126
 mistral/devstral-small-latest	7d4c23ed	8e102126
@@ -22820,6 +23136,7 @@ moonshot/kimi-k2.5	33c4e8ba	b18ee8ef
 moonshot/kimi-k2.6	33c4e8ba	cd1a0e5f
 moonshot/kimi-k2.7-code	7d4c23ed	bc3938d3
 moonshot/kimi-k3	c454043e	c12f0780
+moonshot/kimi-k3.1-pro	c454043e	c12f0780
 moonshot/moonshot-v1-128k	7d4c23ed	8e102126
 moonshot/moonshot-v1-128k-vision-preview	7d4c23ed	8e102126
 moonshot/moonshot-v1-32k	7d4c23ed	8e102126
@@ -23560,6 +23877,8 @@ rerank-multilingual-v3.0	7d4c23ed	8fe82389
 rerank-v3.5	7d4c23ed	8fe82389
 rerank-v4.0-fast	7d4c23ed	8fe82389
 rerank-v4.0-pro	7d4c23ed	8fe82389
+rerank-v5.0-fast	7d4c23ed	2cb3ce58
+rerank-v5.0-pro	7d4c23ed	2cb3ce58
 runwayml/aleph2	7d4c23ed	8e102126
 runwayml/eleven_multilingual_v2	7d4c23ed	8e102126
 runwayml/gemini_omni_flash	7af22a68	1edb4060
@@ -23667,6 +23986,12 @@ snowflake/snowflake-llama-3.1-405b	7d4c23ed	8e102126
 snowflake/snowflake-llama-3.3-70b	7d4c23ed	8e102126
 soniox/stt-async-v4	7d4c23ed	8e102126
 soniox/stt-async-v5	7d4c23ed	8e102126
+soniox/stt-rt-preview	7d4c23ed	8e102126
+soniox/stt-rt-preview-v2	7d4c23ed	8e102126
+soniox/stt-rt-v3	7d4c23ed	8e102126
+soniox/stt-rt-v3-preview	7d4c23ed	8e102126
+soniox/stt-rt-v4	7d4c23ed	8e102126
+soniox/stt-rt-v5	7d4c23ed	8e102126
 sora-2	7d4c23ed	2cb3ce58
 sora-2-pro	7d4c23ed	2cb3ce58
 sora-2-pro-high-res	7d4c23ed	2cb3ce58
@@ -23720,6 +24045,32 @@ standard/1024-x-1536/gpt-image-1.5-2025-12-16	9a276813	87c5ce34
 standard/1536-x-1024/gpt-image-1.5	9a276813	87c5ce34
 standard/1536-x-1024/gpt-image-1.5-2025-12-16	9a276813	87c5ce34
 strands_decider/strands-decider-2B-hobson-v19	7d4c23ed	8e102126
+streamlake/DeepSeek-V3	e7f5c7af	1edb4060
+streamlake/DeepSeek-V4-Pro-0813	7cd6eaf6	3e88aa0e
+streamlake/GLM-5.3	8dda78e5	32814560
+streamlake/GLM-5.3-Flash	8dda78e5	32814560
+streamlake/Kimi-K2-Instruct-0905	7d4c23ed	8e102126
+streamlake/deepseek-r1	7cd6eaf6	3e88aa0e
+streamlake/deepseek-v3.1	9ccac5f1	d29204c4
+streamlake/deepseek-v4-flash	292f9743	60f187a5
+streamlake/deepseek-v4-flash-0731	40163ab7	a6b734c3
+streamlake/deepseek-v4-pro	292f9743	60f187a5
+streamlake/deepseek-v4.1-flash-1017	292f9743	60f187a5
+streamlake/deepseek-v4.1-flash-260910	7cd6eaf6	3e88aa0e
+streamlake/glm-5	08b51db5	88b30671
+streamlake/glm-5.1	08b51db5	88b30671
+streamlake/glm-5.2	0f922369	09d01540
+streamlake/kimi-k2.6	08b51db5	8330afc8
+streamlake/kimi-k2.7-code	7d4c23ed	bc3938d3
+streamlake/mimo-v2.6-flash	08b51db5	88b30671
+streamlake/mimo-v2.6-pro	08b51db5	88b30671
+streamlake/minimax-m2.5	7d4c23ed	8e102126
+streamlake/minimax-m3	33c4e8ba	cd1a0e5f
+streamlake/qwen3.5-397b-a17b	df6a9622	e6c12786
+streamlake/qwen3.6-27b	94a111ce	48429573
+streamlake/qwen3.6-35b-a3b	94a111ce	48429573
+streamlake/qwen3.8-2.4t-a95b	92eae6cd	e811cdaf
+streamlake/qwen3.8-27b	70282732	70c23fe0
 tavily/search	7d4c23ed	8e102126
 tavily/search-advanced	7d4c23ed	8e102126
 tencent/deepseek-v4-flash	0ca8e112	700742bf
@@ -23735,6 +24086,9 @@ tencent/kimi-k2.7-code-highspeed	bdbd8944	6da502e4
 tencent/kimi-k2.8-preview	0f3d5b8f	9975b081
 tencent/kimi-k3	0f3d5b8f	9975b081
 tencent/minimax-m3	7339b065	78e41205
+tencent/seedream-image-v5.0-flash	7d4c23ed	8e102126
+tencent/seedream-image-v5.0-lite	7d4c23ed	8e102126
+tencent/seedream-image-v5.0-pro	7d4c23ed	8e102126
 tensormesh/MiniMaxAI/MiniMax-M2.5	7d4c23ed	8e102126
 tensormesh/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8	94a111ce	48429573
 tensormesh/Qwen/Qwen3.5-397B-A17B-FP8	94a111ce	48429573
@@ -24425,3 +24779,17 @@ zai/glm-5.1	33c4e8ba	cd1a0e5f
 zai/glm-5.2	100a6ab8	86f26855
 zai/glm-5.3	c454043e	29b3dc77
 zai/glm-5.3-flash	c454043e	29b3dc77
+zai/glm-5v-turbo	7d4c23ed	8e102126
+zerogpu/LFM2.5-1.2B-Instruct	7d4c23ed	8e102126
+zerogpu/LFM2.5-1.2B-Thinking	7d4c23ed	8e102126
+zerogpu/deepseek-v4.1-flash	292f9743	83ae2dde
+zerogpu/glm-5.3-flash	8dda78e5	32814560
+zerogpu/gpt-4.1-mini	9a276813	1edb4060
+zerogpu/gpt-5.4-nano	8a110220	4bda7ae1
+zerogpu/gpt-5.6-luna	8a110220	e100688d
+zerogpu/gpt-6-luna	fee21a4b	a71f371e
+zerogpu/gpt-oss-120b	50665211	29b7b224
+zerogpu/llama-3.1-8b-instruct-fast	7d4c23ed	8e102126
+zerogpu/llama-3.2-3b-instruct-fast	7d4c23ed	8e102126
+zerogpu/qwen3-30b-a3b-fp8	94a111ce	48429573
+zerogpu/qwen3.6-35b-a3b	94a111ce	48429573
