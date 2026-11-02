@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
 import { seedAppSettings } from "./helpers/player.js";
 
@@ -25,9 +25,15 @@ for (const width of [1512, 390]) {
     const fixture = await createRecoveryFixture(page, "completed");
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("**/api/ui-specs?*", async (route) => {
+    // Delayed spec responses must settle before dispose() unroutes. Unrouting
+    // empties the handler list; if another handler finishes meanwhile,
+    // Playwright stops intercepting and continues the delayed request, whose
+    // fulfill then throws "Route is already handled!".
+    const pendingSpecs = new Set<Promise<void>>();
+    let delaySpecs = true;
+    const fulfillSpecs = async (route: Route) => {
       // Delay specs to exercise the gap between drawer mounting and discovery.
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (delaySpecs) await new Promise((resolve) => setTimeout(resolve, 250));
       await route.fulfill({
         json: {
           left: [],
@@ -52,6 +58,11 @@ for (const width of [1512, 390]) {
           ],
         },
       });
+    };
+    await page.route("**/api/ui-specs?*", (route) => {
+      const handled = fulfillSpecs(route);
+      pendingSpecs.add(handled);
+      return handled.finally(() => pendingSpecs.delete(handled));
     });
     await page.route(
       "**/api/sessions/*/plugin-data/review-gallery**",
@@ -78,6 +89,10 @@ for (const width of [1512, 390]) {
       expect(errors).toEqual([]);
       expect(fixture.actions).toEqual([]);
     } finally {
+      // Handler failures still reach Playwright through the returned promise;
+      // this only waits for every delayed response before unrouting.
+      delaySpecs = false;
+      while (pendingSpecs.size) await Promise.allSettled([...pendingSpecs]);
       await fixture.dispose();
     }
   });
