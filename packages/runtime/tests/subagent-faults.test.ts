@@ -300,8 +300,9 @@ describe("sub-agent provider attribution", () => {
     expect(failure?.payload.fault).toBe(test.fault);
     if (test.provider?.tools || test.missing)
       expect(f.generate).not.toHaveBeenCalled();
+    // The actor profile allows two output repairs after the first reply.
     if (test.name === "prose instead of schema output")
-      expect(f.generate).toHaveBeenCalledTimes(2);
+      expect(f.generate).toHaveBeenCalledTimes(3);
   });
 
   it("keeps a function caller's tighter remaining deadline neutral", async () => {
