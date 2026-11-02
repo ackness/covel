@@ -10,6 +10,7 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { PreLLMCallRequest } from "../src/hooks/wire-helpers.js";
 import {
   input,
+  contextWindowWithOutputTool,
   makeExecutor,
   submitted,
   queuedLLM,
@@ -85,7 +86,10 @@ describe("sub-agent context overflow settlement", () => {
           hookPipeline,
           toolExecutor: makeExecutor([read]),
           estimator: (text) => text.length,
-          contextBudget: { maxInputTokens: 1_000, reservedForResponse: 100 },
+          contextBudget: {
+            maxInputTokens: await contextWindowWithOutputTool(500),
+            reservedForResponse: 100,
+          },
           loadRuntime: async () => ({
             manifest: provider,
             promptTemplate: "Answer",

@@ -25,6 +25,7 @@ import {
 } from "../src/turn-executor/turn-control.js";
 import type { AgentToolLoopCompleted } from "../src/agent-loop/turn-agent-tool-loop.js";
 import {
+  contextWindowWithOutputTool,
   doneTool,
   input,
   makeExecutor,
@@ -455,7 +456,10 @@ describe("thrown exits (E8–E11)", () => {
       ]),
       maxSteps: 3,
       estimator: (text) => text.length,
-      contextBudget: { maxInputTokens: 1_000, reservedForResponse: 100 },
+      contextBudget: {
+        maxInputTokens: await contextWindowWithOutputTool(500),
+        reservedForResponse: 100,
+      },
     });
     expect(result.stop).toEqual({ reason: "context-overflow" });
     expect(result.stopMessage).toMatch(/Context budget exceeded/);

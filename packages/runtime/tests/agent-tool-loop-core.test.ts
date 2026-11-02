@@ -26,6 +26,7 @@ import { promptCacheKeyFor } from "../src/llm/prompt-cache-key.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import type { LLMAdapter, LLMResponse, LLMStreamEvent } from "@covel/shared";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
+import { contextWindowWithOutputTool } from "./_helpers/agent-loop-fixture.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────
 
@@ -407,7 +408,7 @@ describe("runAgentToolLoop core", () => {
       deps: { emitter },
       estimator: (text) => text.length,
       contextBudget: {
-        maxInputTokens: 1_300,
+        maxInputTokens: await contextWindowWithOutputTool(800),
         reservedForResponse: 100,
         protectLastUserTurns: 1,
       },

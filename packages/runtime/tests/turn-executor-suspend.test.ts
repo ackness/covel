@@ -1,5 +1,6 @@
 import {
   suspendedLoopState,
+  contextWindowWithOutputTool,
   submitted,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -1217,7 +1218,7 @@ describe("resumeRuntimePipeline", () => {
         emitter,
         estimator: (text) => text.length,
         contextBudget: {
-          maxInputTokens: 2_000,
+          maxInputTokens: await contextWindowWithOutputTool(1_500),
           reservedForResponse: 100,
           protectLastUserTurns: 1,
         },
@@ -1368,7 +1369,10 @@ describe("resumeRuntimePipeline", () => {
           toolExecutor: mockToolExecutor,
           eventBus,
           estimator: (text) => text.length,
-          contextBudget: { maxInputTokens: 3_200, reservedForResponse: 100 },
+          contextBudget: {
+            maxInputTokens: await contextWindowWithOutputTool(2_700),
+            reservedForResponse: 100,
+          },
         },
       );
       expect(result.status).toBe("success");
