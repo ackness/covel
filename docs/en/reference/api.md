@@ -1027,6 +1027,8 @@ The body must be exactly `{ "currentCharacterId": "<character id>" }`. Any other
 - The session must be `active` or `paused`.
 - On success it returns `200 { "seats": [...] }`, all the seats after the write.
 
+The web client sends character switches sequentially per session so successive choices are saved in click order. Action submission waits for that session’s switches. After navigating to another save, input neither waits for the previous save’s switches nor uses their returned seats to display its actor.
+
 | Status code | `code`                   | When                                                      |
 | ----------- | ------------------------ | --------------------------------------------------------- |
 | 400         | `invalid_body`           | The body is not `{ currentCharacterId }`                  |

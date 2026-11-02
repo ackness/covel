@@ -74,6 +74,8 @@ A session may have several player characters. The two narrator plugins follow th
 
 ### RPG mechanics
 
+[Inventory](./rpg.md#inventory-inventory) checks changes already handled by tools, including batches with long descriptions, to avoid duplicate bookkeeping.
+
 | Plugin                                         | What it does                                                                                  | On by default |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------- |
 | [Dice Check](./rpg.md) `dice-check`            | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |

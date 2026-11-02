@@ -330,6 +330,26 @@ describe("checkpoint record validation", () => {
       corrections: { toolUse: 1, review: 0 },
       activatedTools: ["lookup"],
     };
+    const sourcedOutput = {
+      ...savedLoop.outputContract,
+      provenance: "tool-result",
+      from: { tool: "save" },
+    };
+    expect(() =>
+      validateBrowserCheckpoint(
+        withLoop({ ...savedLoop, outputContract: sourcedOutput }),
+      ),
+    ).not.toThrow();
+    for (const outputContract of [
+      { ...sourcedOutput, from: undefined },
+      { ...sourcedOutput, from: { tool: "" } },
+      { ...sourcedOutput, from: { tool: "save", extra: true } },
+      { ...sourcedOutput, provenance: "model-authored" },
+    ]) {
+      expect(() =>
+        validateBrowserCheckpoint(withLoop({ ...savedLoop, outputContract })),
+      ).toThrow(BrowserSyncValidationError);
+    }
     const valid = withLoop(savedLoop);
     expect(validateBrowserCheckpoint(valid).suspensions[0]).toEqual(
       valid.suspensions[0],

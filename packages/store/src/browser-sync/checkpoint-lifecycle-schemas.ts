@@ -134,25 +134,35 @@ const suspendedLoopState = z.strictObject({
     loopPerturbation: correctionCount,
     outputRepair: correctionCount,
   }),
-  outputContract: z.strictObject({
-    toolName: z.literal("submit-output"),
-    schema: jsonObject.superRefine((schema, ctx) => {
-      try {
-        assertAgentOutputObjectSchema(schema);
-      } catch {
-        ctx.addIssue({
-          code: "custom",
-          message: "Agent output schema requires an object root",
-        });
-      }
-    }),
-    schemaSource: z.enum(["loaded", "host-story", "host-system"]),
-    provenance: z.literal("model-authored"),
-    requiredWork: z.strictObject({
-      required: z.boolean(),
-      toolNames: z.array(nonEmptyString),
-    }),
-  }),
+  outputContract: z
+    .strictObject({
+      toolName: z.literal("submit-output"),
+      schema: jsonObject.superRefine((schema, ctx) => {
+        try {
+          assertAgentOutputObjectSchema(schema);
+        } catch {
+          ctx.addIssue({
+            code: "custom",
+            message: "Agent output schema requires an object root",
+          });
+        }
+      }),
+      schemaSource: z.enum(["loaded", "host-story", "host-system"]),
+      provenance: z.enum(["model-authored", "tool-result"]),
+      from: z.strictObject({ tool: nonEmptyString }).optional(),
+      requiredWork: z.strictObject({
+        required: z.boolean(),
+        toolNames: z.array(nonEmptyString),
+      }),
+    })
+    .refine(
+      (output) =>
+        (output.provenance === "tool-result") === (output.from !== undefined),
+      {
+        message: "Only tool-result output requires a source tool",
+        path: ["from"],
+      },
+    ),
   corrections: z
     .strictObject({
       toolUse: correctionCount.optional(),
