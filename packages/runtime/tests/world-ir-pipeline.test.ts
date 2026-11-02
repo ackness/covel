@@ -270,7 +270,7 @@ describe("shared WorldIR turn pipeline", () => {
     ).toBe(true);
   });
 
-  it("corrects a changed canonical submission without repeating extraction", async () => {
+  it("ignores changed submission arguments and keeps the canonical tool result", async () => {
     const { result } = await runPipeline(JSON.stringify(VALID_WORLD_IR), true);
     const facts = result.runtimeResults.find(
       (r) => r.runtimeId === "world-ir",
@@ -280,11 +280,7 @@ describe("shared WorldIR turn pipeline", () => {
     expect(facts.toolCalls.map((call) => call.toolName)).toEqual([
       "submit-world-facts",
       "submit-output",
-      "submit-output",
     ]);
-    expect(facts.toolCalls[1]?.output).toMatchObject({
-      error: { code: "invalid-output" },
-    });
   });
 
   it("keeps the story result but skips typed consumers when extraction fails", async () => {
