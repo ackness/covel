@@ -754,7 +754,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 浏览器控制台 `[subscription] stream diagnostic` 区分 `reader-done`、`read-error`、`parse-error`、`message-error`、`body-missing`、`abort`、`cancel` 和 `cancel-error`。非法 JSON 的 `parse-rejected` 与隔离订阅处理器的 `handler-error` 仍保留原来的跳过/隔离行为，不触发额外重连。`stream closed` 标记退出原因；主动终止另记关闭、手动重连、标签隐藏、action 暂停或客户端错误上限。
 - 日志只含连接标识、固定类别、阶段、状态码、计数和时长。错误名也归一化为固定类别，不记录原始异常、事件正文、密钥、owner token 或 URL。`peer-abort` 只说明服务端观察到对端断开，无法单凭它判断浏览器、代理或网络谁先触发；需对照同一连接的客户端日志。
 
-健康空闲连接不产生关闭记录。此诊断不改变退避、心跳、deadline 或重连策略。没有原始异常连接的双端证据时，反复重连仍属待定位；健康测试通过不能证明根因已修复。
+健康空闲连接不产生关闭记录。读取器隔离诊断回调失败，取消和 reader 锁释放不依赖回调成功，原读取／解析／处理异常仍传播。此诊断不改变退避、心跳、deadline 或重连策略。没有原始异常连接的双端证据时，反复重连仍属待定位；健康测试通过不能证明根因已修复。
 
 **action 流和业务执行互不拖累**
 

@@ -15,3 +15,25 @@ it("only returns fixed error categories, never user-controlled names, messages o
     diagnosticErrorKind(new DOMException("PRIVATE_TIMEOUT", "TimeoutError")),
   ).toBe("timeout");
 });
+
+it("does not throw when an error name or prototype cannot be inspected", () => {
+  const error = new Error("PRIVATE_MESSAGE");
+  Object.defineProperty(error, "name", {
+    get() {
+      throw new Error("PRIVATE_NAME");
+    },
+  });
+  expect(diagnosticErrorKind(error)).toBe("error");
+  expect(
+    diagnosticErrorKind(
+      new Proxy(
+        {},
+        {
+          getPrototypeOf() {
+            throw new Error("PRIVATE_PROTOTYPE");
+          },
+        },
+      ),
+    ),
+  ).toBe("error");
+});

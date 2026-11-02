@@ -31,9 +31,16 @@ export interface ReadSseStreamOptions<T> {
 export async function readSseStream<T>(
   options: ReadSseStreamOptions<T>,
 ): Promise<void> {
+  const diagnose = (diagnostic: SseDiagnostic): void => {
+    try {
+      options.onDiagnostic?.(diagnostic);
+    } catch {
+      // Observation must never replace a stream error or block its cleanup.
+    }
+  };
   const reader = options.response.body?.getReader();
   if (!reader) {
-    options.onDiagnostic?.({ type: "body-missing" });
+    diagnose({ type: "body-missing" });
     throw new Error("No response body for SSE stream");
   }
 
@@ -88,21 +95,21 @@ export async function readSseStream<T>(
   };
 
   const cancel = async () => {
-    options.onDiagnostic?.({ type: "cancel" });
+    diagnose({ type: "cancel" });
     await reader.cancel().catch((error: unknown) => {
-      options.onDiagnostic?.({
+      diagnose({
         type: "cancel-error",
         errorKind: diagnosticErrorKind(error),
       });
     });
   };
   const onAbort = () => {
-    options.onDiagnostic?.({ type: "abort" });
+    diagnose({ type: "abort" });
     void cancel();
   };
   options.signal?.addEventListener("abort", onAbort, { once: true });
   try {
-    if (options.signal?.aborted) options.onDiagnostic?.({ type: "abort" });
+    if (options.signal?.aborted) diagnose({ type: "abort" });
     while (!options.signal?.aborted) {
       const { done, value } = await reader.read();
       finished = done;
@@ -128,21 +135,24 @@ export async function readSseStream<T>(
       }
       buffer += chunk.slice(start);
       if (done) {
-        options.onDiagnostic?.({ type: "reader-done" });
+        diagnose({ type: "reader-done" });
         break;
       }
     }
     // An interrupted frame is not committed by EOF; only a blank line dispatches.
   } catch (error) {
-    options.onDiagnostic?.({
+    diagnose({
       type: `${phase}-error`,
       errorKind: diagnosticErrorKind(error),
     });
     throw error;
   } finally {
     options.signal?.removeEventListener("abort", onAbort);
-    if (!finished) await cancel();
-    reader.releaseLock();
+    try {
+      if (!finished) await cancel();
+    } finally {
+      reader.releaseLock();
+    }
   }
 }
 

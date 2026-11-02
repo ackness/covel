@@ -576,8 +576,12 @@ describe("narrative perspective review", () => {
       );
     const speech: [string, string][] = [
       ["zh-CN", "我只有一个请求：『别把这件事写进报道。』"],
+      ["zh-CN", "我只有一个疑问：『钥匙在哪儿？』"],
+      ["zh-CN", "我的回答：『你已经知道了。』"],
       ["zh-CN", "「我只有一个请求：『别把这件事写进报道。』」"],
       ["en", 'I have one request: "Please keep this out of the paper."'],
+      ["en", 'My reply: "You already know."'],
+      ["en", 'Yesterday I said: "Stay here." You know why.'],
       [
         "en",
         'I have one request: "Please keep this out of the paper." You know why.',
@@ -625,8 +629,19 @@ describe("narrative perspective review", () => {
       ["zh-CN", "「走吧。」我说。", "违反了第二人称视角"],
       ["zh-CN", "我说：「走吧。」", "违反了第二人称视角"],
       ["zh-CN", "我低声问：『你要走吗？』", "违反了第二人称视角"],
+      ["zh-CN", "我低声问你：『你要走吗？』", "违反了第二人称视角"],
       ["en", 'I say: "Let\'s go."', "violates second-person perspective"],
       ["en", 'I whisper: "Let\'s go."', "violates second-person perspective"],
+      [
+        "en",
+        'I whisper softly: "Let\'s go."',
+        "violates second-person perspective",
+      ],
+      [
+        "en",
+        'I quietly ask you: "Shall we go?"',
+        "violates second-person perspective",
+      ],
       ["en", 'I say, "Let\'s go."', "violates second-person perspective"],
       ["en", '"Let\'s go," I say.', "violates second-person perspective"],
     ] as const)

@@ -15,6 +15,65 @@ function responseFromChunks(chunks: readonly string[]): Response {
 }
 
 describe("readSseStream", () => {
+  it("preserves parser failure and cleans up when diagnostics throw", async () => {
+    const error = new Error("parser failed");
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("data: event\n\n"));
+        },
+        cancel,
+      }),
+    );
+    await expect(
+      readSseStream({
+        response,
+        parse() {
+          throw error;
+        },
+        onMessage() {},
+        onDiagnostic() {
+          throw new Error("diagnostic failed");
+        },
+      }),
+    ).rejects.toBe(error);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it("cancels a blocked read despite a failing abort observer", async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }));
+    const controller = new AbortController();
+    const pending = readSseStream({
+      response,
+      signal: controller.signal,
+      parse: (data) => data,
+      onMessage() {},
+      onDiagnostic() {
+        throw new Error("diagnostic failed");
+      },
+    });
+    controller.abort();
+    await pending;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it("keeps healthy EOF successful despite a failing observer", async () => {
+    const response = responseFromChunks([]);
+    await readSseStream({
+      response,
+      parse: (data) => data,
+      onMessage() {},
+      onDiagnostic() {
+        throw new Error("diagnostic failed");
+      },
+    });
+    expect(response.body?.locked).toBe(false);
+  });
+
   it.each(["read-error", "parse-error", "message-error"] as const)(
     "reports %s and preserves the original rejection",
     async (kind) => {
