@@ -11,6 +11,7 @@ import type { PreLLMCallRequest } from "../src/hooks/wire-helpers.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 import {
   input,
+  contextWindowWithOutputTool,
   manifest,
   makeExecutor,
   prose,
@@ -148,7 +149,10 @@ describe("context overflow in the agent loop", () => {
       manifest: manifest({ tools: { plugin: ["read"] } }),
       deps: { toolExecutor: makeExecutor([read]) },
       estimator: small.estimator,
-      contextBudget: { maxInputTokens: 5_700, reservedForResponse: 100 },
+      contextBudget: {
+        maxInputTokens: await contextWindowWithOutputTool(5_500),
+        reservedForResponse: 100,
+      },
     });
     expect(loop.stop).toEqual({ reason: "completed" });
     expect(llm.requests).toHaveLength(2);
@@ -197,7 +201,10 @@ describe("context overflow in the agent loop", () => {
       maxSteps: 10,
       deps: { emitter, toolExecutor: makeExecutor([read]) },
       estimator: small.estimator,
-      contextBudget: { maxInputTokens: 6_000, reservedForResponse: 100 },
+      contextBudget: {
+        maxInputTokens: await contextWindowWithOutputTool(5_500),
+        reservedForResponse: 100,
+      },
     });
     const { result } = settle(loop, runtime);
     expect(result.status).toBe("success");
@@ -505,6 +512,7 @@ describe("context overflow in the agent loop", () => {
   });
 
   it("returns a rescued runtime through finalization without a fault", async () => {
+    const contextWindow = await contextWindowWithOutputTool(500);
     const hookPipeline = createHookPipeline();
     hookPipeline.register<PreLLMCallRequest>({
       id: "compact-request",
@@ -530,7 +538,7 @@ describe("context overflow in the agent loop", () => {
       llm: {
         ...identity(llm),
         resolveBudget: () => ({
-          contextWindow: 1_000,
+          contextWindow,
           requestedMaxOutputTokens: 100,
         }),
       },

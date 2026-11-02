@@ -9,10 +9,12 @@ import {
  */
 
 import { watchSubscription } from "./subscription-watch.js";
+import { randomUUID } from "node:crypto";
 import {
   createBoundedSerialQueue,
   closeSseDelivery,
   SSE_WRITE_QUEUE_MAX,
+  type SseQueueFailure,
 } from "./sse-delivery.js";
 import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
@@ -23,6 +25,7 @@ import {
   SUBSCRIPTION_TOPICS,
   parseSubscriptionEventId,
   readRuntimeEnv,
+  diagnosticErrorKind,
 } from "@covel/shared";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -37,6 +40,22 @@ type Env = {
     eventBus: EventBus;
   };
 };
+
+type CloseReason =
+  | SseQueueFailure
+  | "queue-overflow"
+  | "live-buffer-overflow"
+  | "recheck-buffer-overflow"
+  | "handshake-overflow"
+  | "session-invalidated"
+  | "session-missing"
+  | "session-replaced"
+  | "identity-read-error"
+  | "event-bus-reset"
+  | "host-shutdown"
+  | "peer-abort"
+  | "stream-error"
+  | "server-complete";
 
 export const subscribeRoutes = new Hono<Env>();
 
@@ -195,6 +214,11 @@ subscribeRoutes.get(
         c.req.query("lastEventId") ?? c.req.header("Last-Event-ID");
 
       const pinnedEpoch = watch.pin();
+      // Server-generated, non-authorizing identity. Available even if the first
+      // SSE write fails, and readable by approved cross-origin browser clients.
+      const connectionId = randomUUID();
+      c.header("X-Covel-Subscription-Id", connectionId);
+      c.header("Access-Control-Expose-Headers", "X-Covel-Subscription-Id");
       streamOwnsWatch = true;
       return streamOwnedSSE(c, async (stream) => {
         // R-01 Bug A (event-loss race): register the live listener BEFORE
@@ -211,12 +235,30 @@ subscribeRoutes.get(
         let resolveDone = (): void => {};
         let closing = false;
         let resetScheduled = false;
+        const startedAt = Date.now();
+        type StreamPhase = "handshake" | "replay" | "live";
+        let phase: StreamPhase = "handshake";
+        let termination:
+          | { reason: CloseReason; phase: StreamPhase; errorKind?: string }
+          | undefined;
+        let resetReason: "transport-gap" | "publish-failed" | undefined;
+        const recordClose = (reason: CloseReason, error?: unknown): void => {
+          termination ??= {
+            reason,
+            phase,
+            ...(error === undefined
+              ? {}
+              : { errorKind: diagnosticErrorKind(error) }),
+          };
+        };
+        console.info("[subscribe] stream opened", { connectionId });
         const done = new Promise<void>((resolve) => {
           resolveDone = resolve;
         });
 
-        const closeStream = (): void => {
+        const closeStream = (reason: CloseReason, error?: unknown): void => {
           if (closing) return;
+          recordClose(reason, error);
           closing = true;
           writes.close();
           stream.abort();
@@ -233,17 +275,26 @@ subscribeRoutes.get(
             ) {
               return true;
             }
-          } catch {
+            closeStream(live ? "session-replaced" : "session-missing");
+          } catch (error) {
             // A failed identity read cannot safely authorize another frame.
+            closeStream("identity-read-error", error);
           }
-          closeStream();
           return false;
         };
 
         const writes = createBoundedSerialQueue({
           capacity: SSE_WRITE_QUEUE_MAX,
-          onOverflow: closeStream,
-          onError: closeStream,
+          onOverflow: () => closeStream("queue-overflow"),
+          onError: (error, reason) => {
+            if (closing)
+              console.warn("[subscribe] cleanup failed", {
+                connectionId,
+                reason,
+                errorKind: diagnosticErrorKind(error),
+              });
+            closeStream(reason, error);
+          },
         });
 
         const writeEvent = (
@@ -303,11 +354,12 @@ subscribeRoutes.get(
               event.sessionIncarnation === expectedIncarnation &&
               event.type === "session.invalidated"
             ) {
-              closeStream();
+              closeStream("session-invalidated");
               return;
             }
             if (rechecking) {
-              if (pendingRecheck.length >= SSE_WRITE_QUEUE_MAX) closeStream();
+              if (pendingRecheck.length >= SSE_WRITE_QUEUE_MAX)
+                closeStream("recheck-buffer-overflow");
               else pendingRecheck.push(event);
               return;
             }
@@ -328,7 +380,7 @@ subscribeRoutes.get(
             if (!projected) return;
             if (replaying) {
               if (liveBuffer.length >= SSE_WRITE_QUEUE_MAX) {
-                closeStream();
+                closeStream("live-buffer-overflow");
                 return;
               }
               liveBuffer.push(projected);
@@ -341,10 +393,12 @@ subscribeRoutes.get(
           watch.activate(receiveEvent, (reset) => {
             if (reset.sessionId !== sessionId || resetScheduled) return;
             resetScheduled = true;
+            resetReason = reset.reason;
+            const reason = reset.source ?? "event-bus-reset";
             if (replaying) {
               // The replay epoch has changed under this request. Disconnecting
               // makes the reconnect run the ordinary epoch-reset handshake.
-              closeStream();
+              closeStream(reason);
               return;
             }
             writes.enqueue(async () => {
@@ -353,15 +407,27 @@ subscribeRoutes.get(
                 event: "system.reset",
                 data: resetPayload(reset.reason),
               });
-              closeStream();
+              closeStream(reason);
             });
           });
           stream.onAbort(() => {
+            recordClose(
+              c.get("requestWork")?.signal.aborted
+                ? "host-shutdown"
+                : "peer-abort",
+            );
             writes.close();
             closing = true;
             resolveDone();
           });
-          if (stream.aborted || closing) return;
+          if (stream.aborted || closing) {
+            recordClose(
+              c.get("requestWork")?.signal.aborted
+                ? "host-shutdown"
+                : "peer-abort",
+            );
+            return;
+          }
 
           // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
           // frontend never clobbers its lastEventId back to "0" on reconnect
@@ -373,6 +439,7 @@ subscribeRoutes.get(
               event: "system.connected",
               data: JSON.stringify({
                 sessionId,
+                connectionId,
                 topics: topics ? [...topics] : "all",
                 cursor: connectedCursor,
                 timestamp: new Date().toISOString(),
@@ -380,6 +447,7 @@ subscribeRoutes.get(
             });
           });
           if (closing) return;
+          phase = "replay";
 
           // Replay missed events if lastEventId provided. Ids are epoch-scoped
           // (`${epoch}:${seq}`): when the cursor's epoch no longer matches, or
@@ -430,6 +498,7 @@ subscribeRoutes.get(
             }
           }
           replaying = false;
+          phase = "live";
           sentIds.clear();
 
           // Heartbeats share the same serial queue as live events, preventing
@@ -446,10 +515,12 @@ subscribeRoutes.get(
 
           await done;
         } catch (err) {
-          console.error(
-            `[subscribe] SSE stream error (session ${sessionId}):`,
-            err,
-          );
+          recordClose("stream-error", err);
+          console.error("[subscribe] stream failed", {
+            connectionId,
+            phase,
+            errorKind: diagnosticErrorKind(err),
+          });
         } finally {
           writes.close();
           liveBuffer.length = 0;
@@ -458,8 +529,23 @@ subscribeRoutes.get(
           if (heartbeatInterval) clearInterval(heartbeatInterval);
           try {
             await writes.drain();
-            await closeSseDelivery(stream);
+            await closeSseDelivery(stream, (reason, error) => {
+              console.warn("[subscribe] cleanup failed", {
+                connectionId,
+                reason,
+                ...(error === undefined
+                  ? {}
+                  : { errorKind: diagnosticErrorKind(error) }),
+              });
+            });
           } finally {
+            recordClose("server-complete");
+            console.info("[subscribe] stream closed", {
+              connectionId,
+              ...termination,
+              ...(resetReason ? { resetReason } : {}),
+              durationMs: Date.now() - startedAt,
+            });
             connectionLease.release();
           }
         }

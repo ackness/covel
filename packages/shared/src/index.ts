@@ -780,3 +780,4 @@ export {
 export * from "./schemas/plugin-theme.js";
 export * from "./plugin-theme-css.js";
 export * from "./plugin-theme.js";
+export { diagnosticErrorKind } from "./utils/diagnostic-error.js";

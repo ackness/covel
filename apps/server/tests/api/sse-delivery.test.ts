@@ -18,12 +18,14 @@ it("bounds and deduplicates a close that never settles", async () => {
   const close = vi.fn(() => new Promise<void>(() => {}));
   const abort = vi.fn();
   const stream = { close, abort } as unknown as SSEStreamingApi;
-  const closing = closeSseDelivery(stream);
+  const diagnostic = vi.fn();
+  const closing = closeSseDelivery(stream, diagnostic);
   expect(closeSseDelivery(stream)).toBe(closing);
   await vi.advanceTimersByTimeAsync(2000);
   await closing;
   expect(close).toHaveBeenCalledOnce();
   expect(abort).toHaveBeenCalledOnce();
+  expect(diagnostic).toHaveBeenCalledExactlyOnceWith("close-deadline");
   await closeSseDelivery(stream);
   expect(close).toHaveBeenCalledOnce();
 });
@@ -49,12 +51,14 @@ it("bounds total drain even while individual writes keep completing before their
   expect(run).toHaveBeenCalledTimes(2);
   expect(queue.pending()).toBe(0);
   expect(fail).toHaveBeenCalledOnce();
+  expect(fail).toHaveBeenCalledWith(expect.any(Error), "drain-deadline");
 });
 
 it.each(["native-backpressure", "hung-connected"] as const)(
   "releases subscription pins, listeners, timers and connection budget after %s",
   async (mode) => {
     vi.useFakeTimers();
+    const diagnostic = vi.spyOn(console, "info").mockImplementation(() => {});
     const store = createMemoryStore();
     const bus = createEventBus();
     const sessionId = `sse-delivery-${mode}`;
@@ -109,6 +113,13 @@ it.each(["native-backpressure", "hung-connected"] as const)(
     }
     await vi.advanceTimersByTimeAsync(2000);
     expect(instances.at(-1)?.aborted).toBe(true);
+    expect(diagnostic).toHaveBeenCalledWith(
+      "[subscribe] stream closed",
+      expect.objectContaining({
+        reason: "write-deadline",
+        connectionId: response.headers.get("X-Covel-Subscription-Id"),
+      }),
+    );
     expect(releases).toHaveLength(1);
     expect(releases[0]).toHaveBeenCalledOnce();
     expect(unsubs).toHaveLength(2);

@@ -19,6 +19,8 @@
 
 游戏 action 流和普通订阅只携带不含正文的步骤/模型/工具/Hook/子调用/gateway 进度。公开 `runtime` topic 只缓存步骤与工具活动的安全副本，不把 trace 内容带入回放；步骤 note 只含固定拒绝类别和计数。concealed 步骤用布尔值 `submissionAccepted` 保留成功提交的处置，不保留工具列表。接受值只有提交后才作为故事可见，提交参数和原始审查细节不能投影为玩家故事。完整诊断 trace 与显式 trace 订阅仍遵守原有访问、concealed 和委托隐私规则。见[协议](../reference/protocol.md#叙事事件)。
 
+订阅关闭诊断只记录随机连接标识、固定原因与错误类别、阶段、状态码、计数和时长。异常的 `name`、message、stack、cause 及请求 URL、令牌、事件/模型正文都不直接进入这组日志。`X-Covel-Subscription-Id` 只关联控制台记录，不能授权；响应头暴露不改变 CORS origin 或 owner 校验。见[订阅协议](../reference/protocol.md)。
+
 ## 声明式执行边界
 
 [声明式分类](../reference/plugin-installation.md#声明式插件)需要完整、有界、不跟随链接的文件清单，以及与加载定义一致的内容摘要。扫描前后签名不一致、当前 registry 替换或文件读取失败，都不能沿用旧的正面证明。授权读取当前发布的 registry；执行快照只冻结运行材料，不冻结权限。旧代码快照的 runtime、工具和服务不能借用新声明式版本的免审批资格；缓存的代码 runtime 和每次实际模块导入仍要求真实代码与 runtime 授权。

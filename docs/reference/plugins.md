@@ -438,6 +438,8 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 - 故事 agent：必需的非空白 `narrativeOutput: string`，可选 `yield: user | continue`。
 - 系统 agent：开放对象，可选 `narrativeOutput: string`、`completion: done | pending`、`preGameDone: boolean`，允许其他业务字段。`{}` 表示没有业务输出。需要给下游提供类型化输出时应声明 schema。
 
+**完成字段。** 首次可见的 `submit-output` 工具说明和默认 system schema 已说明这组规则。先遵守实际 schema 的必填与取值限制；允许省略时，非 setup 运行省略 `preGameDone`，无需完成信号时也省略 `completion`。`preGameDone: false` 表示 setup 仍在等待，不表示“当前不是 setup”。等待用 `completion: "pending"`，完成用 `"done"`。两个字段同时提供时，只允许 `false + "pending"` 或 `true + "done"`；矛盾仍在宿主提交门被拒绝，不能靠提交成功提前完成或落库。
+
 `submit-output` 自动可用，不写进工具白名单、注册声明或 `defer`。函数仍返回 handler 结果，不能调用这个工具。提交的数据不能借 `pluginData`、UI 或事件形状产生写入。
 
 `agent.completion` 只声明提交前必须完成的业务工作：
@@ -581,6 +583,8 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 - `kind` 是 `narration`（旁白）、`dialogue`（对白）或 `action`（动作）。
 - `speaker` 是说话或行动的人物名字（≤80 字符），写名字，不写 ID。旁白不写。
 - `text` 是这一段的正文（≤4000 字符）。段落里的空行折成单个换行，所以一段就是玩家看到的一个段落。
+
+**对白与旁白。** 署名 `dialogue` 的正文写该人物说的话，内部引用也属于对白，例如 `我只有一个请求：『别把这件事写进报道。』`。引语前的叙述、动作应另放 `narration` / `action` 段。SDK 的 `createNarrativeReview` 对混合文本作保守的句法检查：开头引号外的后缀、由人称主语和明确说话动词组成的冒号前缀（可带副词或宾语，如 `我低声问你：『走吗？』` / `I whisper softly: "Let’s go."`），以及逗号引出的末尾引语仍检查旁白人称。冒号或“疑问／My reply”这样的名词本身不证明旁白。这不是完整的语言语义分析；含糊句式应拆段。五种视角规则和所有段落的内部指令标签检查不变。
 
 内核从 `segments` 推出 `narrativeOutput`：各段 `text` 用空行连接。只需要正文的插件可用 `select: /narrativeOutput` 拿到字符串；提取说话、动作或状态归属的插件应选择 `select: /segments`，连同 `kind`、`speaker` 和 `text` 阅读，不能把引语中的第一人称自动归给玩家。公共契约在 `select` 之前校验完整输出，不需要复制段落 schema。原玩家消息未必包含在提取器的输入中，不能从缺失内容推测承诺；请求、尝试和承诺不等于行动成功。对话日志、下一回合的历史、`turn-digest@1` 和记忆仍读连接后的正文，不会看到 JSON。
 

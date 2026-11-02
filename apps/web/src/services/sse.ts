@@ -1,3 +1,18 @@
+import { diagnosticErrorKind } from "@covel/shared";
+
+export interface SseDiagnostic {
+  readonly type:
+    | "reader-done"
+    | "read-error"
+    | "parse-error"
+    | "message-error"
+    | "abort"
+    | "cancel"
+    | "cancel-error"
+    | "body-missing";
+  readonly errorKind?: string;
+}
+
 export interface SseMessage {
   readonly id?: string;
   readonly event?: string;
@@ -9,13 +24,25 @@ export interface ReadSseStreamOptions<T> {
   readonly signal?: AbortSignal;
   readonly parse: (data: string, message: SseMessage) => T | undefined;
   readonly onMessage: (event: T) => void;
+  /** Transport metadata only; observers never receive content or raw errors. */
+  readonly onDiagnostic?: (diagnostic: SseDiagnostic) => void;
 }
 
 export async function readSseStream<T>(
   options: ReadSseStreamOptions<T>,
 ): Promise<void> {
+  const diagnose = (diagnostic: SseDiagnostic): void => {
+    try {
+      options.onDiagnostic?.(diagnostic);
+    } catch {
+      // Observation must never replace a stream error or block its cleanup.
+    }
+  };
   const reader = options.response.body?.getReader();
-  if (!reader) throw new Error("No response body for SSE stream");
+  if (!reader) {
+    diagnose({ type: "body-missing" });
+    throw new Error("No response body for SSE stream");
+  }
 
   const decoder = new TextDecoder();
   let buffer = "";
@@ -24,6 +51,7 @@ export async function readSseStream<T>(
   let dataLines: string[] = [];
   let skipLf = false;
   let finished = false;
+  let phase: "read" | "parse" | "message" = "read";
 
   const dispatch = (): void => {
     if (dataLines.length === 0) return;
@@ -33,8 +61,13 @@ export async function readSseStream<T>(
       ...(eventType ? { event: eventType } : {}),
       data: eventData,
     };
+    phase = "parse";
     const parsed = options.parse(eventData, message);
-    if (parsed !== undefined) options.onMessage(parsed);
+    if (parsed !== undefined) {
+      phase = "message";
+      options.onMessage(parsed);
+    }
+    phase = "read";
   };
 
   const consumeLine = (line: string): void => {
@@ -61,11 +94,22 @@ export async function readSseStream<T>(
     }
   };
 
+  const cancel = async () => {
+    diagnose({ type: "cancel" });
+    await reader.cancel().catch((error: unknown) => {
+      diagnose({
+        type: "cancel-error",
+        errorKind: diagnosticErrorKind(error),
+      });
+    });
+  };
   const onAbort = () => {
-    void reader.cancel().catch(() => {});
+    diagnose({ type: "abort" });
+    void cancel();
   };
   options.signal?.addEventListener("abort", onAbort, { once: true });
   try {
+    if (options.signal?.aborted) diagnose({ type: "abort" });
     while (!options.signal?.aborted) {
       const { done, value } = await reader.read();
       finished = done;
@@ -90,22 +134,39 @@ export async function readSseStream<T>(
         skipLf = match[0] === "\r" && start === chunk.length;
       }
       buffer += chunk.slice(start);
-      if (done) break;
+      if (done) {
+        diagnose({ type: "reader-done" });
+        break;
+      }
     }
     // An interrupted frame is not committed by EOF; only a blank line dispatches.
+  } catch (error) {
+    diagnose({
+      type: `${phase}-error`,
+      errorKind: diagnosticErrorKind(error),
+    });
+    throw error;
   } finally {
     options.signal?.removeEventListener("abort", onAbort);
-    if (!finished) await reader.cancel().catch(() => {});
-    reader.releaseLock();
+    try {
+      if (!finished) await cancel();
+    } finally {
+      reader.releaseLock();
+    }
   }
 }
 
-export function parseJsonSseData<T>(data: string): T | undefined {
+export function parseJsonSseData<T>(
+  data: string,
+  _message?: SseMessage,
+  onError?: () => void,
+): T | undefined {
   const trimmed = data.trim();
   if (!trimmed) return undefined;
   try {
     return JSON.parse(trimmed) as T;
   } catch {
+    onError?.();
     return undefined;
   }
 }

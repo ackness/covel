@@ -1,6 +1,7 @@
 import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
 import type { SuspendedLoopState } from "@covel/store";
 import { resolveLoopProfile } from "../../src/agent-loop/loop-profile.js";
+import { outputToolDefinition } from "../../src/agent-loop/agent-output-contract.js";
 import { makeProposal } from "@covel/plugin-handlers-utils";
 /**
  * Minimal fixture for the agent tool loop: a scripted model, one recording
@@ -52,6 +53,22 @@ export function manifest(
     maxRetries: 0,
     ...overrides,
   } as RuntimeManifest;
+}
+
+/**
+ * Character-count budget fixtures reserve the current submission definition
+ * separately, so prompt wording cannot consume the conversation under test.
+ * Other tools, messages and the response reserve still use the supplied budget.
+ */
+export async function contextWindowWithOutputTool(
+  otherInputTokens: number,
+  loaded: LoadedRuntime = { manifest: manifest(), promptTemplate: "" },
+): Promise<number> {
+  const definition = await outputToolDefinition(
+    resolveAgentOutput(loaded),
+    "en",
+  );
+  return otherInputTokens + JSON.stringify(definition).length;
 }
 
 export const markTool = tool({

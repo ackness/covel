@@ -4,14 +4,14 @@
 模板提供提交指导以及规范化的解析错误原因。
 -->
 
-tool-description: 在完成必需的工具工作后，提交本 runtime 的最终结果。参数必须符合此 schema。若提交被拒绝，请修正报告的问题并再次调用此工具。提交成功会结束 runtime，但不代表更改已经保存。
+tool-description: 在完成必需的工具工作后，提交本 runtime 的最终结果。参数必须符合此 schema。若提交被拒绝，请修正报告的问题并再次调用此工具。提交成功会结束 runtime，但不代表更改已经保存。 完成字段按 schema 要求提供；允许省略时，普通非 setup 运行省略 preGameDone，不需要完成信号时也省略 completion。preGameDone false 表示 setup 仍在等待，不表示“当前不是 setup”。等待用 completion "pending"，完成用 "done"；若两个字段同时提供，只允许 false + "pending" 或 true + "done"。
 tool-source-description: 请在 {{ tool }} 成功后单独用 {} 调用本工具。宿主提交该业务工具最近一次成功返回的规范结果。被拒绝时按错误修正。提交成功不代表更改已保存。
 source-empty: 请只用 {} 调用 submit-output；宿主采用业务工具的规范结果。
 source-required: 请先成功调用 {{ tool }}，再用 {} 调用 submit-output。
 object-required: 参数必须是一个完整 JSON 对象。
 required-work: 请先成功完成必需的业务工具工作，并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
 required-work-tools: 请先成功完成必需的业务工具工作（{{ tools }}），并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
-completion-conflict: preGameDone 与 completion 互相矛盾。只提交本 runtime 当前所处的状态：仍在等待时用 preGameDone false（或 completion "pending"），已完成时用 preGameDone true（或 completion "done"）。
+completion-conflict: preGameDone 与 completion 互相矛盾。完成字段按 schema 要求提供；允许省略时，普通非 setup 运行省略 preGameDone，不需要完成信号时也省略 completion。preGameDone false 表示 setup 仍在等待，不表示“当前不是 setup”。等待用 completion "pending"，完成用 "done"；若两个字段同时提供，只允许 false + "pending" 或 true + "done"。
 contract-invalid: 去掉协议字段后，输出不符合公共契约 {{ contract }}：{{ problems }}。请修正这些字段后重新提交。
 after-root-object: 根对象已闭合后仍有内容；此处应为输入结束
 unexpected-end: JSON 输入意外结束；需要完整的 JSON 值

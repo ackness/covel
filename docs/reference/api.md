@@ -5048,11 +5048,13 @@ curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 
 **响应**
 
+响应头 `X-Covel-Subscription-Id` 是服务端生成的随机诊断标识，对获准的跨源请求可读；同值在 `system.connected.connectionId` 中返回。它没有授权能力，不代替 session token。用它关联两端的[订阅关闭日志](./protocol.md)，不要据此决定是否重连。
+
 连接成功后收到的第一条消息：
 
 ```
 event: system.connected
-data: {"sessionId":"mistport-a1b2c3d4","topics":"all","cursor":"...","timestamp":"2025-01-15T10:00:00.000Z"}
+data: {"sessionId":"mistport-a1b2c3d4","connectionId":"6d3fc2bd-9d96-4f77-9347-28cc2993f67e","topics":"all","cursor":"...","timestamp":"2025-01-15T10:00:00.000Z"}
 ```
 
 之后是事件。`event:` 一行就是事件类型（`CovelEventType`）本身，服务端不做任何改写。完整清单见 [protocol.md](./protocol.md)。

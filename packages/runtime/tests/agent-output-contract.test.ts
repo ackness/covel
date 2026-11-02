@@ -10,6 +10,7 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { resolveFrameworkCompletion } from "@covel/context";
 import { hasBusinessWork } from "../src/agent-loop/runtime-completion.js";
 import { validateOutput } from "@covel/tools";
+import { outputToolDefinition } from "../src/agent-loop/agent-output-contract.js";
 
 const manifest: RuntimeManifest = {
   name: "example/extract",
@@ -49,6 +50,14 @@ function policy(loaded: LoadedRuntime) {
 }
 
 describe("generated output contract", () => {
+  it("advertises localized completion guidance before a first submission", async () => {
+    const output = resolveAgentOutput({ manifest, promptTemplate: "" });
+    const tool = await outputToolDefinition(output, "zh-CN");
+    expect(tool.description).toContain("普通非 setup 运行省略 preGameDone");
+    expect(tool.description).toContain('false + "pending" 或 true + "done"');
+    expect(tool.description).toContain("不表示“当前不是 setup”");
+  });
+
   it("advertises the same loaded schema for story and system without a business registry", async () => {
     for (const outputKind of ["story", "system"] as const) {
       const result = await policy({

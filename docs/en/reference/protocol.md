@@ -744,6 +744,17 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 - The connected, replay, reset, and heartbeat frames of a subscription stream are subject to the same limits.
 - Listeners, pins, heartbeats, and the connection quota are released during cleanup.
 
+**Subscription close diagnostics**
+
+The server generates a random `connectionId` for each admitted subscription, returned in `X-Covel-Subscription-Id` and `system.connected`. Approved cross-origin requests can read the header. It only correlates both logs; it affects neither authorization, cursors nor reconnect decisions. The client also records a page-local `attemptId` for requests whose response headers have not arrived.
+
+- Server console records `[subscribe] stream opened` / `stream closed` for the actual stream lifecycle, including phase and duration on close. Fixed reasons distinguish `session-invalidated`, `session-missing`, `session-replaced`, `identity-read-error`, `event-bus-reset`, `handshake-overflow`, `live-buffer-overflow`, `recheck-buffer-overflow`, `queue-overflow`, `write-error`, `write-deadline`, `drain-deadline`, `host-shutdown`, `peer-abort`, `stream-error` and `server-complete`. Resets also record the bus reason, `transport-gap` / `publish-failed`. Cleanup errors and deadlines use `cleanup failed` with the same connection ID, preserving the initiating close reason.
+- EventBus records a fixed reset reason and scope; subscription callbacks correlate it to each connection. A stale-cursor handshake reset keeps its stream open and is distinct from live bus invalidation.
+- Browser console `[subscription] stream diagnostic` distinguishes `reader-done`, `read-error`, `parse-error`, `message-error`, `body-missing`, `abort`, `cancel` and `cancel-error`. Malformed JSON (`parse-rejected`) and isolated subscriber failures (`handler-error`) retain their existing skip/isolation behavior without extra reconnects. `stream closed` records the exit reason. Deliberate aborts also identify close, manual reconnect, hidden tab, action pause or the client-error limit.
+- Logs contain only connection identities, fixed categories, phases, status codes, counts and durations. Error names are normalized to fixed categories too. Raw exceptions, event content, keys, owner tokens and URLs are excluded. `peer-abort` only means the server observed a peer disconnect; it cannot identify whether a browser, proxy or network initiated it. Compare the client log for that connection.
+
+Healthy idle streams produce no close records. The reader isolates diagnostic observer failures: cancellation and reader lock release do not depend on observer success, and original read/parse/message errors still propagate. These diagnostics do not change backoff, heartbeats, deadlines or reconnect policy. Repeated reconnects remain unresolved without evidence from both ends of the original failure; passing healthy-stream tests does not prove a root-cause fix.
+
 **The action stream and business execution do not slow each other down**
 
 - For each frame in the action stream, the seq, the turn and trace identity, and the payload are fixed at the moment it is queued. Accepted frames are written out in queue order.

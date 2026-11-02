@@ -5050,11 +5050,13 @@ curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 
 **Response**
 
+The response header `X-Covel-Subscription-Id` is a server-generated random diagnostic identity readable by approved cross-origin requests. The same value appears in `system.connected.connectionId`. It grants no authority and cannot replace a session token. Use it to correlate [subscription close logs](./protocol.md), never to decide whether to reconnect.
+
 The first message you receive after the connection succeeds:
 
 ```
 event: system.connected
-data: {"sessionId":"mistport-a1b2c3d4","topics":"all","cursor":"...","timestamp":"2025-01-15T10:00:00.000Z"}
+data: {"sessionId":"mistport-a1b2c3d4","connectionId":"6d3fc2bd-9d96-4f77-9347-28cc2993f67e","topics":"all","cursor":"...","timestamp":"2025-01-15T10:00:00.000Z"}
 ```
 
 After that, events follow. The `event:` line is the event type (`CovelEventType`) itself. The server does not rewrite it. For the full list, see [protocol.md](./protocol.md).

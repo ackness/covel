@@ -186,7 +186,8 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/context/src/prompt-internals.ts": 14,
   "packages/context/src/session-context.ts": 1,
   "packages/plugin-handlers-utils/src/character-sheets.ts": 1,
-  "packages/plugin-handlers-utils/src/narrative-review.ts": 18,
+  // Includes the Chinese speech-verb pattern for quotation lead-ins.
+  "packages/plugin-handlers-utils/src/narrative-review.ts": 19,
   // Chinese omission marker and condensed-step header, selected by instructionLocaleFor.
   "packages/runtime/src/agent-loop/loop-context-policy.ts": 2,
   "packages/runtime/src/agent-loop/loop-prompts.ts": 1,

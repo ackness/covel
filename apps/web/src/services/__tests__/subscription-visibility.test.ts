@@ -57,12 +57,14 @@ describe("subscription visibility", () => {
     await vi.waitFor(() => expect(received).toHaveBeenCalledTimes(2));
     expect(subscription.state).toBe("connected");
     expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith("[subscription] event handler failed", {
-      sessionId: "session",
-      eventType: "state.snapshot.created",
-      eventId: "epoch:1",
-      errorType: "Error",
-    });
+    expect(warn).toHaveBeenCalledWith(
+      "[subscription] stream diagnostic",
+      expect.objectContaining({
+        type: "handler-error",
+        errorKind: "error",
+        attemptId: expect.any(String),
+      }),
+    );
     expect(JSON.stringify(warn.mock.calls)).not.toContain("private-value");
   });
 

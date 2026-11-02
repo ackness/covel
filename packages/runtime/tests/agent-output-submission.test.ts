@@ -547,6 +547,23 @@ it.each(["throw", "abort"] as const)(
 );
 
 describe("submission business value checks", () => {
+  it("explains optional completion fields on the first model request before any repair", async () => {
+    const llm = queuedLLM([submit({ completion: "done" })]);
+    const result = await runLoop({ llm });
+    expect(result.acceptedOutput).toEqual({ completion: "done" });
+    expect(llm.requests).toHaveLength(1);
+    const tool = llm.requests[0]?.tools?.find(
+      ({ name }) => name === "submit-output",
+    );
+    expect(tool?.description).toContain("omit preGameDone outside setup");
+    expect(tool?.description).toContain('false + "pending" or true + "done"');
+    expect(tool?.description).toContain('not "this is not setup"');
+    expect(JSON.stringify(tool?.parameters)).toContain("false does not mean");
+    expect(JSON.stringify(tool?.parameters)).toContain(
+      "Omit when no completion signal is needed",
+    );
+  });
+
   it("rejects contradictory completion fields as a correctable submission", async () => {
     for (const [conflict, fixed] of [
       [{ preGameDone: false, completion: "done" }, { preGameDone: false }],
@@ -618,9 +635,7 @@ describe("submission business value checks", () => {
     });
     expect(result.acceptedOutput).toEqual({ value: 1, completion: "done" });
     expect(llm.requests).toHaveLength(2);
-    expect(resultFor(llm.requests[1]!, "missing")).toContain(
-      "example.value@1",
-    );
+    expect(resultFor(llm.requests[1]!, "missing")).toContain("example.value@1");
     expect(reviewed).toEqual([{ value: 1, completion: "done" }]);
   });
 });
