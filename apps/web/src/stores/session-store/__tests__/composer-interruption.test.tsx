@@ -115,7 +115,6 @@ it.each(["player say", "host say", "structured action"])(
       const handleSseEvent = createSseEventHandler({
         ...refs,
         dispatch: update,
-        ds,
       });
       const actions = useBuildSessionActions({
         state,

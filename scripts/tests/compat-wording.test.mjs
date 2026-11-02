@@ -12,8 +12,8 @@ const wording =
 // Keep exceptions file-specific so new source files must justify their wording.
 const allowlist = new Map([
   [
-    "apps/web/src/components/session/stage/stage-selectors.ts",
-    "Current message blocks may omit turnId; the stage selector intentionally handles them.",
+    "packages/ai-provider/src/capability/strict-tools.ts",
+    "Strict tool calling checks whether a schema is compatible with a provider's strict mode.",
   ],
   [
     "apps/web/src/services/api/llm.ts",

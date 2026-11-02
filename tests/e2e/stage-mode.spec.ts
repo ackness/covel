@@ -15,7 +15,7 @@ import {
  * the stage-mode plan this covers the viewMode plumbing without running a turn:
  *   1. haruka's world `defaultViewMode: stage` lands the game view in stage mode
  *   2. the header toggle switches between parsed and stage
- * Full stage-render visual regression (backdrop / sprites / typewriter over real
+ * Full stage-render visual regression (backdrop / sprites / committed reader over real
  * scene art) needs a committed turn and is verified manually.
  */
 
@@ -479,7 +479,7 @@ test.describe("Stage view mode", () => {
       // including plugin-owned HTML, without replaying the already-read story.
       await expect(panel).toHaveCount(0);
       await expect(host).toHaveCount(0);
-      await expect(page.getByTestId("stage-dialog")).toHaveCount(0);
+      await expect(page.getByTestId("stage-dialog")).toBeVisible();
       await expect(page.getByTestId("stage-thinking")).toBeVisible();
       await pending.fulfill({ contentType: "text/event-stream", body: "" });
       await expect(panel).toBeVisible();

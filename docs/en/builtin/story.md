@@ -58,7 +58,7 @@ A world can set a default for this setting in `pluginSettings`. Your own setting
 
 ### Notes
 
-The story is shown while it is written; once it is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls: the draft shown so far is cleared and replaced by the rewrite, and what stays on screen is the text that passed the check. The omniscient narrator may not call characters "I" or "you"; the game-master perspective skips the person check.
+The story appears after submission validation, perspective review and durable turn commit. Running, tool and “Revising response” progress stays visible while waiting, without draft text. A perspective rejection can be corrected inside the loop within the review budget, two corrections by default; rejected output is never saved. The omniscient narrator may not call characters "I" or "you"; the game-master perspective skips the person check. Text is instant by default; a UI plugin can opt into whole-segment reveal without delaying the player’s next action.
 
 Possessive apostrophes in dialogue (such as `the guards’ keys`) and ambiguous single quote marks do not themselves request a perspective rewrite. Clear narration outside dialogue is still checked.
 
@@ -100,6 +100,8 @@ A world can preset these settings. For example, "Harukaze Academy · Spring Mint
 As with "Narrator": the character sheet and the person check follow the character you are currently playing, and the other player characters are listed in the character profiles, tagged `[player]`. See [Narrator · The character you play](#the-character-you-play).
 
 ## Action Suggestions (`guide`)
+
+Action suggestions retain the complete validated generation result. Retrying final confirmation does not write the suggestions again.
 
 After each part of the story, recaps the relevant earlier events, explains the choice you are facing now, and then gives 3 to 4 short actions you can use right away.
 
@@ -228,3 +230,5 @@ Cast shows public scene actors only, with an empty state without a provider. It 
 Select an action permitted for the current role: Game masters can use Direct, Narrate and Advance; spectators can only Advance; players retain ordinary modes. Advance takes no text. Changing views preserves drafts, modes, fields and queued choices; refusal does not clear them. Opening the page changes no role, narrator perspective or policy.
 
 DM Mode and Spectator include the console; Ensemble Dialogue recommends it. Defaults remain text and stage respectively. Ordinary DM Mode still uses Narrator and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.
+
+When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.

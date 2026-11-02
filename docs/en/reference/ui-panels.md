@@ -45,16 +45,16 @@ A layout changes only where things are placed. How panels are found, grouped and
 
 The session toolbar and status display read the World Model and public kernel UI slots, without reading plugins' private namespaces directly. Plugins supply slot values, so the same interface works across worlds and plugin combinations. A display item is hidden when its data is absent.
 
-| Shown content                   | Data source                                                                                                                                                                                                                                                      |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| World name, turn count          | `WorldRecord.name`, `SessionRecord.completedPlayerTurns`                                                                                                                                                                                                         |
-| Current scene name              | `name` in the `stage.backdrop@1` slot                                                                                                                                                                                                                            |
-| Player stat gauges              | Session World Model: the primary seat’s current character (see [Seats](./world-model.md#seats)), plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items                            |
-| Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                                                                          |
-| Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                                                                      |
-| "Speaking" marker               | The last paragraph with a speaker in the latest story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. While the story streams it matches the name as written, replaced by the resolved one at commit |
-| Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                                                                            |
-| Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below                                                   |
+| Shown content                   | Data source                                                                                                                                                                                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| World name, turn count          | `WorldRecord.name`, `SessionRecord.completedPlayerTurns`                                                                                                                                                                                |
+| Current scene name              | `name` in the `stage.backdrop@1` slot                                                                                                                                                                                                   |
+| Player stat gauges              | Session World Model: the primary seat’s current character (see [Seats](./world-model.md#seats)), plus attributes in the character schema with `category: "stats"`, `type: "number"`, and both `min` and `max` declared; up to 4 items   |
+| Carried items                   | String items of the `type: "array"` attributes with `category: "equipment"` on the same player character record, merged in schema order                                                                                                 |
+| Characters on stage (scene HUD) | The actors in `stage.cast@1` who have not left (up to 3), with avatars from `character.visual@1` looked up by character ID; only the name is shown when there is no picture                                                             |
+| "Speaking" marker               | The last paragraph with a speaker in the latest story; it matches an actor on stage by character ID when the segment has `speakerId`, otherwise by `displayName`. Only committed segment names and resolved speaker identities are used |
+| Chapter banner                  | In a layout with `backdrop: "banner"`, the world header image, the world name and the first three tags, shown above the first message                                                                                                   |
+| Status summary                  | The `session.summary@1` slot: a few lines that any plugin can provide and that should be seen at a glance, such as the current goal, the time and the inventory. See [Session summary](#session-summary) below                          |
 
 Where this content goes:
 
@@ -700,9 +700,10 @@ contributes:
 - **How speakers compare.** First with the segment's `speakerId`, then with its `speaker` name after trimming. World characters have stable IDs, so an ID targets a world's character; a plugin that does not know IDs can use names.
 - **Which template draws a segment.** The most specific matching template wins: `kind + speaker` beats `speaker` alone, which beats `kind` alone; at the same level, a match by ID beats a match by name. Remaining ties go to the plugin order that `/api/ui-specs?sessionId=` returns, then to declaration order. Only plugins runnable in the session contribute templates, as with `ui.message`.
 - **State a template reads.** `/segment` is the committed segment `{ kind, text, speaker?, speakerId? }`; `/index` is its position (from 0); `/character` is `{ id, name, type }` when `speakerId` names a session character; `/visual` is that character's `character.visual@1` slot value when the host has it. No plugin data, settings or other IDs.
-- **Where templates apply.** Only in the chat view's `parsed` and `detailed` modes, and only to committed stories with `segments`. When some segment matches, the story renders segment by segment: matched segments through their template, the rest as default text. When no segment matches, the message renders exactly as before. A story still streaming, the stage dialog and the `raw` view never use templates (the `raw` JSON shows `segments`).
-- **Host operation failure notice.** The persistent footer renders outside segment templates in parsed and detailed chat. A missing plugin or a template replacing the body cannot suppress it. Stage keeps the current story's notice visible after reading ends and choices/input return; history uses the regular chat footer. It neither gates input nor restarts typing. Plugin theme isolation: [Theme packages](./theme-packages.md#selecting-in-a-session). Raw mode includes only the validated structured count. Wording follows the current UI language while story text and session content locale remain fixed; there are no dismiss, retry or details controls. Fully custom sandbox views remain outside host chat, with no additional bridge fields or capabilities. Field: [Message API](./api.md#get-apisessionsidmessages).
-- **Which components a template can use.** The available display components are: `Stack`, `Row`, `Grid`, `Separator`, `Text`, `Badge`, `Icon`, `TagList`, `Source`, `Image`, `CharacterAvatar`, `Media`, `AudioPlayer`, `Card`, `CardList`, `EntryCard`, `StatBar`, `Progress`, `Accordion`, `Section`, `JsonView`, `EntryList`, `Prose`, `PlayerMessage`, `Alert`. Components that send messages, call runtimes, take input or read session data (such as `CandidateList`, `Button`, `Choice`, form and input components, `SceneCastList`, `CharacterFieldsView` and the galleries) are not available. Media always resolves in the current session, and a `sessionId` prop has no effect.
+- **Reveal policy.** A template may add top-level `reveal: { mode: "segments", intervalMs?: number }` using the [shared Reveal policy](./ui-components.md#complete-content-reveal). After normal per-segment template selection, the first matched template with explicit `reveal` in story order chooses the whole message group policy; an explicit `instant` wins too. No explicit policy means instant. The host supplies durable message/revision identity, and only newly committed live delivery is eligible. Stage uses the same policy over complete committed segments; its rendering remains host-owned.
+- **Where templates apply.** Only in the chat view's `parsed` and `detailed` modes, and only to committed stories with `segments`. When some segment matches, the story renders segment by segment: matched segments through their template, the rest as default text. When no segment matches, the message renders exactly as before. The stage dialog and the `raw` view never use templates (the `raw` JSON shows `segments`).
+- **Host operation failure notice.** The persistent footer renders outside segment templates in parsed and detailed chat. A missing plugin or a template replacing the body cannot suppress it. Stage keeps the current story's notice visible during presentation and while choices/input are available; history uses the regular chat footer. It neither gates input nor restarts presentation. Plugin theme isolation: [Theme packages](./theme-packages.md#selecting-in-a-session). Raw mode includes only the validated structured count. Wording follows the current UI language while story text and session content locale remain fixed; there are no dismiss, retry or details controls. Fully custom sandbox views remain outside host chat, with no additional bridge fields or capabilities. Field: [Message API](./api.md#get-apisessionsidmessages).
+- **Which components a template can use.** The available display components are: `Reveal`, `Stack`, `Row`, `Grid`, `Separator`, `Text`, `Badge`, `Icon`, `TagList`, `Source`, `Image`, `CharacterAvatar`, `Media`, `AudioPlayer`, `Card`, `CardList`, `EntryCard`, `StatBar`, `Progress`, `Accordion`, `Section`, `JsonView`, `EntryList`, `Prose`, `PlayerMessage`, `Alert`. Components that send messages, call runtimes, take input or read session data (such as `CandidateList`, `Button`, `Choice`, form and input components, `SceneCastList`, `CharacterFieldsView` and the galleries) are not available. Media always resolves in the current session, and a `sessionId` prop has no effect.
 - **Template avatars.** `CharacterAvatar.characterId` must equal the resolved `/character/id`, usually bound as `{ "$state": "/character/id" }`; an equal literal ID is also valid. It uses only that speaker’s projected `/visual/avatar`, with no slot, session, plugin-data or service lookup. An unresolved speaker, missing ID or missing portrait renders no avatar while text remains readable. Other character IDs show no avatar; `sessionId`, `ref`, `visual` and similar props cannot change the source. Both thumbnail and preview resolve in the explicit host session. Local enlargement and dismissal are host display interactions; plugin `on` / `watch`, RPC, input, upload and message actions remain forbidden. Changing session, speaker or portrait closes the former preview.
 - **When something fails.** A template that fails to render falls back to the default text for that segment only. A malformed template (a missing or empty `match`; `webview`, `dataSource`, `surfaces`, `group*`, `shortLabel`, `navTarget`, `alwaysRender` or `bridge`; an `on` / `watch` binding in the view; a component outside the list above) is an error in `pnpm validate:plugin` and installation; at load it becomes a diagnostic with its declared path, and the plugin's other templates still apply.
 - `ui.segment` derives no capability (like `ui.view`): templates run no code and read no data.
@@ -725,7 +726,7 @@ The composer does not only send a "say". It shows input modes from the session's
 
 ## Stage Mode (Stage View)
 
-Stage mode is a visual-novel style screen: a scene background, character portraits, and a dialogue box whose text appears one character at a time.
+Stage mode is a visual-novel style screen: a scene background, character portraits, and a reader for complete committed stories.
 
 It is the fourth way to present a session, `viewMode: "stage"`. It sits next to `parsed` / `detailed` / `raw`, and you switch to it in the `GameViewHeader` at the top. When you enter the stage, the three parts of the message area (`ChatMessages`, `PendingDraftsBar` and `MessageComposer`) are all replaced by a full-screen stage. `GameViewHeader` stays.
 
@@ -738,25 +739,21 @@ The stage has five layers. All are absolutely positioned, and their `z-index` va
 
 The stage reads the server's `ui.slot@1` projection. Each provider builds the generic slot values from its own data, domain events and the World Model. The front end does not assemble the stage from plugin namespaces on its own.
 
-| Layer        | Data source                                                                        | Front-end use                                                                                                   |
-| ------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Backdrop** | `stage.backdrop@1`                                                                 | Shows the background, the scene name and the status; falls back to the world's visuals when there is no picture |
-| **Sprites**  | `stage.cast@1`, with `character.visual@1` indexed by character ID                  | Position, highlight, portraits, and a placeholder when there is no picture                                      |
-| **Hud**      | `stage.backdrop@1`                                                                 | Shows the name, the variant and the source status                                                               |
-| **Dialog**   | The latest story text and its `segments` (live paragraph metadata while streaming) | Typing, paragraph splitting and per-paragraph speaker names                                                     |
-| **Choices**  | `stage.choices@1` and the pending interaction choice block                         | Situation recap, decision question, options (`.ui-choice`) and free text input                                  |
+| Layer        | Data source                                                       | Front-end use                                                                                                   |
+| ------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Backdrop** | `stage.backdrop@1`                                                | Shows the background, the scene name and the status; falls back to the world's visuals when there is no picture |
+| **Sprites**  | `stage.cast@1`, with `character.visual@1` indexed by character ID | Position, highlight, portraits, and a placeholder when there is no picture                                      |
+| **Hud**      | `stage.backdrop@1`                                                | Shows the name, the variant and the source status                                                               |
+| **Dialog**   | The latest story text and its `segments`                          | Complete segments, reader navigation and per-segment speaker names                                              |
+| **Choices**  | `stage.choices@1` and the pending interaction choice block        | Situation recap, decision question, options (`.ui-choice`) and free text input                                  |
 
-**Switching between typing and the decision panel.**
+**Reading and the decision panel.**
 
-- "Streaming" follows the kernel's convention: there is no streaming boolean. The condition is `executing` together with a story message ID that starts with `stream_`.
-- New narrative is shown character by character by `StageDialog`, and each paragraph stops and waits for the player to click. The last paragraph also pauses once, waiting for a closing click. Auto-play moves on by itself according to the pause time. An empty paragraph at the end of the text does not produce an empty pause.
-- Narrative text is separate from the “Continue the dialogue” button so screen readers can read it. Live announcements wait until typing finishes for the paragraph. Tab focuses the advance button; Enter or Space continues.
-- When typing catches up with the end of the stream, it does not jump to the decision panel automatically.
-- After the text has been read, and the turn execution has ended, the same spot is replaced by the unified decision panel. It shows, in order: the scene, a "Current context" summary, the "Decision" question, grouped options, and an inline free text input (it shares the composer's modes, fields and character selector; see [Composer Modes](#composer-modes)).
-- Right after submitting, the whole old decision panel is hidden, including areas added by plugins. While the new narrative is coming, "Generating" is shown. Narrative that was already read is not replayed.
-- When a session is restored, or when you switch into the stage from another view, the latest narrative that already existed before mounting counts as read, so it is not typed out again.
-- `stage.choices@1.recap` is optional. When omitted or empty, the panel omits “Current context” and does not extract a summary from the story. If `decision` is omitted, the scene or a generic question guides free input. Reading narration and submitting free input still work without a suggestions provider.
-- Omitting `turnId` declares unscoped choices. Choices with a `turnId` appear only when it matches the current story turn; they stay hidden when that turn is unknown. A committed retry can resolve to the source story through the turn resolver. Providers should set `turnId` on choices that expire with the turn, without relying on the framework to infer old data.
+- The complete committed story remains in the reader. Without a matching opt-in policy, all text is instant; the shared [Reveal](./ui-components.md#complete-content-reveal) primitive supplies optional segment presentation. The old character typewriter and final-click gate are removed.
+- Choices and input appear as soon as execution allows them. Reading position, Show all and Auto-play never delay actions. During execution the previous committed story remains visible with progress and Stop.
+- Previous paragraph, Next paragraph and Read again move only the reader's position without changing focus. Auto-play advances this position, not server turns. Markdown blocks remain complete, including code fences containing blank lines. Names come from committed segment speakers.
+- Restored history, reload and switching views show complete text instantly. The response panel retains scene/context, decision, suggestions, free input and plugin extensions.
+- Optional recap and turn-scoped choices retain their existing slot rules: no inferred recap from story text; unknown or stale turn-scoped suggestions stay hidden, and committed retries resolve to the source turn.
 
 **Previews and caching of slots.**
 
@@ -770,8 +767,7 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 **Speaker name tags.**
 
 - Name tags come from the `segments` of the committed story message (see [story output of `narrative-engine@2`](./plugins.md#story-output)): each paragraph is one segment, and its name tag is that segment's `speaker`. At commit the kernel replaces each speaker it can resolve with the character's current name. No plugin needs to provide data for name tags.
-- While the story streams, name tags come from the `segment` of `narrative.delta` (see [protocol](./protocol.md)): a paragraph's speaker shows as soon as it arrives, as the model wrote it. At commit the `segments` of `narrative.completed` replace it with the resolved current name, for example an alias with the canonical name. The client never resolves names itself.
-- The typewriter and the speaker check share `splitStageParagraphs`. CRLF is turned into LF, and three or more line breaks count as one blank line separator. After the text ends, the number of paragraphs must match the number of segments.
+- Name tags come from the resolved `segments` of committed `narrative.completed`. The client never resolves names itself.
 - A character name tag is not shown for narration, for a segment without a speaker, or for an old message or prose story without `segments`. An actor's focus does not take part in speaker attribution.
 
 **Size and portraits.**
@@ -796,7 +792,7 @@ The input is the value of a `stage.backdrop@1` slot, which matches `stageBackdro
 - **History drawer**: the History button on the Hud opens a Radix `Dialog`. Inside is the full `<ChatMessages viewMode="parsed">`, wrapped in `flex h-[80vh] flex-col`. So you can still look back and scroll through all the parsed messages while in the stage.
 - **Form modal**: the stage dialog takes only options and free text. So when a **form-type** interaction block that has not been submitted yet appears in the messages (`extractPendingFormMessages`), the stage opens a `Dialog` and uses `MessageBlockRenderer` to let the player fill it in. It closes automatically after submission.
 
-Implementation: `apps/web/src/components/session/stage/` (`StageView.tsx` does the assembly. The others are `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx`, `stage-selectors.ts` and `use-typewriter.ts`).
+Implementation: `apps/web/src/components/session/stage/` (`StageView.tsx` does the assembly. The others are `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx`, `stage-selectors.ts` and the shared `lib/reveal/` renderer).
 
 ## Plugin views
 
@@ -833,7 +829,7 @@ Write source text in English and translations under `messages` in `locales/<loca
 
 An ordinary declarative `ui.view` can compose `SessionMessages` and `SessionComposer` for the host's public story, pending interactions and current role's input. Community and bundled packages use the same API. Exact props, counts and placement limits are in [Live session view components](./ui-components.md#live-session-view-components).
 
-The host supplies render slots for the current session only. Messages, settings, credentials and action callbacks are never added to `/data`, `/sources`, JSON state or browser messages. Story uses public parsed rendering and the existing stream, without execution detail or reasoning. Pending is determined against complete history and submitted identities before filtering: unanswered forms, choices and confirmations that no later player message has superseded. Suggestions are optional. Interactions retain real validation and rejection feedback.
+The host supplies render slots for the current session only. Messages, settings, credentials and action callbacks are never added to `/data`, `/sources`, JSON state or browser messages. Story uses public parsed rendering of complete committed messages, without execution detail or reasoning. Pending is determined against complete history and submitted identities before filtering: unanswered forms, choices and confirmations that no later player message has superseded. Suggestions are optional. Interactions retain real validation and rejection feedback.
 
 Both public message regions retain current-turn row metadata. Choice lists in the same region share consecutive numbering for the current turn and support number keys; stale choices do not consume current numbers. Clicking or using a number key to answer a required choice sends its current turn, interaction and option through the existing interaction submission path. It never becomes free text or a local-only submitted marker. Suggestions can still enter the draft queue. Execution details, reasoning and asset administration remain unmounted.
 
@@ -860,7 +856,7 @@ Each spec targets one region; two specs may share a published root. Unknown valu
 
 Explicit main replaces only the story column and retains the host composer by default. An independently selected composer works in chat, ordinary plugin views and stage, including a different plugin's main. Stage places it below narrative and removes duplicate free input, suggestion submission and choice hotkeys; paragraph progression, required forms, suspension and recovery remain host features. Pages without submitAction may offer only interactions or runtime UI. Players can always return to default input.
 
-Selection lasts only for the current mount and session visit; content consent persists on this device. Default UI remains usable while loading or awaiting consent. Each frame owns its lease, handles and stream subscription; failure, disable or revocation in one region does not reset the other.
+Selection lasts only for the current mount and session visit; content consent persists on this device. Default UI remains usable while loading or awaiting consent. Each frame owns its lease and handles; failure, disable or revocation in one region does not reset the other.
 
 Sandbox main views retain a minimum usable height, with the host composer outside that space. When recovery notices and other content stack on a phone, the session center column scrolls vertically so the main view, composer and host controls remain reachable.
 
@@ -937,13 +933,15 @@ Until every requested grant has persisted, the page is not mounted, receives no 
 | `abortExecution` | Stop execution in the current session |
 | `openPanel` | Open the owning plugin's declared panels |
 
-Replacing content or switching sessions closes the old iframe's connection and stream subscription. The page stays unmounted while new content is being hashed or awaiting consent. Already authorized content also gets a new iframe in another session; the old page receives no state or streamed text from the new session.
+Replacing content or switching sessions closes the old iframe's connection. The page stays unmounted while new content is being hashed or awaiting consent. Already authorized content also gets a new iframe in another session; the old page receives no state from the new session.
 
 SettingsStore saves device-local records at `ui.pluginViewConsent.<pluginId>.<hash>.<capability>`, retaining the `.session` read suffix. The hash is SHA-256 of canonical JSON for the entire resolved spec, including capabilities, inline HTML or a URL digest covering every resource. Changed content asks again; an old reading grant adds no capabilities. Pending optimistic notifications do not grant access. “View permissions” can revoke one capability or all permissions, immediately stopping delivery and dispatch and returning to the default even if persistence fails. Refresh from another window can revoke access too.
 
 <a id="sessionprojection-version-1"></a>
 
-### SessionProjection (version 2)
+<a id="sessionprojection-version-2"></a>
+
+### SessionProjection (version 3)
 
 Read the `session` field of the state object exposed on `window.covel`, or subscribe with `window.covel.subscribe`. Top-level state contains only `session`, `locale` and host `theme`, without ordinary panel `data`, `sources`, `jobs`, `context` or own-plugin KV.
 
@@ -952,10 +950,9 @@ When another client commits a turn, the host also refreshes messages and the tur
 <!-- prettier-ignore -->
 | Field | Content |
 | --- | --- |
-| `version` | Always `2` |
+| `version` | Always `3`; version 2 is rejected |
 | `phase` / `turn` / `executing` | `setup` or `playing`, committed player-turn count, execution state |
 | `messages[]` | `{seq, role, text, truncated?}`, public stories and player messages without blocks |
-| `streaming` | `{seq,text}` or `null`; the final story inherits its placeholder ordinal |
 | `pending[]` | `{seq,interaction,handle?}`, public display and an opaque answer handle for this frame |
 | `input.seats[]` | Human seats' `{id,role,characterIds,currentCharacterId?,allowed}`; public associations only, without user/account identity |
 | `input.kinds[]` | Currently permitted `{kind,label,text,actor,fields?}`; fields contain public JSON Schema display vocabulary, without executable validators |
@@ -964,17 +961,16 @@ When another client commits a turn, the host also refreshes messages and the tur
 
 An `interaction` is `form`, `choice`, `confirmation` or `unavailable`. Forms expose title, submit label and field names, types, labels, placeholders, required flags, defaults, numeric bounds and options. Choices expose `choices[].{id,label,description?}`; confirmations expose prompt and confirm/cancel labels. Internal block/turn/interaction references, `meta`, action maps and server validators remain with the host. Handles belong to the current frame attempt and interaction, expiring on answer, replacement, eviction or departure. Custom JSON UI and unsupported/oversized interactions expose `unavailable` without a handle; a host button opens the ordinary interaction interface. Optional suggestions remain with the host.
 
-Ordinals are allocated on first observation and never reused within a bridge instance. Older loaded history may receive larger ordinals; render array order rather than sorting by `seq`. The projection does not read plugin data, results, operations, reasoning, steps, native provider continuations or compacted summaries. Upstream concealed provenance remains authoritative; deleting keys cannot make arbitrary text public. Invalid projection withholds session and stream, without a raw fallback.
+Ordinals are keyed by durable message ID, allocated on first observation and never reused within a bridge instance. Older loaded history may receive larger ordinals; render array order rather than sorting by `seq`. The projection does not read plugin data, results, operations, reasoning, steps, native provider continuations or compacted summaries. Upstream concealed provenance remains authoritative; deleting keys cannot make arbitrary text public. Invalid projection withholds session state, without a raw fallback.
 
 <!-- prettier-ignore -->
 | Content | Limit and handling |
 | --- | --- |
 | Messages | Last 200, 256 KiB total text; 32 KiB each with `truncated:true` when cut |
-| Streaming text | 64 KiB |
 | Characters | At most 100, each 8 KiB serialized; oversized entries skipped |
 | Pending interactions | At most 8, each 16 KiB; oversized display becomes `unavailable` without a handle |
 
-KiB counts UTF-8 bytes. Appends coalesce every 100 ms; full pushes while streaming coalesce too, so unrelated state changes cannot bypass throttling. Full state includes current stream text and establishes the append baseline. Completion flushes the tail immediately; reset, shrink and retry replace drafts even if replacement text outgrows the previous text before the timer fires. Retirement cancels subscriptions and queued timers.
+KiB counts UTF-8 bytes. The bridge sends complete state snapshots containing committed messages only. Version 3 removes `streaming` and the `type: "stream"` append channel; host and page must upgrade together. Execution starts immediately on action admission. The host retains the previous story, progress, Stop and failure/retry controls outside immersive plugin views. Safe rejection codes display “Revising response”; rejected candidates, tool arguments and review feedback never enter the page projection.
 
 ### Page failure and recovery
 
@@ -982,7 +978,7 @@ Inline HTML and URL views wait for ready from frame mount, with an 8-second dead
 
 After ready, the host sends increasing ping probes every 5 seconds while visible; the script replies with the matching pong on the same port. Three unanswered probes trigger fallback. Hidden tabs do not accumulate missed probes; returning resets probes and grants 8 seconds of grace. This measures the document event loop, not model/RPC duration, and cannot recover a browser-wide renderer freeze.
 
-Failure closes ports, timers and stream subscriptions before restoring that region's default UI. A retained host notice names the page and offers Retry and permission revocation. Late ready, HEAD and RPC callbacks cannot revive the attempt. Retry requires a player click, refetching declarations and checking current content consent before creating a new frame. Normal action/runtime refusals are not page failures; never automatically replay mutations. Server-admitted work may settle normally without replying to the retired page.
+Failure closes ports and timers before restoring that region's default UI. A retained host notice names the page and offers Retry and permission revocation. Late ready, HEAD and RPC callbacks cannot revive the attempt. Retry requires a player click, refetching declarations and checking current content consent before creating a new frame. Normal action/runtime refusals are not page failures; never automatically replay mutations. Server-admitted work may settle normally without replying to the retired page.
 
 ### Page requests and safe outcomes
 
@@ -1028,7 +1024,6 @@ plugin local tool / builtin tool / function handler proposes plugin_data writes
 ```
 Turn runs → each Runtime runs behind the stage barrier and the DAG inside each stage
   → SSE event stream:
-    narrative.delta → streamed narrative is appended
     narrative.completed → the full narrative message
     interaction.requested → interaction block (form / choice)
     execution.started/completed → execution step status
@@ -1065,7 +1060,7 @@ To add an interaction block bound to a turn:
 
 **Reading order.**
 
-- Within one turn, story messages come before the plugin message surfaces. This holds even when a plugin message surface arrives first during streaming or data recovery.
+- Within one turn, story messages come before the plugin message surfaces. This holds even when a plugin message surface arrives first during committed delivery or data recovery.
 - The message order is decided by which turn a message belongs to, not by client timestamps.
 
 **Failures must be visible.**

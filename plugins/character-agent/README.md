@@ -7,3 +7,5 @@
 模型失败只减少该角色的贡献，编排方应继续叙事。模型与历史边界不是服务端代码沙箱，也不保证真实模型的语义表现。
 
 开发检查：`pnpm --filter @covel/plugin-character-agent test`。
+
+演员用宿主生成的 `submit-output` 提交角色段落与可选的私有 `intent`，遵守宿主提供的 `character-actor@1` schema。提交不会授予世界写入权限。

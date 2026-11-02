@@ -1,117 +1,204 @@
-/**
- * Narrative dialog for stage mode. It owns only the typewriter state machine;
- * the following decision and composer live together in `StageChoices`.
- */
-import { useEffect, useRef, type ReactElement } from "react";
+import { storyParagraphSpeakers } from "./stage-dialogue-selectors.js";
+/** A committed story reader. Paragraph navigation never controls execution or input. */
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { useTranslation } from "react-i18next";
-import { usePluginThemePart } from "@/theme-system/use-plugin-theme.js";
-import { useTypewriter } from "./use-typewriter.js";
-import { stageParagraphSpeakerName } from "./stage-dialogue-selectors.js";
+import { Markdown } from "@/components/ui/markdown.js";
+import { SessionStateContext } from "@/stores/session-store/context.js";
+import type { StreamMessage } from "@/stores/session-store.js";
+import { Reveal } from "@/lib/reveal/Reveal.js";
+import { useStoryReveal } from "@/lib/reveal/story-reveal-context.js";
+import {
+  compileSegmentTemplates,
+  planSegmentTemplates,
+  segmentRevealPolicy,
+} from "@/lib/segment-templates.js";
 
 export interface StageDialogProps {
-  /** Optional rereading sits in the decision panel without covering its input. */
   readonly inline?: boolean;
   readonly sessionId?: string;
-  readonly turnId?: string;
-  readonly storyText: string;
-  readonly streamEnded: boolean;
-  readonly segmentSpeakers?: readonly (string | null)[];
+  readonly message: Pick<StreamMessage, "id" | "content" | "segments">;
   readonly autoPlay: boolean;
   readonly reducedMotion?: boolean;
-  /** Fires once when the current turn's text has been fully revealed. */
-  readonly onAllRead: () => void;
 }
-
-/** Auto-play dwell time at a paragraph break before advancing (spec §2). */
-const AUTO_PLAY_PAUSE_MS = 1200;
 
 export function StageDialog({
   inline = false,
   sessionId,
-  turnId,
-  storyText,
-  streamEnded,
-  segmentSpeakers,
+  message,
   autoPlay,
   reducedMotion = false,
-  onAllRead,
 }: StageDialogProps): ReactElement {
   const { t } = useTranslation();
-  const themePart = usePluginThemePart(sessionId, "dialogue");
-  const { visible, segmentIndex, status, advance, skip } = useTypewriter(
-    storyText,
-    streamEnded,
-    { turnId, reducedMotion },
+  const admission = useStoryReveal(message);
+  const state = useContext(SessionStateContext);
+  const entries = state?.segmentUiSpecs;
+  const policy = useMemo(
+    () =>
+      segmentRevealPolicy(
+        planSegmentTemplates(
+          compileSegmentTemplates(entries ?? []),
+          message.segments ?? [],
+        ),
+      ),
+    [entries, message.segments],
   );
-  const speakerName = stageParagraphSpeakerName(
-    segmentSpeakers,
-    storyText,
-    segmentIndex,
-    streamEnded,
+  const paragraphs = useMemo(
+    () =>
+      message.segments?.map((segment) => segment.text).join("\n\n") ===
+      message.content
+        ? message.segments.map((segment) => segment.text)
+        : [message.content],
+    [message.content, message.segments],
   );
-
-  const prevStatusRef = useRef(status);
-  useEffect(() => {
-    const justFinished = status === "done" && prevStatusRef.current !== "done";
-    prevStatusRef.current = status;
-    if (justFinished) onAllRead();
-  }, [status, onAllRead]);
-
-  useEffect(() => {
-    if (!autoPlay || status !== "pause") return;
-    const id = setTimeout(advance, AUTO_PLAY_PAUSE_MS);
-    return () => clearTimeout(id);
-  }, [autoPlay, status, advance]);
-
-  const handleFrameClick = () => {
-    if (status === "pause") advance();
-    else skip();
+  const speakers = storyParagraphSpeakers(message);
+  const structured =
+    message.segments?.map((segment) => segment.text).join("\n\n") ===
+    message.content;
+  const [reader, setReader] = useState({
+    id: message.id,
+    index: 0,
+    manual: false,
+  });
+  const index = reader.id === message.id ? reader.index : 0;
+  const refs = useRef(new Map<number, HTMLElement>());
+  const navigation = useRef<HTMLElement[]>([]);
+  const [navigationCount, setNavigationCount] = useState(paragraphs.length);
+  useLayoutEffect(() => {
+    const rebuild = () => {
+      const article = refs.current.get(0);
+      navigation.current =
+        paragraphs.length === 1 && article
+          ? Array.from(article.children).filter(
+              (node): node is HTMLElement =>
+                node instanceof HTMLElement &&
+                [
+                  "P",
+                  "PRE",
+                  "UL",
+                  "OL",
+                  "BLOCKQUOTE",
+                  "TABLE",
+                  "H1",
+                  "H2",
+                  "H3",
+                ].includes(node.tagName),
+            )
+          : [...refs.current.values()];
+      if (!navigation.current.length && article) navigation.current = [article];
+      setNavigationCount(navigation.current.length);
+    };
+    rebuild();
+    const observer = new MutationObserver(rebuild);
+    for (const article of refs.current.values())
+      observer.observe(article, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [message.content, paragraphs]);
+  const move = (next: number, manual = true) => {
+    setReader({ id: message.id, index: next, manual });
+    const node = navigation.current[next];
+    // Scroll only the reader, so navigation never moves the composer or focus.
+    const viewport = node?.parentElement?.closest("[data-stage-reader]");
+    if (node && viewport instanceof HTMLElement)
+      viewport.scrollTo?.({
+        top: node.offsetTop - viewport.offsetTop,
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
   };
-
+  // Auto-play moves the reading position only. It cannot hide text or gate actions.
+  useEffect(() => {
+    if (!autoPlay || index >= navigationCount - 1) return;
+    const timer = setTimeout(() => move(index + 1, false), 1200);
+    return () => clearTimeout(timer);
+  }, [autoPlay, index, message.id, navigationCount]);
   return (
-    <div
+    <section
       className={
         inline
-          ? "relative flex justify-center"
-          : "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4 md:px-8 md:pb-8"
+          ? "relative"
+          : "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-4"
       }
       data-testid="stage-dialog"
     >
-      <div className="ui-stage-panel pointer-events-auto relative w-full max-w-3xl rounded-(--radius-card)">
-        <button
-          type="button"
-          onClick={handleFrameClick}
-          aria-label={t("stage.advanceLabel")}
-          className="absolute inset-0 cursor-pointer rounded-(--radius-card) transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent-primary)"
-        />
-        <div className="pointer-events-none relative flex flex-col gap-1.5 p-4">
-          {speakerName && (
-            <span
-              data-testid="stage-dialog-speaker"
-              className="ui-stage-panel absolute -top-3.5 left-4 rounded-full border-(--accent-primary) px-3.5 py-0.5 text-xs font-semibold text-(--accent-primary)"
-            >
-              {speakerName}
-            </span>
-          )}
-          <p
-            {...themePart}
-            aria-live="polite"
-            aria-atomic="true"
-            aria-busy={status === "typing"}
-            className="min-h-[3.6em] whitespace-pre-line text-sm leading-relaxed"
+      <div className="ui-stage-panel pointer-events-auto w-full max-w-3xl rounded-(--radius-card) p-4">
+        <div
+          className="max-h-52 overflow-y-auto overscroll-contain"
+          data-stage-reader=""
+        >
+          <Reveal
+            revealKey={message.id}
+            {...admission}
+            {...policy}
+            active={
+              admission.active &&
+              !reducedMotion &&
+              !(reader.id === message.id && reader.manual)
+            }
           >
-            {visible}
-            {status === "pause" && (
-              <span
-                className="ui-stage-caret ml-1 inline-block"
-                aria-hidden="true"
-              >
-                ▼
-              </span>
-            )}
-          </p>
+            {paragraphs.map((paragraph, position) => {
+              const speaker = structured
+                ? (speakers?.[position] ?? undefined)
+                : undefined;
+              return (
+                <article
+                  key={position}
+                  ref={(node) => {
+                    if (node) refs.current.set(position, node);
+                    else refs.current.delete(position);
+                  }}
+                  data-stage-paragraph={position}
+                  data-reader-current={index === position}
+                  className="py-1.5 text-sm leading-relaxed"
+                >
+                  {speaker && (
+                    <span
+                      data-testid="stage-dialog-speaker"
+                      className="font-semibold text-(--accent-primary)"
+                    >
+                      {speaker}
+                    </span>
+                  )}
+                  <Markdown themeSessionId={sessionId} themePart="dialogue">
+                    {paragraph}
+                  </Markdown>
+                </article>
+              );
+            })}
+          </Reveal>
         </div>
+        {navigationCount > 1 && (
+          <nav
+            data-covel-host-controls=""
+            className="mt-2 flex flex-wrap gap-3 text-xs"
+            aria-label={t("stage.readAgain")}
+          >
+            <button
+              type="button"
+              disabled={index === 0}
+              onClick={() => move(index - 1)}
+            >
+              {t("stage.previousParagraph")}
+            </button>
+            <button
+              type="button"
+              disabled={index === navigationCount - 1}
+              onClick={() => move(index + 1)}
+            >
+              {t("stage.nextParagraph")}
+            </button>
+            <button type="button" onClick={() => move(0)}>
+              {t("stage.readAgain")}
+            </button>
+          </nav>
+        )}
       </div>
-    </div>
+    </section>
   );
 }

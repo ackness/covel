@@ -1,6 +1,7 @@
 {
   "id": "dialogue-line",
   "match": { "kind": "dialogue" },
+  "reveal": { "mode": "segments" },
   "view": {
     "component": "Row",
     "props": { "gap": "sm", "align": "start" },

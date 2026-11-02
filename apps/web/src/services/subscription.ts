@@ -5,7 +5,7 @@
  * to support custom headers (provider keys, slot config).
  *
  * This is separate from the /actions SSE handler which handles
- * high-frequency turn-execution events (message.delta, message.completed, block.emitted).
+ * execution progress and committed story delivery (runtime.*, step.*, narrative.completed).
  * The subscription handles lifecycle events: runtime.*, state.*, game.*, plugin.*, session.*, system.*.
  */
 

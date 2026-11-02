@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 /**
  * POST /api/actions × steer — a mid-turn interjection follows its turn's
  * transaction (audit F-023).
@@ -82,12 +83,10 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
         const hook = duringFirstCall;
         duringFirstCall = undefined;
         await hook?.();
-        return {
-          content: `Narration ${prompts.length}.`,
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+        return submittedOutput(
+          { narrativeOutput: `Narration ${prompts.length}.` },
+          { inputTokens: 1, outputTokens: 1 },
+        );
       },
     };
     eventBus = createEventBus(store);
@@ -176,7 +175,7 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
     expect(await send("Follow the stranger.")).toMatchObject({
       committed: true,
     });
-    // The interjection reached this turn: one more step read it.
+    // Steering supersedes the first submission; only the next accepted story is saved.
     expect(prompts).toHaveLength(2);
     expect(prompts[1]?.at(-1)).toEqual({ role: "user", content: INTERJECTION });
 
@@ -187,7 +186,7 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
       ["player", "user", "earlier"],
       ["player", "user", "Follow the stranger."],
       ["player-interjection", "user", INTERJECTION],
-      ["runtime", "assistant", "Narration 1.\n\nNarration 2."],
+      ["runtime", "assistant", "Narration 2."],
     ]);
     // One player turn, not two.
     expect(

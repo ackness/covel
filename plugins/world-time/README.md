@@ -21,3 +21,5 @@
 完整字段和倒流/随机示例见 [世界时间契约](../../docs/reference/world-time.md)。
 
 验证：`pnpm --filter @covel/plugin-world-time test`。
+
+`advance-world-time` 成功后，用 `{}` 调用 `submit-output`。`io.output.from.tool: advance-world-time` 直接采用工具的公共规范时钟结果，不需要模型复制；只修正提交，不重复推进时钟。

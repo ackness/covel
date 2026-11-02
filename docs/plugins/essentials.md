@@ -151,7 +151,9 @@ agent:
 
 内置工具的清单见[工具参考](../reference/tools.md)。
 
-调用一个工具就结束的 agent 写 `agent.finishWith: <工具>`。完成条件的完整写法见[插件参考](../reference/plugins.md#完成条件agentfinishwithagentcompletion)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
+每个 agent 都以宿主生成的 `submit-output` 提交最终输出。`completion.afterTools` 声明提交前必需的业务工作，见[插件参考](../reference/plugins.md#agent-output-submission)。
+
+最终输出直接采用业务工具结果时，声明 [`io.output.from`](../reference/plugins.md#agent-output-submission)。工具成功后单独用 `{}` 调用 `submit-output`；离线假模型也提交 `{}`，不复制工具结果或模型视图包装。
 
 ## 怎样用别的插件的结果
 
@@ -378,3 +380,5 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 ### 让故事继续一轮
 
 实现 `narrative-engine@2` 的顶层故事可以返回 `yield: continue`。宿主提交故事后才决定是否再跑一轮；普通 post-turn 工作也随每轮运行。函数通过 `ctx.playerActions` 和输入 digest 区分系统推进与玩家输入，逻辑回合号保持不变。子 agent 的 yield 不控制宿主。完整规则和可选导入见[故事请求自动推进](../reference/plugins.md#故事请求自动推进)。
+
+脚本中的 agent 成功回复应单独调用 `submit-output`，业务工具放在先前的回复里；修正最终提交时不要重复成功的写入。CLI 的 `llmObject` 构造最终提交，`llmContent` 刻意返回回复内容，用于拒绝测试。见[完成约定](../reference/plugins.md#agent-output-submission)。

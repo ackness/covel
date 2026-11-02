@@ -11,6 +11,8 @@ The root exports input normalization, locale selection, cancellation, typed prop
 
 The root and `plugin-api` subpath also export `PluginAPI` and `PluginEntryFactory` for a unified server `entry` module. These cover lifecycle cleanup, tools, hooks, RPC, form validators, services, HTTP helpers, media wires, and known extension points. Authoring against the full entry facade requires the public `zod` peer package (`^4.6.7`) for precise schema and tool argument inference, including recursive JSON types under TypeScript 7.1. The emitted declarations require no database, kernel, or private workspace package.
 
+`ReviewAgentOutputPayload` types the `ReviewAgentOutput` hook for validated agent submissions. Return a bounded correction to request another ordinary loop step; the hook cannot replace the candidate or produce effects. See the [output review contract](../../docs/en/reference/hooks.md#reviewagentoutput).
+
 ```js
 /** @type {import("@covel/plugin-handlers-utils").PluginEntryFactory} */
 export default function (covel) {
@@ -64,3 +66,15 @@ Contracts and limits: [plugin communication](../../docs/en/reference/plugin-exte
 [history](../../docs/en/reference/world-model.md#witnessed-history).
 The [composition example](../../docs/en/plugins/advanced.md#orchestration-example)
 shows narrator fallbacks and private intent handling.
+
+`createNarrativeReview(pluginId)` supplies plugin-owned narration policy:
+
+```js
+const review = createNarrativeReview(covel.pluginId);
+covel.on("PostContextAssembly", review.context);
+covel.on("PreLLMCall", review.prepare);
+covel.on("ReviewAgentOutput", review.review);
+covel.on("TurnStop", review.cleanup);
+```
+
+Declare these hooks in `PLUGIN.md`. Final review reads validated `output.segments` or host-default `output.narrativeOutput`; it returns correction only. Perspective settings, quoted dialogue and session-local player context remain supported. Agents submit through the host-generated `submit-output` tool after optional business work. Do not contribute or allowlist that tool. Function runtimes return output directly.

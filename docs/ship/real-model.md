@@ -181,6 +181,7 @@ pnpm e2e:verify [options]
 | `--runtime <id>`         | 无                                  | 报告和检查只看这一个 runtime                                                          |
 | `--plugin <id>`          | 无                                  | 报告和检查只看这一个插件                                                              |
 | `--enable-plugins <ids>` | 无                                  | 建好游戏后、第一个回合前，启用这些插件。用逗号分隔                                    |
+| `--plugins <ids>`        | 世界默认包                          | 创建会话时请求这些包 ID，替代世界预设；不能与 `--core-only` 合用                      |
 | `--core-only`            | 无                                  | 只用核心插件建游戏，不加载世界预设的插件                                              |
 | `--player-message <str>` | 内置的几句话轮流用                  | 每个回合的玩家输入                                                                    |
 | `--form-values <json>`   | 按字段类型推断                      | 填表单时用的值                                                                        |
@@ -390,6 +391,87 @@ pnpm llm:replay:diff debugs/llm-replay/demo.record.requests debugs/llm-replay/de
 - 换机器带来的差异（仓库路径、`HOME`、时区、`LANG`、终端里的变量）只在一局停在创建角色的游戏上验证过。
 - 回放时模型的回答从几秒变成几毫秒。如果提示词的内容取决于“后台任务和下一回合谁先完成”，两遍可能不同。上面那局游戏里没有出现。
 - 仓库的 CI 不运行 `pnpm e2e:replay`。
+
+<a id="submission-acceptance"></a>
+
+## 提交验收
+
+模型工具调用成功不代表回合已保存。验收须同时核对提交尝试、`execution.completed.committed`、持久化消息和 proposal 读回。先完成离线测试，再验证当前服务商说明与实际目标的能力；[strict 配置](../reference/slots.md#tool-submission-capabilities)默认关闭，没有随仓库发布的在线能力证明。兼容的封闭测试 schema 可验证 strict，原有叙事 schema 的可选字段和开放对象则保留非 strict，不能为通过测试而改写 schema 或切换端点。
+
+### 固定样本与预算
+
+用四个独立的本地配置：官方 `deepseek-flash`、自有测试中转的 `deepseek-v4.1-flash`、同一中转的 `gpt-6-luna`、OpenAI 的 `gpt-6-luna`。报告只用下面的固定标签，不保存中转身份、端点或凭据。没有可用配置的 lane 明确记为未运行。不要使用 Kimi，也不要把单元测试当作在线能力证明。
+
+<!-- prettier-ignore -->
+| 标签 | 必须观察 |
+| --- | --- |
+| `official-deepseek` | 实际 thinking/tool-choice 限制、自愿提交和循环内纠正 |
+| `relay-deepseek` | 实际路由的能力和 continuation，不套用官方主机规则 |
+| `relay-luna` | 实际协议与 reasoning 收窄，隐藏中转身份 |
+| `official-openai` | 已配置时优先 Responses；兼容测试 schema 的 strict 与原叙事 schema 的非 strict |
+
+每个 lane 使用新会话、相同输入和种子：叙事器中文四回合、叙事器英文四回合、对话叙事四回合，共 12 条玩家输入；setup 和开场另计。启动前记录 SHA、插件版本、语言、种子、工具/schema 摘要、协议、reasoning 和预算。预先声明有限的输入数、调用数、每次输入/输出 token 和总 token 上限；达到上限就停止，记录取消或基础设施失败，不补跑成功样本。`--max-input-tokens` 是事后检查；脚本不提供总调用/token 的硬性消费上限，须由观察层、服务商配额和停止控制约束。
+
+服务端用本地未提交的 `COVEL_LLM_TOML`、`COVEL_RANDOM_SEED=20261006` 和 `TZ=UTC` 启动。配置所有实际使用的模型用途，关闭自动推进以固定主样本。`--plugins` 设置初始请求包，契约解析仍照常运行；它不能与 `--core-only` 合用。`--plugin` 仅过滤报告，不减少执行或费用。以下每个命令均保留会话以便读回；每个 lane 换一个标签和全新 session ID：
+
+```bash
+acceptance_lane=official-deepseek
+pnpm e2e:verify --world lantern-barrow --locale zh-CN --turns 4 \
+  --plugins pregame,world-init,char-creator,narrator,memory,world-ir,world-time,living-world-rules \
+  --require-tools submit-output,submit-world-facts --max-input-tokens 16384 --timeout 300 --keep \
+  --session-id "acceptance-${acceptance_lane}-zh" --log-dir "/tmp/covel-acceptance/${acceptance_lane}/zh"
+pnpm e2e:verify --world lantern-barrow --locale en-US --turns 4 \
+  --plugins pregame,world-init,char-creator,narrator,memory,world-ir,world-time,living-world-rules \
+  --require-tools submit-output,submit-world-facts --max-input-tokens 16384 --timeout 300 --keep \
+  --session-id "acceptance-${acceptance_lane}-en" --log-dir "/tmp/covel-acceptance/${acceptance_lane}/en"
+pnpm e2e:verify --world lantern-barrow --locale zh-CN --turns 4 \
+  --plugins pregame,world-init,char-creator,chat-mode-narrator,scene-stage,character-blueprint,memory,world-ir,world-time,living-world-rules \
+  --require-tools submit-output,submit-world-facts --max-input-tokens 16384 --timeout 300 --keep \
+  --session-id "acceptance-${acceptance_lane}-dialogue" --log-dir "/tmp/covel-acceptance/${acceptance_lane}/dialogue"
+```
+
+开始统计前核对世界语言版本与实际启用集合。观察记忆读取和必需业务工具；未自然覆盖的 schema-less prose 与角色委托，使用[提交测试包](../../tests/third-party/submission-review-probe/README.md)另外执行，不能混入 12 条主样本。测试包须按普通社区代码授权，模式默认关闭。它的 prose runtime 使用宿主默认 schema，delegate runtime 须真的调用角色子 agent，父提交与子接受分别核对。
+
+### 纠正、提交和界面检查
+
+每个 lane 另做标记为 injected 的有限样本：测试包的 `review-once` 拒绝第一次有效提交，`schema-once` 把一次故事提交改成无效空对白；使用新会话和准确的目标 runtime，后续正常响应可纠正。检查同一工具调用 ID 的失败结果、普通循环中的重提、预算未重置，以及成功业务写入没有重复。缺失提交、混合批次、预算用尽、晚到拒答、实际提交失败、恢复和子调用另有确定性测试；这些不计入自然模型无效率。
+
+浏览器须观察：等待时保留上次故事，运行/工具/正在修改回复与停止控件可见；提交前没有正文、参数或审查摘录，没有 `narrative.delta`、`session.streaming` 或 bridge stream 消息。提交后完整消息只出现一次，失败、拒答或取消没有新故事。核对 bridge v3 的身份、权限和私有数据投影。检查默认即时、选择段落渐显后首段立即可见且总延迟不超过两秒、键盘 Show all、Instant text、减少动态效果、后台标签、历史/重连/重载/重新挂载、替换/删除消息及新消息结束旧动画。输入、导航、停止和服务器推进不能等待动画。
+
+### 安全报告与通过条件
+
+已有日志中的 trace 和 turns 文件可生成只读摘要；文件名使用脚本实际打印的路径：
+
+```bash
+node scripts/submission-report.mjs --help
+node scripts/submission-report.mjs --traces /path/to/session-traces.json \
+  --turns /path/to/session-turns.json --sample natural --lane official-deepseek \
+  > /tmp/covel-acceptance/official-deepseek-summary.json
+```
+
+注入数据用 `--sample injected` 单独生成报告。摘要只输出固定分类、计数和数值分布，不复制候选正文、审查内容、密钥、地址或模型身份。一次 gate response 是一个提交相关步骤：纯 content 也算缺少提交，混合批次只算一次，不把工具失败和步骤 note 重复计数。恢复通过运行身份关联同一逻辑循环。concealed 步骤通过不含内容的 `submissionAccepted` 标记计入成功提交，不能从收尾步骤的停止原因推断是否接受。重新采集 concealed 验收 trace；旧日志缺少成功标记，不能用于成功提交的分母。报告显示首次/总拒绝分类、重提直方图、步骤/收尾/调用、agent 和函数 gateway 成功及失败调用的已报告用量及缓存样本、提交回执与存储状态的不一致；它不是验收通过证明。
+
+手工补齐报告中 `unmeasured` 的项目：按 runtime/lane 分母、实际纠正预算耗尽、取消与基础设施分类、provider TTFB、准入到进度/接受/提交/首次可见正文及渐显完成的延迟、p50/p95/样本数，以及每个已提交玩家回合的 token/cache 成本（含失败计费调用）。`invalid-output` 终态不能单独证明某类预算耗尽。语义接受和工具确认都不能替代消息及 proposal 的持久化读回。
+
+目标是每个可用 lane 的 12/12 主输入提交。无效、被拒绝、取消或拒答候选落库，重复 proposal，越权效果，未匹配的工具 ID，隐私/草稿泄漏或配额重置，任一项都是硬失败。预算内未恢复也须报告 lane 失败；不能放宽校验。小样本和旧的不同提示词结果不能证明统计上的改善。
+
+最后刷新生成物、静态门和文档，再运行完整相关测试、PG 和串行浏览器验收。录制须等工具/schema/提示词稳定后进行；旧 active agent suspension/checkpoint 和受影响录制须重建，兼容的已提交故事保留。
+
+```bash
+pnpm schemas:generate
+pnpm prompts:lock
+pnpm check
+pnpm test:docs:packages
+pnpm --filter @covel/docs build
+pnpm test:pg
+flock /tmp/covel-e2e.lock pnpm e2e:smoke
+flock /tmp/covel-e2e.lock pnpm e2e
+flock /tmp/covel-e2e.lock pnpm e2e:extensions
+flock /tmp/covel-e2e.lock pnpm e2e:replay --record lantern-barrow
+flock /tmp/covel-e2e.lock pnpm e2e:replay
+```
+
+录制只保存在本机，保留精确请求匹配；不能修改旧回答伪造兼容，也不能提交凭据或本地证据。记录每条实际命令、结果和未覆盖项目；这份流程本身不代表已经运行。
 
 ## 没有按预期工作时
 

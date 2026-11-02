@@ -13,6 +13,7 @@ import {
   type PluginManifest,
 } from "@covel/shared";
 import { compileRuntimeManifest } from "../src/compile-manifest.js";
+import { datasetReferenceIssues } from "../src/dataset-rules.js";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
 import { discoverPluginAt, loadPluginDefinition } from "../src/index.js";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
@@ -213,6 +214,33 @@ describe("dataset reference rules", () => {
     expect(await load(dir)).toBeUndefined();
   });
 
+  it("reports imported service collisions at the dataset reference", () => {
+    const runtime = compileRuntimeManifest(
+      plugin,
+      {
+        ...staged,
+        agent: { tools: { datasets: ["notes"] } },
+      },
+      "probe/teller",
+    );
+    expect(
+      datasetReferenceIssues(plugin, [
+        {
+          sourcePath: "RUNTIME.md",
+          manifest: {
+            ...runtime,
+            tools: {
+              ...runtime.tools,
+              services: [{ contract: "notes.lookup@1", name: "notes-get" }],
+            },
+          },
+        },
+      ]),
+    ).toEqual([
+      "RUNTIME.md: agent.tools.datasets.0: the dataset tool notes-get has the name of an imported service tool of the runtime; rename the dataset or the other tool",
+    ]);
+  });
+
   const long = `n${"o".repeat(57)}`;
   it.each([
     {
@@ -271,8 +299,9 @@ describe("dataset reference rules", () => {
           datasets: ["notes"],
         },
       },
-      field: "agent.tools.datasets.0",
-      text: "notes-get has the name of an imported service tool",
+      // Compiled runtime rules now reject this collision before package rules.
+      field: "tools.services.0",
+      text: 'the imported tool "notes-get" has the name of a tool the runtime already declares',
     },
     {
       case: "a duplicate reference",

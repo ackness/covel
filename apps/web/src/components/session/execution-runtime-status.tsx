@@ -14,6 +14,8 @@ import type { ExecutionStep } from "@/stores/session-store.js";
 
 export interface RuntimeStatus {
   runtimeId: string;
+  runId?: string;
+  turnId?: string;
   pluginId: string;
   label: string;
   status:
@@ -27,6 +29,7 @@ export interface RuntimeStatus {
     | "suspended"
     | "unknown";
   detail?: string;
+  revising?: boolean;
   errorKind?: string;
   failureTarget?: ExecutionStep["failureTarget"];
   /** Qualified tool name when status is "tool" (e.g. "init-wizard:emit-character-form"). */
@@ -42,11 +45,6 @@ export function deriveStatuses(
   steps: ExecutionStep[],
   runtimeLabels: Record<string, string>,
 ): RuntimeStatus[] {
-  // ExecutionStep is now a status-aggregation row (one per runtime per turn),
-  // so derive is mostly a projection. The old event-stream logic (llm.calling
-  // / tool.calling transient states) is gone — the server doesn't emit those
-  // through /api/actions today, and if it ever does they'll arrive as
-  // separate UPSERT_EXECUTION_STEP patches carrying status:"llm"|"tool".
   // Label resolution. Multi-runtime plugins (e.g. `npc-graph/rag-retriever`
   // and `npc-graph/extractor`) must render distinct chips, so we show the
   // runtime suffix after the plugin display name when runtimeId !== pluginId.
@@ -67,10 +65,13 @@ export function deriveStatuses(
 
   return steps.map((step) => ({
     runtimeId: step.runtimeId,
+    runId: step.runId,
+    turnId: step.turnId,
     pluginId: step.pluginId,
     label: runtimeLabel(step),
     status: step.status,
     detail: step.detail,
+    revising: step.revising,
     errorKind: step.errorKind,
     failureTarget: step.failureTarget,
     toolName: step.toolName,
@@ -222,6 +223,7 @@ export function RuntimeChip({
           {rt.toolName}
         </span>
       )}
+      {isActive && rt.revising && <span>{t("session.revisingResponse")}</span>}
       {rt.status === "skipped" && rt.detail && (
         <span
           className="max-w-60 truncate text-[10px]"

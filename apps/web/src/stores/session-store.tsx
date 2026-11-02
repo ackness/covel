@@ -46,11 +46,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () =>
       createSseEventHandler({
         dispatch,
-        ds,
         sessionIdRef: refs.sessionIdRef,
         stateRef: refs.stateRef,
-        deltaBufferRef: refs.deltaBufferRef,
-        deltaRafRef: refs.deltaRafRef,
         lastBackfilledTurnIdRef: refs.lastBackfilledTurnIdRef,
       }),
     [ds, refs],
@@ -72,8 +69,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     stateRef: refs.stateRef,
     sessionIdRef: refs.sessionIdRef,
     sessionGenerationRef: refs.sessionGenerationRef,
-    deltaBufferRef: refs.deltaBufferRef,
-    deltaRafRef: refs.deltaRafRef,
     dispatch,
     workspace,
   });
@@ -92,15 +87,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sessionIdRef: refs.sessionIdRef,
     stateRef: refs.stateRef,
     activeTurnIdRef: refs.lastBackfilledTurnIdRef,
-    deltaBufferRef: refs.deltaBufferRef,
-    deltaRafRef: refs.deltaRafRef,
     sessionGenerationRef: refs.sessionGenerationRef,
     initialEventCursor: state.initialEventCursor,
   });
 
-  // Two providers: the actions value is referentially stable across streaming
+  // Two providers: the actions value is referentially stable across progress
   // state changes (useBuildSessionActions memoises it), so action-only
-  // consumers via useSessionActions() never re-render on delta updates. Only
+  // consumers via useSessionActions() never re-render on progress updates. Only
   // useSessionState() / useSession() consumers track the high-frequency state.
   return (
     <SessionActionsContext.Provider value={actions}>

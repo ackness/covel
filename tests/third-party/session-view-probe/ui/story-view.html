@@ -66,9 +66,6 @@
         for (const message of session.messages) {
           messages.append(paragraph(message.role, message.text));
         }
-        if (session.streaming) {
-          messages.append(paragraph("assistant", session.streaming.text));
-        }
         pending.replaceChildren();
         if (session.pending.length) {
           const heading = document.createElement("h2");

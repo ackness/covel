@@ -18,6 +18,10 @@ import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import type { PluginServiceRegistry } from "../plugin-services.js";
 import type { OperationStage } from "../operations/operation-stage.js";
 import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
+import {
+  agentOutputContract,
+  type AgentOutputContract,
+} from "./agent-output-contract.js";
 import { createDatasetTools, datasetToolNames } from "./dataset-tools.js";
 import {
   absentImportTool,
@@ -35,6 +39,8 @@ export function generatedToolNames(manifest: RuntimeManifest): string[] {
 }
 
 export interface AgentToolSurface {
+  /** Control-only output channel; dispatched by the agent loop. */
+  readonly output?: AgentOutputContract;
   readonly declarative?: boolean;
   /** Generated tools that resolved: advertised and callable. */
   readonly available: ReadonlyMap<string, ToolModule>;
@@ -65,6 +71,16 @@ export async function prepareAgentToolSurface(args: {
   readonly loaded?: LoadedRuntime;
 }): Promise<AgentToolSurface> {
   const { manifest, input, deps } = args;
+  for (const name of [
+    ...(manifest.tools?.builtin ?? []),
+    ...(manifest.tools?.plugin ?? []),
+    ...generatedToolNames(manifest),
+    ...(Array.isArray(manifest.tools?.defer) ? manifest.tools.defer : []),
+  ])
+    if (name === "submit-output")
+      throw new Error(
+        "submit-output is reserved; do not declare or defer the host control tool",
+      );
   const imports =
     manifest.runtimeType === "function" ? [] : (manifest.tools?.services ?? []);
   const datasetNames = datasetToolNames(manifest);
@@ -72,7 +88,16 @@ export async function prepareAgentToolSurface(args: {
     args.loaded ??
     (await deps.loadRuntime?.(manifest, input.locale, input.sessionId));
   const declarative = loaded?.executionMode === "declarative";
-  if (!declarative && imports.length === 0 && datasetNames.length === 0)
+  const output =
+    manifest.runtimeType === "function"
+      ? undefined
+      : agentOutputContract(loaded ?? { manifest, promptTemplate: "" });
+  if (
+    !output &&
+    !declarative &&
+    imports.length === 0 &&
+    datasetNames.length === 0
+  )
     return EMPTY_SURFACE;
   const available = new Map<string, ToolModule>();
   const absent = new Map<string, ToolModule>();
@@ -129,7 +154,7 @@ export async function prepareAgentToolSurface(args: {
       `[service-imports] runtime "${manifest.name}" in session ${input.sessionId}: imported tool "${name}" (${contract}) is absent: ${absentReason(resolution)}`,
     );
   }
-  return { available, absent, declarative };
+  return { available, absent, declarative, output };
 }
 
 function absentReason(absent: AbsentImport): string {

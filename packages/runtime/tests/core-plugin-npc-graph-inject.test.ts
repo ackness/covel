@@ -26,9 +26,15 @@ class CapturingLLM implements LLMAdapter {
         .join("\n\n"),
     );
     return {
-      content: '{"narrativeOutput":"你记起了图谱中的关系。"}',
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: '{"narrativeOutput":"你记起了图谱中的关系。"}',
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 10, outputTokens: 8 },
     };
   }

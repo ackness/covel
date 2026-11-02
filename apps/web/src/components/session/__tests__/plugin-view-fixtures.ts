@@ -63,7 +63,6 @@ const projectionInput: Omit<SessionProjectionInput, "messageSeqs"> = {
     },
   ],
   submittedBlockIds: new Set(),
-  streamingText: undefined,
   characters: [],
   slots: [],
 };

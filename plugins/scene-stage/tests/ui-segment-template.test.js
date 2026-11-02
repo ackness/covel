@@ -30,6 +30,7 @@ describe("scene-stage dialogue template", () => {
     expect(loaded.slots.segment).toEqual([spec]);
     expect(spec).toMatchObject({
       match: { kind: "dialogue" },
+      reveal: { mode: "segments" },
       view: { component: "Row" },
     });
     expect(spec.view.children[0]).toMatchObject({

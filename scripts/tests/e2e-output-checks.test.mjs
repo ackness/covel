@@ -75,15 +75,13 @@ test("counts English prose in a Chinese session and leaves identifiers out", () 
     [
       responded("world-ir", [
         call("submit-world-facts", facts),
-        call("runtime-done", {
-          reason: "Nothing else changed in this turn at all",
-        }),
+        call("submit-output", {}),
       ]),
     ],
     "zh-CN",
   );
-  // Three prose values; the two English descriptions are wrong. The ids and
-  // the trace note of runtime-done are not counted.
+  // Three prose values; the two English descriptions are wrong. Identifiers
+  // and the empty final submission contribute no prose.
   assert.deepEqual([row.runtimeId, row.prose, row.wrong], ["world-ir", 3, 2]);
   assert.match(row.examples[0], /entities\[\]\.description = "Half hemp rope/);
 });

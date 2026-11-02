@@ -383,6 +383,8 @@ contributes:
 
 `match` 是必填的：`kind` 按段落类型匹配，`speaker` 按角色 ID 或名字匹配。模板只负责显示，不能声明操作按钮和数据来源；上例头像只显示已解析说话人的公开头像，可以用宿主本地预览放大，缺少头像时保留名牌和正文。没命中模板的段落和以前一样。可读的状态和选择规则见[段落模板](../reference/ui-panels.md#段落模板)。
 
+可选的顶层 `reveal: { "mode": "segments" }` 请求在本地逐段显示完整已提交故事，不授予动作或执行能力。宿主为整条故事选择一个策略，见[段落模板](../reference/ui-panels.md#段落模板)与 [Reveal](../reference/ui-components.md#完整内容的分段显示)。
+
 ## 5. 给玩家选项
 
 给玩家选的东西只有一种正确的写法：`ChoiceList` 里放若干个 `Choice`。

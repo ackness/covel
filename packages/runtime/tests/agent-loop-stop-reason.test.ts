@@ -31,6 +31,7 @@ import {
   manifest,
   markTool,
   prose,
+  submitted,
   queuedLLM,
   runLoop,
   runRuntime,
@@ -69,23 +70,23 @@ function slowTool(ms: number, onEnter?: () => void) {
 }
 
 describe("the loop's own exits", () => {
-  it("E1: a reply without tool calls is completed", async () => {
-    const result = await runLoop({ llm: queuedLLM([prose("done")]) });
+  it("an accepted submission is completed", async () => {
+    const result = await runLoop({ llm: queuedLLM([submitted("done")]) });
     expect(result.stop).toEqual({ reason: "completed" });
   });
 
-  it("E2: runtime-done is tool-finished", async () => {
+  it("a submission after business work is completed", async () => {
     const result = await runLoop({
       llm: queuedLLM([
         toolCall("mark", { note: "a" }),
-        toolCall("runtime-done", {}, "tc-done"),
+        toolCall("submit-output", {}, "tc-done"),
       ]),
       deps: { toolExecutor: makeExecutor([markTool, doneTool]) },
     });
-    expect(result.stop).toEqual({ reason: "tool-finished" });
+    expect(result.stop).toEqual({ reason: "completed" });
   });
 
-  it("E3: a PostToolUse terminate is tool-finished", async () => {
+  it("PostToolUse termination without submission is invalid-output", async () => {
     const hookPipeline = createHookPipeline();
     hookPipeline.register({
       id: "stop",
@@ -95,18 +96,18 @@ describe("the loop's own exits", () => {
         replace: { terminate: true },
       }),
     });
-    const llm = queuedLLM([toolCall("mark", { note: "a" }), prose("late")]);
+    const llm = queuedLLM([toolCall("mark", { note: "a" }), submitted("late")]);
     const result = await runLoop({ llm, hookPipeline });
-    expect(result.stop).toEqual({ reason: "tool-finished" });
+    expect(result.stop).toEqual({ reason: "invalid-output" });
     expect(llm.requests).toHaveLength(1);
   });
 
-  it("E4: completeAfterTools is tool-finished", async () => {
+  it("required business work still needs a submission", async () => {
     const result = await runLoop({
-      llm: queuedLLM([toolCall("mark", { note: "a" })]),
+      llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
       manifest: manifest({ completeAfterTools: ["mark"] }),
     });
-    expect(result.stop).toEqual({ reason: "tool-finished" });
+    expect(result.stop).toEqual({ reason: "completed" });
   });
 });
 
@@ -140,9 +141,9 @@ describe("the step limit (E5)", () => {
   it("succeeds only through the finalizer, with its text, not the scratch", async () => {
     let n = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch text")
-        : prose("the final answer"),
+        : submitted("the final answer"),
     );
     const result = await runRuntime({
       llm,
@@ -152,34 +153,38 @@ describe("the step limit (E5)", () => {
     expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
     expect(JSON.stringify(result.output)).not.toContain("scratch text");
     expect(llm.requests).toHaveLength(3);
-    expect(llm.requests[2]?.tools).toBeUndefined();
-    expect(llm.requests[2]?.defaults?.toolChoice).toBeUndefined();
+    expect(llm.requests[2]?.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
+    expect(llm.requests[2]?.defaults?.toolChoice).toEqual({
+      name: "submit-output",
+    });
     expect(llm.requests[2]?.messages.at(-1)).toMatchObject({
       role: "system",
-      content: expect.stringContaining("No steps are left"),
+      content: expect.stringContaining("Call submit-output"),
     });
     // The finalizer's tool calls never run: only the two steps' calls.
-    expect(result.toolCalls).toHaveLength(2);
+    expect(result.toolCalls).toHaveLength(3);
   });
 
   it("hands the loop the finalizer's text in place of the scratch", async () => {
     let n = 0;
     const result = await runLoop({
       llm: scriptedLLM((params) =>
-        params.tools
+        params.tools?.some((tool) => tool.name !== "submit-output")
           ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch text")
-          : prose("the final answer"),
+          : submitted("the final answer"),
       ),
       maxSteps: 2,
     });
     expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
-    expect(result.finalContent).toBe("the final answer");
+    expect(result.acceptedOutput?.narrativeOutput).toBe("the final answer");
   });
 
   it("fails when the finalizer writes nothing", async () => {
     let n = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch text")
         : prose("   "),
     );
@@ -197,7 +202,8 @@ describe("the step limit (E5)", () => {
     try {
       let n = 0;
       const llm = scriptedLLM((params) => {
-        if (!params.tools) throw new Error("PROVIDER_ERROR: finalizer down");
+        if (!params.tools?.some((tool) => tool.name !== "submit-output"))
+          throw new Error("PROVIDER_ERROR: finalizer down");
         return toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch");
       });
       const result = await runRuntime({
@@ -205,7 +211,7 @@ describe("the step limit (E5)", () => {
         manifest: manifest({ maxSteps: 1 }),
       });
       expect(result.status).toBe("failed");
-      expect(result.stop).toEqual({ reason: "max-steps" });
+      expect(result.stop).toEqual({ reason: "model-error" });
     } finally {
       warn.mockRestore();
     }
@@ -214,9 +220,9 @@ describe("the step limit (E5)", () => {
   it("asks a story for its narrative and keeps the finalizer's text", async () => {
     let n = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "Looking up...")
-        : prose("The fog closes over the pier."),
+        : submitted("The fog closes over the pier."),
     );
     const result = await runLoop({
       llm,
@@ -224,9 +230,11 @@ describe("the step limit (E5)", () => {
       maxSteps: 2,
     });
     expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
-    expect(result.finalContent).toBe("The fog closes over the pier.");
+    expect(result.acceptedOutput?.narrativeOutput).toBe(
+      "The fog closes over the pier.",
+    );
     expect(llm.requests.at(-1)?.messages.at(-1)?.content).toContain(
-      "have not written the story",
+      "submit-output",
     );
   });
 
@@ -235,17 +243,17 @@ describe("the step limit (E5)", () => {
     // not complete and the contract is met: only the output channel rules
     // the finalizer out.
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? {
             content: "scratch",
             toolCalls: [
               { id: "tc-save", name: "save", arguments: "{}" },
               { id: "tc-bad", name: "mark", arguments: "{}" },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 1, outputTokens: 1 },
           }
-        : prose("never"),
+        : submitted("never"),
     );
     const result = await runLoop({
       llm,
@@ -256,12 +264,17 @@ describe("the step limit (E5)", () => {
         tools: { plugin: ["mark", "save"] },
       }),
       loaded: {
+        manifest: manifest({
+          requireToolUse: true,
+          completeAfterTools: ["save"],
+          tools: { plugin: ["mark", "save"] },
+        }),
         promptTemplate: "prompt",
         outputSchema: {
           type: "object",
           properties: { saved: { type: "boolean" } },
         },
-      } as never,
+      },
       deps: { toolExecutor: makeExecutor([markTool, saveTool]) },
     });
     expect(result.stop).toEqual({ reason: "max-steps" });
@@ -271,9 +284,9 @@ describe("the step limit (E5)", () => {
   it("skips the finalizer when too little time is left", async () => {
     let n = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch")
-        : prose("never"),
+        : submitted("never"),
     );
     const result = await runLoop({ llm, maxSteps: 1, timeoutMs: 2_000 });
     expect(result.stop).toEqual({ reason: "max-steps" });
@@ -284,19 +297,17 @@ describe("the step limit (E5)", () => {
 describe("the deadline (E6) and cancellation (E7)", () => {
   it("E6: settles a deadline exit as a failure with the timeout text", () => {
     const toolLoop: AgentToolLoopCompleted = {
-      finalContent: "scratch",
-      finalToolOutput: null,
+      acceptedOutput: null,
       collectedToolCalls: [],
       executedToolCalls: [],
       failedToolCalls: [],
       pendingProposals: [],
       emittedEvents: [],
-      streamDeltaCount: 0,
+
       stop: { reason: "deadline" },
       effectiveMaxSteps: 5,
       deadline: Date.now(),
       requiredToolUseUnmet: false,
-      requiredCompletionUnmet: false,
     };
     const settled = settleAgentLoop({
       manifest: manifest(),
@@ -312,7 +323,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
 
   it("E6: the runtime's own timer gives deadline on the failed result", async () => {
     const result = await runRuntime({
-      llm: queuedLLM([toolCall("mark", { note: "a" })]),
+      llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
       manifest: manifest({ timeoutMs: 40 }),
       deps: { toolExecutor: makeExecutor([slowTool(2_000)]) },
     });
@@ -325,7 +336,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
     const controller = new AbortController();
     const error = await thrownBy(
       runLoop({
-        llm: queuedLLM([toolCall("mark", { note: "a" })]),
+        llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
         deps: {
           toolExecutor: makeExecutor([
             slowTool(2_000, () => controller.abort()),
@@ -346,7 +357,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
     const parentTimeout = new RuntimeTimeoutError("parent timed out");
     const error = await thrownBy(
       runLoop({
-        llm: queuedLLM([toolCall("mark", { note: "a" })]),
+        llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
         deps: {
           toolExecutor: makeExecutor([
             slowTool(2_000, () => controller.abort(parentTimeout)),
@@ -365,7 +376,7 @@ describe("the deadline (E6) and cancellation (E7)", () => {
   it("E7: the loop's own timer is deadline, not a parent cancellation", async () => {
     const error = await thrownBy(
       runLoop({
-        llm: queuedLLM([toolCall("mark", { note: "a" })]),
+        llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
         timeoutMs: 40,
         deps: { toolExecutor: makeExecutor([slowTool(2_000)]) },
       }),
@@ -428,11 +439,11 @@ describe("thrown exits (E8–E11)", () => {
         replace: { correction: "Try again." },
       }),
     });
-    const error = await thrownBy(
-      runLoop({ llm: queuedLLM([prose("draft")]), hookPipeline }),
-    );
-    expect(String(error)).toContain("Response validation failed");
-    expect(stopOf(error, "run-loop")).toEqual({ reason: "invalid-output" });
+    const result = await runLoop({
+      llm: queuedLLM([submitted("draft")]),
+      hookPipeline,
+    });
+    expect(result.stop).toEqual({ reason: "invalid-output" });
   });
 
   it("returns a context-overflow stop without throwing or losing tool calls", async () => {
@@ -440,7 +451,7 @@ describe("thrown exits (E8–E11)", () => {
       manifest: manifest({ loopProfile: { finalizer: { maxSteps: false } } }),
       llm: queuedLLM([
         toolCall("mark", { note: "x".repeat(3_000) }),
-        prose("unreached"),
+        submitted("unreached"),
       ]),
       maxSteps: 3,
       estimator: (text) => text.length,
@@ -476,9 +487,9 @@ describe("thrown exits (E8–E11)", () => {
       let i = 0;
       const result = await runLoop({
         llm: scriptedLLM((params) =>
-          params.tools
+          params.tools?.some((tool) => tool.name !== "submit-output")
             ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-            : prose("The fog closes over the pier."),
+            : submitted("The fog closes over the pier."),
         ),
         manifest: manifest({ outputKind: "story" }),
         maxSteps: 20,
@@ -501,7 +512,7 @@ describe("thrown exits (E8–E11)", () => {
     const executor = makeExecutor([broken]);
     const error = await thrownBy(
       runLoop({
-        llm: queuedLLM([toolCall("mark", { note: "a" })]),
+        llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
         deps: {
           toolExecutor: {
             ...executor,
@@ -545,7 +556,7 @@ describe("suspension (E12) and settle failures (E13, E14)", () => {
 
   it("E13: a schema-gate failure is invalid-output", async () => {
     const result = await runRuntime({
-      llm: queuedLLM([prose(JSON.stringify({ count: "many" }))]),
+      llm: queuedLLM([toolCall("submit-output", { count: "many" })]),
       deps: {
         loadRuntime: async (runtime) => ({
           manifest: runtime,
@@ -562,14 +573,14 @@ describe("suspension (E12) and settle failures (E13, E14)", () => {
     expect(result.stop).toEqual({ reason: "invalid-output" });
   });
 
-  it("E14: a requireToolUse miss keeps the loop's own completed", async () => {
+  it("a required-work miss ends with invalid-output", async () => {
     const result = await runRuntime({
-      llm: queuedLLM([prose("I did it."), prose("Really, I did.")]),
+      llm: queuedLLM([submitted("I did it."), submitted("Really, I did.")]),
       manifest: manifest({ requireToolUse: true }),
     });
     expect(result.status).toBe("failed");
-    expect(result.error).toContain("requireToolUse");
-    expect(result.stop).toEqual({ reason: "completed" });
+    expect(result.error).toContain("required-work");
+    expect(result.stop).toEqual({ reason: "invalid-output" });
   });
 });
 
@@ -623,7 +634,7 @@ describe("stop through finalization", () => {
     expect(rewritten.stop).toEqual({ reason: "max-steps" });
   });
 
-  it("a failure a PostRuntime hook turns into success keeps no stale max-steps", async () => {
+  it("PostRuntime cannot turn an unsubmitted failure into success", async () => {
     const hookPipeline = createHookPipeline();
     hookPipeline.register({
       id: "recover",
@@ -645,18 +656,18 @@ describe("stop through finalization", () => {
     let n = 0;
     const result = await runRuntime({
       llm: scriptedLLM((params) =>
-        params.tools
+        params.tools?.some((tool) => tool.name !== "submit-output")
           ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch")
           : prose(""),
       ),
       manifest: manifest({ maxSteps: 1 }),
       deps: { hookPipeline },
     });
-    expect(result.status).toBe("success");
-    expect(result.stop).toBeUndefined();
+    expect(result.status).toBe("failed");
+    expect(result.stop).toEqual({ reason: "max-steps" });
   });
 
-  it("a thrown exit keeps its stop through finalizeThrownRuntime, unless a hook recovers it", async () => {
+  it("a thrown exit cannot be recovered by a PostRuntime status rewrite", async () => {
     const failing = scriptedLLM(() => {
       throw new Error("PROVIDER_ERROR: upstream exploded");
     });
@@ -678,7 +689,7 @@ describe("stop through finalization", () => {
       llm: failing,
       deps: { hookPipeline },
     });
-    expect(recovered.status).toBe("success");
-    expect(recovered.stop).toBeUndefined();
+    expect(recovered.status).toBe("failed");
+    expect(recovered.stop).toEqual({ reason: "model-error" });
   });
 });

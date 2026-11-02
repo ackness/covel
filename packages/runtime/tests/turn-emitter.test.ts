@@ -16,12 +16,13 @@ function makeStoreSpy() {
 }
 
 function makeBusSpy(): EventBus & {
-  emitted: Array<{ type: string; payload: unknown }>;
+  emitted: Array<{ topic: string; type: string; payload: unknown }>;
 } {
-  const emitted: Array<{ type: string; payload: unknown }> = [];
+  const emitted: Array<{ topic: string; type: string; payload: unknown }> = [];
   const bus: EventBus = {
-    emit(ev: { payload: unknown }) {
+    emit(ev: { topic: string; payload: unknown }) {
       emitted.push({
+        topic: ev.topic,
         type: String((ev.payload as Record<string, unknown>)._subType ?? ""),
         payload: ev.payload,
       });
@@ -169,11 +170,59 @@ describe("TurnEmitter", () => {
     expect((first!.payload as { seq: number }).seq).toBe(0);
     expect((second!.payload as { seq: number }).seq).toBe(1);
 
-    expect(bus.emitted).toHaveLength(2);
-    expect(bus.emitted[0]!.type).toBe("tool.calling");
-    expect(bus.emitted[1]!.type).toBe("tool.completed");
+    expect(bus.emitted.map(({ topic, type }) => [topic, type])).toEqual([
+      ["trace", "tool.calling"],
+      ["runtime", "tool.calling"],
+      ["trace", "tool.completed"],
+      ["runtime", "tool.completed"],
+    ]);
     // flowId defaults to the (fallback) traceId so /api/traces never returns "".
     expect((first!.payload as { flowId?: string }).flowId).toBe("T");
+  });
+
+  it("publishes safe rejection progress separately from diagnostic content", async () => {
+    const store = makeStoreSpy();
+    const bus = makeBusSpy();
+    const emitter = createTurnEmitter({
+      store,
+      eventBus: bus,
+      sessionId: "S",
+      turnId: "T",
+    });
+    await emitter.emit("step.completed", {
+      runId: "run",
+      runtimeId: "story",
+      pluginId: "probe",
+      step: 1,
+      notes: [
+        {
+          kind: "output-rejected",
+          reason: "review-rejected",
+          attempt: 1,
+          feedback: "private review",
+        },
+      ],
+      toolCalls: [{ name: "private business tool", success: false }],
+    });
+    expect(bus.emitted).toHaveLength(2);
+    expect(bus.emitted[0]?.topic).toBe("trace");
+    expect(JSON.stringify(bus.emitted[0])).toContain("private");
+    expect(bus.emitted[1]).toMatchObject({
+      topic: "runtime",
+      type: "step.completed",
+      payload: {
+        runId: "run",
+        runtimeId: "story",
+        pluginId: "probe",
+        turnId: "T",
+        step: 1,
+        notes: [
+          { kind: "output-rejected", reason: "review-rejected", attempt: 1 },
+        ],
+      },
+    });
+    expect(JSON.stringify(bus.emitted[1])).not.toContain("private");
+    expect(store.addTraceEvent).toHaveBeenCalledTimes(1);
   });
 
   it("uses the explicit traceId for trace_events and sets payload.flowId = traceId", async () => {

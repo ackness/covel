@@ -158,9 +158,15 @@ describe("resume context", () => {
               usage,
             };
           return {
-            content: JSON.stringify({ completed: true }),
-            toolCalls: [],
-            finishReason: "stop" as const,
+            content: null,
+            toolCalls: [
+              {
+                id: "final",
+                name: "submit-output",
+                arguments: JSON.stringify({ completed: true }),
+              },
+            ],
+            finishReason: "tool_calls" as const,
             usage,
           };
         },
@@ -348,9 +354,15 @@ describe("resume completion evidence", () => {
                 usage,
               }
             : {
-                content: JSON.stringify({ completed: true }),
-                toolCalls: [],
-                finishReason: "stop" as const,
+                content: null,
+                toolCalls: [
+                  {
+                    id: "final",
+                    name: "submit-output",
+                    arguments: JSON.stringify({ completed: true }),
+                  },
+                ],
+                finishReason: "tool_calls" as const,
                 usage,
               };
         },
@@ -376,7 +388,7 @@ describe("resume completion evidence", () => {
   it("does not count a tool that failed before the suspension as the required work", async () => {
     const { result, workCalls } = await resumeAfterWork([false]);
     expect(result.status).toBe("failed");
-    expect(result.error).toContain("requireToolUse");
+    expect(result.error).toContain("required-work");
     expect(workCalls).toBe(1);
   });
 
@@ -403,7 +415,7 @@ describe("resume completion evidence", () => {
   it("does not let runtime-done stand in for a tool that failed before the suspension", async () => {
     const { result, workCalls } = await resumeAfterWork([false], [done]);
     expect(result.status).toBe("failed");
-    expect(result.error).toContain("requireToolUse");
+    expect(result.error).toContain("required-work");
     expect(workCalls).toBe(1);
   });
 
@@ -488,13 +500,31 @@ describe.each(["step limit", "hook stop"] as const)(
           promptTemplate: "Do the required work.",
         }),
         llm: {
-          generate: async (request: { tools?: readonly unknown[] }) => {
+          generate: async (request: {
+            tools?: readonly { name: string }[];
+          }) => {
             modelCalls += 1;
-            if (emptyFinalizer && !request.tools)
+            if (
+              emptyFinalizer &&
+              request.tools?.every((tool) => tool.name === "submit-output")
+            )
               return {
                 content: "",
                 toolCalls: [],
                 finishReason: "stop" as const,
+                usage,
+              };
+            if (request.tools?.every((tool) => tool.name === "submit-output"))
+              return {
+                content: null,
+                toolCalls: [
+                  {
+                    id: "final",
+                    name: "submit-output",
+                    arguments: JSON.stringify({ completed: true }),
+                  },
+                ],
+                finishReason: "tool_calls" as const,
                 usage,
               };
             return suspended && modelCalls === 1
@@ -571,23 +601,23 @@ describe.each(["step limit", "hook stop"] as const)(
     const expectedFailure =
       exit === "step limit"
         ? "exhausted the tool loop after 1 steps"
-        : "requireToolUse";
+        : "Loop stopped without an accepted submission";
 
     it("fails a run whose only business tool call failed", async () => {
       const { result, workCalls, modelCalls } = await run(false, false);
       expect(result.status).toBe("failed");
       expect(result.error).toContain(expectedFailure);
       expect(result.stop?.reason).toBe(
-        exit === "step limit" ? "max-steps" : "tool-finished",
+        exit === "step limit" ? "max-steps" : "invalid-output",
       );
       // No finalizer: prose cannot satisfy an unmet requireToolUse.
       expect(modelCalls).toBe(1);
       expect(workCalls).toBe(1);
     });
 
-    it("accepts a run whose business tool call succeeded", async () => {
+    it("requires accepted submission after business work succeeds", async () => {
       const { result, workCalls, modelCalls } = await run(false, true);
-      expect(result.status).toBe("success");
+      expect(result.status).toBe(exit === "step limit" ? "success" : "failed");
       expect(workCalls).toBe(1);
       if (exit === "step limit") {
         // The contract is met, so the finalizer answers with tools off; its
@@ -595,7 +625,7 @@ describe.each(["step limit", "hook stop"] as const)(
         expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
         expect(modelCalls).toBe(2);
       } else {
-        expect(result.stop).toEqual({ reason: "tool-finished" });
+        expect(result.stop).toEqual({ reason: "invalid-output" });
         expect(modelCalls).toBe(1);
       }
     });
@@ -619,7 +649,7 @@ describe.each(["step limit", "hook stop"] as const)(
       );
       expect(result.status).toBe("failed");
       expect(result.error).toContain(expectedFailure);
-      expect(workCalls).toBe(2);
+      expect(workCalls).toBe(exit === "step limit" ? 1 : 2);
       expect(commitStatus).toBe("failed");
       expect(resolvedAt).toBeUndefined();
     });
@@ -629,10 +659,11 @@ describe.each(["step limit", "hook stop"] as const)(
         true,
         true,
       );
-      expect(result.status).toBe("success");
-      expect(workCalls).toBe(2);
-      expect(commitStatus).toBe("committed");
-      expect(resolvedAt).toBeDefined();
+      expect(result.status).toBe(exit === "step limit" ? "success" : "failed");
+      expect(workCalls).toBe(exit === "step limit" ? 1 : 2);
+      expect(commitStatus).toBe(exit === "step limit" ? "committed" : "failed");
+      if (exit === "step limit") expect(resolvedAt).toBeDefined();
+      else expect(resolvedAt).toBeUndefined();
     });
   },
 );

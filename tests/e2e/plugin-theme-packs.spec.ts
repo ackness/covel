@@ -22,7 +22,7 @@ import {
 import {
   sandboxThemeFixture,
   startThemeOrchestrationHost,
-  streamingThemeStory,
+  committedThemeStory,
   themeSecrets,
 } from "./helpers/theme-orchestration.js";
 
@@ -285,13 +285,13 @@ async function expectSandboxStory(region: Locator, story: string) {
 
 type PortEnvelope = {
   type: string;
-  append?: string;
   value?: {
     theme?: { id: string; tokens: { background: string } };
     session?: {
       turn: number;
       executing: boolean;
-      streaming: { text: string } | null;
+      version: 3;
+      messages: { seq: number; role: string; text: string }[];
     };
   };
 };
@@ -697,10 +697,12 @@ for (const width of [360, 1440])
         .getByRole("button", { name: "返回默认视图", exact: true })
         .click();
       await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      const currentParagraph = page
+        .getByTestId("stage-dialog")
+        .locator('[data-stage-paragraph][data-reader-current="true"]');
+      await expect(currentParagraph).toHaveText("Public reading theme story.");
       await expect(
-        page
-          .getByTestId("stage-dialog")
-          .locator('[data-covel-theme-part="dialogue"]'),
+        currentParagraph.locator('[data-covel-theme-part="dialogue"]'),
       ).toHaveCSS("color", "rgb(245, 234, 210)");
       await page.getByRole("button", { name: "全屏舞台", exact: true }).click();
       const reset = page.getByRole("button", {
@@ -832,10 +834,12 @@ for (const width of [360, 1440])
         .frameLocator("iframe")
         .getByRole("button", { name: "Fill viewport", exact: true })
         .click();
+      const currentParagraph = page
+        .getByTestId("stage-dialog")
+        .locator('[data-stage-paragraph][data-reader-current="true"]');
+      await expect(currentParagraph).toHaveText("Public reading theme story.");
       await expect(
-        page
-          .getByTestId("stage-dialog")
-          .locator('[data-covel-theme-part="dialogue"]'),
+        currentParagraph.locator('[data-covel-theme-part="dialogue"]'),
       ).toHaveCSS("color", "rgb(245, 234, 210)");
       await page.getByTestId("stage-immersive-toggle").click();
       await expectSandboxStory(input, "Public reading theme story.");
@@ -1149,7 +1153,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       await sandbox
         .getByRole("button", { name: "Submit action", exact: true })
         .click();
-      await expect(sandbox.locator("#story")).toContainText("Public streaming");
+      await fixture.waitForSubmission(turn);
       await expect
         .poll(() =>
           frame!.evaluate(() => {
@@ -1159,29 +1163,25 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
             return bridge.covel.getState().session;
           }),
         )
-        .toMatchObject({
-          executing: true,
-          turn,
-          // Segment streaming holds trailing whitespace until the next word.
-          streaming: { text: "Public streaming" },
-        });
-      // A real second delta follows the full-state baseline on the same port.
-      const envelopes = (await portMessages(frame!)).length;
-      fixture.nextDelta(turn);
-      await expect
-        .poll(async () =>
-          (await portMessages(frame!))
-            .slice(envelopes)
-            .some(
-              (message) =>
-                message.type === "stream" &&
-                message.append?.includes("theme story."),
-            ),
-        )
-        .toBe(true);
-      await expect(sandbox.locator("#story")).toContainText(
-        streamingThemeStory,
+        .toMatchObject({ version: 3, executing: true, turn });
+      const beforeCommit = await portMessages(frame!);
+      expect(beforeCommit.some((message) => message.type === "stream")).toBe(
+        false,
       );
+      const snapshot = beforeCommit
+        .filter((message) => message.type === "state")
+        .at(-1)?.value?.session;
+      expect(snapshot).not.toHaveProperty("streaming");
+      expect(
+        snapshot?.messages.filter((message) =>
+          message.text.includes(committedThemeStory),
+        ),
+      ).toHaveLength(turn);
+      if (turn === 1)
+        await expect(sandbox.locator("#story")).toContainText(
+          committedThemeStory,
+        );
+      fixture.continueArguments(turn);
       const stop = controls.getByRole("button", { name: "停止", exact: true });
       await hit(stop);
       const before = await controlStyle(stop);
@@ -1211,6 +1211,11 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       await hit(stop);
       expect(await controlStyle(stop)).toEqual(before);
       expect(writes).toEqual(writesBefore);
+      expect(
+        (await portMessages(frame!))
+          .filter((message) => message.type === "state")
+          .at(-1)?.value?.session?.messages,
+      ).toEqual(snapshot?.messages);
       expect(actions).toHaveLength(turn + 1);
       await assertPrivateThemeDataAbsent(page, host, frame!);
       fixture.release(turn);
@@ -1223,9 +1228,25 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
           ),
         )
         .toBe(true);
+      const afterCommit = (await portMessages(frame!))
+        .filter((message) => message.type === "state")
+        .at(-1)?.value?.session;
+      expect(
+        afterCommit?.messages.filter((message) =>
+          message.text.includes(committedThemeStory),
+        ),
+      ).toHaveLength(turn + 1);
+      expect(
+        (await portMessages(frame!)).some(
+          (message) => message.type === "stream",
+        ),
+      ).toBe(false);
+      await expect(sandbox.locator("#story")).toContainText(
+        committedThemeStory,
+      );
       const story = page
         .locator('[data-covel-theme-part="story"]')
-        .filter({ hasText: streamingThemeStory });
+        .filter({ hasText: committedThemeStory });
       await expect(story.last()).toHaveCSS("color", "rgb(245, 234, 210)");
       expect(
         (await host.store.getSession(host.sessionId))?.completedPlayerTurns,
@@ -1333,8 +1354,8 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       ).length,
     ).toBe(1);
   } finally {
-    fixture.nextDelta(0);
-    fixture.nextDelta(1);
+    fixture.continueArguments(0);
+    fixture.continueArguments(1);
     fixture.release(0);
     fixture.release(1);
     await page.goto("about:blank");

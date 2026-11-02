@@ -3,8 +3,7 @@ import { projectStoryOperationFailures, stageCastSchema } from "@covel/shared";
 /**
  * Full-screen visual-novel stage (viewMode: "stage"). Composes the five stage
  * layers over kernel UI projections and owns the small amount of
- * cross-layer state the pieces can't hold themselves: which turn's text is
- * fully read (switches narrative into the unified decision panel), auto-play,
+ * cross-layer state the pieces can't hold themselves: reader auto-play,
  * and the history / pending-form modals.
  *
  * Absolute-positioned layers stack inside a `relative` bounded container in
@@ -12,12 +11,7 @@ import { projectStoryOperationFailures, stageCastSchema } from "@covel/shared";
  * the components). UI slots supply committed values and turn previews.
  */
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
-import {
-  useMemo,
-  useState,
-  type ComponentProps,
-  type ReactElement,
-} from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import type {
@@ -34,10 +28,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
-import {
-  useStreamingSpeakers,
-  useStreamingText,
-} from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -50,19 +40,16 @@ import { MessageBlockRenderer } from "../chat-messages/message-blocks.js";
 import { StageBackdrop } from "./StageBackdrop.js";
 import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
-import { StageDialog } from "./StageDialog.js";
+import { StageDialog, type StageDialogProps } from "./StageDialog.js";
 import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import type { ComposerModes } from "../game-view/use-composer-modes.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
-import { storyParagraphSpeakers } from "./stage-dialogue-selectors.js";
 import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
-  initialStageReadStoryKey,
-  stageStoryKey,
   type PresenceRecord,
   type StageSpeaker,
 } from "./stage-selectors.js";
@@ -81,10 +68,6 @@ export interface StageViewProps {
   readonly messages: StreamMessage[];
   readonly executing: boolean;
   readonly advancing?: boolean;
-  /** The session is being restored: a story that arrives now is history. */
-  readonly restoring?: boolean;
-  /** Offer optional rereading without delaying an already-read story's input. */
-  readonly replayStoryOnEnter?: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
   readonly recoveryTurnId?: string;
@@ -116,9 +99,7 @@ export interface StageViewProps {
   readonly messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
-/** Latest `story` message drives the dialog; a `stream_`-prefixed id while
- *  the turn is still executing means the text is mid-stream (no dedicated
- *  streaming flag exists — see reducer.ts). */
+/** The latest committed story drives the dialog. */
 function findLatestStory(
   messages: readonly StreamMessage[],
 ): StreamMessage | undefined {
@@ -136,8 +117,6 @@ export function StageView(props: StageViewProps): ReactElement {
     messages,
     executing,
     advancing = false,
-    restoring = false,
-    replayStoryOnEnter = false,
     sessionPlugins,
     submittedBlockIds,
     submittedBlockValues,
@@ -190,45 +169,11 @@ export function StageView(props: StageViewProps): ReactElement {
       [slots],
     );
 
-  // ── Latest story text + stream state ──────────────────────────
-  // Streaming tokens no longer live in `messages[].content` — the placeholder
-  // carries empty content and the live text is held in a fine-grained external
-  // store. Only the dialog child subscribes to the live text.
   const storyMsg = findLatestStory(messages);
   const storyTurnId = storyMsg?.turnId;
-  const storyKey = stageStoryKey(storyMsg);
-  const isStreaming =
-    executing && (storyMsg?.id.startsWith("stream_") ?? false);
-  // Nameplates come from the committed story's segments. While the story
-  // streams they are the live speakers as written; commit replaces them with
-  // the resolved names.
-  const liveSpeakers = useStreamingSpeakers(storyMsg?.id ?? "");
-  const segmentSpeakers = isStreaming
-    ? liveSpeakers
-    : storyParagraphSpeakers(storyMsg);
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
-  // A committed story read elsewhere must never gate the player's next action.
-  const [readStoryKey, setReadStoryKey] = useState<string | undefined>(() =>
-    initialStageReadStoryKey(storyMsg),
-  );
-  const [reviewStoryKey, setReviewStoryKey] = useState<string | undefined>(
-    () => (replayStoryOnEnter ? initialStageReadStoryKey(storyMsg) : undefined),
-  );
-  // Stage can also mount before a restore delivers the history. The first
-  // story it then receives has been read as well, unless a turn running in
-  // this view is writing it. A restore counts as executing until it has
-  // checked the session's execution, so `restoring` tells the two apart.
-  const [awaitingHistory, setAwaitingHistory] = useState(!storyMsg);
-  if (awaitingHistory && storyMsg) {
-    setAwaitingHistory(false);
-    if (!executing || restoring) {
-      setReadStoryKey(initialStageReadStoryKey(storyMsg));
-      if (replayStoryOnEnter)
-        setReviewStoryKey(initialStageReadStoryKey(storyMsg));
-    }
-  }
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -270,10 +215,8 @@ export function StageView(props: StageViewProps): ReactElement {
     ];
   }, [storyTurnId, props.executionSteps, messages]);
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
-  const allRead = Boolean(storyKey && readStoryKey === storyKey);
-  // Hide the previous decision, including plugin surfaces, as soon as a turn
-  // starts. Keep already-read narration hidden while waiting for the new story.
-  const choicesVisible = advancing || (!executing && allRead);
+  // Only execution controls action availability; reading never gates input.
+  const choicesVisible = advancing || !executing;
 
   return (
     <div
@@ -307,34 +250,26 @@ export function StageView(props: StageViewProps): ReactElement {
           onToggleImmersive={onToggleImmersive}
           onExit={() => onViewModeChange("parsed")}
         />
-        <LiveStageDialog
-          sessionId={session.id}
-          message={storyMsg}
-          allRead={allRead}
-          executing={executing}
-          turnId={storyTurnId}
-          streamEnded={!isStreaming}
-          segmentSpeakers={segmentSpeakers}
-          autoPlay={autoPlay}
-          reducedMotion={reducedMotion}
-          onAllRead={() => setReadStoryKey(storyKey)}
-        />
+        {executing && (
+          <CommittedStageDialog
+            sessionId={session.id}
+            message={storyMsg}
+            executing
+            autoPlay={autoPlay}
+            reducedMotion={reducedMotion}
+          />
+        )}
         <StageChoices
           hideInput={props.composerReplaced}
           storyReview={
-            allRead && !executing && storyKey === reviewStoryKey ? (
-              <LiveStageDialog
+            storyMsg ? (
+              <StageDialog
+                key={storyMsg.id}
                 inline
                 sessionId={session.id}
                 message={storyMsg}
-                allRead={false}
-                executing={false}
-                turnId={storyTurnId}
-                streamEnded
-                segmentSpeakers={segmentSpeakers}
                 autoPlay={autoPlay}
                 reducedMotion={reducedMotion}
-                onAllRead={() => setReviewStoryKey(undefined)}
               />
             ) : undefined
           }
@@ -367,8 +302,7 @@ export function StageView(props: StageViewProps): ReactElement {
       </div>
 
       {storyMsg &&
-        projectStoryOperationFailures(storyMsg).operationFailures &&
-        !storyMsg.id.startsWith("stream_") && (
+        projectStoryOperationFailures(storyMsg).operationFailures && (
           <div className="shrink-0 border-t border-border bg-background px-4 py-2">
             <StoryOperationFailureNotice message={storyMsg} />
           </div>
@@ -429,32 +363,30 @@ export function StageView(props: StageViewProps): ReactElement {
   );
 }
 
-/** Live tokens update only the dialog and its waiting indicator. */
-function LiveStageDialog({
+/** The previous committed story remains readable while an action is running. */
+function CommittedStageDialog({
   message,
-  allRead,
   executing,
-  ...dialogProps
-}: Omit<ComponentProps<typeof StageDialog>, "storyText"> & {
-  message: StreamMessage | undefined;
-  allRead: boolean;
+  ...props
+}: Omit<StageDialogProps, "message"> & {
+  message?: StreamMessage;
   executing: boolean;
 }) {
   const { t } = useTranslation();
-  const liveText = useStreamingText(message?.id ?? "");
-  const storyText = message ? (liveText ?? message.content) : "";
-  if (!allRead && storyText.trim().length > 0)
-    return <StageDialog {...dialogProps} storyText={storyText} />;
-  if (!executing) return null;
   return (
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
-      data-testid="stage-thinking"
-    >
-      <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-        <span>{t("stage.thinkingLabel")}</span>
-      </div>
-    </div>
+    <>
+      {message && <StageDialog {...props} key={message.id} message={message} />}
+      {executing && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center px-4"
+          data-testid="stage-thinking"
+        >
+          <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            <span>{t("stage.thinkingLabel")}</span>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

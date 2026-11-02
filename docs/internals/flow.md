@@ -23,7 +23,7 @@
 6. **运行一个 runtime。** 内核先检查它需要的东西齐不齐，再准备它能看到的内容：世界设定、历史对话、上游 runtime 的结果、玩家这句话。`agent` 把这些交给模型，模型可以调用工具，直到给出最终结果；`function` 直接运行函数。
 7. **领域写入先暂存。** 正文、表单和插件数据的写入先变成提案，尚未生效。执行结果、诊断和已确认的玩家输入可能已经单独保存；它们不等于领域写入已提交。
 8. **提交存档。** 内核在同一个事务里写入被接受的提案、执行日志和会话时钟。有有效故事时，可选 runtime 的写入可以单独丢弃；故事或 setup 单元被拒、基础设施出错时，整次事务回滚。已单独保存的玩家输入保留。
-9. **确认画面。** 正文可以在提交前流式显示。提交后的事件给出最终正文、待填表单和面板数据；前端据此确认内容，或撤下未提交的结果。
+9. **显示已提交内容。** 执行期间显示进度；提交后的事件才发布完整故事、表单和面板数据。失败或取消不创建草稿故事。
 10. **收尾。** 最后一条事件是 `execution.completed`，其中的 `committed` 说明这一回合有没有真正保存。耗时的收尾工作（例如整理记忆）可以转到后台去做，玩家不用等。
 
 开局稍有不同。新会话先处在“准备阶段”（`setup`）：只运行准备用的 runtime，例如生成角色表单。全部准备完成后，会话才进入“游玩阶段”（`playing`），开始上面这种四阶段的回合。
@@ -221,7 +221,7 @@ stateDiagram-v2
 - 子调用先前发出的成功是计算结果。保存挂起项之后，内核按原来的 `(turnId, runtimeId, runId)` 追加 `suspended` 生命周期修正，并让这些调用自己的任务等待。恢复失败或提交回滚时追加失败；之后重试提交成功可修正为成功，再次挂起则恢复等待，放弃、过期或作废则取消。原有 trace 保留为历史。独立调用即使 runtime 相同，也不跟着改变状态。
 - continuation 保存当前挂起的 run 和整条链的任务所有者。进度记录的内核元数据保留调用身份及收尾来源，插件不能伪造；因此恢复可以修正内核上一次写下的失败，而不会复活插件明确报告的失败或取消。任务的公共去重身份和根进度范围不变。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
-- `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
+- `execution.completed.committed` 是客户端的终态信号：前端据此结算进度；故事正文来自提交后的通知或保存的消息。
 - 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
 
 成功、写入后跳过的 guard 和真正挂起的结果，在内核私有符号下携带读取依赖。执行在复制提交计划前收集它们；普通公开结果与 continuation 不存图。提交也检查持有挂起项但没有领域提案的单元，丢弃依赖已拒绝生产者的辅助挂起项，复用作业与时钟结算。恢复读当前已提交世界和自己的保存缓冲，源生产者已经结算，所以恢复计划没有历史生产者 ID。
@@ -230,7 +230,7 @@ stateDiagram-v2
 
 向客户端投递事件，不负责“业务是否完成”：
 
-- `onFinalized` 确认结果已经持久保存后，把事件放进一个有上限的队列。runtime 的增量和生命周期事件同样只入队。这些回调不等 SSE 的网络写入。
+- `onFinalized` 确认结果已经持久保存后，把事件放进一个有上限的队列。runtime 的进度和生命周期事件同样只入队。这些回调不等 SSE 的网络写入。
 - 提案、日志、时钟的事务和自动快照仍在原来的会话锁内完成。事件信封的身份和 `seq` 在这次执行持有锁的时候取得。
 - 最后把队列发完这一步在锁外进行。连接慢到超时或断开，不改变已提交的内容，不重跑模型，也不会让只读恢复把成功的执行当成可重试的失败。
 
@@ -300,7 +300,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
+    Commit --> SSE["发 SessionEvent<br/>narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
     PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
     PreGameTick -->|否| Keep["保持 phase 不变"]
@@ -555,56 +555,17 @@ LLM: "调用 sync-           ToolExecutor:
                            Tool Loop 按完成契约、预算和取消条件收敛
 ```
 
-**怎样才算做完。** 模型说“我说完了”（`finishReason: stop`）本身不能证明一个有结构的任务成功。runtime 用下面的声明说明什么才算完成：
+**怎样才算做完。** 每个 agent 只有一条成功路径：在独立的工具响应批次中调用 `submit-output`，通过完整对象解析、实际 schema、故事不变量、必需业务工作和 `ReviewAgentOutput` 审查。普通回复和最后一个业务工具结果都不能替代提交。函数仍返回 handler 结果。
 
-| 声明                        | 含义                                                                         |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `requireToolUse`            | 声明 `completeAfterTools` 时，只认列出的成功调用；否则任意成功的业务工具都算 |
-| `completeAfterTools`        | 指定的终结工具成功，并且这一批里没有未解决的工具错误，就可以结束             |
-| `requireExplicitCompletion` | 用于允许“没有变化”的任务：必须有真实的写入，或明确调用 `runtime-done`        |
+每一步先处理插话、`PreStep`、`PreLLMCall` 和请求预算，再调用模型。保留供应商的真实 assistant 消息、调用 ID、推理和 continuation。`PostLLMResponse` 只审查这次真实响应；拒绝时逐个关闭原调用 ID，不派发工具。随后整批按模型顺序运行一次 `PreToolUse`，在任何业务工具执行前检查原始及改写后的提交名字。提交混合读写、挂起或另一个提交时，整批拒绝。普通业务调用仍按安全只读池和屏障执行。
 
-- 只写正文，或者把工具调用写成一段 JSON 文本，都不算写入。
-- 错误的结果不能变成有结构的成功。
-- function runtime 可以通过声明过的 `ctx.tools.call()` 走同样的工具、权限、参数校验和事务边界。
-- 社区 handler 使用 `ctx.pluginData`，拿不到完整的可写 store。
+提交成功把候选值存入内核私有状态，结束计算。`PostToolUse` 可改模型可见文字，不能改变成功、候选值或 effects；没有接受值的终止请求失败。`PostRuntime` 改写经过防御性 schema/故事校验，失败时不再调用模型。只有提交所有者能持久化已成功业务工具的 proposal，提交参数本身没有写权限。
 
-**输出审查在执行工具之前。** 插件可以在 `PostLLMResponse` 里拒绝草稿并给出纠正要求；`PreLLMCall` 也可以用 `replace.stream: false` 关掉这次调用的流式输出，审查通过前什么都不显示。
+拒绝返回有调用关联的工具错误和不含正文的 `output-rejected` 步骤说明。格式、审查和必需工作各用独立预算，仍消耗普通步数；详见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。同一个成功业务写入不因重新提交而重跑。
 
-- 纠正次数由 `agent.loop.corrections.review` 配置，默认两次；预算用尽后再次退回草稿，runtime 以 `invalid-output` 失败。纠正仍受步数和时限限制，配置见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
-- 两个内置叙事插件用它检查 `perspective`（视角）：默认以角色为中心的第二人称，也可选第一、第三人称、全知旁白或主持人视角；对白保留各自的视角。分段的草稿按各段正文检查。
-- 它们不缓冲：草稿边写边流式显示。草稿被退回时，循环发出 `reset`，客户端清掉已显示的文字，再显示改写后的草稿；提交后 `narrative.completed` 的最终正文替换流式显示的内容。
-- 这是有限的文本检查，不保证所有剧情推断都正确。
+挂起保存准入的输出 schema 与可选业务工具输出来源、必需工作规则、插件版本、已用步数与纠正次数及其上限。恢复检查同一契约，沿用步号和预算；`PreStep` 降低的上限也保留。必需工作和 effects 从执行器原始结果恢复，不从 Hook 改写后的公开工具记录或 assistant 正文推导。被拒绝的候选只留在私有对话中，不能成为恢复后的已接受输出。委托子 agent 使用同一提交门控，但没有独立故事提交单元。
 
-**工具循环的阶段与结束原因。** agent 的工具循环（`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`）按固定的阶段走，阶段和合法的转换写在 `agent-loop/loop-state.ts` 里，非法的转换直接抛错（这是循环自身的缺陷，模型和插件触发不了）：
-
-```
-preparing → awaiting-pre-step → requesting-model → reviewing → running-tools → deciding
-              ↑                                       │                          │
-              └───────────── 下一步 ←──────────────────┴──────────────────────────┘
-deciding → finalizing → stopped        running-tools → suspended
-```
-
-循环的行为来自 runtime 的循环 profile（`agent-loop/loop-profile.ts` 的 `resolveLoopProfile`），不看 `outputKind`：文字是否流式显示给玩家、是否并入玩家插话、截断的正文是否保留、工具调用打转时关掉工具还是失败（`fallback`）、步数上限和时限预留处是否收尾（`finalizer`）。没写 `agent.loop.profile` 时，故事 runtime 用 `story`，其他用 `system`；字段和取值见 [插件参考的循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。回合层判断还有没有 runtime 读插话队列时用同一个解析函数。
-
-循环每次运行创建一个纠正策略（`agent-loop/correction-policy.ts`），从 profile 的 `corrections` 分别读取工具使用、回复审查、循环扰动和输出修复的预算。循环及收尾步骤之后、进入 `stopped` 之前，用与 `settleAgentLoop` 相同的无副作用输出检查决定是否需要修复。默认在预算和剩余时间允许时关闭工具再请求一次，把校验错误发给模型，完整替换无效答案；仍不符合 schema 或故事正文仍为空时以 `invalid-output` 失败。修复步骤不触发 `PreStep`，但照常经过 `PreLLMCall` 和 `PostLLMResponse`。条件和取值见[循环 profile](../reference/plugins.md#循环-profileagentloopprofile)。
-
-要求 JSON 时，已有的纠正请求会补充具体的[格式诊断](../reference/slots.md#结构化输出)：空答案会说明未返回 JSON 对象，语法错误会保留解析器提供的位置和预期，而不只报告提取后缺少字段。`PostLLMResponse` 已退回的草稿也会在插件原有纠正要求后追加说明，按 hook 改写后的回复诊断，仍使用审查预算；循环结束后的输出修复使用自己的预算。诊断不会新增拒绝条件，也不改变已有的宽容解析和故事正文回退规则。
-
-每一步的先后：
-
-1. 检查取消；profile 开了 `steering` 时，把玩家插话并入对话。
-2. `PreStep` Hook：可以收窄这一步的工具、改工具选择、减少剩余步数，或结束循环（见 [Hook 参考](../reference/hooks.md#prestep)）。
-3. 发 `step.started`。
-4. `PreLLMCall` → 移除目标不支持的图片 → 重放本次运行的上下文账本 → 省略旧工具数据 → 把旧的完整工具步骤变成确定性摘要 → `applyBudget` 历史裁剪 → 首尾截断 → 模型调用（`llm.calling` / `llm.responded`）。策略只改请求副本；原始对话、trace、工具记录和挂起状态保留完整内容。详见[提示词预算](../reference/prompt-structure.md#预算)。
-5. `PostLLMResponse` 审查；接受后按模型顺序将连续的安全只读工具组成并行池，其他调用作为单独的屏障执行（`tool.*`），每一步全部结束后才开始下一步。具体条件和 Hook 顺序见[工具参考](../reference/tools.md#同一批调用的执行)和 [Hook 参考](../reference/hooks.md#pretooluse)。
-6. 判断是否结束：完成工具、`runtime-done`、Hook 的 `terminate`、没有工具调用的最终回复，否则进入下一步。
-7. 这一步的 `step.completed` 在下一步开始或循环结束时发出，每个开始了的步骤恰好一次。
-
-每一种结束方式对应一个结束原因（`StopReason`），写进 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason`，完整的表见 [协议参考的结束原因](../reference/protocol.md#stop-reasons)。正常的出口（`completed`、`tool-finished`、`max-steps`、`deadline`、`context-overflow`、PreStep 的 `cancelled`）由循环自己记下，`settleAgentLoop` 按它定结果。抛出的出口保留原来的错误对象，原因挂在错误上（`agent-loop/stop-reason.ts`）：调用点给模型错误、输出无效、无效上下文限制和循环检测打标，循环外层的 catch 再把玩家停止、自己的超时和上级取消分出来，`finalizeRuntimeResult` 从错误上读出原因，放进失败的结果。标记属于打标的那次运行（`runId`）：上级超时取消正在等待的子 agent 时，两者共用同一个错误对象，子 agent 的“上级取消”不会变成上级自己的结束原因。
-
-**步数上限不算成功。** 用完步数时，模型在工具调用旁边写的文字只是草稿。只要输出不是由完成工具交出、`requireToolUse` 和 `requireExplicitCompletion` 已满足或没开、离截止时间还有至少 3 秒，内核再发一次关掉工具的收尾请求，要求直接给出最终答案。故事的输出 schema 要求 `segments` 时，收尾、仅读取工具后的续写以及循环检测后的续写都要求按 JSON 对象输出，将段落放入 `segments` 数组，标明 narration、dialogue 或 action，且对话带 speaker。收尾写出文字时 runtime 成功，结果标明 `stop.finalizer: true`；否则以 `max-steps` 失败，暂存的写入不提交。profile 的 `finalizer.maxSteps: false` 关掉这次收尾。超时是失败，不尝试收尾；例外是 profile 写了 `finalizer.deadlineReserveMs`：剩余时间不足预留、而且上面的收尾条件满足时，循环不再开始新的一步，先并入排队的玩家插话（profile 开了 `steering` 时），再发收尾请求，写出答案时以 `{ reason: "deadline", finalizer: true }` 成功。
-
-**上下文超限也可收尾。** `finalizer.maxSteps` 开启时，已有完整工具步骤、且通常的收尾条件满足，超限出口会尝试一次关闭工具的请求。该请求按[提示词预算](../reference/prompt-structure.md#预算)按需裁剪工具步骤，最新一组也可处理。救回的答案以 `{ reason: "context-overflow", finalizer: true }` 成功，仍可修复输出；否则结算保留最初的超限失败文字。账本不持久保存：恢复挂起时确定性地重新计算决定，因此请求前缀可能变化一次。
+**步数上限不算成功。** 只有必需工作已完成、至少剩 3 秒、profile 允许时，步数上限、时限预留或上下文超限才可使用一次仅提交工具的收尾请求。超限还要求已有完整工具步骤。收尾使用同一校验和审查，不触发 `PreStep`，之后没有额外修复循环。模型拒绝、取消和真正超时不能被先前文字转为成功。完整的[结束原因](../reference/protocol.md#stop-reasons)保留在 runtime 和步骤事件里。
 
 ## 四、插件设计
 
@@ -763,7 +724,6 @@ io:
 │  SSE 事件                  消息转换层                 渲染层       │
 │  ──────────               ────────                 ──────        │
 │                                                                  │
-│  narrative.delta    ──►  appendDelta()      ──►  Prose           │
 │  narrative.completed ──► addMessage(story)  ──►  组件            │
 │                                                                  │
 │  interaction.requested ──► addMessage(block) ──► messageToSpec() │
@@ -801,7 +761,7 @@ io:
 组件清单见 [UI 组件](../reference/ui-components.md)。
 
 > [!IMPORTANT]
-> `narrative.delta` 只有启用了流式输出的 runtime 才发。插件可以在 `PreLLMCall` 里用 `replace.stream: false` 关掉流式，所以客户端不能指望每回合都收到 delta。内置叙事插件边写边流式输出，草稿被退回时先发 `reset`。
+> 玩家故事正文只在持久提交后出现。等待期间通过 runtime/step/tool/job 事件显示进度，包括安全的提交拒绝提示。provider 流式传输、工具参数心跳和 `PreLLMCall.replace.stream` 只决定内部传输，不向故事界面发送草稿或 reset。
 >
 > 只有 `execution.completed.committed` 或已提交的记录，才能确认本回合已经保存。单个 runtime 的成功事件不是整个回合的提交凭据。
 
@@ -1077,7 +1037,7 @@ turn_messages (canonical 追加式执行日志):
 
 runtime 的生命周期事件由 `TraceRecorder` 写入，恢复入口也记录开始和终态。保存的递归工作在提交或退出挂起之后追加同一 run 的有效状态修正，先持久化，再送到订阅客户端和发起动作的流，每条流只转发一次。修正不重新提交提案、不执行 Hook，也不增加子调用的插件故障计数。
 
-流式的叙事增量不保存。每个 runtime 只保存最终的那条 `message.completed`，这样表不会膨胀。
+不产生叙事增量。接受后的 story runtime 在 trace 中记录一条 `message.completed`；只有提交后的 `narrative.completed` 进入玩家故事。
 
 事件的完整 payload 见[协议参考](../reference/protocol.md)的“转发的运行时内部事件”一节。
 
@@ -1119,12 +1079,12 @@ sequenceDiagram
             LLM-->>Plugin: tool 结果 / finishReason=stop
             Plugin-->>Kernel: RuntimeOutput<br/>(segments / narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (仅流式 runtime；分段故事只发段落正文)
-        Kernel-->>Web: SSE: narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
+        Kernel-->>Web: SSE: step.started / step.completed (progress only)
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     Kernel->>Server: 登记 setupRuntimes 完成镜像；未集齐则 phase 保持 'setup'
+    Kernel->>Kernel: 原子提交准备结果
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
     end
     Server-->>Web: SSE: execution.completed
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
@@ -1151,12 +1111,11 @@ sequenceDiagram
             Plugin-->>Kernel: Agent 协议 → output / effects / completion
         end
         Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
-        Kernel-->>Web: SSE: narrative.delta / narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
-        Kernel-->>Web: SSE: plugin-data.changed (数据集工具等写入提交后)
-        Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
+    Kernel->>Kernel: 原子提交执行结果
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
+    Kernel-->>Web: SSE: plugin-data.changed / event.emitted (after commit)
     end
 
     opt 某个 runtime 挂起

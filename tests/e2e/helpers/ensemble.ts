@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import {
   startFakeLlmProvider,
+  submitOutputReply,
   type FakeChatRequest,
   type FakeReply,
 } from "./fake-llm-provider.js";
@@ -26,7 +27,7 @@ export function ensembleReply(
   if (text.includes("Play only the character assigned")) {
     const name = text.includes('"name":"Mara"') ? "Mara" : "Ivo";
     return {
-      text: JSON.stringify(
+      ...submitOutputReply(
         failActor && name === "Ivo"
           ? { segments: [] }
           : {
@@ -55,9 +56,16 @@ export function ensembleReply(
       })
     : undefined;
   const plan = inputs?.plan?.value;
-  const receipts = request.rawMessages.filter(
-    (message) => message.role === "tool",
-  );
+  const toolNames = new Map<string, string>();
+  const receipts = request.rawMessages.filter((message) => {
+    for (const call of message.tool_calls ?? [])
+      toolNames.set(call.id, call.function.name);
+    return (
+      message.role === "tool" &&
+      message.tool_call_id !== undefined &&
+      toolNames.get(message.tool_call_id) === "delegate"
+    );
+  });
   const next = plan?.actors[receipts.length];
   if (next) {
     expect(
@@ -91,21 +99,19 @@ export function ensembleReply(
       speaker: plan!.actors[index]!.character,
     }));
   });
-  return {
-    text: JSON.stringify({
-      segments: [
-        ...segments,
-        {
-          kind: "narration",
-          text: segments.length
-            ? "The bell grows quiet."
-            : "Mara and Ivo wait by the bell.",
-        },
-      ],
-      cues: { present: plan?.cast.length ? plan.cast : ["Mara", "Ivo"] },
-      yield: segments.length ? (plan?.yieldHint ?? "user") : "user",
-    }),
-  };
+  return submitOutputReply({
+    segments: [
+      ...segments,
+      {
+        kind: "narration",
+        text: segments.length
+          ? "The bell grows quiet."
+          : "Mara and Ivo wait by the bell.",
+      },
+    ],
+    cues: { present: plan?.cast.length ? plan.cast : ["Mara", "Ivo"] },
+    yield: segments.length ? (plan?.yieldHint ?? "user") : "user",
+  });
 }
 
 export async function prepareEnsemble(
@@ -314,6 +320,15 @@ export async function prepareEnsemble(
       .getByLabel("Strategy", { exact: true });
     await control.selectOption(value);
     await expect(control).toHaveValue(value);
+    if (value === "list") {
+      // An empty order preserves the incoming cast order, which follows salience.
+      const order = page
+        .getByRole("dialog")
+        .getByLabel("Actor order", { exact: true });
+      await order.fill("Mara\nIvo");
+      await order.blur();
+      await expect(order).toHaveValue("Mara\nIvo");
+    }
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Close", exact: true })

@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.10
+version: 0.0.12
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story

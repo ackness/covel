@@ -2,7 +2,7 @@
  * Hook lifecycle pipeline types.
  *
  * Defines handler contracts and registration structures for the HookPipeline
- * across the 17 hook events. All types are framework-level — no plugin IDs here.
+ * across the 18 hook events. All types are framework-level — no plugin IDs here.
  *
  * The event names themselves are NOT defined here: `HookEvent` is re-derived
  * from the single source of truth `HOOK_EVENTS` in `@covel/shared`, so the
@@ -14,7 +14,7 @@ import type { HookEnforce, HookEventName } from "@covel/shared";
 // ── Hook event names ─────────────────────────────────────────────
 
 /**
- * The 17 framework hook events. Alias of `@covel/shared`'s `HookEventName`,
+ * The 18 framework hook events. Alias of `@covel/shared`'s `HookEventName`,
  * which is itself `typeof HOOK_EVENTS[number]` — keep this name local because
  * the runtime/pipeline code references `HookEvent` throughout.
  */
@@ -50,6 +50,7 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   PreLLMCall: "sequential",
   // Inspect / patch the LLM response before tool dispatch; chained.
   PostLLMResponse: "sequential",
+  ReviewAgentOutput: "sequential",
   // Sequential so `replace.result` can rewrite the RuntimeResult. Parallel
   // discarded replace, leaving runPostRuntimeHook's rewrite path dead.
   PostRuntime: "sequential",
@@ -79,6 +80,7 @@ export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
   "PreCompaction",
   "PreRuntime",
   "PreToolUse",
+  "ReviewAgentOutput",
   "PreStateCommit",
 ]);
 
@@ -102,7 +104,7 @@ export interface HookContext {
    * Plugin of the runtime the event is about — not the plugin that
    * registered the handler. Set, with `runtimeId`, for every event that
    * concerns one runtime: PreRuntime, PostContextAssembly, PreStep, PreLLMCall,
-   * PostLLMResponse, PreToolUse, PostToolUse, PostRuntime, and the two
+   * PostLLMResponse, ReviewAgentOutput, PreToolUse, PostToolUse, PostRuntime, and the two
    * commit events (the proposal's source). Absent for session and turn events.
    * This is the one place for the identity: payloads do not repeat it.
    */

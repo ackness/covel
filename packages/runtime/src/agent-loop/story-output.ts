@@ -35,7 +35,6 @@ const isKind = (value: unknown): value is StorySegmentKind =>
 /**
  * A segment text as committed: trimmed, with blank lines folded to one
  * newline, so that each segment is exactly one paragraph of the joined text.
- * The live stream applies the same rule (`story-stream.ts`).
  */
 export function normalizeSegmentText(text: string): string {
   return text.replace(/\n{2,}/g, "\n").trim();

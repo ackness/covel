@@ -22,7 +22,6 @@ vi.mock("../plugin-bridge.js", () => ({
     mocks.connect(...args);
     return {
       pushState: vi.fn(),
-      pushStream: vi.fn(),
       close: mocks.close,
       ping: mocks.ping,
     };

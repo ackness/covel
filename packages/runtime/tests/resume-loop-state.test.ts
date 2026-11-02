@@ -1,7 +1,6 @@
 /**
  * A suspended agent resumes with the loop state its transcript cannot carry:
- * spent corrections, the deferred tools it activated, prose written before a
- * late interjection, a completing tool's output and its prompt segments. The
+ * spent corrections and steps, deferred tools, required business work and prompt segments. The
  * resumed loop behaves as the uninterrupted loop would have.
  */
 
@@ -31,6 +30,7 @@ import {
   queuedLLM,
   saveTool,
   scriptedLLM,
+  submitted,
   toolCall,
   type GenerateParams,
 } from "./_helpers/agent-loop-fixture.js";
@@ -108,33 +108,89 @@ function withoutLoop(record: SuspensionRecord): SuspensionRecord {
 const toolNames = (request: GenerateParams | undefined) =>
   (request?.tools ?? []).map((definition) => definition.name);
 
+it("restores fulfilled named business work without completion prerequisites or a finalizer", async () => {
+  const rt = runtime({
+    llm: { toolChoice: { name: "lookup" } },
+    tools: { plugin: ["lookup"], builtin: ["suspend"] },
+    loopProfile: { finalizer: { maxSteps: false } },
+  });
+  const hooks = createHookPipeline();
+  hooks.register({
+    id: "allow-initial-batch",
+    event: "PreStep",
+    handler: async () => ({
+      action: "continue",
+      replace: { toolChoice: "auto" },
+    }),
+  });
+  // The initial auto step may batch the named business work with suspension.
+  const initial = scriptedLLM((request) => {
+    expect(request.defaults?.toolChoice).toBeUndefined();
+    return {
+      ...toolCall("lookup", {}, "lookup"),
+      toolCalls: [
+        ...toolCall("lookup", {}, "lookup").toolCalls,
+        ...toolCall("suspend", ASK, "suspend").toolCalls,
+      ],
+    };
+  });
+  const record = await suspend(rt, deps(initial, { hookPipeline: hooks }));
+  expect(record.pendingContinuation.businessCalls).toContainEqual(
+    expect.objectContaining({ name: "lookup", success: true }),
+  );
+  const llm = scriptedLLM((request) => {
+    const choice = request.defaults?.toolChoice;
+    const name = typeof choice === "object" ? choice.name : "submit-output";
+    return name === "lookup" ? toolCall(name, {}) : submitted("done");
+  });
+  const work = vi.fn(lookupTool.execute);
+  const result = await resumeRuntimePipeline(
+    record,
+    {},
+    rt,
+    deps(llm, {
+      toolExecutor: makeExecutor([
+        { ...lookupTool, execute: work },
+        suspendTool,
+      ]),
+    }),
+  );
+  expect(result.status).toBe("success");
+  expect(llm.requests).toHaveLength(1);
+  expect(llm.requests[0]?.defaults?.toolChoice).toEqual({
+    name: "submit-output",
+  });
+  expect(work).not.toHaveBeenCalled();
+});
+
 describe("corrections survive a suspension", () => {
   const rt = runtime({ requireToolUse: true });
 
   async function suspended() {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     // The bare text answer spends the one tool-use correction.
-    const llm = queuedLLM([prose("done"), toolCall("suspend", ASK)]);
+    const llm = queuedLLM([submitted("done"), toolCall("suspend", ASK)]);
     return suspend(rt, deps(llm));
   }
 
   it("does not correct a resumed loop again once the correction was spent", async () => {
     const record = await suspended();
-    expect(record.pendingContinuation.loop).toEqual({
+    expect(record.pendingContinuation.loop).toMatchObject({
       corrections: { toolUse: 1 },
     });
-    const llm = queuedLLM([prose("finished"), prose("finished again")]);
+    const llm = queuedLLM([submitted("finished"), submitted("finished again")]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(llm));
     expect(llm.requests).toHaveLength(1);
     expect(result.status).toBe("failed");
   });
 
-  it("corrects a resumed loop whose continuation spent none", async () => {
+  it("rejects obsolete continuations without admitted loop state", async () => {
     const record = withoutLoop(await suspended());
-    const llm = queuedLLM([prose("finished"), prose("finished again")]);
+    const llm = queuedLLM([submitted("finished"), submitted("finished again")]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(llm));
-    expect(llm.requests).toHaveLength(2);
+    expect(llm.requests).toHaveLength(0);
     expect(result.status).toBe("failed");
+    expect(result.error).toContain("recreate this suspended runtime");
   });
 });
 
@@ -158,7 +214,7 @@ describe("loop perturbation survives a suspension", () => {
     const record = await suspended(rt);
     const llm = queuedLLM([
       toolCall("mark", { note: "a" }, "tc-4"),
-      prose("done"),
+      submitted("done"),
     ]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(llm));
     expect(result).toMatchObject({
@@ -168,28 +224,35 @@ describe("loop perturbation survives a suspension", () => {
     expect(llm.requests).toHaveLength(1);
   });
 
-  it("takes the tools away at the next repeat for the answer-without-tools fallback", async () => {
+  it("offers only submit-output at the next repeat for finalization", async () => {
     const rt = runtime({
       loopDetectionThreshold: 2,
-      loopProfile: { fallback: "answer-without-tools" },
+      loopProfile: { fallback: "submit-output" },
     });
     const record = await suspended(rt);
     const llm = queuedLLM([
       toolCall("mark", { note: "a" }, "tc-4"),
-      prose("done"),
+      submitted("done"),
     ]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(llm));
     expect(result.status).toBe("success");
     expect(llm.requests).toHaveLength(2);
-    expect(llm.requests[1]?.tools).toBeUndefined();
+    expect(toolNames(llm.requests[1])).toEqual(["submit-output"]);
   });
 
   it("perturbs a resumed loop whose continuation spent none", async () => {
     const rt = runtime({ loopDetectionThreshold: 2 });
-    const record = withoutLoop(await suspended(rt));
+    const original = await suspended(rt);
+    const record = {
+      ...original,
+      pendingContinuation: {
+        ...original.pendingContinuation,
+        loop: { ...original.pendingContinuation.loop!, corrections: {} },
+      },
+    };
     const llm = queuedLLM([
       toolCall("mark", { note: "a" }, "tc-4"),
-      prose("done"),
+      submitted("done"),
     ]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(llm));
     expect(result.status).toBe("success");
@@ -214,16 +277,20 @@ describe("activated deferred tools survive a suspension", () => {
 
   it("offers the activated tools on the first resumed request", async () => {
     const record = await suspended();
-    expect(record.pendingContinuation.loop).toEqual({
+    expect(record.pendingContinuation.loop).toMatchObject({
       activatedTools: ["lookup"],
     });
-    const llm = queuedLLM([toolCall("lookup", {}, "tc-3"), prose("found it")]);
+    const llm = queuedLLM([
+      toolCall("lookup", {}, "tc-3"),
+      submitted("found it"),
+    ]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(llm));
     expect(result.status).toBe("success");
     expect(toolNames(llm.requests[0])).toContain("lookup");
     expect(result.toolCalls.map((call) => call.toolName)).toEqual([
       "search-tools",
       "lookup",
+      "submit-output",
     ]);
   });
 
@@ -233,10 +300,13 @@ describe("activated deferred tools survive a suspension", () => {
       ...record,
       pendingContinuation: {
         ...record.pendingContinuation,
-        loop: { activatedTools: ["lookup", "suspend", "vanished"] },
+        loop: {
+          ...record.pendingContinuation.loop!,
+          activatedTools: ["lookup", "suspend", "vanished"],
+        },
       },
     };
-    const llm = queuedLLM([prose("done")]);
+    const llm = queuedLLM([submitted("done")]);
     const result = await resumeRuntimePipeline(stale, {}, rt, deps(llm));
     expect(result.status).toBe("success");
     const names = toolNames(llm.requests[0]);
@@ -246,8 +316,8 @@ describe("activated deferred tools survive a suspension", () => {
   });
 });
 
-describe("steered prose survives a suspension", () => {
-  it("joins the prose written before the suspension into the final output", async () => {
+describe("steered prose is not accepted output", () => {
+  it("keeps earlier prose only in the transcript until an explicit submission", async () => {
     const rt = runtime({ loopProfile: { steering: true } });
     let steered = false;
     const turnControl = {
@@ -263,20 +333,17 @@ describe("steered prose survives a suspension", () => {
       toolCall("suspend", ASK),
     ]);
     const record = await suspend(rt, deps(llm, { turnControl }));
-    expect(record.pendingContinuation.loop).toEqual({
-      steeredProse: ["Before the question."],
-    });
-    const resumed = queuedLLM([prose("After the answer.")]);
+    expect(record.pendingContinuation.loop).not.toHaveProperty("steeredProse");
+    expect(record.pendingContinuation).not.toHaveProperty("partialContent");
+    const resumed = queuedLLM([submitted("After the answer.")]);
     const result = await resumeRuntimePipeline(record, {}, rt, deps(resumed));
     expect(result.status).toBe("success");
-    expect(JSON.stringify(result.output)).toContain(
-      "Before the question.\\n\\nAfter the answer.",
-    );
+    expect(result.output).toEqual({ narrativeOutput: "After the answer." });
   });
 });
 
-describe("a completing tool's output survives a suspension", () => {
-  it("keeps the tool's output as the answer when the resumed model ends with text", async () => {
+describe("business evidence survives a suspension", () => {
+  it("restores required work without treating a tool result as an accepted answer", async () => {
     const outputSchema = {
       type: "object",
       properties: { saved: { type: "boolean" } },
@@ -299,10 +366,16 @@ describe("a completing tool's output survives a suspension", () => {
       },
     ]);
     const record = await suspend(rt, deps(llm, { outputSchema }));
-    expect(record.pendingContinuation.loop).toEqual({
-      completingToolOutput: { saved: true },
-    });
-    const resumed = queuedLLM([prose("All done, nothing else to add.")]);
+    expect(record.pendingContinuation.loop).not.toHaveProperty(
+      "completingToolOutput",
+    );
+    expect(record.pendingContinuation.businessCalls).toEqual([
+      { name: "save", success: true, result: { saved: true } },
+    ]);
+    const resumed = queuedLLM([
+      prose("All done, nothing else to add."),
+      toolCall("submit-output", { saved: false }),
+    ]);
     const result = await resumeRuntimePipeline(
       record,
       {},
@@ -311,7 +384,7 @@ describe("a completing tool's output survives a suspension", () => {
     );
     expect(result).toMatchObject({
       status: "success",
-      output: { saved: true },
+      output: { saved: false },
     });
   });
 });
@@ -363,7 +436,10 @@ describe("context on resume", () => {
       record,
       {},
       rt,
-      deps(queuedLLM([prose("done")]), { hookPipeline, extensionExecution }),
+      deps(queuedLLM([submitted("done")]), {
+        hookPipeline,
+        extensionExecution,
+      }),
     );
     expect(result.status).toBe("success");
     expect(seen).toEqual([
@@ -470,7 +546,7 @@ describe("context on resume", () => {
         ? toolCall("notes-get", { key: "upstream" }, "tc-3")
         : call === 2
           ? toolCall("notes-get", { key: "own" }, "tc-4")
-          : prose("done"),
+          : submitted("done"),
     );
     const resumed = await resumeSuspendedRuntime(
       record!,

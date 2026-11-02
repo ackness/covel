@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { startFakeLlmProvider } from "./helpers/fake-llm-provider.js";
+import {
+  startFakeLlmProvider,
+  submitOutputReply,
+} from "./helpers/fake-llm-provider.js";
 import {
   ONBOARDING_VERSION,
   composerInput,
@@ -26,35 +29,16 @@ for (const explicitSetup of [false, true]) {
       let sessionId: string | undefined;
       let headers: Record<string, string> = {};
       const text = "The lantern lights the path.";
-      provider.reply = (request) => ({
-        hold: gate,
-        text: JSON.stringify({
-          segments: [{ kind: "narration", text }],
-          cues: { present: [] },
-        }),
-        toolCalls: request.tools.some(
-          (tool) => tool.function.name === "submit-world-facts",
-        )
-          ? [
-              {
-                id: "facts",
-                type: "function",
-                function: {
-                  name: "submit-world-facts",
-                  arguments: JSON.stringify({
-                    schemaVersion: 1,
-                    summary: text,
-                    entities: [],
-                    relations: [],
-                    events: [],
-                    statements: [],
-                    objectiveAssessments: [],
-                  }),
-                },
-              },
-            ]
-          : [],
-      });
+      provider.reply = () => {
+        return {
+          hold: gate,
+          ...submitOutputReply({
+            segments: [{ kind: "narration", text }],
+            cues: { present: [] },
+          }),
+        };
+      };
+
       const encode = (value: unknown) =>
         Buffer.from(JSON.stringify(value)).toString("base64");
       await useServerWorlds(page);
@@ -177,6 +161,7 @@ for (const explicitSetup of [false, true]) {
           completedPlayerTurns: 0,
         });
         await sendPlayerMessage(page, "I lift the lantern.");
+        await expect(page.getByTestId("story-segments")).toHaveCount(0);
         release();
         await waitForTurnIdle(page);
         await expectPlayerCanAct(page);

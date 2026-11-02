@@ -1,6 +1,12 @@
+import {
+  exportSessionCheckpoint,
+  replaceSessionFromCheckpoint,
+} from "../../browser-sync/session-checkpoint.js";
+import { validateBrowserCheckpoint } from "../../browser-sync/browser-sync.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DataStore, SnapshotPayload } from "../../types.js";
 import {
+  makeSession,
   makeLorebookEntry,
   makeSessionSummary,
   makeSnapshot,
@@ -11,11 +17,26 @@ import {
 
 /** Continuation fields a resume restores beyond the transcript. */
 const resumeParityFields = {
+  businessCalls: [{ name: "save", success: true, result: { saved: true } }],
   loop: {
+    steps: 3,
+    maxSteps: 8,
+    rejectionAttempts: 1,
+    correctionLimits: {
+      toolUse: 1,
+      review: 2,
+      loopPerturbation: 1,
+      outputRepair: 1,
+    },
+    outputContract: {
+      toolName: "submit-output",
+      schema: { type: "object" },
+      schemaSource: "loaded",
+      provenance: "model-authored",
+      requiredWork: { required: true, toolNames: ["save"] },
+    },
     corrections: { toolUse: 1, loopPerturbation: 1 },
     activatedTools: ["lookup"],
-    steeredProse: ["Before the interjection."],
-    completingToolOutput: { saved: true, items: [1, 2] },
   },
   promptSegments: [{ pluginId: "rules", id: "house-rules" }],
   nestedResults: [
@@ -73,6 +94,38 @@ export function registerPersistenceStoreSuites(
       );
     });
 
+    it("preserves admitted submission quotas and executor evidence through checkpoint replacement", async () => {
+      const session = makeSession({ id: "submission-checkpoint" });
+      await store.createSession(session);
+      const saved = makeSuspension({ sessionId: session.id });
+      const continuation = {
+        ...saved.pendingContinuation,
+        ...resumeParityFields,
+      };
+      await store.saveSuspension({
+        ...saved,
+        pendingContinuation: continuation,
+      });
+      const checkpoint = validateBrowserCheckpoint(
+        JSON.parse(
+          JSON.stringify(
+            await exportSessionCheckpoint(store, session.id, {
+              revision: 1,
+              actionId: "submission",
+            }),
+          ),
+        ),
+      );
+      await replaceSessionFromCheckpoint(store, checkpoint);
+      expect(
+        (await store.getSuspension(saved.id))?.pendingContinuation,
+      ).toEqual(JSON.parse(JSON.stringify(continuation)));
+      expect(await store.claimSuspension(saved.id)).not.toBeNull();
+      expect(
+        (await store.getSuspension(saved.id))?.pendingContinuation.loop,
+      ).toEqual(continuation.loop);
+    });
+
     it("should filter listSuspensions by sessionId", async () => {
       const s1 = makeSuspension({ sessionId: "sess-susp-A" });
       const s2 = makeSuspension({ sessionId: "sess-susp-A" });
@@ -122,7 +175,6 @@ export function registerPersistenceStoreSuites(
           messages: [{ role: "system", content: "x".repeat(20_000) }],
           toolCallsSoFar: [{ name: "ask" }],
           pendingProposals: [{ type: "plugin.data" }],
-          partialContent: "Half a sentence",
           suspendToolCallId: "call-1",
           emittedEvents: [{ topic: "t" }],
           locale: "en-US",

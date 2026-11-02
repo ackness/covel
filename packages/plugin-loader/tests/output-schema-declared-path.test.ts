@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { discoverPlugins } from "../src/discover.js";
+import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
 import { loadRuntime } from "../src/load.js";
 
 function makeFrontmatter(overrides: Record<string, unknown>): string {
@@ -60,6 +61,7 @@ describe("loadRuntime output schema resolution", () => {
     const loaded = await loadRuntime(discovery!, "test-plugin");
 
     expect(loaded.outputSchema).toEqual(SCHEMA);
+    expect(resolveAgentOutput(loaded).schema).toEqual(SCHEMA);
   });
 
   it("falls back to the output.schema.json convention when undeclared", async () => {
@@ -75,7 +77,46 @@ describe("loadRuntime output schema resolution", () => {
     const loaded = await loadRuntime(discovery!, "test-plugin");
 
     expect(loaded.outputSchema).toEqual(SCHEMA);
+    expect(resolveAgentOutput(loaded).schema).toEqual(SCHEMA);
   });
+
+  it("uses the resolved contract schema for submission", async () => {
+    const pluginDir = path.join(tmpDir, "test-plugin");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDir, "PLUGIN.md"),
+      makeFrontmatter({ output: { schema: "contract:facts@1" } }),
+    );
+    const [discovery] = await discoverPlugins(tmpDir);
+    const loaded = await loadRuntime(
+      discovery!,
+      "test-plugin",
+      undefined,
+      undefined,
+      { "facts@1": SCHEMA },
+    );
+    expect(resolveAgentOutput(loaded).schema).toEqual(SCHEMA);
+  });
+
+  it.each([{ type: "array" }, { type: "string" }, {}, null, false])(
+    "rejects an agent output schema without an object root: %j",
+    async (schema) => {
+      const pluginDir = path.join(tmpDir, "test-plugin");
+      await fs.mkdir(pluginDir, { recursive: true });
+      await fs.writeFile(
+        path.join(pluginDir, "PLUGIN.md"),
+        makeFrontmatter({}),
+      );
+      await fs.writeFile(
+        path.join(pluginDir, "output.schema.json"),
+        JSON.stringify(schema),
+      );
+      const [discovery] = await discoverPlugins(tmpDir);
+      await expect(loadRuntime(discovery!, "test-plugin")).rejects.toThrow(
+        /io.output.schema.*parameters must describe an object/,
+      );
+    },
+  );
 
   it("rejects a declared path that escapes the plugin root", async () => {
     const pluginDir = path.join(tmpDir, "test-plugin");

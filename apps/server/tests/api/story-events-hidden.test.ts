@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -40,6 +44,17 @@ class RecordingLLM implements LLMAdapter {
       )
       .join("\n");
     this.calls.push({ tools, text });
+    for (const name of [
+      "submit-world-facts",
+      "advance-world-time",
+      "plan-story-events",
+      "generate-guide",
+      "update-dimensions",
+      "sync-characters",
+    ]) {
+      const output = completedBusinessOutput(params.messages, name);
+      if (output) return submittedOutput({});
+    }
     const usage = { inputTokens: 10, outputTokens: 10 };
     if (/memory manager|记忆管理器/.test(text))
       return { content: "{}", toolCalls: [], finishReason: "stop", usage };
@@ -90,26 +105,21 @@ class RecordingLLM implements LLMAdapter {
         toolCalls: [
           {
             id: `tracker-${this.calls.length}`,
-            name: "runtime-done",
-            arguments: JSON.stringify({ reason: "no changes" }),
+            name: "sync-characters",
+            arguments: JSON.stringify({ creates: [], updates: [] }),
           },
         ],
         finishReason: "tool_calls",
         usage,
       };
-    return {
-      content: JSON.stringify({
-        segments: [
-          {
-            kind: "narration",
-            text: "The fog rolls over the pier while you wait.",
-          },
-        ],
-      }),
-      toolCalls: [],
-      finishReason: "stop",
-      usage,
-    };
+    return submittedOutput({
+      segments: [
+        {
+          kind: "narration",
+          text: "The fog rolls over the pier while you wait.",
+        },
+      ],
+    });
   }
 }
 

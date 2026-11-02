@@ -157,17 +157,15 @@ describe("the agent loop profile", () => {
       io: { visibility: "story" },
       agent: {
         loop: {
-          stream: true,
           steering: false,
-          truncation: "reject",
+
           finalizer: { maxSteps: false },
         },
       },
     });
     expect(manifest.loopProfile).toEqual({
-      stream: true,
       steering: false,
-      truncation: "reject",
+
       finalizer: { maxSteps: false },
     });
   });

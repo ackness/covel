@@ -128,6 +128,8 @@ it("returns one plugin.data proposal", async () => {
 
 A tool's return value has two parts. Use `getToolContent(result)` to get the "content returned to the model", and use `getPendingProposals(result)` to get the "data it wants to write". Do not assert on the whole return value as if it were the business content.
 
+Tests for function runtimes should also exercise the host's return value validation. Valid inputs such as characters without attributes must produce the expected business result and satisfy the [function result contract](./local-code.md#write-a-function). Checking only the selected cast can miss nested `undefined` values.
+
 ### Test a tool and really save
 
 The test above only checks what the tool returned. To confirm that these writes really pass the checks and get saved, use `executeToolAndCommit`. It uses an in-memory store, and it goes through the same execution and save flow as in the game:
@@ -357,7 +359,7 @@ Fields of a case:
 | `userSettings`              | Overrides this plugin's settings. If left out, the declared defaults are used                                       |
 | `llmResponses`              | The fake model's replies. Each model call uses up one                                                               |
 | `llmResponse`               | A shorthand for when there is only one reply                                                                        |
-| `llmContent` / `llmObject`  | Shorter shorthands: the reply is a piece of text, or a JSON object                                                  |
+| `llmContent` / `llmObject`  | `llmContent` returns reply content for rejection tests; `llmObject` constructs a final tool submission              |
 | `withPlugins`               | Other plugins loaded along with this one. See [test together with other plugins](#test-together-with-other-plugins) |
 | `ignoreUpstreams`           | Ignores this runtime's dependencies on upstream runtimes. Only for debugging this one by itself                     |
 | `expectsBackgroundFollower` | Expects this run to queue a background task. If none is queued, the case fails                                      |
@@ -573,3 +575,7 @@ Load real manifests/entries and script the model through actual delegate calls, 
 ## Testing presentation refusals
 
 Load real manifests, execute handlers through restricted contexts, and inspect committed rows plus `presentation.completed`, rather than testing only selection helpers. Prove an allowed write through the same entry before checking absent / ambiguous story, hidden inputs, forbidden writes, hook rewrites, zero allowance, cache hits, retry persistence and commit-time supersession. Use fake gateways and exact dispatch counts, without paid models. See the [advanced guide](./advanced.md#presentation-selectors) and [contract](../reference/plugins.md#presentation-runtimes).
+
+Scripted agent success responses call `submit-output` alone. Keep business calls in earlier responses; a final submission correction must not repeat a successful write. CLI `llmObject` constructs a submission, while `llmContent` deliberately returns reply content for rejection tests. See the [completion contract](../reference/plugins.md#agent-output-submission).
+
+When final output comes directly from a business tool, declare [`io.output.from`](../reference/plugins.md#agent-output-submission). After tool success, call `submit-output` alone with `{}`. Scripted models also submit `{}` without copying tool content or model-view wrappers.

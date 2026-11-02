@@ -17,6 +17,8 @@
 
 插件文件引用按[声明目录规则](../reference/plugins.md#declaration-paths)解析，并检查解析后的真实路径仍在包内。约定的 `output.schema.json` 也不能通过符号链接逃出包，或从父仓库继承。
 
+游戏 action 流和普通订阅只携带不含正文的步骤/模型/工具/Hook/子调用/gateway 进度。公开 `runtime` topic 只缓存步骤与工具活动的安全副本，不把 trace 内容带入回放；步骤 note 只含固定拒绝类别和计数。concealed 步骤用布尔值 `submissionAccepted` 保留成功提交的处置，不保留工具列表。接受值只有提交后才作为故事可见，提交参数和原始审查细节不能投影为玩家故事。完整诊断 trace 与显式 trace 订阅仍遵守原有访问、concealed 和委托隐私规则。见[协议](../reference/protocol.md#叙事事件)。
+
 ## 声明式执行边界
 
 [声明式分类](../reference/plugin-installation.md#声明式插件)需要完整、有界、不跟随链接的文件清单，以及与加载定义一致的内容摘要。扫描前后签名不一致、当前 registry 替换或文件读取失败，都不能沿用旧的正面证明。授权读取当前发布的 registry；执行快照只冻结运行材料，不冻结权限。旧代码快照的 runtime、工具和服务不能借用新声明式版本的免审批资格；缓存的代码 runtime 和每次实际模块导入仍要求真实代码与 runtime 授权。
@@ -32,6 +34,10 @@
 段落模板中的 `CharacterAvatar` 只显示宿主已投影的说话人公开头像；`characterId` 必须匹配，组件不查任意会话或角色槽位。宿主本地放大与关闭不授予插件操作、数据读取或写入能力，也不增加审批。模板仍不接收设置、隐藏 namespace、concealed 输出、私人角色说明、续写或推理内容。退场画面只保存在渲染器内，不进入 snapshot、桥接或模型上下文。见[段落模板](../reference/ui-panels.md#段落模板)。
 
 故事的操作失败提示只投影经校验的正安全整数 `count`；实时回执另带目标持久消息 ID。不投影操作请求、结果、摘要、错误、私密意图、角色笔记、提供方或子调用明细。concealed 和私有委托继续允许不含内容的失败状态与汇总次数，不扩大其内容可见性。公开消息投影不返回任意 metadata；导入内容只作数据渲染，不作为 HTML 或操作重放指令。完整 checkpoint 仍遵守更广的可信所有者恢复契约，这不表示其中没有宿主私有数据。见[消息 API](../reference/api.md#get-apisessionsidmessages)。
+
+`submit-output` 是每次 agent 运行的私有控制工具，不在全局注册表里。自动授权只增加该工具，不扩大业务白名单；函数调用被拒绝。提交参数保留模型来源，不能通过工具结果通道冒充可信 effects。
+
+接受值由内核独立持有，schema、必需工作和审查全部通过后才设定。`PostToolUse` 不能替换它或把失败变成功，`PostRuntime` 不能把未提交的 agent 恢复为成功。输出审查只收到 JSON 复制后的公开自有工具结果，不收到符号属性里的提交元数据和私有子调用值。混合提交先拒绝整批，再执行任何业务工作。concealed trace 隐藏参数、候选值和审查文字，保留不含内容的拒绝类别与次数。
 
 ## Host profile
 
@@ -261,7 +267,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 **流程。**
 
 1. 玩家添加了本机或局域网的模型地址，并且服务端在 `/api/health` 报告 `deployment.modelRelay` 时，浏览器用一个页面内随机生成的通道号打开 `GET /api/model-relay/stream`（SSE），并在模型请求里用 `X-Model-Relay` 带上同一个通道号。
-2. 服务端为这个请求的 `GatewayOptions` 附上该通道的中继（`apps/server/src/middleware/per-request-llm.ts`）。运行时的 agent 适配器和 function 网关均保留它，覆盖开局、流式叙事及插件调用，再由网关复制进每个服务商配置。交给后台任务的凭据也带着它（见 [Provider keys](#provider-keys)）。
+2. 服务端为这个请求的 `GatewayOptions` 附上该通道的中继（`apps/server/src/middleware/per-request-llm.ts`）。运行时的 agent 适配器和 function 网关均保留它，覆盖开局、内部模型流及插件调用，再由网关复制进每个服务商配置。交给后台任务的凭据也带着它（见 [Provider keys](#provider-keys)）。
 3. 只有同时满足四个条件，`postJson` / `getJson` 才改走中继：宿主是共享形态；配置里带着中继；服务商登记表把这个配置标为 `relayable`，也就是地址来自玩家这次请求，并且没有附带服务端自己的密钥或请求头（服务端环境变量里的密钥、`llm.toml` 里的密钥和请求头）；`baseUrl` 是本机或局域网地址（`isLocalNetworkBaseUrl`，`packages/shared/src/utils/local-network.ts`：回环地址、私有地址段、`100.64.0.0/10`、IPv6 本地地址，以及 `.local`、`.lan`、`.internal`、`.home.arpa`、`.localhost` 结尾的名字）。其余请求照旧经过 SSRF 检查和钉住的连接。走中继的请求，服务端自己不连接这个地址。上传文件的 `postFormData` 不走中继。
 4. 服务端通过流把请求（URL、方法、请求头、JSON 正文）交给浏览器。浏览器分几次 POST 回状态和响应头、正文分块、结束或失败（`/api/model-relay/requests/:id/*`），服务端把它们拼成一个流式的 `Response`（`apps/server/src/model-relay/registry.ts`）。
 
@@ -549,7 +555,7 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 
 亲历历史和按名字调用是受约束的上下文能力，不是对已批准服务端代码的安全隔离。角色只能通过此 helper 读取当前 world 中角色的已提交在场故事；工具与服务原有的批准和读取权限不变。调用方仍负责简报和 instruction 的内容。子 agent 继承调用准入时已有授权的服务端世界读快照，不继承父方 KV、历史或对话，不增加浏览器能力或服务端代码豁免；这不是席位可见性过滤。子 agent 的角色读取基线在同一成功边界归入调用方，失败或取消时丢弃；基线仍只属于宿主私有证据。世界来源与记录器始终留在宿主内存中，见 [World Model](../reference/world-model.md)。
 
-宿主在父方回复/工具 trace 前识别 `delegate-batch` 每项目标的私密来源，包括其他字段无效但目标已知的项。一项私密就隐去持久 trace、工具记录、后续对话副本、原生续调、思考及压缩摘要中的整个容器。最终授权拒绝的调用在记录时也沿用这份投影。获授权的实时父方保留已接受结果，兄弟简报不会继承。私密 batch 经 `completeAfterTools` 完成时只投影无内容对象。识别依据是宿主解析的提供方，不是插件标记或任意 JSON 字段名。
+宿主在父方回复/工具 trace 前识别 `delegate-batch` 每项目标的私密来源，包括其他字段无效但目标已知的项。一项私密就隐去持久 trace、工具记录、后续对话副本、原生续调、思考及压缩摘要中的整个容器。最终授权拒绝的调用在记录时也沿用这份投影。获授权的实时父方保留已接受结果，兄弟简报不会继承。私密 batch 的结果只供本次获授权的父方使用，不自动成为父方输出；父 agent 仍须单独提交自己的结果。识别依据是宿主解析的提供方，不是插件标记或任意 JSON 字段名。
 
 委托隐私使用内核记录的提供方和调用 ID，过滤实时流、持久 trace、父方工具记录及后续请求的 trace 副本；不信任插件自报的隐藏标志，也不按字段名全局删数据。实际父模型仍能使用 intent。设置接口继续使用 host-profile、会话 owner、settle 和锁；选服务不授予执行权。详见[协议](../reference/protocol.md#委托的私有投影)。
 
@@ -563,9 +569,13 @@ SillyTavern 内容导入使用有上限的 PNG 块遍历（读数据前先检查
 
 呈现上下文使用独立构造路径，只复制公开 `segments` / `cues`、精简角色身份和明确允许的自有数据。concealed / 失败 / 非故事结果、隐藏 namespace、原始 digest 和服务入口不进入它。`_presentation_budget` 属于 `__kernel:presentation` 的控制面，只保存来源与计数；插件、RPC、数据工具和可移植视图不可见，snapshot / fork / 浏览器 checkpoint 排除它。额度保留到会话删除；restore / reset 改变代次，旧作业不能接到新会话。函数 JS 本身仍非沙箱，原有代码批准不变。见[呈现 runtime](../reference/plugins.md#presentation-runtimes)。
 
-普通 session 页面只接收版本 2 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。沙箱主视图与输入框使用独立租约和有界生命周期，失效只恢复对应区域。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。
+会话页面只收到完整已提交消息和原有的安全执行状态，不接收候选输出、工具参数、审核反馈或私有 trace 订阅。宿主在沉浸式视图之外保留进度、停止和失败重试控件。
+
+普通 session 页面只接收版本 3 的公开 DTO，不继承右侧面板的 KV、context、jobs 或 action/command/event 处理器。所有修改通过认证宿主进入普通玩家行动/交互或所属插件的手动 runtime 提案通道；opaque iframe 仍不能请求 `/api`、读取存储、密钥或 Electron IPC。会话/内容/授权/页面尝试变化会使租约失效，等待中的审批不能重试旧调用。回复只含安全状态；失败和成功都不发送嵌套执行输出。资源路由在 HEAD/304 判断前也核对实际内容哈希，避免旧摘要执行同长度新内容。沙箱不防护恶意操作系统所有者；旧不可变缓存仍是旧的已同意内容。沙箱主视图与输入框使用独立租约和有界生命周期，失效只恢复对应区域。详见[会话页面契约](../reference/ui-panels.md#读取会话前的授权)。
 
 读取基线指纹和目标身份只留在宿主提交证据及私有 continuation 中。公开 runtime 副本去掉缓冲和操作写入；Hook、响应、trace、模型和沙箱投影不暴露条件。采集基线不增加隐藏数据或呈现上下文的访问能力。见[事务](../reference/transactions.md#read-baselines)。
+
+agent continuation 的业务工具证据保留执行器原始结果，用于恢复完成条件和 effects。它受现有私有 checkpoint 访问策略保护，不加入公开运行结果；公开工具记录和 Hook 改写不能伪造已执行的成功工作。
 
 ## 插件主题的样式边界
 

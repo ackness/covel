@@ -74,13 +74,7 @@ export function executionPresentation({
         message.role === "assistant" &&
         !message.block &&
         (!message.kind || message.kind === "story") &&
-        ((!message.id.startsWith("stream_") && !!message.content) ||
-          (message.runtimeId !== undefined &&
-            foreground.some(
-              (step) =>
-                step.runtimeId === message.runtimeId &&
-                step.status === "completed",
-            ))),
+        !!message.content,
     );
     return storyReady ? "updating" : "generating";
   }

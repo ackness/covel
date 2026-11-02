@@ -610,6 +610,7 @@
                   "PreStep",
                   "PreLLMCall",
                   "PostLLMResponse",
+                  "ReviewAgentOutput",
                   "PostRuntime",
                   "PreToolUse",
                   "PostToolUse",
@@ -636,6 +637,7 @@
                       "PreStep",
                       "PreLLMCall",
                       "PostLLMResponse",
+                      "ReviewAgentOutput",
                       "PostRuntime",
                       "PreToolUse",
                       "PostToolUse",
@@ -1636,6 +1638,19 @@
             "output": {
               "type": "object",
               "properties": {
+                "from": {
+                  "type": "object",
+                  "properties": {
+                    "tool": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Name of the allowlisted own or builtin business tool whose latest successful public result is submitted."
+                    }
+                  },
+                  "required": ["tool"],
+                  "additionalProperties": false,
+                  "description": "Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract."
+                },
                 "contract": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
@@ -1823,29 +1838,24 @@
               "type": "boolean",
               "description": "`true` lists the session's event directory in the prompt so the model knows which topics it may emit."
             },
-            "finishWith": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Tool that ends the run: the run completes after a successful call to it, and fails if it ends without one. The model must call a tool on every step (`toolChoice: required`) unless `toolChoice` says otherwise. Not with `completion`, which is the long form for several tools or explicit completion."
-            },
             "completion": {
               "type": "object",
               "properties": {
                 "require": {
                   "type": "string",
-                  "enum": ["explicit", "tool-use"],
-                  "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count."
+                  "const": "tool-use",
+                  "description": "Requires successful business work before submit-output: one tool in afterTools, or any authorized business tool without a list. Host control tools and failed calls do not count."
                 },
                 "afterTools": {
                   "type": "array",
                   "items": {
                     "type": "string"
                   },
-                  "description": "The runtime completes after a successful call to one of these tools."
+                  "description": "At least one of these own or builtin business tools must succeed before submission. Implies require: tool-use; does not end the run."
                 }
               },
               "additionalProperties": false,
-              "description": "How the agent run ends. For one completing tool, `finishWith` is shorter."
+              "description": "Required business work before the host-generated submit-output tool."
             },
             "loop": {
               "type": "object",
@@ -1854,7 +1864,7 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
-                  "description": "Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops."
+                  "description": "Maximum ordinary model steps, including output submission and corrections. Budget a separate step after required business tools."
                 },
                 "timeoutMs": {
                   "type": "integer",
@@ -1901,25 +1911,16 @@
                 "profile": {
                   "type": "string",
                   "enum": ["story", "actor", "system"],
-                  "description": "Loop profile the other loop behaviour keys override. `story` streams to the player, reads interjections and keeps a cut reply; `actor` and `system` do neither, and `actor` answers without tools where `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`."
-                },
-                "stream": {
-                  "type": "boolean",
-                  "description": "Show the model's text to the player as it streams. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`."
+                  "description": "Loop profile the other loop behaviour keys override. `story` reads player interjections; `actor` and `system` do not. `story` and `actor` request submission when a tool loop repeats; `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`."
                 },
                 "steering": {
                   "type": "boolean",
-                  "description": "Merge the player's interjections into the transcript before each step and after a prose finish. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`."
-                },
-                "truncation": {
-                  "type": "string",
-                  "enum": ["accept", "reject"],
-                  "description": "`accept` keeps a reply cut at the output limit; `reject` fails it. `accept` needs streaming. Defaults to `accept` for `story`, otherwise `reject`."
+                  "description": "Merge the player's interjections into the transcript before submission acceptance. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`."
                 },
                 "fallback": {
                   "type": "string",
-                  "enum": ["answer-without-tools", "fail"],
-                  "description": "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`."
+                  "enum": ["submit-output", "fail"],
+                  "description": "What a repeated tool loop does: `submit-output` offers only submit-output for the final result; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `submit-output`."
                 },
                 "corrections": {
                   "type": "object",
@@ -1928,13 +1929,13 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 3,
-                      "description": "Corrections for missing required tool use or explicit completion. Defaults to 1."
+                      "description": "Corrections for missing required business tool work. Defaults to 1."
                     },
                     "review": {
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 5,
-                      "description": "Corrections after a PostLLMResponse rejection. Defaults to 2."
+                      "description": "Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2."
                     },
                     "loopPerturbation": {
                       "type": "integer",
@@ -1946,7 +1947,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 3,
-                      "description": "Requests with tools off to repair invalid output. Defaults to 1."
+                      "description": "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 1."
                     }
                   },
                   "additionalProperties": false,
@@ -1957,17 +1958,17 @@
                   "properties": {
                     "maxSteps": {
                       "type": "boolean",
-                      "description": "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true."
+                      "description": "At the step limit or context overflow, offer only submit-output once if business prerequisites are met. The same validation and review apply; no extra repair follows. Defaults to true."
                     },
                     "deadlineReserveMs": {
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991,
-                      "description": "Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off."
+                      "description": "Stop starting ordinary steps this many ms before the time limit and request submission if business prerequisites are met. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off."
                     }
                   },
                   "additionalProperties": false,
-                  "description": "The final answer step, with tools off."
+                  "description": "One final submission-only step when the loop limit permits it."
                 }
               },
               "additionalProperties": false,

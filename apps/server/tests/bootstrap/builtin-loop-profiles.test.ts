@@ -34,11 +34,10 @@ it("derives the story preset for bundled stories and system for every other agen
       }
       expect(resolveLoopProfile(manifest), manifest.name).toEqual(
         story
-          ? { preset: "story", ...LOOP_PRESETS.story, answerPrompt: "story" }
+          ? { preset: "story", ...LOOP_PRESETS.story }
           : {
               preset: "system",
               ...LOOP_PRESETS.system,
-              answerPrompt: "answer",
             },
       );
     }

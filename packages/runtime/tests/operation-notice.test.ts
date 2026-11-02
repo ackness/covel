@@ -1,3 +1,4 @@
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { LLMMessage, RuntimeManifest } from "@covel/shared";
@@ -206,7 +207,7 @@ describe("previous-turn operation notices", () => {
                   },
                 ],
               }
-            : answer(JSON.stringify({ line: "Done." }));
+            : toolCall("submit-output", { line: "Done." });
         },
       },
       loadRuntime: async (manifest: RuntimeManifest) =>

@@ -7,11 +7,6 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import {
-  appendStreamingText,
-  clearAllStreamingText,
-  setStreamingSegment,
-} from "@/stores/streaming-text-store.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { StageView, type StageViewProps } from "../StageView.js";
 
@@ -52,7 +47,6 @@ vi.mock("@/stores/ui-slot-store.js", () => ({
 
 afterEach(() => {
   cleanup();
-  clearAllStreamingText();
   stageSlots.items = [];
   stageSlots.realSprites = false;
   stageSlots.reduce = true;
@@ -96,7 +90,7 @@ function fixture(): StageViewProps {
 
 describe("stage decision lifecycle", () => {
   it("keeps choices and free input ready while rereading a story from another view", () => {
-    const props = { ...fixture(), replayStoryOnEnter: true };
+    const props = { ...fixture() };
     const { rerender } = render(<StageView {...props} />);
     expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.getByTestId("stage-choices")).toBeDefined();
@@ -106,13 +100,12 @@ describe("stage decision lifecycle", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(props.onSendMessage).toHaveBeenCalledWith("Continue the tour");
     rerender(<StageView {...props} executing />);
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
   });
   it("keeps explicit story review and extensions when the host replaces stage input", () => {
     const props: StageViewProps = {
       ...fixture(),
-      replayStoryOnEnter: true,
       composerReplaced: true,
     };
     const { rerender } = render(<StageView {...props} />);
@@ -121,7 +114,7 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-decision-input")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
     rerender(<StageView {...props} executing />);
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
@@ -136,7 +129,7 @@ describe("stage decision lifecycle", () => {
       const props = fixture();
       render(<StageView {...props} />);
       expect(screen.queryByText("当前信息")).toBeNull();
-      expect(screen.queryByText(previousStory.content)).toBeNull();
+      expect(screen.getByText(previousStory.content)).toBeDefined();
       const input = screen.getByTestId("stage-decision-input");
       fireEvent.change(input, { target: { value: "Look around" } });
       fireEvent.keyDown(input, { key: "Enter" });
@@ -218,170 +211,75 @@ describe("stage decision lifecycle", () => {
     ]);
   });
 
-  it("hides the old decision and plugin surface until the new story is read and execution finishes", () => {
-    let props = fixture();
-    const { rerender } = render(<StageView {...props} />);
-    expect(screen.getByTestId("stage-choices")).toBeDefined();
-    expect(screen.getByTestId("plugin-extension")).toBeDefined();
-    fireEvent.change(screen.getByTestId("stage-decision-input"), {
-      target: { value: "Visit the library" },
-    });
-    fireEvent.keyDown(screen.getByTestId("stage-decision-input"), {
-      key: "Enter",
-    });
-    expect(props.onSendMessage).toHaveBeenCalledWith("Visit the library");
-
-    // The request starts before any new story message or token arrives.
-    props = { ...props, executing: true };
-    rerender(<StageView {...props} />);
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(screen.queryByTestId("plugin-extension")).toBeNull();
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
-    expect(screen.getByTestId("stage-thinking")).toBeDefined();
-
-    const stream: StreamMessage = {
-      ...previousStory,
-      id: "stream_next-turn_narrator",
-      turnId: "next-turn",
-      content: "",
-    };
-    props = { ...props, messages: [previousStory, stream] };
-    rerender(<StageView {...props} />);
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
-    expect(screen.getByTestId("stage-thinking")).toBeDefined();
-
-    const stageRenders = stageSlots.renders.mock.calls.length;
-    const nextStory = "You enter the library.\n\nThe librarian looks up.";
-    act(() => {
-      appendStreamingText(stream.id, nextStory);
-    });
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(screen.queryByTestId("stage-thinking")).toBeNull();
-    expect(stageSlots.renders).toHaveBeenCalledTimes(stageRenders);
-
-    // Narration commits before the remaining plugins finish.
-    props = {
-      ...props,
-      messages: [
-        previousStory,
-        { ...stream, id: "next-story", content: nextStory },
-      ],
-    };
-    rerender(<StageView {...props} />);
-    // Click through the paragraphs; the last one also waits for a closing
-    // click before the dialog hands over to the decision panel.
-    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
-    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-
-    props = { ...props, executing: false };
-    rerender(<StageView {...props} />);
-    expect(screen.getByTestId("stage-choices")).toBeDefined();
-    expect(screen.getByTestId("plugin-extension")).toBeDefined();
-    expect(screen.queryByTestId("stage-thinking")).toBeNull();
-  });
-
-  it("names paragraphs with live speakers while streaming, then the resolved names", () => {
-    let props = { ...fixture(), executing: true };
-    const stream: StreamMessage = {
-      ...previousStory,
-      id: "stream_next-turn_narrator",
-      turnId: "next-turn",
-      content: "",
-    };
-    props = { ...props, messages: [previousStory, stream] };
-    const { rerender } = render(<StageView {...props} />);
-    const text = "雨停了。\n\n「走吧。」";
-    act(() => {
-      setStreamingSegment(stream.id, { index: 0, kind: "narration" });
-      appendStreamingText(stream.id, "雨停了。");
-    });
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    // A second paragraph whose metadata has not arrived names nobody, so
-    // it never borrows another paragraph's speaker.
-    act(() => {
-      appendStreamingText(stream.id, "\n\n「走吧。」");
-    });
-    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    // Its live speaker is the name as the model wrote it.
-    act(() => {
-      setStreamingSegment(stream.id, {
-        index: 1,
-        kind: "dialogue",
-        speaker: "小雅",
-      });
-    });
-    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("小雅");
-
-    props = {
-      ...props,
-      messages: [
-        previousStory,
-        {
-          ...stream,
-          id: "next-story",
-          content: text,
-          segments: [
-            { kind: "narration", text: "雨停了。" },
-            {
-              kind: "dialogue",
-              speaker: "阿雅",
-              speakerId: "char-aya",
-              text: "「走吧。」",
-            },
-          ],
-        },
-      ],
-    };
-    rerender(<StageView {...props} />);
-    // Commit replaces the written alias with the resolved name.
-    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("阿雅");
-  });
-
-  it("shows the decision when the restored history arrives after Stage mounts", () => {
+  it("keeps input available as soon as execution finishes without any reading click", () => {
     const props = fixture();
-    const { rerender } = render(<StageView {...props} messages={[]} />);
+    const view = render(<StageView {...props} executing />);
+    expect(screen.getByText(previousStory.content)).toBeDefined();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
-
-    rerender(<StageView {...props} />);
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
-    expect(screen.getByTestId("stage-choices")).toBeDefined();
+    const message = {
+      ...previousStory,
+      id: "next",
+      turnId: "next",
+      content: "First.\n\nSecond.",
+      segments: [
+        { kind: "narration" as const, text: "First." },
+        { kind: "narration" as const, text: "Second." },
+      ],
+    };
+    view.rerender(<StageView {...props} messages={[previousStory, message]} />);
+    expect(screen.getByText("First.")).toBeDefined();
+    expect(screen.getByText("Second.")).toBeDefined();
+    const input = screen.getByTestId(
+      "stage-decision-input",
+    ) as HTMLTextAreaElement;
+    expect(input.disabled).toBe(false);
+    fireEvent.change(input, { target: { value: "Continue immediately" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSendMessage).toHaveBeenCalledWith("Continue immediately");
   });
-
-  it("treats a story that arrives while the restore is still checking as history", () => {
-    const props = { ...fixture(), executing: true, restoring: true };
-    const { rerender } = render(<StageView {...props} messages={[]} />);
-    rerender(<StageView {...props} />);
-    rerender(<StageView {...props} executing={false} restoring={false} />);
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
-    expect(screen.getByTestId("stage-choices")).toBeDefined();
-  });
-
-  it("plays the first story of a turn running in this view", () => {
-    const props = { ...fixture(), messages: [], executing: true };
-    const { rerender } = render(<StageView {...props} />);
-    rerender(
+  it("retains resolved speakers and navigation without gating input", () => {
+    const props = fixture();
+    const text = "雨停了。\n\n「走吧。」";
+    render(
       <StageView
         {...props}
-        messages={[{ ...previousStory, id: "opening", turnId: "opening" }]}
+        messages={[
+          {
+            ...previousStory,
+            content: text,
+            segments: [
+              { kind: "narration", text: "雨停了。" },
+              {
+                kind: "dialogue",
+                text: "「走吧。」",
+                speaker: "阿雅",
+                speakerId: "char-aya",
+              },
+            ],
+          },
+        ]}
       />,
     );
-    rerender(
-      <StageView
-        {...props}
-        executing={false}
-        messages={[{ ...previousStory, id: "opening", turnId: "opening" }]}
-      />,
-    );
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
+    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("阿雅");
+    fireEvent.click(screen.getByRole("button", { name: "下一段" }));
+    expect(
+      document
+        .querySelector('[data-stage-paragraph="1"]')
+        ?.getAttribute("data-reader-current"),
+    ).toBe("true");
+    expect(
+      (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
+        .disabled,
+    ).toBe(false);
   });
-
+  it("renders restored history immediately whether it arrives before or after mount", () => {
+    const props = fixture();
+    const view = render(<StageView {...props} messages={[]} executing />);
+    view.rerender(<StageView {...props} />);
+    expect(screen.getByText(previousStory.content)).toBeDefined();
+    expect(screen.getByTestId("stage-choices")).toBeDefined();
+    expect(document.querySelector('[data-reveal-hidden="true"]')).toBeNull();
+  });
   it("restores the previous decision when an attempt ends without a new story", () => {
     const props = fixture();
     const { rerender } = render(<StageView {...props} />);
@@ -389,7 +287,7 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-choices")).toBeNull();
     rerender(<StageView {...props} executionError="Request failed" />);
     expect(screen.getByTestId("stage-decision-input")).toBeDefined();
-    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
   });
 });
 
@@ -397,15 +295,13 @@ it("keeps the current story notice visible after reading without gating input or
   const props = {
     ...fixture(),
     messages: [{ ...previousStory, operationFailures: { count: 1 } }],
-    replayStoryOnEnter: true,
   };
   const { rerender } = render(<StageView {...props} />);
   expect(
     screen.getByTestId("story-operation-failure-notice").textContent,
   ).toContain("1");
   expect(screen.getByTestId("stage-dialog")).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
-  expect(screen.queryByTestId("stage-dialog")).toBeNull();
+  expect(screen.getByTestId("stage-dialog")).toBeDefined();
   expect(screen.getByTestId("story-operation-failure-notice")).toBeDefined();
   const input = screen.getByTestId(
     "stage-decision-input",
@@ -420,7 +316,7 @@ it("keeps the current story notice visible after reading without gating input or
       messages={[{ ...props.messages[0]!, operationFailures: { count: 2 } }]}
     />,
   );
-  expect(screen.queryByTestId("stage-dialog")).toBeNull();
+  expect(screen.getByTestId("stage-dialog")).toBeDefined();
   expect(
     screen.getByTestId("story-operation-failure-notice").textContent,
   ).toContain("2");

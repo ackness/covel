@@ -33,6 +33,14 @@ describe("ToolRegistry", () => {
     expect(registry.find("lookup", "b")).toBe(b);
   });
 
+  it("does not register a schema-bearing submission singleton", () => {
+    const registry = new ToolRegistry();
+    expect(() => registry.registerBuiltin(module("submit-output"))).toThrow(
+      "cannot be registered globally",
+    );
+    expect(registry.find("submit-output", "a")).toBeUndefined();
+  });
+
   it.each(FRAMEWORK_TOOL_NAMES)(
     "reserves %s before optional builtin registration",
     (name) => {

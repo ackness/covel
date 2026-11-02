@@ -15,11 +15,10 @@ import type { SessionRecord } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
 
-export const SESSION_BRIDGE_VERSION = 2;
+export const SESSION_BRIDGE_VERSION = 3;
 export const SESSION_BRIDGE_MAX_MESSAGES = 200;
 export const SESSION_BRIDGE_MAX_MESSAGE_BYTES = 32 * 1024;
 export const SESSION_BRIDGE_MAX_TEXT_BYTES = 256 * 1024;
-export const SESSION_BRIDGE_MAX_STREAM_BYTES = 64 * 1024;
 export const SESSION_BRIDGE_MAX_CHARACTERS = 100;
 export const SESSION_BRIDGE_MAX_CHARACTER_BYTES = 8 * 1024;
 export const SESSION_BRIDGE_MAX_PENDING = 8;
@@ -71,7 +70,6 @@ export function boundedSessionText(text: string, bytes: number): string {
 const jsonBytes = (value: unknown) =>
   encoder.encode(JSON.stringify(value)).length;
 const positiveSeq = z.number().int().positive();
-const streamingSchema = z.strictObject({ seq: positiveSeq, text: z.string() });
 const characterSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
@@ -95,7 +93,6 @@ export const sessionProjectionSchema = z.strictObject({
       }),
     )
     .max(SESSION_BRIDGE_MAX_MESSAGES),
-  streaming: streamingSchema.nullable(),
   pending: z
     .array(
       z.strictObject({
@@ -156,7 +153,6 @@ export interface SessionProjectionInput {
   /** Host-only identity map; only the assigned ordinals cross the port. */
   messageSeqs: ReadonlyMap<string, number>;
   submittedBlockIds: ReadonlySet<string>;
-  streamingText: string | undefined;
   characters: readonly unknown[];
   slots: readonly { slot: string; key?: string; value: unknown }[];
 }
@@ -181,28 +177,14 @@ function isVisibleSessionMessage(message: StreamMessage): boolean {
  */
 export function createSessionMessageOrdinals() {
   const known = new Map<string, number>();
-  const streaming = new Map<string, number>();
   let next = 1;
   return (messages: readonly StreamMessage[]): ReadonlyMap<string, number> => {
     const current = new Map<string, number>();
     for (const message of messages) {
       if (!isVisibleSessionMessage(message) && !message.block) continue;
-      const stream = message.id.startsWith("stream_");
-      const story = message.role === "assistant" && message.kind === "story";
-      const streamKey =
-        story && message.turnId && message.runtimeId
-          ? JSON.stringify([message.turnId, message.runtimeId])
-          : undefined;
-      const seq =
-        known.get(message.id) ??
-        (!stream && streamKey ? streaming.get(streamKey) : undefined) ??
-        next++;
+      const seq = known.get(message.id) ?? next++;
       known.set(message.id, seq);
       current.set(message.id, seq);
-      if (streamKey) {
-        if (stream) streaming.set(streamKey, seq);
-        else streaming.delete(streamKey);
-      }
     }
     return current;
   };
@@ -213,21 +195,10 @@ export function buildSessionProjection(
 ): SessionProjection {
   const visible = visibleSessionMessages(input.messages);
   const messages: ProjectionShape["messages"] = [];
-  let streaming: SessionProjection["streaming"] = null;
   let textBytes = 0;
   for (const message of visible) {
     // Missing ordinals fail the projection schema instead of reusing an index.
     const seq = input.messageSeqs.get(message.id) ?? 0;
-    if (message.id.startsWith("stream_")) {
-      streaming = {
-        seq,
-        text: boundedSessionText(
-          input.streamingText ?? message.content,
-          SESSION_BRIDGE_MAX_STREAM_BYTES,
-        ),
-      };
-      continue;
-    }
     const text = boundedSessionText(
       message.content,
       SESSION_BRIDGE_MAX_MESSAGE_BYTES,
@@ -301,7 +272,6 @@ export function buildSessionProjection(
     turn: input.session.completedPlayerTurns,
     executing: input.executing,
     messages,
-    streaming,
     pending,
     input: publicActionInput(input, characters),
     characters,

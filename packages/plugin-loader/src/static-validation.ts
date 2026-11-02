@@ -1,3 +1,4 @@
+import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import type { PluginThemeFiles } from "./theme-files.js";
 import type { MessageCatalog } from "./locale-messages.js";
 import { compilePluginTheme } from "./plugin-themes.js";
@@ -207,13 +208,20 @@ export function validatePluginFiles(
     manifests,
   ))
     file(source, field, reference);
-  for (const [contract, declaration] of Object.entries(plugin.contracts ?? {}))
-    file(
+  const contractSchemas: Record<string, unknown> = {
+    ...packageManifest.contractSchemas,
+  };
+  for (const [contract, declaration] of Object.entries(
+    plugin.contracts ?? {},
+  )) {
+    const document = file(
       packageManifest.sourcePath,
       `contracts.${contract}.schema`,
       declaration.schema,
       true,
     );
+    if (document !== undefined) contractSchemas[contract] = document;
+  }
   for (const [namespace, declaration] of Object.entries(
     plugin.contributes?.data ?? {},
   ))
@@ -367,7 +375,48 @@ export function validatePluginFiles(
     }
   for (const parsed of manifests) {
     const runtime = parsed.manifest;
-    file(parsed.sourcePath, "io.output.schema", runtime.output?.schema, true);
+    let outputSchema = file(
+      parsed.sourcePath,
+      "io.output.schema",
+      runtime.output?.schema,
+      true,
+    );
+    if (runtime.output?.schema?.startsWith("contract:"))
+      outputSchema =
+        contractSchemas[runtime.output.schema.slice("contract:".length)];
+    if (!runtime.output?.schema && parsed.sourcePath) {
+      let convention: string | undefined;
+      try {
+        convention = readFile(
+          path.resolve(path.dirname(parsed.sourcePath), "output.schema.json"),
+        );
+      } catch (error) {
+        if (!(
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ))
+          throw error;
+      }
+      if (convention !== undefined) outputSchema = JSON.parse(convention);
+    }
+    if (outputSchema === undefined && runtime.outputContract)
+      outputSchema = contractSchemas[runtime.outputContract];
+    if (runtime.output?.from && outputSchema === undefined)
+      throw new Error(
+        `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
+      );
+    if (runtime.runtimeType !== "function" && outputSchema !== undefined) {
+      try {
+        assertAgentOutputObjectSchema(outputSchema);
+      } catch (cause) {
+        throw new Error(
+          `${parsed.sourcePath}: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { cause },
+        );
+      }
+    }
     file(parsed.sourcePath, "io.payloadSchema", runtime.input?.schema, true);
     // Committed bindings compile into input.inject, not runtime.inputs.
     // Validate both scopes from the authored declarations to retain field paths.

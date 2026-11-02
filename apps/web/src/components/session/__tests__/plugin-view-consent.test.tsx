@@ -20,7 +20,6 @@ import type { PluginViewEntry } from "../game-view/use-plugin-views.js";
 import { useGameViewMode } from "../game-view/use-game-view-mode.js";
 import { PluginViewHost } from "../plugin-view-host.js";
 import { PluginWebview } from "../plugin-webview.js";
-import type { StreamFeed } from "../session-bridge-stream.js";
 import {
   viewEntry,
   pageViewEntry,
@@ -32,7 +31,6 @@ const mocks = vi.hoisted(() => ({
   sessionBridge: vi.fn(),
   connections: [] as {
     states: unknown[];
-    streams: { seq: number; append: string }[];
     close: ReturnType<typeof vi.fn>;
   }[],
 }));
@@ -53,7 +51,7 @@ vi.mock("../plugin-panel.js", () => ({
     sessionBridge,
   }: {
     spec: typeof viewEntry.spec;
-    sessionBridge?: { projection: typeof projection; stream: StreamFeed };
+    sessionBridge?: { projection: typeof projection };
   }) => (
     <PluginWebview
       title="Consented page"
@@ -62,7 +60,6 @@ vi.mock("../plugin-panel.js", () => ({
       locked={false}
       handlers={{}}
       state={sessionBridge ? { session: sessionBridge.projection } : {}}
-      stream={sessionBridge?.stream}
     />
   ),
 }));
@@ -76,7 +73,6 @@ vi.mock("../plugin-bridge.js", () => ({
     mocks.posted.push(initial);
     const connection = {
       states: [initial],
-      streams: [] as { seq: number; append: string }[],
       close: vi.fn(),
     };
     mocks.connections.push(connection);
@@ -85,8 +81,6 @@ vi.mock("../plugin-bridge.js", () => ({
         mocks.posted.push(value);
         connection.states.push(value);
       },
-      pushStream: (seq: number, append: string) =>
-        connection.streams.push({ seq, append }),
       close: connection.close,
     };
   },
@@ -100,7 +94,6 @@ beforeEach(async () => {
   mocks.connections = [];
   mocks.sessionBridge.mockReset().mockReturnValue({
     projection,
-    stream: { subscribe: () => () => {}, read: () => null },
   });
   const store = new SettingsStore({
     load: async () => ({}),
@@ -500,36 +493,18 @@ it("waits for the new visit's world default after dropping a previous selection"
 it.each([viewEntry, pageViewEntry])(
   "closes connected readers across deferred content hashing and session replacement ($spec.webview)",
   async (entry) => {
-    function feed(text: string) {
-      const listeners = new Set<() => void>();
-      let value = { seq: 1, text };
-      return {
-        stream: {
-          read: () => value,
-          subscribe: (listener: () => void) => {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
-          },
-        } satisfies StreamFeed,
-        append(tail: string) {
-          value = { ...value, text: value.text + tail };
-          for (const listener of listeners) listener();
-        },
-      };
-    }
-    const feeds = new Map([
-      ["a", feed("Session A")],
-      ["b", feed("Session B")],
-      ["c", feed("Session C")],
+    const stories = new Map([
+      ["a", "Public story a"],
+      ["b", "Public story b"],
+      ["c", "Public story c"],
     ]);
     mocks.sessionBridge.mockImplementation((sessionId: string) => ({
       projection: {
         ...projection,
         messages: [
-          { seq: 1, role: "assistant", text: `Public story ${sessionId}` },
+          { seq: 1, role: "assistant", text: stories.get(sessionId)! },
         ],
       },
-      stream: feeds.get(sessionId)!.stream,
     }));
     function Host({
       current,
@@ -570,10 +545,9 @@ it.each([viewEntry, pageViewEntry])(
     fireEvent.load(oldFrame);
     const first = mocks.connections[0]!;
     expect(JSON.stringify(first.states)).toContain("Public story a");
-    act(() => feeds.get("a")!.append(" allowed tail"));
-    await waitFor(() =>
-      expect(first.streams).toContainEqual({ seq: 1, append: " allowed tail" }),
-    );
+    stories.set("a", "Public story a updated");
+    view.rerender(<Host current={entry} sessionId="a" />);
+    expect(JSON.stringify(first.states)).toContain("Public story a updated");
 
     const deferredDigest = () => {
       let resolve!: (value: ArrayBuffer) => void;
@@ -608,11 +582,10 @@ it.each([viewEntry, pageViewEntry])(
       expect(allow().disabled).toBe(true);
       const oldDeliveries = {
         states: [...first.states],
-        streams: [...first.streams],
       };
-      act(() => feeds.get("a")!.append(" withheld old tail"));
+      stories.set("a", "Public story a withheld old tail");
       view.rerender(<Host current={current} sessionId="b" />);
-      act(() => feeds.get("b")!.append(" withheld current tail"));
+      stories.set("b", "Public story b withheld current tail");
       fireEvent.load(oldFrame);
       await act(async () => {
         pending.resolve(new Uint8Array(32).fill(1).buffer);
@@ -626,7 +599,6 @@ it.each([viewEntry, pageViewEntry])(
       expect(allow().disabled).toBe(false);
       expect(screen.queryByTitle("Consented page")).toBeNull();
       expect(first.states).toEqual(oldDeliveries.states);
-      expect(first.streams).toEqual(oldDeliveries.streams);
 
       await act(async () => {
         fireEvent.click(allow());
@@ -640,26 +612,20 @@ it.each([viewEntry, pageViewEntry])(
       const second = mocks.connections[1]!;
       expect(JSON.stringify(second.states)).toContain("Public story b");
       expect(JSON.stringify(second.states)).toContain("withheld current tail");
-      act(() => feeds.get("b")!.append(" allowed current tail"));
-      await waitFor(() =>
-        expect(second.streams).toContainEqual({
-          seq: 1,
-          append: " allowed current tail",
-        }),
-      );
+      stories.set("b", "Public story b updated");
+      view.rerender(<Host current={current} sessionId="b" />);
+      expect(JSON.stringify(second.states)).toContain("Public story b updated");
 
       const currentDeliveries = {
         states: [...second.states],
-        streams: [...second.streams],
       };
       view.rerender(<Host current={current} sessionId="c" />);
       expect(second.close).toHaveBeenCalledOnce();
       const nextFrame = screen.getByTitle("Consented page");
       expect(nextFrame).not.toBe(currentFrame);
-      act(() => feeds.get("b")!.append(" stale session tail"));
+      stories.set("b", "Public story b stale session tail");
       fireEvent.load(currentFrame);
       expect(second.states).toEqual(currentDeliveries.states);
-      expect(second.streams).toEqual(currentDeliveries.streams);
       fireEvent.load(nextFrame);
       expect(mocks.connections).toHaveLength(3);
       expect(JSON.stringify(mocks.connections[2]!.states)).toContain(

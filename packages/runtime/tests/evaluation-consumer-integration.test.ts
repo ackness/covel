@@ -1,3 +1,4 @@
+import { latestToolOutput, toolCall } from "./_helpers/agent-loop-fixture.js";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
@@ -57,6 +58,7 @@ describe("plugin-owned evaluation integration", () => {
       entry.default({
         provideExtension() {},
         toolkit: { tool, z, shortId, shortIdBatch, withPendingProposals },
+        on: vi.fn(),
         registerTool: (value: ToolModule) => tools.set(value.name, value),
         registerService: (
           definition: Parameters<typeof services.register>[1],
@@ -138,18 +140,25 @@ describe("plugin-owned evaluation integration", () => {
           store,
         }),
         llm: {
-          generate: async () => ({
-            content: null,
-            toolCalls: [
-              {
-                id: "call-1",
-                name: "generate-guide",
-                arguments: JSON.stringify(candidate),
-              },
-            ],
-            finishReason: "tool_calls",
-            usage: { inputTokens: 10, outputTokens: 5 },
-          }),
+          generate: async (request) => {
+            const canonical = latestToolOutput(
+              request.messages,
+              "generate-guide",
+            );
+            if (canonical) return toolCall("submit-output", {});
+            return {
+              content: null,
+              toolCalls: [
+                {
+                  id: "call-1",
+                  name: "generate-guide",
+                  arguments: JSON.stringify(candidate),
+                },
+              ],
+              finishReason: "tool_calls" as const,
+              usage: { inputTokens: 10, outputTokens: 5 },
+            };
+          },
         },
       },
     );

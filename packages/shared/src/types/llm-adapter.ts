@@ -111,6 +111,8 @@ export interface LLMToolDefinition {
   readonly name: string;
   readonly description: string;
   readonly parameters: Readonly<Record<string, unknown>>; // JSON Schema
+  /** Opt in to lossless strict selection against the actual target's profile. */
+  readonly strict?: "auto";
 }
 
 /** Runtime preferences applied only when allowed by explicit user settings. */

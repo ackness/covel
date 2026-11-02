@@ -1,4 +1,4 @@
-import { segmentTemplateMatchSchema } from "@covel/shared";
+import { segmentTemplateMatchSchema, revealPolicySchema } from "@covel/shared";
 import type { ComponentProps } from "react";
 import type { TFunction } from "i18next";
 import {
@@ -151,7 +151,9 @@ describe("story segment templates in the chat view", () => {
       ],
     });
     const body = screen.getByTestId("story-segments");
-    const parts = [...body.children] as HTMLElement[];
+    const parts = [
+      ...body.querySelectorAll("[data-reveal-unit] > div"),
+    ] as HTMLElement[];
     expect(parts).toHaveLength(3);
     // Unmatched narration: default prose of its text.
     expect(parts[0]!.dataset.segmentTemplate).toBeUndefined();
@@ -188,6 +190,7 @@ describe("story segment templates in the chat view", () => {
             specs: [
               {
                 ...dialogueLine,
+                reveal: revealPolicySchema.parse(dialogueLine.reveal),
                 label: undefined,
                 match: segmentTemplateMatchSchema.parse(dialogueLine.match),
               },
@@ -276,12 +279,12 @@ describe("story segment templates in the chat view", () => {
     expect(screen.queryByTestId("story-segments")).toBeNull();
   });
 
-  it("never draws a streaming story through templates", () => {
+  it("draws full committed story through templates regardless of its durable ID", () => {
     renderMessage(
-      { ...story, id: "stream_turn-1_narrator" },
+      { ...story, id: "another-durable-id" },
       { specs: [{ pluginId: "plates", specs: [nameplate] }] },
     );
-    expect(screen.queryByTestId("story-segments")).toBeNull();
+    expect(screen.getByTestId("story-segments")).toBeDefined();
   });
 
   it("shows the segments in the raw view", () => {

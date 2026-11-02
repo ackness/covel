@@ -62,3 +62,11 @@ export type {
 } from "./handler.js";
 export type { LoadedRuntime } from "./loaded-runtime.js";
 export type PluginSource = "builtin" | "community";
+export {
+  SUBMIT_OUTPUT_TOOL_NAME,
+  assertAgentOutputObjectSchema,
+  requiredAgentWork,
+  resolveAgentOutput,
+  type EffectiveAgentOutput,
+  type RequiredAgentWork,
+} from "./agent-output.js";

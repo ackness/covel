@@ -66,6 +66,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `fallback` | — | 调用失败时改用的用途名。目标用途必须是同一种能力，并且已经配置好密钥；回退关系不能成环 |
 | `input` / `output` | — | 模型接受和产出的内容类型，不写时自动识别（见[模型能力从哪里来](#模型能力从哪里来)）。`output` 可以是 `text` / `image` / `audio` / `video` / `embedding` / `evaluation` |
 | `features` | — | 模型特性（`function_calling`、`reasoning`、`vision`…） |
+| `strictTools` | — | 宿主核实并明确配置的目标、端点与 schema profile；默认关闭，见[工具提交能力](#tool-submission-capabilities) |
 | `contextWindow` / `maxOutputTokens` | — | 覆盖上下文窗口和最大输出的 token 数 |
 | `pricing` | — | 计价信息，只用于 `/debug` 的成本面板 |
 | `reasoningEffort` | — | 思考档位（例如 `disabled` 关闭思考）。它是这个模型的默认值，发送时换成各家接口自己的字段，见[思考强度](#思考强度) |
@@ -450,7 +451,7 @@ Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 
 
 模型 ID 是一个不解释的字符串，发请求时不裁剪也不改写。例如服务商 `openai` 下的 `openai/gpt-5.6-sol` 和 `deepseek/deepseek-v4-flash` 都保持原样。
 
-查询模型能力时，按下面的顺序尝试匹配。匹配结果只用来显示能力和价格：
+查询模型能力时，按下面的顺序尝试匹配。匹配结果用于能力检查、请求控制和价格显示，不改写发送的模型 ID：
 
 1. 完整 ID；
 2. 去掉与当前服务商相同的最外层路由前缀；
@@ -463,6 +464,31 @@ Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 
 - 通过聚合服务商匹配到上游模型资料时，价格标为“参考价”。实际费用以当前服务商的账单为准。
 - 每个服务商的价格倍率默认是 `1`，接受 `0.1`、`2.5` 这样的正小数。调试成本面板按“模型参考价 × 服务商倍率”计算预估结算价。
 - 没有精确识别的模型不会被猜成支持图片输入。可以在“用途分配”里手动覆盖能力。
+
+<a id="tool-submission-capabilities"></a>
+
+## 工具提交能力
+
+agent 通过 `submit-output` 提交结果，因此实际调用的目标必须支持工具。gateway 对主目标和每个后备用途分别检查 `features`：明确列出能力却没有 `function_calling` 时，跳过该目标，只尝试已配置的同标签后备。没有可用后备时返回 `CONFIG_ERROR`，其中 `details.unsupportedCapability` 是 `function_calling`，并标出实际目标的服务商和模型。能力未知时仍可尝试普通工具；不使用回复正文作为成功提交。纯文本的 function/gateway 调用不受此检查影响。
+
+生成的输出工具带有 `strict: "auto"` 策略。只有宿主明确提供当前目标的 strict 能力，且 schema 与该能力完全兼容时，gateway 才选择 strict。JSON 输出能力、兼容协议和模型名都不构成 strict 支持的证明。目前没有内置的、经过验证的 strict profile，默认关闭。`generateObject`、evaluate、压缩和世界生成仍保留各自的结构化内容格式。
+
+宿主可在 TOML 的 `[covel.<slot>.strictTools]` 或程序注册的 `PresetConfig.capability.strictTools` 提供记录。`provider`、`model`、`protocol`、`baseUrl` 必须与实际解析后的目标逐字相同，`profile` 描述已核实的限制；每次后备切换重新选择。程序适配器收到已选择的 `function.strict` 布尔值，并负责映射到自身协议。内置 Chat、Responses 和 Anthropic 适配器实现 strict 标志的序列化；Gemini 原生适配器没有该映射，因此保持非 strict。这是序列化能力，不代表某个在线服务商支持该选项。
+
+<!-- prettier-ignore -->
+| `profile` 字段 | 含义 |
+| --- | --- |
+| `id`、`keywords` | profile 标识与允许的 schema 关键字列表；未列出的关键字使 schema 不兼容 |
+| `root` | `object` 要求无组合的对象根；`any` 不增加根限制 |
+| `requireAllProperties`、`closedObjects` | 是否要求所有属性必填、每个对象明确使用 `additionalProperties: false` |
+| `references` | `none`、`local` 或 `recursive`；后两者只接受本 schema 内的 JSON Pointer |
+| `typeUnions`、`booleanSchemas`、`formats` | 是否允许类型数组、独立布尔 schema，以及允许的 format 名称 |
+| `maxBytes`、`maxDepth` | JSON 编码的字节上限和遍历深度上限；深度不超过 128 |
+| `maxProperties`、`maxEnumValues` | 遍历到的属性与枚举值总数上限；展开引用也计数 |
+
+`checkStrictToolSchema` 和配置校验 schema 由 `@covel/ai-provider` 导出。不兼容诊断最多给出 8 个 schema 路径，每个路径不超过 200 个字符。检查覆盖可选属性、开放对象、引用、联合、条件、约束和大小；不会加 nullable、补 required、关闭字典或删除约束。`narrative-engine@2` 的可选字段和开放对象保持原样，在要求全必填封闭对象的 profile 上使用非 strict。普通业务工具不会自动进入 strict 策略；Responses 在没有选中 strict 时明确发送 `strict: false`。宿主验证仍然执行。
+
+运营者须先核实服务商当前规范，再配置 profile。beta strict 地址必须由运营者明确配置；gateway 不改 URL、不扩大密钥来源。不在能力记录预期内的 schema 400 是诊断失败，需修正 profile 或配置；不会改写 schema 或无限重试。
 
 ## 思考强度
 
@@ -511,7 +537,7 @@ reasoningEffort = "disabled"
 - **OpenAI Responses**：`reasoning: { effort }`。
   - 已识别的 GPT-5 / o3 / o4 模型同时请求 `summary: "auto"`；明确的摘要设置保留。
   - 服务商是否保存对话见 [Responses 不让服务商保存对话](#responses-不让服务商保存对话)。
-  - 函数工具带 `strict: false`。原因：这个接口在不带该字段时把工具当成严格模式（Chat 协议相反），所有可选参数都变成必填，模型会给每个可选参数填一个空值，工具随后拒绝这次调用。
+  - 未选中经过核实的 strict 能力和兼容 schema 时，函数工具带 `strict: false`；选中时发送 `true`。原因：这个接口在不带该字段时把工具当成严格模式（Chat 协议相反），所有可选参数都变成必填，模型会给每个可选参数填一个空值，工具随后拒绝这次调用。
   - 结构化输出的 `text.format` 同样带 `strict: false`。严格模式要求每个对象都写 `additionalProperties: false`、所有属性都必填，否则整次请求返回 400；Covel 的输出 schema 有可选字段，由调用方自己校验解析结果。
 - **Anthropic Messages**：`output_config: { effort }`。
   - 已识别的自适应思考模型选了档位时，启用 `thinking.type: "adaptive"`，默认请求可见的摘要 `display: "summarized"`。
@@ -852,25 +878,19 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 
 `gateway.generateText` 和 `gateway.streamText` 都接受 `responseFormat`，并把它传给每次实际调用的适配器，包括备用模型。流式输出仍然是文本增量：`responseFormat` 不提供增量的对象解析，也不能代替调用方对完整结果的校验。
 
-agent runtime 要求 JSON、且已有的输出检查或回复审查要求纠正时，框架会根据原始候选答案补充格式说明：
-
-- 空答案或只有空白时，说明未返回 JSON 对象，要求重新发送符合 schema 的完整对象；schema 要求故事段落时也会提醒包含 `segments`。空内容的工具调用不按空 JSON 答案诊断。
-- JSON 语法错误时，说明错误原因和预期；解析器提供位置时，保留从零开始的偏移及可用的行列。偏移按现有代码围栏规范化后的文本计算，单位是 JavaScript UTF-16 代码单元。根对象过早闭合、后面仍有字段时，要求把所有字段放在一个完整对象内，不会接受前缀或重组碎片。
-- 原始 JSON 候选有语法错误时，只说明语法问题，不附加从容错解析片段得出的字段或段落错误。普通文字答案的纠正保留 schema 的必填字段提示；合法 JSON 的字段或段落错误保留原有校验说明。格式问题最多五条，每条最多 200 个字符；新增诊断不回显草稿或推理正文。
-
-说明按会话的指令语言生成，并遵守 `instructionLocaleFor` 的语言选择。回复审查已拒绝草稿时，说明追加到插件的纠正要求后，使用已有审查预算；输出修复在已有预算和时限内关闭工具重试，不重做业务工具调用。更具体的反馈不保证下一次答案正确，不增加服务商的严格模式能力，也不改变已有的宽容解析、故事正文回退或最终提交规则。以上是 runtime 的纠正行为；`gateway.generateObject` 仍按前述规则返回错误，不因此增加纠正请求。
+agent 完成使用工具参数里的 schema，不请求 `responseFormat`、`text.format` 或 JSON MIME 输出指令。提交和纠正的契约见[完成条件](./plugins.md#agent-output-submission)；目标能力和 strict 策略见[工具提交能力](#tool-submission-capabilities)。这不会为 `gateway.generateObject` 增加纠正模型调用。
 
 ## Provider 流式响应
 
-只要 adapter 提供流式接口，所有 agent runtime 都使用它。只有故事 runtime 把文本增量转发到玩家界面。由此带来的规则：
+adapter 支持时，所有 agent runtime 都使用 provider 流式传输。文本、推理和不含参数正文的工具活动会刷新首次输出/静默时限。runtime 缓冲完整响应，收到有效的 provider 终态后才执行工具。玩家在接受与提交后收到完整故事。
 
-| 情况                                                      | 处理                                                                                                                                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 流在已有输出之后中断                                      | 故事 runtime 不重试；其他 runtime 丢弃半截输出，按 `maxRetries` 重试                                                                                         |
-| 结果被 `length` / `max_tokens` 截断                       | 按 profile 处理：故事可保留已有正文并提示未写完，仍须通过输出检查和提交；要求完整结果的 runtime 不保存半截结构，按其截断策略纠正或失败，不改用非流式调用重来 |
-| 流在没有任何输出时失败，重试用完                          | 改用一次非流式调用                                                                                                                                           |
-| provider 明确拒绝请求本身（401、400、配置或 schema 错误） | 不改用非流式调用，因为同一个请求会原样失败                                                                                                                   |
-| HTTP 200 里带 provider 错误                               | 保留消息、code/type。确定性的拒绝不会变成一个空的、可重试的错误                                                                                              |
+| 情况                                                  | 处理                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------ |
+| 已有部分输出后流失败                                  | 丢弃全部缓冲，按 `maxRetries` 重试；不执行部分调用，不拼接不同尝试 |
+| `length` / `max_tokens` 截断                          | 最多重试一次，再失败；不保留部分故事，不使用非流式救援             |
+| 临时流式故障重试耗尽                                  | 预算允许时使用有上限的非流式救援；失败输出从未展示给玩家           |
+| provider 拒绝请求（401、400、配置/schema 错误或拒答） | 不通过非流式救援重复同一请求                                       |
+| HTTP 200 里带 provider 错误                           | 保留错误分类和已报告用量，不上报成功                               |
 
 其他规则：
 
@@ -959,8 +979,8 @@ HTTP 失败响应即使正文为空、纯文本或 HTML，也保留状态码并�
 
 **只有 `stop` 和 `tool_calls` 算说完了**（`@covel/shared` 的 `isCompleteFinishReason`）。`other` 不算正常结束：服务商没说清为什么停（如 Anthropic 的 `pause_turn`、DeepSeek 的 `insufficient_system_resource`），回答可能停在任何地方。
 
-- 叙事：已经写出来的正文保留，`llm.responded` 带着 `finishReason: other` 和 `rawFinishReason`，界面提示这段没写完，玩家可以重试这一回合。被输出上限截断（`length`）的叙事同样保留，提示的是另一句话。
-- runtime 里其他的回答（带工具调用的、要求 JSON 的、不保留截断正文的 runtime）、世界生成、历史摘要：按失败处理，不保存半截结果，也不自动重试。
+- 所有 agent runtime 都拒绝不完整的响应，包括纯文本和已经闭合的工具参数。失败尝试不会成为已提交叙事。
+- 世界生成与历史摘要同样要求完整结果。function gateway 保留独立的公开 text/object/stream API。
 - function 插件通过 `ctx.gateway` 拿到的是原样的 `other`，由插件决定。后台输出应当和上面一样按失败处理。
 
 **诊断。** 四种内置文本协议的 text / object 返回值和 stream 的 `done` 可以带 `diagnostics`，包含服务商和请求的 warning、URL / 文档来源和引用位置。runtime bridge 和 LLM trace 保留这些信息。

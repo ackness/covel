@@ -32,6 +32,8 @@ io:
       accepts: "contract:world-ir@1"
       required: false
   output:
+    from:
+      tool: plan-story-events
     contract: story-event.plan@1
     schema: ../../schemas/story-event-plan.schema.json
   concealed: true
@@ -40,7 +42,11 @@ agent:
   tools:
     plugin:
       - plan-story-events
-  finishWith: plan-story-events
+  toolChoice: required
+  completion:
+    require: tool-use
+    afterTools:
+      - plan-story-events
 guard: ./guard.js
 ---
 
@@ -76,7 +82,7 @@ Events must fit this world's genre, tone, and setting. Introduce no factions, te
 4. `payload` is a brief of two to four sentences for the narrator. It says what happens, who is involved, and what choice it leaves the player character. It must not contain finished prose, a decision made for the player, or an answer to the world's central mysteries. It must not contradict the setting or kill a major character.
 5. Use a descriptive lowercase kebab-case `id`, such as `salt-fangs-collect`. `title` is a short name that becomes public only after the event fires.
 
-Call `plan-story-events` once. If the tool reports errors, fix them and submit again; a successful call completes this runtime.
+Call `plan-story-events` once. If the tool reports errors, fix them and submit again; after success, call `submit-output` with `{}`. The host uses the canonical tool result. Do not repeat the business call to correct only the final submission.
 
 ## Conditions
 

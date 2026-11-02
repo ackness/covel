@@ -13,6 +13,7 @@ import { LLMRetryError } from "../retry/retry-common.js";
 import { serviceFailureOf } from "../plugin-services.js";
 import { isDeepStrictEqual } from "node:util";
 import { validateOutput } from "@covel/tools";
+import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
 import {
   runPostRuntimeHook,
   runPreRuntimeHook,
@@ -20,6 +21,8 @@ import {
 import {
   normalizeStoryOutput,
   STORY_EMPTY_ERROR,
+  storyOutputProblems,
+  schemaAsksForSegments,
 } from "../agent-loop/story-output.js";
 import { withAgentFailureTarget } from "../agent-loop/runtime-completion.js";
 import {
@@ -124,7 +127,6 @@ export async function finalizeRuntimeResult(
   options: {
     readonly cause?: unknown;
     readonly lastTarget?: LLMTargetIdentity;
-    readonly deltaCount?: number;
     readonly outputContractSchema?: Readonly<Record<string, unknown>>;
     readonly outputSchema?: Readonly<Record<string, unknown>>;
     /**
@@ -176,9 +178,27 @@ export async function finalizeRuntimeResult(
             ? signal.reason.message
             : "Runtime execution was cancelled",
     };
-  } else if (manifest.outputKind === "story") {
+  } else if (
+    manifest.runtimeType === "function" &&
+    manifest.outputKind === "story"
+  ) {
+    // Function outputs keep their existing normalization-before-schema route.
     finalized = normalizeFinalizedStory(finalized);
   }
+  // Agent success is a private submission decision, never a status rewrite.
+  if (
+    manifest.runtimeType !== "function" &&
+    result.status !== "success" &&
+    finalized.status === "success"
+  )
+    finalized = {
+      ...result,
+      status: "failed",
+      output: null,
+      error:
+        result.error ?? "Agent ended without an accepted submit-output call.",
+    };
+
   // A hook that turns a failed or skipped result into success must pass the
   // same `output.schema` gate as a normal success. Such a result has no
   // canonical value, so its `output` is what downstream inputs read.
@@ -188,10 +208,16 @@ export async function finalizeRuntimeResult(
     finalized.canonicalValue?.value !== undefined
       ? { schema: options.outputSchema, value: finalized.canonicalValue.value }
       : !finalized.canonicalValue &&
-          manifest.outputKind !== "story" &&
+          (manifest.runtimeType !== "function" ||
+            manifest.outputKind !== "story") &&
           (recovered || !isDeepStrictEqual(finalized.output, preHookOutput))
         ? {
-            schema: options.agentOutputSchema ?? options.outputSchema,
+            schema:
+              options.agentOutputSchema ??
+              options.outputSchema ??
+              (manifest.runtimeType !== "function" && !manifest.output?.schema
+                ? resolveAgentOutput({ manifest, promptTemplate: "" }).schema
+                : undefined),
             value: finalized.output,
           }
         : undefined;
@@ -223,6 +249,17 @@ export async function finalizeRuntimeResult(
         error = "schema could not be compiled or output could not be validated";
       }
     }
+    if (
+      error === undefined &&
+      manifest.runtimeType !== "function" &&
+      manifest.outputKind === "story"
+    ) {
+      const problems = storyOutputProblems(schemaTarget.value, {
+        segmentsRequired: schemaAsksForSegments(schema),
+        prose: false,
+      });
+      if (problems.length) error = problems.join("; ");
+    }
     if (error !== undefined)
       finalized = {
         ...finalized,
@@ -231,6 +268,8 @@ export async function finalizeRuntimeResult(
         error: `output-schema-invalid: ${error}`,
       };
   }
+  if (manifest.runtimeType !== "function" && manifest.outputKind === "story")
+    finalized = normalizeFinalizedStory(finalized);
   if (manifest.presentation) {
     const forbiddenResult = (value: RuntimeResult) =>
       value.status === "suspended" ||
@@ -329,12 +368,7 @@ export async function finalizeRuntimeResult(
           ? output.content
           : "";
     try {
-      await emitMessageCompleted(
-        deps.emitter,
-        finalized,
-        content,
-        options.deltaCount ?? 0,
-      );
+      await emitMessageCompleted(deps.emitter, finalized, content);
     } catch {
       // Trace delivery cannot turn a finished execution into another Hook run.
       console.warn("[runtime-telemetry] message delivery failed", {

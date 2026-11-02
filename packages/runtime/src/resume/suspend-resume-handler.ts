@@ -2,7 +2,7 @@
  * Suspend handling for the agent tool-call loop.
  *
  * When a tool returns the suspend sentinel, the loop must capture its full
- * mid-turn state (messages, partial content, collected tool calls, buffered
+ * mid-turn state (messages, collected tool calls, buffered
  * proposals, and the loop state the transcript cannot carry) into an
  * execution-local {@link SuspensionRecord} artifact, emit `runtime.completed`,
  * and exit with a `status: "suspended"` RuntimeResult. PostRuntime does not
@@ -34,9 +34,8 @@ export interface HandleSuspensionOptions {
   readonly deps: AgentLoopDeps;
   readonly hookPipeline: HookPipeline | undefined;
   readonly messages: readonly LLMMessage[];
-  readonly finalContent: string | null;
   readonly collectedToolCalls: readonly ToolCallRecord[];
-  readonly completionCalls?: SuspensionRecord["pendingContinuation"]["completionCalls"];
+  readonly businessCalls?: SuspensionRecord["pendingContinuation"]["businessCalls"];
   readonly pendingProposals: readonly Proposal[];
   readonly emittedEvents: readonly EmittedEvent[];
   readonly executionContext: ExecutionContext;
@@ -53,43 +52,37 @@ export interface HandleSuspensionOptions {
   readonly runId: string;
   readonly outputContractSchema?: Readonly<Record<string, unknown>>;
   /** Loop state beyond the transcript; empty parts are not stored. */
-  readonly loop?: LoopStateAtSuspension;
+  readonly loop: LoopStateAtSuspension;
   /** The prompt segments `PreLLMCall` hooks received before the suspension. */
   readonly promptSegments?: SuspensionRecord["pendingContinuation"]["promptSegments"];
 }
 
 /** What the loop holds at the suspension, before empty parts are dropped. */
-export interface LoopStateAtSuspension {
+export interface LoopStateAtSuspension extends SuspendedLoopState {
   readonly corrections: Readonly<
     Record<keyof NonNullable<SuspendedLoopState["corrections"]>, number>
   >;
   readonly activatedTools: readonly string[];
-  readonly steeredProse: readonly string[];
-  readonly completingToolOutput: Readonly<Record<string, unknown>> | null;
 }
 
-/** The stored loop state: every empty part left out, undefined when all are. */
+/** Own the admitted state; omit only empty optional collections. */
 export function suspendedLoopState(
   loop: LoopStateAtSuspension,
-): SuspendedLoopState | undefined {
+): SuspendedLoopState {
   const corrections = Object.fromEntries(
     Object.entries(loop.corrections).filter(([, count]) => count > 0),
-  ) as SuspendedLoopState["corrections"];
-  const state: SuspendedLoopState = {
-    ...(corrections && Object.keys(corrections).length > 0
-      ? { corrections }
-      : {}),
-    ...(loop.activatedTools.length > 0
+  );
+  return structuredClone({
+    steps: loop.steps,
+    maxSteps: loop.maxSteps,
+    rejectionAttempts: loop.rejectionAttempts,
+    outputContract: loop.outputContract,
+    correctionLimits: loop.correctionLimits,
+    ...(Object.keys(corrections).length ? { corrections } : {}),
+    ...(loop.activatedTools.length
       ? { activatedTools: [...loop.activatedTools] }
       : {}),
-    ...(loop.steeredProse.length > 0
-      ? { steeredProse: [...loop.steeredProse] }
-      : {}),
-    ...(loop.completingToolOutput
-      ? { completingToolOutput: structuredClone(loop.completingToolOutput) }
-      : {}),
-  };
-  return Object.keys(state).length > 0 ? state : undefined;
+  });
 }
 
 /**
@@ -106,7 +99,6 @@ export async function handleSuspension(
     deps,
     hookPipeline,
     messages,
-    finalContent,
     collectedToolCalls,
     pendingProposals,
     emittedEvents,
@@ -117,7 +109,7 @@ export async function handleSuspension(
   } = opts;
 
   const suspensionId = crypto.randomUUID();
-  const loop = opts.loop ? suspendedLoopState(opts.loop) : undefined;
+  const loop = suspendedLoopState(opts.loop);
 
   // Capture the provider-valid transcript (including a placeholder tool result
   // for the suspender and cancellation results for later calls in its batch)
@@ -126,9 +118,8 @@ export async function handleSuspension(
     lifecycle: { runId, progressRunId: runId },
     readScopes: [],
     messages: [...messages],
-    partialContent: finalContent ?? undefined,
     toolCallsSoFar: [...collectedToolCalls],
-    ...(opts.completionCalls ? { completionCalls: opts.completionCalls } : {}),
+    ...(opts.businessCalls ? { businessCalls: opts.businessCalls } : {}),
     pendingProposals: [...pendingProposals],
     ...(opts.inputSlots ? { inputSlots: opts.inputSlots } : {}),
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
@@ -151,7 +142,7 @@ export async function handleSuspension(
       : {}),
     // Store the suspend tool's call ID so resume can append a proper tool result
     suspendToolCallId,
-    ...(loop ? { loop } : {}),
+    loop,
     ...(opts.promptSegments?.length
       ? {
           promptSegments: opts.promptSegments.map(({ pluginId, id }) => ({

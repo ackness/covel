@@ -277,7 +277,7 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
     expect(requests.map((r) => r.body)).toEqual(calls);
   });
 
-  it("records streamed requests before the first text delta is projected", async () => {
+  it("records provider requests while buffering streamed output", async () => {
     const { params, rows } = fixture();
     fetch.mockImplementation(async (_url, init) => {
       calls.push(JSON.parse(String(init?.body)));
@@ -286,11 +286,9 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
         { headers: { "content-type": "text/event-stream" } },
       );
     });
-    const delta = vi.fn(() => {
-      expect(recorded(rows)[0]!.body).toEqual(calls[0]);
-    });
-    await streamLLMWithRetry({ ...params, onDelta: delta });
-    expect(delta).toHaveBeenCalledWith("hello");
+    const result = await streamLLMWithRetry(params);
+    expect(result.response.content).toBe("hello");
+    expect(recorded(rows)[0]!.body).toEqual(calls[0]);
     expect(recorded(rows)[0]!.body.stream).toBe(true);
   });
 

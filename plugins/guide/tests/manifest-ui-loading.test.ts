@@ -138,7 +138,7 @@ describe("guide manifest and UI loading", () => {
       (await loadPluginDefinition(discovery!, "en-US")).packageManifest.plugin
         .contributes?.prompt,
     );
-    expect(localizedPostHistory).toContain("Do not call `runtime-done`");
+    expect(localizedPostHistory).toContain("submit-output");
     expect(localizedPostHistory).not.toContain(
       "immediately call `runtime-done`",
     );

@@ -49,7 +49,8 @@
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
  *   --enable-plugins <ids> Enable comma-separated plugins before the first turn
- *   --core-only            Create the session with core plugins only instead of
+ *   --plugins <ids>        Initial requested package IDs instead of the world preset
+  --core-only            Create the session with core plugins only instead of
  *                          the world's preset pack
  *   --player-message <str> Player text for each playing turn (default: cycles through built-ins)
  *   --form-values <json>   Default form field values (default: auto from field types)
@@ -100,6 +101,7 @@ interface CliArgs {
   runtimeFilter?: string;
   pluginFilter?: string;
   enablePlugins: string[];
+  plugins?: string[];
   coreOnly: boolean;
   playerMessage?: string;
   formValues: Record<string, string>;
@@ -176,6 +178,14 @@ function parseArgs(argv: string[]): CliArgs {
           .map((value) => value.trim())
           .filter(Boolean);
         break;
+      case "--plugins":
+        args.plugins = next()
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (!args.plugins.length)
+          throw new Error("--plugins must name at least one package");
+        break;
       case "--core-only":
         args.coreOnly = true;
         break;
@@ -233,6 +243,8 @@ function parseArgs(argv: string[]): CliArgs {
   if (!args.server.startsWith("http")) {
     throw new Error("--server must start with http:// or https://");
   }
+  if (args.plugins && args.coreOnly)
+    throw new Error("--plugins and --core-only cannot be combined");
   if (args.turns < 0) throw new Error("--turns must be >= 0");
   if (args.timeoutSec <= 0) throw new Error("--timeout must be > 0");
   if (
@@ -264,6 +276,7 @@ Options:
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
   --enable-plugins <ids>  Enable comma-separated plugins before the first turn
+  --plugins <ids>         Initial requested package IDs instead of the world preset
   --core-only             Core plugins only, not the world's preset pack
   --player-message <str>  Player text for each playing turn
   --form-values <json>    Default form field values
@@ -1752,7 +1765,8 @@ async function runMain(
   // only the core plugins and would not exercise what players play.
   section("Phase 4: Session Creation");
   let plugins: string[] | undefined;
-  if (!args.coreOnly) {
+  if (args.plugins) plugins = args.plugins;
+  else if (!args.coreOnly) {
     const plan = await httpGet<{
       selectedPackId?: string;
       defaultPluginIds?: string[];

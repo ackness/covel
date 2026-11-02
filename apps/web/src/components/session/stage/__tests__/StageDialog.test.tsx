@@ -1,48 +1,68 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { StageDialog } from "../StageDialog.js";
 
 afterEach(cleanup);
-
 const baseProps = {
-  turnId: "turn-1",
-  storyText: "Mio speaks.\n\nRin answers.\n\nThe wind quiets.",
-  streamEnded: true,
+  message: {
+    id: "message",
+    content: "Mio speaks.\n\nRin answers.\n\nThe wind quiets.",
+    segments: [
+      { kind: "narration" as const, text: "Mio speaks." },
+      { kind: "narration" as const, text: "Rin answers." },
+      { kind: "narration" as const, text: "The wind quiets." },
+    ],
+  },
   autoPlay: false,
   reducedMotion: true,
-  onAllRead: vi.fn(),
 };
-
-describe("StageDialog", () => {
-  it("exposes narration outside the named advance button", () => {
+describe("committed stage reader", () => {
+  it("exposes all semantic paragraphs once, outside navigation controls", () => {
     render(<StageDialog {...baseProps} />);
-    const prose = screen.getByText(/Mio speaks/);
-    expect(prose.closest("button")).toBeNull();
-    expect(prose.getAttribute("aria-live")).toBe("polite");
-    expect(prose.getAttribute("aria-busy")).toBe("false");
-    const advance = screen.getByRole("button", { name: "点击继续对话" });
-    fireEvent.click(advance);
-    expect(screen.getByText(/Rin answers/).closest("button")).toBeNull();
+    for (const text of ["Mio speaks.", "Rin answers.", "The wind quiets."]) {
+      const paragraph = screen.getByText(text);
+      expect(paragraph.closest("button")).toBeNull();
+      expect(paragraph.closest('[aria-live="off"]')).not.toBeNull();
+    }
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "下一段" }));
+    expect(
+      document
+        .querySelector('[data-stage-paragraph="1"]')
+        ?.getAttribute("data-reader-current"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "重新阅读" }));
+    expect(
+      document
+        .querySelector('[data-stage-paragraph="0"]')
+        ?.getAttribute("data-reader-current"),
+    ).toBe("true");
   });
-  it("changes the nameplate at each paragraph and removes it for narration", () => {
+  it("maps committed speakers without borrowing a speaker for narration", () => {
     render(
-      <StageDialog {...baseProps} segmentSpeakers={["Mio", "Rin", null]} />,
+      <StageDialog
+        {...baseProps}
+        message={{
+          ...baseProps.message,
+          segments: [
+            { kind: "dialogue", text: "Mio speaks.", speaker: "Mio" },
+            { kind: "dialogue", text: "Rin answers.", speaker: "Rin" },
+            { kind: "narration", text: "The wind quiets." },
+          ],
+        }}
+      />,
     );
-    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("Mio");
-    const advance = screen.getByRole("button");
-    fireEvent.click(advance);
-    expect(screen.getByTestId("stage-dialog-speaker").textContent).toBe("Rin");
-    expect(screen.getByText(/Rin answers/)).toBeDefined();
-    fireEvent.click(advance);
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
+    expect(
+      screen
+        .getAllByTestId("stage-dialog-speaker")
+        .map((node) => node.textContent),
+    ).toEqual(["Mio", "Rin"]);
+    fireEvent.click(screen.getByRole("button", { name: "下一段" }));
     expect(screen.getByText("The wind quiets.")).toBeDefined();
   });
-
-  it("reads legacy restored prose without attributing it to an actor", () => {
+  it("renders plain restored content instantly without a speaker map", () => {
     render(<StageDialog {...baseProps} />);
     expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    fireEvent.click(screen.getByRole("button"));
-    expect(screen.queryByTestId("stage-dialog-speaker")).toBeNull();
-    expect(screen.getByText(/Rin answers/)).toBeDefined();
+    expect(document.querySelector('[data-reveal-hidden="true"]')).toBeNull();
   });
 });

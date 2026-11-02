@@ -96,8 +96,6 @@ function observation(executing = false) {
   return {
     stateRef: { current: state },
     activeTurnIdRef: { current: "t1" as string | null },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
   };
 }
 

@@ -1,442 +1,188 @@
-import { describe, expect, it } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+/** Loaded output schemas belong to the generated submission tool. */
+import { describe, it, expect, vi } from "vitest";
+import type {
+  LLMResponse,
+  RuntimeManifest,
+  RuntimeResult,
+} from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
 import type { ToolExecutor } from "../src/agent-loop/tool-executor.js";
 
-const OBJECT_SCHEMA = {
+const schema = {
   type: "object",
   additionalProperties: false,
   required: ["prompt"],
-  properties: { prompt: { type: "string" } },
-} as const;
-
-class CapturingLLM implements LLMAdapter {
-  responseFormat: unknown;
-  tools: unknown;
-  content = '{"ok":true}';
-
-  async generate(
-    params: Parameters<LLMAdapter["generate"]>[0],
-  ): Promise<LLMResponse> {
-    this.responseFormat = params.responseFormat;
-    this.tools = params.tools;
-    return {
-      content: this.content,
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
-    };
-  }
-}
-
-class ToolCallingLLM implements LLMAdapter {
-  responseFormat: unknown;
-  calls = 0;
-
-  async generate(
-    params: Parameters<LLMAdapter["generate"]>[0],
-  ): Promise<LLMResponse> {
-    this.calls++;
-    this.responseFormat = params.responseFormat;
-    return {
-      content: "incidental prose must not replace the tool result",
-      toolCalls: [
-        {
-          id: "call-submit-output",
-          name: "submit-output",
-          arguments: '{"prompt":"a portrait"}',
-        },
-      ],
-      finishReason: "tool_calls",
-      usage: { inputTokens: 1, outputTokens: 1 },
-    };
-  }
-}
-
-function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
-  return {
-    name: "test-plugin/prompt-generator",
-    pluginId: "test-plugin",
-    description: "prompt generator",
+  properties: { prompt: { type: "string", minLength: 1 } },
+};
+async function run(
+  script: readonly LLMResponse[],
+  options: { business?: boolean; rewrite?: boolean } = {},
+) {
+  const manifest: RuntimeManifest = {
+    name: "author/prompt",
+    pluginId: "author",
+    description: "Produce an illustration prompt",
     stage: "setup",
-    runtimeType: "agent",
-    trigger: { type: "auto" },
     outputKind: "system",
-    ...overrides,
-  } as RuntimeManifest;
+    runtimeType: "agent",
+    output: { schema: "output.schema.json" },
+    ...(options.business
+      ? {
+          tools: { plugin: ["prepare"] },
+          requireToolUse: true,
+          completeAfterTools: ["prepare"],
+        }
+      : {}),
+    maxRetries: 0,
+  };
+  const llm = queuedLLM(script);
+  const execute = vi.fn<ToolExecutor["execute"]>(async (call) => ({
+    toolCallId: call.toolCallId,
+    name: call.name,
+    result: '{"data":{"canonical":"a portrait"}}',
+    parsedResult: { canonical: "a portrait" },
+    success: true,
+    approvalStatus: "auto-allowed",
+  }));
+  const pipeline = createHookPipeline();
+  if (options.rewrite)
+    pipeline.register({
+      id: "rewrite",
+      event: "PostRuntime",
+      handler: async (_ctx, payload) => ({
+        action: "continue",
+        replace: {
+          result: {
+            ...(payload as { result: RuntimeResult }).result,
+            output: { wrong: true },
+          },
+        },
+      }),
+    });
+  const turn = await runTurnPipeline(
+    { sessionId: "s", turnId: "t", origin: "player", playerMessage: "Start" },
+    [manifest],
+    {
+      store: createMemoryStore(),
+      llm,
+      hookPipeline: pipeline,
+      loadRuntime: async () => ({
+        manifest,
+        promptTemplate: "Read canonical work, then submit the final output.",
+        outputSchema: schema,
+      }),
+      ...(options.business
+        ? {
+            toolExecutor: {
+              execute,
+              getToolInfo: (name) => ({
+                name,
+                description: "Prepare context",
+                annotations: {
+                  readOnly: true,
+                  stagesWrites: false,
+                  idempotent: true,
+                  concurrencySafe: true,
+                },
+                jsonSchema: { type: "object" },
+              }),
+            },
+          }
+        : {}),
+    },
+    { maxSteps: 5 },
+  );
+  return { result: turn.runtimeResults[0]!, llm, execute };
 }
 
-describe("runTurnPipeline: output.schema.json", () => {
-  it("passes loaded outputSchema as json_schema responseFormat", async () => {
-    const schema = {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        ok: { type: "boolean" },
-      },
-      required: ["ok"],
-    };
-    const llm = new CapturingLLM();
-    const input: TurnInput = {
-      origin: "player",
-      sessionId: "sess-schema",
-      turnId: "turn-schema",
-      playerMessage: "start",
-    };
-    const runtime = manifest();
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({
-        manifest: m,
-        promptTemplate: "Return JSON.",
-        outputSchema: schema,
-      }),
-      llm,
-      store: createMemoryStore(),
-    };
-
-    await runTurnPipeline(input, [runtime], deps);
-
-    expect(llm.responseFormat).toEqual({
-      type: "json_schema",
-      schema,
-    });
-  });
-
-  it("does not auto-inject runtime-done for schema-declared agent runtimes", async () => {
-    const schema = {
-      type: "object",
-      properties: {
-        prompt: { type: "string" },
-      },
-      required: ["prompt"],
-    };
-    const llm = new CapturingLLM();
-    // Valid output, so the captured request is the first one (with tools),
-    // not an output repair request.
-    llm.content = JSON.stringify({ prompt: "a portrait" });
-    const input: TurnInput = {
-      origin: "player",
-      sessionId: "sess-schema-tools",
-      turnId: "turn-schema-tools",
-      playerMessage: "start",
-    };
-    const runtime = manifest({
-      output: { schema: "./output.schema.json" },
-      tools: { builtin: ["sync-characters"] },
-    });
-    const toolExecutor: ToolExecutor = {
-      async execute() {
-        throw new Error("not used");
-      },
-      getToolInfo: (name) => ({
-        name,
-        description: `Tool ${name}`,
-        annotations: {
-          readOnly: false,
-          stagesWrites: true,
-          idempotent: false,
-          concurrencySafe: false,
-        },
-        jsonSchema: { type: "object", additionalProperties: true },
-      }),
-    };
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({
-        manifest: m,
-        promptTemplate: "Return JSON.",
-        outputSchema: schema,
-      }),
-      llm,
-      store: createMemoryStore(),
-      toolExecutor,
-    };
-
-    await runTurnPipeline(input, [runtime], deps);
-
-    expect(
-      (llm.tools as Array<{ name: string }>).map((tool) => tool.name),
-    ).toEqual(["sync-characters"]);
-  });
-
-  it("uses a required completing tool as the sole structured output channel", async () => {
-    const llm = new ToolCallingLLM();
-    const output = { prompt: "a portrait" };
-    const toolExecutor: ToolExecutor = {
-      async execute(call) {
-        return {
-          toolCallId: call.toolCallId,
-          name: call.name,
-          result: JSON.stringify(output),
-          parsedResult: output,
-          success: true,
-          approvalStatus: "auto-allowed",
-        };
-      },
-      getToolInfo: (name) => ({
-        name,
-        description: "Submit the output",
-        annotations: {
-          readOnly: false,
-          stagesWrites: true,
-          idempotent: false,
-          concurrencySafe: false,
-        },
-        jsonSchema: { ...OBJECT_SCHEMA },
-      }),
-    };
-    const runtime = manifest({
-      output: { schema: "./output.schema.json" },
-      tools: { plugin: ["submit-output"] },
-      requireToolUse: true,
-      completeAfterTools: ["submit-output"],
-    });
-
-    const result = await runTurnPipeline(
-      {
-        origin: "player",
-        sessionId: "sess-schema-tool",
-        turnId: "turn-schema-tool",
-        playerMessage: "start",
-      },
-      [runtime],
-      {
-        loadRuntime: async (loadedManifest) => ({
-          manifest: loadedManifest,
-          promptTemplate: "Call submit-output.",
-          outputSchema: { ...OBJECT_SCHEMA },
-        }),
-        llm,
-        store: createMemoryStore(),
-        toolExecutor,
-      },
-    );
-
-    expect(llm.calls).toBe(1);
-    expect(llm.responseFormat).toBeUndefined();
-    expect(result.runtimeResults[0]?.status).toBe("success");
-    expect(result.runtimeResults[0]?.output).toEqual(output);
-  });
-
-  it("schema-validates the object returned by a completing tool", async () => {
-    const llm = new ToolCallingLLM();
-    const invalidOutput = { wrong: "shape" };
-    const toolExecutor: ToolExecutor = {
-      async execute(call) {
-        return {
-          toolCallId: call.toolCallId,
-          name: call.name,
-          result: JSON.stringify(invalidOutput),
-          parsedResult: invalidOutput,
-          success: true,
-          approvalStatus: "auto-allowed",
-        };
-      },
-      getToolInfo: (name) => ({
-        name,
-        description: "Submit the output",
-        annotations: {
-          readOnly: false,
-          stagesWrites: true,
-          idempotent: false,
-          concurrencySafe: false,
-        },
-        jsonSchema: { ...OBJECT_SCHEMA },
-      }),
-    };
-    const runtime = manifest({
-      output: { schema: "./output.schema.json" },
-      tools: { plugin: ["submit-output"] },
-      requireToolUse: true,
-      completeAfterTools: ["submit-output"],
-    });
-
-    const result = await runTurnPipeline(
-      {
-        origin: "player",
-        sessionId: "sess-schema-tool-invalid",
-        turnId: "turn-schema-tool-invalid",
-        playerMessage: "start",
-      },
-      [runtime],
-      {
-        loadRuntime: async (loadedManifest) => ({
-          manifest: loadedManifest,
-          promptTemplate: "Call submit-output.",
-          outputSchema: { ...OBJECT_SCHEMA },
-        }),
-        llm,
-        store: createMemoryStore(),
-        toolExecutor,
-      },
-    );
-
-    expect(result.runtimeResults[0]?.status).toBe("failed");
-    expect(result.runtimeResults[0]?.output).toEqual(invalidOutput);
-    expect(result.runtimeResults[0]?.error).toContain(
-      "output did not match output.schema",
-    );
-  });
-
-  it("fails schema-declared plugin runtimes when parsed JSON has the wrong shape", async () => {
-    const schema = {
-      type: "object",
-      required: ["prompt", "promptMode", "events"],
-      properties: {
-        prompt: { type: "string" },
-        promptMode: { type: "string" },
-        events: { type: "array", minItems: 1 },
-      },
-    };
-    const llm = new CapturingLLM();
-    llm.content =
-      '{"scene":{"location":"mistport"},"recent_events":["wrong envelope"]}';
-    const input: TurnInput = {
-      origin: "player",
-      sessionId: "sess-schema-invalid",
-      turnId: "turn-schema-invalid",
-      playerMessage: "start",
-    };
-    const runtime = manifest({
-      output: { schema: "./output.schema.json" },
-    });
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({
-        manifest: m,
-        promptTemplate: "Return JSON.",
-        outputSchema: schema,
-      }),
-      llm,
-      store: createMemoryStore(),
-    };
-
-    const result = await runTurnPipeline(input, [runtime], deps);
-
-    expect(result.runtimeResults[0]?.status).toBe("failed");
-    expect(result.runtimeResults[0]?.error).toContain(
-      "output did not match output.schema",
-    );
-    expect(result.runtimeResults[0]?.error).toContain(
-      "must have required property 'prompt'",
-    );
-  });
-
-  // Regression: when an LLM returns plain prose for a schema-declared runtime,
-  // the failure must surface (a) the required-field hint so the user knows what
-  // the model should have emitted, (b) the full LLM output preserved in
-  // `output.narrativeOutput`, and (c) a structured `output.diagnostic` block so
-  // the plugin's task UI can render schema vs raw output side-by-side. Before
-  // this contract, the user only saw a 220-char preview and a vague "model
-  // emitted unparseable prose" message — the openai-image-gen prompt-generator
-  // failure in cloudmere-682fb5bf was the trigger for this work.
-  it("enriches schema-prose failure with required fields, full LLM output, and diagnostic", async () => {
-    const schema = {
-      title: "openai-image-gen/prompt-generator output",
-      type: "object",
-      required: ["prompt", "promptMode", "events"],
-      properties: {
-        prompt: { type: "string" },
-        promptMode: { type: "string" },
-        events: { type: "array" },
-      },
-    };
-    const llm = new CapturingLLM();
-    const fullProse =
-      "日落渡口。一身旧道袍的少年弟子盘膝坐于石砌渡口的末级台阶上".repeat(20);
-    llm.content = fullProse;
-    const input: TurnInput = {
-      origin: "player",
-      sessionId: "sess-prose",
-      turnId: "turn-prose",
-      playerMessage: "start",
-    };
-    const runtime = manifest({
-      output: { schema: "./output.schema.json" },
-    });
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({
-        manifest: m,
-        promptTemplate: "Return JSON.",
-        outputSchema: schema,
-      }),
-      llm,
-      store: createMemoryStore(),
-    };
-
-    const result = await runTurnPipeline(input, [runtime], deps);
-    const failure = result.runtimeResults[0];
-
-    expect(failure?.status).toBe("failed");
-    expect(failure?.error).toContain(
-      "expected a JSON envelope per output.schema",
-    );
-    // Required fields hint surfaces in the error string.
-    expect(failure?.error).toContain("{prompt, promptMode, events}");
-    // Pointer to where the full LLM output lives.
-    expect(failure?.error).toContain("runtimeResults[].output.narrativeOutput");
-    // Full LLM output preserved verbatim (no truncation in narrativeOutput).
-    const output = failure?.output as Record<string, unknown> | null;
-    expect(output?.narrativeOutput).toBe(fullProse);
-    // Structured diagnostic for the task UI to render.
-    const diagnostic = output?.diagnostic as
-      Record<string, unknown> | undefined;
-    expect(diagnostic?.kind).toBe("schema-validation-prose");
-    expect(diagnostic?.requiredFields).toEqual([
-      "prompt",
-      "promptMode",
-      "events",
+describe("agent output schema", () => {
+  it("advertises the unchanged schema through submit-output without responseFormat", async () => {
+    const { result, llm, execute } = await run([
+      toolCall("submit-output", { prompt: "a portrait" }),
     ]);
-    expect(diagnostic?.schemaTitle).toBe(
-      "openai-image-gen/prompt-generator output",
-    );
-    expect(diagnostic?.llmOutput).toBe(fullProse);
-    expect(typeof diagnostic?.hint).toBe("string");
+    expect(result.status, result.error).toBe("success");
+    expect(result.output).toEqual({ prompt: "a portrait" });
+    expect(llm.requests[0]?.responseFormat).toBeUndefined();
+    expect(llm.requests[0]?.tools).toEqual([
+      expect.objectContaining({ name: "submit-output", parameters: schema }),
+    ]);
+    expect(execute).not.toHaveBeenCalled();
   });
-
-  // Defence in depth: a malformed schema (missing or wrong-typed `required`)
-  // must not crash the failure path. The error string still surfaces, just
-  // without the field hint. This protects schema-validation diagnostics for
-  // third-party plugins whose schemas may not follow JSON-Schema conventions.
-  it("handles malformed schemas (no required[]) gracefully on prose failure", async () => {
-    const schema = {
-      type: "object",
-      // No `required` array at all.
-      properties: { ok: { type: "boolean" } },
-    };
-    const llm = new CapturingLLM();
-    llm.content = "plain prose, not JSON";
-    const input: TurnInput = {
-      origin: "player",
-      sessionId: "sess-malformed-schema",
-      turnId: "turn-malformed-schema",
-      playerMessage: "start",
-    };
-    const runtime = manifest({
-      output: { schema: "./output.schema.json" },
-    });
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({
-        manifest: m,
-        promptTemplate: "Return JSON.",
-        outputSchema: schema,
-      }),
-      llm,
-      store: createMemoryStore(),
-    };
-
-    const result = await runTurnPipeline(input, [runtime], deps);
-    const failure = result.runtimeResults[0];
-
-    expect(failure?.status).toBe("failed");
-    expect(failure?.error).toContain(
-      "expected a JSON envelope per output.schema",
+  it("offers the generated tool alongside declared business tools", async () => {
+    const { result, llm } = await run(
+      [
+        toolCall("prepare", {}),
+        toolCall("submit-output", { prompt: "a portrait" }),
+      ],
+      { business: true },
     );
-    // No required-field hint when schema lacks `required[]`.
-    expect(failure?.error).not.toContain("Required fields:");
-    const diagnostic = (failure?.output as Record<string, unknown>)
-      ?.diagnostic as Record<string, unknown>;
-    expect(diagnostic?.requiredFields).toEqual([]);
+    expect(result.status, result.error).toBe("success");
+    expect(llm.requests[0]?.tools?.map((t) => t.name)).toEqual([
+      "prepare",
+      "submit-output",
+    ]);
+  });
+  it("uses submitted output after business work rather than promoting a tool result", async () => {
+    const { result, execute } = await run(
+      [
+        toolCall("prepare", {}),
+        toolCall("submit-output", { prompt: "a portrait" }),
+      ],
+      { business: true },
+    );
+    expect(result.output).toEqual({ prompt: "a portrait" });
+    expect(execute).toHaveBeenCalledOnce();
+  });
+  it("rejects wrong shapes without exposing a failed candidate as output", async () => {
+    const { result, llm } = await run([
+      toolCall("submit-output", { wrong: true }),
+    ]);
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("invalid-output");
+    expect(result.output).toBeNull();
+    expect(llm.requests).toHaveLength(2);
+    expect(JSON.stringify(llm.requests[1]?.messages)).toContain("prompt");
+  });
+  it("corrects an invalid final submission without repeating work", async () => {
+    const { result, llm, execute } = await run(
+      [
+        toolCall("prepare", {}),
+        toolCall("submit-output", { wrong: true }),
+        toolCall("submit-output", { prompt: "a portrait" }),
+      ],
+      { business: true },
+    );
+    expect(result.status, result.error).toBe("success");
+    expect(llm.requests).toHaveLength(3);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+  it("rejects malformed complete arguments with correlated tool errors", async () => {
+    const invalid = toolCall("submit-output", {});
+    const { result, llm } = await run([
+      {
+        ...invalid,
+        toolCalls: [
+          { id: "bad-json", name: "submit-output", arguments: '{"prompt":' },
+        ],
+      },
+    ]);
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("invalid-json");
+    expect(result.output).toBeNull();
+    expect(llm.requests[1]?.messages).toContainEqual(
+      expect.objectContaining({ role: "tool", toolCallId: "bad-json" }),
+    );
+  });
+  it("defensively rejects a post-runtime rewrite outside the admitted schema", async () => {
+    const { result } = await run(
+      [toolCall("submit-output", { prompt: "a portrait" })],
+      { rewrite: true },
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("output-schema-invalid");
+    expect(result.output).toBeNull();
   });
 });

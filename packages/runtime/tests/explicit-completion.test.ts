@@ -1,3 +1,4 @@
+import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { runtimeDoneTool, suspendTool, tool } from "@covel/tools";
@@ -26,7 +27,7 @@ function response(
 
 async function run(
   script: LLMResponse[],
-  strict = true,
+  strict = false,
   resume?: "explicit" | "tool-use",
 ) {
   const store = createMemoryStore();
@@ -73,9 +74,8 @@ async function run(
     outputKind: "system",
     trigger: { type: "auto" },
     tools: { plugin: tools.slice(1).map((entry) => entry.name) },
-    completeAfterTools: ["save-facts"],
-    requireExplicitCompletion: strict,
-    requireToolUse: resume === "tool-use",
+    ...(resume === "tool-use" ? { completeAfterTools: ["save-facts"] } : {}),
+    requireToolUse: strict || resume === "tool-use",
     maxSteps: 4,
     maxRetries: 0,
   } as RuntimeManifest;
@@ -113,12 +113,13 @@ async function run(
           resumeSchema: {},
           createdAt: "2026-01-01T00:00:00Z",
           pendingContinuation: {
+            loop: suspendedLoopState(manifest),
             lifecycle: {
               runId: "suspended-run",
               progressRunId: "suspended-run",
             },
             readScopes: [],
-            takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+            takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
             messages: [
               { role: "system", content: "Extract facts conservatively." },
             ],
@@ -153,7 +154,7 @@ async function run(
     generate,
     write,
     resumeCaptured: async () => {
-      expect(result?.status).toBe("suspended");
+      expect(result?.status, result?.error).toBe("suspended");
       const [suspension] = collectExecutionSuspensions({
         runtimeResults: [result!],
       });
@@ -177,10 +178,8 @@ describe("explicit completion for third-party extractors", () => {
         resume === "explicit",
         resume,
       );
-      expect(result?.status).toBe("failed");
-      expect(result?.error).toContain(
-        resume === "explicit" ? "requireExplicitCompletion" : "requireToolUse",
-      );
+      expect(result?.status, result?.error).toBe("failed");
+      expect(result?.error).toContain("missing-submission");
       expect(result?.error).toContain(
         "[provider: fallback, model: actual-model]",
       );
@@ -194,8 +193,8 @@ describe("explicit completion for third-party extractors", () => {
     '{"toolCalls":[{"name":"save-facts","output":{}}]}',
   ])("rejects an unexecuted claim after one correction: %s", async (text) => {
     const { result, generate, write } = await run([response(text)]);
-    expect(result?.status).toBe("failed");
-    expect(result?.error).toContain("requireExplicitCompletion");
+    expect(result?.status, result?.error).toBe("failed");
+    expect(result?.error).toContain("missing-submission");
     expect(result?.error).toContain(
       "[provider: fallback, model: actual-model]",
     );
@@ -205,19 +204,20 @@ describe("explicit completion for third-party extractors", () => {
   });
 
   it("accepts a real no-change completion without inventing a write", async () => {
-    const { result, write } = await run([response(null, "runtime-done")]);
-    expect(result?.status).toBe("success");
+    const { result, write } = await run([response(null, "submit-output")]);
+    expect(result?.status, result?.error).toBe("success");
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("corrects drift into a real write and completes immediately", async () => {
+  it("corrects drift with business work then a separate submission", async () => {
     const { result, generate, write } = await run([
       response('{"updated":true}'),
       response(null, "save-facts"),
+      response(null, "submit-output"),
     ]);
-    expect(result?.status).toBe("success");
+    expect(result?.status, result?.error).toBe("success");
     expect(write).toHaveBeenCalledTimes(1);
-    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate).toHaveBeenCalledTimes(3);
   });
 
   it("does not mistake a successful read for completed extraction", async () => {
@@ -225,16 +225,16 @@ describe("explicit completion for third-party extractors", () => {
       response(null, "read-facts"),
       response("Updated everything."),
     ]);
-    expect(result?.status).toBe("failed");
+    expect(result?.status, result?.error).toBe("failed");
     expect(write).not.toHaveBeenCalled();
   });
 
   it("does not hide an unresolved tool failure behind no-change", async () => {
-    const { result } = await run([
-      response(null, "broken-read"),
-      response(null, "runtime-done"),
-    ]);
-    expect(result?.status).toBe("failed");
+    const { result } = await run(
+      [response(null, "broken-read"), response(null, "submit-output")],
+      true,
+    );
+    expect(result?.status, result?.error).toBe("failed");
   });
 
   it("attributes exhausted invalid tool arguments to the actual response model", async () => {
@@ -243,7 +243,7 @@ describe("explicit completion for third-party extractors", () => {
         response(null, "save-facts", { text: index }),
       ),
     );
-    expect(result?.status).toBe("failed");
+    expect(result?.status, result?.error).toBe("failed");
     expect(result?.error).toContain("exhausted the tool loop");
     expect(result?.error).toContain(
       "[provider: fallback, model: actual-model]",
@@ -252,13 +252,14 @@ describe("explicit completion for third-party extractors", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("accepts a completing tool after correcting invalid arguments", async () => {
+  it("submits after correcting invalid business arguments", async () => {
     const { result, generate, write } = await run([
       response(null, "save-facts", { text: 42 }),
       response(null, "save-facts", { text: "A confirmed fact" }),
+      response(null, "submit-output"),
     ]);
-    expect(result?.status).toBe("success");
-    expect(generate).toHaveBeenCalledTimes(2);
+    expect(result?.status, result?.error).toBe("success");
+    expect(generate).toHaveBeenCalledTimes(3);
     expect(write).toHaveBeenCalledTimes(1);
   });
 
@@ -266,49 +267,60 @@ describe("explicit completion for third-party extractors", () => {
     const { result, write } = await run([
       response(null, "read-facts", { scope: 42 }),
       response(null, "read-facts", { scope: "current" }),
-      response(null, "runtime-done"),
+      response(null, "submit-output"),
     ]);
-    expect(result?.status).toBe("success");
+    expect(result?.status, result?.error).toBe("success");
     expect(write).not.toHaveBeenCalled();
   });
 
   it("does not let a write conceal a different failed query", async () => {
-    const { result, write } = await run([
-      response(null, "broken-read"),
-      response(null, "save-facts"),
-    ]);
-    expect(result?.status).toBe("failed");
+    const { result, write } = await run(
+      [
+        response(null, "broken-read"),
+        response(null, "save-facts"),
+        response(null, "submit-output"),
+      ],
+      true,
+    );
+    expect(result?.status, result?.error).toBe("failed");
     expect(write).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves text completion for runtimes that do not opt in", async () => {
+  it("requires submission from every agent", async () => {
     const { result, generate } = await run(
       [response("An intentional textual result.")],
       false,
     );
-    expect(result?.status).toBe("success");
-    expect(generate).toHaveBeenCalledTimes(1);
+    expect(result?.status, result?.error).toBe("failed");
+    expect(generate).toHaveBeenCalledTimes(2);
   });
 
   it.each([false, true])(
     "retains a failed query across suspension, repaired: %s",
     async (repair) => {
-      const { resumeCaptured, write } = await run([
-        response(null, "read-facts", { scope: 42 }),
-        response(null, "suspend", {
-          reason: "Choose a scope",
-          fields: [{ type: "text", name: "answer", label: "Answer" }],
-        }),
-        ...(repair ? [response(null, "read-facts", { scope: "current" })] : []),
-        response(null, "runtime-done"),
-      ]);
+      const { resumeCaptured, write } = await run(
+        [
+          response(null, "read-facts", { scope: 42 }),
+          response(null, "suspend", {
+            reason: "Choose a scope",
+            fields: [{ type: "text", name: "answer", label: "Answer" }],
+          }),
+          ...(repair
+            ? [response(null, "read-facts", { scope: "current" })]
+            : []),
+          response(null, "submit-output"),
+        ],
+        true,
+      );
       const resumed = await resumeCaptured();
-      expect(resumed.status).toBe(repair ? "success" : "failed");
+      expect(resumed.status, resumed?.error).toBe(
+        repair ? "success" : "failed",
+      );
       expect(write).not.toHaveBeenCalled();
     },
   );
 
-  it("retains a successful finishing tool from a batch suspended afterwards", async () => {
+  it("retains successful business work from a batch suspended afterwards", async () => {
     const batch = response(null, "save-facts");
     const suspended = response(null, "suspend", {
       reason: "Confirm",
@@ -316,7 +328,7 @@ describe("explicit completion for third-party extractors", () => {
     });
     const { resumeCaptured, write } = await run([
       { ...batch, toolCalls: [...batch.toolCalls!, ...suspended.toolCalls!] },
-      response("Confirmed."),
+      response(null, "submit-output"),
     ]);
     expect((await resumeCaptured()).status).toBe("success");
     expect(write).toHaveBeenCalledTimes(1);

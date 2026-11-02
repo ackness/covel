@@ -299,7 +299,9 @@ export function ExecutionTimeline({
                   ) : (
                     <>
                       <span className={summaryTone}>
-                        {t(`session.executionState.${presentation}`)}
+                        {active?.revising
+                          ? t("session.revisingResponse")
+                          : t(`session.executionState.${presentation}`)}
                       </span>
                       {" · "}
                       {t("session.executionSummary", {
@@ -392,7 +394,7 @@ export function ExecutionTimeline({
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {statuses.map((rt) => (
                     <RuntimeChip
-                      key={rt.runtimeId}
+                      key={`${rt.turnId}:${rt.pluginId}:${rt.runtimeId}:${rt.runId ?? ""}`}
                       rt={rt}
                       canRetry={canRetry && retryableFailures.includes(rt)}
                       // Carry the chip's turn id so the retry replays THIS
@@ -415,7 +417,7 @@ export function ExecutionTimeline({
               <div className="mt-1.5 flex min-w-0 flex-col gap-1.5">
                 {failures.map((rt) => (
                   <RuntimeFailureNotice
-                    key={rt.runtimeId}
+                    key={`${rt.turnId}:${rt.pluginId}:${rt.runtimeId}:${rt.runId ?? ""}`}
                     rt={rt}
                     canRetry={canRetry && retryableFailures.includes(rt)}
                     onConfigureModel={() => {

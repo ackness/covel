@@ -151,7 +151,9 @@ Rules:
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
 
-An agent that finishes by calling one tool writes `agent.finishWith: <tool>`. For the full completion rules, see the [plugin reference](../reference/plugins.md#completion-conditions-agentfinishwith-agentcompletion). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
+Every agent finishes with the host-generated `submit-output` tool. Use `completion.afterTools` for required business work before submission; see the [plugin reference](../reference/plugins.md#agent-output-submission).
+
+When final output comes directly from a business tool, declare [`io.output.from`](../reference/plugins.md#agent-output-submission). After tool success, call `submit-output` alone with `{}`. Scripted models also submit `{}` without copying tool content or model-view wrappers.
 
 ## How to use another plugin's results
 
@@ -378,3 +380,5 @@ Use the current declared input and data shapes. A projected narrative input is a
 ### Letting the story continue
 
 A top-level story implementing `narrative-engine@2` can return `yield: continue`. The host decides whether to run another round after committing the story; ordinary post-turn work runs each round too. Functions use `ctx.playerActions` and the input digest to distinguish system advancement from player input, with the logical turn unchanged. A sub-agent's yield does not control the host. See [stories requesting advancement](../reference/plugins.md#stories-requesting-advancement) for the full rules and optional imports.
+
+Scripted agent success responses call `submit-output` alone. Keep business calls in earlier responses; a final submission correction must not repeat a successful write. CLI `llmObject` constructs a submission, while `llmContent` deliberately returns reply content for rejection tests. See the [completion contract](../reference/plugins.md#agent-output-submission).

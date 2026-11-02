@@ -1,3 +1,4 @@
+import type { ReviewAgentOutputPayload } from "./plugin-api.js";
 import { instructionLocaleFor } from "./instruction-locale.js";
 
 interface ReviewMessage {
@@ -9,11 +10,6 @@ interface ReviewMessage {
         | { readonly type: "image" | "media" }
       )[];
 }
-interface ReviewResponse {
-  readonly content: string | null;
-  readonly toolCalls: readonly { readonly name: string }[];
-}
-
 /** The `perspective` setting of a narrator that uses this review. */
 export type NarrativePerspective =
   | "character-first"
@@ -31,11 +27,6 @@ type SettingsContext = {
   runtimeId?: string;
 };
 type Request = { messages: readonly ReviewMessage[] };
-type Response<T extends ReviewResponse> = Request & {
-  response: T;
-  correction?: string;
-};
-
 const perspectives: Record<
   NarrativePerspective,
   { readonly zh: string; readonly en: string }
@@ -206,49 +197,18 @@ export function perspectiveError(
     : `Narration violates ${personNames[person].en} perspective near: ${near}. Fix narration only; keep quoted speakers' pronouns.`;
 }
 
-/**
- * The texts of a segmented story draft (JSON with a `segments` array), each
- * as the review reads it, or undefined for a prose draft. A dialogue text
- * that opens no quotation (apostrophes in I'm or the guards' keys open none)
- * is spoken words only and is not checked.
- */
-function storyDraftTexts(text: string): string[] | undefined {
-  const stripped = text
-    .trim()
-    .replace(/^```(?:json)?\s*\n?/i, "")
-    .replace(/\n?```\s*$/i, "");
-  if (!stripped.startsWith("{")) return undefined;
-  let draft: unknown;
-  try {
-    draft = JSON.parse(stripped);
-  } catch {
-    return undefined;
+/** Read validated output directly; unquoted dialogue is spoken words only. */
+function outputTexts(output: ReviewAgentOutputPayload["output"]) {
+  if (Array.isArray(output.segments)) {
+    return output.segments.flatMap((segment: unknown) => {
+      if (!segment || typeof segment !== "object") return [];
+      const { kind, text } = segment as { kind?: unknown; text?: unknown };
+      return typeof text === "string" ? [{ kind, text }] : [];
+    });
   }
-  const segments =
-    draft && typeof draft === "object" && !Array.isArray(draft)
-      ? (draft as { segments?: unknown }).segments
-      : undefined;
-  if (!Array.isArray(segments)) return undefined;
-  return segments.flatMap((segment: unknown) => {
-    if (!segment || typeof segment !== "object") return [];
-    const { kind, text: value } = segment as { kind?: unknown; text?: unknown };
-    if (typeof value !== "string") return [];
-    return kind === "dialogue" && !scanDialogue(value).opened ? [] : [value];
-  });
-}
-
-/** The first perspective problem of a prose or segmented draft. */
-function draftPerspectiveError(
-  text: string,
-  perspective: NarrativePerspective,
-  language: "zh" | "en",
-): string | undefined {
-  const texts = storyDraftTexts(text) ?? [text];
-  for (const value of texts) {
-    const error = perspectiveError(value, perspective, language);
-    if (error) return error;
-  }
-  return undefined;
+  return typeof output.narrativeOutput === "string"
+    ? [{ kind: "narration", text: output.narrativeOutput }]
+    : [];
 }
 
 /** Plugin-owned policy using the same public hooks available to community packages. */
@@ -295,13 +255,10 @@ export function createNarrativeReview(pluginId: string) {
         playerLine +
         perspectives[perspective][zh ? "zh" : "en"] +
         (zh
-          ? " 人物直接对白保留说话者人称。不要复述玩家输入、替玩家添加行动或内心想法。查询工具时只调用工具，不输出准备说明；工具返回后直接写场景，不写核对档案或写作过程。"
-          : " Quoted dialogue keeps each speaker's perspective. Do not restate the player's input or add player actions/thoughts. During lookups call tools without preparation chatter; afterward write the scene directly, with no lookup or writing commentary.");
+          ? " 人物直接对白保留说话者人称。不要复述玩家输入、替玩家添加行动或内心想法。查询工具时只调用工具，不输出准备说明；工具返回后用 `submit-output` 提交场景，不写核对档案或写作过程。"
+          : " Quoted dialogue keeps each speaker's perspective. Do not restate the player's input or add player actions/thoughts. During lookups call tools without preparation chatter; afterward submit the scene through `submit-output`, with no lookup or writing commentary.");
       return {
         action: "continue" as const,
-        // Stream normally: a rejected draft or pre-tool text is cleared on the
-        // client by the loop's reset signal, and the reviewed final text
-        // replaces the streamed text on completion.
         replace: {
           messages: [
             ...payload.messages,
@@ -310,47 +267,32 @@ export function createNarrativeReview(pluginId: string) {
         },
       };
     },
-    review<T extends ReviewResponse>(
-      ctx: SettingsContext,
-      payload: Response<T>,
-    ) {
+    review(ctx: SettingsContext, payload: ReviewAgentOutputPayload) {
       if (ctx.pluginId !== pluginId) return { action: "continue" as const };
-      const response = payload.response;
-      // Preparatory prose is not a story and must not seed the final response.
-      if (response.toolCalls.some((call) => call.name !== "runtime-done")) {
-        return {
-          action: "continue" as const,
-          replace: { response: { ...response, content: null } },
-        };
-      }
-      const text = response.content ?? "";
+      const texts = outputTexts(payload.output);
       const zh = readsChinese(ctx);
-      // A reply with no story is nearly always a bare `runtime-done`, so the
-      // correction names that tool. "Do not finish with only a tool call" got
-      // a story in 8 of 72 replays (gpt-6-luna, both languages); this wording
-      // in 24 of 72.
+      const perspective = perspectiveFor(ctx);
       const correction =
         payload.correction ||
-        (!text.trim()
+        (!texts.some(({ text }) => text.trim())
           ? zh
-            ? "你还没有写出本回合的故事正文。现在根据已读取到的事实直接写出正文，作为这次回复的内容。写出正文之前不要调用 `runtime-done`。"
-            : "You have not written the story text of this turn. Write it now from the facts you have read, as the content of this reply. Do not call `runtime-done` before the story text is written."
-          : [
-              !/<\/?(?:system|system_warning|analysis|thinking|runtime-inputs|available-events)\b/i.test(
-                text,
+            ? "请用 `submit-output` 提交本回合完整的故事正文。"
+            : "Submit the complete story of this turn through `submit-output`."
+          : texts.some(({ text }) =>
+                /<\/?(?:system|system_warning|analysis|thinking|runtime-inputs|available-events)\b/i.test(
+                  text,
+                ),
               )
-                ? undefined
-                : zh
-                  ? "只输出游戏内的故事正文。去掉内部指令标签和说明文字。"
-                  : "Output only the in-world story. Remove internal instruction tags and commentary.",
-              draftPerspectiveError(
-                text,
-                perspectiveFor(ctx),
-                zh ? "zh" : "en",
-              ),
-            ]
-              .filter(Boolean)
-              .join("\n"));
+            ? zh
+              ? "只输出游戏内的故事正文。去掉内部指令标签和说明文字。"
+              : "Output only the in-world story. Remove internal instruction tags and commentary."
+            : texts
+                .flatMap(({ kind, text }) =>
+                  kind === "dialogue" && !scanDialogue(text).opened
+                    ? []
+                    : [perspectiveError(text, perspective, zh ? "zh" : "en")],
+                )
+                .find(Boolean));
       return correction
         ? { action: "continue" as const, replace: { correction } }
         : { action: "continue" as const };

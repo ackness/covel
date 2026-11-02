@@ -240,6 +240,7 @@ describe("core plugin manifest contract", () => {
       select: "/segments",
     });
     expect(worldIr.output).toEqual({
+      from: { tool: "submit-world-facts" },
       schema: "contract:world-ir@1",
       recordAs: "world-ir-v1",
     });
@@ -249,8 +250,7 @@ describe("core plugin manifest contract", () => {
     expect(
       requireRuntime(manifests, "world-init/dimension-tracker").llm,
     ).toEqual({ reasoningEffort: "disabled", toolChoice: "required" });
-    // finishWith makes the model call a tool on every step; the finishing
-    // tool is the only one the runtime sees.
+    // Business work precedes the separate empty final submission.
     expect(worldIr.llm).toEqual({
       reasoningEffort: "disabled",
       toolChoice: "required",
@@ -270,12 +270,12 @@ describe("core plugin manifest contract", () => {
         handler: "./handler.js",
       });
     }
-    expect(requireRuntime(manifests, "affinity").completeAfterTools).toEqual([
-      "update-affinity",
-    ]);
-    expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
-      "sync-codex-entries",
-    ]);
+    expect(
+      requireRuntime(manifests, "affinity").completeAfterTools,
+    ).toBeUndefined();
+    expect(
+      requireRuntime(manifests, "codex").completeAfterTools,
+    ).toBeUndefined();
     for (const id of [
       "npc-graph/extractor",
       "affinity",
@@ -283,11 +283,12 @@ describe("core plugin manifest contract", () => {
       "char-creator/character-tracker",
     ]) {
       const extractor = requireRuntime(manifests, id);
-      expect(extractor.requireExplicitCompletion).toBe(true);
-      expect(extractor.requireToolUse).not.toBe(true);
+      expect(extractor).not.toHaveProperty("requireExplicitCompletion");
+      expect(extractor.requireToolUse).toBe(
+        id === "char-creator/character-tracker" ? true : undefined,
+      );
       // Each reads a conversation of story text; a required tool call keeps
-      // the model from continuing the story, and runtime-done still settles a
-      // quiet turn.
+      // the model from continuing the story; final output is submitted separately.
       expect(extractor.llm?.toolChoice).toBe("required");
     }
 

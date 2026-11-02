@@ -1,6 +1,6 @@
 # 世界事实提取 (World IR)
 
-`world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约选择当前故事的 `/segments`，保留逐段的 `kind`、`speaker` 和 `text`，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，成功的工具结果会直接成为严格校验的 `contract:world-ir@1` 输出。
+`world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约选择当前故事的 `/segments`，保留逐段的 `kind`、`speaker` 和 `text`，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，模型随后用 `{}` 调用 `submit-output`，宿主直接采用工具的规范事实，通过接受门控后成为 `contract:world-ir@1` 输出。
 
 同轮下游 runtime 应声明：
 
@@ -24,9 +24,9 @@ runtime:
 
 插件的 `PostContextAssembly` hook 只保留本地化任务、权威 `inputs.narrative` 段落数组、角色单词短名/姓名名册，以及可选的 `vocabulary`（见下文）与本轮工具操作。原玩家输入不单独提供；单项重试仍只读取恢复的源故事段落，不拼接新执行的输入或当前受控角色。未进入这些段落的玩家话语或承诺无法由此恢复。叙事中的请求、尝试和假设不是成功结果；NPC 的台词或承诺不代表玩家接受。完整输出仍由公共 `narrative-engine@2` schema 在选择前校验，无需另复制一份段落 schema。用户消息里名册、词表、本轮工具操作依次排在正文前面：它们很少变，正文每回合都变，下一回合的请求因此与本回合从头相同到正文为止，服务商的前缀缓存可以覆盖这一段。完整历史、记忆块、旧世界状态不再重复发送；这样既避免把旧变化当作本轮变化，也降低提取请求体积。输出 token 数直接决定这一步的耗时，所以提示要求每个事实只写一次（事件不再复述为关系或陈述）、只登记本轮新出现的实体、attributes 只放下游要用的状态字段，以约 600 tokens 为典型输出目标，保留所有明确的物品、任务与状态变化；World IR 的结构上限保持不变。
 
-`agent.reasoning: false` 默认关闭可选推理；`agent.finishWith: submit-world-facts` 要求模型每一步都调用工具，`submit-world-facts` 成功后结束。用户显式推理配置仍优先；对于 thinking 与强制工具不兼容的模型，adapter 保留用户配置并退回自动工具选择。叙事段落和身份数据分开保存在 user JSON，提示要求逐句核对施动者，无法解析的代词不猜姓名。结构校验能保证协议和引用完整，但无法保证所有模型生成事实的语义正确。
+`agent.reasoning: false` 默认关闭可选推理；`agent.toolChoice: required` 要求调用工具，`agent.completion.afterTools: [submit-world-facts]` 把抽取列为提交前提。成功后用 `{}` 调用 `submit-output`，宿主采用工具的规范结果。用户显式推理配置仍优先；对于 thinking 与强制工具不兼容的模型，adapter 保留用户配置并退回自动工具选择。叙事段落和身份数据分开保存在 user JSON，提示要求逐句核对施动者，无法解析的代词不猜姓名。结构校验能保证协议和引用完整，但无法保证所有模型生成事实的语义正确。
 
-代价仍是一条额外的串行模型调用；当两个以上结构化插件复用结果时，通常可用更短、更稳定的下游输入抵消。新增只有一个消费者、且确实需要完整原文的独立能力时，可以直接绑定 `narrative-engine@2`，无需为了形式统一强制经过 World IR；现有图鉴、任务、关系、物品和好感插件则统一选择共享契约，以保持组合行为和失败语义一致。
+抽取工具之后还需要一次最终提交的模型调用；当两个以上结构化插件复用结果时，通常可用更短、更稳定的下游输入抵消。新增只有一个消费者、且确实需要完整原文的独立能力时，可以直接绑定 `narrative-engine@2`，无需为了形式统一强制经过 World IR；现有图鉴、任务、关系、物品和好感插件则统一选择共享契约，以保持组合行为和失败语义一致。
 
 ## 固定字段事件与名称词表
 
@@ -37,3 +37,5 @@ runtime:
 ## 本轮工具操作
 
 `runtime.io.inputs.operations` 绑定内核输入 `operations@1`。非空时，hook 在 `vocabulary` 之后、`narrative` 之前加入 `operations: [{ contract, request, result }]`，不携带操作身份或提交信息；空列表不加入消息。操作是工具本轮已经作出的变化。正文呈现其中一项时，提取记录对应事件。物品名和数量沿用工具请求原文。正文没有呈现的操作不凭空生成事件。行囊可以据此避免重复记账，其他 WorldIR 消费者仍能读取同一事件，公开事实结构保持不变。
+
+`submit-world-facts` 成功后，模型用 `{}` 调用 `submit-output`。`io.output.from.tool: submit-world-facts` 直接采用规范事实，不复制模型视图的 `data.facts` 包装。`entityReferences` 让模型投影保留事实实体的业务 ID，不属于最终输出；修正提交不重新抽取。

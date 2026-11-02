@@ -16,6 +16,7 @@ import type {
 import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
 import type { ProviderRelay } from "./adapters/http/model-relay.js";
+import type { StrictToolCapability } from "./capability/strict-tools.js";
 
 // ── Provider Protocol ──────────────────────────────────────────────
 
@@ -89,6 +90,8 @@ export interface ModelCapability {
   output: OutputModality[];
   /** Feature flags beyond basic I/O */
   features?: ModelFeature[];
+  /** Explicit verified target/protocol/endpoint profile; absent means off. */
+  strictTools?: StrictToolCapability;
   /** Maximum input context window (tokens) */
   contextWindow?: number;
   /** Maximum output tokens the model can produce */
@@ -283,10 +286,14 @@ export interface PresetConfig {
 /** OpenAI API function tool definition. */
 export interface ToolDefinition {
   type: "function";
+  /** Gateway policy, consumed before serialization or programmatic dispatch. */
+  strict?: "auto";
   function: {
     name: string;
     description?: string;
     parameters?: Record<string, unknown>;
+    /** Selected for the actual target, never inferred from JSON output support. */
+    strict?: boolean;
   };
 }
 

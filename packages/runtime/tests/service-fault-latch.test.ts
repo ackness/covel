@@ -1,3 +1,4 @@
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ToolError, type RuntimeManifest } from "@covel/shared";
@@ -341,9 +342,9 @@ describe("service provider fault latch", () => {
                     ...answer(),
                     content: null,
                     toolCalls: [{ id: "call", name: "probe", arguments: "{}" }],
-                    finishReason: "tool_calls",
+                    finishReason: "tool_calls" as const,
                   }
-                : answer(JSON.stringify({ line: "Done." })),
+                : toolCall("submit-output", { line: "Done." }),
           },
           loadRuntime: async (manifest) =>
             manifest.name === helper.name
@@ -487,7 +488,7 @@ describe("service provider fault latch", () => {
                     ...answer(),
                     content: null,
                     toolCalls: [{ id: "call", name: "probe", arguments: "{}" }],
-                    finishReason: "tool_calls",
+                    finishReason: "tool_calls" as const,
                   }
                 : answer(),
           },

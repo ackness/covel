@@ -130,9 +130,17 @@ async function conversations(
           const name = /PROMPT:([\w-]+)/.exec(system)?.[1] ?? "";
           seen.set(name, request.messages.slice(1));
           return {
-            content: name === "narrator" ? narrative : "noted",
-            toolCalls: [],
-            finishReason: "stop",
+            content: null,
+            toolCalls: [
+              {
+                id: "final",
+                name: "submit-output",
+                arguments: JSON.stringify({
+                  narrativeOutput: name === "narrator" ? narrative : "noted",
+                }),
+              },
+            ],
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 1, outputTokens: 1 },
           };
         },

@@ -1,11 +1,17 @@
 <!--
 用于现有结构化输出纠正请求的模型指令片段。
 与 action-labels.md 相同，每行一个 key: value 条目。
-模板只插入规范化的解析错误原因和数字位置。
+模板提供提交指导以及规范化的解析错误原因。
 -->
 
+tool-description: 在完成必需的工具工作后，提交本 runtime 的最终结果。参数必须符合此 schema。若提交被拒绝，请修正报告的问题并再次调用此工具。提交成功会结束 runtime，但不代表更改已经保存。
+tool-source-description: 请在 {{ tool }} 成功后单独用 {} 调用本工具。宿主提交该业务工具最近一次成功返回的规范结果。被拒绝时按错误修正。提交成功不代表更改已保存。
+source-empty: 请只用 {} 调用 submit-output；宿主采用业务工具的规范结果。
+source-required: 请先成功调用 {{ tool }}，再用 {} 调用 submit-output。
+object-required: 参数必须是一个完整 JSON 对象。
+required-work: 请先成功完成必需的业务工具工作，并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
+required-work-tools: 请先成功完成必需的业务工具工作（{{ tools }}），并解决失败的业务调用，然后重新提交。不要重复已成功的写入。
 after-root-object: 根对象已闭合后仍有内容；此处应为输入结束
-after-root-value: 根值已闭合后仍有内容；此处应为输入结束
 unexpected-end: JSON 输入意外结束；需要完整的 JSON 值
 unterminated-string: JSON 字符串未闭合；需要结束双引号
 invalid-escape: JSON 转义无效；需要合法的转义序列
@@ -19,9 +25,5 @@ invalid-number: JSON 数字无效；需要完整的数字
 unexpected-token: JSON 符号无效；需要合法的 JSON 语法
 unknown-syntax: JSON 语法无效；需要合法的 JSON 值
 syntax: JSON 语法错误：{{ reason }}。所有字段必须位于一个完整对象内。
-location: 位置：从零开始的偏移 {{ offset }}（围栏规范化后的 JavaScript UTF-16 代码单元）。
-location-with-line-column: 位置：从零开始的偏移 {{ offset }}（围栏规范化后的 JavaScript UTF-16 代码单元）；行 {{ line }}，列 {{ column }}。
-complete-object: 请返回符合 schema 的完整对象。
-complete-story-object: 请返回符合 schema 的完整对象，包括 segments。
-empty: 答案为空或只有空白；未返回 JSON 对象。{{ complete }}
-prose: 答案是普通文字，未提供所需的 JSON 对象。{{ complete }}
+location: 位置：从零开始的偏移 {{ offset }}（原始参数的 JavaScript UTF-16 代码单元）。
+location-with-line-column: 位置：从零开始的偏移 {{ offset }}（原始参数的 JavaScript UTF-16 代码单元）；行 {{ line }}，列 {{ column }}。

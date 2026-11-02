@@ -9,7 +9,7 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { settleAgentLoop } from "../src/agent-loop/settle-agent-loop.js";
+
 import { stopOf } from "../src/agent-loop/stop-reason.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
@@ -22,7 +22,7 @@ import {
   latch,
   makeExecutor,
   manifest,
-  prose,
+  submitted,
   queuedLLM,
   runLoop,
   runRuntime,
@@ -96,7 +96,7 @@ describe("tool batches", () => {
       const emitter = makeEmitterSpy();
       const llm = queuedLLM([
         batch(["mark", "save"], "unfinished draft"),
-        prose('{"answer":"fixed"}'),
+        submitted('{"answer":"fixed"}'),
       ]);
       const loop = await runLoop({
         llm,
@@ -115,22 +115,9 @@ describe("tool batches", () => {
       expect(save).not.toHaveBeenCalled();
       expectMatchedToolCalls(messages);
       expect(loop.stop).toEqual({
-        reason: "tool-finished",
-        ...(repair ? { repaired: true } : {}),
+        reason: "invalid-output",
       });
-      expect(llm.requests).toHaveLength(repair ? 2 : 1);
-      if (repair) {
-        expectMatchedToolCalls(llm.requests[1]!.messages);
-        const settled = settleAgentLoop({
-          manifest: runtime,
-          input,
-          runId: "run-loop",
-          startTime: Date.now(),
-          toolLoop: loop,
-          outputSchema: loaded.outputSchema,
-        });
-        expect(settled.result.output).toEqual({ answer: "fixed" });
-      }
+      expect(llm.requests).toHaveLength(1);
       expect(JSON.parse(toolsIn(messages)[1]!.content as string)).toEqual({
         error: {
           code: "cancelled",
@@ -138,9 +125,11 @@ describe("tool batches", () => {
         },
       });
       expect(loop.executedToolCalls.map((call) => call.name)).toEqual(["mark"]);
-      expect(loop.collectedToolCalls.map((call) => call.toolName)).toEqual([
-        "mark",
-      ]);
+      expect(
+        loop.collectedToolCalls
+          .filter((call) => call.toolName !== "submit-output")
+          .map((call) => call.toolName),
+      ).toEqual(["mark"]);
       expect(loop.failedToolCalls).toEqual([]);
       expect(
         emitter.events.filter((event) => event.payload.toolCallId === "call-1"),
@@ -200,7 +189,7 @@ describe("tool batches", () => {
     const messages = transcript();
     const emitter = makeEmitterSpy();
     const loop = await runLoop({
-      llm: queuedLLM([batch(names), prose("done")]),
+      llm: queuedLLM([batch(names), submitted("done")]),
       manifest: runtimeFor(names),
       messages,
       hookPipeline: hooks,
@@ -208,13 +197,17 @@ describe("tool batches", () => {
       deps: { emitter, toolExecutor: makeExecutor(modules) },
     });
     expect(finished).toEqual(["c", "b", "a"]);
-    expect(toolsIn(messages).map((message) => message.toolCallId)).toEqual([
-      "call-0",
-      "call-1",
-      "call-2",
-    ]);
+    expect(
+      toolsIn(messages)
+        .filter((message) => message.toolCallId !== "submit")
+        .map((message) => message.toolCallId),
+    ).toEqual(["call-0", "call-1", "call-2"]);
     expect(loop.executedToolCalls.map((call) => call.name)).toEqual(names);
-    expect(loop.collectedToolCalls.map((call) => call.toolName)).toEqual(names);
+    expect(
+      loop.collectedToolCalls
+        .filter((call) => call.toolName !== "submit-output")
+        .map((call) => call.toolName),
+    ).toEqual(names);
     expect(loop.collectedToolCalls[0]!.durationMs).toBeGreaterThan(
       loop.collectedToolCalls[2]!.durationMs,
     );
@@ -222,7 +215,9 @@ describe("tool batches", () => {
       emitter.events.find((event) => event.type === "step.completed")?.payload
         .toolCalls,
     ).toEqual(names.map((name) => ({ name, success: true })));
-    expect(hooksSeen).toEqual([
+    expect(
+      hooksSeen.filter((entry) => !entry.endsWith(":submit-output")),
+    ).toEqual([
       ...names.map((name) => `PreToolUse:${name}`),
       ...names.map((name) => `start:${name}`),
       ...names.map((name) => `PostToolUse:${name}`),
@@ -247,7 +242,7 @@ describe("tool batches", () => {
       ),
     );
     await runLoop({
-      llm: queuedLLM([batch(names), prose("done")]),
+      llm: queuedLLM([batch(names), submitted("done")]),
       manifest: runtimeFor(names),
       timeoutMs: 400,
       deps: { toolExecutor: makeExecutor(modules) },
@@ -300,7 +295,7 @@ describe("tool batches", () => {
     const executed: Array<{ name: string; context: ToolCallContext }> = [];
     const classified: Array<{ name: string; context: ToolCallContext }> = [];
     const loop = await runLoop({
-      llm: queuedLLM([batch(names), prose("done")]),
+      llm: queuedLLM([batch(names), submitted("done")]),
       manifest: runtimeFor(names),
       deps: {
         toolExecutor: {
@@ -394,7 +389,7 @@ describe("tool batches", () => {
     const hidden = vi.fn(async () => ({ secret: true }));
     const messages = transcript();
     const loop = await runLoop({
-      llm: queuedLLM([batch(names), prose("done")]),
+      llm: queuedLLM([batch(names), submitted("done")]),
       manifest: manifest({
         tools: {
           plugin: [
@@ -442,7 +437,7 @@ describe("tool batches", () => {
       order.filter((entry) =>
         ["end:r3", "pre:hidden", "post:hidden", "start:r4"].includes(entry),
       ),
-    ).toEqual(["end:r3", "pre:hidden", "post:hidden", "start:r4"]);
+    ).toEqual(["pre:hidden", "end:r3", "post:hidden", "start:r4"]);
     expect(JSON.parse(toolsIn(messages)[3]!.content as string).error.code).toBe(
       "not-found",
     );
@@ -465,12 +460,16 @@ describe("tool batches", () => {
       }),
     );
     const loop = await runLoop({
-      llm: queuedLLM([batch(names), prose("done")]),
+      llm: queuedLLM([batch(names), submitted("done")]),
       manifest: runtimeFor(names),
       deps: { toolExecutor: makeExecutor(modules) },
     });
     expect(maximum).toBe(MAX_PARALLEL_TOOL_CALLS);
-    expect(loop.collectedToolCalls.map((call) => call.toolName)).toEqual(names);
+    expect(
+      loop.collectedToolCalls
+        .filter((call) => call.toolName !== "submit-output")
+        .map((call) => call.toolName),
+    ).toEqual(names);
   });
 
   it("continues after a pooled timeout without losing its sibling result", async () => {
@@ -487,7 +486,7 @@ describe("tool batches", () => {
       module("fast"),
     ]);
     const messages = transcript();
-    const llm = queuedLLM([batch(["slow", "fast"]), prose("done")]);
+    const llm = queuedLLM([batch(["slow", "fast"]), submitted("done")]);
     try {
       const loop = await runLoop({
         llm,
@@ -556,10 +555,12 @@ describe("tool batches", () => {
       expect(loop.executedToolCalls.map((call) => call.name)).toEqual(
         completed,
       );
-      expect(loop.collectedToolCalls.map((call) => call.toolName)).toEqual(
-        completed,
-      );
-      expect(loop.stop).toEqual({ reason: "tool-finished" });
+      expect(
+        loop.collectedToolCalls
+          .filter((call) => call.toolName !== "submit-output")
+          .map((call) => call.toolName),
+      ).toEqual(completed);
+      expect(loop.stop).toEqual({ reason: "invalid-output" });
       if (barrier)
         expect(
           emitter.events.filter((event) => event.payload.toolName === "write"),
@@ -584,7 +585,7 @@ describe("tool batches", () => {
     const messages = transcript();
     const emitter = makeEmitterSpy();
     const loop = await runLoop({
-      llm: queuedLLM([batch(["a", "b", "c"]), prose("done")]),
+      llm: queuedLLM([batch(["a", "b", "c"]), submitted("done")]),
       manifest: runtimeFor(["a", "b", "c"]),
       hookPipeline: hooks,
       messages,
@@ -598,19 +599,20 @@ describe("tool batches", () => {
       },
     });
     expect(refused).not.toHaveBeenCalled();
-    expect(toolsIn(messages).map((message) => message.toolCallId)).toEqual([
-      "call-0",
-      "call-1",
-      "call-2",
-    ]);
+    expect(
+      toolsIn(messages)
+        .filter((message) => message.toolCallId !== "submit")
+        .map((message) => message.toolCallId),
+    ).toEqual(["call-0", "call-1", "call-2"]);
     expect(JSON.parse(toolsIn(messages)[1]!.content as string).error.code).toBe(
       "refused",
     );
     expect(loop.executedToolCalls.map((call) => call.name)).toEqual(["a", "c"]);
-    expect(loop.collectedToolCalls.map((call) => call.toolName)).toEqual([
-      "a",
-      "c",
-    ]);
+    expect(
+      loop.collectedToolCalls
+        .filter((call) => call.toolName !== "submit-output")
+        .map((call) => call.toolName),
+    ).toEqual(["a", "c"]);
     expect(loop.failedToolCalls).toEqual([]);
     expect(
       emitter.events.filter((event) => event.payload.toolCallId === "call-1"),
@@ -664,26 +666,25 @@ describe("tool batches", () => {
     );
     const messages = transcript();
     await runLoop({
-      llm: queuedLLM([batch(["r1", "r3", "r2", "r4"]), prose("done")]),
+      llm: queuedLLM([batch(["r1", "r3", "r2", "r4"]), submitted("done")]),
       manifest: runtimeFor(modules.map((entry) => entry.name)),
       hookPipeline: hooks,
       timeoutMs: 400,
       messages,
       deps: { toolExecutor: makeExecutor(modules) },
     });
-    expect(log.filter((entry) => entry.startsWith("pre:"))).toEqual([
-      "pre:r1",
-      "pre:r3",
-      "pre:r2",
-      "pre:r4",
-    ]);
+    expect(
+      log.filter(
+        (entry) => entry.startsWith("pre:") && entry !== "pre:submit-output",
+      ),
+    ).toEqual(["pre:r1", "pre:r3", "pre:r2", "pre:r4"]);
     expect(log.indexOf("start:write")).toBeGreaterThan(log.indexOf("end:r1"));
     expect(log.indexOf("start:write")).toBeGreaterThan(log.indexOf("end:r3"));
     expect(log.indexOf("pre:r2")).toBeLessThan(log.indexOf("start:r1"));
-    expect(log.indexOf("pre:r4")).toBeGreaterThan(log.indexOf("end:write"));
+    expect(log.indexOf("pre:r4")).toBeLessThan(log.indexOf("start:r1"));
     expect(
       messages.find((message) => message.toolCalls)?.toolCalls?.[2]?.name,
-    ).toBe("write");
+    ).toBe("r2");
   });
 
   it("drains admitted calls and closes the transcript before propagating player cancellation", async () => {
@@ -809,7 +810,7 @@ describe("tool batches", () => {
 
   it("answers a nested suspension with an unavailable envelope and continues", async () => {
     const messages = transcript();
-    const llm = queuedLLM([toolCall("suspend", {}), prose("continue")]);
+    const llm = queuedLLM([toolCall("suspend", {}), submitted("continue")]);
     await runLoop({
       llm,
       manifest: manifest({ tools: { builtin: ["suspend"] } }),
@@ -855,15 +856,21 @@ describe("tool batches", () => {
     hooks.register({
       id: "refuse",
       event: "PreToolUse",
+      match: (payload: unknown) =>
+        (payload as { toolCall: { name: string } }).toolCall.name === "a",
       handler: async () => ({ action: "abort", reason: "private reason" }),
     });
     await runLoop({
-      llm: queuedLLM([batch(["a"]), prose("done")]),
+      llm: queuedLLM([batch(["a"]), submitted("done")]),
       manifest: runtime,
       hookPipeline: hooks,
       deps: { emitter, toolExecutor: makeExecutor([module("a")]) },
     });
-    const events = persisted.filter((event) => event.type.startsWith("tool."));
+    const events = persisted.filter(
+      (event) =>
+        event.type.startsWith("tool.") &&
+        (event.payload as { toolName?: string }).toolName === "a",
+    );
     expect(events.map((event) => event.type)).toEqual([
       "tool.calling",
       "tool.failed",

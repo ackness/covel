@@ -281,18 +281,18 @@ const crossField = [
     field: "agent.tools.services.0.as",
   },
   {
-    name: "an imported service that completes the run",
+    name: "an imported service used as required business work",
     runtime: {
       schedule: { stage: "post-turn" },
       agent: {
         tools: { services: ["inventory.items@1"] },
-        finishWith: "inventory-items",
+        completion: { afterTools: ["inventory-items"] },
       },
     },
-    field: "agent.finishWith",
+    field: "agent.completion.afterTools.0",
   },
   {
-    name: "finishWith beside the long completion form",
+    name: "the removed finishWith field",
     runtime: {
       schedule: { stage: "post-turn" },
       agent: {
@@ -300,7 +300,7 @@ const crossField = [
         completion: { require: "tool-use", afterTools: ["save"] },
       },
     },
-    field: "agent.finishWith",
+    field: "agent",
   },
   {
     name: "a story runtime with a required contract input",
@@ -594,4 +594,13 @@ describe("UI specs", () => {
       expect.objectContaining({ slot: "message", specIndex: 0 }),
     ]);
   });
+});
+
+it("rejects a plugin tool declaration using the host output name", () => {
+  expect(() =>
+    parsePluginMd(
+      `---\n${JSON.stringify({ id: "probe", kind: "plugin", description: "Probe", contributes: { tools: ["submit-output"] } })}\n---\n`,
+      "probe/PLUGIN.md",
+    ),
+  ).toThrow(/submit-output.*reserved/);
 });

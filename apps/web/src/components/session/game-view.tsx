@@ -1,3 +1,5 @@
+import { StoryRevealProvider } from "@/lib/reveal/story-reveal-context.js";
+import { ExecutionTimeline } from "./execution-timeline.js";
 import { usePluginThemes } from "./game-view/use-plugin-themes.js";
 import { SessionThemeSettings } from "./session-theme-settings.js";
 import { SessionRecoveryControls } from "./session-recovery-controls.js";
@@ -31,7 +33,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
-import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { MemoryIndexNotice } from "./memory-index-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
@@ -304,7 +305,6 @@ export function GameView({
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
-  const [replayStageStory, setReplayStageStory] = useState(false);
   // Warm the media cache with known stage art (sprites + scene backdrops)
   // during pre-game, so the opening turn paints them without a download stall.
   useStageMediaPreload(session.id);
@@ -463,7 +463,6 @@ export function GameView({
     retryOwner.current.main++;
     setFailures((previous) => ({ ...previous, main: undefined }));
     if (mode !== "stage") setImmersive(false);
-    setReplayStageStory(mode === "stage");
     setViewMode(mode);
   };
 
@@ -879,6 +878,22 @@ export function GameView({
               notices={surfaceNotices}
             />
           )}
+          {activePluginView && (
+            <div
+              data-covel-host-controls=""
+              className="shrink-0 border-b border-border px-4"
+              role="status"
+            >
+              <ExecutionTimeline
+                steps={executionSteps}
+                executing={executing}
+                plugins={plugins}
+                messages={messages}
+                onRetryRuntime={onRetryRuntime}
+                recoveryTurnId={recoveryTurnId}
+              />
+            </div>
+          )}
           <SessionRecoveryControls theme={pluginThemes.source} />
           <AutoAdvanceControl key={`auto-advance:${session.id}`} />
 
@@ -925,12 +940,6 @@ export function GameView({
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}
-          <UnsavedNarratives
-            messages={state.unsavedNarratives ?? []}
-            recovery={state.executionRecovery}
-            executing={state.executing}
-            onRetry={retryInterruptedTurn}
-          />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             steps={executionSteps}
@@ -1087,7 +1096,6 @@ export function GameView({
             </>
           ) : stageActive ? (
             <StageView
-              replayStoryOnEnter={replayStageStory}
               composerReplaced={Boolean(activeComposer)}
               advancing={!!state.advance && state.advance.phase !== "stopped"}
               recoveryTurnId={recoveryTurnId}
@@ -1099,10 +1107,6 @@ export function GameView({
               world={world}
               messages={messages}
               executing={executing}
-              restoring={Boolean(
-                state.executionRecovery?.hydrating ||
-                state.executionRecovery?.checking,
-              )}
               executionError={executionError}
               executionSteps={executionSteps}
               plugins={plugins}
@@ -1173,7 +1177,9 @@ export function GameView({
         session.runtimeModelOverrides,
       )}
     >
-      {content}
+      <StoryRevealProvider sessionId={session.id} messages={messages}>
+        {content}
+      </StoryRevealProvider>
     </SessionModelUsesContext.Provider>
   );
 }

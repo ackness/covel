@@ -25,11 +25,7 @@ import {
 } from "../../src/index.js";
 import { PluginServiceRegistry } from "../../src/plugin-services.js";
 import { policies } from "./orchestration-fixture.js";
-import {
-  prose,
-  toolCall,
-  expectMatchedToolCalls,
-} from "./agent-loop-fixture.js";
+import { toolCall, expectMatchedToolCalls } from "./agent-loop-fixture.js";
 
 export const compositionScenarios = [
   "plain",
@@ -218,7 +214,7 @@ export async function assertPrivateActorComposition({
         if (!messages.some((m) => m.role === "tool"))
           return toolCall(readWorld.name, {}, `actor-read-${actorCalls}`);
         expect(text).toContain("current staged profile");
-        return prose(
+        return submitJson(
           JSON.stringify({
             segments: [{ kind: "dialogue", text: "I will listen." }],
             intent: "INTENT-SECRET",
@@ -314,7 +310,7 @@ export async function assertPrivateActorComposition({
           ),
         ).toBe(false);
       }
-      return prose(
+      return submitJson(
         JSON.stringify({
           segments: [
             { kind: "dialogue", speaker: "Mara", text: "I will listen." },
@@ -431,4 +427,8 @@ export async function assertPrivateActorComposition({
   expect(events.some((event) => event.type === "runtime.failed")).toBe(false);
   await inspectTrace?.(store, sessionId);
   await store.close();
+}
+
+function submitJson(content: string) {
+  return toolCall("submit-output", JSON.parse(content));
 }

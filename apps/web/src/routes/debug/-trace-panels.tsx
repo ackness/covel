@@ -13,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge.js";
 import type * as api from "@/services/api.js";
 import {
-  aggregateDeltas,
   categorize,
   CATEGORY_STYLES,
   extractDetail,
@@ -128,7 +127,7 @@ export function TurnCard({
               filterCategory,
         )
       : events;
-    return aggregateDeltas(filtered);
+    return filtered;
   }, [turn.events, filterCategory, runtimes, runtimeEventIds]);
 
   return (
@@ -355,7 +354,7 @@ function RuntimeRow({
           (event) => categorize(getDisplayType(event)) === filterCategory,
         )
       : runtime.events;
-    return aggregateDeltas(events);
+    return events;
   }, [runtime.events, filterCategory]);
 
   return (

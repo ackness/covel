@@ -46,6 +46,7 @@ describe("world-ir plugin contract", () => {
     });
     expect(loaded?.bindingAcceptsSchemas?.narrative).toBeUndefined();
     expect(parsed?.manifest.output).toEqual({
+      from: { tool: "submit-world-facts" },
       schema: "contract:world-ir@1",
       recordAs: "world-ir-v1",
     });

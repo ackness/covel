@@ -1,7 +1,5 @@
-import { instructionLocaleFor, type LLMResponseFormat } from "@covel/shared";
+import { instructionLocaleFor } from "@covel/shared";
 import { interpolate, loadPrompt } from "@covel/context";
-import { normalizeFinalOutputJsonText } from "../turn-executor/turn-output-helpers.js";
-import { schemaAsksForSegments } from "./story-output.js";
 
 // Only fixed parser reasons are forwarded. Native messages may quote the draft.
 const syntaxReasons = [
@@ -35,7 +33,7 @@ const syntaxReasons = [
 ] as const;
 
 /** Keyed fragments follow the framework action-labels template format. */
-async function loadDiagnosticText(locale: string | undefined) {
+export async function loadOutputText(locale: string | undefined) {
   const source = await loadPrompt(
     "server",
     "output-format-diagnostics",
@@ -59,8 +57,7 @@ async function loadDiagnosticText(locale: string | undefined) {
 
 function syntaxProblems(
   error: unknown,
-  text: Awaited<ReturnType<typeof loadDiagnosticText>>,
-  rootObject: boolean,
+  text: Awaited<ReturnType<typeof loadOutputText>>,
 ): string[] {
   const message = error instanceof SyntaxError ? error.message : "";
   const located = message.match(
@@ -69,10 +66,7 @@ function syntaxProblems(
   const reason = syntaxReasons.find(([pattern]) =>
     pattern.test(located?.[1] ?? message),
   );
-  const reasonKey =
-    reason?.[1] === "after-root-object" && !rootObject
-      ? "after-root-value"
-      : (reason?.[1] ?? "unknown-syntax");
+  const reasonKey = reason?.[1] ?? "unknown-syntax";
   const problems = [text("syntax", { reason: text(reasonKey) })];
   // Read locations only from a recognized native reason, never from quoted input.
   const offset = located?.[2];
@@ -88,48 +82,10 @@ function syntaxProblems(
   return problems;
 }
 
-/**
- * Enrich an existing rejection only. JSON.parse diagnoses the original draft;
- * the shared output gate alone decides acceptance, including tolerant salvage.
- */
-export async function outputFormatProblems(args: {
-  readonly content: string | null;
-  readonly responseFormat?: LLMResponseFormat;
-  readonly hasToolCalls?: boolean;
-  readonly locale?: string;
-  readonly problems?: readonly string[];
-}): Promise<readonly string[]> {
-  const problems = args.problems ?? [];
-  const bounded = (items: readonly string[]) =>
-    items.slice(0, 5).map((problem) => problem.slice(0, 200));
-  if (!args.responseFormat || args.hasToolCalls) return bounded(problems);
-
-  const candidate = normalizeFinalOutputJsonText(args.content ?? "");
-  let syntaxError: unknown;
-  if (candidate) {
-    try {
-      JSON.parse(candidate);
-      // Valid JSON keeps the gate's field-path and segment diagnostics.
-      return bounded(problems);
-    } catch (error) {
-      syntaxError = error;
-    }
-  }
-
-  const text = await loadDiagnosticText(args.locale);
-  const segments = schemaAsksForSegments(args.responseFormat.schema);
-  const complete = text(segments ? "complete-story-object" : "complete-object");
-  let diagnostic: readonly string[];
-  if (!candidate) {
-    diagnostic = [text("empty", { complete })];
-  } else if (/^[{["]/.test(candidate)) {
-    diagnostic = syntaxProblems(syntaxError, text, candidate.startsWith("{"));
-  } else {
-    // Prose corrections still need the output gate's schema guidance,
-    // including required fields.
-    return bounded([text("prose", { complete }), ...problems]);
-  }
-  // The gate may have validated a salvaged fragment. Its field/segment errors
-  // do not describe the original malformed candidate; diagnose syntax alone.
-  return bounded(diagnostic);
+/** Syntax diagnostics for a complete submission, with no quoted provider text. */
+export async function submissionSyntaxProblems(
+  error: unknown,
+  locale?: string,
+): Promise<readonly string[]> {
+  return syntaxProblems(error, await loadOutputText(locale));
 }

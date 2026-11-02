@@ -1,3 +1,7 @@
+import {
+  executionProgressPayload,
+  selectSubscriptionProgress,
+} from "./execution-progress.js";
 /**
  * API Subscription routes — unified SSE stream with topic filtering and replay.
  *
@@ -253,10 +257,16 @@ subscribeRoutes.get(
           )
             return Promise.resolve();
           if (trackReplay) sentIds.add(event.id);
+          // An explicit trace subscription is a diagnostic reader. Ordinary
+          // gameplay/recovery subscriptions receive only safe progress.
+          const payload = topics?.has("trace")
+            ? event.payload
+            : executionProgressPayload(event.type, event.payload);
+          if (!payload) return Promise.resolve();
           return stream.writeSSE({
             id: event.id,
             event: deriveSseEventName(event),
-            data: JSON.stringify(event),
+            data: JSON.stringify({ ...event, payload }),
           });
         };
 
@@ -314,18 +324,19 @@ subscribeRoutes.get(
               });
               return;
             }
-            if (topics && !topics.has(event.topic)) return;
+            const projected = selectSubscriptionProgress(event, topics);
+            if (!projected) return;
             if (replaying) {
               if (liveBuffer.length >= SSE_WRITE_QUEUE_MAX) {
                 closeStream();
                 return;
               }
-              liveBuffer.push(event);
+              liveBuffer.push(projected);
               return;
             }
             // No sentIds bookkeeping on the live path — dedupe only
             // covers the replay→live cutover window; live ids are epoch-unique.
-            writes.enqueue(() => writeEvent(event, false));
+            writes.enqueue(() => writeEvent(projected, false));
           };
           watch.activate(receiveEvent, (reset) => {
             if (reset.sessionId !== sessionId || resetScheduled) return;
@@ -398,8 +409,9 @@ subscribeRoutes.get(
               if (closing) return;
             } else {
               for (const event of replay.events) {
-                if (!topics || topics.has(event.topic)) {
-                  await writes.write(() => writeEvent(event));
+                const projected = selectSubscriptionProgress(event, topics);
+                if (projected) {
+                  await writes.write(() => writeEvent(projected));
                   if (closing) return;
                 }
               }

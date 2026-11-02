@@ -47,9 +47,15 @@ const input: TurnInput = {
 
 function prose(content: string): LLMResponse {
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: content }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }

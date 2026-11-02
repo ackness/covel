@@ -20,7 +20,7 @@ interface NarrativeMessageBodyProps {
 /**
  * Memoised message-body renderer. Splitting this out gives each message row a
  * stable memo boundary so high-frequency state changes elsewhere in the chat
- * (e.g. a streaming delta on the latest turn, or a per-message image-gen
+ * (e.g. a completed message on the latest turn, or a per-message image-gen
  * toggle) do not force every already-rendered narrative body — including the
  * expensive markdown parse — to re-render. Re-renders only when this row's own
  * content or display mode changes.

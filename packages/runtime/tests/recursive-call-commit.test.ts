@@ -1067,7 +1067,7 @@ describe("recursiveCall results at commit", () => {
     },
   );
 
-  it("drops a skipping guard's nested call with its own writes when a hook changes its status", async () => {
+  it("refuses hook-made agent success and drops the skipping guard's nested writes", async () => {
     const guarded = manifest("guarded", {
       runtimeType: "agent",
       trigger: { type: "auto" },
@@ -1110,7 +1110,11 @@ describe("recursiveCall results at commit", () => {
     );
 
     expect(execution.commit.results).toEqual([
-      expect.objectContaining({ runtimeId: guarded.name, status: "success" }),
+      expect.objectContaining({
+        runtimeId: guarded.name,
+        status: "failed",
+        error: "Agent ended without an accepted submit-output call.",
+      }),
     ]);
     expect(notes).toEqual({});
   });

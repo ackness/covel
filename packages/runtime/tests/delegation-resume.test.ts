@@ -12,7 +12,7 @@ import {
   commitExecution,
   type ExecutionDeps,
 } from "../src/index.js";
-import { prose } from "./_helpers/agent-loop-fixture.js";
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 
 const input = {
   sessionId: "session",
@@ -102,11 +102,9 @@ describe("delegation across suspended legs", () => {
             expect(JSON.stringify(messages)).not.toContain(
               "INTERVENING-SECRET",
             );
-            return prose(
-              JSON.stringify({
-                segments: [{ kind: "action", text: "Listens." }],
-              }),
-            );
+            return toolCall("submit-output", {
+              segments: [{ kind: "action", text: "Listens." }],
+            });
           },
         },
         loadRuntime: async (manifest) => ({
@@ -236,7 +234,7 @@ describe("delegation across suspended legs", () => {
         llm: {
           generate: async () => {
             starts++;
-            return prose(
+            return actorReply(
               JSON.stringify({
                 segments: [{ kind: "action", text: "Waits." }],
               }),
@@ -290,7 +288,7 @@ describe("delegation across suspended legs", () => {
           llm: {
             generate: async () => {
               starts();
-              return prose(
+              return actorReply(
                 JSON.stringify({
                   segments: [{ kind: "action", text: "Waits." }],
                 }),
@@ -355,3 +353,7 @@ describe("delegation across suspended legs", () => {
     },
   );
 });
+
+function actorReply(content: string) {
+  return toolCall("submit-output", JSON.parse(content));
+}

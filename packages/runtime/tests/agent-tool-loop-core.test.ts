@@ -49,7 +49,10 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   } as RuntimeManifest;
 }
 
-const loaded = { promptTemplate: "prompt" } as unknown as LoadedRuntime;
+const loaded = {
+  manifest: manifest(),
+  promptTemplate: "prompt",
+} satisfies LoadedRuntime;
 
 const markTool = tool({
   name: "mark",
@@ -79,18 +82,27 @@ class ScriptedLLM implements LLMAdapter {
   async generate(
     params: Parameters<LLMAdapter["generate"]>[0],
   ): Promise<LLMResponse> {
-    this.requests.push(params);
+    this.requests.push({
+      ...params,
+      messages: structuredClone(params.messages),
+    });
     const r = this.script[Math.min(this.calls, this.script.length - 1)]!;
     this.calls++;
     return r;
   }
 }
 
-function prose(content: string): LLMResponse {
+function submitted(content: string): LLMResponse {
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "submit",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: content }),
+      },
+    ],
+    finishReason: "tool_calls",
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -147,7 +159,7 @@ async function run(opts: {
     },
     manifest: opts.manifest ?? manifest(),
     input,
-    loaded,
+    loaded: { ...loaded, manifest: opts.manifest ?? manifest() },
     deps: { llm: opts.llm, toolExecutor: makeExecutor(), ...opts.deps },
     maxSteps: opts.maxSteps ?? 5,
     timeoutMs: 10_000,
@@ -179,7 +191,7 @@ describe("runAgentToolLoop core", () => {
       }),
     });
     const result = await run({
-      llm: new ScriptedLLM([toolCall("mark", {}), prose("done")]),
+      llm: new ScriptedLLM([toolCall("mark", {}), submitted("done")]),
       deps: { toolExecutor: createToolExecutor({ findTool: () => module }) },
     });
     expect(result.collectedToolCalls[0]?.output).toEqual({
@@ -235,21 +247,23 @@ describe("runAgentToolLoop core", () => {
     ]);
   });
 
-  it("bare prose finish: one call, finalContent set, no deltas", async () => {
-    const llm = new ScriptedLLM([prose("done story")]);
+  it("submitted output finishes in one call without deltas", async () => {
+    const llm = new ScriptedLLM([submitted("done story")]);
     const result = await run({ llm });
 
     expect(llm.calls).toBe(1);
-    expect(result.finalContent).toBe("done story");
+    expect(result.acceptedOutput?.narrativeOutput).toBe("done story");
     expect(result.stop).toEqual({ reason: "completed" });
-    expect(result.streamDeltaCount).toBe(0);
-    expect(result.collectedToolCalls).toHaveLength(0);
+
+    expect(result.collectedToolCalls.map((call) => call.toolName)).toEqual([
+      "submit-output",
+    ]);
   });
 
   it("tool round: executes tool, collects call + proposals, feeds result back", async () => {
     const llm = new ScriptedLLM([
       toolCall("mark", { note: "alpha" }),
-      prose("after tool"),
+      submitted("after tool"),
     ]);
     const messages = [
       { role: "system", content: "sys" },
@@ -258,8 +272,12 @@ describe("runAgentToolLoop core", () => {
     const result = await run({ llm, messages });
 
     expect(llm.calls).toBe(2);
-    expect(result.finalContent).toBe("after tool");
-    expect(result.collectedToolCalls).toHaveLength(1);
+    expect(result.acceptedOutput?.narrativeOutput).toBe("after tool");
+    expect(
+      result.collectedToolCalls.filter(
+        (call) => call.toolName !== "submit-output",
+      ),
+    ).toHaveLength(1);
     expect(result.collectedToolCalls[0]).toMatchObject({
       toolName: "mark",
       pluginId: "plug",
@@ -270,14 +288,21 @@ describe("runAgentToolLoop core", () => {
     expect(result.pendingProposals[0]).toMatchObject({ type: "plugin.data" });
     // Transcript grew: assistant tool-call message + tool result message.
     const roles = messages.map((m) => m.role);
-    expect(roles).toEqual(["system", "user", "assistant", "tool"]);
+    expect(roles).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+      "tool",
+    ]);
     expect(messages[3]!.content).toContain("marked:alpha");
   });
 
   it("re-budgets a grown tool transcript before each LLM call", async () => {
     const llm = new ScriptedLLM([
       toolCall("mark", { note: "x".repeat(3_000) }),
-      prose("must not be reached"),
+      submitted("must not be reached"),
     ]);
 
     const result = await run({
@@ -286,7 +311,7 @@ describe("runAgentToolLoop core", () => {
       maxSteps: 3,
       estimator: (text) => text.length,
       contextBudget: {
-        maxInputTokens: 1_000,
+        maxInputTokens: 2_000,
         reservedForResponse: 100,
         protectLastUserTurns: 1,
       },
@@ -306,10 +331,10 @@ describe("runAgentToolLoop core", () => {
   it("sends one cache key for every step of a runtime, and another for another runtime", async () => {
     const llm = new ScriptedLLM([
       toolCall("mark", { note: "a" }),
-      prose("done"),
+      submitted("done"),
     ]);
     await run({ llm });
-    const other = new ScriptedLLM([prose("done")]);
+    const other = new ScriptedLLM([submitted("done")]);
     await run({ llm: other, manifest: manifest({ name: "plug/other" }) });
 
     const key = llm.requests[0]?.promptCacheKey;
@@ -335,7 +360,7 @@ describe("runAgentToolLoop core", () => {
     });
     const llm = new ScriptedLLM([
       toolCall("large-read", {}),
-      prose("after compacted result"),
+      submitted("after compacted result"),
     ]);
     const { emitter, types, payloads } = recordingEmitter();
 
@@ -346,13 +371,15 @@ describe("runAgentToolLoop core", () => {
       maxSteps: 3,
       estimator: (text) => text.length,
       contextBudget: {
-        maxInputTokens: 1_000,
+        maxInputTokens: 2_000,
         reservedForResponse: 100,
         protectLastUserTurns: 1,
       },
     });
 
-    expect(result.finalContent).toBe("after compacted result");
+    expect(result.acceptedOutput?.narrativeOutput).toBe(
+      "after compacted result",
+    );
     expect(llm.calls).toBe(2);
     const followUpToolMessage = llm.requests[1]!.messages.find(
       (message) => message.role === "tool",
@@ -369,7 +396,7 @@ describe("runAgentToolLoop core", () => {
   });
 
   it("temporarily truncates a durable summary when fixed per-call input leaves no other pruneable history", async () => {
-    const llm = new ScriptedLLM([prose("summary fallback worked")]);
+    const llm = new ScriptedLLM([submitted("summary fallback worked")]);
     const { emitter, types, payloads } = recordingEmitter();
     const durableSummary =
       `<compacted_history>\n${"older-fact ".repeat(80)}\n</compacted_history>\n` +
@@ -380,7 +407,7 @@ describe("runAgentToolLoop core", () => {
       deps: { emitter },
       estimator: (text) => text.length,
       contextBudget: {
-        maxInputTokens: 700,
+        maxInputTokens: 1_300,
         reservedForResponse: 100,
         protectLastUserTurns: 1,
       },
@@ -391,7 +418,9 @@ describe("runAgentToolLoop core", () => {
       ],
     });
 
-    expect(result.finalContent).toBe("summary fallback worked");
+    expect(result.acceptedOutput?.narrativeOutput).toBe(
+      "summary fallback worked",
+    );
     const sentSummary = llm.requests[0]!.messages.find((message) =>
       String(message.content).includes("compacted history truncated"),
     );
@@ -406,22 +435,23 @@ describe("runAgentToolLoop core", () => {
     });
   });
 
-  it("completeAfterTools avoids a follow-up LLM call after a completing tool", async () => {
+  it("completeAfterTools requires business work followed by a submission", async () => {
     const llm = new ScriptedLLM([
       toolCall("mark", { note: "single-shot" }),
-      prose("should never be reached"),
+      submitted("submitted result"),
     ]);
     const result = await run({
       llm,
       manifest: manifest({ completeAfterTools: ["mark"] }),
     });
 
-    expect(llm.calls).toBe(1);
-    expect(result.stop).toEqual({ reason: "tool-finished" });
+    expect(llm.calls).toBe(2);
+    expect(result.stop).toEqual({ reason: "completed" });
     expect(result.collectedToolCalls.map((call) => call.toolName)).toEqual([
       "mark",
+      "submit-output",
     ]);
-    expect(result.finalContent).toContain("single-shot");
+    expect(result.acceptedOutput?.narrativeOutput).toBe("submitted result");
   });
 
   it("does not complete after a character batch fails to find its target", async () => {
@@ -430,7 +460,7 @@ describe("runAgentToolLoop core", () => {
       toolCall("sync-characters", {
         updates: [{ id: "missing", fields: { hp: 1 } }],
       }),
-      prose("Recovered after the failed update"),
+      submitted("Recovered after the failed update"),
     ]);
     const result = await run({
       llm,
@@ -445,8 +475,9 @@ describe("runAgentToolLoop core", () => {
         }),
       },
     });
-    expect(llm.calls).toBe(2);
-    expect(result.finalContent).toBe("Recovered after the failed update");
+    expect(llm.calls).toBe(3);
+    expect(result.acceptedOutput).toBeNull();
+    expect(result.stop.reason).toBe("invalid-output");
     expect(result.pendingProposals).toEqual([]);
     expect(llm.requests[1]?.messages).toEqual(
       expect.arrayContaining([
@@ -458,45 +489,19 @@ describe("runAgentToolLoop core", () => {
     );
   });
 
-  it("runtime-done sentinel: early exit, sentinel stripped from business calls", async () => {
-    const doneTool = tool({
-      name: "runtime-done",
-      description: "declare completion",
-      parameters: z.object({}),
-      async execute() {
-        return { _covelRuntimeDone: true, reason: "done" };
-      },
-    });
-    const executor = createToolExecutor({
-      findTool: (name) =>
-        name === "mark"
-          ? markTool
-          : name === "runtime-done"
-            ? doneTool
-            : undefined,
-    });
+  it("does not execute an undeclared retired terminator", async () => {
     const llm = new ScriptedLLM([
-      toolCall("mark", { note: "beta" }),
-      {
-        content: null,
-        toolCalls: [{ id: "tc-done", name: "runtime-done", arguments: "{}" }],
-        finishReason: "tool_calls",
-        usage: { inputTokens: 1, outputTokens: 1 },
-      },
-      prose("should never be reached"),
+      toolCall("runtime-done", {}),
+      submitted("accepted"),
     ]);
-    const result = await run({
-      llm,
-      deps: { toolExecutor: executor },
-    });
-
-    // Exits right after the runtime-done round — no third LLM call.
+    const result = await run({ llm });
     expect(llm.calls).toBe(2);
-    expect(result.stop).toEqual({ reason: "tool-finished" });
-    // Sentinel stripped: only the business tool remains.
-    expect(result.collectedToolCalls.map((c) => c.toolName)).toEqual(["mark"]);
-    // No prose was produced → JSON envelope over business calls.
-    expect(result.finalContent).toContain("mark");
+    expect(result.stop).toEqual({ reason: "completed" });
+    expect(result.acceptedOutput).toEqual({ narrativeOutput: "accepted" });
+    expect(
+      llm.requests[1]?.messages.find((message) => message.role === "tool")
+        ?.content,
+    ).toContain("not declared");
   });
 
   it("maxSteps bounds the loop even when the LLM keeps calling tools", async () => {
@@ -508,22 +513,21 @@ describe("runAgentToolLoop core", () => {
     const m = manifest({ maxSteps: 2 } as Partial<RuntimeManifest>);
     const result = await run({ llm, manifest: m });
 
-    expect(result.collectedToolCalls).toHaveLength(2);
+    expect(result.collectedToolCalls).toHaveLength(3);
     expect(result.effectiveMaxSteps).toBe(2);
     expect(result.stop.reason).toBe("max-steps");
   });
 
-  it("streams deltas for story runtimes with identity attached", async () => {
-    const seen: { runtimeId: string; pluginId: string; textDelta: string }[] =
-      [];
+  it("buffers transport text while accepting a complete story submission", async () => {
     const llm: LLMAdapter = {
-      generate: async () => prose("fallback"),
+      generate: async () => submitted("fallback"),
       stream: async function* (): AsyncIterable<LLMStreamEvent> {
         yield { type: "text-delta", textDelta: "Once " };
         yield { type: "text-delta", textDelta: "upon" };
+        yield { type: "tool-call", ...submitted("Once upon").toolCalls[0]! };
         yield {
           type: "done",
-          finishReason: "stop",
+          finishReason: "tool_calls",
           usage: { inputTokens: 1, outputTokens: 1 },
         };
       } as never,
@@ -534,20 +538,10 @@ describe("runAgentToolLoop core", () => {
       manifest: m,
       deps: {
         toolExecutor: undefined,
-        onDelta: async (d: (typeof seen)[number]) => {
-          seen.push(d);
-        },
       },
     });
 
-    expect(result.streamDeltaCount).toBe(2);
-    expect(seen).toHaveLength(2);
-    expect(seen[0]).toMatchObject({
-      runtimeId: "plug/story",
-      pluginId: "plug",
-      textDelta: "Once ",
-    });
-    expect(result.finalContent).toBe("Once upon");
+    expect(result.acceptedOutput?.narrativeOutput).toBe("Once upon");
   });
 
   it("does not resend an unchanged malformed-arguments request", async () => {
@@ -568,7 +562,7 @@ describe("runAgentToolLoop core", () => {
   });
 
   it.each([false, true])(
-    "repairs history to match executed hook arguments (hook: %s)",
+    "preserves original provider arguments while business tools retain tolerant parsing (hook: %s)",
     async (rewrite) => {
       const raw = '{"note":"repaired"}]}';
       const response = rewrite
@@ -581,12 +575,14 @@ describe("runAgentToolLoop core", () => {
       hooks.register({
         id: "rewrite",
         event: "PreToolUse",
+        match: (payload: unknown) =>
+          (payload as { toolCall: { name: string } }).toolCall.name === "mark",
         handler: async () => ({
           action: "continue",
           replace: { toolCall: { id: "tc-1", name: "mark", arguments: raw } },
         }),
       });
-      const llm = new ScriptedLLM([response, prose("done")]);
+      const llm = new ScriptedLLM([response, submitted("done")]);
       const result = await run({
         llm,
         ...(rewrite ? { hookPipeline: hooks } : {}),
@@ -594,7 +590,9 @@ describe("runAgentToolLoop core", () => {
       const assistant = llm.requests[1]?.messages.find(
         (m) => m.toolCalls?.length,
       );
-      expect(assistant?.toolCalls?.[0]?.arguments).toBe('{"note":"repaired"}');
+      expect(assistant?.toolCalls?.[0]?.arguments).toBe(
+        response.toolCalls[0]!.arguments,
+      );
       expect(result.collectedToolCalls[0]?.input).toEqual({ note: "repaired" });
       expect(result.pendingProposals).toHaveLength(1);
     },
@@ -607,13 +605,13 @@ describe("runAgentToolLoop core", () => {
         ...toolCall("mark", {}),
         toolCalls: [{ id: "tc-1", name: "mark", arguments: raw }],
       },
-      prose("done"),
+      submitted("done"),
     ]);
     const result = await run({ llm });
     const messages = llm.requests[1]!.messages;
     const args = messages.find((m) => m.toolCalls?.length)?.toolCalls?.[0]
       ?.arguments;
-    expect(JSON.parse(args!)).toBe(raw);
+    expect(args).toBe(raw);
     expect(messages.find((m) => m.role === "tool")?.content).toContain(
       "invalid-input",
     );
@@ -632,14 +630,17 @@ describe("runAgentToolLoop core", () => {
         parameters: z.object({}),
         execute: async () => value,
       });
-      const llm = new ScriptedLLM([toolCall("mark", {}), prose("after tool")]);
+      const llm = new ScriptedLLM([
+        toolCall("mark", {}),
+        submitted("after tool"),
+      ]);
       const result = await run({
         llm,
         manifest: manifest({ requireToolUse: true }),
         deps: { toolExecutor: createToolExecutor({ findTool: () => module }) },
       });
       expect(llm.calls).toBe(2);
-      expect(result.finalContent).toBe("after tool");
+      expect(result.acceptedOutput?.narrativeOutput).toBe("after tool");
       expect(result.requiredToolUseUnmet).toBe(false);
       expect(result.executedToolCalls[0]?.result).toEqual(value);
     },
@@ -658,7 +659,7 @@ describe("runAgentToolLoop core", () => {
     const llm = new ScriptedLLM([
       toolCall("mark", { note: "read" }),
       toolCall("runtime-done", {}),
-      prose("done"),
+      submitted("done"),
     ]);
     const result = await run({
       llm,
@@ -679,7 +680,7 @@ describe("runAgentToolLoop core", () => {
   it.each(["mark", "submit"])(
     "applies completing-tool requirements to resumed %s evidence",
     async (name) => {
-      const llm = new ScriptedLLM([prose("done")]);
+      const llm = new ScriptedLLM([submitted("done")]);
       const result = await run({
         llm,
         manifest: manifest({
@@ -688,7 +689,7 @@ describe("runAgentToolLoop core", () => {
           tools: { plugin: ["mark", "submit"] },
         }),
         initialState: {
-          completionCalls: [{ name, success: true, done: false }],
+          businessCalls: [{ name, success: true, result: {} }],
         },
         deps: {
           toolExecutor: createToolExecutor({
@@ -705,29 +706,32 @@ describe("runAgentToolLoop core", () => {
   it("streams plugin-output runtimes without forwarding their text to the story", async () => {
     const streamSpy = vi.fn(async function* () {
       yield { type: "text-delta" as const, textDelta: "plugin chatter" };
-      yield { type: "done" as const, finishReason: "stop" };
+      yield {
+        type: "tool-call" as const,
+        ...submitted("plugin chatter").toolCalls[0]!,
+      };
+      yield { type: "done" as const, finishReason: "tool_calls" };
     });
-    const onDelta = vi.fn();
     const llm: LLMAdapter = {
-      generate: async () => prose("plugin chatter"),
+      generate: async () => submitted("plugin chatter"),
       stream: streamSpy,
     };
     const result = await run({
       llm,
-      deps: { toolExecutor: undefined, onDelta },
+      manifest: manifest({ tools: {} }),
+      deps: { toolExecutor: undefined },
     });
 
     expect(streamSpy).toHaveBeenCalledOnce();
-    expect(onDelta).not.toHaveBeenCalled();
-    expect(result.streamDeltaCount).toBe(0);
-    expect(result.finalContent).toBe("plugin chatter");
+
+    expect(result.acceptedOutput?.narrativeOutput).toBe("plugin chatter");
   });
 
   it("pins the llm trace sequence: calling → responded per step", async () => {
     const { emitter, types } = recordingEmitter();
     const llm = new ScriptedLLM([
       toolCall("mark", { note: "t" }),
-      prose("end"),
+      submitted("end"),
     ]);
     await run({ llm, deps: { toolExecutor: makeExecutor(), emitter } });
 
@@ -739,7 +743,12 @@ describe("runAgentToolLoop core", () => {
       "llm.responded",
     ]);
     const toolEvents = types.filter((t) => t.startsWith("tool."));
-    expect(toolEvents).toEqual(["tool.calling", "tool.completed"]);
+    expect(toolEvents).toEqual([
+      "tool.calling",
+      "tool.completed",
+      "tool.calling",
+      "tool.completed",
+    ]);
   });
 
   it("lets a story stuck repeating a tool call write its prose without tools", async () => {
@@ -752,9 +761,9 @@ describe("runAgentToolLoop core", () => {
       const llm: LLMAdapter = {
         generate: async (params) => {
           requests.push(params);
-          return params.tools
+          return params.tools?.some((tool) => tool.name === "mark")
             ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-            : prose("The fog closes over the pier.");
+            : submitted("The fog closes over the pier.");
         },
       };
       const result = await run({
@@ -763,8 +772,12 @@ describe("runAgentToolLoop core", () => {
         maxSteps: 20,
       });
 
-      expect(result.finalContent).toBe("The fog closes over the pier.");
-      expect(requests.at(-1)?.tools).toBeUndefined();
+      expect(result.acceptedOutput?.narrativeOutput).toBe(
+        "The fog closes over the pier.",
+      );
+      expect(requests.at(-1)?.tools?.map((tool) => tool.name)).toEqual([
+        "submit-output",
+      ]);
     } finally {
       warn.mockRestore();
     }
@@ -803,7 +816,7 @@ describe("runAgentToolLoop core", () => {
   it("abort: a pre-fired signal rejects with TurnAbortedError before any LLM call", async () => {
     const controller = new AbortController();
     controller.abort();
-    const generateSpy = vi.fn(async () => prose("never"));
+    const generateSpy = vi.fn(async () => submitted("never"));
     await expect(
       run({
         llm: { generate: generateSpy },
@@ -817,7 +830,7 @@ describe("runAgentToolLoop core", () => {
     const controller = new AbortController();
     const { emitter, types } = recordingEmitter();
     const llm: LLMAdapter = {
-      generate: async () => prose("fallback"),
+      generate: async () => submitted("fallback"),
       stream: async function* (): AsyncIterable<LLMStreamEvent> {
         yield { type: "text-delta", textDelta: "Partial " };
         // Player presses stop mid-stream; the provider then dies on its
@@ -833,7 +846,6 @@ describe("runAgentToolLoop core", () => {
         manifest: m,
         deps: {
           toolExecutor: undefined,
-          onDelta: async () => {},
           emitter,
           turnControl: { signal: controller.signal },
         },
@@ -854,7 +866,7 @@ describe("runAgentToolLoop core", () => {
         messages: readonly { role: string; content: unknown }[];
       }) => {
         seenMessages.push([...params.messages]);
-        return prose("story goes left");
+        return submitted("story goes left");
       },
     } as LLMAdapter;
     const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
@@ -885,7 +897,9 @@ describe("runAgentToolLoop core", () => {
         messages: readonly { role: string; content: unknown }[];
       }) => {
         seenMessages.push([...params.messages]);
-        return prose(seenMessages.length === 1 ? "walks ahead" : "turns back");
+        return submitted(
+          seenMessages.length === 1 ? "walks ahead" : "turns back",
+        );
       },
     } as LLMAdapter;
     const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
@@ -905,7 +919,7 @@ describe("runAgentToolLoop core", () => {
       second.some(
         (msg) =>
           msg.role === "assistant" &&
-          String(msg.content).includes("walks ahead"),
+          JSON.stringify(msg).includes("walks ahead"),
       ),
     ).toBe(true);
     expect(
@@ -914,43 +928,37 @@ describe("runAgentToolLoop core", () => {
           msg.role === "user" && String(msg.content).includes("等等，回头"),
       ),
     ).toBe(true);
-    // Both prose chunks survive into finalContent.
-    expect(result.finalContent).toBe("walks ahead\n\nturns back");
+    // Only the candidate that saw steering can become output.
+    expect(result.acceptedOutput?.narrativeOutput).toBe("turns back");
   });
 
-  it("steering: the live text breaks between the steered segments as the final content does", async () => {
+  it("steering supersedes a candidate received over provider streaming", async () => {
     const drains: string[][] = [[], ["等等，回头"]];
     let call = 0;
     const llm: LLMAdapter = {
-      generate: async () => prose("fallback"),
-      stream: async function* (): AsyncIterable<LLMStreamEvent> {
-        call += 1;
+      generate: async () => submitted("fallback"),
+      stream: async function* () {
+        call++;
         yield {
-          type: "text-delta",
-          textDelta: call === 1 ? "walks ahead" : "turns back",
+          type: "tool-call",
+          ...submitted(call === 1 ? "walks ahead" : "turns back").toolCalls[0]!,
         };
-        yield {
-          type: "done",
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
-      } as never,
+        yield { type: "done", finishReason: "tool_calls" };
+      },
     };
-    const live: string[] = [];
-    const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
     const result = await run({
       llm,
-      manifest: m,
+      manifest: manifest({ outputKind: "story", tools: {} }),
       deps: {
         toolExecutor: undefined,
-        onDelta: async (d: { textDelta: string }) => {
-          live.push(d.textDelta);
-        },
         turnControl: { drainSteering: () => drains.shift() ?? [] },
       },
     });
-    expect(result.finalContent).toBe("walks ahead\n\nturns back");
-    expect(live.join("")).toBe(result.finalContent);
+    expect(result.acceptedOutput?.narrativeOutput).toBe("turns back");
+    expect(call).toBe(2);
+    expect(result.collectedToolCalls[0]?.output).toMatchObject({
+      error: { code: "invalid-output" },
+    });
   });
 
   it("steering: an interjection keeps the player's own message under the budget's protection", async () => {
@@ -959,7 +967,7 @@ describe("runAgentToolLoop core", () => {
     // the interjection without what it answers. A call that cannot hold both
     // fails instead.
     const queue = ["等等，回头"];
-    const llm = new ScriptedLLM([prose("must not be reached")]);
+    const llm = new ScriptedLLM([submitted("must not be reached")]);
     const result = await run({
       llm,
       manifest: manifest({
@@ -993,11 +1001,12 @@ describe("runAgentToolLoop core", () => {
         messages: readonly { role: string; content: unknown }[];
       }) => {
         seenMessages.push([...params.messages]);
-        return prose("plugin output");
+        return submitted("plugin output");
       },
     } as LLMAdapter;
     await run({
       llm,
+      manifest: manifest({ tools: {} }),
       deps: {
         toolExecutor: undefined,
         turnControl: { drainSteering: drain },

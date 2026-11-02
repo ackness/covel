@@ -8,10 +8,7 @@ import type {
 import i18n from "@/i18n";
 import { subscribeToast } from "@/lib/toast-channel.js";
 import { initialState, reducer } from "../reducer.js";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 
 // Mirrors the ordered settlement events asserted by the server's
 // tests/api/bundled-actor-settlement.test.ts; model/step/hook traces are omitted.
@@ -190,11 +187,10 @@ describe("bundled dialogue actor settlement notices", () => {
         dispatch: (action) => {
           stateRef.current = reducer(stateRef.current, action);
         },
-        ds: {} as SseEventHandlerDeps["ds"],
+
         stateRef,
         sessionIdRef: { current: "scene" },
-        deltaBufferRef: { current: new Map() },
-        deltaRafRef: { current: null },
+
         lastBackfilledTurnIdRef: { current: null },
       });
       const toast = vi.fn();

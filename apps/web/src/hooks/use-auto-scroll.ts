@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Sticky-bottom auto-scroll for streaming message lists.
+ * Sticky-bottom auto-scroll for message lists.
  *
  * Tracks whether the user is "pinned" to the bottom of a scroll container
  * (within `thresholdPx` tolerance). Auto-follows new content only while
@@ -12,11 +12,30 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * `scrollIntoView` — the latter also scrolls the document and can shove the
  * full-height app shell off-screen.
  *
- * High-frequency delta updates use `behavior: "auto"` to avoid the jittery
- * smooth-scroll animation; the explicit jump action uses `"smooth"`.
+ * New messages use `behavior: "auto"`; the explicit jump action uses `"smooth"`.
  */
 
 const DEFAULT_THRESHOLD_PX = 80;
+
+/** Follow readable content while later semantic units still reserve layout. */
+function followTop(viewport: HTMLElement): number {
+  const group = Array.from(
+    viewport.querySelectorAll('[data-reveal-active="true"]'),
+  ).at(-1);
+  const hidden = group?.querySelector('[data-reveal-hidden="true"]');
+  const anchor = hidden?.previousElementSibling;
+  if (!anchor)
+    return Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  const rect = anchor.getBoundingClientRect();
+  const viewportTop = viewport.getBoundingClientRect().top + viewport.clientTop;
+  // A tall unit starts at its first readable line; a short one follows its end.
+  return Math.max(
+    0,
+    viewport.scrollTop +
+      Math.min(rect.top, rect.bottom - viewport.clientHeight) -
+      viewportTop,
+  );
+}
 
 export interface AutoScrollResult {
   /** Attach to the scrollable viewport element. */
@@ -28,16 +47,15 @@ export interface AutoScrollResult {
 }
 
 export function useAutoScroll(
-  /** Value(s) that change as new content streams in (e.g. messages). */
+  /** Value(s) that change when content arrives (e.g. messages). */
   dep: unknown,
   options?: {
     thresholdPx?: number;
-    subscribeToStreaming?: (listener: () => void) => () => void;
   },
 ): AutoScrollResult {
   const thresholdPx = options?.thresholdPx ?? DEFAULT_THRESHOLD_PX;
   const viewportRef = useRef<HTMLElement | null>(null);
-  // Default to pinned: a fresh session should follow the stream.
+  // Default to pinned: a fresh session should follow new messages.
   const isPinnedRef = useRef(true);
   const [showJumpButton, setShowJumpButton] = useState(false);
 
@@ -49,18 +67,19 @@ export function useAutoScroll(
   const scrollViewportToBottom = useCallback((behavior: ScrollBehavior) => {
     const el = viewportRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
+    el.scrollTo({ top: followTop(el), behavior });
   }, []);
 
   const computeIsAtBottom = useCallback(
     (el: HTMLElement): boolean => {
-      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const distance = followTop(el) - el.scrollTop;
       return distance <= thresholdPx;
     },
     [thresholdPx],
   );
 
   const scrollHandlerRef = useRef<(() => void) | null>(null);
+  const revealObserverRef = useRef<MutationObserver | null>(null);
   const scrollRef = useCallback(
     (node: HTMLElement | null) => {
       const prev = viewportRef.current;
@@ -69,6 +88,8 @@ export function useAutoScroll(
       if (prev && scrollHandlerRef.current) {
         prev.removeEventListener("scroll", scrollHandlerRef.current);
       }
+      revealObserverRef.current?.disconnect();
+      revealObserverRef.current = null;
       viewportRef.current = node;
       scrollHandlerRef.current = null;
       if (!node) return;
@@ -79,8 +100,18 @@ export function useAutoScroll(
       };
       scrollHandlerRef.current = handler;
       node.addEventListener("scroll", handler);
+      const observer = new MutationObserver(() => {
+        if (isPinnedRef.current) scrollViewportToBottom("auto");
+      });
+      observer.observe(node, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["data-reveal-active", "data-reveal-hidden"],
+      });
+      revealObserverRef.current = observer;
     },
-    [computeIsAtBottom],
+    [computeIsAtBottom, scrollViewportToBottom],
   );
 
   const jumpToBottom = useCallback(() => {
@@ -92,34 +123,11 @@ export function useAutoScroll(
     scrollViewportToBottom(prefersReducedMotion ? "auto" : "smooth");
   }, [scrollViewportToBottom]);
 
-  // Follow new content only while pinned. Use "auto" during streaming so
-  // rapid deltas don't queue competing smooth-scroll animations.
+  // Follow new content only while pinned.
   useEffect(() => {
     if (!isPinnedRef.current) return;
     scrollViewportToBottom("auto");
   }, [dep, scrollViewportToBottom]);
-
-  // Streaming text lives outside React session state. Follow it imperatively so
-  // token arrival does not re-render and reconcile the complete message history.
-  useEffect(() => {
-    const subscribe = options?.subscribeToStreaming;
-    if (!subscribe) return;
-    let frameId: number | null = null;
-    const unsubscribe = subscribe(() => {
-      if (!isPinnedRef.current || frameId !== null) return;
-      // A provider can deliver several deltas inside one display frame. Batch
-      // their scrollHeight read + scrollTo into one animation-frame callback
-      // so streaming text does not force layout for every token chunk.
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        if (isPinnedRef.current) scrollViewportToBottom("auto");
-      });
-    });
-    return () => {
-      unsubscribe();
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-    };
-  }, [options?.subscribeToStreaming, scrollViewportToBottom]);
 
   return { scrollRef, showJumpButton, jumpToBottom };
 }

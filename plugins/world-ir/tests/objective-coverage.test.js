@@ -1,3 +1,4 @@
+import { getToolContent } from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
 import makeSubmit from "../tools/submit-world-facts.js";
 
@@ -48,7 +49,7 @@ const event = (name, done, status = "progressed") => ({
   attributes: { quest: name, status, completedObjectives: done },
 });
 const submit = (args, ctx = context) =>
-  tool.execute(tool.parameters.parse(args), ctx);
+  tool.execute(tool.parameters.parse(args), ctx).then(getToolContent);
 
 describe("objective coverage before extraction succeeds", () => {
   it("checks evidence within individual source segments without using attribution or retry input", async () => {

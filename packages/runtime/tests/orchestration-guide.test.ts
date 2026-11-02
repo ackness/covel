@@ -1,3 +1,4 @@
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,7 +19,7 @@ import {
   commitExecution,
   finalizePresentationJobs,
 } from "../src/index.js";
-import { prose } from "./_helpers/agent-loop-fixture.js";
+
 import { setup, narrator, input, story } from "./presentation-fixture.js";
 import { emptyPresentationDigest } from "../src/presentation/projection.js";
 import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
@@ -334,12 +335,10 @@ describe("public orchestration guide", () => {
           services,
           llm: {
             generate: async () =>
-              prose(
-                JSON.stringify({
-                  segments: [{ kind: "dialogue", text: "Welcome." }],
-                  intent: "PRIVATE-GUIDE-INTENT",
-                }),
-              ),
+              toolCall("submit-output", {
+                segments: [{ kind: "dialogue", text: "Welcome." }],
+                intent: "PRIVATE-GUIDE-INTENT",
+              }),
           },
           loadRuntime: async (manifest) =>
             manifest.name === actor.manifest.name ? actor : story,

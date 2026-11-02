@@ -11,7 +11,7 @@ import {
 } from "../src/index.js";
 import {
   makeExecutor,
-  prose,
+  submitted,
   queuedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -101,7 +101,7 @@ describe.each(["form", "raw sentinel"])("suspension from a %s", (kind) => {
         suspension!,
         { name: "Alex", age: 21 },
         runtime,
-        { ...deps, llm: queuedLLM([prose("All answered.")]) },
+        { ...deps, llm: queuedLLM([submitted("All answered.")]) },
       );
       expect(resumed.result.status).toBe("success");
       expect(

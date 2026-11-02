@@ -103,19 +103,15 @@ export async function reportRuntimeResult(
 }
 
 /**
- * Emit the compact `message.completed` trace event for a story runtime that
- * produced non-empty narrative content. No-op when there is no emitter or no
- * content. This is the single persisted record of the final aggregated content
- * + delta count, so the `/debug` timeline shows one row per runtime output
- * instead of thousands of per-token rows.
+ * Record accepted story computation for diagnostics before durable commit.
+ * Gameplay consumes only the committed narrative.completed event.
  */
 export async function emitMessageCompleted(
   emitter: TurnEmitter | undefined,
   result: RuntimeResult,
   finalContent: string,
-  deltaCount: number,
 ): Promise<void> {
-  if (!emitter) return;
+  if (!emitter || !finalContent) return;
   await emitter.emit("message.completed", {
     runtimeId: result.runtimeId,
     pluginId: result.pluginId,
@@ -123,6 +119,5 @@ export async function emitMessageCompleted(
     runId: result.runId,
     content: finalContent,
     len: finalContent.length,
-    deltaCount,
   });
 }

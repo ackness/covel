@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -36,26 +40,30 @@ for (const community of [false, true]) {
         // Once setup is done the narrator tells the opening and the
         // character tracker finishes without changes.
         if (!formTool) {
-          const done = request.tools?.some(
-            (tool) => tool.name === "runtime-done",
-          );
-          return {
-            content: done ? null : "The story begins.",
-            toolCalls: done
-              ? [{ id: "tracker-done", name: "runtime-done", arguments: "{}" }]
-              : [],
-            finishReason: done ? "tool_calls" : "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          };
+          if (request.tools?.some((tool) => tool.name === "sync-characters")) {
+            if (completedBusinessOutput(request.messages, "sync-characters"))
+              return submittedOutput({});
+            return {
+              content: null,
+              toolCalls: [
+                {
+                  id: "tracker-sync",
+                  name: "sync-characters",
+                  arguments: JSON.stringify({ creates: [], updates: [] }),
+                },
+              ],
+              finishReason: "tool_calls",
+              usage: { inputTokens: 1, outputTokens: 1 },
+            };
+          }
+          return submittedOutput({
+            segments: [{ kind: "narration", text: "The story begins." }],
+          });
         }
         // The form tool answered with its filled preview; the model accepts it.
         if (request.messages.at(-1)?.role === "tool")
-          return {
-            content: '{"preGameDone":false}',
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          };
+          return submittedOutput({ preGameDone: false });
+
         return {
           content: "Your story begins.",
           toolCalls: [

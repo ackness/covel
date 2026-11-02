@@ -88,7 +88,10 @@ export {
   ToolError,
   isToolError,
 } from "@covel/plugin-handlers-utils";
-export type { ToolModelView } from "@covel/plugin-handlers-utils";
+export type {
+  ReviewAgentOutputPayload,
+  ToolModelView,
+} from "@covel/plugin-handlers-utils";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
 export * from "./llm-slots.js";
@@ -251,6 +254,10 @@ export {
   concealRuntimeResult,
   concealTracePayload,
 } from "./utils/concealed-runtime.js";
+export {
+  isRuntimeProgressType,
+  runtimeProgressPayload,
+} from "./utils/runtime-progress.js";
 export {
   HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
   KERNEL_PLUGIN_DATA_OWNER_PREFIX,

@@ -159,11 +159,13 @@ const LazyReactMarkdown = lazyWithRetry(async () => {
   function Inner({
     children,
     themeSessionId,
+    themePart = "story",
   }: {
     children: string;
     themeSessionId?: string;
+    themePart?: "story" | "dialogue";
   }) {
-    const part = usePluginThemePart(themeSessionId, "story");
+    const part = usePluginThemePart(themeSessionId, themePart);
     const themedComponents = useMemo(
       () =>
         ({
@@ -174,7 +176,7 @@ const LazyReactMarkdown = lazyWithRetry(async () => {
             children?: ReactNode;
           }) => <span {...part}>{text}</span>,
         }) as Components,
-      [part["data-covel-theme-scope"]],
+      [part["data-covel-theme-scope"], themePart],
     );
     return (
       <ReactMarkdown
@@ -194,11 +196,13 @@ const LazyReactMarkdown = lazyWithRetry(async () => {
 function NonMemoizedMarkdown({
   children,
   themeSessionId,
+  themePart = "story",
 }: {
   children: string;
   themeSessionId?: string;
+  themePart?: "story" | "dialogue";
 }) {
-  const part = usePluginThemePart(themeSessionId, "story");
+  const part = usePluginThemePart(themeSessionId, themePart);
   // While the parser chunk loads, fall back to the raw text so the message is
   // never blank — it simply upgrades to formatted markdown once ready.
   return (
@@ -209,7 +213,7 @@ function NonMemoizedMarkdown({
         </span>
       }
     >
-      <LazyReactMarkdown themeSessionId={themeSessionId}>
+      <LazyReactMarkdown themeSessionId={themeSessionId} themePart={themePart}>
         {children}
       </LazyReactMarkdown>
     </Suspense>
@@ -220,7 +224,8 @@ export const Markdown = memo(
   NonMemoizedMarkdown,
   (prev, next) =>
     prev.children === next.children &&
-    prev.themeSessionId === next.themeSessionId,
+    prev.themeSessionId === next.themeSessionId &&
+    prev.themePart === next.themePart,
 );
 
 interface MarkdownNode {

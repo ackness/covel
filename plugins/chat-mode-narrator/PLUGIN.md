@@ -1,5 +1,5 @@
 ---
-version: 0.0.44
+version: 0.0.45
 displayName: Dialogue Narrator
 description: >-
   Makes the story feel more like character dialogue, suited for play focused on
@@ -97,7 +97,7 @@ contributes:
         the topics and payload shapes), tool calls do not count as prose and
         must not be mentioned in it
 
-        - Return the reply as segments (see Reply Format); list the characters
+        - Submit the reply through `submit-output` as segments (see Reply Format); list the characters
         present in cues.present
 
         - Control reply length by the user setting: short ~120-220 chars, medium
@@ -106,7 +106,7 @@ contributes:
   hooks:
     - PostContextAssembly
     - PreLLMCall
-    - PostLLMResponse
+    - ReviewAgentOutput
     - TurnStop
 ---
 

@@ -1,3 +1,4 @@
+import { submitted, toolCall } from "./_helpers/agent-loop-fixture.js";
 /** Request validation failures produce one paired error trace, without resending history. */
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
@@ -59,9 +60,7 @@ describe("turn-executor message.completed trace emission", () => {
       },
       async generate() {
         return {
-          content: narrative,
-          toolCalls: [],
-          finishReason: "stop",
+          ...submitted(narrative),
           usage: { inputTokens: 10, outputTokens: 20 },
         };
       },
@@ -95,7 +94,7 @@ describe("turn-executor message.completed trace emission", () => {
       content: narrative,
       len: narrative.length,
     });
-    expect(typeof messageCompleted!.payload.deltaCount).toBe("number");
+    expect(messageCompleted!.payload).not.toHaveProperty("deltaCount");
   });
 
   it("does not emit message.completed for plugin-output runtimes", async () => {
@@ -114,9 +113,7 @@ describe("turn-executor message.completed trace emission", () => {
     const llm: LLMAdapter = {
       async generate() {
         return {
-          content: '{"data": "ok"}',
-          toolCalls: [],
-          finishReason: "stop",
+          ...toolCall("submit-output", { data: "ok" }),
           usage: { inputTokens: 5, outputTokens: 5 },
         };
       },

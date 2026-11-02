@@ -23,7 +23,7 @@ The player types "I go explore the swamp" and presses send. Then these things ha
 6. **A runtime runs.** The kernel first checks that everything the runtime needs is there. Then it prepares what the runtime can see: the world setting, the earlier conversation, the results of upstream runtimes, and the player's sentence. An `agent` gives all of this to the model. The model can call tools until it gives a final result. A `function` simply runs its function.
 7. **Domain writes are staged.** Story text, forms and plugin data become proposals and have not taken effect yet. Execution results, diagnostics and confirmed player input may already be saved separately; those records do not confirm that domain writes committed.
 8. **The save is committed.** Accepted proposals, the execution journal and the session clock share one transaction. With a valid story, optional runtime writes can be discarded separately. A rejected story or setup unit, or an infrastructure failure, rolls back the whole transaction. Player input saved separately is retained.
-9. **The screen is confirmed.** Story text can stream before commit. Committed events provide the final text, forms and panel data. The frontend confirms that content, or removes results that did not commit.
+9. **The screen receives committed content.** Progress is visible during execution. Only post-commit events publish the complete story, forms and panel data; failure or cancellation creates no draft story.
 10. **Wrap-up.** The last event is `execution.completed`. Its `committed` field says whether this turn was really saved. Slow wrap-up work, such as tidying up memory, can move to the background, so the player does not have to wait for it.
 
 The start is a little different. A new session starts in the "setup" phase (`setup`). Only the runtimes for setup run during this phase, for example the one that generates the character form. When all the setup is done, the session enters the "playing" phase (`playing`) and starts the four-stage turns described above.
@@ -299,7 +299,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story output → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["Emit SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
+    Commit --> SSE["Emit SessionEvent<br/>narrative.completed<br/>interaction.requested<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' and<br/>all setup runtimes<br/>have reported completion?"}
     PreGameTick -->|yes| Advance["setup commit: phase setup → playing<br/>completedPlayerTurns stays 0"]
     PreGameTick -->|no| Keep["Keep phase unchanged"]
@@ -554,56 +554,17 @@ LLM: "call sync-           ToolExecutor:
                            The Tool Loop converges on the completion contract, budget and cancellation conditions
 ```
 
-**How a task counts as done.** When the model says "I am finished" (`finishReason: stop`), that alone does not prove that a structured task succeeded. A runtime uses these declarations to say what counts as done:
+**How a task counts as done.** Every agent has one success path: call `submit-output` in its own tool response batch and pass complete-object parsing, the effective schema, story invariants, required business work and `ReviewAgentOutput`. Ordinary content and the last business-tool result cannot replace submission. Functions still return handler results.
 
-| Declaration                 | Meaning                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `requireToolUse`            | With `completeAfterTools`, a listed tool must succeed; otherwise any successful business tool counts    |
-| `completeAfterTools`        | The loop can end once the named final tool succeeds and there is no unresolved tool error in that batch |
-| `requireExplicitCompletion` | For tasks that allow "no change": there must be a real write, or an explicit call to `runtime-done`     |
+Each step handles steering, `PreStep`, `PreLLMCall` and the request budget before calling the model. Preserve the actual assistant message, provider call IDs, reasoning and continuation. `PostLLMResponse` reviews that real response only; rejection closes every original call ID without dispatch. Then run every `PreToolUse` once in model order and check original and rewritten submission names before any business call executes. A submission mixed with reads, writes, suspension or another submission rejects the whole batch. Ordinary business tools retain safe read pools and barriers.
 
-- Writing only story text, or writing a tool call as a JSON text block, does not count as a write.
-- An error result cannot turn into a structured success.
-- A function runtime can go through the same tools, permissions, argument validation, and transaction boundary by using a declared `ctx.tools.call()`.
-- A community handler uses `ctx.pluginData`. It does not get a full writable store.
+Acceptance stores a candidate in private kernel state and ends computation. `PostToolUse` may rewrite model-visible text, never success, the candidate or effects; termination without acceptance fails. `PostRuntime` rewrites pass a defensive schema/story gate without another model call. Only the commit owner can persist successful business-tool proposals; submission arguments carry no write authority.
 
-**Output review happens before tools run.** A plugin can reject the draft in `PostLLMResponse` and give a correction request. `PreLLMCall` can also turn streaming off for that call with `replace.stream: false`, so nothing is shown before the review passes.
+Rejection returns a correlated tool error and a content-free `output-rejected` step note. Format, review and required work have independent budgets while consuming ordinary steps; see [loop profiles](../reference/plugins.md#loop-profile-agentloopprofile). Resubmission never repeats an already successful business write.
 
-- `agent.loop.corrections.review` configures the correction budget, with two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. Corrections remain subject to step and time limits; see [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
-- The two built-in narrative plugins use this to check `perspective`. The default is character-centred second person; first or third person, an omniscient narrator or a game-master voice can be chosen instead, and dialogue keeps its own point of view. A segmented draft is checked by its segment texts.
-- They do not buffer: the draft streams while it is written. When a draft is rejected, the loop sends a `reset`, the client clears the text shown so far and then shows the rewritten draft; after commit, the final text of `narrative.completed` replaces what was streamed.
-- This is a limited text check. It does not guarantee that every plot inference is correct.
+Suspension saves the admitted output schema and optional business-tool output source, required-work rules, plugin version, ordinary steps used, and correction counts and ceilings. Resume checks the same contract and continues step numbering and budgets, including a ceiling lowered by `PreStep`. Required work and effects come from executor-owned results, not hook-rewritten public tool records or assistant content. Rejected candidates remain in the private transcript and cannot become accepted resumed output. Delegated children use the same submission gate without an independent story commit unit.
 
-**Phases and stop reasons of the tool loop.** An agent's tool loop (`packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`) moves through fixed phases. The phases and their legal transitions are in `agent-loop/loop-state.ts`; an illegal transition throws at once (it is a defect of the loop itself, which no model or plugin can trigger):
-
-```
-preparing → awaiting-pre-step → requesting-model → reviewing → running-tools → deciding
-              ↑                                       │                          │
-              └───────────── next step ←──────────────┴──────────────────────────┘
-deciding → finalizing → stopped        running-tools → suspended
-```
-
-The loop's behaviour comes from the runtime's loop profile (`resolveLoopProfile` in `agent-loop/loop-profile.ts`), not from `outputKind`: whether text is shown to the player as it streams, whether the player's interjections are merged, whether cut-off story text is kept, whether a repeated tool call turns the tools off or fails (`fallback`), and whether a finalizer runs at the step limit and at the deadline reserve (`finalizer`). Without `agent.loop.profile`, a story runtime uses `story` and any other `system`; fields and values are in [the plugin reference's loop profile](../reference/plugins.md#loop-profile-agentloopprofile). The turn level uses the same resolver to tell whether any runtime still reads the interjection queue.
-
-Each loop run creates one correction policy (`agent-loop/correction-policy.ts`), reading separate budgets for tool use, response review, loop perturbation and output repair from the profile's `corrections`. After the loop and any finalizer, before entering `stopped`, a silent output check shared with `settleAgentLoop` decides whether repair is needed. By default, when budget and remaining time allow, one more request with tools off sends the validation errors to the model and completely replaces the invalid answer. An answer that still fails its schema or a story whose text is still empty fails with `invalid-output`. Repair skips `PreStep` but passes through `PreLLMCall` and `PostLLMResponse`. Conditions and values are in [the loop profile](../reference/plugins.md#loop-profile-agentloopprofile).
-
-When JSON is required, existing correction requests include concrete [format diagnostics](../reference/slots.md#structured-output): an empty answer explains that no JSON object was returned, and syntax errors retain the parser's location and expectation rather than only reporting fields missing after extraction. A draft already rejected by `PostLLMResponse` also gets this explanation after the plugin's correction, diagnosing the response after hook rewrites and using the review budget; output repair after the loop uses its own budget. Diagnostics add no rejection condition and preserve existing tolerant parsing and story prose fallback rules.
-
-The order within each step:
-
-1. Check for cancellation; when the profile has `steering`, add the player's interjections to the conversation.
-2. The `PreStep` hook: it can narrow this step's tools, change its tool choice, lower the steps left, or end the loop (see the [hook reference](../reference/hooks.md#prestep)).
-3. Send `step.started`.
-4. `PreLLMCall` → strip unsupported pictures → replay the per-run context ledger → elide older tool data → collapse older complete tool steps into deterministic digests → `applyBudget` history pruning → head/tail truncation → model call (`llm.calling` / `llm.responded`). The policy changes only the request copy; canonical messages, traces, tool records and suspension state retain their full content. Details: [prompt budgeting](../reference/prompt-structure.md#budget).
-5. The `PostLLMResponse` review; once accepted, consecutive safe read-only tools form parallel pools in model order, with other calls running as single barriers (`tool.*`). Each step finishes before the next starts. See [the tool rules](../reference/tools.md#execution-within-one-batch) and [hook order](../reference/hooks.md#pretooluse).
-6. Decide whether to end: a completing tool, `runtime-done`, a hook's `terminate`, a final reply without tool calls; otherwise go to the next step.
-7. The step's `step.completed` is sent when the next step starts or the loop ends, exactly once for each step that started.
-
-Every way of ending maps to one stop reason (`StopReason`), written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. The full table is in [the protocol reference's stop reasons](../reference/protocol.md#stop-reasons). The loop records the ordinary exits itself (`completed`, `tool-finished`, `max-steps`, `deadline`, `context-overflow`, PreStep's `cancelled`), and `settleAgentLoop` settles the result by it. A thrown exit keeps its original error object, and the reason is attached to the error (`agent-loop/stop-reason.ts`): call sites tag model errors, invalid output, invalid context limits and loop detection; the loop's outer catch tells apart the player's stop, the loop's own timeout and a parent's cancellation; and `finalizeRuntimeResult` reads the reason from the error into the failed result. A tag belongs to the run (`runId`) that made it: when a parent's timeout cancels the child agent it awaits, both share one error object, and the child's "cancelled by parent" never becomes the parent's own stop reason.
-
-**A step limit is not a success.** When the steps run out, text the model wrote beside a tool call is only a draft. As long as the output is not handed over by a completing tool, `requireToolUse` and `requireExplicitCompletion` are met or off, and at least 3 seconds remain before the deadline, the kernel sends one more request with tools off, the finalizer, asking for the final answer now. When the story output schema asks for `segments`, the finalizer, the prompt after lookup-only work and the loop-detection fallback all ask for a JSON object with paragraphs in `segments`, using narration, dialogue or action, and a speaker for dialogue. When the finalizer writes text, the runtime succeeds and its result is marked `stop.finalizer: true`; otherwise it fails with `max-steps` and its staged writes are not committed. The profile's `finalizer.maxSteps: false` turns this finalizer off. A timeout is a failure and does not try a finalizer; the exception is a profile that sets `finalizer.deadlineReserveMs`: when less time than the reserve is left and the finalizer conditions above hold, the loop starts no new step, merges queued player interjections when the profile has `steering` on, and sends the finalizer instead, which succeeds with `{ reason: "deadline", finalizer: true }` when it writes the answer.
-
-**A context overflow can also be finalized.** `finalizer.maxSteps` enables one tools-off request after an over-limit stop when a complete tool step exists and the normal finalizer conditions hold. That request trims tool steps as needed under [prompt budgeting](../reference/prompt-structure.md#budget), with the newest group also eligible. A rescued answer succeeds with `{ reason: "context-overflow", finalizer: true }` and can be repaired; otherwise settlement retains the original overflow failure text. The ledger is not persisted: resume recomputes its decisions deterministically, so the request prefix may change once.
+**A step limit is not a success.** With required work complete, at least 3 seconds left and the profile enabled, a step limit, deadline reserve or context overflow may use one submission-only finalizer. Overflow also requires a complete tool step. The finalizer uses the same validation/review, skips `PreStep`, and has no subsequent repair loop. Refusal, cancellation and real timeout cannot become success from earlier text. The complete [stop reasons](../reference/protocol.md#stop-reasons) remain on runtime and step events.
 
 ## 4. Plugin design
 
@@ -764,7 +725,6 @@ When the frontend receives an SSE event, it first turns the event into a message
 │  SSE events                  Message layer                  Render layer         │
 │  ──────────                  ─────────────                  ────────────         │
 │                                                                                  │
-│  narrative.delta         ──►  appendDelta()           ──►  Prose                 │
 │  narrative.completed     ──►  addMessage(story)       ──►  Components            │
 │                                                                                  │
 │  interaction.requested   ──►  addMessage(block)       ──►  messageToSpec()       │
@@ -802,7 +762,7 @@ When the frontend receives an SSE event, it first turns the event into a message
 For the list of components, see [UI components](../reference/ui-components.md).
 
 > [!IMPORTANT]
-> `narrative.delta` is sent only by runtimes that have streaming output turned on. A plugin can turn streaming off in `PreLLMCall` with `replace.stream: false`, so the client cannot count on receiving deltas in every turn. The built-in narrative plugins stream while they write and send a `reset` first when a draft is rejected.
+> Player story text appears only after durable commit. Runtime/step/tool/job events report progress while waiting, including safe submission-rejection notes. Provider streaming, tool-argument heartbeats and `PreLLMCall.replace.stream` select internal transport only; no draft or reset reaches the story pane.
 >
 > Only `execution.completed.committed` or a committed record confirms that this turn was saved. A success event from a single runtime is not proof that the whole turn was committed.
 
@@ -1078,7 +1038,7 @@ The events it emits include:
 
 Runtime lifecycle events use `TraceRecorder`, including starts and terminals at the resume entry. After commit or a suspension exit, saved recursive work appends an effective-status correction for the same run, persisting it before delivery to subscribers and the initiating action stream, once per stream. Corrections do not recommit proposals, rerun Hooks or count innocent child runs as plugin faults.
 
-Streamed story deltas are not saved. Each runtime saves only its final `message.completed`, so the table does not grow too large.
+Story deltas do not exist. Each accepted story runtime records one `message.completed` in traces; only a committed `narrative.completed` enters the player story feed.
 
 For the full payloads of the events, see the section "Forwarded runtime internal events" in the [protocol reference](../reference/protocol.md).
 
@@ -1120,12 +1080,12 @@ sequenceDiagram
             LLM-->>Plugin: tool result / finishReason=stop
             Plugin-->>Kernel: RuntimeOutput<br/>(segments / narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (streaming runtimes only; a segmented story sends only segment text)
-        Kernel-->>Web: SSE: narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (if there is a form/button)
+        Kernel-->>Web: SSE: step.started / step.completed (progress only)
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     Kernel->>Server: Record the setupRuntimes completion mirror, if not all are done, phase stays 'setup'
+    Kernel->>Kernel: Commit setup atomically
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
     end
     Server-->>Web: SSE: execution.completed
     Note over Web: Render narrative (Prose) + form (Form)<br/>pluginData updates → right panel + message panel
@@ -1152,12 +1112,11 @@ sequenceDiagram
             Plugin-->>Kernel: Agent protocol → output / effects / completion
         end
         Note over Kernel: Only explicit effects and story narrative produce Proposal[], committed together
-        Kernel-->>Web: SSE: narrative.delta / narrative.completed
-        Kernel-->>Web: SSE: interaction.requested (e.g. the guide's action cards)
-        Kernel-->>Web: SSE: plugin-data.changed (after a commit of writes such as dataset tools)
-        Kernel-->>Web: SSE: event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
+    Kernel->>Kernel: Commit the execution atomically
+    Kernel-->>Web: SSE: narrative.completed / interaction.requested (after commit)
+    Kernel-->>Web: SSE: plugin-data.changed / event.emitted (after commit)
     end
 
     opt a runtime suspends

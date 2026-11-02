@@ -5,10 +5,7 @@ import type { MessageRecord, SessionRecord } from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
 import { initialState, reducer } from "../reducer.js";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 import type { SessionAction, SessionState } from "../types.js";
 import { claimSessionAction } from "../runtime-refs.js";
 import { textActions } from "../composer-actions.js";
@@ -344,11 +341,10 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
   const sessionIdRef = { current: request.sessionId as string | null };
   const handle = createSseEventHandler({
     dispatch,
-    ds: {} as SseEventHandlerDeps["ds"],
+
     sessionIdRef,
     stateRef: { current: state },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   });
   const pending = runSingleSessionAction({

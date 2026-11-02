@@ -232,23 +232,19 @@ describe("connectPluginBridge", () => {
   });
 });
 
-it("posts only nonempty stream appends with a positive integer sequence", async () => {
+it("provides complete state delivery without a stream sender", async () => {
   const connection = connect();
   await connection.next();
-  connection.bridge.pushStream(0, "bad");
-  connection.bridge.pushStream(1.5, "bad");
-  connection.bridge.pushStream(3, "");
-  connection.bridge.pushStream(3, "ab");
-  expect(await connection.next()).toEqual({
-    type: "stream",
-    seq: 3,
-    append: "ab",
+  expect(connection.bridge).not.toHaveProperty("pushStream");
+  connection.bridge.pushState({ public: "Full story" });
+  expect(await connection.next()).toMatchObject({
+    type: "state",
+    value: { public: "Full story" },
   });
-  expect(connection.received).toHaveLength(2);
   connection.bridge.close();
 });
 
-it("the page bridge merges appends and ignores the stream lane without consented session state", async () => {
+it("the page bridge rejects version two and accepts only complete version three session state", async () => {
   const { runInNewContext } = await import("node:vm");
   let listener: ((event: unknown) => void) | undefined;
   const page: {
@@ -292,15 +288,21 @@ it("the page bridge merges appends and ignores the stream lane without consented
       value: { session: { version: 2, streaming: { seq: 2, text: "a" } } },
     },
   });
-  port.onmessage?.({ data: { type: "stream", seq: 2, append: "b" } });
-  expect(page.covel?.getState()).toMatchObject({
-    session: { streaming: { seq: 2, text: "ab" } },
+  expect(page.covel?.getState()).toEqual({});
+  expect(notify).not.toHaveBeenCalled();
+  port.onmessage?.({
+    data: {
+      type: "state",
+      value: {
+        session: { version: 3, messages: [{ seq: 2, text: "Full story" }] },
+      },
+    },
   });
-  port.onmessage?.({ data: { type: "stream", seq: 3, append: "c" } });
+  port.onmessage?.({ data: { type: "stream", seq: 2, append: "PRIVATE" } });
   expect(page.covel?.getState()).toMatchObject({
-    session: { streaming: { seq: 3, text: "c" } },
+    session: { version: 3, messages: [{ seq: 2, text: "Full story" }] },
   });
-  expect(notify).toHaveBeenCalledTimes(3);
+  expect(notify).toHaveBeenCalledOnce();
 });
 
 it("connects URL pages without a document and handles ready separately from actions", async () => {
@@ -415,7 +417,6 @@ it("drops late replies and delivery after retirement and validates every session
   active = false;
   finish({ status: "committed" });
   c.bridge.pushState({ private: "credential-sentinel" });
-  c.bridge.pushStream(1, "private");
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(c.received).toHaveLength(3);
   expect(JSON.stringify(c.received)).not.toContain("credential-sentinel");
@@ -428,7 +429,7 @@ it("executes the shipped page script against a real channel, reconstructs text a
   const parent = {};
   const page: {
     covel?: {
-      getState(): { session?: { streaming?: { text: string } } };
+      getState(): { session?: { messages?: { seq: number; text: string }[] } };
       invoke(
         method: string,
         params?: Record<string, unknown>,
@@ -470,7 +471,7 @@ it("executes the shipped page script against a real channel, reconstructs text a
     } as unknown as Pick<Window, "postMessage">,
     undefined,
     () => ({
-      state: { session: { version: 2, streaming: { seq: 1, text: "" } } },
+      state: { session: { version: 3, messages: [] } },
       sessionPage: true,
       locked: false,
       handlers: {
@@ -486,14 +487,16 @@ it("executes the shipped page script against a real channel, reconstructs text a
     }),
   );
   await vi.waitFor(() => expect(page.covel?.getState().session).toBeDefined());
-  let expected = "";
-  for (let index = 0; index < 50; index++) {
-    expected += "字🙂";
-    bridge.pushStream(1, "字🙂");
-  }
+  const expected = "字🙂".repeat(50);
+  bridge.pushState({
+    session: { version: 3, messages: [{ seq: 1, text: expected }] },
+  });
   await vi.waitFor(() =>
-    expect(page.covel?.getState().session?.streaming?.text).toBe(expected),
+    expect(page.covel?.getState().session?.messages?.[0]?.text).toBe(expected),
   );
+  expect(
+    captured.some((value) => (value as { type: string }).type === "stream"),
+  ).toBe(false);
   const pending = Array.from({ length: 8 }, () => page.covel!.invoke("run"));
   for (const promise of pending) void promise.catch(() => {});
   await expect(page.covel!.invoke("run")).rejects.toThrow("Plugin UI is busy");

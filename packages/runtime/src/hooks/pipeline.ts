@@ -294,9 +294,21 @@ export class HookPipeline {
       }
 
       if ("replace" in result && result.replace !== undefined) {
-        Object.assign(accumulated, result.replace);
+        // Reviewers can request correction, never replace another reviewer's
+        // candidate, call identity or public tool evidence.
+        const replacement =
+          event === "ReviewAgentOutput"
+            ? {
+                correction:
+                  (accumulated as { correction?: string }).correction ||
+                  (result.replace as { correction?: string }).correction
+                    ?.trim()
+                    .slice(0, 2000),
+              }
+            : result.replace;
+        Object.assign(accumulated, replacement);
         hasReplace = true;
-        currentPayload = { ...currentPayload, ...result.replace };
+        currentPayload = { ...currentPayload, ...replacement };
       }
     }
 
@@ -402,6 +414,17 @@ export class HookPipeline {
           if (!hookResultSchema.safeParse(owned).success) {
             // Do not include untrusted return values in diagnostic errors.
             throw new TypeError("Hook handler returned an invalid result");
+          }
+          if (
+            event === "ReviewAgentOutput" &&
+            owned.action === "continue" &&
+            "replace" in owned
+          ) {
+            const correction = (
+              owned.replace as { correction?: unknown } | undefined
+            )?.correction;
+            if (correction !== undefined && typeof correction !== "string")
+              throw new TypeError("Output review correction must be text");
           }
           // Keep the owned data: schema output can drop execution artifacts.
           return owned.action === "abort"
@@ -538,6 +561,10 @@ function emitHookEvent(
         pluginId: ctx.pluginId,
         runtimeId: ctx.runtimeId,
         ...extra,
+        // Review exceptions and abort reasons may quote private candidate data.
+        ...(ctx.event === "ReviewAgentOutput"
+          ? { reason: "Agent output review did not accept the submission." }
+          : {}),
       },
     });
   } catch {

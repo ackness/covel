@@ -1,6 +1,6 @@
 # Hooks
 
-A hook is a piece of plugin code. The kernel calls it at fixed moments: when a session starts or ends, when a turn starts or ends, before and after a runtime runs, before and after each model call, before and after each tool call, and before and after each write is committed. This page lists all 17 events, and what each one gives its handler and what the handler can return. Plugin authors who write hooks need it.
+A hook is a piece of plugin code. The kernel calls it at fixed moments: when a session starts or ends, when a turn starts or ends, before and after a runtime runs, before and after each model call, before and after each tool call, and before and after each write is committed. This page lists all 18 events, and what each one gives its handler and what the handler can return. Plugin authors who write hooks need it.
 
 A hook does only one of three things:
 
@@ -119,6 +119,7 @@ The table follows the order in `HOOK_EVENTS`. Tool events repeat inside the agen
 | `PreStep`             | runtime | sequential  | no    | Narrow this step's tools, change its tool choice, lower the steps left, or end the loop |
 | `PreLLMCall`          | runtime | sequential  | no    | Rewrite one call's messages, model, and tools                                           |
 | `PostLLMResponse`     | runtime | sequential  | no    | Rewrite the reply, or ask the model to correct it                                       |
+| `ReviewAgentOutput`   | runtime | sequential  | yes   | Accept validated output or request resubmission                                         |
 | `PostRuntime`         | runtime | sequential  | no    | Rewrite the runtime's result                                                            |
 | `PreToolUse`          | runtime | sequential  | yes   | Stop the tool call, or rewrite its name or arguments                                    |
 | `PostToolUse`         | runtime | sequential  | no    | Rewrite the tool result, or end the tool loop                                           |
@@ -217,7 +218,7 @@ Payload: `{ step, stepsRemaining, maxSteps, toolNames, toolChoice }`.
 - `replace.toolChoice`: this step's tool choice, replacing the manifest's `agent.toolChoice`. `"auto"` means no choice is sent; `{ name }` must be a tool offered this step. On a step where the runtime asked the model to correct itself and call a tool, `"auto"` does not lift that requirement.
 - `replace.stepsRemaining`: lower the steps left to this integer (at least 1, this step included). A value larger than the current one is ignored: steps can only go down. When they run out, the loop ends with `max-steps`.
 - `replace.stop: { reason, message? }`: end the loop before this step's model call. `reason` can only be one of these two:
-  - `"tool-finished"`: end as a success, the same as `PostToolUse`'s `terminate`. The runtime's completion conditions (`agent.completion`) are still checked.
+  - `"tool-finished"`: request an end to the loop. Without accepted output, the runtime fails with `invalid-output`.
   - `"cancelled"`: the runtime fails with the error `Runtime "<id>" was stopped by a PreStep hook`, followed by `message`. The tool calls already made stay in the failed result.
 
 `abort` is the same as "nothing changes". `PreStep` runs first and `PreLLMCall` then rewrites the call: `PreLLMCall`'s `replace.tools` overrides the tools `PreStep` narrowed.
@@ -229,7 +230,7 @@ Fires before each model call of an agent runtime. This includes calls made after
 Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state carries the same list, saved before the suspension.
 
 - `replace.messages`, `replace.model`, and `replace.tools` change only this one call. The runtime's own conversation record is not changed.
-- Output repair requests keep tools off after hook processing; `replace.tools` cannot re-enable tools for repair steps.
+- Finalizer and loop-fallback requests still offer only `submit-output` after the hook; business tools cannot be restored.
 - `replace.stream: false` makes this call not stream.
 - `abort` is the same as "nothing changes".
 
@@ -239,10 +240,16 @@ Fires after each model reply, before the tool calls in the reply are run.
 
 Payload: `{ response, messages }`, the reply, and the messages actually sent.
 
-For a story runtime that asks for segments (`io.output.schema: contract:narrative-engine@2`), `response.content` is the JSON the model wrote, not the story text; a text review reads each segment's `text` (see [Story output](./plugins.md#story-output)).
+Final output is reviewed in `ReviewAgentOutput`. Here, `response` always represents an actual provider response, which may contain only tool calls.
 
 - `replace.response` replaces the reply.
-- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
+- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and each original call ID receives a correlated error. The actual assistant message and continuation remain in history, and the model can resubmit on the next ordinary step. Each rejection consumes one `agent.loop.corrections.review` unit, allowing two corrections by default. A further rejection after that budget is exhausted fails the runtime with `invalid-output`. See [the loop profile](./plugins.md#loop-profile-agentloopprofile) for configuration.
+
+### `ReviewAgentOutput`
+
+Runs after the complete `submit-output` object passes its schema, story invariants and required-work checks. The SDK exports `ReviewAgentOutputPayload`: `{ output, toolCall: { id, name }, toolResults, correction? }`. `toolCall` preserves the original provider identity. `toolResults` contains only public `toolCallId`, `toolName` and `output` from this runtime's completed calls, excluding submissions, without hidden commit metadata or private child-agent values.
+
+Return `continue` to accept, or `replace.correction` to request revision. Corrections are capped at 2000 characters and share the review budget with `PostLLMResponse`. Later reviewers cannot clear an earlier correction. Other replacement fields have no effect: reviewers cannot replace the candidate, tool evidence, effects or completion. Direct payload mutation also has no effect. Throws, timeouts and invalid results fail closed as guard failures, rather than model-correctable errors; `abort` ends the run. `ctx.pluginId` / `runtimeId` identify the subject runtime, while `getOwnSettings()` still reads the handler owner's settings.
 
 ### `PostRuntime`
 
@@ -250,13 +257,15 @@ Fires once after a runtime finishes, whether it succeeds, fails or is skipped. I
 
 Payload: `{ result, resumed? }`. `result` is the `RuntimeResult`. `resumed` is `true` when the run that finishes was resumed from a suspended state; otherwise the field is absent.
 
+An agent can succeed only after an accepted `submit-output`; a hook cannot recover an unsubmitted, failed or skipped agent into success. Function recovery rules remain unchanged.
+
 `replace.result` replaces the result. The kernel does these things with the replaced result:
 
 - It keeps the original result's `pluginId`, `runtimeId`, `runId`, and `turnId`.
 - Writes come only from the runtime itself: `pendingProposals`, `effects` and `completion` always take the original result's values, and whatever a hook adds is dropped. To stop a write, use `PreStateCommit`.
 - When a hook changes `status` (for example from failed to success), the run's `pendingProposals`, `effects`, and `completion` are all discarded. A failed function handler's writes buffered before it failed are not committed either. A setup runtime changed from failed to success by a hook is not marked complete; it remains pending.
 - If the handler changed `output` but did not change `canonicalValue`, the kernel discards the old `canonicalValue`. This way, the values other runtimes read do not disagree with the rewritten output.
-- It then checks again against the runtime's `output.schema`. A function runtime checks `canonicalValue`. An agent checks `output` when a hook changed `output`. A result changed from failed or skipped to success has no `canonicalValue`, so its `output` is checked, the same check a normal success passes. If the check fails, the runtime fails with `output-schema-invalid`, and nothing is committed.
+- It then checks again against the runtime's `output.schema`. A function runtime checks `canonicalValue`. An agent checks `output` when a hook changed `output`. A function result changed from failed or skipped to success has no `canonicalValue`, so its `output` is checked, the same check a normal success passes. If the check fails, the runtime fails with `output-schema-invalid`, and nothing is committed.
 
 ### `PreToolUse`
 
@@ -267,7 +276,7 @@ Payload: `{ toolCall: { id, name, arguments } }`, where `arguments` is a JSON st
 - `abort` skips this call and sends `reason` to the model as a `refused` error. The agent loop also records `tool.calling` / `tool.failed` with `skipped: true` and `skipReason: "hook-aborted"`; it does not count as an executed call or a failure.
 - `replace.toolCall` can change `name` or `arguments`. `id` stays the same.
 
-Within an agent tool batch, `PreToolUse` runs exactly once per call, in model order. For a run of eligible concurrent reads, all members' hooks run in order before any tool starts. A call whose original name is not poolable is never looked ahead to; its hook waits for the preceding step to finish. If a look-ahead call is rewritten into a barrier, it runs alone in the next step, retaining its hook outcome without firing the hook again. See [the tool execution rules](./tools.md#execution-within-one-batch).
+All `PreToolUse` hooks in an agent batch run once in model order before any business dispatch. The kernel checks original and effective names, rejects mixed submission batches, then applies the ordinary read pools and barriers. Assistant history retains original calls; execution and authorization use rewritten names and arguments.
 
 ### `PostToolUse`
 

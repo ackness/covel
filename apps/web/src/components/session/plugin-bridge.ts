@@ -45,7 +45,6 @@ export interface PluginBridgeHost {
 
 export interface PluginBridge {
   pushState(state: Readonly<Record<string, unknown>>): void;
-  pushStream(seq: number, append: string): void;
   ping(id: number): void;
   close(): void;
 }
@@ -159,10 +158,6 @@ export function connectPluginBridge(
   return {
     ping: (id) => reply({ type: "ping", id }),
     pushState: (state) => reply({ type: "state", value: state }),
-    pushStream: (seq, append) => {
-      if (Number.isSafeInteger(seq) && seq > 0 && append)
-        reply({ type: "stream", seq, append });
-    },
     close: () => {
       if (closed) return;
       port.postMessage({ type: "closed" });

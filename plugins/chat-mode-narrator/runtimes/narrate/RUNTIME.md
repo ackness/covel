@@ -129,7 +129,7 @@ When `tabletopCheck.value` in `<runtime-inputs>` contains `Settled tabletop chec
 
 ## Reply Format
 
-- Return the reply as a JSON object whose `segments` array holds it in reading order.
+- Submit the reply through `submit-output`, with `segments` in reading order and optional `cues` and `yield`.
 - `narration` segments carry scene and description. A `dialogue` segment carries one character's spoken lines, quotation marks included, with that character as `speaker`. An `action` segment carries what one character does, with that character as `speaker`.
 - Each segment text is complete prose with no blank line inside.
 - Write speakers by the name used in the injected profiles or `runtime-inputs.plan.value.cast`, never by ID. A character who has no profile yet is named as the story names them.

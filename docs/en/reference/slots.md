@@ -66,6 +66,7 @@ Schema: `packages/ai-provider/src/config/llm-schema.ts`.
 | `fallback` | — | Name of the role to use when a call fails. The target role must have the same capability, and its key must already be set. Fallbacks cannot form a loop |
 | `input` / `output` | — | Types of content that the model accepts and produces. If you leave them out, they are detected automatically (see [Where model capabilities come from](#where-model-capabilities-come-from)). `output` can be `text` / `image` / `audio` / `video` / `embedding` / `evaluation` |
 | `features` | — | Model features (`function_calling`, `reasoning`, `vision`, and so on) |
+| `strictTools` | — | Host-verified, explicitly configured target, endpoint and schema profile; off by default. See [tool submission capabilities](#tool-submission-capabilities) |
 | `contextWindow` / `maxOutputTokens` | — | Overrides the context window and the maximum output in tokens |
 | `pricing` | — | Price information. It is used only by the cost panel in `/debug` |
 | `reasoningEffort` | — | Thinking level (for example `disabled`, which turns thinking off). It is the default for this model. When Covel sends the request, it becomes each provider's own field. See [Thinking strength](#thinking-strength) |
@@ -450,7 +451,7 @@ The settings screen stores connection info and model IDs separately:
 
 A model ID is an opaque string. It is not trimmed or rewritten when a request is sent. For example, `openai/gpt-5.6-sol` and `deepseek/deepseek-v4-flash` under the provider `openai` are both kept as they are.
 
-When Covel looks up model capabilities, it tries these matches in order. A match is used only to show capabilities and prices:
+When Covel looks up model capabilities, it tries these matches in order. A match informs capability checks, request controls and price display without rewriting the model ID sent:
 
 1. The full ID;
 2. The ID with the outermost routing prefix removed, when that prefix is the same as the current provider;
@@ -463,6 +464,31 @@ When Covel looks up model capabilities, it tries these matches in order. A match
 - When a model is matched to upstream model data through an aggregator provider, its price is marked "reference price". The real cost is what the current provider bills.
 - Each provider's price multiplier is `1` by default. It accepts positive decimals such as `0.1` and `2.5`. The cost panel for debugging calculates the estimated settlement price as "model reference price × provider multiplier".
 - A model that is not identified exactly is never guessed to accept image input. You can override its capabilities by hand in "Model Roles".
+
+<a id="tool-submission-capabilities"></a>
+
+## Tool submission capabilities
+
+Agents submit results through `submit-output`, so the actual target must support tools. The gateway checks `features` on the primary target and every fallback: a stated feature list without `function_calling` skips that target and tries only configured fallbacks with the same tag. If none is eligible, it returns `CONFIG_ERROR` with `details.unsupportedCapability: "function_calling"` and the actual provider and model. Unknown capabilities may still attempt ordinary tools; reply content is never a successful submission. Text-only function/gateway calls remain available.
+
+The generated output tool carries the `strict: "auto"` policy. The gateway selects strict only with an explicit host-supplied capability for the current target and a fully compatible schema. JSON output support, compatible protocols and model names do not prove strict support. No verified strict profiles are bundled yet; strict defaults to off. `generateObject`, evaluate, compaction and world generation retain their own structured content formats.
+
+The host can provide a record under TOML `[covel.<slot>.strictTools]` or programmatic `PresetConfig.capability.strictTools`. Its `provider`, `model`, `protocol` and `baseUrl` must exactly match the resolved target; `profile` describes verified limits. Selection runs again on every fallback. Programmatic adapters receive the selected boolean `function.strict` and map it to their wire. The built-in Chat, Responses and Anthropic adapters serialize strict flags; the native Gemini adapter has no such mapping and remains non-strict. Serialization support does not establish support by any live provider.
+
+<!-- prettier-ignore -->
+| `profile` field | Meaning |
+| --- | --- |
+| `id`, `keywords` | Profile identifier and allowed schema keywords; unlisted keywords make a schema incompatible |
+| `root` | `object` requires an object root without composition; `any` adds no root restriction |
+| `requireAllProperties`, `closedObjects` | Whether every property must be required and every object must explicitly use `additionalProperties: false` |
+| `references` | `none`, `local` or `recursive`; the latter two accept only JSON Pointers within this schema |
+| `typeUnions`, `booleanSchemas`, `formats` | Whether type arrays and standalone boolean schemas are allowed, and the allowed format names |
+| `maxBytes`, `maxDepth` | JSON byte and traversal depth limits; depth cannot exceed 128 |
+| `maxProperties`, `maxEnumValues` | Total traversed properties and enum values, including expanded references |
+
+`checkStrictToolSchema` and the configuration schemas are exported by `@covel/ai-provider`. Compatibility diagnostics report at most 8 schema paths, each bounded to 200 characters. Checks cover optional properties, open objects, references, unions, conditionals, constraints and size. They never add nullable values, require optional fields, close dictionaries or remove constraints. The optional fields and open objects in `narrative-engine@2` remain unchanged and use non-strict submission on profiles requiring fully required closed objects. Ordinary business tools do not automatically opt in; Responses explicitly sends `strict: false` when strict is not selected. Host validation still runs.
+
+Operators must verify current provider specifications before configuring a profile. A beta strict endpoint requires explicit configuration; the gateway never rewrites URLs or broadens credential origins. An unexpected schema 400 is a diagnostic failure requiring a profile or configuration fix, without schema rewriting or unlimited retries.
 
 ## Thinking strength
 
@@ -511,7 +537,7 @@ The shared `reasoningEffort` is converted according to the API protocol:
 - **OpenAI Responses**: `reasoning: { effort }`.
   - A recognized GPT-5 / o3 / o4 model also requests `summary: "auto"`. An explicit summary setting is kept.
   - Whether the provider stores the conversation is described in [Responses does not let the provider store the conversation](#responses-does-not-let-the-provider-store-the-conversation).
-  - Function tools carry `strict: false`. Reason: without this field, this API treats tools as strict mode (the Chat protocol does the opposite). Then every optional parameter becomes required. The model fills each optional parameter with an empty value, and the tool then rejects the call.
+  - Function tools carry `strict: false` unless verified strict capability and schema compatibility select `true`. Reason: without this field, this API treats tools as strict mode (the Chat protocol does the opposite). Then every optional parameter becomes required. The model fills each optional parameter with an empty value, and the tool then rejects the call.
   - Structured output in `text.format` also carries `strict: false`. Strict mode requires `additionalProperties: false` on every object and every property to be required, or the whole request returns 400. Covel output schemas have optional fields, and the caller validates the parsed result itself.
 - **Anthropic Messages**: `output_config: { effort }`.
   - For a recognized adaptive-thinking model that has a level chosen, `thinking.type: "adaptive"` is enabled. The default request also asks for a visible summary with `display: "summarized"`.
@@ -852,25 +878,19 @@ Before it sends a request, `gateway.generateObject({ schema, messages })` conver
 
 `gateway.generateText` and `gateway.streamText` both accept `responseFormat`. It is passed to the adapter of each actual call, including fallback models. Streamed output is still text deltas. `responseFormat` does not provide incremental object parsing, and it does not replace the caller's check of the complete result.
 
-When an agent runtime requires JSON and an existing output check or response review requests a correction, the framework adds format feedback from the original candidate answer:
-
-- An empty or whitespace-only answer explains that no JSON object was returned and asks for the complete object matching the schema, including `segments` when the schema asks for story paragraphs. Tool calls with empty content are not diagnosed as empty JSON answers.
-- JSON syntax errors explain the reason and expectation. When the parser supplies a location, feedback retains its zero-based offset and available line and column. Offsets use JavaScript UTF-16 code units in the text after existing code fence normalization. When the root object closes before further fields, feedback asks for all fields inside one complete object; it does not accept a prefix or reconstruct fragments.
-- When the original JSON candidate has a syntax error, feedback reports syntax only and omits field or segment complaints derived from a salvaged fragment. Prose corrections retain the schema's required-field guidance; valid JSON keeps the existing field or segment validation errors. Format problems are limited to five entries of at most 200 characters each; new diagnostics do not echo draft or reasoning text.
-
-Feedback uses the session's instruction language through `instructionLocaleFor`. For a draft already rejected by response review, it follows the plugin's correction and uses the existing review budget. Output repair retries with tools off within its existing budget and deadline, without repeating business tool calls. More specific feedback does not guarantee a correct next answer, add provider strict-mode capabilities, or change existing tolerant parsing, story prose fallback or final commit rules. These are runtime corrections; `gateway.generateObject` still returns errors as described above and gains no correction requests.
+Agent completion uses the schema in tool arguments without `responseFormat`, `text.format` or JSON MIME instructions. See [completion conditions](./plugins.md#agent-output-submission) for submission and correction, and [tool submission capabilities](#tool-submission-capabilities) for target checks and strict policy. This adds no correction model calls to `gateway.generateObject`.
 
 ## Provider streaming responses
 
-Every agent runtime uses streaming whenever the adapter offers a streaming interface. Only the story runtime forwards text deltas to the player's screen. This leads to these rules:
+All agent runtimes use provider streaming when the adapter supports it. Text, reasoning and payload-free tool-argument activity refresh first-output/idle guards. The runtime buffers the entire response and executes calls only after a valid provider terminal result. Players receive the complete story after acceptance and commit.
 
-| Situation                                                                               | What happens                                                                                                                                                                                                                                                              |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The stream breaks after some output has already arrived                                 | The story runtime does not retry. Other runtimes discard the partial output and retry according to `maxRetries`                                                                                                                                                           |
-| The result is cut off by `length` / `max_tokens`                                        | Handled by the profile: a story may retain its text with an incomplete warning, subject to output checks and commit. Runtimes requiring complete results correct or fail according to their truncation policy without saving partial structures. No non-streaming restart |
-| The stream fails before any output, and the retries are used up                         | Switches to one non-streaming call                                                                                                                                                                                                                                        |
-| The provider clearly rejects the request itself (401, 400, or a config or schema error) | Does not switch to a non-streaming call, because the same request would fail the same way                                                                                                                                                                                 |
-| An HTTP 200 response carries a provider error                                           | Keeps the message and the code/type. A definite rejection does not turn into an empty, retryable error                                                                                                                                                                    |
+| Case                                                                               | Behavior                                                                                            |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| A stream fails after partial output                                                | Discard every buffer and retry within `maxRetries`; never execute partial calls or combine attempts |
+| `length` / `max_tokens` truncation                                                 | Retry at most once, then fail; no partial story and no non-stream rescue                            |
+| Transient stream failure exhausts retries                                          | Use bounded non-stream recovery if budget remains; failed output was never player-visible           |
+| The provider rejects the request (401, 400, configuration/schema error or refusal) | Do not repeat the same request through non-stream recovery                                          |
+| HTTP 200 contains a provider error                                                 | Retain the error classification and any reported usage; do not report success                       |
 
 Other rules:
 
@@ -959,8 +979,8 @@ The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `t
 
 **Only `stop` and `tool_calls` mean the answer is finished** (`isCompleteFinishReason` in `@covel/shared`). `other` is not a normal end: the provider did not say why it stopped (for example Anthropic's `pause_turn` or DeepSeek's `insufficient_system_resource`), and the answer may stop anywhere.
 
-- Story: the text already written is kept. `llm.responded` carries `finishReason: other` and `rawFinishReason`, the app says that this part is not finished, and the player can retry the turn. A story cut at the output limit (`length`) is kept too, with a different notice.
-- Every other answer in the runtime (one with tool calls, one that must be JSON, a runtime that does not keep cut text), world generation and the history summary: the call fails. No half result is saved, and the call is not retried on its own.
+- Every agent runtime rejects incomplete responses, including prose and otherwise complete tool arguments. Failed attempts never become committed narrative.
+- World generation and history summaries also require complete results. Function gateway calls retain their separate public text/object/stream APIs.
 - A function plugin gets `other` as it is through `ctx.gateway` and decides for itself. A background output should fail in the same way.
 
 **Diagnostics.** The text and object return values of the four built-in text protocols, and the `done` event of a stream, can carry `diagnostics`. They include the provider's and request's warnings, URL and document sources, and citation positions. The runtime bridge and the LLM trace keep this information.

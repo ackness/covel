@@ -103,10 +103,10 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 ### Stage and sound
 
-| Plugin                                  | What it does                                           | On by default |
-| --------------------------------------- | ------------------------------------------------------ | ------------- |
-| [Scene Stage](./stage.md) `scene-stage` | Updates scenes and cast as the player changes location |               |
-| [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene             |               |
+| Plugin                                  | What it does                                                                                             | On by default |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------- |
+| [Scene Stage](./stage.md) `scene-stage` | Updates scenes and cast, with optional character attributes; dialogue opts into committed segment reveal |               |
+| [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene                                                               |               |
 
 ## The four built-in worlds
 
@@ -142,3 +142,7 @@ Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation f
 Scene Stage dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while cast and direction providers explicitly opt into host-owned departure fades; see [Stage and sound](./stage.md).
 
 Scene Stage also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly from the session theme menu and recoverable through Use default appearance.
+
+When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.
+
+World initialization, time, facts, event planning and action suggestions retain their validated tool results. Retrying final confirmation does not repeat successful business writes.

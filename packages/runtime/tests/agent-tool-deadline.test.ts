@@ -1,3 +1,7 @@
+import {
+  suspendedLoopState,
+  submitted,
+} from "./_helpers/agent-loop-fixture.js";
 import { throughGateway } from "./helpers/through-gateway.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { tool, z, withPendingProposals } from "@covel/tools";
@@ -19,7 +23,7 @@ afterEach(() => {
 function options(
   deps: RunAgentToolLoopOptions["deps"],
 ): RunAgentToolLoopOptions {
-  return {
+  const result: RunAgentToolLoopOptions = {
     executionContext: {
       executionId: "execution",
       origin: "manual",
@@ -50,6 +54,7 @@ function options(
     startTime: Date.now(),
     runId: "run",
   };
+  return { ...result, loaded: { ...result.loaded, manifest: result.manifest } };
 }
 
 describe("agent tool deadline", () => {
@@ -307,14 +312,13 @@ describe("agent tool deadline", () => {
                   readScopes: [],
                   takenUnder: {
                     playerTurns: 0,
-                    pluginVersion: "1.0.0",
+                    pluginVersion: "0.0.0",
                     writes: [],
                   },
+                  loop: suspendedLoopState(opts.manifest),
                   executionContext: opts.executionContext,
                   messages: [],
                   toolCallsSoFar: [],
-                  partialContent:
-                    "Persisted partial output must not become success",
                   pendingProposals: [],
                 },
               },
@@ -361,27 +365,47 @@ describe("agent tool deadline", () => {
     vi.useFakeTimers();
     setLLMSlotCapForTests(1);
     const holder = await acquireLLMSlot();
-    const generate = vi.fn(async () => ({
-      content: "done",
-      toolCalls: [],
-      finishReason: "stop" as const,
-      usage: { inputTokens: 1, outputTokens: 1 },
-    }));
-    const running = runAgentToolLoop(
-      options({ llm: throughGateway({ generate }) }),
-    );
+    const generate = vi.fn(async () => submitted("done"));
+    const gateway = throughGateway({ generate });
+    const queued = Promise.withResolvers<void>();
+    const opts = options({
+      llm: {
+        ...gateway,
+        generate: (params) =>
+          gateway.generate({
+            ...params,
+            onQueueStart: () => {
+              const onAcquired = params.onQueueStart?.();
+              queued.resolve();
+              return (waitedMs) => onAcquired?.(waitedMs);
+            },
+          }),
+      },
+    });
+    const manifest = {
+      ...opts.manifest,
+      tools: undefined,
+      completeAfterTools: undefined,
+    };
+    const running = runAgentToolLoop({
+      ...opts,
+      manifest,
+      loaded: { ...opts.loaded, manifest },
+    });
     let failure: unknown;
     void running.catch((error) => {
       failure = error;
     });
     try {
+      // Prompt loading precedes admission; advance only the model-slot wait.
+      await queued.promise;
       await vi.advanceTimersByTimeAsync(300);
       expect(generate).not.toHaveBeenCalled();
       expect(failure).toBeUndefined();
       holder.release();
       const result = await running;
       expect(result).toMatchObject({
-        finalContent: "done",
+        acceptedOutput: { narrativeOutput: "done" },
         stop: { reason: "completed" },
       });
       expect(generate).toHaveBeenCalledOnce();

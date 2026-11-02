@@ -28,10 +28,10 @@ export const LEGAL_TRANSITIONS: Readonly<
   // Fresh and resumed loops start a step, or stop at once when the step limit
   // or the deadline is already reached.
   preparing: ["awaiting-pre-step", "finalizing", "stopped"],
-  // A successful PreStep stop may still need an output repair.
+  // PreStep may stop or lower the remaining ordinary-step budget.
   "awaiting-pre-step": ["requesting-model", "finalizing", "stopped"],
   "requesting-model": ["reviewing"],
-  // Tool calls run and prose is decided. A rejected draft starts the next
+  // Tool calls run and submissions are judged. A rejection starts the next
   // step, or ends at the loop's step limit or deadline.
   reviewing: [
     "running-tools",

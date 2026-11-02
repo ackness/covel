@@ -1,248 +1,71 @@
-/**
- * Player abort terminal state (audit 2026-07-10 A-04).
- *
- * After the player clicks Stop mid-stream, the server never commits the
- * partial narrative — the client must discard the `stream_<turnId>_<runtimeId>`
- * placeholder created by APPEND_DELTA (otherwise the player sees ghost text
- * that vanishes on refresh) and must NOT surface `aborted-by-player` as a
- * red retryable error.
- */
-
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { PLAYER_ABORT_REASON } from "@covel/shared";
-import type { SseEnvelope } from "@/services/api";
+import type { SseEnvelope } from "@/services/api.js";
+import type { SessionState } from "../session-store/types.js";
 import { initialState, reducer } from "../session-store/reducer.js";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../session-store/sse-handler.js";
-import type { SessionAction, SessionState } from "../session-store/types.js";
+import { createSseEventHandler } from "../session-store/sse-handler.js";
 
-function appendDelta(state: SessionState, turnId: string): SessionState {
-  return reducer(state, {
-    type: "APPEND_DELTA",
-    turnId,
-    runtimeId: "narrator/main",
-    pluginId: "narrator",
-    delta: "half-written narrative…",
-  });
-}
-
-describe("reducer DISCARD_TURN_STREAMS", () => {
-  it("removes the streaming placeholder for the aborted turn, keeps everything else", () => {
-    let state = reducer(initialState, {
-      type: "ADD_MESSAGE",
-      message: {
-        id: "m1",
-        role: "user",
-        content: "hi",
-        timestamp: "2026-07-10T00:00:00Z",
-      },
-    });
-    state = appendDelta(state, "turn-1");
-    state = appendDelta(state, "turn-2");
-    expect(state.messages).toHaveLength(3);
-
-    state = reducer(state, { type: "DISCARD_TURN_STREAMS", turnId: "turn-1" });
-
-    expect(state.messages.map((m) => m.id)).toEqual([
-      "m1",
-      "stream_turn-2_narrator/main",
-    ]);
-  });
-
-  it("without turnId, discards all streaming placeholders", () => {
-    let state = appendDelta(initialState, "turn-1");
-    state = appendDelta(state, "turn-2");
-
-    state = reducer(state, { type: "DISCARD_TURN_STREAMS" });
-
-    expect(state.messages).toHaveLength(0);
-  });
-});
-
-describe("sse-handler execution.completed abort terminal state", () => {
-  function makeDeps(dispatch: (a: SessionAction) => void): SseEventHandlerDeps {
-    return {
-      dispatch,
-      ds: {} as SseEventHandlerDeps["ds"],
-      sessionIdRef: { current: "sess-1" },
-      stateRef: { current: initialState },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
-      lastBackfilledTurnIdRef: { current: "turn-1" },
-    };
-  }
-
-  function completedEnvelope(abortReason: string): SseEnvelope {
-    return {
-      type: "execution.completed",
-      requestId: "req-1",
-      traceId: "trace-1",
-      sessionId: "sess-1",
-      turnId: "turn-1",
-      flowId: "trace-1",
-      seq: 9,
-      timestamp: "2026-07-10T00:00:01Z",
-      payload: {
-        runtimeCount: 1,
-        resultCount: 0,
-        durationMs: 5,
-        committed: true,
-        abortReason,
-      },
-    };
-  }
-
-  it.each([true, false])(
-    "player abort (committed=%s) discards placeholders without an execution error",
-    (committed) => {
-      const dispatch = vi.fn();
-      const handle = createSseEventHandler(makeDeps(dispatch));
-
-      const envelope = completedEnvelope(PLAYER_ABORT_REASON);
-      handle({ ...envelope, payload: { ...envelope.payload, committed } });
-
-      const types = dispatch.mock.calls.map(([a]) => a.type);
-      expect(types).toContain("DISCARD_TURN_STREAMS");
-      expect(types).not.toContain("SET_EXECUTION_ERROR");
-      expect(dispatch).toHaveBeenCalledWith({
-        type: "DISCARD_TURN_STREAMS",
+describe("execution terminal state preserves committed stories", () => {
+  it.each([PLAYER_ABORT_REASON, "budget-cap-exceeded", "commit-veto"])(
+    "retains history without drafts after %s",
+    (reason) => {
+      const saved = {
+        id: "saved",
+        role: "assistant" as const,
+        kind: "story" as const,
+        content: "Previous story",
+        timestamp: "now",
         turnId: "turn-1",
+      };
+      const stateRef: { current: SessionState } = {
+        current: { ...initialState, executing: true, messages: [saved] },
+      };
+      const handle = createSseEventHandler({
+        dispatch: (a) => {
+          stateRef.current = reducer(stateRef.current, a);
+        },
+        stateRef,
+        sessionIdRef: { current: "s" },
+        lastBackfilledTurnIdRef: { current: "turn-1" },
       });
+      const event = (
+        type: string,
+        payload: Record<string, unknown>,
+      ): SseEnvelope => ({
+        type,
+        sessionId: "s",
+        turnId: "turn-1",
+        requestId: "r",
+        traceId: "t",
+        flowId: "f",
+        seq: 1,
+        timestamp: "now",
+        payload,
+      });
+      handle(
+        event("runtime.completed", {
+          runtimeId: "narrator",
+          pluginId: "fixture",
+          output: "SECRET CANDIDATE",
+          status: "completed",
+        }),
+      );
+      handle(
+        event("execution.completed", {
+          committed: reason !== "commit-veto",
+          abortReason: reason === "commit-veto" ? undefined : reason,
+          error: reason === "commit-veto" ? reason : undefined,
+        }),
+      );
+      expect(stateRef.current.messages).toEqual([saved]);
+      expect(stateRef.current.executing).toBe(false);
+      expect(stateRef.current).not.toHaveProperty("unsavedNarratives");
+      expect(JSON.stringify(stateRef.current)).not.toContain(
+        "SECRET CANDIDATE",
+      );
+      expect(stateRef.current.executionError).toBe(
+        reason === PLAYER_ABORT_REASON ? null : reason,
+      );
     },
   );
-
-  it("non-player abort reasons still surface as an execution error", () => {
-    const dispatch = vi.fn();
-    const handle = createSseEventHandler(makeDeps(dispatch));
-
-    handle(completedEnvelope("budget-cap-exceeded"));
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "SET_EXECUTION_ERROR",
-      error: "budget-cap-exceeded",
-    });
-    const types = dispatch.mock.calls.map(([a]) => a.type);
-    expect(types).toContain("DISCARD_TURN_STREAMS");
-  });
-
-  it("commit failure discards uncommitted streams and surfaces the terminal error", () => {
-    const dispatch = vi.fn();
-    const deps = makeDeps(dispatch);
-    deps.deltaBufferRef.current.set("turn-1:narrator/main", {
-      turnId: "turn-1",
-      runtimeId: "narrator/main",
-      pluginId: "narrator",
-      text: "ghost narrative",
-      flushSessionId: "sess-1",
-    });
-    const handle = createSseEventHandler(deps);
-
-    handle({
-      ...completedEnvelope(""),
-      payload: {
-        runtimeCount: 1,
-        resultCount: 1,
-        durationMs: 5,
-        committed: false,
-        error: "injected commit veto",
-      },
-    });
-
-    expect(deps.deltaBufferRef.current.size).toBe(0);
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "DISCARD_TURN_STREAMS",
-      turnId: "turn-1",
-    });
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "SET_EXECUTION_ERROR",
-      error: "injected commit veto",
-      turnId: "turn-1",
-    });
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "SET_EXECUTING",
-      value: false,
-    });
-  });
-});
-
-describe("sse-handler abort clears the pending delta rAF (H1 race)", () => {
-  function deltaEnvelope(): SseEnvelope {
-    return {
-      type: "narrative.delta",
-      requestId: "req-1",
-      traceId: "trace-1",
-      sessionId: "sess-1",
-      turnId: "turn-1",
-      flowId: "trace-1",
-      seq: 8,
-      timestamp: "2026-07-10T00:00:00Z",
-      payload: {
-        delta: "half-written narrative…",
-        runtimeId: "narrator/main",
-        pluginId: "narrator",
-        kind: "story",
-      },
-    };
-  }
-
-  function completedAbortEnvelope(): SseEnvelope {
-    return {
-      type: "execution.completed",
-      requestId: "req-1",
-      traceId: "trace-1",
-      sessionId: "sess-1",
-      turnId: "turn-1",
-      flowId: "trace-1",
-      seq: 9,
-      timestamp: "2026-07-10T00:00:01Z",
-      payload: {
-        runtimeCount: 1,
-        resultCount: 0,
-        durationMs: 5,
-        committed: true,
-        abortReason: PLAYER_ABORT_REASON,
-      },
-    };
-  }
-
-  it("a delta queued through the handler does not resurrect the ghost after abort", () => {
-    // Capture the rAF callback so we can flush it *after* the abort, mimicking
-    // the last delta + execution.completed arriving in one network flush.
-    let rafCb: FrameRequestCallback | null = null;
-    vi.stubGlobal(
-      "requestAnimationFrame",
-      (cb: FrameRequestCallback): number => {
-        rafCb = cb;
-        return 1;
-      },
-    );
-    vi.stubGlobal("cancelAnimationFrame", (): void => {
-      rafCb = null;
-    });
-
-    let state = initialState;
-    const dispatch = (a: SessionAction) => {
-      state = reducer(state, a);
-    };
-    const deps: SseEventHandlerDeps = {
-      dispatch,
-      ds: {} as SseEventHandlerDeps["ds"],
-      sessionIdRef: { current: "sess-1" },
-      stateRef: { current: state },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
-      lastBackfilledTurnIdRef: { current: "turn-1" },
-    };
-    const handle = createSseEventHandler(deps);
-
-    handle(deltaEnvelope()); // buffers the delta + schedules the rAF flush
-    handle(completedAbortEnvelope()); // player abort → discard + cancel rAF
-    if (rafCb) (rafCb as FrameRequestCallback)(0); // late flush must be a no-op
-
-    expect(state.messages.some((m) => m.id.startsWith("stream_"))).toBe(false);
-
-    vi.unstubAllGlobals();
-  });
 });

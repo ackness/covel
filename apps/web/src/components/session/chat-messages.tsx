@@ -13,7 +13,6 @@ import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { useSetting } from "@/settings/use-settings.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
-import { subscribeToStreamingChanges } from "@/stores/streaming-text-store.js";
 import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
 import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
@@ -114,18 +113,13 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   const [expandUpdates] = useSetting<boolean>("ui.expandTurnUpdates");
   const { turnNotes, backdrop } = useThemeLayout();
   const sessionId = session.id;
-  // Sticky-bottom auto-scroll. Follows the stream only while the user is
+  // Sticky-bottom auto-scroll. Follows new messages only while the user is
   // pinned to the bottom; surfaces a "jump to latest" button after they
   // scroll up. Keep the native scroll element in state because auto-scroll,
   // older-message observation, and prepend compensation all share it.
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
-  // Autoscroll follows both new messages and the external streaming signal;
-  // token arrival does not re-render this history-sized parent component.
   const { scrollRef, showJumpButton, jumpToBottom } = useAutoScroll(
     messages.length,
-    {
-      subscribeToStreaming: subscribeToStreamingChanges,
-    },
   );
   const setScrollViewport = useCallback(
     (node: HTMLDivElement | null) => {
@@ -289,6 +283,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
       <div className="relative flex-1 min-h-0 flex flex-col">
         <div
           ref={setScrollViewport}
+          data-testid="chat-scroll-viewport"
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">

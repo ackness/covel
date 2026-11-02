@@ -172,7 +172,7 @@ prompt loader 也按实例划分：
 - 维度提供者从 `@covel/plugin-handlers-utils/dimensions` 导入。插件不到 shared 包里去取这些操作。
 - UI 工具工厂和角色字段校验也在 SDK 里。
 - 按 locale 读取文件的功能单独放在只能在 Node 里用的 `/prompts` 入口，根入口保持可以在浏览器里使用。
-- 宿主包重新导出的内容包括工具校验的错误类。`shared` 还重新导出 SDK 的 `ToolError`、固定错误码和 `ToolModelView`；runtime 从 `shared` 导入错误和模型视图类型，从 `tools` 读取工具辅助函数的类型，不直接导入 SDK。
+- 宿主包重新导出的内容包括工具校验的错误类。`shared` 还重新导出 SDK 的 `ToolError`、固定错误码、`ToolModelView` 和 `ReviewAgentOutputPayload`；runtime 从 `shared` 导入错误、模型视图和输出审核类型，从 `tools` 读取工具辅助函数的类型，不直接导入 SDK。
 
 ## 开发阶段的兼容范围
 
@@ -203,3 +203,5 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 ## 主题编译的依赖方向
 
 `shared` 拥有纯主题 schema、CSS 策略和 `css-tree` 直接依赖，不读取文件或依赖 Web；布局 ID 也是低层共享枚举。`plugin-loader` 负责文件/ZIP 适配、位图校验与内容身份；server 缓存并发布安全 DTO 与资源；web 负责外观应用。规则见[主题契约](../reference/theme-packages.md#插件提供的受限主题)。
+
+模型验收复用 API 驱动脚本和本地 trace/turn 产物。`scripts/submission-report.mjs` 只读取这些文件，输出固定分类和数值，不属于 runtime 或 provider 请求路径。步骤、提交接受和持久化结果分别统计，见[真实模型验收](../ship/real-model.md#submission-acceptance)。

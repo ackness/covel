@@ -65,6 +65,7 @@ export interface UISlotSpec {
   surfaces?: readonly ("panel" | "stage")[];
   /** Which story paragraphs a segment template draws. */
   match?: SegmentTemplateMatch;
+  reveal?: import("@covel/shared").RevealPolicyInput;
 }
 
 export interface UISlotEntry {

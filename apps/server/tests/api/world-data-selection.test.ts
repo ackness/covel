@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import {
   DEPENDENCY_CASES,
   worldDataDependencyScenario,
@@ -929,15 +930,15 @@ it("commits an opening and player story with exactly one notice for unavailable 
       store: f.store,
       storeBackend: "memory",
       llmAdapter: {
-        generate: async () => ({
-          content: JSON.stringify({
-            segments: [{ kind: "narration", text: "The lamp holds." }],
-            cues: { present: [] },
-          }),
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        }),
+        generate: async () =>
+          submittedOutput(
+            {
+              narrativeOutput: "The lamp holds.",
+              segments: [{ kind: "narration", text: "The lamp holds." }],
+              cues: { present: [] },
+            },
+            { inputTokens: 1, outputTokens: 1 },
+          ),
       },
     });
     const post = (url: string, body: unknown) =>

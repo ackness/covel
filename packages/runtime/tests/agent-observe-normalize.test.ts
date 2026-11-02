@@ -25,9 +25,11 @@ class JsonLLM implements LLMAdapter {
   constructor(private readonly content: string) {}
   async generate(): Promise<LLMResponse> {
     return {
-      content: this.content,
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        { id: "final", name: "submit-output", arguments: this.content },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 1, outputTokens: 1 },
     };
   }

@@ -1,8 +1,18 @@
-import { mkdtemp, mkdir, rm, writeFile, access, symlink } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  rm,
+  writeFile,
+  access,
+  symlink,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
+import { parsePluginMd, compileInlineRuntime } from "../src/parse-plugin-md.js";
+import { validatePluginFiles } from "../src/static-validation.js";
 import {
   validatePluginPackage,
   parseIssueLocation,
@@ -58,8 +68,7 @@ async function parity(root: string) {
   expect(stdout).toBe(
     (report.ok
       ? `✓ Static package validation: ${report.rootPath}\n  languages: ${report.languages}\n`
-      : "") +
-      report.cliWarnings.map((line) => `${line}\n`).join(""),
+      : "") + report.cliWarnings.map((line) => `${line}\n`).join(""),
   );
   return report;
 }
@@ -551,4 +560,160 @@ it("keeps a package-relative stylesheet as the diagnostic source", () => {
     field: "css.rules[0].declarations[0]",
     message: "property is not allowed",
   });
+});
+
+describe("tool-sourced agent output", () => {
+  const schema = JSON.stringify({
+    type: "object",
+    properties: { value: { type: "integer" } },
+  });
+  const source = { from: { tool: "calculate" } };
+  const agentRuntime = {
+    schedule: { trigger: { type: "manual" } },
+    agent: { tools: { plugin: ["calculate"] } },
+    io: { output: source },
+  };
+
+  it("loads a declared schema or a convention schema without executing entry code", async () => {
+    for (const declared of [true, false]) {
+      const root = await fixture(
+        {
+          entry: "./server/index.js",
+          contributes: { tools: ["calculate"] },
+          runtime: {
+            ...agentRuntime,
+            io: {
+              output: {
+                ...source,
+                ...(declared ? { schema: "./output.schema.json" } : {}),
+              },
+            },
+          },
+        },
+        {
+          "server/index.js": "throw new Error('must never run')",
+          "output.schema.json": schema,
+        },
+      );
+      expect((await parity(root)).ok).toBe(true);
+    }
+  });
+
+  it.each([
+    [
+      "unknown tool",
+      { ...source, from: { tool: "unknown" } },
+      { tools: { plugin: ["unknown"] } },
+      undefined,
+      "not declared in contributes.tools",
+    ],
+    [
+      "tool outside allowlist",
+      source,
+      { tools: { plugin: ["other"] } },
+      undefined,
+      "authorized own or builtin",
+    ],
+    [
+      "missing schema",
+      source,
+      agentRuntime.agent,
+      undefined,
+      "requires a loaded output schema or contract",
+    ],
+    [
+      "host control",
+      { from: { tool: "suspend" } },
+      { tools: { builtin: ["suspend"] } },
+      undefined,
+      "authorized own or builtin",
+    ],
+    [
+      "function runtime",
+      source,
+      undefined,
+      { handler: "./handler.js" },
+      "only supported by agent",
+    ],
+    [
+      "optional service",
+      { from: { tool: "remote" } },
+      { tools: { services: [{ contract: "remote@1", as: "remote" }] } },
+      undefined,
+      "authorized own or builtin",
+    ],
+  ])("rejects %s statically", async (label, output, agent, fn, message) => {
+    const root = await fixture(
+      {
+        entry: "./server/index.js",
+        contributes: { tools: ["calculate", "other"] },
+        runtime: {
+          schedule: agentRuntime.schedule,
+          ...(agent ? { agent } : {}),
+          ...(fn ? { function: fn } : {}),
+          io: { output },
+        },
+      },
+      {
+        "server/index.js": "throw new Error('must never run')",
+        ...(label === "missing schema" ? {} : { "output.schema.json": schema }),
+      },
+    );
+    const report = await parity(root);
+    expect(report.ok).toBe(false);
+    expect(report.cliFailure).toContain(message);
+  });
+
+  it.each(["schema", "contract"] as const)(
+    "resolves a package's own %s validator during installation without preloaded schemas",
+    async (field) => {
+      const root = await fixture(
+        {
+          entry: "./server/index.js",
+          contracts: { "probe.result@1": { schema: "./result.schema.json" } },
+          contributes: { tools: ["calculate"] },
+          runtime: {
+            ...agentRuntime,
+            io: {
+              output: {
+                ...source,
+                [field]:
+                  field === "schema"
+                    ? "contract:probe.result@1"
+                    : "probe.result@1",
+              },
+            },
+          },
+        },
+        {
+          "server/index.js": "throw new Error('must never run')",
+          "result.schema.json": schema,
+        },
+      );
+      expect((await parity(root)).ok).toBe(true);
+      const manifestPath = path.join(root, "PLUGIN.md");
+      const parsed = parsePluginMd(
+        readFileSync(manifestPath, "utf8"),
+        manifestPath,
+      );
+      expect(parsed.contractSchemas).toBeUndefined();
+      const runtime = compileInlineRuntime(parsed);
+      if (!runtime) throw new Error("missing inline runtime");
+      expect(() =>
+        validatePluginFiles(parsed, [runtime], (file) =>
+          readFileSync(file, "utf8"),
+        ),
+      ).not.toThrow();
+      // Resolving the declaration must retain object-schema admission too.
+      await writeFile(
+        path.join(root, "result.schema.json"),
+        '{"type":"array"}',
+      );
+      expect(() =>
+        validatePluginFiles(parsed, [runtime], (file) =>
+          readFileSync(file, "utf8"),
+        ),
+      ).toThrow("must describe an object");
+    },
+  );
 });

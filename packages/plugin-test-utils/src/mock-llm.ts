@@ -49,9 +49,9 @@ export interface MockLLMConfig {
  * // single default response
  * const llm = new MockLLM({
  *   defaultResponse: {
- *     content: '{"narrativeOutput": "The dragon roars!"}',
- *     toolCalls: [],
- *     finishReason: 'stop',
+ *     content: null,
+ *     toolCalls: [{id:'final',name:'submit-output',arguments:'{"narrativeOutput":"The dragon roars!"}'}],
+ *     finishReason: 'tool_calls',
  *     usage: { inputTokens: 100, outputTokens: 50 },
  *   },
  * });
@@ -60,7 +60,7 @@ export interface MockLLMConfig {
  * const scripted = new MockLLM({
  *   responses: [
  *     { content: 'pick-a-tool', toolCalls: [{ id: 't1', name: 'create-form', arguments: '{}' }], finishReason: 'tool_calls', usage: { inputTokens: 10, outputTokens: 5 } },
- *     { content: 'done', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 12, outputTokens: 3 } },
+ *     { content: null, toolCalls: [{id:'final',name:'submit-output',arguments:'{}'}], finishReason: 'tool_calls', usage: { inputTokens: 12, outputTokens: 3 } },
  *   ],
  * });
  * ```
@@ -74,9 +74,9 @@ export class MockLLM implements LLMAdapter {
 
   constructor(config?: MockLLMConfig) {
     this.defaultResponse = config?.defaultResponse ?? {
-      content: "",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [{ id: "final", name: "submit-output", arguments: "{}" }],
+      finishReason: "tool_calls",
       usage: { inputTokens: 100, outputTokens: 50 },
     };
     this.responses = config?.responses ?? [];

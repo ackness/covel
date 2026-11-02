@@ -66,21 +66,34 @@ Open `tests/runtime-cases.json`, and add an item to `cases`:
           "id": "tc-1",
           "name": "notes-upsert",
           "arguments": "{\"record\":{\"id\":\"keepers-daughter\",\"kind\":\"analysis\",\"title\":\"The keeper's daughter\",\"text\":\"The innkeeper says she never left the lighthouse.\",\"tags\":[\"rumor\"]}}"
-        },
+        }
+      ]
+    },
+    {
+      "content": null,
+      "finishReason": "tool_calls",
+      "toolCalls": [
         {
-          "id": "tc-2",
-          "name": "runtime-done",
-          "arguments": "{\"reason\":\"recorded\"}"
+          "id": "final",
+          "name": "submit-output",
+          "arguments": "{}"
         }
       ]
     }
   ],
   "expect": {
     "runtimeResults": [
-      { "runtimeId": "tavern-rumors/analyst", "status": "success" }
+      {
+        "runtimeId": "tavern-rumors/analyst",
+        "status": "success"
+      }
     ],
     "pluginData": [
-      { "namespace": "notes", "key": "keepers-daughter", "field": "title" }
+      {
+        "namespace": "notes",
+        "key": "keepers-daughter",
+        "field": "title"
+      }
     ]
   }
 }

@@ -22,15 +22,15 @@ import {
   makeExecutor,
   manifest,
   markTool,
-  prose,
+  submitted,
   queuedLLM,
   runLoop,
   scriptedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
 
-const FINAL_ANSWER_TEXT = "Give your final answer now";
-const WRITE_STORY_TEXT = "Write this turn's narrative now";
+const FINAL_ANSWER_TEXT = "Call submit-output";
+const WRITE_STORY_TEXT = "Call submit-output";
 
 function story(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return manifest({
@@ -66,13 +66,11 @@ describe("resolveLoopProfile", () => {
     expect(resolveLoopProfile({ outputKind: "story" })).toEqual({
       preset: "story",
       ...LOOP_PRESETS.story,
-      answerPrompt: "story",
     });
     for (const outputKind of ["system", undefined] as const)
       expect(resolveLoopProfile({ outputKind })).toEqual({
         preset: "system",
         ...LOOP_PRESETS.system,
-        answerPrompt: "answer",
       });
   });
 
@@ -85,7 +83,6 @@ describe("resolveLoopProfile", () => {
     ).toEqual({
       preset: "actor",
       ...LOOP_PRESETS.actor,
-      answerPrompt: "answer",
     });
   });
 
@@ -94,41 +91,23 @@ describe("resolveLoopProfile", () => {
       resolveLoopProfile({
         outputKind: "story",
         loopProfile: {
-          stream: false,
+          steering: false,
           finalizer: { deadlineReserveMs: 5_000 },
         },
       }),
     ).toEqual({
       preset: "story",
-      stream: false,
-      steering: true,
-      truncation: "accept",
-      fallback: "answer-without-tools",
+      steering: false,
+      fallback: "submit-output",
       finalizer: { maxSteps: true, deadlineReserveMs: 5_000 },
       corrections: LOOP_PRESETS.story.corrections,
-      answerPrompt: "story",
     });
     expect(
       resolveLoopProfile({
         outputKind: "system",
         loopProfile: { preset: "actor", fallback: "fail" },
       }),
-    ).toMatchObject({ preset: "actor", fallback: "fail", stream: false });
-  });
-
-  it("derives answerPrompt from outputKind, whatever the preset", () => {
-    expect(
-      resolveLoopProfile({
-        outputKind: "story",
-        loopProfile: { preset: "actor" },
-      }).answerPrompt,
-    ).toBe("story");
-    expect(
-      resolveLoopProfile({
-        outputKind: "system",
-        loopProfile: { preset: "actor" },
-      }).answerPrompt,
-    ).toBe("answer");
+    ).toMatchObject({ preset: "actor", fallback: "fail", steering: false });
   });
 
   it("keeps the preset table frozen", () => {
@@ -139,35 +118,36 @@ describe("resolveLoopProfile", () => {
 });
 
 describe("the loop core under a profile", () => {
-  it("(i) a story with stream: false forwards no text and keeps its content", async () => {
-    const onDelta = vi.fn();
+  it("a story buffers provider text and accepts only the complete submission", async () => {
     const llm: LLMAdapter = {
-      generate: async () => prose("fallback"),
+      generate: async () => submitted("fallback"),
       stream: async function* () {
         yield { type: "text-delta" as const, textDelta: "Once " };
         yield { type: "text-delta" as const, textDelta: "upon" };
         yield {
+          type: "tool-call" as const,
+          ...submitted("Once upon").toolCalls[0]!,
+        };
+        yield {
           type: "done" as const,
-          finishReason: "stop" as const,
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 1, outputTokens: 1 },
         };
       },
     };
     const result = await runLoop({
       llm,
-      // g3: a story that stops streaming also rejects truncated text.
-      manifest: story({ loopProfile: { stream: false, truncation: "reject" } }),
-      deps: { toolExecutor: undefined, onDelta },
+      manifest: story(),
+      deps: { toolExecutor: undefined },
     });
-    expect(onDelta).not.toHaveBeenCalled();
-    expect(result.streamDeltaCount).toBe(0);
-    expect(result.finalContent).toBe("Once upon");
+
+    expect(result.acceptedOutput?.narrativeOutput).toBe("Once upon");
     expect(result.stop).toEqual({ reason: "completed" });
   });
 
   it("(ii) a story with steering: false leaves the queue undrained", async () => {
     const drainSteering = vi.fn(() => ["turn left"]);
-    const llm = queuedLLM([prose("The road forks.")]);
+    const llm = queuedLLM([submitted("The road forks.")]);
     const result = await runLoop({
       llm,
       manifest: story({ loopProfile: { steering: false } }),
@@ -175,7 +155,7 @@ describe("the loop core under a profile", () => {
     });
     expect(drainSteering).not.toHaveBeenCalled();
     expect(llm.requests).toHaveLength(1);
-    expect(result.finalContent).toBe("The road forks.");
+    expect(result.acceptedOutput?.narrativeOutput).toBe("The road forks.");
   });
 
   it("(iii) a story with fallback: fail throws loop-detected on the second detection", async () => {
@@ -184,9 +164,9 @@ describe("the loop core under a profile", () => {
     const error = await thrownBy(
       runLoop({
         llm: scriptedLLM((params) =>
-          params.tools
+          params.tools?.some((tool) => tool.name !== "submit-output")
             ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-            : prose("never"),
+            : submitted("never"),
         ),
         manifest: story({
           tools: { plugin: ["mark"] },
@@ -203,9 +183,9 @@ describe("the loop core under a profile", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     let i = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-        : prose("The guard lets you pass."),
+        : submitted("The guard lets you pass."),
     );
     const result = await runLoop({
       llm,
@@ -213,20 +193,21 @@ describe("the loop core under a profile", () => {
       maxSteps: 20,
     });
     expect(result.stop).toEqual({ reason: "completed" });
-    expect(result.finalContent).toBe("The guard lets you pass.");
+    expect(result.acceptedOutput?.narrativeOutput).toBe(
+      "The guard lets you pass.",
+    );
     const last = llm.requests.at(-1)!;
-    expect(last.tools).toBeUndefined();
+    expect(last.tools?.map((tool) => tool.name)).toEqual(["submit-output"]);
     const texts = systemTexts(last);
     expect(texts.some((text) => text.includes(FINAL_ANSWER_TEXT))).toBe(true);
-    expect(texts.some((text) => text.includes(WRITE_STORY_TEXT))).toBe(false);
   });
 
   it("(v) finalizer.maxSteps: false fails the step limit even when prose could answer", async () => {
     let n = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch")
-        : prose("never"),
+        : submitted("never"),
     );
     const result = await runLoop({
       llm,
@@ -246,22 +227,16 @@ describe("the loop core under a profile", () => {
     expect(settled.kind).toBe("failed");
   });
 
-  it("(vii) truncation: reject on a story fails a reply cut at the output limit", async () => {
+  it("a story rejects a submission cut at the provider output limit", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const cut: LLMResponse = {
-      ...prose("The fog rolls"),
+      ...submitted("The fog rolls"),
       finishReason: "length",
     };
-    const kept = await runLoop({
-      llm: queuedLLM([cut]),
-      manifest: story(),
-      deps: { toolExecutor: undefined },
-    });
-    expect(kept.finalContent).toBe("The fog rolls");
     const error = await thrownBy(
       runLoop({
         llm: queuedLLM([cut]),
-        manifest: story({ loopProfile: { truncation: "reject" } }),
+        manifest: story(),
         deps: { toolExecutor: undefined },
       }),
     );
@@ -280,12 +255,12 @@ describe("the deadline reserve (vi)", () => {
     vi.spyOn(Date, "now").mockImplementation(() => now);
     let n = 0;
     const llm = scriptedLLM((params) => {
-      if (params.tools) {
+      if (params.tools?.some((tool) => tool.name !== "submit-output")) {
         now += opts.stepMs;
         return opts.step(n++);
       }
       now += opts.finalMs;
-      return prose("The answer, written in time.");
+      return submitted("The answer, written in time.");
     });
     return llm;
   }
@@ -307,9 +282,17 @@ describe("the deadline reserve (vi)", () => {
       }),
     });
     expect(result.stop).toEqual({ reason: "deadline", finalizer: true });
-    expect(result.finalContent).toBe("The answer, written in time.");
-    expect(llm.requests.filter((r) => r.tools)).toHaveLength(4);
-    expect(llm.requests.at(-1)!.tools).toBeUndefined();
+    expect(result.acceptedOutput?.narrativeOutput).toBe(
+      "The answer, written in time.",
+    );
+    expect(
+      llm.requests.filter((r) =>
+        r.tools?.some((tool) => tool.name !== "submit-output"),
+      ),
+    ).toHaveLength(4);
+    expect(llm.requests.at(-1)!.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
     const settled = settleAgentLoop({
       manifest: manifest(),
       input,
@@ -355,9 +338,15 @@ describe("the deadline reserve (vi)", () => {
       deps: { turnControl: { drainSteering } },
     });
     expect(result.stop).toEqual({ reason: "deadline", finalizer: true });
-    expect(llm.requests.filter((r) => r.tools)).toHaveLength(4);
+    expect(
+      llm.requests.filter((r) =>
+        r.tools?.some((tool) => tool.name !== "submit-output"),
+      ),
+    ).toHaveLength(4);
     const finalizer = llm.requests.at(-1)!;
-    expect(finalizer.tools).toBeUndefined();
+    expect(finalizer.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
     const messages = finalizer.messages as {
       role: string;
       content: unknown;
@@ -405,7 +394,11 @@ describe("the deadline reserve (vi)", () => {
     );
     expect(stopOf(error, "run-loop")).toEqual({ reason: "deadline" });
     // The fifth step started with 4 s left, inside the reserve.
-    expect(llm.requests.filter((r) => r.tools)).toHaveLength(5);
+    expect(
+      llm.requests.filter((r) =>
+        r.tools?.some((tool) => tool.name !== "submit-output"),
+      ),
+    ).toHaveLength(5);
     expect(llm.requests.every((r) => r.tools)).toBe(true);
   });
 
@@ -427,7 +420,11 @@ describe("the deadline reserve (vi)", () => {
       deps: { toolExecutor: makeExecutor([markTool]) },
     });
     expect(result.stop).toEqual({ reason: "deadline", finalizer: true });
-    expect(llm.requests.filter((r) => r.tools)).toHaveLength(3);
+    expect(
+      llm.requests.filter((r) =>
+        r.tools?.some((tool) => tool.name !== "submit-output"),
+      ),
+    ).toHaveLength(3);
   });
 });
 
@@ -436,19 +433,17 @@ describe("settling a deadline", () => {
     stop: AgentToolLoopCompleted["stop"],
   ): AgentToolLoopCompleted {
     return {
-      finalContent: "The answer.",
-      finalToolOutput: null,
+      acceptedOutput: { narrativeOutput: "The answer." },
       collectedToolCalls: [],
       executedToolCalls: [],
       failedToolCalls: [],
       pendingProposals: [],
       emittedEvents: [],
-      streamDeltaCount: 0,
+
       stop,
       effectiveMaxSteps: 5,
       deadline: Date.now(),
       requiredToolUseUnmet: false,
-      requiredCompletionUnmet: false,
     };
   }
 

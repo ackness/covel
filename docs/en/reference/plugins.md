@@ -100,9 +100,9 @@ runtime:
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
-    finishWith: save-facts
+    completion: { afterTools: [save-facts] }
 ---
-Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
+Extract facts supported by runtime-inputs.narrative.value, then call save-facts. Read its result and call submit-output with the final output object.
 ```
 
 The ID of this package is its directory name, `example`; its entry is `server/index.js` (which registers `save-facts`); the runtime has no `function` block, so it is an agent; and the package provides `example.facts@1` because the runtime outputs it. None of these needs to be written; see [Defaults](#defaults).
@@ -179,7 +179,7 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
 | `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                                    |
 | `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                                 |
-| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `finishWith`, `completion`, `loop`                 |
+| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `completion`, `loop`                               |
 | `function`    | A runtime with this block is a function, one without it an agent; `handler`, `model`, `timeoutMs`, `tools` |
 | `guard`       | The guard module, relative to the runtime                                                                  |
 | `effects`     | Read and write resources, and `parallelSafe`                                                               |
@@ -213,10 +213,9 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `io.selfData[].format`, `maxEntries` | `summary`, `50` |
 | `agent.model` | `story` for a runtime with `io.visibility: story`, `plugin` for any other |
 | `agent.reasoning` | `true`: the model's own reasoning setting applies |
-| `agent.toolChoice` (with `finishWith`) | `required` |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
-| `agent.loop.stream`, `steering`, `truncation`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.steering`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.extensions[].order` | `0` |
@@ -226,7 +225,6 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 
 - A hook with only `event` is written as the event name: `- PreToolUse`.
 - An extension with only `point` and `id` is written as `<point>/<id>`.
-- `completion: {require: tool-use, afterTools: [one tool]}` with `toolChoice: required` is written as `finishWith: <tool>`. See [Completion conditions](#completion-conditions-agentfinishwith-agentcompletion).
 
 Covel works out the fields below when they are left out. When one is written with the value Covel would work out, `pnpm validate:plugin` warns in the same way (`is the default value; remove it` or `is worked out from …; remove it`).
 
@@ -345,6 +343,8 @@ A provider that already succeeded in an earlier stage or event layer can also sa
 
 ### Notes on setup runtimes
 
+Setup agents must submit completion fields through `submit-output` too. Acceptance alone does not complete setup: only a committed result updates setup state. Suspension, rejection and rollback cannot complete it early; setup and opening still do not increment player turns.
+
 Opening character templates must include a placeholder for every collected field. Template/default errors are correctable `invalid-input` failures; see [character tools](./tools.md#opening-character-form).
 
 A package-level `requires` makes sure the contract's provider is activated. It does not require the provider to produce output again on every execution.
@@ -397,14 +397,13 @@ A streaming call is limited by how long it goes without output: a model that kee
 
 - The call is retried as a new attempt, with one added line that says "write only what the task needs". A model that loops or repeats itself usually finishes on a second try.
 - The call fails only if it is cut off again. The error message suggests raising the output limit. If the limit is really too small, the second attempt will not finish either.
-- The one exception: a runtime on the `story` profile (`truncation: accept`) produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence. A runtime with `io.visibility: story` uses this profile by default.
+- Every profile rejects incomplete provider responses; only a complete `submit-output` call can enter acceptance.
 
-**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime on the `story` profile that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
+**The provider did not say why it stopped (`finishReason: other`).** The call fails without retry; its content cannot become a successful output. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
 
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
-- A runtime that streams its text to the player (the `story` profile, `stream: true`) is not retried, because the player has already read that text.
-- For other runtimes, the output was not shown to anyone, so it is discarded and the call is retried according to `maxRetries`. The time spent producing the output that was already written does not count toward `timeoutMs`. Silence after that does count.
+- Every runtime discards the failed attempt completely and retries within `maxRetries`. No partial call executes. Time spent writing does not count toward `timeoutMs`; the following silence does. See [Provider streaming](./slots.md#provider-streaming-responses).
 
 **A non-streaming call** gives no progress signal, so `callTimeoutMs` limits the total duration of a single call.
 
@@ -421,34 +420,51 @@ The budget decides how many retries can actually be used:
 - A 5xx error that uses up every transport-level retry leaves room for only two rounds.
 - Failures that return quickly and use only one HTTP request (the connection drops partway through a reply, or a generation error) are the ones that can use more attempts.
 
-### Completion conditions (`agent.finishWith`, `agent.completion`)
+<a id="completion-conditions-agentfinishwith-agentcompletion"></a>
+<a id="agent-output-submission"></a>
 
-An agent that finishes by calling one tool writes `finishWith`:
+### Completion conditions (`agent.completion`)
+
+Every agent submits its final result with the host-generated `submit-output` tool. Story and system agents use the same tool; reply content is not an output channel. Successful submission ends computation. Writes still require proposal validation and commit.
+
+Without an output source, parameters come from the actual loaded output schema: explicit files, `contract:` references and the `output.schema.json` convention take precedence. The schema must describe an object, not a scalar or array, and is neither wrapped nor rewritten. It appears only in the tool definition; agent completion requests no JSON content response format.
+
+When final output is a business tool’s result, declare `io.output.from: { tool: save-facts }`. The tool must be an allowlisted own or builtin business tool, never a host control or optional service import; function runtimes cannot use this field. An output schema or contract must actually load, including the `output.schema.json` convention. After the tool succeeds, the model calls `submit-output` alone with `{}`. The generated parameter schema still advertises an empty object. In this mode the host ignores all call arguments, including `parameters` / `arguments` wrappers, extra fields and malformed JSON text; arguments cannot replace the canonical result. The host takes that tool’s latest successful public content in this loop (rather than the `summary` / `data` / `staged` model view), validates the output schema and existing contract gates, then runs `ReviewAgentOutput` as usual. With no successful call, `required-work` spends the `toolUse` budget. Suspension retains the source and executor results so resumed submission need not repeat work. Tool effects still require their original proposals and commit.
+
+The actual model must support tools. Strict and non-strict submissions use the same host validation, preserving optional properties and open objects. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for target checks, same-tag fallback and strict profiles. Submission steps prefer a named `submit-output` choice, narrowed to `required` or `auto` when thinking capabilities require it; the player's reasoning choice is never disabled to force submission.
+
+Without an output schema, the host supplies an object default:
+
+- Story agent: required nonblank `narrativeOutput: string`, optional `yield: user | continue`.
+- System agent: an open object with optional `narrativeOutput: string`, `completion: done | pending`, `preGameDone: boolean`, and other business fields. `{}` means no business output. Declare a schema for typed downstream output.
+
+`submit-output` is automatically available. Do not put it in allowlists, registrations or `defer`. Functions still return handler results and cannot call it. Submitted fields shaped like `pluginData`, UI or events cannot produce writes.
+
+`agent.completion` declares only business work required before submission:
 
 ```yaml
 agent:
-  finishWith: save-facts
+  tools:
+    plugin: [save-facts]
+  completion:
+    afterTools: [save-facts]
 ```
 
-- The runtime finishes as soon as `save-facts` succeeds, without asking the model again. If it ends without a successful call to that tool, the run fails.
-- The model must call a tool on every step, as with `toolChoice: required`. When `agent.toolChoice` is written, its value is used.
-- It means the same as `completion: {require: tool-use, afterTools: [save-facts]}` with `toolChoice: required`.
+- A nonempty `afterTools` implies `require: tool-use`: at least one listed authorized own or builtin business tool must succeed. That call does not end the runtime. The model reads its result, then calls `submit-output`.
+- Without a list, `require: tool-use` accepts any successful authorized business tool. Failed calls, submission, tool search, suspension and delegation controls do not count as business work.
+- For no change, send the empty result allowed by the business tool, then submit final output. Do not repeat successful writes just to resubmit output.
+- Imported services cannot be required work because their providers may be absent. A required failed call still needs a later success of the same tool.
+- `finishWith`, `completion.require: explicit` and `runtime-done` have been removed. Replace `finishWith: save-facts` with the `completion` above and instruct the model to read the tool result before submitting output.
 
-Completion tools should check required coverage before reporting success. For example, [world fact extraction](./tools.md#per-objective-assessment) requires an assessment of every supplied open objective. Valid JSON alone does not prove complete extraction.
+Business tools still validate domain constraints such as coverage. Valid JSON alone does not prove a complete task. See the [submission tool](./tools.md#submit-output).
 
-When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`. An imported service tool cannot be a completing tool: a runtime must not need another plugin to finish.
+Narrator and Dialogue Narrator keep the `narrative-engine@2` `segments/cues/yield` payload and deliver it through final submission. Register `createNarrativeReview` on `ReviewAgentOutput`. It checks validated segments or default `narrativeOutput` and returns correction only; it cannot rewrite a response or add effects. Preparation chatter never becomes story content.
 
-- `completion.afterTools`: the run finishes once one of the listed tools succeeds.
-- When the model must read the tool result and revise it, use `completion.require: tool-use` without `afterTools`. Character creation, for example, returns the filled narrative for review before the model finishes.
-- `completion.require: explicit`: the run must end with a successful call to a completing tool, or with `runtime-done`. A runtime with `io.visibility: story` cannot use it.
-- `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
-- If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
-- The request right after a correction requires the model to call a tool (`toolChoice: "required"`, with any tool named in the manifest kept as it is). After the model calls a tool, the choice goes back to automatic. When the model is in thinking mode, the provider does not accept a forced choice, so the model keeps choosing on its own.
-- This check runs in one place, where the loop returns. It applies to every way a normal run or a resume can end: a text answer, `runtime-done`, automatic completion through `afterTools`, a `PostToolUse` hook that stops the run, and running out of steps.
+Suggestions, fact extraction, event planning, time advancement and world initialization first complete their required business tool, then submit its canonical result. They declare the business tool as their output source, so the host validates and reviews the canonical result. Correct only the submission, without repeating successful writes. Affinity, codex and graph agents may submit `{}` without writing on no-change turns; character tracking still syncs an empty batch and dimension tracking still settles `updates: []`. World initialization’s canonical result must include `preGameDone: true`; character form preparation submits `preGameDone: false` while waiting for the player to fill the form.
 
 ### Tool choice and reasoning (`agent.toolChoice`, `agent.reasoning`)
 
-- `agent.toolChoice: required` makes the model call a tool on every step; the model picks which one. `{name: <tool>}` makes it call that one tool. Without it (and without `finishWith`), the model decides on its own.
+- `agent.toolChoice: required` makes the model call a tool on every step; the model chooses which one. `{name: <tool>}` selects one tool. When omitted, the model chooses.
 - `agent.reasoning: false` turns reasoning off for this runtime. It suits an extraction runtime that only fills in tool arguments. Without it, the model's own reasoning setting applies; a reasoning level the player sets explicitly still wins.
 - When the model is in thinking mode, the provider does not accept a forced tool choice, so the model keeps choosing on its own.
 
@@ -568,16 +584,16 @@ Each segment is `{ kind, speaker?, text }`:
 
 The kernel derives `narrativeOutput` by joining each segment’s `text` with blank lines. Consumers needing only prose can use `select: /narrativeOutput`. Consumers extracting who spoke, acted, or changed state should use `select: /segments`, reading `kind`, `speaker`, and `text` together; quoted first-person speech does not automatically belong to the player. The public contract validates the full output before `select`, so consumers need no duplicate segment schema. The original player message may be absent from an extractor’s inputs; do not infer commitments from missing text. Requests, attempts, and promises do not establish successful outcomes. Dialogue logs, next-turn history, `turn-digest@1`, and memory still read the joined prose, not JSON.
 
-**Lenient normalization.** Before commit, the kernel tidies the story:
+**Deterministic normalization.** Accepted story objects are normalized before commit. Functions and guards retain their existing lenient normalization; agents must first pass the schema and story invariants, so normalization cannot bypass validation:
 
-- Prose is still a valid story: each paragraph becomes one `narration` segment.
-- An unknown `kind` is read as `narration`. A dialogue without a `speaker` is kept, unattributed.
+- An accepted object’s `narrativeOutput` becomes one `narration` segment per paragraph; functions may still return prose directly.
+- For functions and guards, unknown `kind` becomes `narration` and dialogue without a speaker stays unattributed. Agent submissions must correct these errors before acceptance.
 - The `speaker` of a `narration` segment is dropped.
 - A `text` over 4000 characters is split at newlines into several segments. Above 60 segments, neighbours of the same kind and speaker are merged first; trailing segments are dropped only if the story still does not fit.
 - A trailing paragraph that lists options for the player ("What do you do?") is removed.
 - A story with no text left fails with the "no narrative output" error, including when a PostRuntime hook empties it.
 
-**Repair requests.** A story agent that declares `io.output.schema: contract:narrative-engine@2` sends that schema to the model as the response format. When the answer has problems (a dialogue without a speaker, an unknown `kind`, prose where `segments` were asked for, or an empty `segments` array), the kernel sends one repair request through the existing output repair flow, listing at most five problems. Once the repair budget is spent, the story commits under the lenient rules above.
+**Submission validation.** Story arguments first pass the effective output schema, then nonempty text, segment kind and dialogue-speaker checks. Errors return as tool results for correction on the next ordinary step. Exhaustion fails; invalid arguments and ordinary reply content are never normalized into successful stories. Accepted values and function output retain deterministic story normalization.
 
 **Speaker resolution.** At commit, the kernel resolves `speaker` and `cues.present` to characters of the session by name. Only a full character ID, name or alias matches; there is no partial matching.
 
@@ -586,7 +602,7 @@ The kernel derives `narrativeOutput` by joining each segment’s `text` with bla
 - The story message's metadata records `segments`, `cues`, `yield` and the presence record `presentCharacterIds`: the resolved speakers and the characters in `cues.present`. The presence record is only stored for now, ready for per-character history later.
 - Story messages on `/messages` and `/view` carry `segments` (see [API](./api.md)). Character IDs never reach model-facing text.
 
-**Streaming.** When the answer is segmented JSON, the narrative stream forwards only each segment's `text`, with a blank line between segments, matching the committed text. JSON keys, `speaker` and `cues` never appear in the streamed text. Each paragraph's kind and speaker as written travel in the `segment` of `narrative.delta`, so the stage shows name tags while the story streams and replaces them with the resolved names at commit (see [protocol](./protocol.md#narrative-events)). A prose answer streams as before, without `segment`.
+**Presentation.** The complete accepted story is published after commit through `narrative.completed`, including resolved speakers and segments. Provider text and tool arguments stay internal; they never create a draft message. Progress stays visible while waiting. See [protocol](./protocol.md#narrative-events).
 
 #### Function output
 
@@ -698,11 +714,12 @@ Rules at run time:
 
 - **Own transcript**: the sub-agent's prompt is the provider's own body, the framework's completion instructions, then the brief. It does not see the caller's conversation. Generic sub-agents have no session history; the actor contract adds framework-filtered witnessed history (see [character delegation](#character-orchestration)).
 - **Read-only tools**: tools in the provider's `agent.tools` without the `readOnly` annotation (plugin tools, write tools such as a dataset's `-upsert` / `-update`), `suspend` and `delegate` are taken away. A declared plugin tool that is not registered still fails the run as it always does. Of the dataset tools, only `-get` / `-list` stay. Imported service tools stay, write-service imports included: the sub-agent calls as itself, and the operations it stages ride on the run that delegated to it and are taken back when the sub-agent fails.
+- **Submission tool**: after read-only filtering, the host generates `submit-output` from the provider’s effective output schema, granting no domain writes. Children return only output accepted by schema, required-work and `ReviewAgentOutput` checks. A delegated result cannot substitute for the parent agent’s own submission. Children cannot suspend.
 - **Loop profile**: without `agent.loop.profile` it runs `actor`: no streaming, no player interjections.
 - **Model**: it uses the model role the provider declares. The session's `runtimeModelOverrides` apply by the provider's runtimeId, also in a run resumed after suspension; the caller's override and the request's story model override do not.
 - **Caps**: one execution runs at most 8 sub-agents at a time, nested executions included, and a sub-agent cannot call another one (depth cap 1). Session settings also bound cumulative actors and calls; see [execution allowances](#character-orchestration). A call over a cap gets `unavailable` at once; nothing queues.
 - **Cancellation**: when the caller is cancelled, times out or ends, the sub-agent stops with it, with `cancelled`. A sub-agent the handler did not await is waited for before the runtime finishes.
-- **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PreStep`, `PreToolUse` and `PostToolUse` fire as usual, with the sub-agent's `ctx.runtimeId`.
+- **Output only**: the output is checked against the provider's `io.output.schema` and contract schema; a failure is `internal`. The `PreRuntime`, `PostRuntime` and `PostContextAssembly` hooks do not fire for a sub-agent; the in-loop `PreLLMCall`, `PostLLMResponse`, `PreStep`, `PreToolUse`, `PostToolUse` and `ReviewAgentOutput` fire as usual, with the sub-agent's `ctx.runtimeId`.
 - **Trace**: every event of the sub-agent carries `subagentCallId`, `parentCallId` and `parentRuntimeId`, plus `subagent.started` / `completed` / `failed` (see [protocol](./protocol.md#sub-agent-events)). An `io.concealed` provider has its content hidden as a top-level run does.
 - **Fault latch**: a sub-agent’s own faults count against its provider. Only the provider’s own tightest time limit (winning ties) counts as its timeout; model errors and cancellations do not count. Faults count even if the parent execution fails or rolls back; clearing requires a committed execution. Calls from setup runtimes neither count nor clear faults. Paused providers return `unavailable` and still count toward ambiguity. See the [protocol fault latch](./protocol.md#plugin-fault-latch).
 
@@ -827,7 +844,7 @@ No bundled plugin uses the fields below, and a first plugin does not need them. 
 | `agent.loop.firstTokenTimeoutMs`, `idleTimeoutMs` | The wait limits of a streaming call. See [Wait limits of a streaming call](#wait-limits-of-a-streaming-call). |
 | `agent.loop.loopDetection` | How many identical calls in a row count as a loop. The default is 3; `0` turns the check off. |
 | `agent.loop.maxRecursionDepth` | How deep `ctx.recursiveCall()` may nest. The default is 10. |
-| `agent.loop.profile`, `stream`, `steering`, `truncation`, `fallback`, `finalizer`, `corrections` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
+| `agent.loop.profile`, `steering`, `fallback`, `finalizer`, `corrections` | How the loop behaves; see [Loop profile](#loop-profile-agentloopprofile) |
 
 ### Wait limits of a streaming call
 
@@ -849,50 +866,37 @@ So when a provider accepts the request but never produces any text, there is sti
 
 ### Loop profile (`agent.loop.profile`)
 
-A profile decides how an agent loop runs: whether its text is shown to the player as it is written, whether it reads the player's interjections, whether a reply cut off at the output limit is kept, what happens when the model keeps calling the same tool, and when the tools are turned off to ask for a final answer. Without one, the profile follows `io.visibility`: `story` for a story runtime, `system` for any other. Both bundled narrative runtimes get theirs this way, with nothing written in their manifests.
-
-When only one thing differs from the profile, write only that key; the rest keep the profile's values:
+The loop profile controls steering, repeated-tool fallback, finalization and correction budgets. Without `profile`, story runtimes use `story` and other runtimes use `system`; child agents default to `actor`. Every profile completes through `submit-output`. Truncated or refused provider responses cannot succeed. `agent.loop.stream` and `agent.loop.truncation` are removed. Transport streaming and tool-argument heartbeats still enforce request timeouts; `steering` remains independent.
 
 <!-- prettier-ignore -->
-| Field | Effect |
+| Field | Meaning |
 | --- | --- |
-| `profile` | `story`, `actor` or `system`; the other keys override it |
-| `stream` | Show the model's text to the player as it is written |
-| `steering` | Merge the player's queued interjections into the conversation before each step and after the story text is written |
-| `truncation` | `accept`: story text cut off at the output limit is kept; `reject`: it fails |
-| `fallback` | When the model keeps calling the same tool: `answer-without-tools` turns the tools off and asks for the answer; `fail` fails with `loop-detected` |
-| `finalizer.maxSteps` | At the step limit or when the request no longer fits the model context, turn tools off and ask once for the final answer, subject to the finalizer conditions. Overflow rescue requires a complete tool step and trims tool groups as needed under [prompt budgeting](./prompt-structure.md#budget). `false` disables both rescues |
-| `finalizer.deadlineReserveMs` | With this many milliseconds left before the time limit, start no new step and ask for the final answer with tools off. `0` turns it off |
-| `corrections.toolUse` | Corrections for missing required tool work or explicit completion. Integer 0–3, default 1 |
-| `corrections.review` | Corrections after `PostLLMResponse` rejects a draft. Integer 0–5, default 2 |
-| `corrections.loopPerturbation` | Perturbations of a repeated tool loop before `fallback`. Integer 0–3, default 1 |
-| `corrections.outputRepair` | Requests with tools off for a complete replacement of invalid output. Integer 0–3, default 1 |
-
-The values of the three profiles:
+| `profile` | `story`, `actor` or `system`; other fields override that preset |
+| `steering` | Merge player interjections; new input before acceptance supersedes the candidate and requires another ordinary step |
+| `fallback` | `submit-output`: offer only submission after repeated business calls; `fail`: stop with `loop-detected` |
+| `finalizer.maxSteps` | At most one extra submission request after step exhaustion or context overflow when eligible; default `true` |
+| `finalizer.deadlineReserveMs` | Switch to one submission request inside this reserve; default `0`, clamped to half the runtime timeout |
+| `corrections.outputRepair` | Missing submission, mixed batch, JSON/schema/story shape failure; integer 0–3, default 1 |
+| `corrections.review` | Shared by `PostLLMResponse` and `ReviewAgentOutput`; integer 0–5, default 2 |
+| `corrections.toolUse` | Missing required business work; integer 0–3, default 1 |
+| `corrections.loopPerturbation` | Perturbations before repeated-tool fallback; integer 0–3, default 1 |
 
 <!-- prettier-ignore -->
 | Field | `story` | `actor` | `system` |
 | --- | --- | --- | --- |
-| `stream` | `true` | `false` | `false` |
 | `steering` | `true` | `false` | `false` |
-| `truncation` | `accept` | `reject` | `reject` |
-| `fallback` | `answer-without-tools` | `answer-without-tools` | `fail` |
+| `fallback` | `submit-output` | `submit-output` | `fail` |
 | `finalizer.maxSteps` | `true` | `true` | `true` |
 | `finalizer.deadlineReserveMs` | `0` | `0` | `0` |
 | `corrections` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` | `{ toolUse: 1, review: 2, loopPerturbation: 1, outputRepair: 1 }` |
 
-`actor` is for an agent that only answers a brief and writes no story text. A [sub-agent](#sub-agents) that names no profile uses it.
+`profile: story` and `steering: true` require story visibility. The reserve must be a nonnegative integer below the runtime timeout.
 
-Loading checks these rules and rejects a manifest that breaks one:
+**Correction budgets and output repair.** A rejection by the real response's `PostLLMResponse` runs first. Otherwise, classify in order: batch, JSON/schema/story shape, required work, output review. Each rejection consumes at most one category. The four counters are independent and spent only when scheduling another attempt. Corrections consume ordinary steps and the same deadline, without extra network retries or repeated successful business writes. Exhausting one category is terminal even when another has room. Valid JSON in reply content is also missing submission. Function and gateway structured-output APIs are unchanged.
 
-- `profile: story` requires `io.visibility: story`.
-- A `stream` or `steering` that ends up `true` requires `io.visibility: story`: only a story writes the narrative feed and reads the player's interjections.
-- A `truncation` that ends up `accept` requires a `stream` that ends up `true`: only text the player read as it was written is kept. A story that writes `stream: false` therefore also writes `truncation: reject`.
-- `finalizer.deadlineReserveMs` is a non-negative integer smaller than `timeoutMs` (compared with the default time limit when `timeoutMs` is not written).
+Suspension and re-suspension retain these counts, ordinary steps used and admitted ceilings; resume is not a new loop. If the saved output schema, required-work rules or plugin version differ from the loaded artifact, resume fails: recreate that agent continuation and checkpoints containing it. Successful business work need not run again, but resume still requires a new submission; no accepted answer is saved. Waiting for the player does not consume the next leg’s deadline.
 
-**Finishing before the time limit (`deadlineReserveMs`).** When less time than this is left, and text alone could complete the runtime at that moment (no unmet `requireToolUse` or explicit completion, and no output handed over by a completing tool) and at least 3 seconds remain to write it, the loop starts no new step and asks for the final answer with tools off. With `steering` on, player interjections queued during the last step are merged first, so that request reads them. When the answer is written, the runtime succeeds with stop reason `deadline` and `finalizer: true`. When it is not, the runtime still fails with a timeout. The reserve used is at most half of `timeoutMs`, and the time left is measured against the deadline as queue and streaming time have moved it. When the conditions do not hold, the loop runs to the real time limit as usual.
-
-**Correction budgets and output repair.** The four budgets in `agent.loop.corrections` are independent; `0` disables that correction. Write only keys you want to override. A bare text finish and a `runtime-done` without business work share the `toolUse` budget. After the loop and any finalizer, output that fails its schema or a story with empty text gets one request with tools off by default, including the validation errors and asking for a complete replacement answer. If it is still invalid, the runtime fails with `invalid-output`. The repair replaces earlier drafts and story text from before interjections. It runs only after a success-shaped exit, with required tool work and completion met, output not handed over by a completing tool, and at least 3 seconds left. Errors, cancellation and an expired deadline get no repair. Each request consumes one `outputRepair` unit. Each new loop starts fresh budgets; a resumed execution is not a new loop and keeps counting from what it spent before the suspension.
+**Finishing before the time limit (`deadlineReserveMs`).** With required work complete and at least 3 seconds left, a step limit, deadline reserve or context overflow can admit one request offering only `submit-output`; overflow also requires a complete tool step. It uses the same validation and review, and `PreLLMCall` cannot restore business tools. Success keeps the original stop reason with `stop.finalizer: true`. It does not invoke `PreStep`, and rejection never starts another repair request. Real timeout, cancellation and model errors retain their causes; an oversized finalizer preserves the original overflow. See [stop reasons](./protocol.md#stop-reasons).
 
 ### Author information
 
@@ -1004,12 +1008,12 @@ The commit rules are under [Turn-level single transaction](./transactions.md#tur
 
 The built-in `world-init` has four runtimes related to dimensions. `dimension-clock` runs after time settlement and `dimension-tracker`.
 
-| Runtime             | Stage              | Responsibility                                                                                                                                                                                                                                                                                                                                               |
-| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `dimension-context` | pre-turn function  | Calls no model. Reads the committed values and publishes `world.dimensions@1`.                                                                                                                                                                                                                                                                               |
-| `dimension-tracker` | post-turn agent    | Must be bound to this turn's narrative, and it maintains the dimensions by the author's rules. WorldIR is an optional supporting input. The world clock after this turn's settlement (`world-time-evolution@1`) is an optional input. `finishWith: update-dimensions`. When nothing changed, it still settles by calling `update-dimensions({updates: []})`. |
-| `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                                 |
-| `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                              |
+| Runtime             | Stage              | Responsibility                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dimension-context` | pre-turn function  | Calls no model. Reads the committed values and publishes `world.dimensions@1`.                                                                                                                                                                                                                                                                                                 |
+| `dimension-tracker` | post-turn agent    | Must be bound to this turn's narrative, and it maintains the dimensions by the author's rules. WorldIR is an optional supporting input. The world clock after this turn's settlement (`world-time-evolution@1`) is an optional input. `completion: { afterTools: [update-dimensions] }`. When nothing changed, it still settles by calling `update-dimensions({updates: []})`. |
+| `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                                                   |
+| `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                                                |
 
 Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](./tools.md#update-dimensions).
 **Reading.**
@@ -1294,7 +1298,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@2` (default provider) | inline | Advances the story based on the player's actions. |
 | [npc-graph](../../../plugins/npc-graph/README.md) | Relationship Graph | `plugin` | `npc-graph@1`, `graph-rag@1` | `extractor`, `rag-retriever` | Records the relationships between people. |
 | [pregame](../../../plugins/pregame/README.md) | Pre-Game Setup | `core` | `session.opening@1` | inline | Reads the world material at the start and prepares the first adventure. |
-| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast`, `story-cues` | Optionally reads story scene and presence cues and commits stage changes with the story; events still override scenes, day/night, and actor direction; dialogue templates use speaker-scoped avatars and local previews |
+| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast`, `story-cues` | Optionally reads story scene and presence cues and commits stage changes with the story, allowing missing character attributes; events still override scenes, day/night, and actor direction; dialogue templates use speaker-scoped avatars, local previews and optional segment reveal |
 | [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue`, `story-cues` | Optionally reads story scene and mood cues to play the world's music; scene selection works without Scene Stage, and events remain overrides. |
 | [story-events](../../../plugins/story-events/README.md) | Hidden Story Events | `plugin` | `story-event-cue@1`, `story-event.plan@1` | `intake`, `evaluate`, `plot` | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
 | [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Tabletop Rules | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
@@ -1452,6 +1456,8 @@ Functions and guards expose `ctx.historyFor(characterId, {limit?})`; plugin tool
 Development data: discard unresolved suspensions that already delegated before budget snapshots existed, and snapshots/checkpoints containing those continuations. Ordinary sessions and stories need no reset. There is no old-counter reconstruction or dual-format compatibility.
 
 ## Stories requesting advancement
+
+An agent’s `yield: continue` must come from accepted, committed output. Rejection, cancellation, failed commit and child output cannot start another round. Local text reveal does not participate in execution decisions.
 
 The host reads only committed top-level stories with `io.visibility: story` and `io.output.contract: narrative-engine@2`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
 

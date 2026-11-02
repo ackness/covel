@@ -5,7 +5,8 @@ import { isValidPluginSetting } from "@covel/shared";
 
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import { isSetupRuntime } from "@covel/shared";
-import { resolveFrameworkCompletion } from "@covel/context";
+import type { EffectiveAgentOutput } from "@covel/shared/plugin-runtime";
+import { outputToolDefinition } from "../agent-loop/agent-output-contract.js";
 import { DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME } from "@covel/tools";
 import type {
   ToolCallContext,
@@ -54,38 +55,31 @@ export function retainPreGameRuntimes(
 }
 
 /**
- * Whether a runtime ends by calling `runtime-done`. A runtime with an output
- * schema ends with its JSON or its completing tool, a runtime that must call
- * a completing tool ends with that call, and a story runtime ends with its
- * text.
- *
- * The answer is the one the prompt's `[COMPLETION]` instruction is written
- * from, so a runtime is offered `runtime-done` exactly when it is told to
- * call it.
- */
-export function usesRuntimeDone(
-  manifest: Pick<
-    RuntimeManifest,
-    "output" | "outputKind" | "requireToolUse" | "completeAfterTools"
-  >,
-): boolean {
-  return resolveFrameworkCompletion(manifest).completion === "runtime-done";
-}
-
-/**
  * Build LLM tool definitions from a runtime's manifest declarations.
  * Looks up each declared tool in the ToolExecutor's registry to get its JSON schema.
  *
  * The required context lets the executor surface session-specific tool
  * variants and enforce plugin scoping while resolving schemas.
  */
-export function buildToolDefinitions(
+export async function buildToolDefinitions(
   manifest: RuntimeManifest,
-  toolExecutor: ToolExecutor,
+  toolExecutor: ToolExecutor | undefined,
   context: ToolCallContext,
-): LLMToolDefinition[] | undefined {
+  output: EffectiveAgentOutput,
+): Promise<LLMToolDefinition[]> {
+  for (const name of [
+    ...(manifest.tools?.builtin ?? []),
+    ...(manifest.tools?.plugin ?? []),
+    ...generatedToolNames(manifest),
+    ...(Array.isArray(manifest.tools?.defer) ? manifest.tools.defer : []),
+  ]) {
+    if (name === output.toolName)
+      throw new Error(
+        `runtime "${manifest.name}": submit-output is reserved; do not declare or defer it`,
+      );
+  }
   for (const name of manifest.tools?.plugin ?? []) {
-    if (!toolExecutor.getToolInfo(name, context))
+    if (!toolExecutor?.getToolInfo(name, context))
       throw new Error(
         `runtime "${manifest.name}" declares plugin tool "${name}", but its plugin did not register it`,
       );
@@ -108,31 +102,10 @@ export function buildToolDefinitions(
     (name) => !deferred.has(name),
   );
 
-  // Framework-contracted tool: `runtime-done` is auto-available to tool-using
-  // agent runtimes so the LLM can exit immediately after completing business
-  // tool calls. Schema-declared runtimes either emit final JSON text or use a
-  // declared completing tool as their output channel, so `runtime-done` is
-  // withheld; either path already has an explicit completion contract.
-  // A runtime that must call a completing tool ends with that call. Offered
-  // `runtime-done`, a model ends a quiet turn with it; the terminator records
-  // nothing, so the loop answers with a correction and one more model call.
-  // A story runtime finishes with its text. Offered `runtime-done`, a model
-  // that follows instructions to the letter ends the run with it and writes
-  // no story.
-  const frameworkNames = new Set<string>();
-  if (usesRuntimeDone(manifest) && !names.includes("runtime-done")) {
-    names.push("runtime-done");
-    frameworkNames.add("runtime-done");
-  }
-
-  if (names.length === 0 && deferred.size === 0) {
-    return undefined;
-  }
-
   const defs: LLMToolDefinition[] = [];
 
   for (const name of names) {
-    const info = toolExecutor.getToolInfo(name, context);
+    const info = toolExecutor?.getToolInfo(name, context);
     if (info) {
       defs.push({
         name: info.name,
@@ -144,15 +117,6 @@ export function buildToolDefinitions(
       [DELEGATE_TOOL_NAME, DELEGATE_BATCH_TOOL_NAME].includes(name)
     ) {
       // Optional imports and delegation targets can be absent for this run.
-    } else if (frameworkNames.has(name)) {
-      // Framework-contracted sentinel pushed above, not a manifest
-      // declaration — keep a minimal definition even when the hosting
-      // registry omits it (e.g. reduced test harnesses).
-      defs.push({
-        name,
-        description: `Tool: ${name}`,
-        parameters: { type: "object" },
-      });
     } else {
       // Missing builtins are optional host capabilities.
       console.warn(
@@ -166,7 +130,8 @@ export function buildToolDefinitions(
     defs.push(buildSearchToolsDefinition(deferred.size, manifest.pluginId));
   }
 
-  return defs.length > 0 ? defs : undefined;
+  defs.push(await outputToolDefinition(output, context.locale));
+  return defs;
 }
 
 export function makeFailedResult(

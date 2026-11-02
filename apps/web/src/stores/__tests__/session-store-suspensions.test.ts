@@ -73,11 +73,10 @@ function createHarness(seed: SessionState = initialState): {
   };
   const deps: SseEventHandlerDeps = {
     dispatch,
-    ds: {} as SseEventHandlerDeps["ds"],
+
     sessionIdRef: { current: SESSION_ID },
     stateRef,
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   };
   return { handle: createSseEventHandler(deps), state: () => current };

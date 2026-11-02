@@ -50,14 +50,22 @@ class ScriptedLLM implements LLMAdapter {
             }),
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 10, outputTokens: 5 },
       };
     }
     return {
-      content: "test.ping emitted, done.",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({
+            narrativeOutput: "test.ping emitted, done.",
+          }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 10, outputTokens: 5 },
     };
   }
@@ -210,9 +218,15 @@ describe("emit-event: segment 5 directory injection (plan task 5)", () => {
           (m) => m.role === "system",
         )?.content as string | undefined;
         return {
-          content: "done.",
-          toolCalls: [],
-          finishReason: "stop",
+          content: null,
+          toolCalls: [
+            {
+              id: "final",
+              name: "submit-output",
+              arguments: JSON.stringify({ narrativeOutput: "done." }),
+            },
+          ],
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 10, outputTokens: 5 },
         };
       }
@@ -283,14 +297,20 @@ describe("emit-event: same-turn duplicate topic no-op", () => {
                 }),
               },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 10, outputTokens: 5 },
           };
         }
         return {
-          content: "done.",
-          toolCalls: [],
-          finishReason: "stop",
+          content: null,
+          toolCalls: [
+            {
+              id: "final",
+              name: "submit-output",
+              arguments: JSON.stringify({ narrativeOutput: "done." }),
+            },
+          ],
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 10, outputTokens: 5 },
         };
       }
@@ -388,13 +408,21 @@ describe("emit-event: a refused emit and the runtime's result", () => {
                   arguments: JSON.stringify({ topic: args.topic, data: {} }),
                 },
               ],
-              finishReason: "tool_calls",
+              finishReason: "tool_calls" as const,
               usage,
             }
           : {
-              content: "Nothing to report.",
-              toolCalls: [],
-              finishReason: "stop",
+              content: null,
+              toolCalls: [
+                {
+                  id: "final",
+                  name: "submit-output",
+                  arguments: JSON.stringify({
+                    narrativeOutput: "Nothing to report.",
+                  }),
+                },
+              ],
+              finishReason: "tool_calls" as const,
               usage,
             };
       },
@@ -448,15 +476,21 @@ describe("emit-event: a refused emit and the runtime's result", () => {
       requireToolUse: true,
     });
     expect(result?.status).toBe("failed");
-    expect(result?.error).toContain("requireToolUse");
+    expect(result?.error).toContain("required-work");
   });
 
   it("fails the runtime when the payload breaks the declared contract", async () => {
     const result = await runSystemEmitter({
       topic: "test.ping",
       validate: async () => ({ ok: false, reason: "data/x must be number" }),
+      requireToolUse: true,
     });
     expect(result?.status).toBe("failed");
-    expect(result?.error).toContain("event payload rejected");
+    expect(result?.error).toContain("required-work");
+    expect(result?.effects?.events).toBeUndefined();
+    expect(result?.toolCalls[0]).toMatchObject({
+      toolName: "emit-event",
+      output: null,
+    });
   });
 });

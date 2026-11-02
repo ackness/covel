@@ -1,11 +1,17 @@
 <!--
 Model-facing fragments for existing structured-output corrections.
 One key: value entry per line, as in action-labels.md.
-Only normalized parser reasons and numeric locations fill these templates.
+Submission guidance and normalized parser reasons use these templates.
 -->
 
+tool-description: Submit the final result for this runtime after required tool work is complete. Arguments must match this schema. If the submission is rejected, correct the reported problems and call this tool again. A successful submission ends the runtime; it does not confirm that changes have been saved.
+tool-source-description: After {{ tool }} succeeds, call this tool alone with {}. The host submits that business tool's latest successful canonical result. Correct any reported rejection. Acceptance does not confirm persistence.
+source-empty: Call submit-output with {} only; the host supplies the output from the business tool.
+source-required: Call {{ tool }} successfully before calling submit-output with {}.
+object-required: Arguments must be one complete JSON object.
+required-work: Complete required business tool work successfully and resolve failed business calls before submitting. Do not repeat successful writes.
+required-work-tools: Complete required business tool work ({{ tools }}) successfully and resolve failed business calls before submitting. Do not repeat successful writes.
 after-root-object: unexpected content after a closed root object; expected end-of-input
-after-root-value: unexpected content after a closed root value; expected end-of-input
 unexpected-end: unexpected end of JSON input; expected a complete JSON value
 unterminated-string: unterminated JSON string; expected a closing double quote
 invalid-escape: invalid JSON escape; expected a valid escape sequence
@@ -19,9 +25,5 @@ invalid-number: invalid JSON number; expected a complete number
 unexpected-token: unexpected JSON token; expected valid JSON syntax
 unknown-syntax: invalid JSON syntax; expected a valid JSON value
 syntax: JSON syntax error: {{ reason }}. Put all fields inside one complete object.
-location: Location: zero-based offset {{ offset }} (JavaScript UTF-16 code units after fence normalization).
-location-with-line-column: Location: zero-based offset {{ offset }} (JavaScript UTF-16 code units after fence normalization); line {{ line }}, column {{ column }}.
-complete-object: Return the complete object matching the schema.
-complete-story-object: Return the complete object matching the schema, including segments.
-empty: The answer was empty or whitespace-only; no JSON object was returned. {{ complete }}
-prose: The answer is plain prose instead of the JSON object required by the schema. {{ complete }}
+location: Location: zero-based offset {{ offset }} (JavaScript UTF-16 code units in the original arguments).
+location-with-line-column: Location: zero-based offset {{ offset }} (JavaScript UTF-16 code units in the original arguments); line {{ line }}, column {{ column }}.

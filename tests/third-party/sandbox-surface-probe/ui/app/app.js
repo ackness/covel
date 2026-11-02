@@ -29,7 +29,6 @@
     session = state.session;
     find("story").textContent = (session?.messages ?? [])
       .map((row) => row.text)
-      .concat(session?.streaming?.text ?? [])
       .join("\n");
     find("input").textContent = JSON.stringify(session?.input ?? {});
     const next = JSON.stringify(session?.pending ?? []);

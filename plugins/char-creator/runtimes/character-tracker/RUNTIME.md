@@ -25,7 +25,7 @@ agent:
       - sync-characters
       - get-character
   completion:
-    require: explicit
+    require: tool-use
     afterTools:
       - sync-characters
   loop:
@@ -46,8 +46,8 @@ Workflow:
 - `<existing-characters>` lists each character's id, name, aliases, type and description. In a large cast a description is shortened (it ends with `...`) or left out. The character still has its full description. `<character-fields>` gives each one's current `fields`, one line per id; decide changes from it directly. Call `get-character` only for a character whose line says `fieldsOmitted`. After a successful read it is removed. A lookup that finds nothing or several characters returns an error. Read again with a listed name or id. Then sync confirmed changes or finish; after a failed sync, correct and resubmit the full batch. Never invent missing values.
 - Obey the `fields` schema. Do not infer changes, duplicate a name, or modify the player unless the narrative explicitly changed them.
 - Merge all changes into one `sync-characters` batch: create at most 5 NPCs and update at most 10 characters. Failed batches commit nothing and may be corrected and retried. Duplicate creates retain existing profiles without overwriting them.
-- If nothing changed, submit an empty batch: `sync-characters({creates: [], updates: []})`. After a successful sync, emit no more tools, explanation, or prose.
+- If nothing changed, submit an empty batch: `sync-characters({creates: [], updates: []})`. After a successful sync, submit `{}` through `submit-output` without repeating the write or adding commentary.
 
 Process only explicit character changes in `runtime-inputs.narrator-output.value` relative to `<existing-characters>` and `<character-fields>`.
-Put new characters in `creates` and known-character patches in `updates`. Usually this is one step: call `sync-characters` once. Use the single `get-character` read only for `fieldsOmitted` characters, then submit the confirmed changes (or an empty batch). After a failed sync, use the remaining tool budget to correct and resubmit the full batch.
-The framework finishes after `sync-characters` succeeds.
+Put new characters in `creates` and known-character patches in `updates`. Normally call `sync-characters` once, then submit final output. Use the single `get-character` read only for `fieldsOmitted` characters, then submit the confirmed changes (or an empty batch). After a failed sync, use the remaining tool budget to correct and resubmit the full batch.
+After `sync-characters` succeeds, submit `{}` through `submit-output`.

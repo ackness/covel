@@ -1,3 +1,5 @@
+import { admitCommittedStory } from "@/lib/reveal/committed-stories.js";
+import { readExecutionProgress } from "./execution-progress.js";
 import { handlePluginFaultNotice } from "./fault-notices.js";
 import i18n from "i18next";
 import type { MutableRef } from "./runtime-refs.js";
@@ -14,16 +16,6 @@ import {
   type ExecutionAdvancePayload,
 } from "@covel/shared";
 import * as api from "@/services/api";
-import type { DataService } from "@/services/data-service.js";
-import {
-  appendStreamingText,
-  resetStreamingText,
-  clearStreamingText,
-  clearStreamingTextsForTurn,
-  parseStreamSegmentMeta,
-  setStreamingSegment,
-  type StreamSegmentMeta,
-} from "@/stores/streaming-text-store.js";
 import {
   reducePluginDataChanged,
   reduceTurnResumed,
@@ -47,16 +39,6 @@ import type {
   StreamMessage,
 } from "./types.js";
 
-interface DeltaBufferEntry {
-  turnId: string;
-  runtimeId: string;
-  pluginId: string;
-  text: string;
-  /** The latest metadata of each paragraph, applied with the text. */
-  segments?: Map<number, StreamSegmentMeta>;
-  flushSessionId: string | null;
-}
-
 /** `error.occurred` codes shown in the player's language, not the server text. */
 const STALE_RETRY = "session.reasonRetryStale";
 const ERROR_CODE_REASONS: ReadonlyMap<string, string> = new Map([
@@ -71,108 +53,14 @@ const ERROR_CODE_REASONS: ReadonlyMap<string, string> = new Map([
   ["recovery_unavailable", STALE_RETRY],
 ]);
 
-export type DeltaBufferRef = MutableRef<Map<string, DeltaBufferEntry>>;
-export type DeltaRafRef = MutableRef<number | null>;
-
 export interface SseEventHandlerDeps {
   dispatch: (action: SessionAction) => void;
-  ds: DataService;
   sessionIdRef: MutableRef<string | null>;
   stateRef: MutableRef<SessionState>;
-  deltaBufferRef: DeltaBufferRef;
-  deltaRafRef: DeltaRafRef;
   lastBackfilledTurnIdRef: MutableRef<string | null>;
 }
 
 export type SseEventHandler = (envelope: api.SseEnvelope) => void;
-
-export function clearNarrativeDeltaBuffer(
-  deltaBufferRef: DeltaBufferRef,
-  deltaRafRef: DeltaRafRef,
-  turnId?: string,
-): void {
-  if (turnId) {
-    for (const [key, entry] of deltaBufferRef.current) {
-      if (entry.turnId === turnId) deltaBufferRef.current.delete(key);
-    }
-    return;
-  }
-  if (deltaRafRef.current !== null) {
-    cancelAnimationFrame(deltaRafRef.current);
-    deltaRafRef.current = null;
-  }
-  deltaBufferRef.current.clear();
-}
-
-function queueNarrativeDelta(
-  deps: Pick<
-    SseEventHandlerDeps,
-    "dispatch" | "sessionIdRef" | "deltaBufferRef" | "deltaRafRef"
-  >,
-  entry: {
-    turnId: string | undefined;
-    runtimeId: string;
-    pluginId: string;
-    delta: string;
-    segment?: StreamSegmentMeta;
-  },
-): void {
-  const turnId = entry.turnId ?? "unknown";
-  const bufKey = `${turnId}_${entry.runtimeId}`;
-  let buffered = deps.deltaBufferRef.current.get(bufKey);
-  if (buffered) {
-    buffered.text += entry.delta;
-  } else {
-    buffered = {
-      turnId,
-      runtimeId: entry.runtimeId,
-      pluginId: entry.pluginId,
-      text: entry.delta,
-      flushSessionId: deps.sessionIdRef.current,
-    };
-    deps.deltaBufferRef.current.set(bufKey, buffered);
-  }
-  if (entry.segment)
-    (buffered.segments ??= new Map()).set(entry.segment.index, entry.segment);
-  if (deps.deltaRafRef.current !== null) return;
-
-  deps.deltaRafRef.current = requestAnimationFrame(() => {
-    flushNarrativeDeltaBuffer(deps);
-  });
-}
-
-function flushNarrativeDeltaBuffer(
-  deps: Pick<
-    SseEventHandlerDeps,
-    "dispatch" | "sessionIdRef" | "deltaBufferRef" | "deltaRafRef"
-  >,
-): void {
-  if (deps.deltaRafRef.current !== null) {
-    cancelAnimationFrame(deps.deltaRafRef.current);
-    deps.deltaRafRef.current = null;
-  }
-  const bufferedEntries = [...deps.deltaBufferRef.current.values()];
-  deps.deltaBufferRef.current.clear();
-  const currentSid = deps.sessionIdRef.current;
-  for (const buffered of bufferedEntries) {
-    if (buffered.flushSessionId !== currentSid) continue;
-    const streamId = `stream_${buffered.turnId}_${buffered.runtimeId}`;
-    // Metadata and text land in the same frame, so a new paragraph never
-    // shows the previous paragraph's speaker.
-    for (const meta of buffered.segments?.values() ?? [])
-      setStreamingSegment(streamId, meta);
-    if (!buffered.text) continue;
-    const firstChunk = appendStreamingText(streamId, buffered.text);
-    if (!firstChunk) continue;
-    deps.dispatch({
-      type: "APPEND_DELTA",
-      turnId: buffered.turnId,
-      runtimeId: buffered.runtimeId,
-      pluginId: buffered.pluginId,
-      delta: buffered.text,
-    });
-  }
-}
 
 export function addBlockMessageFromSse(
   deps: Pick<SseEventHandlerDeps, "dispatch">,
@@ -261,8 +149,7 @@ export function createSseEventHandler(
     // the still-open connection. Every downstream write stamps
     // `sessionIdRef.current` (the NEW session), which in local/IDB mode
     // persists the old session's narrative into the new one's history. Drop
-    // foreign envelopes here — the delta path already does this via
-    // `flushSessionId`, this closes the same hole for every other event.
+    // foreign envelopes before publishing any session state.
     const currentSessionId = deps.sessionIdRef.current;
     if (
       envelope.sessionId &&
@@ -310,33 +197,6 @@ export function createSseEventHandler(
         break;
       case "llm.responded":
       case "gateway.responded": {
-        // Only a story is kept when it is cut at the model's output limit or
-        // ended for a reason the provider did not explain; the text stays on
-        // screen, so say that it is not whole.
-        if (eventType === "llm.responded" && payload.finishReason === "length")
-          emitToast(
-            "info",
-            i18n.t("session.outputTruncated", {
-              defaultValue:
-                "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
-            }),
-            undefined,
-            { durationMs: 12_000 },
-          );
-        if (eventType === "llm.responded" && payload.finishReason === "other")
-          emitToast(
-            "info",
-            i18n.t("session.outputInterrupted", {
-              reason:
-                typeof payload.rawFinishReason === "string"
-                  ? payload.rawFinishReason
-                  : "other",
-              defaultValue:
-                "The model stopped the story before it finished ({{reason}}), so it may end mid-sentence. Retry this turn to have it written again.",
-            }),
-            undefined,
-            { durationMs: 12_000 },
-          );
         const action = reasoningAction(
           eventType,
           payload,
@@ -346,45 +206,25 @@ export function createSseEventHandler(
         if (action) deps.dispatch(action);
         break;
       }
-      case "narrative.delta": {
-        const delta = (payload.delta as string) ?? "";
-        const runtimeId = (payload.runtimeId as string) ?? "unknown";
-        const pluginId = (payload.pluginId as string) ?? "";
-        const deltaKind = payload.kind as string;
-        if (deltaKind === "story" && payload.reset === true) {
-          // The text streamed so far was a preparation step or a rejected
-          // draft; drop it (buffered and rendered) before the next step.
-          deps.deltaBufferRef.current.delete(
-            `${turnId ?? "unknown"}_${runtimeId}`,
-          );
-          resetStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
-        }
-        // A metadata-only delta (empty text) still updates the nameplate.
-        const segment = parseStreamSegmentMeta(payload.segment);
-        if (deltaKind === "story" && (delta || segment)) {
-          queueNarrativeDelta(deps, {
-            turnId,
-            runtimeId,
-            pluginId,
-            delta,
-            ...(segment ? { segment } : {}),
-          });
-        }
+      case "tool.calling":
+      case "tool.completed":
+      case "tool.failed":
+      case "llm.calling":
+      case "step.started":
+      case "step.completed": {
+        const progress = readExecutionProgress(eventType, payload, turnId);
+        if (progress) deps.dispatch({ type: "EXECUTION_PROGRESS", progress });
         break;
       }
       case "narrative.completed": {
-        const content = (payload.content as string) ?? "";
+        const content =
+          typeof payload.content === "string" ? payload.content : "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
-        const msgId = (payload.messageId as string) ?? crypto.randomUUID();
+        const msgId =
+          typeof payload.messageId === "string" ? payload.messageId : "";
         const completedKind = payload.kind as string;
         if (completedKind === "story") {
-          // A story runtime's stream is finished. Always flush the same-frame
-          // delta and drop the external live buffer — even on empty content —
-          // so stale partial text can't linger on screen.
-          // Only publish an authoritative message when content exists.
-          flushNarrativeDeltaBuffer(deps);
-          clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
-          if (content) {
+          if (content && msgId) {
             // Segments carry the stage nameplates and the HUD speaker.
             const segments = storyMessageSegmentSchema
               .array()
@@ -399,6 +239,7 @@ export function createSseEventHandler(
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
               ...(segments.success ? { segments: segments.data } : {}),
             };
+            admitCommittedStory(envelope.sessionId, msg);
             deps.dispatch({
               type: "COMPLETE_MESSAGE",
               turnId: turnId ?? "unknown",
@@ -531,26 +372,8 @@ export function createSseEventHandler(
               ? { abortReason: payload.abortReason }
               : {}),
           });
-        if (!committed && turnId) {
-          deps.dispatch({ type: "REMOVE_MESSAGES_FROM_TURN", turnId });
-        }
-        // A turn aborted before producing output (e.g. by a TurnStart hook)
-        // carries an abortReason — surface it so the player isn't left with
-        // a silent empty turn. A player-initiated abort is NOT an error: the
-        // server never commits the partial narrative, so discard the streaming
-        // placeholder instead of showing ghost text + a red retry affordance.
         const abortReason = payload.abortReason as string | undefined;
         if (!committed && abortReason !== PLAYER_ABORT_REASON) {
-          clearNarrativeDeltaBuffer(
-            deps.deltaBufferRef,
-            deps.deltaRafRef,
-            turnId,
-          );
-          if (turnId) clearStreamingTextsForTurn(turnId);
-          deps.dispatch({
-            type: "DISCARD_TURN_STREAMS",
-            ...(turnId ? { turnId } : {}),
-          });
           deps.dispatch({
             type: "SET_EXECUTION_ERROR",
             ...(turnId ? { turnId } : {}),
@@ -558,34 +381,8 @@ export function createSseEventHandler(
               (payload.error as string | undefined) ??
               "__i18n:session.reasonExecutionCommitFailed__",
           });
-        } else if (abortReason === PLAYER_ABORT_REASON) {
-          // Cancel any pending rAF delta flush + drop buffered deltas first:
-          // otherwise a fast abort (last narrative.delta + execution.completed
-          // in one network flush) lets the queued rAF fire AFTER the discard
-          // and re-`APPEND_DELTA` the ghost placeholder back into view.
-          clearNarrativeDeltaBuffer(
-            deps.deltaBufferRef,
-            deps.deltaRafRef,
-            turnId,
-          );
-          if (turnId) clearStreamingTextsForTurn(turnId);
-          deps.dispatch({
-            type: "DISCARD_TURN_STREAMS",
-            ...(turnId ? { turnId } : {}),
-          });
-        } else if (abortReason) {
+        } else if (abortReason && abortReason !== PLAYER_ABORT_REASON) {
           deps.dispatch({ type: "SET_EXECUTION_ERROR", error: abortReason });
-        }
-        // Any remaining draft belongs to an uncommitted runtime result,
-        // even when the enclosing execution committed other work.
-        if (turnId) {
-          clearNarrativeDeltaBuffer(
-            deps.deltaBufferRef,
-            deps.deltaRafRef,
-            turnId,
-          );
-          clearStreamingTextsForTurn(turnId);
-          deps.dispatch({ type: "DISCARD_TURN_STREAMS", turnId });
         }
         if (envelope.type === "execution.completed") {
           deps.dispatch({ type: "SET_EXECUTING", value: false });
@@ -704,17 +501,6 @@ export function createSseEventHandler(
             : ((payload.message as string) ??
               "__i18n:session.reasonExecutionFailed__"),
         });
-        // Any remaining draft belongs to an uncommitted runtime result,
-        // even when the enclosing execution committed other work.
-        if (turnId) {
-          clearNarrativeDeltaBuffer(
-            deps.deltaBufferRef,
-            deps.deltaRafRef,
-            turnId,
-          );
-          clearStreamingTextsForTurn(turnId);
-          deps.dispatch({ type: "DISCARD_TURN_STREAMS", turnId });
-        }
         deps.dispatch({ type: "SET_EXECUTING", value: false });
         deps.dispatch({ type: "SET_ADVANCE", advance: null });
         deps.dispatch({
@@ -782,12 +568,7 @@ export function createSseEventHandler(
       case "world.dimensions.changed":
       case "state.snapshot.created":
       case "session.forked":
-      case "tool.calling":
-      case "tool.completed":
-      case "tool.failed":
-      case "llm.calling":
-      case "step.started":
-      case "step.completed":
+
       case "message.completed":
       case "block.emitted":
       case "hook.fired":

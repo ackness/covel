@@ -1,472 +1,146 @@
-/**
- * requireToolUse manifest gate: an agent runtime that finishes without ever
- * successfully executing a tool (LLM drifted into free-form prose, zero tool
- * calls) is given one corrective retry — a system message telling it to call
- * its declared tool first. A second bare finish is released with a warn so a
- * stubborn model cannot wedge the runtime. Motivated by deepseek-v4-flash
- * skipping generate-guide and just continuing the narrative.
- */
-
-import { describe, it, expect, vi } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+/** Business prerequisites are checked when final output is submitted. */
+import { describe, it, expect } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { DataStore } from "@covel/store";
-import {
-  createEmitEventTool,
-  tool,
-  z,
-  runtimeDoneTool,
-  type EventDirectoryLike,
-} from "@covel/tools";
+import { createEmitEventTool, tool, z } from "@covel/tools";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import { queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
+import type { LLMResponse, RuntimeManifest } from "@covel/shared";
 
-const directory: EventDirectoryLike = {
-  listTopics: async () => ["test.ping"],
-  validate: async () => ({ ok: true }),
-};
-
-async function mainLoopStore(sessionId: string): Promise<DataStore> {
+const submit = () => toolCall("submit-output", {});
+const work = () =>
+  toolCall("emit-event", { topic: "test.ping", data: { x: 1 } });
+async function run(
+  script: readonly LLMResponse[],
+  locale = "en-US",
+  required = true,
+  repair = false,
+) {
   const store = createMemoryStore();
-  await store.appendTurnMessage({
-    id: "seed",
-    sessionId,
-    turnId: "seed-turn",
-    sourceType: "player",
-    role: "user",
-    content: "prior",
-    order: 0,
-    createdAt: "2024-01-01T00:00:00Z",
+  const emit = createEmitEventTool({
+    directory: {
+      listTopics: async () => ["test.ping"],
+      validate: async () => ({ ok: true }),
+    },
   });
-  return store;
-}
-
-function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
-  return {
-    origin: "player",
-    sessionId: "sess-1",
-    turnId: "turn-1",
-    playerMessage: "go",
-    ...overrides,
-  };
-}
-
-function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return {
+  let attempts = 0;
+  const failed = tool({
+    name: "flaky",
+    description: "Required work",
+    parameters: z.object({}),
+    execute: async () => {
+      if (!repair || attempts++ === 0) throw new Error("Unavailable");
+      return { saved: true };
+    },
+  });
+  const llm = queuedLLM(script);
+  const manifest: RuntimeManifest = {
     name: "plug/gated",
     pluginId: "plug",
-    description: "Must call emit-event",
-    stage: "narrative",
+    description: "Save work then submit",
+    stage: "post-turn",
     outputKind: "system",
-    tools: { builtin: ["emit-event"] },
-    trigger: { type: "auto" },
-    ...overrides,
-  } as RuntimeManifest;
-}
-
-function toolExecutor(store: DataStore) {
-  return createToolExecutor({
-    findTool: (name) => {
-      if (name === "emit-event") return createEmitEventTool({ directory });
-      // The gate must treat this as "no work done", so the harness has to be
-      // able to resolve it — otherwise the call fails for the wrong reason.
-      if (name === runtimeDoneTool.name) return runtimeDoneTool;
-      return undefined;
+    runtimeType: "agent",
+    requireToolUse: required,
+    tools: { plugin: ["emit-event", "flaky"] },
+    maxRetries: 0,
+  };
+  const result = await runTurnPipeline(
+    {
+      sessionId: "s",
+      turnId: "t",
+      origin: "player",
+      playerMessage: "Continue",
+      locale,
     },
-    store,
-  });
-}
-
-/** Records the messages seen on each generate() call so tests can assert the
- * correction system message was injected. `scriptedToolStep` returns a tool
- * call on that 1-based step; all other steps return bare prose. */
-class ScriptedLLM implements LLMAdapter {
-  step = 0;
-  seenMessages: { role: string; content: unknown }[][] = [];
-  seenToolChoices: unknown[] = [];
-  constructor(private readonly toolStep: number | null) {}
-
-  async generate(params: {
-    messages: readonly { role: string; content: unknown }[];
-    defaults?: { toolChoice?: unknown };
-  }): Promise<LLMResponse> {
-    this.step++;
-    this.seenMessages.push([...params.messages]);
-    this.seenToolChoices.push(params.defaults?.toolChoice);
-    if (this.toolStep !== null && this.step === this.toolStep) {
-      return {
-        content: null,
-        toolCalls: [
-          {
-            id: `tc-${this.step}`,
-            name: "emit-event",
-            arguments: JSON.stringify({ topic: "test.ping", data: { x: 1 } }),
-          },
-        ],
-        finishReason: "tool_calls",
-        usage: { inputTokens: 10, outputTokens: 5 },
-      };
-    }
-    return {
-      content: "The corridor stretches on and the story continues.",
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 10, outputTokens: 5 },
-    };
-  }
-}
-
-// The correction message is locale-branched like buildFrameworkPreamble:
-// the default zh-CN locale and explicit aliases get Chinese; all other
-// locales (including Traditional Chinese and no locale) get English.
-const CORRECTION = "You finished without calling any tool";
-const CORRECTION_ZH = "你没有调用任何工具就结束了";
-
-/** Answers the corrective nudge by calling only the loop terminator. */
-class DoneOnlyLLM implements LLMAdapter {
-  step = 0;
-  async generate(): Promise<LLMResponse> {
-    this.step++;
-    if (this.step === 1) {
-      return {
-        content: "The corridor stretches on and the story continues.",
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 10, outputTokens: 5 },
-      };
-    }
-    return {
-      content: null,
-      toolCalls: [
-        {
-          id: `tc-done-${this.step}`,
-          name: "runtime-done",
-          arguments: JSON.stringify({ reason: "all set" }),
-        },
-      ],
-      finishReason: "tool_calls",
-      usage: { inputTokens: 10, outputTokens: 5 },
-    };
-  }
-}
-
-describe("requireToolUse gate", () => {
-  it("injects one correction then succeeds when the retry calls the tool", async () => {
-    const store = await mainLoopStore("sess-1");
-    const llm = new ScriptedLLM(2); // step 1 prose, step 2 tool call
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-      llm,
+    [manifest],
+    {
       store,
-      toolExecutor: toolExecutor(store),
-    };
-
-    const result = await runTurnPipeline(
-      makeTurnInput(),
-      [manifest({ requireToolUse: true })],
-      deps,
-      { maxSteps: 5 },
-    );
-
-    // Exactly one corrective retry: step 1 (prose) → correction → step 2
-    // (tool call) → step 3 (finish). One call more than the ideal 2-call path.
-    expect(llm.step).toBe(3);
-    // The corrected request requires a tool call; once the model called one,
-    // the choice is the model's again.
-    expect(llm.seenToolChoices).toEqual([undefined, "required", undefined]);
-    // The correction system message reached the second call.
-    const secondCallSystems = llm.seenMessages[1]!.filter(
-      (m) => m.role === "system",
-    );
-    expect(
-      secondCallSystems.some((m) => String(m.content).includes(CORRECTION)),
-    ).toBe(true);
-
-    const res = result.runtimeResults.find((r) => r.runtimeId === "plug/gated");
-    expect(res?.status).toBe("success");
-    const events = res?.effects?.events;
-    expect(events).toEqual([{ topic: "test.ping", data: { x: 1 } }]);
-  });
-
-  it("injects the Chinese correction for the default locale", async () => {
-    const store = await mainLoopStore("sess-1");
-    const llm = new ScriptedLLM(2);
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
       llm,
-      store,
-      toolExecutor: toolExecutor(store),
-    };
-
-    await runTurnPipeline(
-      makeTurnInput({ locale: "zh-CN" }),
-      [manifest({ requireToolUse: true })],
-      deps,
-      { maxSteps: 5 },
-    );
-
-    const secondCallSystems = llm.seenMessages[1]!.filter(
-      (m) => m.role === "system",
-    );
-    expect(
-      secondCallSystems.some((m) => String(m.content).includes(CORRECTION_ZH)),
-    ).toBe(true);
-  });
-
-  it("uses the English correction for Traditional Chinese locales", async () => {
-    const store = await mainLoopStore("sess-1");
-    const llm = new ScriptedLLM(2);
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-      llm,
-      store,
-      toolExecutor: toolExecutor(store),
-    };
-
-    await runTurnPipeline(
-      makeTurnInput({ locale: "zh-Hant-TW" }),
-      [manifest({ requireToolUse: true })],
-      deps,
-      { maxSteps: 5 },
-    );
-
-    const secondCallSystems = llm.seenMessages[1]!.filter(
-      (m) => m.role === "system",
-    );
-    expect(
-      secondCallSystems.some((m) => String(m.content).includes(CORRECTION)),
-    ).toBe(true);
-    expect(
-      secondCallSystems.some((m) => String(m.content).includes(CORRECTION_ZH)),
-    ).toBe(false);
-  });
-
-  it("releases with a warn and fails when the retry still calls no tool", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const store = await mainLoopStore("sess-2");
-      const llm = new ScriptedLLM(null); // every step is bare prose
-      const deps: TurnExecutorDeps = {
-        loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-        llm,
+      loadRuntime: async () => ({
+        manifest,
+        promptTemplate: "Complete the work, then submit.",
+      }),
+      toolExecutor: createToolExecutor({
         store,
-        toolExecutor: toolExecutor(store),
-      };
+        findTool: (name) => [emit, failed].find((t) => t.name === name),
+      }),
+    },
+    { maxSteps: 6 },
+  );
+  return { result: result.runtimeResults[0]!, llm };
+}
 
-      const result = await runTurnPipeline(
-        makeTurnInput({ sessionId: "sess-2" }),
-        [manifest({ requireToolUse: true })],
-        deps,
-        { maxSteps: 5 },
-      );
-
-      // One correction attempt, then released — not looped to maxSteps.
-      expect(llm.step).toBe(2);
-      expect(
-        warn.mock.calls.some((c) =>
-          String(c[0]).includes("reason=no-tool-call"),
-        ),
-      ).toBe(true);
-      // Released, but NOT reported as success: the runtime's whole declared
-      // job is to call a tool, and it never did. An empty success would hand
-      // the player a blank panel behind a green check.
-      const res = result.runtimeResults.find(
-        (r) => r.runtimeId === "plug/gated",
-      );
-      expect(res?.status).toBe("failed");
-      expect(res?.error).toContain("requireToolUse");
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it("a bare runtime-done does not satisfy the gate", async () => {
-    // Observed in the wild: nudged with "call the declared tools", the model
-    // called only the framework's loop terminator and did no work. The gate
-    // counted it as a successful tool call, so the runtime reported success
-    // with zero output — a green check over an empty panel.
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const store = await mainLoopStore("sess-done");
-      const llm = new DoneOnlyLLM();
-      const deps: TurnExecutorDeps = {
-        loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-        llm,
-        store,
-        toolExecutor: toolExecutor(store),
-      };
-
-      const result = await runTurnPipeline(
-        makeTurnInput({ sessionId: "sess-done" }),
-        [manifest({ requireToolUse: true })],
-        deps,
-        { maxSteps: 5 },
-      );
-
-      const res = result.runtimeResults.find(
-        (r) => r.runtimeId === "plug/gated",
-      );
-      expect(res?.status).toBe("failed");
-      expect(res?.error).toContain("requireToolUse");
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it("corrects a first bare runtime-done once, then accepts the tool call", async () => {
-    // Seen with world-init/dimension-tracker on qwen3.8-flash: on a quiet
-    // turn the model's first answer was runtime-done ("nothing changed").
-    // Failing it outright left settlement pending and blocked every later
-    // turn; one correction gets the no-change result recorded instead.
-    const store = await mainLoopStore("sess-done-first");
-    let step = 0;
-    const seen: { role: string; content: unknown }[][] = [];
-    const llm: LLMAdapter = {
-      async generate(params) {
-        step++;
-        seen.push([...params.messages]);
-        const call =
-          step === 1
-            ? { name: "runtime-done", arguments: { reason: "no change" } }
-            : step === 2
-              ? {
-                  name: "emit-event",
-                  arguments: { topic: "test.ping", data: { x: 1 } },
-                }
-              : undefined;
-        return call
-          ? {
-              content: null,
-              toolCalls: [
-                {
-                  id: `tc-${step}`,
-                  name: call.name,
-                  arguments: JSON.stringify(call.arguments),
-                },
-              ],
-              finishReason: "tool_calls",
-              usage: { inputTokens: 10, outputTokens: 5 },
-            }
-          : {
-              content: "done",
-              toolCalls: [],
-              finishReason: "stop",
-              usage: { inputTokens: 10, outputTokens: 5 },
-            };
-      },
-    };
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-      llm,
-      store,
-      toolExecutor: toolExecutor(store),
-    };
-
-    const result = await runTurnPipeline(
-      makeTurnInput({ sessionId: "sess-done-first" }),
-      [manifest({ requireToolUse: true })],
-      deps,
-      { maxSteps: 5 },
-    );
-
-    expect(
-      seen[1]!.some(
-        (m) =>
-          m.role === "system" && String(m.content).includes("runtime-done"),
-      ),
-    ).toBe(true);
-    const res = result.runtimeResults.find((r) => r.runtimeId === "plug/gated");
-    expect(res?.status).toBe("success");
-    expect(res?.effects?.events).toEqual([
+describe("required business work", () => {
+  it("corrects a premature submission with work and one final submission", async () => {
+    const { result, llm } = await run([submit(), work(), submit()]);
+    expect(result.status, result.error).toBe("success");
+    expect(llm.requests).toHaveLength(3);
+    expect(result.effects?.events).toEqual([
       { topic: "test.ping", data: { x: 1 } },
     ]);
+    expect(result.toolCalls.map((call) => call.toolName)).toEqual([
+      "submit-output",
+      "emit-event",
+      "submit-output",
+    ]);
   });
-
-  it.each([false, true])(
-    "requires a successful declared completion tool after a read (corrected: %s)",
-    async (corrected) => {
-      const store = await mainLoopStore("sess-read");
-      const read = tool({
-        name: "read",
-        description: "fixture",
-        parameters: z.object({}),
-        execute: async () => ({ value: 1 }),
-      });
-      const submit = tool({
-        name: "submit",
-        description: "fixture",
-        parameters: z.object({}),
-        execute: async () => ({ submitted: true }),
-      });
-      const seen: Parameters<LLMAdapter["generate"]>[0][] = [];
-      const llm: LLMAdapter = {
-        generate: async (params) => {
-          seen.push(structuredClone({ messages: params.messages }));
-          const name =
-            seen.length === 1
-              ? "read"
-              : corrected && seen.length === 3
-                ? "submit"
-                : undefined;
-          return {
-            content: name ? null : "done",
-            toolCalls: name
-              ? [{ id: `tc-${seen.length}`, name, arguments: "{}" }]
-              : [],
-            finishReason: name ? "tool_calls" : "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          };
-        },
-      };
-      const result = await runTurnPipeline(
-        makeTurnInput({ sessionId: "sess-read" }),
-        [
-          manifest({
-            requireToolUse: true,
-            completeAfterTools: ["submit"],
-            tools: { plugin: ["read", "submit"] },
-          }),
-        ],
-        {
-          store,
-          llm,
-          loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-          toolExecutor: createToolExecutor({
-            store,
-            findTool: (name) => [read, submit].find((t) => t.name === name),
-          }),
-        },
-        { maxSteps: 5 },
+  it.each(["zh-CN", "zh-TW"])(
+    "localizes required-work feedback for %s",
+    async (locale) => {
+      const { result, llm } = await run([submit(), work(), submit()], locale);
+      expect(result.status, result.error).toBe("success");
+      const feedback = JSON.stringify(llm.requests[1]?.messages);
+      expect(feedback).toContain(
+        locale === "zh-CN" ? "业务工具工作" : "business tool work",
       );
-      expect(seen).toHaveLength(3);
-      const res = result.runtimeResults.find(
-        (r) => r.runtimeId === "plug/gated",
-      );
-      expect(res?.status).toBe(corrected ? "success" : "failed");
-      if (!corrected) expect(res?.error).toContain("requireToolUse");
     },
   );
-
-  it("default (no requireToolUse) finishes on the first bare response", async () => {
-    const store = await mainLoopStore("sess-3");
-    const llm = new ScriptedLLM(null);
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
-      llm,
-      store,
-      toolExecutor: toolExecutor(store),
-    };
-
-    await runTurnPipeline(
-      makeTurnInput({ sessionId: "sess-3" }),
-      [manifest()],
-      deps,
-      { maxSteps: 5 },
-    );
-
-    // No retry — bare finish accepted immediately.
-    expect(llm.step).toBe(1);
+  it("fails bounded repeated submissions with no business work", async () => {
+    const { result, llm } = await run([submit()]);
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("required-work");
+    expect(llm.requests).toHaveLength(2);
+  });
+  it("accepts an initial business call followed by explicit submission", async () => {
+    const { result, llm } = await run([work(), submit()]);
+    expect(result.status, result.error).toBe("success");
+    expect(llm.requests).toHaveLength(2);
+  });
+  it.each([false, true])(
+    "requires same-tool recovery after failure (repaired=%s)",
+    async (repair) => {
+      const { result } = await run(
+        [
+          toolCall("flaky", {}),
+          work(),
+          ...(repair ? [toolCall("flaky", {})] : []),
+          submit(),
+        ],
+        "en-US",
+        true,
+        repair,
+      );
+      expect(result.status, result.error).toBe(repair ? "success" : "failed");
+      if (!repair) expect(result.error).toContain("required-work");
+    },
+  );
+  it("accepts a no-change object immediately when no work is required", async () => {
+    const { result, llm } = await run([submit()], "en-US", false);
+    expect(result.status, result.error).toBe("success");
+    expect(result.output).toEqual({});
+    expect(llm.requests).toHaveLength(1);
+  });
+  it("never treats reply prose as required business work", async () => {
+    const { result } = await run([
+      {
+        content: "Already saved",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    ]);
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("missing-submission");
   });
 });

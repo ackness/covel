@@ -108,11 +108,9 @@ function setup(batched = false) {
   });
   const actionStream = createSseEventHandler({
     dispatch,
-    ds,
     sessionIdRef,
     stateRef,
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     lastBackfilledTurnIdRef: { current: null },
   });
   const send = (
@@ -518,8 +516,6 @@ it.each(["restore", "reconnect"])(
       {
         stateRef,
         activeTurnIdRef: { current: null },
-        deltaBufferRef: { current: new Map() },
-        deltaRafRef: { current: null },
       },
     );
     await act(async () => {

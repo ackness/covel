@@ -1,3 +1,4 @@
+import { toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * Dataset tools: an agent that lists a dataset of its own package in
  * `agent.tools.datasets` gets `<dataset>-get`, `-list`, `-upsert` and
@@ -117,9 +118,15 @@ type Reply = (index: number, request: Request) => LLMResponse;
 
 function text(content: string): LLMResponse {
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: content }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -127,7 +134,7 @@ function call(name: string, args: object, id = `call-${name}`): LLMResponse {
   return {
     content: null,
     toolCalls: [{ id, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
@@ -320,6 +327,7 @@ describe("dataset tools offered to an agent", () => {
         "npcs-list",
         "npcs-update",
         "npcs-upsert",
+        "submit-output",
       ]);
       const { $schema: _drop, ...record } = npcSchema;
       const upsert = offered.get("npcs-upsert")!;
@@ -346,7 +354,9 @@ describe("dataset tools offered to an agent", () => {
           (schema) => schema.properties.op.enum[0],
         ),
       ).toEqual(["merge", "inc", "append", "delete"]);
-      for (const tool of offered.values()) {
+      for (const tool of [...offered.values()].filter(
+        (tool) => tool.name !== "submit-output",
+      )) {
         expect(tool.description).toContain("People the hero has met.");
         expect(tool.description).not.toContain(P);
       }
@@ -1046,7 +1056,10 @@ describe("dataset tools and the execution", () => {
         ],
         deps(llm),
       );
-      expect(requests[0]!.tools.map((tool) => tool.name)).toEqual(["npcs-get"]);
+      expect(requests[0]!.tools.map((tool) => tool.name)).toEqual([
+        "npcs-get",
+        "submit-output",
+      ]);
       expect(toolMessage(requests[1])).toMatchObject({
         error: {
           code: "unavailable",
@@ -1062,7 +1075,10 @@ describe("dataset tools and the execution", () => {
   it("can complete a run", async () => {
     const { deps, toolExecutor } = await fixture();
     const { llm, requests } = scripted({
-      [MARK]: () => call("npcs-upsert", { record: { name: "Mara" } }),
+      [MARK]: (index) =>
+        index === 0
+          ? call("npcs-upsert", { record: { name: "Mara" } })
+          : call("submit-output", {}),
     });
     try {
       const execution = await executeTurn(
@@ -1077,7 +1093,7 @@ describe("dataset tools and the execution", () => {
         ],
         deps(llm),
       );
-      expect(requests).toHaveLength(1);
+      expect(requests).toHaveLength(2);
       expect(resultOf(execution)).toMatchObject({ status: "success" });
       expect(planned(execution)!.pendingProposals).toHaveLength(1);
     } finally {
@@ -1141,7 +1157,7 @@ describe("dataset tools and the execution", () => {
             fields: [{ type: "text", name: "who", label: "Who" }],
           }),
           call("npcs-upsert", { record: { name: "Mara" } }),
-          text(JSON.stringify({ done: true })),
+          toolCall("submit-output", { done: true }),
         ][index]!,
     });
     try {
@@ -1196,7 +1212,7 @@ describe("dataset tools and the execution", () => {
       [HELPER_MARK]: (index) =>
         index === 0
           ? call("npcs-list", {})
-          : text(JSON.stringify({ line: "Nobody yet." })),
+          : call("submit-output", { line: "Nobody yet." }),
     });
     try {
       const base = deps(llm);
@@ -1225,6 +1241,7 @@ describe("dataset tools and the execution", () => {
       expect(requests[0]!.tools.map((tool) => tool.name).sort()).toEqual([
         "npcs-get",
         "npcs-list",
+        "submit-output",
       ]);
       expect(toolMessage(requests[1])).toEqual({
         data: { total: 0, items: [] },

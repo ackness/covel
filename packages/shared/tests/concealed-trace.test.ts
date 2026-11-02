@@ -38,19 +38,49 @@ describe("concealTracePayload", () => {
   });
 });
 
-it("preserves the repair identity and note without exposing content", () => {
+it("preserves rejection identity and safe progress without exposing content", () => {
   expect(
     concealTracePayload({
       step: 2,
-      repair: true,
-      notes: [{ kind: "output-repair" }],
+      notes: [
+        { kind: "output-rejected", reason: "review-rejected", attempt: 1 },
+      ],
       text: "private draft",
       messages: [{ role: "system", content: "private errors" }],
     }),
   ).toEqual({
     concealed: true,
     step: 2,
-    repair: true,
-    notes: [{ kind: "output-repair" }],
+    notes: [{ kind: "output-rejected", reason: "review-rejected", attempt: 1 }],
   });
+});
+
+it("keeps only the accepted submission disposition and remains idempotent", () => {
+  const concealed = concealTracePayload({
+    runId: "run",
+    step: 2,
+    finalizer: true,
+    stopReason: "max-steps",
+    toolCalls: [
+      { name: "private-business-tool", success: true, output: "private" },
+      { name: "submit-output", success: true, arguments: "private candidate" },
+    ],
+  });
+  expect(concealed).toEqual({
+    concealed: true,
+    runId: "run",
+    step: 2,
+    finalizer: true,
+    stopReason: "max-steps",
+    submissionAccepted: true,
+  });
+  expect(concealTracePayload(concealed)).toEqual(concealed);
+  expect(
+    concealTracePayload({
+      toolCalls: [{ name: "submit-output", success: false }],
+    }),
+  ).toEqual({ concealed: true });
+  expect(
+    concealTracePayload({ submissionAccepted: "private candidate" }),
+  ).toEqual({ concealed: true });
 });

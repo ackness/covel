@@ -1,3 +1,5 @@
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { tool, z } from "@covel/tools";
 /**
  * Wiring tests for the context-budget plumbing in turn-executor.
  *
@@ -85,9 +87,15 @@ async function createMainLoopStore(sessionId: string) {
 
 function makeResponse(content: string): LLMResponse {
   return {
-    content,
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      {
+        id: "final",
+        name: "submit-output",
+        arguments: JSON.stringify({ narrativeOutput: content }),
+      },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 42, outputTokens: 10 },
   };
 }
@@ -129,6 +137,17 @@ async function makeBaseDeps(
     loadRuntime: async () => makeLoaded(manifest),
     llm,
     store: await createMainLoopStore(SESSION_ID),
+    toolExecutor: createToolExecutor({
+      findTool: (name) =>
+        name === "dummy"
+          ? tool({
+              name: "dummy",
+              description: "Fixture read",
+              parameters: z.object({}),
+              execute: async () => ({}),
+            })
+          : undefined,
+    }),
   };
 }
 
@@ -272,7 +291,10 @@ describe("turn-executor → context budget wiring", () => {
       const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
       expect(result.runtimeResults).toHaveLength(1);
-      expect(result.runtimeResults[0]!.status).toBe("success");
+      expect(
+        result.runtimeResults[0]!.status,
+        result.runtimeResults[0]!.error,
+      ).toBe("success");
       expect(llm.calls).toHaveLength(1);
 
       const messages = llm.calls[0]!.messages;

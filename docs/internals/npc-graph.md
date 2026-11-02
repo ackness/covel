@@ -44,7 +44,7 @@ flowchart TD
 
 - **它读什么。** 必需的输入 `worldIR`，来自契约 `world-ir-provider@1`。那是另一个插件已经从本回合正文里整理好的结构化事实，所以提取器不用自己重读整段正文。
 - **它已经知道什么。** 已有的节点和关系在调用模型之前就放进了它的提示词（`<existing-npcs>` 和 `<existing-relations>`，各最多 60 条）。
-- **怎样才算完成。** `toolChoice: required` 要求模型真的调用工具。完成条件是 `completion.require: explicit`：一次成功的 `upsert-npc-graph`，或者在没有变化时明确调用 `runtime-done`。
+- **怎样才算完成。** 有变化时先调用 `upsert-npc-graph`，读取结果后单独调用 `submit-output`。没有变化时可直接提交 `{}`。业务工具本身不结束 runtime。
 - **什么不算。** 只用文字或 JSON 声称“已更新”，不会让图发生任何变化。
 - **什么时候看得到。** 实际的写入先随回合的事务提交，之后界面才收到数据事件。
 

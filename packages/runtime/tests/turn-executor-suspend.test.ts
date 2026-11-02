@@ -1,3 +1,8 @@
+import {
+  suspendedLoopState,
+  submitted,
+  toolCall,
+} from "./_helpers/agent-loop-fixture.js";
 /**
  * Tests for TurnExecutor suspend / resume primitives.
  *
@@ -5,7 +10,7 @@
  * - Agent runtime: suspend tool returns sentinel → suspension persisted, status: 'suspended'
  * - Function runtime: handler returns { status: 'suspended' } → same flow
  * - Flag-off: sentinel treated as normal tool result, no suspension created
- * - Partial content and tool calls before suspend are captured in pendingContinuation
+ * - Tool evidence and loop budgets survive suspension without accepting partial prose
  * - resumeRuntimePipeline: reconstructs messages, runs LLM loop, marks resolved, emits turn.resumed
  */
 
@@ -354,9 +359,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
         generate: async (params) => {
           resumed = params.messages;
           return {
-            content: "Done.",
-            toolCalls: [],
-            finishReason: "stop",
+            ...submitted("Done."),
             usage: { inputTokens: 1, outputTokens: 1 },
           };
         },
@@ -375,7 +378,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     ]);
   });
 
-  it("should capture partialContent and toolCallsSoFar in pendingContinuation", async () => {
+  it("should capture tool records without accepting partial assistant text", async () => {
     // First tool call (some-tool), then suspend tool
     mockLLM.setResponses([
       {
@@ -431,10 +434,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(suspensions).toHaveLength(1);
     const s = suspensions[0]!;
 
-    // partialContent should be captured
-    expect(s.pendingContinuation.partialContent).toBe(
-      "I need to ask the player...",
-    );
+    expect(s.pendingContinuation).not.toHaveProperty("partialContent");
     // toolCallsSoFar should include the some-tool call
     expect(
       (s.pendingContinuation.toolCallsSoFar as unknown[]).length,
@@ -622,9 +622,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
               ...params.messages.map((message) => ({ ...message })),
             );
             return {
-              content: '{"narrativeOutput":"continued"}',
-              toolCalls: [],
-              finishReason: "stop",
+              ...submitted("continued"),
               usage: { inputTokens: 5, outputTokens: 5 },
             };
           },
@@ -969,7 +967,8 @@ describe("resumeRuntimePipeline", () => {
       pendingContinuation: {
         lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
-        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+        takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
+        loop: suspendedLoopState(makeManifest()),
         executionContext: {
           executionId: crypto.randomUUID(),
           origin: "player",
@@ -989,7 +988,6 @@ describe("resumeRuntimePipeline", () => {
               ]
             : []),
         ],
-        partialContent: "Starting to...",
         toolCallsSoFar: [],
         pendingProposals: [],
         suspendToolCallId,
@@ -1004,9 +1002,7 @@ describe("resumeRuntimePipeline", () => {
 
     mockLLM.setResponses([
       {
-        content: '{"narrativeOutput": "Resume successful!"}',
-        toolCalls: [],
-        finishReason: "stop",
+        ...toolCall("submit-output", { narrativeOutput: "Resume successful!" }),
         usage: { inputTokens: 10, outputTokens: 8 },
       },
     ]);
@@ -1065,9 +1061,7 @@ describe("resumeRuntimePipeline", () => {
         usage: { inputTokens: 1, outputTokens: 1 },
       },
       {
-        content: "Done.",
-        toolCalls: [],
-        finishReason: "stop",
+        ...submitted("Done."),
         usage: { inputTokens: 1, outputTokens: 1 },
       },
     ]);
@@ -1113,9 +1107,9 @@ describe("resumeRuntimePipeline", () => {
           throw new Error("fetch failed");
         }
         return {
-          content: '{"narrativeOutput": "Recovered after retry."}',
-          toolCalls: [],
-          finishReason: "stop",
+          ...toolCall("submit-output", {
+            narrativeOutput: "Recovered after retry.",
+          }),
           usage: { inputTokens: 5, outputTokens: 5 },
         };
       },
@@ -1177,11 +1171,12 @@ describe("resumeRuntimePipeline", () => {
           };
         },
       };
-      const manifest = makeManifest(
-        allowFinalizer
+      const manifest = makeManifest({
+        tools: { plugin: ["mark"] },
+        ...(allowFinalizer
           ? {}
-          : { loopProfile: { finalizer: { maxSteps: false } } },
-      );
+          : { loopProfile: { finalizer: { maxSteps: false } } }),
+      });
       const loaded: LoadedRuntime = { manifest, promptTemplate: "" };
       const saved = await store.getSuspension(suspensionId);
       if (!saved) throw new Error("expected a saved suspension");
@@ -1222,7 +1217,7 @@ describe("resumeRuntimePipeline", () => {
         emitter,
         estimator: (text) => text.length,
         contextBudget: {
-          maxInputTokens: 1_000,
+          maxInputTokens: 2_000,
           reservedForResponse: 100,
           protectLastUserTurns: 1,
         },
@@ -1250,9 +1245,11 @@ describe("resumeRuntimePipeline", () => {
         expect(result).toMatchObject({ status: "failed", output: null });
         expect(result.stop).toEqual(loopResult.stop);
         expect(result.error).toBe(loopResult.stopMessage);
-        expect(result.toolCalls.map((call) => call.toolCallId)).toEqual([
-          "tc-large-resume",
-        ]);
+        expect(result.toolCalls.map((call) => call.toolCallId)).toEqual(
+          allowFinalizer
+            ? ["tc-large-resume", "tc-large-resume"]
+            : ["tc-large-resume"],
+        );
         expect(requests).toHaveLength(allowFinalizer ? 2 : 1);
         expect(requests[0]?.maxOutputTokens).toBe(100);
 
@@ -1260,7 +1257,7 @@ describe("resumeRuntimePipeline", () => {
           (event) => event.type === "step.completed",
         );
         expect(completed[1]?.payload).toMatchObject({
-          step: 2,
+          step: 3,
           stopReason: "context-overflow",
         });
         expect(completed[1]?.payload).not.toHaveProperty("usage");
@@ -1271,11 +1268,13 @@ describe("resumeRuntimePipeline", () => {
         expect(finalizers).toHaveLength(allowFinalizer ? 1 : 0);
         if (allowFinalizer) {
           expect(finalizers[0]?.payload).toMatchObject({
-            step: 3,
-            toolCount: 0,
+            step: 4,
+            toolCount: 1,
           });
           const finalizer = requests[1]!;
-          expect(finalizer.tools).toBeUndefined();
+          expect(finalizer.tools?.map((tool) => tool.name)).toEqual([
+            "submit-output",
+          ]);
           expect(
             finalizer.messages.some(
               (message) => message.toolCalls?.length || message.role === "tool",
@@ -1307,7 +1306,8 @@ describe("resumeRuntimePipeline", () => {
     const continuation = (currentTurnUserMessages?: number) => ({
       lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
       readScopes: [],
-      takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+      takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
+      loop: suspendedLoopState(makeManifest()),
       executionContext: {
         executionId: crypto.randomUUID(),
         origin: "player" as const,
@@ -1359,9 +1359,7 @@ describe("resumeRuntimePipeline", () => {
             async generate(params) {
               sent = params.messages;
               return {
-                content: '{"narrativeOutput": "noted"}',
-                toolCalls: [],
-                finishReason: "stop",
+                ...toolCall("submit-output", { narrativeOutput: "noted" }),
                 usage: { inputTokens: 1, outputTokens: 1 },
               };
             },
@@ -1370,7 +1368,7 @@ describe("resumeRuntimePipeline", () => {
           toolExecutor: mockToolExecutor,
           eventBus,
           estimator: (text) => text.length,
-          contextBudget: { maxInputTokens: 2_200, reservedForResponse: 100 },
+          contextBudget: { maxInputTokens: 3_200, reservedForResponse: 100 },
         },
       );
       expect(result.status).toBe("success");
@@ -1389,9 +1387,7 @@ describe("resumeRuntimePipeline", () => {
 
     mockLLM.setResponses([
       {
-        content: '{"narrativeOutput": "original"}',
-        toolCalls: [],
-        finishReason: "stop",
+        ...toolCall("submit-output", { narrativeOutput: "original" }),
         usage: { inputTokens: 4, outputTokens: 4 },
       },
     ]);
@@ -1405,9 +1401,7 @@ describe("resumeRuntimePipeline", () => {
       action: "continue",
       replace: {
         response: {
-          content: '{"narrativeOutput": "patched by hook"}',
-          toolCalls: [],
-          finishReason: "stop",
+          ...toolCall("submit-output", { narrativeOutput: "patched by hook" }),
           usage: { inputTokens: 4, outputTokens: 4 },
         },
       },
@@ -1487,9 +1481,9 @@ describe("resumeRuntimePipeline", () => {
 
     mockLLM.setResponses([
       {
-        content: '{"narrativeOutput": "Resume with queued writes."}',
-        toolCalls: [],
-        finishReason: "stop",
+        ...toolCall("submit-output", {
+          narrativeOutput: "Resume with queued writes.",
+        }),
         usage: { inputTokens: 10, outputTokens: 8 },
       },
     ]);
@@ -1533,9 +1527,7 @@ describe("resumeRuntimePipeline", () => {
 
     mockLLM.setResponses([
       {
-        content: "Done.",
-        toolCalls: [],
-        finishReason: "stop",
+        ...submitted("Done."),
         usage: { inputTokens: 5, outputTokens: 3 },
       },
     ]);
@@ -1579,9 +1571,7 @@ describe("resumeRuntimePipeline", () => {
 
     mockLLM.setResponses([
       {
-        content: "Narrative after resume.",
-        toolCalls: [],
-        finishReason: "stop",
+        ...submitted("Narrative after resume."),
         usage: { inputTokens: 5, outputTokens: 5 },
       },
     ]);
@@ -1622,9 +1612,7 @@ describe("resumeRuntimePipeline", () => {
       async generate(params) {
         capturedMessages.push(...params.messages);
         return {
-          content: "Resumed agent.",
-          toolCalls: [],
-          finishReason: "stop",
+          ...submitted("Resumed agent."),
           usage: { inputTokens: 5, outputTokens: 5 },
         };
       },
@@ -1685,7 +1673,8 @@ describe("resumeRuntimePipeline", () => {
       pendingContinuation: {
         lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
-        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+        takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
+        loop: suspendedLoopState(makeManifest()),
         messages: [{ role: "system", content: "system prompt" }],
         toolCallsSoFar: [],
         pendingProposals: [],

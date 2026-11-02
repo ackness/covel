@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { createPresentationBrowserFixture } from "../helpers/presentation-browser.js";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -108,29 +109,24 @@ contributes:
         const generate: LLMAdapter["generate"] = async (request) => {
           contexts.push(JSON.stringify(request.messages));
           const index = calls++;
+          if (index >= 2)
+            return submittedOutput({
+              narrativeOutput: "The story continues.",
+              segments: [{ kind: "narration", text: "The story continues." }],
+              yield: advance && index === 2 ? "continue" : "user",
+            });
           return {
-            content:
-              index < 2
-                ? null
-                : JSON.stringify({
-                    segments: [
-                      { kind: "narration", text: "The story continues." },
-                    ],
-                    yield: advance && index === 2 ? "continue" : "user",
-                  }),
-            toolCalls:
-              index < 2
-                ? [
-                    {
-                      id: `call-${index}`,
-                      name: "change",
-                      arguments: JSON.stringify({
-                        key: index === 0 ? "kept" : "rejected",
-                      }),
-                    },
-                  ]
-                : [],
-            finishReason: index < 2 ? "tool_calls" : "stop",
+            content: null,
+            toolCalls: [
+              {
+                id: `call-${index}`,
+                name: "change",
+                arguments: JSON.stringify({
+                  key: index === 0 ? "kept" : "rejected",
+                }),
+              },
+            ],
+            finishReason: "tool_calls",
             usage: { inputTokens: 1, outputTokens: 1 },
           };
         };

@@ -16,6 +16,7 @@ import {
   type PluginUiComponentName,
   type SegmentTemplateComponentName,
 } from "@covel/shared";
+import { Reveal } from "./catalog/reveal-renderer.js";
 import { GraphCanvas } from "./graph-canvas.js";
 import {
   SessionMessages,
@@ -106,6 +107,7 @@ export const __filterContainerInternals = {
 // React child". `"toString"` renders junk text the same way.
 const covelComponents = {
   // Layout
+  Reveal,
   Stack,
   Row,
   Grid,

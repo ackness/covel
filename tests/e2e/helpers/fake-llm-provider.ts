@@ -218,3 +218,48 @@ export async function startFakeLlmProvider(): Promise<FakeLlmProvider> {
       }),
   });
 }
+
+/** Current agent success route; content-only replies remain explicit fault cases. */
+export function submitOutputReply(output: Record<string, unknown>): FakeReply {
+  return {
+    text: "",
+    toolCalls: [
+      {
+        id: "submission",
+        type: "function",
+        function: { name: "submit-output", arguments: JSON.stringify(output) },
+      },
+    ],
+  };
+}
+
+/** Read canonical model-visible data after a successful, correlated business call. */
+export function completedBusinessData(
+  request: FakeChatRequest,
+  name: string,
+): Record<string, unknown> | undefined {
+  const names = new Map<string, string>();
+  let latest: Record<string, unknown> | undefined;
+  for (const message of request.rawMessages) {
+    for (const call of message.tool_calls ?? [])
+      names.set(call.id, call.function.name);
+    if (
+      message.role !== "tool" ||
+      !message.tool_call_id ||
+      names.get(message.tool_call_id) !== name ||
+      typeof message.content !== "string"
+    )
+      continue;
+    const envelope: unknown = JSON.parse(message.content);
+    if (!envelope || typeof envelope !== "object" || "error" in envelope) {
+      latest = undefined;
+      continue;
+    }
+    const data: unknown = "data" in envelope ? envelope.data : {};
+    latest =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : undefined;
+  }
+  return latest;
+}

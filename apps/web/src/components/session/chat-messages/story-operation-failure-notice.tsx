@@ -11,7 +11,7 @@ export function StoryOperationFailureNotice({
 }) {
   const { t } = useTranslation();
   const { operationFailures } = projectStoryOperationFailures(message);
-  if (!operationFailures || message.id.startsWith("stream_")) return null;
+  if (!operationFailures) return null;
   return (
     <p
       className="flex items-start gap-2 text-sm text-muted-foreground"

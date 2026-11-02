@@ -10,6 +10,8 @@
  */
 import {
   segmentTemplateMatchSchema,
+  revealPolicySchema,
+  type RevealPolicy,
   type CharacterVisualModel,
   type SnapshotCharacter,
   type StoryMessageSegment,
@@ -21,6 +23,7 @@ export interface SegmentTemplate {
   readonly spec: UISlotSpec;
   readonly kinds?: ReadonlySet<string>;
   readonly speakers?: readonly string[];
+  readonly reveal?: RevealPolicy;
 }
 
 /** The state a segment template binds to with `$state`. */
@@ -51,11 +54,17 @@ export function compileSegmentTemplates(
     for (const spec of entry.specs) {
       const match = segmentTemplateMatchSchema.safeParse(spec.match);
       if (!match.success || !spec.view) continue;
+      const reveal =
+        spec.reveal === undefined
+          ? undefined
+          : revealPolicySchema.safeParse(spec.reveal);
+      if (reveal && !reveal.success) continue;
       const kinds = asList(match.data.kind);
       const speakers = asList(match.data.speaker).map((name) => name.trim());
       templates.push({
         pluginId: entry.pluginId,
         spec,
+        ...(reveal?.success ? { reveal: reveal.data } : {}),
         ...(kinds.length ? { kinds: new Set(kinds) } : {}),
         ...(speakers.length ? { speakers } : {}),
       });
@@ -112,6 +121,18 @@ export function planSegmentTemplates(
     selectSegmentTemplate(templates, segment),
   );
   return plan.some(Boolean) ? plan : undefined;
+}
+
+/** Story order chooses the first matched template with an explicit display policy. */
+export function segmentRevealPolicy(
+  plan: readonly (SegmentTemplate | undefined)[] | undefined,
+): RevealPolicy {
+  return (
+    plan?.find((template) => template?.reveal)?.reveal ?? {
+      mode: "instant",
+      intervalMs: 120,
+    }
+  );
 }
 
 /**

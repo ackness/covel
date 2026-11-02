@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
@@ -172,12 +173,10 @@ describe("action streams for rejected world producers", () => {
           expect(
             JSON.stringify(messages.filter((m) => m.role === "tool")),
           ).toContain(SECRET);
-          return {
-            content: "Complete",
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          };
+          return submittedOutput(
+            { narrativeOutput: "Complete" },
+            { inputTokens: 1, outputTokens: 1 },
+          );
         },
       };
       const tools = createDefaultToolRegistry({

@@ -84,9 +84,11 @@ afterEach(async () => {
 
 function json(value: unknown): LLMResponse {
   return {
-    content: JSON.stringify(value),
-    toolCalls: [],
-    finishReason: "stop",
+    content: null,
+    toolCalls: [
+      { id: "final", name: "submit-output", arguments: JSON.stringify(value) },
+    ],
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 7, outputTokens: 3 },
   };
 }
@@ -94,7 +96,7 @@ function call(name: string, args: object, id = name): LLMResponse {
   return {
     content: null,
     toolCalls: [{ id, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 7, outputTokens: 3 },
   };
 }

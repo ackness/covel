@@ -136,6 +136,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       (def.input ??
       def.output ??
       def.features ??
+      def.strictTools ??
       def.contextWindow ??
       def.maxOutputTokens ??
       def.pricing)
@@ -143,6 +144,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
             input: def.input,
             output: def.output,
             features: def.features,
+            strictTools: def.strictTools,
             contextWindow: def.contextWindow,
             maxOutputTokens: def.maxOutputTokens,
             pricing: def.pricing,

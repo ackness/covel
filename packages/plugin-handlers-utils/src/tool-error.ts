@@ -1,6 +1,11 @@
 /** Error vocabulary shared by plugin tools and their hosts. */
 export const TOOL_ERROR_CODES = [
   "invalid-input",
+  "invalid-json",
+  "invalid-output",
+  "required-work",
+  "review-rejected",
+  "submission-batch",
   "not-found",
   "ambiguous",
   "refused",

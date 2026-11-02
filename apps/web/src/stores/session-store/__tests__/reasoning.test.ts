@@ -1,9 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-  createSseEventHandler,
-  type SseEventHandlerDeps,
-} from "../sse-handler.js";
+import { createSseEventHandler } from "../sse-handler.js";
 import { initialState, reducer } from "../reducer.js";
 import { reconcileExecutionSteps } from "../snapshot-execution-steps.js";
 import type { SessionState } from "../types.js";
@@ -35,11 +32,10 @@ describe("reasoning live and recovery", () => {
       dispatch: (action) => {
         state = reducer(state, action);
       },
-      ds: {} as SseEventHandlerDeps["ds"],
+
       sessionIdRef: { current: "session" },
       stateRef: { current: state },
-      deltaBufferRef: { current: new Map() },
-      deltaRafRef: { current: null },
+
       lastBackfilledTurnIdRef: { current: "turn" },
     });
     const event = {

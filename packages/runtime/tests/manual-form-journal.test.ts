@@ -96,9 +96,9 @@ describe.each(["function", "agent"] as const)(
             }),
             llm: {
               generate: async () => ({
-                content: calls++ === 0 ? "" : "Ready",
+                content: null,
                 toolCalls:
-                  calls === 1
+                  calls++ === 0
                     ? [
                         {
                           id: "form-call",
@@ -106,8 +106,8 @@ describe.each(["function", "agent"] as const)(
                           arguments: JSON.stringify(form),
                         },
                       ]
-                    : [],
-                finishReason: calls === 1 ? "tool_calls" : "stop",
+                    : [{ id: "final", name: "submit-output", arguments: "{}" }],
+                finishReason: "tool_calls" as const,
                 usage: { inputTokens: 1, outputTokens: 1 },
               }),
             },

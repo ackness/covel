@@ -74,7 +74,7 @@ it("reports lifecycle hooks that an isolated turn cannot execute", async () => {
 
 it("executes response hooks before publishing agent output", async () => {
   const root = await fixture(
-    'async (_ctx, {response}) => ({action:"continue",replace:{response:{...response,content:"cleaned narrative"}}})',
+    'async (_ctx, {response}) => ({action:"continue",replace:{response:{...response,toolCalls:response.toolCalls.map(call=>({...call,arguments:JSON.stringify({narrativeOutput:"cleaned narrative"})}))}}})',
     "PostLLMResponse",
   );
   await writeFile(
@@ -86,7 +86,7 @@ it("executes response hooks before publishing agent output", async () => {
     runtimeId: "probe",
     pluginsDir: root,
     withPlugins: ["guard"],
-    llmContent: "raw narrative",
+    llmObject: { narrativeOutput: "raw narrative" },
   });
   expect(report.runtimeResults[0]?.output).toMatchObject({
     narrativeOutput: "cleaned narrative",

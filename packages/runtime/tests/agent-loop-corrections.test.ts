@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runtimeDoneTool } from "@covel/tools";
+
 import { createCorrectionPolicy } from "../src/agent-loop/correction-policy.js";
 import {
   LOOP_PRESETS,
@@ -9,9 +9,7 @@ import { stopOf } from "../src/agent-loop/stop-reason.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 import {
-  makeExecutor,
   manifest,
-  markTool,
   prose,
   queuedLLM,
   runLoop,
@@ -103,37 +101,9 @@ describe("correction policy", () => {
 });
 
 describe("corrections in the loop", () => {
-  it.each([false, true])(
-    "shares the default tool-use budget (runtime-done first: %s)",
-    async (doneFirst) => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
-      const emitter = makeEmitterSpy();
-      const llm = queuedLLM([
-        doneFirst ? toolCall("runtime-done", {}) : prose("done"),
-        prose("still done"),
-      ]);
-      const result = await runLoop({
-        llm,
-        manifest: manifest({ requireToolUse: true }),
-        deps: {
-          toolExecutor: makeExecutor([markTool, runtimeDoneTool]),
-          emitter,
-        },
-      });
-      expect(llm.requests).toHaveLength(2);
-      expect(result.requiredToolUseUnmet).toBe(true);
-      const notes = emitter.events
-        .filter((e) => e.type === "step.completed")
-        .flatMap((e) => e.payload.notes);
-      expect(notes).toEqual([
-        { kind: doneFirst ? "runtime-done-correction" : "no-tool-correction" },
-      ]);
-    },
-  );
-
   it.each([0, 3])("uses a tool-use budget of %s", async (toolUse) => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const llm = queuedLLM([prose("done")]);
+    const llm = queuedLLM([toolCall("submit-output", {})]);
     const result = await runLoop({
       llm,
       manifest: manifest({
@@ -158,30 +128,25 @@ describe("corrections in the loop", () => {
         }),
       });
       const llm = queuedLLM([prose("rejected")]);
-      const error = await thrownBy(
-        runLoop({
-          llm,
-          hookPipeline,
-          manifest: manifest({ loopProfile: { corrections: { review } } }),
-        }),
-      );
-      expect(String(error)).toContain(
-        "Response validation failed: Use the selected perspective.",
-      );
-      expect(stopOf(error, "run-loop")).toEqual({ reason: "invalid-output" });
+      const result = await runLoop({
+        llm,
+        hookPipeline,
+        manifest: manifest({ loopProfile: { corrections: { review } } }),
+      });
+      expect(result.stop).toEqual({ reason: "invalid-output" });
       expect(llm.requests).toHaveLength(review + 1);
     },
   );
 
-  it.each(["fail", "answer-without-tools"] as const)(
+  it.each(["fail", "submit-output"] as const)(
     "uses %s at the first detection with perturbation budget zero",
     async (fallback) => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       const emitter = makeEmitterSpy();
       const llm = scriptedLLM((params, call) =>
-        params.tools
+        params.tools?.some((tool) => tool.name === "mark")
           ? toolCall("mark", { note: "same" }, `tc-${call}`)
-          : prose("answer"),
+          : toolCall("submit-output", { narrativeOutput: "answer" }),
       );
       const promise = runLoop({
         llm,
@@ -196,8 +161,10 @@ describe("corrections in the loop", () => {
           reason: "loop-detected",
         });
       else {
-        expect((await promise).finalContent).toBe("answer");
-        expect(llm.requests.at(-1)?.tools).toBeUndefined();
+        expect((await promise).acceptedOutput?.narrativeOutput).toBe("answer");
+        expect(llm.requests.at(-1)?.tools?.map((tool) => tool.name)).toEqual([
+          "submit-output",
+        ]);
       }
       expect(llm.requests).toHaveLength(fallback === "fail" ? 3 : 4);
       expect(

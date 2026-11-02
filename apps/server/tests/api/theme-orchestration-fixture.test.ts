@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import type { SseEnvelope } from "@covel/shared";
 import {
   startThemeOrchestrationHost,
-  streamingThemeStory,
+  committedThemeStory,
   themeSecrets,
 } from "../../../../tests/e2e/helpers/theme-orchestration.js";
 
@@ -48,7 +48,7 @@ async function* actionEvents(response: Response) {
   }
 }
 
-it("streams the theme fixture's public story before commit and preserves an explicit operation retry", async () => {
+it("keeps the theme story private until commit and preserves an explicit operation retry", async () => {
   const fixture = await startThemeOrchestrationHost();
   const { host } = fixture;
   try {
@@ -80,41 +80,39 @@ it("streams the theme fixture's public story before commit and preserves an expl
       expect(response.status).toBe(200);
       const events: SseEnvelope[] = [];
       const stream = actionEvents(response);
-      let text = "";
       const observe = (event: SseEnvelope) => {
         events.push(event);
         expect(event.type, JSON.stringify(event.payload)).not.toBe(
           "runtime.failed",
         );
-        if (event.type === "narrative.delta") {
-          text =
-            (event.payload.reset ? "" : text) +
-            String(event.payload.delta ?? "");
-          for (const secret of themeSecrets) expect(text).not.toContain(secret);
-        }
+        expect(event.type).not.toBe("narrative.delta");
+        for (const secret of themeSecrets)
+          expect(JSON.stringify(event.payload)).not.toContain(secret);
       };
-      const readUntilText = async (expected: string) => {
-        while (true) {
-          const { done, value } = await stream.next();
-          if (done) break;
-          observe(value);
-          if (text.includes(expected)) return;
-        }
-        throw new Error(`Action stream ended before ${expected}`);
-      };
-      // Both chunks must arrive while the provider is held before completion.
-      await readUntilText("Public streaming");
-      expect(text).toBe("Public streaming");
+      // Arguments and accepted output remain private while the provider is held.
+      await fixture.waitForSubmission(turn);
+      const beforeCommit = await host.store.listMessages(host.sessionId);
+      expect(
+        beforeCommit.some((message) =>
+          message.content.includes(committedThemeStory),
+        ),
+      ).toBe(turn > 0);
       expect(
         (await host.store.getSession(host.sessionId))?.completedPlayerTurns,
       ).toBe(turn);
-      fixture.nextDelta(turn);
-      await readUntilText(streamingThemeStory);
-      expect(events.some((event) => event.type === "execution.completed")).toBe(
-        false,
-      );
+      fixture.continueArguments(turn);
       fixture.release(turn);
       for await (const event of stream) observe(event);
+      const stories = events.filter(
+        (event) => event.type === "narrative.completed",
+      );
+      expect(stories).toHaveLength(1);
+      expect(stories[0]?.payload.content).toContain(committedThemeStory);
+      const beforeStory = events.slice(
+        0,
+        events.findIndex((event) => event.type === "narrative.completed"),
+      );
+      expect(JSON.stringify(beforeStory)).not.toContain(committedThemeStory);
       expect(
         events.find((event) => event.type === "execution.completed"),
       ).toMatchObject({ payload: { committed: true } });

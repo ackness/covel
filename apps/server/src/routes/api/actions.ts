@@ -1,3 +1,4 @@
+import { executionProgressPayload } from "./execution-progress.js";
 import { pluginFaultHost } from "./plugin-faults.js";
 import {
   committedAdvanceDecision,
@@ -74,6 +75,7 @@ import {
   PLAYER_ABORT_REASON,
   concealedRuntimeIds,
   interactionActionKind,
+  isRuntimeProgressType,
   readRuntimeEnv,
   turnActionSchema,
   validateActionRequest,
@@ -757,10 +759,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     const subscribeEventForwarding = (): void => {
       eventBusUnsubscribe = eventBus.onEmit((ev) => {
         if (ev.sessionId !== sessionId) return;
+        // The trace copy already drives this POST; the public copy is for subscriptions.
+        if (ev.topic === "runtime" && isRuntimeProgressType(ev.type)) return;
         if (!FORWARDED_EVENT_TYPES.has(ev.type as CovelEventType)) return;
-        writeEvent(ev.type, {
+        const progress = executionProgressPayload(ev.type, {
           ...(ev.payload as Record<string, unknown>),
-        }).catch(() => {
+        });
+        if (!progress) return;
+        writeEvent(ev.type, progress).catch(() => {
           /* stream closed, teardown handles cleanup */
         });
       });
@@ -1336,16 +1342,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             eventBus,
             store,
             emitter,
-            onDelta: async (delta) => {
-              await writeEvent("narrative.delta", {
-                runtimeId: delta.runtimeId,
-                pluginId: delta.pluginId,
-                kind: outputKindByRuntime.get(delta.runtimeId) ?? "system",
-                delta: delta.textDelta,
-                ...(delta.reset ? { reset: true } : {}),
-                ...(delta.segment ? { segment: delta.segment } : {}),
-              });
-            },
             onRuntimeStart: async (info) => {
               try {
                 await trace.runtimeStarted(info);

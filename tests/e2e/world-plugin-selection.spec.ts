@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { ExecutionOrigin, RuntimeResult } from "@covel/shared";
-import { startFakeLlmProvider } from "./helpers/fake-llm-provider.js";
+import {
+  startFakeLlmProvider,
+  submitOutputReply,
+  completedBusinessData,
+} from "./helpers/fake-llm-provider.js";
 import {
   ONBOARDING_VERSION,
   seedBrowserSettings,
@@ -14,6 +18,14 @@ test("local world selection survives preparation, hydration, the opening, the fi
 }) => {
   const provider = await startFakeLlmProvider();
   provider.reply = (request) => {
+    for (const name of [
+      "submit-world-facts",
+      "initialize-world",
+      "advance-world-time",
+    ]) {
+      if (completedBusinessData(request, name)) return submitOutputReply({});
+    }
+
     const systemPrompt = request.rawMessages
       .filter(({ role }) => role === "system" || role === "developer")
       .map(({ content }) => (typeof content === "string" ? content : ""))
@@ -22,7 +34,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
       systemPrompt.includes("You are a memory manager.") ||
       systemPrompt.includes("你是一个记忆管理器。")
     )
-      return { text: "{}" };
+      return submitOutputReply({});
     if (request.tools.some((tool) => tool.function.name === "initialize-world"))
       return {
         text: "",
@@ -98,7 +110,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
         ],
       };
     return {
-      text: JSON.stringify({
+      ...submitOutputReply({
         segments: [
           {
             kind: "narration",

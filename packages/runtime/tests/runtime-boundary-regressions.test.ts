@@ -1,3 +1,4 @@
+import { submitted } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type {
@@ -46,7 +47,7 @@ const input: TurnInput = {
 
 describe("terminal domain boundaries", () => {
   it.each(["text", "reasoning"] as const)(
-    "does not replace %s output after an empty tool_calls terminal",
+    "discards hidden %s output before recovering missing structured calls",
     async (outputMode) => {
       const store = createMemoryStore();
       const story = {
@@ -64,19 +65,12 @@ describe("terminal domain boundaries", () => {
         execute: async () => ({ found: true }),
       });
       const streamedText = "The door is red.";
-      const streamedDeltas: string[] = [];
       const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-        content: "The door is blue.",
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 1, outputTokens: 1 },
+        ...submitted("The door is blue."),
       }));
       const turn = await runTurnPipeline(input, [story], {
         store,
         toolExecutor: createToolExecutor({ findTool: () => lookup, store }),
-        onDelta: async (delta) => {
-          streamedDeltas.push(JSON.stringify(delta));
-        },
         llm: {
           generate,
           stream: async function* () {
@@ -96,14 +90,11 @@ describe("terminal domain boundaries", () => {
           promptTemplate: "Write story",
         }),
       });
-      expect(turn.runtimeResults[0]?.status).toBe("failed");
-      expect(turn.runtimeResults[0]?.error).toContain(
-        "tool_calls but no structured calls",
-      );
-      expect(generate).not.toHaveBeenCalled();
-      if (outputMode === "text") {
-        expect(streamedDeltas.join(" ")).toContain(streamedText);
-      }
+      expect(turn.runtimeResults[0]?.status).toBe("success");
+      expect(turn.runtimeResults[0]?.output).toMatchObject({
+        narrativeOutput: "The door is blue.",
+      });
+      expect(generate).toHaveBeenCalledOnce();
       const committed = await finalizeExecution({
         store,
         sessionId: input.sessionId,
@@ -112,8 +103,11 @@ describe("terminal domain boundaries", () => {
         results: turn.runtimeResults,
         turnIds: [turn.turnId],
       });
-      expect(committed.status).toBe("failed");
-      expect(await store.listMessages(input.sessionId)).toEqual([]);
+      expect(committed.status).toBe("committed");
+      const messages = await store.listMessages(input.sessionId);
+      expect(messages.map((message) => message.content)).toEqual([
+        "The door is blue.",
+      ]);
     },
   );
 
@@ -134,15 +128,11 @@ describe("terminal domain boundaries", () => {
       execute: async () => ({ found: true }),
     });
     const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-      content: "The door is blue.",
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
+      ...submitted("The door is blue."),
     }));
     const turn = await runTurnPipeline(input, [story], {
       store,
       toolExecutor: createToolExecutor({ findTool: () => lookup, store }),
-      onDelta: async () => {},
       llm: {
         generate,
         stream: async function* () {
@@ -260,14 +250,13 @@ describe("terminal domain boundaries", () => {
       const turn = await runTurnPipeline(input, [story], {
         store,
         llm: adapter,
-        onDelta: async () => {},
         loadRuntime: async () => ({
           manifest: story,
           promptTemplate: "Write story",
         }),
       });
       expect(turn.runtimeResults[0]?.status).toBe("failed");
-      expect(generate).toHaveBeenCalledTimes(mode === "generate" ? 1 : 0);
+      expect(generate).toHaveBeenCalledTimes(mode === "generate" ? 1 : 2);
       const committed = await finalizeExecution({
         store,
         sessionId: input.sessionId,

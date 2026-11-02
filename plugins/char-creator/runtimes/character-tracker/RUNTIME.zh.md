@@ -15,8 +15,8 @@
 - `<existing-characters>` 列出每个角色的 id、姓名、别名、类型和 description；角色很多时 description 会被截短（以 `...` 结尾）或省略，角色的完整 description 仍然存在；`<character-fields>` 每行一个 id，给出该角色当前的 `fields`，直接据此判断变化；只有那一行写着 `fieldsOmitted` 的角色才调用 `get-character` 读取详情，读取成功后该工具会从可用工具中移除；查不到或匹配到多个角色时会返回错误，可用列出的名字或 id 再读一次。随后提交确认的变化或结束；若同步失败，按错误修正后重交完整批次，不要猜测缺失的值。
 - `fields` 遵守工具 schema；不推测变化、不重复创建同名角色，玩家属性仅在叙事明确变化时更新。
 - 把本回合全部变化合并为一个 `sync-characters` 批次；最多创建 5 个 NPC、更新 10 个角色。失败的批次没有写入，可以修正后重试；已存在的创建项保持原档案，不会覆盖已有资料。
-- 无变化则提交空批次 `sync-characters({creates: [], updates: []})`；同步成功后不要再调用工具或输出解释、叙事。
+- 无变化则提交空批次 `sync-characters({creates: [], updates: []})`；同步成功后只用 `submit-output` 提交 `{}`，不要重复写入或输出解释、叙事。
 
 只处理 `runtime-inputs.narrator-output.value` 相对 `<existing-characters>` 和 `<character-fields>` 的明确角色变化。
-通常一步就能完成：直接调用一次 `sync-characters`。只有一次读取机会，仅用于 `fieldsOmitted` 的角色；读完后把确认的变化（或空批次）交给 `sync-characters`；失败后在剩余工具预算内修正并重交完整批次。
-`sync-characters` 成功后框架自动结束。
+通常只需一次业务调用：调用 `sync-characters` 后再提交最终输出。只有一次读取机会，仅用于 `fieldsOmitted` 的角色；读完后把确认的变化（或空批次）交给 `sync-characters`；失败后在剩余工具预算内修正并重交完整批次。
+`sync-characters` 成功后用 `submit-output` 提交 `{}`；无变化时也要先同步空批次，再提交 `{}`。

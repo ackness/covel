@@ -1,17 +1,5 @@
-/**
- * Golden characterization of the agent runtime output schema gate.
- *
- * These tests are the regression anchor for the agent-specific structured
- * output path.
- *
- * Pinned behaviours (all via `runTurnPipeline` → `executeAgentRuntime`):
- *   1. schema declared + conforming JSON → success, output = parsed envelope.
- *   2. schema declared + non-conforming JSON → failed, schema-validation error.
- *   3. schema declared + plain prose → failed, prose diagnostic.
- *   4. NO schema declared → no validation at all (wrong shape still succeeds).
- *   5. outputKind "story" + schema declared → gate skipped (the gate only runs
- *      for non-story runtimes), so a non-conforming output still succeeds.
- */
+import { suspendedLoopState, toolCall } from "./_helpers/agent-loop-fixture.js";
+/** Agent submissions and resumed outputs use the same frozen schema gate. */
 
 import { describe, expect, it, vi } from "vitest";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
@@ -31,9 +19,11 @@ class FixedContentLLM implements LLMAdapter {
   constructor(private readonly content: string) {}
   async generate(): Promise<LLMResponse> {
     return {
-      content: this.content,
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        { id: "final", name: "submit-output", arguments: this.content },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 1, outputTokens: 1 },
     };
   }
@@ -94,7 +84,7 @@ describe("agent schema gate (golden)", () => {
     );
 
     const r = result.runtimeResults[0];
-    expect(r?.status).toBe("success");
+    expect(r?.status, r?.error).toBe("success");
     expect((r!.output as Record<string, unknown>).prompt).toBe("a portrait");
   });
 
@@ -112,18 +102,18 @@ describe("agent schema gate (golden)", () => {
     );
 
     const r = result.runtimeResults[0];
-    expect(r?.status).toBe("failed");
-    expect(r?.error).toContain("output did not match output.schema");
-    expect(r?.error).toContain("must have required property 'prompt'");
+    expect(r?.status, r?.error).toBe("failed");
+    expect(r?.error).toContain("invalid-output");
+    expect(JSON.stringify(r?.toolCalls)).toContain("prompt");
     // The non-conforming parsed object is preserved as the failed output.
-    expect((r!.output as Record<string, unknown>).wrong).toBe("shape");
+    expect(r?.output).toBeNull();
     expect(onRuntimeComplete).toHaveBeenCalledOnce();
     expect(onRuntimeComplete).toHaveBeenCalledWith(
       expect.objectContaining({
         runtimeId: "test-plugin/schema-runtime",
         pluginId: "test-plugin",
         status: "failed",
-        error: expect.stringContaining("output did not match output.schema"),
+        error: expect.stringContaining("invalid-output"),
       }),
     );
   });
@@ -137,13 +127,9 @@ describe("agent schema gate (golden)", () => {
     );
 
     const r = result.runtimeResults[0];
-    expect(r?.status).toBe("failed");
-    expect(r?.error).toContain("expected a JSON envelope per output.schema");
-    const output = r?.output as Record<string, unknown>;
-    expect(output.narrativeOutput).toBe("just some narrative, not JSON at all");
-    expect((output.diagnostic as Record<string, unknown>).kind).toBe(
-      "schema-validation-prose",
-    );
+    expect(r?.status, r?.error).toBe("failed");
+    expect(r?.error).toContain("invalid-json");
+    expect(r?.output).toBeNull();
   });
 
   it("does not validate when no output schema is declared (wrong shape still succeeds)", async () => {
@@ -157,13 +143,11 @@ describe("agent schema gate (golden)", () => {
     );
 
     const r = result.runtimeResults[0];
-    expect(r?.status).toBe("success");
+    expect(r?.status, r?.error).toBe("success");
     expect((r!.output as Record<string, unknown>).wrong).toBe("shape");
   });
 
-  it("skips the gate for story runtimes even when a schema is declared", async () => {
-    // The gate condition is `outputSchema && outputKind !== "story"`. A story
-    // runtime bypasses the JSON schema gate while still requiring story prose.
+  it("applies the declared schema to story runtimes", async () => {
     const llm = new FixedContentLLM(
       '{"narrativeOutput":"A lamp lights the stairs."}',
     );
@@ -179,7 +163,8 @@ describe("agent schema gate (golden)", () => {
     );
 
     const r = result.runtimeResults[0];
-    expect(r?.status).toBe("success");
+    expect(r?.status, r?.error).toBe("failed");
+    expect(r?.output).toBeNull();
   });
 });
 
@@ -218,9 +203,23 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: "2026-01-01T00:00:00Z",
         pendingContinuation: {
+          loop: suspendedLoopState(
+            m,
+            m.output ? { ...OBJECT_SCHEMA } : undefined,
+            !m.output
+              ? {
+                  type: "object",
+                  required: ["events", "name"],
+                  properties: {
+                    events: { type: "array" },
+                    name: { type: "string" },
+                  },
+                }
+              : undefined,
+          ),
           lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [],
@@ -236,7 +235,7 @@ describe("ordinary and resumed private schema parity", () => {
       deps,
     );
     for (const result of [ordinary.runtimeResults[0], resumed]) {
-      expect(result?.status).toBe("success");
+      expect(result?.status, result?.error).toBe("success");
       expect(result?.output).toEqual({ name: "Atlas", events: [worldEvent] });
       expect(result?.effects).toBeUndefined();
       expect(result?.completion).toBe("done");
@@ -256,9 +255,15 @@ describe("ordinary and resumed private schema parity", () => {
         ...makeDeps(
           {
             generate: async () => ({
-              content: nextContent,
-              toolCalls: [],
-              finishReason: "stop",
+              content: null,
+              toolCalls: [
+                {
+                  id: "final",
+                  name: "submit-output",
+                  arguments: nextContent ?? "",
+                },
+              ],
+              finishReason: "tool_calls" as const,
               usage: { inputTokens: 1, outputTokens: 0 },
             }),
           },
@@ -269,9 +274,7 @@ describe("ordinary and resumed private schema parity", () => {
       const turnInput = input(`empty-${content === null ? "null" : "string"}`);
       const ordinary = await runTurnPipeline(turnInput, [m], deps);
       expect(ordinary.runtimeResults[0]?.status).toBe("failed");
-      expect(ordinary.runtimeResults[0]?.error).toContain(
-        "output did not match output.schema",
-      );
+      expect(ordinary.runtimeResults[0]?.error).toContain("invalid-json");
 
       const proposal: Proposal = {
         id: "pending-write",
@@ -292,9 +295,23 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: new Date().toISOString(),
         pendingContinuation: {
+          loop: suspendedLoopState(
+            m,
+            m.output ? { ...OBJECT_SCHEMA } : undefined,
+            !m.output
+              ? {
+                  type: "object",
+                  required: ["events", "name"],
+                  properties: {
+                    events: { type: "array" },
+                    name: { type: "string" },
+                  },
+                }
+              : undefined,
+          ),
           lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [proposal],
@@ -307,8 +324,8 @@ describe("ordinary and resumed private schema parity", () => {
       };
       await store.saveSuspension(suspension);
       const resumed = await resumeRuntimePipeline(suspension, {}, m, deps);
-      expect(resumed.status).toBe("failed");
-      expect(resumed.error).toContain("output did not match output.schema");
+      expect(resumed.status, resumed?.error).toBe("failed");
+      expect(resumed.error).toContain("invalid-json");
       expect(resumed.pendingProposals ?? []).toEqual([]);
       await finalizeExecution({
         store,
@@ -336,7 +353,7 @@ describe("ordinary and resumed private schema parity", () => {
 
       nextContent = validContent;
       const retry = await resumeRuntimePipeline(suspension, {}, m, deps);
-      expect(retry.status).toBe("success");
+      expect(retry.status, retry?.error).toBe("success");
       expect(retry.pendingProposals).toEqual([proposal]);
     },
   );
@@ -360,9 +377,23 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: "2026-01-01T00:00:00Z",
         pendingContinuation: {
+          loop: suspendedLoopState(
+            m,
+            m.output ? { ...OBJECT_SCHEMA } : undefined,
+            !m.output
+              ? {
+                  type: "object",
+                  required: ["events", "name"],
+                  properties: {
+                    events: { type: "array" },
+                    name: { type: "string" },
+                  },
+                }
+              : undefined,
+          ),
           lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [],
@@ -378,14 +409,14 @@ describe("ordinary and resumed private schema parity", () => {
       deps,
     );
     expect(ordinary.runtimeResults[0]?.status).toBe(status);
-    expect(resumed.status).toBe(status);
+    expect(resumed.status, resumed?.error).toBe(status);
     expect(resumed.output).toEqual(ordinary.runtimeResults[0]?.output);
     expect(resumed.pendingProposals ?? []).toEqual([]);
     expect(await deps.store!.listMessages("schema-parity")).toEqual([]);
   });
 
   it.each([true, false])(
-    "validates completing-tool outputs in both entrypoints (valid=%s)",
+    "validates submission after business work in both entrypoints (valid=%s)",
     async (valid) => {
       const m = manifest({
         output: { schema: "output.json" },
@@ -395,12 +426,20 @@ describe("ordinary and resumed private schema parity", () => {
       });
       const baseDeps = makeDeps(
         {
-          generate: async () => ({
-            content: "incidental prose",
-            toolCalls: [{ id: "call", name: "complete", arguments: "{}" }],
-            finishReason: "tool_calls",
-            usage: { inputTokens: 1, outputTokens: 1 },
-          }),
+          generate: async (request) =>
+            request.messages.some((message) => message.role === "tool")
+              ? toolCall(
+                  "submit-output",
+                  valid ? { prompt: "portrait" } : { wrong: true },
+                )
+              : {
+                  content: "incidental prose",
+                  toolCalls: [
+                    { id: "call", name: "complete", arguments: "{}" },
+                  ],
+                  finishReason: "tool_calls" as const,
+                  usage: { inputTokens: 1, outputTokens: 1 },
+                },
         },
         { ...OBJECT_SCHEMA },
       );
@@ -447,12 +486,26 @@ describe("ordinary and resumed private schema parity", () => {
           resumeSchema: {},
           createdAt: "2026-01-01T00:00:00Z",
           pendingContinuation: {
+            loop: suspendedLoopState(
+              m,
+              m.output ? { ...OBJECT_SCHEMA } : undefined,
+              !m.output
+                ? {
+                    type: "object",
+                    required: ["events", "name"],
+                    properties: {
+                      events: { type: "array" },
+                      name: { type: "string" },
+                    },
+                  }
+                : undefined,
+            ),
             lifecycle: {
               runId: "suspended-run",
               progressRunId: "suspended-run",
             },
             readScopes: [],
-            takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+            takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
             messages: [],
             toolCallsSoFar: [],
             pendingProposals: [],
@@ -471,7 +524,9 @@ describe("ordinary and resumed private schema parity", () => {
         ordinary.runtimeResults[0]?.status,
         ordinary.runtimeResults[0]?.error,
       ).toBe(valid ? "success" : "failed");
-      expect(resumed.status).toBe(ordinary.runtimeResults[0]?.status);
+      expect(resumed.status, resumed?.error).toBe(
+        ordinary.runtimeResults[0]?.status,
+      );
       expect(resumed.output).toEqual(ordinary.runtimeResults[0]?.output);
       if (valid) {
         for (const result of [ordinary.runtimeResults[0], resumed]) {

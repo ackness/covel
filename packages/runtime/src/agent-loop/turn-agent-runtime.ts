@@ -1,3 +1,4 @@
+import { agentOutputContract } from "./agent-output-contract.js";
 import type { UpstreamWorldWrite } from "../function-runtime/upstream-world-model.js";
 import { settleAgentLoop } from "./settle-agent-loop.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -35,7 +36,6 @@ import {
   withAgentToolSurface,
 } from "./agent-tool-surface.js";
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
-import { createStorySegmentStream } from "./story-stream.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import { selfDataReadObserver } from "./selfdata-read-baselines.js";
 import { baselinesFor, createReadBaselineRecorder } from "../read-baselines.js";
@@ -146,6 +146,7 @@ export async function executeAgentRuntime({
   runId,
   operations,
 }: ExecuteAgentRuntimeOptions): Promise<RuntimeResult> {
+  const agentOutput = agentOutputContract(loaded);
   // ── Agent runtime: LLM pipeline ─────────────────────────────
   // Emit start AFTER guard passes (or no guard exists) — prevents
   // frontend showing an infinite spinner for guard-skipped runtimes.
@@ -249,6 +250,7 @@ export async function executeAgentRuntime({
     const buildParams = {
       promptSegments,
       promptTemplate: loaded.promptTemplate,
+      agentOutput,
       manifest,
       turnInput: input,
       completedResults,
@@ -376,16 +378,10 @@ export async function executeAgentRuntime({
         { upstream: upstreamWorld, recorder: pluginDataVisibility.recorder },
       )
     : undefined;
-  // A story answered in JSON streams only its segment text.
-  const onDelta =
-    deps.onDelta && manifest.outputKind === "story" && loaded.outputSchema
-      ? createStorySegmentStream(deps.onDelta)
-      : deps.onDelta;
-  const streamDeps = onDelta === deps.onDelta ? deps : { ...deps, onDelta };
   const loopDeps =
     deps.subagents && toolExecutor
       ? {
-          ...streamDeps,
+          ...deps,
           toolExecutor: withSubagentDelegate(toolExecutor, deps.subagents, {
             caller: {
               pluginId: manifest.pluginId,
@@ -399,8 +395,8 @@ export async function executeAgentRuntime({
           }),
         }
       : toolExecutor
-        ? { ...streamDeps, toolExecutor }
-        : streamDeps;
+        ? { ...deps, toolExecutor }
+        : deps;
   const toolLoop = await runAgentToolLoop({
     worldBase,
     upstreamProposals,
@@ -454,10 +450,9 @@ export async function executeAgentRuntime({
     settled.result,
     {
       lastTarget: toolLoop.lastTarget,
-      deltaCount: toolLoop.streamDeltaCount,
       outputContractSchema: loaded.outputContractSchema,
       ...(settled.kind === "success" && loaded.outputSchema
-        ? { agentOutputSchema: loaded.outputSchema }
+        ? { agentOutputSchema: agentOutputContract(loaded).schema }
         : {}),
     },
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LLMAdapter } from "@covel/shared";
 import { fixture, fn, story, tell } from "./_helpers/world-read-fixture.js";
-import { prose, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
+import { submitted, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
 
 import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
 import { withSubagentDelegate } from "../src/agent-loop/subagent-delegate.js";
@@ -65,12 +65,12 @@ describe("bounded batch delegation", () => {
             { ok: true, output: { line: "first" } },
             { ok: true, output: { line: "second" } },
           ]);
-          return prose("Parent done");
+          return submitted("Parent done");
         }
         const brief = String(r.messages.at(-1)!.content);
         started.push(brief);
         await rendezvous();
-        return prose(JSON.stringify({ line: brief }));
+        return submitJson(JSON.stringify({ line: brief }));
       },
     };
     const f = await fixture({ deps: { llm } });
@@ -79,7 +79,7 @@ describe("bounded batch delegation", () => {
       { [story.name]: tell },
     );
     expect(result.resultOf(parent).status).toBe("success");
-    expect(started).toEqual(["first", "second"]);
+    expect([...started].sort()).toEqual(["first", "second"]);
   });
 });
 
@@ -133,7 +133,7 @@ async function direct(
     ...f.baseDeps,
     llm: options.llm ?? {
       generate: async (r) =>
-        prose(JSON.stringify({ line: r.messages.at(-1)?.content })),
+        submitJson(JSON.stringify({ line: r.messages.at(-1)?.content })),
     },
     loadRuntime: (...args) => loader(...args),
     delegation,
@@ -282,7 +282,7 @@ describe("batch admission and lifetime", () => {
       llm: {
         generate: async (r) => {
           started.push(String(r.messages.at(-1)?.content));
-          return prose("Done");
+          return submitted("Done");
         },
       },
     });
@@ -296,7 +296,10 @@ describe("batch admission and lifetime", () => {
     expect(results(result)[8]).toMatchObject({
       error: { code: "unavailable" },
     });
-    expect(started).toEqual(Array.from({ length: 8 }, (_, i) => String(i)));
+    // Parallel prompt loading may reach the provider in any order.
+    expect([...started].sort()).toEqual(
+      Array.from({ length: 8 }, (_, i) => String(i)),
+    );
     expect(f.delegation.snapshot().calls).toBe(8);
     expect(f.runner.inFlight).toBe(0);
   });
@@ -310,7 +313,7 @@ describe("batch admission and lifetime", () => {
         generate: async () => {
           if (++calls === 8) allStarted.resolve();
           await release.promise;
-          return prose("Done");
+          return submitted("Done");
         },
       },
     });
@@ -350,7 +353,7 @@ describe("batch admission and lifetime", () => {
         generate: async (r) => {
           if (r.messages.at(-1)?.content === "bad")
             throw new Error("PRIVATE-PROVIDER-ERROR");
-          return prose("Done");
+          return submitted("Done");
         },
       },
     });
@@ -444,7 +447,7 @@ describe("batch speculative evidence and operations", () => {
             if (!r.messages.some((m) => m.role === "tool"))
               return toolCall(peek.name, { failed: bad });
             if (bad) throw new Error("failed after reading");
-            return prose("Done");
+            return submitted("Done");
           },
         },
       });
@@ -539,7 +542,7 @@ describe("batch speculative evidence and operations", () => {
             if (!r.messages.some((m) => m.role === "tool"))
               return toolCall("write-note", { key });
             if (key === "bad") throw new Error("discard my operation");
-            return prose("Done");
+            return submitted("Done");
           },
         },
       });
@@ -582,7 +585,7 @@ it.each([0, 1])(
       provider: { outputContract: "character-actor@1" },
       llm: {
         generate: async () =>
-          prose(
+          submitJson(
             JSON.stringify({
               segments: [{ kind: "dialogue", text: "Hello" }],
               intent: "PRIVATE-INTENT",
@@ -626,12 +629,13 @@ it("refuses undeclared batches at final authorization and strips delegation at c
   ).toMatchObject({ ok: false, error: { code: "unavailable" } });
 });
 
-it("projects private batch completion to a content-free object before persistence", async () => {
+it("keeps private batch results out of persistence while the parent submits its own output", async () => {
   let parentCalls = 0;
   const llm: LLMAdapter = {
     generate: async (r) => {
       if (r.messages.some((m) => String(m.content).includes(parent.name))) {
         parentCalls++;
+        if (parentCalls > 1) return submitted("The parent finished.");
         return toolCall("delegate-batch", {
           requests: [
             {
@@ -642,7 +646,7 @@ it("projects private batch completion to a content-free object before persistenc
           ],
         });
       }
-      return prose(
+      return submitJson(
         JSON.stringify({
           segments: [{ kind: "dialogue", text: "Hello" }],
           intent: "PRIVATE-INTENT",
@@ -651,19 +655,15 @@ it("projects private batch completion to a content-free object before persistenc
     },
   };
   const f = await fixture({ deps: { llm } });
-  const finishing = {
-    ...parent,
-    completeAfterTools: ["delegate-batch"],
-    requireToolUse: true,
-  };
+  const finishing = parent;
   const result = await f.execute(
     [story, finishing, { ...child, outputContract: "character-actor@1" }],
     { [story.name]: tell },
   );
-  expect(parentCalls).toBe(1);
+  expect(parentCalls).toBe(2);
   expect(result.resultOf(parent).status).toBe("success");
   expect(result.resultOf(parent).output).toEqual({
-    toolCalls: [{ name: "delegate-batch", output: null }],
+    narrativeOutput: "The parent finished.",
   });
   expect(JSON.stringify(result.execution.result)).not.toMatch(
     /PRIVATE-BRIEF|PRIVATE-INTENT/,
@@ -674,7 +674,7 @@ it("keeps a valid sibling after another child fails output repair", async () => 
   const f = await direct({
     llm: {
       generate: async (r) =>
-        prose(
+        submitJson(
           JSON.stringify(
             r.messages.find((m) => m.role === "user")?.content === "invalid"
               ? { wrong: true }
@@ -726,3 +726,7 @@ it("redacts private batch arguments even when final authorization refuses the ca
   expect(recorded).toHaveLength(1);
   expect(JSON.stringify(recorded)).not.toContain("PRIVATE-UNAUTHORIZED-BRIEF");
 });
+
+function submitJson(content: string) {
+  return toolCall("submit-output", JSON.parse(content));
+}

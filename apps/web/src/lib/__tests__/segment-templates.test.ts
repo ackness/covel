@@ -204,3 +204,41 @@ describe("segment template state", () => {
     });
   });
 });
+
+it("selects the first explicit policy in story order after normal template precedence", async () => {
+  const { segmentRevealPolicy } = await import("../segment-templates.js");
+  const entries: UISlotEntry[] = [
+    {
+      pluginId: "community-paragraphs",
+      specs: [
+        { label: undefined, match: { kind: "narration" }, view },
+        {
+          label: undefined,
+          match: { kind: "dialogue" },
+          view,
+          reveal: { mode: "segments", intervalMs: 300 },
+        },
+        {
+          label: undefined,
+          match: { speaker: "char-aya" },
+          view,
+          reveal: { mode: "instant" },
+        },
+      ],
+    },
+  ];
+  const templates = compileSegmentTemplates(entries);
+  expect(
+    segmentRevealPolicy(planSegmentTemplates(templates, [narration, aya])),
+  ).toEqual({ mode: "instant", intervalMs: 120 });
+  const other = { ...aya, speakerId: "other", speaker: "Other" };
+  expect(
+    segmentRevealPolicy(
+      planSegmentTemplates(templates, [narration, other, aya]),
+    ),
+  ).toEqual({ mode: "segments", intervalMs: 300 });
+  expect(segmentRevealPolicy(undefined)).toEqual({
+    mode: "instant",
+    intervalMs: 120,
+  });
+});

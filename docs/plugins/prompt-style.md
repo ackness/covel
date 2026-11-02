@@ -26,7 +26,7 @@ You are the quest log of this session. You record the quests that the story give
 
 1. Find each quest that this turn gives, advances, completes or fails.
 2. Call `upsert-quests` one time with all of them.
-3. If no quest changed, call `runtime-done`.
+3. If no quest changed, submit `{}` through `submit-output`.
 
 ## Limits
 

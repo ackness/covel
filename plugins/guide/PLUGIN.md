@@ -1,5 +1,5 @@
 ---
-version: 0.0.40
+version: 0.0.42
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -28,7 +28,7 @@ contributes:
         - You MUST complete exactly one successful `generate-guide` call, with a recap, the current decision, and replies the player can send.
         - Even when the narrative seems "calm", provide wait, probe, or prepare style replies.
         - If the tool returns a parameter validation error, correct the parameters and retry. Do not call it again after success.
-        - The framework finishes the runtime automatically after the tool succeeds. Do not call `runtime-done`.
+        - After success, call `submit-output` with `{}`. The host uses the canonical tool result. Do not repeat the write to correct a final submission.
         - Do not emit any text before or after the tool call.
       position: post-history
   tools:
@@ -44,6 +44,8 @@ runtime:
         select: /narrativeOutput
         accepts: ./schemas/narrative-output.schema.json
     output:
+      from:
+        tool: generate-guide
       schema: ./schemas/scene-prompts-output.schema.json
       contract: scene-prompts@1
   agent:
@@ -51,7 +53,11 @@ runtime:
       maxTurns: 2
       includeSummaries: true
     reasoning: false
-    finishWith: generate-guide
+    toolChoice: required
+    completion:
+      require: tool-use
+      afterTools:
+        - generate-guide
   effects:
     parallelSafe: true
 ---

@@ -69,21 +69,19 @@ export default function (toolkit) {
         instructionLocaleFor(ctx.locale) === "zh"
           ? `世界已初始化：${schema.attributeCount} 个属性，${dimensionCount} 个维度。`
           : `World initialized: ${schema.attributeCount} attributes, ${dimensionCount} dimensions.`;
+      const output = {
+        success: true,
+        preGameDone: true,
+        worldSchema: schema.worldSchema,
+        attributeCount: schema.attributeCount,
+        dimensionCount,
+      };
       return withModelView(
-        withPendingProposals(
-          {
-            success: true,
-            preGameDone: true,
-            worldSchema: schema.worldSchema,
-            attributeCount: schema.attributeCount,
-            dimensionCount,
-          },
-          [
-            ...getPendingProposals(schemaResult),
-            ...getPendingProposals(dimensionsResult),
-          ],
-        ),
-        { summary },
+        withPendingProposals(output, [
+          ...getPendingProposals(schemaResult),
+          ...getPendingProposals(dimensionsResult),
+        ]),
+        { data: output, summary },
       );
     },
   });

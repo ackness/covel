@@ -4,7 +4,11 @@ import { tool, withPendingProposals, z } from "@covel/tools";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { createToolExecutionContext } from "../src/agent-loop/tool-execution-context.js";
 import { createWorldModelView } from "../src/function-runtime/world-model-view.js";
-import { queuedLLM, prose, toolCall } from "./_helpers/agent-loop-fixture.js";
+import {
+  queuedLLM,
+  submitted,
+  toolCall,
+} from "./_helpers/agent-loop-fixture.js";
 import {
   fixture,
   fn,
@@ -91,7 +95,7 @@ describe("world read surfaces", () => {
     });
     const llm = queuedLLM([
       toolCall(name, name === "get-character" ? { id: "source" } : {}),
-      prose("Complete"),
+      submitted("Complete"),
     ]);
     const f = await fixture({ tools: [peek, peekSchema], deps: { llm } });
     const r = await f.execute(
@@ -135,7 +139,9 @@ describe("world read surfaces", () => {
   });
 
   it("discards a passing guard's observations", async () => {
-    const f = await fixture({ deps: { llm: queuedLLM([prose("Complete")]) } });
+    const f = await fixture({
+      deps: { llm: queuedLLM([submitted("Complete")]) },
+    });
     const reader = fn("read", { runtimeType: "agent", guard: "guard.js" });
     const r = await f.execute(
       [producer, story, reader],
@@ -194,7 +200,7 @@ describe("world read surfaces", () => {
         tools: [toolModule],
         deps: {
           services: registry,
-          llm: queuedLLM([toolCall("read-world", {}), prose("Complete")]),
+          llm: queuedLLM([toolCall("read-world", {}), submitted("Complete")]),
         },
       });
       const r = await f.execute([producer, story, reader], {
@@ -238,7 +244,7 @@ describe("world read surfaces", () => {
         llm: queuedLLM([
           toolCall("idle", {}),
           toolCall("dimensions", {}),
-          prose("Complete"),
+          submitted("Complete"),
         ]),
       },
     });
@@ -483,11 +489,11 @@ describe("world read surfaces", () => {
                   : { runtimeId: "observer/child" },
                 brief: parentBrief,
               });
-            return prose("Parent complete");
+            return submitted("Parent complete");
           }
           if (childCalls++ === 0) return toolCall("child-world", {});
           if (fail) throw new Error("child failed");
-          return prose("Child complete");
+          return toolCall("submit-output", { description: "staged" });
         },
       };
       const actor = fn(

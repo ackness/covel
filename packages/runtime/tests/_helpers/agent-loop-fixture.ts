@@ -1,3 +1,6 @@
+import { resolveAgentOutput } from "@covel/shared/plugin-runtime";
+import type { SuspendedLoopState } from "@covel/store";
+import { resolveLoopProfile } from "../../src/agent-loop/loop-profile.js";
 import { makeProposal } from "@covel/plugin-handlers-utils";
 /**
  * Minimal fixture for the agent tool loop: a scripted model, one recording
@@ -123,6 +126,11 @@ export function prose(content: string): LLMResponse {
   };
 }
 
+/** A successful host-default submission. Content-only responses use prose(). */
+export function submitted(content: string): LLMResponse {
+  return toolCall("submit-output", { narrativeOutput: content }, "submit");
+}
+
 export function toolCall(
   name: string,
   args: Record<string, unknown>,
@@ -132,7 +140,7 @@ export function toolCall(
   return {
     content,
     toolCalls: [{ id, name, arguments: JSON.stringify(args) }],
-    finishReason: "tool_calls",
+    finishReason: "tool_calls" as const,
     usage: { inputTokens: 3, outputTokens: 2 },
   };
 }
@@ -152,20 +160,19 @@ export interface LoopRunOptions {
   readonly loaded?: LoadedRuntime;
 }
 
-const loaded = { promptTemplate: "prompt" } as unknown as LoadedRuntime;
-
 export async function runLoop(
   opts: LoopRunOptions,
 ): Promise<AgentToolLoopCompleted> {
+  const runtime = opts.manifest ?? manifest();
   return (await runAgentToolLoop({
     executionContext: {
       executionId: "exec-loop",
       origin: "manual",
       countPolicy: "none",
     },
-    manifest: opts.manifest ?? manifest(),
+    manifest: runtime,
     input,
-    loaded: opts.loaded ?? loaded,
+    loaded: opts.loaded ?? { manifest: runtime, promptTemplate: "prompt" },
     deps: {
       toolExecutor: makeExecutor(),
       ...opts.deps,
@@ -275,4 +282,55 @@ export function latch(participants: number): () => Promise<void> {
     if (--remaining === 0) ready.resolve();
     return ready.promise;
   };
+}
+
+/** Current admitted continuation state for tests that construct a saved agent directly. */
+export function suspendedLoopState(
+  runtime: RuntimeManifest,
+  outputSchema?: Record<string, unknown>,
+  outputContractSchema?: Record<string, unknown>,
+): SuspendedLoopState {
+  return {
+    steps: 1,
+    maxSteps: 100,
+    rejectionAttempts: 0,
+    correctionLimits: resolveLoopProfile(runtime).corrections,
+    outputContract: resolveAgentOutput({
+      manifest: runtime,
+      promptTemplate: "",
+      ...(outputSchema ? { outputSchema } : {}),
+      ...(outputContractSchema ? { outputContractSchema } : {}),
+    }),
+  };
+}
+
+/** Canonical public business data supplied to a scripted model after its own call. */
+export function latestToolOutput(
+  messages: readonly LLMMessage[],
+  toolName: string,
+): Record<string, unknown> | undefined {
+  const names = new Map<string, string>();
+  let output: Record<string, unknown> | undefined;
+  for (const message of messages) {
+    for (const call of message.toolCalls ?? []) names.set(call.id, call.name);
+    if (
+      message.role !== "tool" ||
+      !message.toolCallId ||
+      names.get(message.toolCallId) !== toolName ||
+      typeof message.content !== "string"
+    )
+      continue;
+    const envelope: unknown = JSON.parse(message.content);
+    if (!envelope || typeof envelope !== "object") continue;
+    if ("error" in envelope) {
+      output = undefined;
+      continue;
+    }
+    const data = "data" in envelope ? envelope.data : undefined;
+    output =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {};
+  }
+  return output;
 }

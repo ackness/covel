@@ -163,7 +163,12 @@ async function run(
     createdAt: timestamp,
     updatedAt: timestamp,
   });
-  const generate = vi.fn(async () => ({ content: "{}", toolCalls: [] }));
+  const generate = vi.fn(async () => ({
+    content: null,
+    toolCalls: [{ id: "final", name: "submit-output", arguments: "{}" }],
+    finishReason: "tool_calls" as const,
+    usage: { inputTokens: 1, outputTokens: 1 },
+  }));
   const execution = await executeTurn(input, runtimes, {
     store,
     llm: { generate } as never,

@@ -37,7 +37,7 @@ SSE is the way the server keeps pushing text over one HTTP connection. Covel has
 | Other                 | The stream ends when the action ends                         | Subscribed by topic. The server sends `system.connected` on connect and `system.heartbeat` every 30 seconds. A reconnect with `lastEventId` can replay missed events |
 
 > [!WARNING]
-> Frames on `/api/actions` have no `event:` header. So `EventSource.addEventListener('narrative.delta', …)` **never** fires on this stream. To read events inside a turn, use `sendAction` in `apps/web/src/services/api/actions.ts` (it parses a ReadableStream), or call `fetch()` yourself and read the `data:` lines. Subscribing by event name only works for `/api/events/stream`.
+> Frames on `/api/actions` have no `event:` header. So `EventSource.addEventListener('narrative.completed', …)` **never** fires on this stream. To read events inside a turn, use `sendAction` in `apps/web/src/services/api/actions.ts` (it parses a ReadableStream), or call `fetch()` yourself and read the `data:` lines. Subscribing by event name only works for `/api/events/stream`.
 
 ## Host execution and commit boundary
 
@@ -91,13 +91,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - A resume uses these frozen snapshots. Commands not yet committed can still be read by the resumed run, and they are committed together, atomically, if the resume succeeds.
 - A failed resume discards these domain writes.
 - The results of child runtimes a function handler called with `ctx.recursiveCall` before it suspended are saved in the continuation together with their writes, and they commit ahead of the handler when the resume succeeds. A child that suspended itself is not saved; the trace records a `recursive.failed` with `code` `nested-suspension-dropped`.
-- When an agent runtime suspends, the continuation also saves the state of the tool loop: the corrections spent, the deferred tools activated, the prose written from merged player interjections, the output of a completing tool that already succeeded, and this turn's prompt segments. The resumed loop continues from that state and does not assemble its context again.
+- An agent continuation saves ordinary steps used, the current step ceiling, correction counts and ceilings, rejection count, activated deferred tools, the admitted output schema and required-work rules, and prompt segments. Executor-owned business results are saved separately to restore required-work evidence and effects. Resume cannot raise the saved step or correction ceilings and does not assemble context again. Reply text, rejected candidates and public tool records do not prove acceptance.
 - The continuation also records the number of player turns in the history and the plugin version at the moment of the suspension. If either has changed at resume time, the suspended item is voided and does not run; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items).
 - A resumed run can suspend again. The new suspended item continues the same execution, and the original execution's identity, logical turn and held-back background jobs move to it; see [Suspending again](./api.md#suspending-again).
 - A resumed run sends `runtime.started` as usual, with `resumed: true`. `PreRuntime` and `PostContextAssembly` do not fire again; `PostRuntime` does not fire on a suspension and fires once at the real end; see [Hooks](./hooks.md#postruntime).
 
 > [!WARNING]
-> After the continuation format changes, existing development-time suspension records must be rebuilt.
+> This format change requires recreating active development agent continuations and snapshots/checkpoints containing them. Committed story history remains valid. Saved completing-tool output and steered prose are removed without a migration.
 
 ### Commands produced by tools
 
@@ -135,18 +135,16 @@ In the tables, "S→C" means sent from the server to the client.
 
 ### Narrative events
 
-| Event type            | Dir. | Description                        | Payload                                                                             |
-| --------------------- | ---- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta, reset?, segment? }`                            |
-| `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
+| Event type            | Direction | Description                  | Payload                                                                             |
+| --------------------- | --------- | ---------------------------- | ----------------------------------------------------------------------------------- |
+| `narrative.completed` | S→C       | Complete committed narrative | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
-- `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
-- `narrative.delta` can carry `reset: true`. In that case `delta` is usually an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown and its paragraph metadata, then take in the later pieces.
-- The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
-- For a segmented story (a story runtime with a declared output schema, such as the `segments` of `narrative-engine@2`), `delta` carries only segment text, with a blank line between segments, matching `content`. JSON keys, speakers and `cues` never reach `delta`. See [Story output](./plugins.md#story-output).
-- Such a story's `narrative.delta` also carries `segment: { index, kind, speaker? }`, naming the paragraph the text belongs to. `index` starts at 0 and counts only paragraphs that showed text, so it equals the paragraph's position when the streamed text is split at blank lines. The event with each paragraph's first visible character carries the `kind` and `speaker` known so far; when `kind` or `speaker` is finished after the text, one more event with an empty `delta` carries the updated `segment`. The rules match commit: an unknown `kind` counts as `narration`, narration has no speaker, and a speaker is trimmed and cut to 80 characters. `speaker` is the name as the model wrote it, unresolved; the `segments` of `narrative.completed` carry the resolved names. Events of a prose story have no `segment`.
+- `narrative.completed` and `runtime.started` carry `kind`; clients read it directly.
+- A story becomes visible only after its durable commit. Submission acceptance and `runtime.completed` describe computation, and do not publish a story. Rollback, refusal and cancellation publish no candidate.
+- Actions, setup/opening, resume and state subscriptions use the same commit boundary. A resumed HTTP response returns committed events; recovery reads saved messages. Child output remains private to its parent until composition and commit.
+- While waiting, runtime/step/tool/job events report progress. `step.completed.notes` can carry `output-rejected` with a safe reason and integer attempt count; it never carries reviewer text or arguments and implies no percentage.
+- `narrative.delta`, its reset/segment payloads and the host `onDelta` callback are removed. Clients must update with the server; no alias is accepted. Provider streaming remains an internal transport.
 - When a speaker or present name in the story could not be resolved to a character (no match, or more than one), `narrative.completed` carries `unresolvedSpeakers`: those names in order of first appearance; it is omitted when there are none.
-- A story's `narrative.completed` carries `segments`: the segments with the speakers resolved at commit, in the same shape as `segments` from `/messages` (see [api.md](./api.md#get-apisessionsidmessages)). The client uses them to show nameplates and the speaker for the turn it just watched without reading messages again; events of other kinds have no such field.
 
 ### Interaction events
 
@@ -175,7 +173,7 @@ This lets stage animations react while the narrative is still being generated, a
 | ----------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | A turn execution starts                                                                                                        | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | The interaction answer in `submit_actions` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | One runtime starts                                                                                                             | `{ runtimeId, pluginId, kind, turnId, runId, label, stage?, resumed?, resumeSourceRunId? }`                                                 |
+| `runtime.started`       | S→C  | One runtime starts                                                                                                             | `{ runtimeId, pluginId, kind, turnId, runId, label, stage?, resumed?, resumeSourceRunId? }`                             |
 | `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                              | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | One runtime completes                                                                                                          | `{ runtimeId, pluginId, turnId, runId, status, durationMs, stopReason? }`                                               |
 | `runtime.failed`        | S→C  | One runtime fails                                                                                                              | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
@@ -193,7 +191,7 @@ Fields of `execution.completed`:
 
 | Field         | Meaning                                                                                                                                                                                                                                                           |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `committed`   | Describes the final actual execution: `true` means its proposals, journal and clock are saved; `false` removes only its uncommitted streamed content. Earlier committed rounds remain saved                                                                       |
+| `committed`   | Describes the final actual execution: `true` means its proposals, journal and clock are saved; `false` marks that execution as failed. Earlier committed messages remain saved                                                                                    |
 | `error`       | Present when `committed: false`. It holds the proposal error or a general transaction error                                                                                                                                                                       |
 | `abortReason` | Appears only when the turn was stopped. When the player stops it, the value is `"aborted-by-player"`                                                                                                                                                              |
 | `resync`      | `true` when events from any committed round in this request could not be published. The data is saved, so the client should read the saved state and not wait for those events. The subscription stream also gets `system.reset`, with `reason: "publish-failed"` |
@@ -202,6 +200,8 @@ Fields of `execution.completed`:
 > **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows at least **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
 
 `runtime.failed.errorKind` is an optional model failure category; see [failure categories](./slots.md#connection-tests-and-failure-reasons). `missing_key` means a built-in remote provider was missing its key before a request was sent. The turn's failure notice uses the same remedies as the connection test and keeps the provider's message in expandable details. An unclassified exception uses `unknown`; failures without a model exception may omit the field. `io.concealed` still replaces error details with fixed text, but keeps the category because it contains no hidden content.
+
+When submission corrections run out, `Output rejected (...)` is an invalid-output failure: the UI suggests retrying the task or opening details. The fixed category in parentheses may be `invalid-json`, `invalid-output`, `missing-submission`, `required-work`, `review-rejected` or `submission-batch`; these failures should not fall back to a generic request error.
 
 `runtime.failed.failureTarget` is an optional `{ provider, model? }` taken from the actual failed model exception, never inferred from error text. Runtime results and traces retain it; SSE and session snapshots restore it into execution records. A failed fallback records that fallback target, and later settings changes do not rewrite the historical target. It contains only provider and model identities, never keys or connection configuration. The client uses current active runtimes and current routing to list model uses that may share the affected provider.
 
@@ -216,20 +216,22 @@ Every way an agent runtime's tool loop can end maps to one stop reason (`StopRea
 <!-- prettier-ignore -->
 | Identifier | Stop reason | Meaning | Runtime result |
 | --- | --- | --- | --- |
-| `completed` | Completed | The model gave its final reply and called no more tools | Success; failure when a completion condition (`requireToolUse` and so on) is unmet, with the reason still `completed` |
-| `tool-finished` | Tool finished | A completing tool, `runtime-done`, or a hook (`PostToolUse`'s `terminate`, `PreStep`'s `stop`) ended the loop as a success | Success; completion conditions are still checked |
-| `max-steps` | Step limit | The `maxSteps` steps (or the fewer steps a `PreStep` left) ran out | Failure, even when the model wrote text beside a tool call. Success when the finalizer step writes the answer, with `stop.finalizer` set to `true` |
-| `deadline` | Timeout | The runtime's own deadline passed, or the loop profile's deadline reserve (`finalizer.deadlineReserveMs`) was reached | Failure. Success when the finalizer step at the deadline reserve writes the answer, with `stop.finalizer` set to `true` |
-| `context-overflow` | Context overflow | The request still does not fit after condensation and pruning; returned as a stop with the overflow text | Failure with that text verbatim. Success with `stop.finalizer: true` when the allowed tools-off finalizer writes the answer |
+| `completed` | Completed | `submit-output` passed every acceptance gate | Success; acceptance does not imply committed writes |
+| `tool-finished` | Tool stop request | A hook may request this stop | Without accepted output, the actual stop is `invalid-output`; a business tool cannot complete an agent |
+| `max-steps` | Step limit | Ordinary steps ran out | Failure; success with `stop.finalizer: true` if the single reserve submission passes |
+| `deadline` | Timeout | Deadline reached or deadline reserve entered | Failure; success with `stop.finalizer: true` if the reserve submission passes |
+| `context-overflow` | Context overflow | The request still cannot fit after condensation and pruning | Keeps overflow details; success with `stop.finalizer: true` if the eligible single reserve submission passes |
 | `cancelled` | Cancelled | `stop.cancelledBy` says who: `player` (the player stopped), `parent` (the enclosing execution was cancelled or timed out), `hook` (`PreStep`'s `stop`) | Failure |
 | `model-error` | Model error | The model call still failed after its retries ran out | Failure |
-| `invalid-output` | Invalid output | `PostLLMResponse` exhausted its review correction budget, or output still fails its schema / story text is empty after repair | Failure |
-| `loop-detected` | Loop detected | The model kept repeating the same tool call after a perturbation | Failure; on a loop profile whose `fallback` is `answer-without-tools` (`story`, `actor`), the first detection takes the tools away and asks for the story text or the answer instead of ending |
+| `invalid-output` | Invalid output | Submission corrections exhausted, or a hook stopped without accepted output | Failure; remaining counters in other categories cannot rescue it |
+| `loop-detected` | Loop detected | The same business call repeats after perturbation | Failure; `fallback: submit-output` first switches to an ordinary step offering only the submission tool |
 | `suspended` | Suspended | The `suspend` tool was called; the loop waits for the player's input | Suspended |
 
-**The finalizer step.** When the loop runs out of steps, text the model wrote beside a tool call is a draft, not an answer. The kernel then sends one more request: tools off, asking the model for its final answer now, in the same output format, streamed when the runtime streams. That request is the finalizer step. Its step number is one past the last step, and `PreStep` does not fire for it. It is sent only when all of these hold: the output is not handed over by a completing tool; `requireToolUse` is off or already met; `requireExplicitCompletion` is off or already met; and at least 3 seconds remain before the deadline. When the finalizer writes non-empty text, that text replaces the earlier text, the runtime succeeds, and `stop` is `{ reason: "max-steps", finalizer: true }`. When the text is empty, the request fails or the draft is rejected, the runtime fails with `max-steps`. A timeout does not try a finalizer, unless the loop profile sets a deadline reserve ([`finalizer.deadlineReserveMs`](./plugins.md#loop-profile-agentloopprofile)): with less time left than the reserve, the finalizer step is sent as well, so `stop.finalizer` means the finalizer step handed over the answer at the step limit, deadline reserve, or context overflow. An overflow gets one finalizer when `finalizer.maxSteps` is on, at least one complete tool step exists, and the same completion and time conditions hold. That request disables tools and elides results or creates deterministic digests as needed under [prompt budgeting](./prompt-structure.md#budget), with the newest group also eligible. A successful answer clears the overflow text and remains eligible for output repair; an empty or rejected answer or a failed request keeps the original overflow failure. Invalid token limits remain thrown configuration errors.
+**The finalizer step.** At the step limit, configured deadline reserve or context overflow, at most one reserve request offers only `submit-output`. It uses the frozen tool definition and the same acceptance gate, advances the step number and skips `PreStep`; `PreLLMCall` cannot restore business tools. Required work must have succeeded, required business failures must be resolved, and at least 3 seconds must remain. Context overflow also requires one complete tool step; [prompt budgeting](./prompt-structure.md#budget) can elide results or create digests, including the newest group. Acceptance preserves the original boundary reason with `finalizer: true`. Rejection has no second repair loop: exhausted validation/review counters report `invalid-output`; otherwise the bound that prevented another attempt remains the reason. Actual cancellation, provider refusal and request errors retain their own attribution; another overflow keeps the original overflow error.
 
-**The output repair step.** An invalid answer eligible for repair gets a repair request after any finalizer and before final output validation (conditions in [the loop profile](./plugins.md#loop-profile-agentloopprofile)). `StepIdentity.repair: true` appears on both `step.started` and `step.completed`; the completed event's `notes` include `output-repair`. Tools are off and `PreStep` does not fire. Once repair produces a replacement answer, `LoopStop.repaired: true` preserves the original `reason` and `finalizer`. Output that remains invalid settles as `invalid-output`. `agent.loop.corrections.outputRepair` limits the requests, default 1.
+Resumed step numbers continue the original loop. A response mixing submission with `suspend` is rejected as a batch; acceptance ends the loop immediately, so it cannot subsequently suspend. `PostRuntime`, proposal validation or transaction rollback can still reject completed computation. Only the commit receipt permits story completion to be published.
+
+**In-loop corrections.** JSON/schema/story shape, missing submission and mixed batches use `outputRepair` (default 1); `PostLLMResponse` and `ReviewAgentOutput` share `review` (default 2); unmet required work uses `toolUse` (default 1). Each rejection has one classification and spends one counter only when another request can be scheduled, within ordinary steps and the deadline. The `output-rejected` note in `step.completed.notes` carries only a safe `reason` category and a one-based `attempt`, never review text or arguments. There is no post-loop `repair` step or `repaired` success.
 
 **`runtime.deferred` is a "handoff notice"**
 
@@ -244,7 +246,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 **steer: the player interjects during a turn** (`POST /api/sessions/:id/steer`)
 
 - The message goes into the queue for this session on the server. Before the next model call, the story runtime merges the queued content into the live conversation record.
-- If the interjection arrives while the final answer is still streaming, the story runtime makes one more model call to handle it before it finishes (limited by maxSteps).
+- If the interjection arrives before final output is accepted, the story runtime makes one more model call to handle it before it finishes (limited by maxSteps).
 - The interjection is saved with its turn. When the turn commits, it is written in the same transaction to the conversation history (after the player's message of the turn) and to the chat log, so later turns read it. An interjection does not count as a new player turn. When the turn is stopped, fails or is rolled back, neither keeps it.
 - The client shows the interjection locally itself. There is no new SSE event.
 
@@ -258,7 +260,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 
 When the client receives this value, it treats the end as caused by the player, not as an error:
 
-- It drops the streamed placeholder message for this turn that was not committed. The server never commits a half-finished narrative, and keeping it would make it disappear after a refresh.
+- Keep previous committed messages and end progress without retaining an unsaved draft story.
 - It shows "Stopped; turn not committed" and a clear retry action. It does not show the general error message. For a stopped opening continuation, "Continue" in the recovery notice uses the confirmed `retry_turn` action without a page refresh.
 - If the request ends with a player stop before any `execution.started`, the echoed player message returns to the input box. The client preserves newer draft text and does not query the previous turn for a recovery action.
 - Other `abortReason` values (for example, a TurnStart hook aborted the turn) are still shown as errors.
@@ -616,7 +618,7 @@ For Gemini native thinking effort, `providerOptions.google.thinkingConfig`, `cac
 | Event type       | Dir. | Description                                                                                                                                                                                                                                                                                                                                                                                                                       | Payload                                                                                       |
 | ---------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `turn.suspended` | S→C  | The runtime creates a suspension artifact. It is sent only after `finalizeExecution` commits the record together with the writes of the same execution. On a rollback, no record is kept and no event is sent. An older item of the same runtime is voided in this commit without an event of its own; the client drops it on receipt. It is also sent when a resumed runtime suspends again, and then `turn.resumed` is not sent | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | Sent by the route after the `resume` action on the suspension resource succeeds                                                                                                                                                                                                                                                                                                                                                   | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, runId, resumeSourceRunId }`                                                         |
+| `turn.resumed`   | S→C  | Sent by the route after the `resume` action on the suspension resource succeeds                                                                                                                                                                                                                                                                                                                                                   | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, runId, resumeSourceRunId }`          |
 
 `turn.resumed` also carries the completed resume's `runId` and the chain's `resumeSourceRunId`, allowing the client to update the exact execution row. A notification without `runId` only removes the suspension card and triggers a read; it does not guess which invocation to update.
 
@@ -680,7 +682,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 
 `operation.failed.messages` is a required safe receipt list containing only the IDs of saved, annotated story messages and positive safe integer counts. The event follows the successful transaction and the corresponding `narrative.completed` publications. Each committed execution still emits one event and one immediate toast; direct action routing and `forwardToActionStream: false` are unchanged. `count` retains its execution-wide failure total. Auxiliary unit failures or the absence of a public story can leave `messages` empty, and targeted counts may sum to less than the total. Each auto-advance round uses its own turn and message receipts.
 
-Clients set or replace counts by session, turn and durable message ID. Duplicate receipts never add counts; clients neither guess the latest story nor annotate streaming placeholders. Unknown or unloaded IDs wait for ordinary history recovery. A lost event recovers through the [persisted message field](./api.md#get-apisessionsidmessages), without rerunning operations. Non-action commits retain their existing session-view and subscription recovery and never reopen a stream. Server and Web must update together; the old event shape is not accepted.
+Clients set or replace counts by session, turn and durable message ID. Duplicate receipts never add counts; clients do not guess the latest story. Unknown or unloaded IDs wait for ordinary history recovery. A lost event recovers through the [persisted message field](./api.md#get-apisessionsidmessages), without rerunning operations. Non-action commits retain their existing session-view and subscription recovery and never reopen a stream. Server and Web must update together; the old event shape is not accepted.
 
 A failed commit holds back the "execution completed" step, and the client shows the error as an execution failure. A story-attached write-service operation dropped only because its own writes were rejected is not an execution failure: the action stream sends no `proposal.failed` for it, only one `operation.failed`, and the turn commits. A background result cannot reopen an action stream that has already ended. On reconnect, the client restores from the saved session state. Read-baseline `conflict` uses these same proposal and operation boundaries, with no new event or client fingerprint argument; see [Transactions](./transactions.md#read-baselines).
 
@@ -712,9 +714,10 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 
 - The topics accepted by `/api/events/stream` are defined by `SUBSCRIPTION_TOPICS` in `@covel/shared`: `runtime / state / game / plugin / session / store / system / trace / hooks / job`. `VALID_TOPICS` in `subscribe.ts` is generated from it.
 - `trace` (from TurnEmitter) and `hooks` (from the hook pipeline) are internal observation topics of the runtime. `job` carries `job-status.updated`.
+- TurnEmitter also publishes safe copies of `step.started`, `step.completed`, `llm.calling` and `tool.calling/completed/failed` on the public `runtime` topic. Copies carry only identity, status, counts, timing and usage; step notes retain only fixed rejection categories and attempt counts, without candidates, arguments or raw review text. These copies enter ordinary reconnect replay; full traces stay out of the replay buffer. The web client can show tool activity and “Revising response” without subscribing to `trace`. Action streams forward progress once.
 - `apps/web/src/services/subscription.ts` subscribes by default to `runtime / state / game / plugin / session / system`. It does not include `store`. To recover background tasks, the session store subscribes to `job` explicitly as well.
 - The client dispatches by `event.topic`. When you add a new topic or event, **you must update this file at the same time**.
-- In-turn events on `/api/actions` (`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
+- In-turn events on `/api/actions` (`narrative.completed` / `interaction.requested` / `plugin-data.changed`, and so on) are handled by the callback of `sendAction`. They do not go through `subscription.ts`.
 - The `game` event `turn.completed` reports a committed turn. An observing web client rereads the session snapshot to update messages and the turn count, including turns without character or dimension writes. Existing recovery generation and execution ownership checks preserve a healthy local action stream.
 
 **Authentication**
@@ -750,8 +753,8 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 **Recovery after the stream drops (web app)**
 
 - After the web app gets a reset or reconnects, it refetches, checking revisions: the session snapshot, the plugin list, the data for every enabled plugin, unresolved suspensions, and the world. Live events that arrive during this are buffered first, and replayed afterwards.
-- The streamed placeholder is replaced with the saved final narrative for the same `turnId/runtimeId` only when the access generation and execution ownership still match. The external text of that placeholder and its pending fragments are removed. A new, healthy POST stream still owns its own live output.
-- After an error or stream loss, only authoritative recovery confirming a failed or interrupted turn without matching saved prose moves the displayed text to an “Unsaved” area and clears its placeholder and streaming buffers. This local copy lasts until leaving the session and never enters story history, stage content or plugin data. A retry appears beside it when recovery supplies an action. Unknown network state does not enable retry; saved prose still replaces placeholders as above. Player aborts and normal `committed: false` keep their existing removal behavior.
+- Recovery merges committed messages by durable message ID after checking session and execution ownership; repeated delivery does not duplicate a story.
+- Stream loss, failure and cancellation create no draft message. Keep the previous committed story and recover progress through the read-only execution endpoint; retry is available only after authoritative failure or interruption.
 - If the most recent window of the recovered snapshot does not join up with the history already loaded, the client first fills in older messages through the existing message pagination endpoint, read-only, up to the old anchor, and then merges and publishes. It does not delete the old window, and it does not resend the action.
 
 **For hosts that embed `@covel/events`**
@@ -894,7 +897,7 @@ Additional notes:
 
 For a runtime that declares `io.concealed: true`, its TurnEmitter events keep only fields without content before they are saved and forwarded, and they carry `concealed: true`:
 
-- Kept: `runtimeId`, `pluginId`, `toolName`, `toolCallId`, `status`, `durationMs`, `usage`, `finishReason`, `seq`, the step events' `step`, `stopReason`, `finalizer`, `repair`, `retries` and `notes`, and so on.
+- Kept: `runtimeId`, `pluginId`, `toolName`, `toolCallId`, `status`, `durationMs`, `usage`, `finishReason`, `seq`, the step events' `step`, `stopReason`, `finalizer`, `retries` and `notes`, and so on.
 - Removed: content fields such as `messages`, `text`, `toolCalls`, `arguments`, `result`, `parsedResult`, and `output`.
 
 ## 2. Command types (CommandType)
@@ -1196,7 +1199,6 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 `handleSseEvent` is the only handler for in-turn events. By event type, it passes each event to the matching state slice:
 
 ```
-narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
 event.emitted         → gameState.events
@@ -1207,7 +1209,7 @@ runtime.deferred      → executionSteps (pending, attached to the source turn b
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
 job-status.updated    → executionSteps (background terminal state, by data.originTurnId)
-execution.completed   → committed=true: finalize; committed=false: discard optimistic stream + executionError; both set executing=false
+execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false
 error.occurred        → executionError
 ```
 
@@ -1294,6 +1296,8 @@ The field used to send thinking back is determined by the endpoint address, so C
 
 **`providerContinuation`: passing native content back on tool continuation**
 
+Provider streams remain internal transport. `tool-argument-delta` reports activity without argument fragments. Complete calls reach the loop only after protocol terminal and refusal checks; a later refusal fails the request even after a full tool block arrives. Usage, reasoning continuation and idle timers remain intact, and tool arguments never become player story text. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for strict selection and endpoint scope.
+
 - It saves the provider's native answer entries in their original order, including signed and encrypted thinking. It is used for a tool continuation only when the protocol, model, and address are all the same.
 - A native Gemini tool turn keeps its ordered parts, which carry `thoughtSignature`.
 - When a native Gemini continuation arrives, and the protocol is unchanged but the model or address has changed, a continuation with a signature fails with `CONFIG_ERROR`.
@@ -1312,6 +1316,8 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 - `trace_events`, used by the `/api/traces` read endpoints and the `/debug` inspector.
 - The global `EventBus`. The `/api/actions` SSE route then forwards them according to `FORWARDED_EVENT_TYPES` (the set generated from `COVEL_EVENT_META[type].forwardToActionStream`).
 
+The table lists full diagnostic payloads. Gameplay streams use the content-free projection described below.
+
 <!-- prettier-ignore -->
 | Type | Payload |
 | --- | --- |
@@ -1320,11 +1326,11 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, hint?, details?, durationMs, approvalStatus, success: false, skipped?: true, skipReason? }`  `code` uses `ToolErrorCode`; `error` is the full message and `hint` is optional correction guidance. Codes: `invalid-input`, `not-found`, `ambiguous`, `refused`, `unavailable`, `timeout`, `conflict`, `cancelled`, `internal`. |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`. A temporary display signal after `emit-event` passes validation. Persistent business state is still committed by the normal event chain |
 | `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`. `slot` is the role the runtime requests. In production, the gateway resolves it to `model` / `provider` before the call. A custom adapter that does not support role resolution can omit `provider` |
-| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. With `agent.loop.truncation: accept`, `finishReason: length` can report a reply kept at the output limit; it must still pass final output and commit checks. With `reject`, truncation is reported as failure. The story profile accepts by default; the other profiles reject, and authors can override this |
-| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer?, repair? }`. A step of an agent tool loop is about to call the model; sent after `PreStep` and before the step's `llm.calling`. `maxSteps` is the step limit at this step, `toolCount` is the number of tools offered this step (their names are in `llm.calling.tools`), and `toolChoice` is `"auto"`, `"required"` or `{ name }`. The finalizer step carries `finalizer: true`; an output repair step carries `repair: true`, numbered one past the last started step |
-| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer?, repair? }`. Sent exactly once for each step that started, after all the step's `tool.*` events. `usage` is the same as in `llm.responded`; a step that ended with an error has none. `toolCalls` is `[{ name, success }]`. `retries` lists the retries of the step's model call as `[{ attempt, reason }]`. `notes` is `[{ kind, count?, ignored? }]`, where `kind` is one of `output-repair`, `review-rejected`, `no-tool-correction`, `runtime-done-correction`, `loop-perturbation`, `story-without-tools`, `late-steering`, `tool-activated` and `tool-narrowed`; a note carries only its kind and counts, never a tool name. `stopReason` appears only on the step that ended the loop |
+| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`. `usage` is `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`. `inputTokens` is the total input including cache reads and writes. The last two are subsets reported by the provider. Incomplete provider responses fail; no truncated narrative is retained. |
+| `step.started` | `{ runtimeId, pluginId, turnId, runId, step, maxSteps, toolCount, toolChoice, finalizer? }`. Sent after `PreStep` and before `llm.calling` for ordinary requests. The single reserve carries `finalizer: true`, offers only submission and uses `toolChoice: { name: "submit-output" }`. |
+| `step.completed` | `{ runtimeId, pluginId, turnId, runId, step, durationMs, finishReason?, usage?, toolCalls, retries, notes, stopReason?, finalizer? }`. Closes each started step exactly once after its tool events. `toolCalls` is `[{ name, success }]`, including submission attempts; `retries` is `[{ attempt, reason }]`. `notes` is `[{ kind, count?, ignored?, reason?, attempt? }]` with kinds `output-rejected`, `submission-only`, `loop-perturbation`, `late-steering`, `tool-activated`, `tool-narrowed`; only categories and counts are included. `stopReason` appears only on the terminal step. |
 | `gateway.responded` | The success result of a function-runtime gateway. Text and object calls carry `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`. `model/provider` is the target actually hit after fallback. Transcription calls also carry `usage/model/provider` when available. Old traces, or custom gateways that do not support this metadata, may lack them |
-| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
+| `message.completed` | `{ runtimeId, pluginId, turnId, runId, content, len }`. Trace-only accepted computation, recorded before commit; never forwarded as player narrative. |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`. The action stream and `state` topic send the same committed payload; the block ID and metadata come from the commit result |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
@@ -1336,7 +1342,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 
 `tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure. A call that never executed emits a `tool.calling` / `tool.failed` pair without `tool.completed`. Both carry `skipped: true`, `skipReason` (`hook-aborted`, `suspended`, `terminated` or `aborted`), `durationMs: 0` and `approvalStatus: "auto-allowed"`. They appear only in the transcript and trace, not executed tool records, failure accounting or `step.completed.toolCalls`; concealed runtimes still strip `code`, `error`, `skipped` and `skipReason`.
 
-Narrative fragments are still sent live to the interface through `narrative.delta`. To keep `trace_events` lean, only `message.completed` is saved.
+Gameplay action streams and ordinary state subscriptions strip prompt/reply text, arguments, results and review details from step/LLM/tool/hook/child/function/gateway progress. Concealed steps drop `toolCalls` and retain only `submissionAccepted: true` for successful submissions, including finalizers. This marks output acceptance, not a successful commit. Full diagnostic payloads remain in traces and explicit `topics=trace` subscriptions, subject to concealed and delegation privacy. They must never be projected into player story messages. `message.completed` records acceptance timing; committed `narrative.completed` records presentation timing.
 
 **`command.*`**
 
@@ -1518,7 +1524,7 @@ How snapshots are saved:
 
 Declarative [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components) render directly through the host, without this port. Input reuses player-source `submit_actions` and existing interaction responses. Refusal or busy admission retains drafts; UI callbacks are not plugin RPC and do not imply persistence.
 
-Plugin views reuse the sandbox MessagePort. Full `{ type: "state", value }` messages carry the projection in `value.session`; streaming messages are `{ type: "stream", seq, append }`. This adds no HTTP or SSE endpoint. Reading requires player consent before mounting, bound to the plugin ID and the content hash of the spec plus HTML. Revocation closes the page. Consented session pages expose only their declared, schema-validated public methods and safe outcomes; ordinary panel handlers remain separate. See [Plugin views](./ui-panels.md#plugin-views) for projection, throttling and consent rules.
+Plugin views reuse the sandbox MessagePort. Complete `{ type: "state", value }` messages carry version 3 in `value.session`, with committed messages only. There is no story append channel. This adds no HTTP or SSE endpoint. Reading requires player consent bound to plugin ID and the spec plus HTML content hash; revocation closes the page. Declared, validated public methods return safe outcomes. See [Plugin views](./ui-panels.md#plugin-views) for the authoritative projection and consent rules.
 
 <a id="auto-advance-events"></a>
 
@@ -1576,7 +1582,7 @@ The event contains no raw input, free-text reason, asset path, reply or credenti
 
 ## Sandbox session page protocol
 
-Ordinary session webviews use one MessagePort and public projection version 2. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-2). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
+Ordinary session webviews use one MessagePort and public projection version 3. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-3). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
 
 ### Session theme snapshots
 

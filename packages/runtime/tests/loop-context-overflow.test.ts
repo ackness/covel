@@ -14,6 +14,7 @@ import {
   manifest,
   makeExecutor,
   prose,
+  submitted,
   queuedLLM,
   runLoop,
   runRuntime,
@@ -23,7 +24,7 @@ import {
 
 const small = {
   estimator: (text: string) => text.length,
-  contextBudget: { maxInputTokens: 1_000, reservedForResponse: 100 },
+  contextBudget: { maxInputTokens: 2_000, reservedForResponse: 100 },
 };
 const largeCall = () => toolCall("mark", { note: "x".repeat(3_000) });
 function settle(
@@ -57,7 +58,10 @@ describe("context overflow in the agent loop", () => {
       parameters: z.object({}),
       execute: async () => data,
     });
-    const llm = queuedLLM([toolCall("read", {}), prose("Take the north gate")]);
+    const llm = queuedLLM([
+      toolCall("read", {}),
+      submitted("Take the north gate"),
+    ]);
     const emitter = makeEmitterSpy();
     const messages: LLMMessage[] = [
       { role: "system", content: "sys" },
@@ -74,7 +78,9 @@ describe("context overflow in the agent loop", () => {
     });
     expect(loop.stop).toEqual({ reason: "max-steps", finalizer: true });
     expect(llm.requests).toHaveLength(2);
-    expect(llm.requests[1]?.tools).toBeUndefined();
+    expect(llm.requests[1]?.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
     const result = llm.requests[1]?.messages.find(
       (message) => message.role === "tool",
     );
@@ -133,7 +139,7 @@ describe("context overflow in the agent loop", () => {
     });
     const llm = queuedLLM([
       toolCall("read", { page: 4 }, "reused"),
-      prose("done"),
+      submitted("done"),
     ]);
     const loop = await runLoop({
       llm,
@@ -142,7 +148,7 @@ describe("context overflow in the agent loop", () => {
       manifest: manifest({ tools: { plugin: ["read"] } }),
       deps: { toolExecutor: makeExecutor([read]) },
       estimator: small.estimator,
-      contextBudget: { maxInputTokens: 5_000, reservedForResponse: 100 },
+      contextBudget: { maxInputTokens: 5_700, reservedForResponse: 100 },
     });
     expect(loop.stop).toEqual({ reason: "completed" });
     expect(llm.requests).toHaveLength(2);
@@ -176,7 +182,7 @@ describe("context overflow in the agent loop", () => {
     const llm = scriptedLLM((_request, call) =>
       call <= 8
         ? toolCall("read", { page: call }, `read-${call}`)
-        : prose("done"),
+        : submitted("done"),
     );
     const emitter = makeEmitterSpy();
     const messages: import("@covel/shared").LLMMessage[] = [
@@ -195,8 +201,12 @@ describe("context overflow in the agent loop", () => {
     });
     const { result } = settle(loop, runtime);
     expect(result.status).toBe("success");
-    expect(result.toolCalls).toHaveLength(8);
-    for (const call of result.toolCalls)
+    expect(
+      result.toolCalls.filter((call) => call.toolName !== "submit-output"),
+    ).toHaveLength(8);
+    for (const call of result.toolCalls.filter(
+      (call) => call.toolName !== "submit-output",
+    ))
       expect(JSON.stringify(call.output)).toContain("r".repeat(1_200));
     expect(
       llm.requests.some((request) =>
@@ -217,7 +227,7 @@ describe("context overflow in the agent loop", () => {
       ),
     ).toBe(true);
     expect(messages.filter((message) => message.role === "tool")).toHaveLength(
-      8,
+      9,
     );
     expect(JSON.stringify(messages)).not.toContain(
       "[older tool output omitted]",
@@ -245,7 +255,9 @@ describe("context overflow in the agent loop", () => {
     expect(result.status).toBe("failed");
     expect(result.error).toBe(loop.stopMessage);
     expect(result.error?.match(/\[provider:/g)).toHaveLength(1);
-    expect(result.toolCalls).toHaveLength(1);
+    expect(
+      result.toolCalls.filter((call) => call.toolName !== "submit-output"),
+    ).toHaveLength(1);
     expect(llm.requests).toHaveLength(1);
     const completed = emitter.events.filter(
       (event) => event.type === "step.completed",
@@ -258,15 +270,17 @@ describe("context overflow in the agent loop", () => {
   });
 
   it("rescues an oversized newest call once with tools off, closes its step, and returns success", async () => {
-    const llm = queuedLLM([largeCall(), prose("rescued answer")]);
+    const llm = queuedLLM([largeCall(), submitted("rescued answer")]);
     const emitter = makeEmitterSpy();
     const loop = await runLoop({ llm, deps: { emitter }, ...small });
     expect(loop.stop).toEqual({ reason: "context-overflow", finalizer: true });
     expect(loop.stopMessage).toBeUndefined();
-    expect(loop.finalContent).toBe("rescued answer");
+    expect(loop.acceptedOutput?.narrativeOutput).toBe("rescued answer");
     expect(settle(loop).result.status).toBe("success");
     expect(llm.requests).toHaveLength(2);
-    expect(llm.requests[1]?.tools).toBeUndefined();
+    expect(llm.requests[1]?.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
     expect(
       llm.requests[1]?.messages.some((message) => message.role === "tool"),
     ).toBe(false);
@@ -286,44 +300,33 @@ describe("context overflow in the agent loop", () => {
     expect(steps[4]?.payload).toMatchObject({
       step: 3,
       finalizer: true,
-      toolCount: 0,
+      toolCount: 1,
     });
     expect(
       emitter.events.find((event) => event.type === "context.pruned")?.payload,
     ).toMatchObject({ collapsedStepCount: 1 });
   });
 
-  it("allows output repair after an overflow finalizer, with its collapsed ledger replayed", async () => {
+  it("does not issue another repair after a rejected overflow finalizer", async () => {
     const llm = queuedLLM([
       largeCall(),
-      prose("invalid answer"),
-      prose('{"answer":"fixed"}'),
+      submitted("invalid answer"),
+      toolCall("submit-output", { answer: "unused" }),
     ]);
+    const runtime = manifest();
     const outputSchema = {
       type: "object",
       required: ["answer"],
       properties: { answer: { type: "string" } },
     };
-    const runtime = manifest();
     const loop = await runLoop({
       llm,
       loaded: { manifest: runtime, promptTemplate: "JSON", outputSchema },
       ...small,
-      contextBudget: { maxInputTokens: 1_800, reservedForResponse: 100 },
     });
-    expect(loop.stop).toEqual({
-      reason: "context-overflow",
-      finalizer: true,
-      repaired: true,
-    });
-    expect(settle(loop, runtime, outputSchema).result.output).toEqual({
-      answer: "fixed",
-    });
-    expect(llm.requests).toHaveLength(3);
-    expect(llm.requests[2]?.tools).toBeUndefined();
-    expect(
-      llm.requests[2]?.messages.some((message) => message.role === "tool"),
-    ).toBe(false);
+    expect(loop.stop).toEqual({ reason: "context-overflow" });
+    expect(settle(loop, runtime, outputSchema).result.status).toBe("failed");
+    expect(llm.requests).toHaveLength(2);
   });
 
   it.each(["empty", "overflow", "rejected", "provider error"])(
@@ -366,11 +369,13 @@ describe("context overflow in the agent loop", () => {
         if (failure === "provider error") throw new Error("unavailable");
         return prose(failure === "empty" ? "" : "draft");
       });
-      const loop = await runLoop({
-        llm: identity(llm),
-        hookPipeline,
-        ...small,
-      });
+      const pending = runLoop({ llm: identity(llm), hookPipeline, ...small });
+      if (failure === "provider error") {
+        await expect(pending).rejects.toThrow("unavailable");
+        expect(llm.requests).toHaveLength(2);
+        return;
+      }
+      const loop = await pending;
       expect(loop.stop).toEqual({ reason: "context-overflow" });
       expect(loop.stopMessage).toContain("tools=");
       expect(loop.stopMessage).not.toContain("fixed=5000");
@@ -380,7 +385,7 @@ describe("context overflow in the agent loop", () => {
     },
   );
 
-  it.each(["required work", "explicit completion", "no time"])(
+  it.each(["required work", "no time"])(
     "does not rescue when the finalizer lacks %s",
     async (reason) => {
       const now = Date.now();
@@ -394,9 +399,6 @@ describe("context overflow in the agent loop", () => {
       });
       const runtime = manifest({
         ...(reason === "required work" ? { requireToolUse: true } : {}),
-        ...(reason === "explicit completion"
-          ? { requireExplicitCompletion: true }
-          : {}),
       });
       const loop = await runLoop({ llm, manifest: runtime, ...small });
       expect(loop.stop).toEqual({ reason: "context-overflow" });
@@ -406,7 +408,7 @@ describe("context overflow in the agent loop", () => {
   );
 
   it("does not request a finalizer before any complete tool step exists", async () => {
-    const llm = queuedLLM([prose("unreached")]);
+    const llm = queuedLLM([submitted("unreached")]);
     const loop = await runLoop({
       llm,
       messages: [
@@ -421,7 +423,7 @@ describe("context overflow in the agent loop", () => {
   });
 
   it("keeps invalid limits thrown and tagged without offering a finalizer", async () => {
-    const llm = queuedLLM([prose("unreached")]);
+    const llm = queuedLLM([submitted("unreached")]);
     let caught: unknown;
     try {
       await runLoop({
@@ -459,7 +461,7 @@ describe("context overflow in the agent loop", () => {
       }),
     });
     const result = await runRuntime({
-      llm: identity(queuedLLM([prose("unreached")])),
+      llm: identity(queuedLLM([submitted("unreached")])),
       deps: {
         hookPipeline,
         estimator: small.estimator,
@@ -520,7 +522,10 @@ describe("context overflow in the agent loop", () => {
         },
       }),
     });
-    const llm = queuedLLM([largeCall(), prose('{"answer":"rescued"}')]);
+    const llm = queuedLLM([
+      largeCall(),
+      toolCall("submit-output", { answer: "rescued" }),
+    ]);
     const result = await runRuntime({
       llm: {
         ...identity(llm),
@@ -542,7 +547,9 @@ describe("context overflow in the agent loop", () => {
     });
     expect(result.output).toEqual({ answer: "rescued" });
     expect(result.fault).toBeUndefined();
-    expect(result.toolCalls).toHaveLength(1);
+    expect(
+      result.toolCalls.filter((call) => call.toolName !== "submit-output"),
+    ).toHaveLength(1);
   });
 
   it("formats overflow messages verbatim and supplies a fallback without a message", () => {

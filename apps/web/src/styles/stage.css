@@ -229,10 +229,4 @@
     box-shadow: 0 0 0 3px
       color-mix(in oklab, var(--accent-primary) 40%, transparent);
   }
-
-  /* Reuses the existing blink keyframe (see `.ui-cursor` above) for the
-   dialog's "more text below" indicator. */
-  .ui-stage-caret {
-    animation: ui-blink 1s step-end infinite;
-  }
 }

@@ -32,9 +32,7 @@ function authoredLoopView(
   loop:
     | {
         readonly profile?: string;
-        readonly stream?: boolean;
         readonly steering?: boolean;
-        readonly truncation?: string;
         readonly timeoutMs?: number;
         readonly finalizer?: { readonly deadlineReserveMs?: number };
       }
@@ -42,9 +40,7 @@ function authoredLoopView(
 ) {
   return {
     preset: loop?.profile,
-    stream: loop?.stream,
     steering: loop?.steering,
-    truncation: loop?.truncation,
     deadlineReserveMs: loop?.finalizer?.deadlineReserveMs,
     timeoutMs: loop?.timeoutMs,
   };
@@ -226,6 +222,19 @@ export const runtimeAuthoringManifestSchema = z
           .optional(),
         output: z
           .strictObject({
+            from: z
+              .strictObject({
+                tool: z
+                  .string()
+                  .min(1)
+                  .describe(
+                    "Name of the allowlisted own or builtin business tool whose latest successful public result is submitted.",
+                  ),
+              })
+              .describe(
+                "Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract.",
+              )
+              .optional(),
             contract: contractIdSchema
               .describe(
                 "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.",
@@ -296,30 +305,23 @@ export const runtimeAuthoringManifestSchema = z
             "`true` lists the session's event directory in the prompt so the model knows which topics it may emit.",
           )
           .optional(),
-        finishWith: z
-          .string()
-          .min(1)
-          .describe(
-            "Tool that ends the run: the run completes after a successful call to it, and fails if it ends without one. The model must call a tool on every step (`toolChoice: required`) unless `toolChoice` says otherwise. Not with `completion`, which is the long form for several tools or explicit completion.",
-          )
-          .optional(),
         completion: z
           .strictObject({
             require: z
-              .enum(["explicit", "tool-use"])
+              .literal("tool-use")
               .describe(
-                "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count.",
+                "Requires successful business work before submit-output: one tool in afterTools, or any authorized business tool without a list. Host control tools and failed calls do not count.",
               )
               .optional(),
             afterTools: z
               .array(z.string())
               .describe(
-                "The runtime completes after a successful call to one of these tools.",
+                "At least one of these own or builtin business tools must succeed before submission. Implies require: tool-use; does not end the run.",
               )
               .optional(),
           })
           .describe(
-            "How the agent run ends. For one completing tool, `finishWith` is shorter.",
+            "Required business work before the host-generated submit-output tool.",
           )
           .optional(),
         loop: z
@@ -329,7 +331,7 @@ export const runtimeAuthoringManifestSchema = z
               .int()
               .positive()
               .describe(
-                "Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops.",
+                "Maximum ordinary model steps, including output submission and corrections. Budget a separate step after required business tools.",
               )
               .optional(),
             timeoutMs: z
@@ -394,31 +396,19 @@ export const runtimeAuthoringManifestSchema = z
             profile: z
               .enum(["story", "actor", "system"])
               .describe(
-                "Loop profile the other loop behaviour keys override. `story` streams to the player, reads interjections and keeps a cut reply; `actor` and `system` do neither, and `actor` answers without tools where `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`.",
-              )
-              .optional(),
-            stream: z
-              .boolean()
-              .describe(
-                "Show the model's text to the player as it streams. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
+                "Loop profile the other loop behaviour keys override. `story` reads player interjections; `actor` and `system` do not. `story` and `actor` request submission when a tool loop repeats; `system` fails. Defaults to `story` with `io.visibility: story`, otherwise `system`.",
               )
               .optional(),
             steering: z
               .boolean()
               .describe(
-                "Merge the player's interjections into the transcript before each step and after a prose finish. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
-              )
-              .optional(),
-            truncation: z
-              .enum(["accept", "reject"])
-              .describe(
-                "`accept` keeps a reply cut at the output limit; `reject` fails it. `accept` needs streaming. Defaults to `accept` for `story`, otherwise `reject`.",
+                "Merge the player's interjections into the transcript before submission acceptance. Needs `io.visibility: story`. Defaults to the profile's value: true for `story`.",
               )
               .optional(),
             fallback: z
-              .enum(["answer-without-tools", "fail"])
+              .enum(["submit-output", "fail"])
               .describe(
-                "What a repeated tool loop does: `answer-without-tools` takes the tools away and asks for the answer; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `answer-without-tools`.",
+                "What a repeated tool loop does: `submit-output` offers only submit-output for the final result; `fail` stops the runtime. Defaults to `fail` for `system`, otherwise `submit-output`.",
               )
               .optional(),
             corrections: z
@@ -429,7 +419,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(3)
                   .describe(
-                    "Corrections for missing required tool use or explicit completion. Defaults to 1.",
+                    "Corrections for missing required business tool work. Defaults to 1.",
                   )
                   .optional(),
                 review: z
@@ -438,7 +428,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(5)
                   .describe(
-                    "Corrections after a PostLLMResponse rejection. Defaults to 2.",
+                    "Corrections shared by PostLLMResponse and ReviewAgentOutput rejections. Defaults to 2.",
                   )
                   .optional(),
                 loopPerturbation: z
@@ -456,7 +446,7 @@ export const runtimeAuthoringManifestSchema = z
                   .min(0)
                   .max(3)
                   .describe(
-                    "Requests with tools off to repair invalid output. Defaults to 1.",
+                    "In-loop corrections for missing, malformed, schema-invalid or mixed-batch output submission. Defaults to 1.",
                   )
                   .optional(),
               })
@@ -469,7 +459,7 @@ export const runtimeAuthoringManifestSchema = z
                 maxSteps: z
                   .boolean()
                   .describe(
-                    "At the step limit or when the request no longer fits the model's context, ask once for the answer with tools off. `false` makes these stops always fail. Defaults to true.",
+                    "At the step limit or context overflow, offer only submit-output once if business prerequisites are met. The same validation and review apply; no extra repair follows. Defaults to true.",
                   )
                   .optional(),
                 deadlineReserveMs: z
@@ -477,11 +467,13 @@ export const runtimeAuthoringManifestSchema = z
                   .int()
                   .min(0)
                   .describe(
-                    "Stop starting steps this many ms before the time limit and ask for the answer with tools off, when prose can complete the runtime. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off.",
+                    "Stop starting ordinary steps this many ms before the time limit and request submission if business prerequisites are met. At most half of `timeoutMs` is used; smaller than `timeoutMs`. Defaults to 0, off.",
                   )
                   .optional(),
               })
-              .describe("The final answer step, with tools off.")
+              .describe(
+                "One final submission-only step when the loop limit permits it.",
+              )
               .optional(),
           })
           .describe(
@@ -557,13 +549,6 @@ export const runtimeAuthoringManifestSchema = z
         message:
           "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a system runtime instead",
       });
-    if (value.agent?.finishWith !== undefined && value.agent.completion)
-      ctx.addIssue({
-        code: "custom",
-        path: ["agent", "finishWith"],
-        message:
-          "agent.finishWith is the short form of agent.completion; write one of the two",
-      });
     const detached = value.schedule?.detached;
     const inputs = Object.entries(value.io?.inputs ?? {});
     for (const issue of runtimeRuleIssues(
@@ -596,12 +581,10 @@ export const runtimeAuthoringManifestSchema = z
           name: serviceImportName(entry),
           explicit: typeof entry !== "string" && entry.as !== undefined,
         })),
-        completingTools: value.agent?.completion?.afterTools,
-        finishWith: value.agent?.finishWith,
+        requiredBusinessTools: value.agent?.completion?.afterTools,
+        requireToolUse: value.agent?.completion?.require === "tool-use",
         visibility: value.io?.visibility,
         output: value.io?.output,
-        requireExplicitCompletion:
-          value.agent?.completion?.require === "explicit",
         ...(value.agent ? { loop: authoredLoopView(value.agent.loop) } : {}),
         operationsInputs: inputs
           .filter(

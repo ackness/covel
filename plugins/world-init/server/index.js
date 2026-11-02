@@ -149,7 +149,7 @@ export default function (covel) {
         .filter(({ rule }) => rule);
       if (!rules.length) return [];
       // Give the tracker every rule, schema, and frozen value it needs in one
-      // prompt so a typical settlement is a single model call. Only what does
+      // prompt so typical settlement needs one business tool call, followed by final submission. Only what does
       // not fit falls back to paged tool reads.
       //
       // Rules and schemas hold for the session; values change with the turn.

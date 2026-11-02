@@ -1,3 +1,4 @@
+import { executionProgressStep } from "./execution-progress.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import {
@@ -66,9 +67,6 @@ function upsertExecutionStep(
     : folded;
 }
 
-/** Streaming-placeholder id convention shared with the renderer. */
-const STREAM_ID_PREFIX = "stream_";
-
 /**
  * In-memory chat window: live appends past this cap drop the OLDEST loaded
  * messages (a marathon tab otherwise grows without bound). Dropped rows stay
@@ -89,9 +87,7 @@ export function configureMessagesWindowCap(cap: number): void {
 
 /**
  * Cap a grown `messages` array. Only live-append paths call this —
- * PREPEND_MESSAGES (the user explicitly loading history) never caps, and
- * streaming placeholders are never dropped (they only live at the tail; a
- * placeholder inside the drop range means assumptions broke, so skip capping).
+ * PREPEND_MESSAGES (the user explicitly loading history) never caps.
  */
 function capLiveMessages(
   state: SessionState,
@@ -101,15 +97,9 @@ function capLiveMessages(
   if (messages.length <= messagesWindowCap) return { messages };
   const dropCount = messages.length - messagesWindowCap;
   const dropped = messages.slice(0, dropCount);
-  if (dropped.some((m) => m.id.startsWith(STREAM_ID_PREFIX))) {
-    return { messages };
-  }
   const kept = messages.slice(dropCount);
   const edge = kept.find(
-    (message) =>
-      !message.requestId &&
-      !message.id.startsWith(STREAM_ID_PREFIX) &&
-      message.kind !== "plugin-message",
+    (message) => !message.requestId && message.kind !== "plugin-message",
   );
   // Retain an authoritative anchor until a durable message can bound paging.
   if (!edge) return { messages };
@@ -149,7 +139,6 @@ export const initialState: SessionState = {
   world: null,
   session: null,
   messages: [],
-  unsavedNarratives: [],
   restoredInput: null,
   olderMessagesCursor: null,
   initialEventCursor: null,
@@ -186,7 +175,6 @@ export const initialState: SessionState = {
 const SESSION_RESET: Partial<SessionState> = {
   session: null,
   messages: [],
-  unsavedNarratives: [],
   restoredInput: null,
   olderMessagesCursor: null,
   initialEventCursor: null,
@@ -238,11 +226,7 @@ export function reducer(
       return {
         ...state,
         messages: state.messages.map((message) => {
-          if (
-            message.turnId !== action.turnId ||
-            message.id.startsWith(STREAM_ID_PREFIX) ||
-            !targets.has(message.id)
-          )
+          if (message.turnId !== action.turnId || !targets.has(message.id))
             return message;
           const notice = projectStoryOperationFailures({
             ...message,
@@ -416,86 +400,39 @@ export function reducer(
       };
     }
     case "ADD_STEER_MESSAGE": {
-      // The commit saves the interjection before the story text of its turn,
-      // so it goes above the text still streaming: a reload shows the same.
-      const streaming = state.messages.findIndex((m) =>
-        m.id.startsWith(`${STREAM_ID_PREFIX}${action.message.turnId}_`),
+      const beforeStory = state.messages.findIndex(
+        (message) =>
+          message.turnId === action.message.turnId &&
+          message.role === "assistant",
       );
-      const messages =
-        streaming < 0
-          ? [...state.messages, action.message]
-          : [
-              ...state.messages.slice(0, streaming),
-              action.message,
-              ...state.messages.slice(streaming),
-            ];
+      const messages = [...state.messages];
+      if (beforeStory < 0) messages.push(action.message);
+      else messages.splice(beforeStory, 0, action.message);
       return { ...state, ...capLiveMessages(state, messages) };
     }
     case "COMPLETE_MESSAGE": {
-      // Replace the streaming placeholder with the final message content and
-      // drop its live streaming buffer (the authoritative full text now lives
-      // in `messages`). Previously we skipped when a placeholder existed — but
-      // if any delta frames were dropped mid-stream the placeholder only held
-      // the partial text the client received, so we always overwrite with the
-      // completed content.
-      const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
-      const idx = state.messages.findIndex((m) => m.id === streamId);
-      const authoritativeIdx = state.messages.findIndex(
-        (message) => message.id === action.message.id,
+      const index = state.messages.findIndex(
+        (row) => row.id === action.message.id,
       );
-      const saved = state.messages[authoritativeIdx];
-      // Resume events predate host notice finalization. A late completion
-      // must keep a validated notice already learned from the durable row.
+      const saved = state.messages[index];
       const message: StreamMessage = {
         ...action.message,
         kind: "story",
-        ...(!action.message.operationFailures &&
-        action.message.role === "assistant" &&
-        saved &&
-        !saved.id.startsWith(STREAM_ID_PREFIX)
+        ...(!action.message.segments && saved?.segments
+          ? { segments: saved.segments }
+          : {}),
+        ...(!action.message.operationFailures && saved
           ? projectStoryOperationFailures(saved)
           : {}),
       };
-      if (authoritativeIdx >= 0 || idx >= 0) {
-        const replaceIdx = authoritativeIdx >= 0 ? authoritativeIdx : idx;
-        // Recovery and a queued delta can leave both identities present.
-        // Keep the durable position and remove its streaming placeholder.
-        const next = state.messages.flatMap((row, index) =>
-          index === replaceIdx ? [message] : row.id === streamId ? [] : [row],
-        );
-        return { ...state, messages: orderStoryBeforePluginMessages(next) };
+      if (index >= 0) {
+        const messages = [...state.messages];
+        messages[index] = message;
+        return { ...state, messages: orderStoryBeforePluginMessages(messages) };
       }
       return {
         ...state,
         ...capLiveMessages(state, [...state.messages, message]),
-      };
-    }
-    case "APPEND_DELTA": {
-      // Streaming text lives in a fine-grained external store. The placeholder
-      // is inserted exactly once, keeping the messages reference stable for the
-      // whole stream so O(history) grouping does not rebuild per token.
-      //
-      // IMPORTANT: carry turnId / runtimeId / kind on the placeholder — chat
-      // groups execution timelines by turnId, and without these the streaming
-      // story message is "unattributed" and its timeline chips jump to the top
-      // of the chat instead of appearing right after the turn's last message.
-      const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
-      if (state.messages.some((message) => message.id === streamId))
-        return state;
-      return {
-        ...state,
-        ...capLiveMessages(
-          state,
-          state.messages.concat({
-            id: streamId,
-            role: "assistant",
-            content: "",
-            timestamp: new Date().toISOString(),
-            turnId: action.turnId,
-            runtimeId: action.runtimeId,
-            kind: "story",
-          }),
-        ),
       };
     }
     case "SET_EXECUTING":
@@ -513,17 +450,6 @@ export function reducer(
               executionMayBeRunning(state.executionRecovery.status))
           ),
       };
-    case "DISCARD_TURN_STREAMS": {
-      // Streaming placeholders use the `stream_<turnId>_<runtimeId>` id
-      // convention (APPEND_DELTA above). No turnId → discard all placeholders.
-      const dropStream = (id: string, turnId?: string): boolean =>
-        id.startsWith(STREAM_ID_PREFIX) &&
-        (action.turnId === undefined || turnId === action.turnId);
-      return {
-        ...state,
-        messages: state.messages.filter((m) => !dropStream(m.id, m.turnId)),
-      };
-    }
     case "SET_EXECUTION_ERROR":
       if (
         action.turnId &&
@@ -535,49 +461,17 @@ export function reducer(
         return state;
       return { ...state, executionError: action.error };
     case "MERGE_RECOVERED_MESSAGES": {
-      const drafts =
-        action.actionGeneration === (state.actionGeneration ?? 0)
-          ? (action.unsavedNarratives ?? [])
-          : [];
-      const draftIds = new Set(drafts.map((row) => row.id));
-      const currentMessages =
-        draftIds.size === 0 ||
-        !state.messages.some((row) => draftIds.has(row.id))
-          ? state.messages
-          : state.messages.filter((row) => !draftIds.has(row.id));
-      const unsavedNarratives =
-        drafts.length === 0
-          ? state.unsavedNarratives
-          : [
-              ...(state.unsavedNarratives ?? []).filter(
-                (row) => !draftIds.has(row.id),
-              ),
-              ...drafts,
-            ];
-      const messages = mergeRecoveredMessages(
-        currentMessages,
-        action.messages,
-        state.executing,
-        action.actionGeneration === (state.actionGeneration ?? 0)
-          ? action.terminalTurnId
-          : undefined,
-      );
-      if (
-        messages === state.messages &&
-        unsavedNarratives === state.unsavedNarratives
-      )
-        return state;
-      return { ...state, messages, unsavedNarratives };
+      const messages = mergeRecoveredMessages(state.messages, action.messages);
+      return messages === state.messages ? state : { ...state, messages };
     }
     case "PREPEND_MESSAGES": {
-      // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
+      // 把更旧的一批消息合并到前部。已有消息（含本地追加）优先保留，
       // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
       const existingIds = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !existingIds.has(m.id));
       const messages = mergeRecoveredMessages(
         state.messages,
         action.messages.filter((m) => existingIds.has(m.id)),
-        state.executing,
       );
       if (older.length === 0) {
         // 没有新增历史，补齐同 ID 的已提交字段并推进游标。
@@ -585,7 +479,7 @@ export function reducer(
       }
       // `older` 来自 listMessagesPage(before = 当前最旧一条的游标)，按契约**严格早于**
       // 所有 existing、且自身已按 (createdAt,id) 正序，故直接拼到前部即可。不能再按
-      // timestamp 整体重排：流式占位/本地回显用的是客户端墙钟时间戳，服务端权威 createdAt
+      // timestamp 整体重排：本地回显用的是客户端墙钟时间戳，服务端权威 createdAt
       // 与它混排会在客户端时钟偏移时把历史顺序打乱（desktop 无 NTP 保证）。
       return {
         ...state,
@@ -629,6 +523,15 @@ export function reducer(
           appendReasoningStep(previous, action),
         ),
       };
+    }
+    case "EXECUTION_PROGRESS": {
+      const step = executionProgressStep(action.progress, state.executionSteps);
+      return step
+        ? {
+            ...state,
+            executionSteps: upsertExecutionStep(state.executionSteps, step),
+          }
+        : state;
     }
     case "UPSERT_EXECUTION_STEP": {
       // Upsert on (turnId, runtimeId, runId). Transitions running → completed/failed/
@@ -820,19 +723,6 @@ export function reducer(
           message === target ? { ...message, turnId: action.turnId } : message,
         ),
       };
-    }
-    case "REMOVE_MESSAGES_FROM_TURN": {
-      if (
-        state.executionSteps.some(
-          (step) =>
-            step.turnId === action.turnId && step.attemptStatus === "committed",
-        )
-      )
-        return state;
-      const filtered = state.messages.filter(
-        (m) => m.turnId !== action.turnId || m.role !== "assistant",
-      );
-      return { ...state, messages: filtered };
     }
     case "REPLACE_PLUGIN_DATA":
     case "REPLACE_PLUGIN_DATA_FOR_PLUGIN":

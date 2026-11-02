@@ -1,3 +1,4 @@
+import { agentOutputContract } from "./agent-output-contract.js";
 import {
   CHARACTER_ACTOR_CONTRACT,
   characterActorInputSchema,
@@ -135,7 +136,7 @@ export interface SubagentRunner {
   availableTargets(caller: SubagentCaller): readonly SubagentTarget[];
   privateTargetKind(
     request: unknown,
-    caller: SubagentCaller,
+    caller: Pick<SubagentCaller, "pluginId">,
   ): "actor" | "concealed" | undefined;
   /** Never throws for a sub-agent failure: it resolves with `ok: false`. */
   run(args: SubagentRunArgs): Promise<SubagentResult>;
@@ -805,7 +806,7 @@ async function runProvider({
       sessionId: input.sessionId,
       turnId: input.turnId,
     }),
-    // A sub-agent acts a part: no streaming, no steering, unless the
+    // A sub-agent acts a part: no player presentation, no steering, unless the
     // provider names a profile itself.
     loopProfile: {
       ...provider.loopProfile,
@@ -870,7 +871,6 @@ async function runProvider({
       : undefined;
     const subDeps: TurnExecutorDeps = {
       ...deps,
-      onDelta: undefined,
       emitter,
       // The player's abort and the caller's cancellation reach the sub-agent;
       // the steering queue does not.
@@ -923,6 +923,7 @@ async function runProvider({
     const assembled = await prepare(
       buildContext({
         promptTemplate: loaded.promptTemplate,
+        agentOutput: agentOutputContract(loaded),
         manifest,
         turnInput: input,
         completedResults: new Map(),

@@ -1,70 +1,70 @@
 {
   "plugins/affinity/PLUGIN.md": {
-    "en": "014fec765416d2bb",
-    "zh": "b9eb20b9afd19c94"
+    "en": "54acad9631f719fe",
+    "zh": "e4e713488c58f86f"
   },
   "plugins/char-creator/runtimes/character-tracker/RUNTIME.md": {
-    "en": "bdb35e772bb5a1a6",
-    "zh": "d8c88c8248a68d75"
+    "en": "7d3401a77ec5d01a",
+    "zh": "a52868128347b200"
   },
   "plugins/char-creator/runtimes/player-init/RUNTIME.md": {
-    "en": "1975873921722204",
-    "zh": "1d28347857cc3160"
+    "en": "90b1fb379feb583c",
+    "zh": "ccd161fa7124366d"
   },
   "plugins/character-agent/PLUGIN.md": {
-    "en": "e582eab293bfb60a",
-    "zh": "615a915954dc8ddf"
+    "en": "8f61ca47c7680dc1",
+    "zh": "ed903f245774a716"
   },
   "plugins/chat-mode-narrator/PLUGIN.md": {
-    "en": "d6be31d653c4fbc9",
-    "zh": "c0b9b1b01f8b3c74"
+    "en": "eeeb80bac1b15777",
+    "zh": "48e5c92b08e2fad6"
   },
   "plugins/chat-mode-narrator/runtimes/narrate/RUNTIME.md": {
-    "en": "248c79475628a4f0",
-    "zh": "a85953e2d4f52b29"
+    "en": "90e68b6690060fa0",
+    "zh": "5a72fbf1cd18740f"
   },
   "plugins/codex/PLUGIN.md": {
-    "en": "2f5df09dfec2817d",
-    "zh": "4a5966cc4c66d2ea"
+    "en": "d3d6428e98f346ad",
+    "zh": "2fd6118f306caeaa"
   },
   "plugins/guide/PLUGIN.md": {
-    "en": "ed3936b86a5d0739",
-    "zh": "f3447fe23895c5e2"
+    "en": "790374ead3f05950",
+    "zh": "4a35817f9e8cc160"
   },
   "plugins/history-compaction/prompts/server/compactor.md": {
     "en": "34bf821fd1dba882",
     "zh": "365026b1103fce40"
   },
   "plugins/narrator/PLUGIN.md": {
-    "en": "dec3f1c15c380e94",
-    "zh": "0e5000299c47e74c"
+    "en": "f079cd81a7867adb",
+    "zh": "36e6d8cc1dc52f67"
   },
   "plugins/npc-graph/runtimes/extractor/RUNTIME.md": {
-    "en": "77e443f66fac166c",
-    "zh": "c97f8db4bf48b84b"
+    "en": "f374efe553f5918e",
+    "zh": "55bb29a2147b8b5c"
   },
   "plugins/story-events/runtimes/plot/RUNTIME.md": {
-    "en": "a243d38f82ff668d",
-    "zh": "ac73559d323cb860"
+    "en": "16a1f3d41c1a6feb",
+    "zh": "a7c522e2d39964d2"
   },
   "plugins/turn-policy/prompts/director.md": {
     "en": "793eb4a2c427ed05",
     "zh": "1a17bde4099297a9"
   },
   "plugins/world-init/runtimes/dimension-tracker/RUNTIME.md": {
-    "en": "e3c763612f7e0da2",
-    "zh": "310aa9f6d47682f5"
+    "en": "bb50cfeadbad31a3",
+    "zh": "75efc4b6e63dcffc"
   },
   "plugins/world-init/runtimes/schema-gen/RUNTIME.md": {
-    "en": "085eeb9e3389d1b9",
-    "zh": "38f41ad6c64238d2"
+    "en": "88f0eaa93b7dc51c",
+    "zh": "ae8fe8baed48508e"
   },
   "plugins/world-ir/PLUGIN.md": {
-    "en": "55e87a0f5ba9739e",
-    "zh": "36c1fd647ff93e15"
+    "en": "e5a57607b68c338e",
+    "zh": "f05d5c2e11c5dc39"
   },
   "plugins/world-time/runtimes/advance/RUNTIME.md": {
-    "en": "7a2aaa7470d95326",
-    "zh": "6f690da006f3c60d"
+    "en": "b81aecacc5e5ebca",
+    "zh": "ae3ed7cc8376f48b"
   }
 }

@@ -22,7 +22,7 @@ const invalidResults: Array<[string, unknown]> = [
   ["native replacement", { action: "continue", replace: new Map() }],
 ];
 
-describe.each(["PreRuntime", "TurnStop"] as const)(
+describe.each(["PreRuntime", "ReviewAgentOutput", "TurnStop"] as const)(
   "%s dynamic Hook results",
   (event) => {
     it("continues past a missing return without treating it as a veto", async () => {

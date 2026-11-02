@@ -31,7 +31,7 @@ import {
 import type { ExecutedRuntime, ExecutionDeps } from "../src/execution.js";
 import {
   makeExecutor,
-  prose,
+  submitted,
   queuedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -217,7 +217,7 @@ describe("an agent that suspends again on resume", () => {
       store: f.store,
       llm: queuedLLM(
         leg === 2
-          ? [prose("All answered.")]
+          ? [submitted("All answered.")]
           : [toolCall("suspend", ASK, `call-${leg}`)],
       ),
       toolExecutor: makeExecutor([suspendTool]),

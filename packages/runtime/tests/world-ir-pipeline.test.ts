@@ -1,3 +1,4 @@
+import { latestToolOutput, toolCall } from "./_helpers/agent-loop-fixture.js";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
@@ -50,13 +51,25 @@ const VALID_WORLD_IR = {
 class PipelineLLM implements LLMAdapter {
   readonly calls: Array<Parameters<LLMAdapter["generate"]>[0]> = [];
 
-  constructor(private readonly worldIrContent: string) {}
+  constructor(
+    private readonly worldIrContent: string,
+    private tamper = false,
+  ) {}
 
   async generate(
     params: Parameters<LLMAdapter["generate"]>[0],
   ): Promise<LLMResponse> {
     this.calls.push(params);
     if (params.model !== "story") {
+      const view = latestToolOutput(params.messages, "submit-world-facts");
+      const canonical = view?.facts as Record<string, unknown> | undefined;
+      if (canonical) {
+        const output = this.tamper
+          ? { ...canonical, summary: "Invented story facts." }
+          : {};
+        this.tamper = false;
+        return toolCall("submit-output", output);
+      }
       return {
         content: null,
         toolCalls: [
@@ -66,14 +79,27 @@ class PipelineLLM implements LLMAdapter {
             arguments: this.worldIrContent,
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 10, outputTokens: 5 },
       };
     }
     return {
-      content: "You find a brass key beneath the observatory desk.",
-      toolCalls: [],
-      finishReason: "stop",
+      content: null,
+      toolCalls: [
+        {
+          id: "final",
+          name: "submit-output",
+          arguments: JSON.stringify({
+            segments: [
+              {
+                kind: "narration",
+                text: "You find a brass key beneath the observatory desk.",
+              },
+            ],
+          }),
+        },
+      ],
+      finishReason: "tool_calls" as const,
       usage: { inputTokens: 10, outputTokens: 5 },
     };
   }
@@ -109,7 +135,7 @@ async function discoverRuntime(pluginId: string): Promise<{
   return { discovery, manifest: parsed.manifest };
 }
 
-async function runPipeline(worldIrContent: string) {
+async function runPipeline(worldIrContent: string, tamper = false) {
   const narrator = await discoverRuntime("narrator");
   const worldIr = await discoverRuntime("world-ir");
   const observedInputs: unknown[] = [];
@@ -130,7 +156,7 @@ async function runPipeline(worldIrContent: string) {
       },
     },
   };
-  const llm = new PipelineLLM(worldIrContent);
+  const llm = new PipelineLLM(worldIrContent, tamper);
   const submitWorldFacts = makeSubmitWorldFacts({ tool });
   const toolExecutor = createToolExecutor({
     findTool: (name) =>
@@ -219,6 +245,7 @@ describe("shared WorldIR turn pipeline", () => {
     expect(extractorCall?.responseFormat).toBeUndefined();
     expect(extractorCall?.tools?.map((tool) => tool.name)).toEqual([
       "submit-world-facts",
+      "submit-output",
     ]);
     expect(extractorCall?.tools?.[0]?.parameters).toMatchObject({
       type: "object",
@@ -241,6 +268,19 @@ describe("shared WorldIR turn pipeline", () => {
           ),
       ),
     ).toBe(true);
+  });
+
+  it("ignores changed submission arguments and keeps the canonical tool result", async () => {
+    const { result } = await runPipeline(JSON.stringify(VALID_WORLD_IR), true);
+    const facts = result.runtimeResults.find(
+      (r) => r.runtimeId === "world-ir",
+    )!;
+    expect(facts.status, facts.error).toBe("success");
+    expect(facts.output).toEqual(VALID_WORLD_IR);
+    expect(facts.toolCalls.map((call) => call.toolName)).toEqual([
+      "submit-world-facts",
+      "submit-output",
+    ]);
   });
 
   it("keeps the story result but skips typed consumers when extraction fails", async () => {

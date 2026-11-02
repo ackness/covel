@@ -41,12 +41,13 @@ Properties marked _(I18nText)_ in the tables are text shown to the player, and t
 
 ### Layout
 
-| Component   | Use                             | Main properties                             |
-| ----------- | ------------------------------- | ------------------------------------------- |
-| `Stack`     | Lays out children vertically.   | `gap` (a string, used directly as a style)  |
-| `Row`       | Lays out children horizontally. | `gap`, `align` (`center` / `start` / `end`) |
-| `Grid`      | A CSS grid.                     | `cols` (a number)                           |
-| `Separator` | A horizontal divider line.      | —                                           |
+| Component   | Use                                    | Main properties                                                                                                                         |
+| ----------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `Stack`     | Lays out children vertically.          | `gap` (a string, used directly as a style)                                                                                              |
+| `Row`       | Lays out children horizontally.        | `gap`, `align` (`center` / `start` / `end`)                                                                                             |
+| `Grid`      | A CSS grid.                            | `cols` (a number)                                                                                                                       |
+| `Separator` | A horizontal divider line.             | —                                                                                                                                       |
+| `Reveal`    | Reveals complete child blocks locally. | `revealKey` (required stable local key or state binding), `mode`, `intervalMs`; see [complete-content reveal](#complete-content-reveal) |
 
 ### Display
 
@@ -239,7 +240,7 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 <!-- prettier-ignore -->
 | Component | Props | Content |
 | --- | --- | --- |
-| `SessionMessages` | Only optional literal `content: "story" \| "pending"`, default `"story"` | Public story/player messages and current story stream, or pending public interactions with an empty state |
+| `SessionMessages` | Only optional literal `content: "story" \| "pending"`, default `"story"` | Complete committed public story/player messages, or pending public interactions with an empty state |
 | `SessionComposer` | Empty object `{}`; `props` may be omitted | The current session's shared mode bar, fields, input, queued drafts and feedback |
 
 These components are valid only in live declarative `contributes.ui.view`. Each view allows at most one story region, one pending region and one composer. They cannot use `repeat`, have a repeated ancestor, or occur inside `FilterContainer.props.itemTemplate`. Both `component` and `type` are checked, including named slots and row templates, with exact diagnostic paths. Other props, including session, seat, actor, source and action parameters, are rejected. Expressions cannot select `content`. This control value is never translated; translate region headings through ordinary text components.
@@ -285,6 +286,33 @@ Right, message and segment placements reject them. Webviews, snapshots, debug pa
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `AssetRender`      | Shows an `AssetGenerateView` proposal. It hands the asset to the matching renderer by `view.modality` (image / audio / generic link).                                  | `view` (`AssetGenerateView`), `sessionId?` (overrides the lookup of the "current session") |
 | `AssetTurnSidebar` | Shows every generated asset recorded in a turn (from `state.assetsByTurn`, filled in by the `asset.generated` SSE handler). Shows nothing when the turn has no assets. | `turnId`, `sessionId?`                                                                     |
+
+## Complete-content reveal
+
+`Reveal` is a display container. It keeps every complete child mounted once and reveals whole blocks in order; it never slices Markdown or changes stored text. Props are `revealKey` (a stable local string, or a state/item binding resolving to one), `mode: "instant" | "segments"` (default `"instant"`), and integer `intervalMs` (default 120, range 0–500). Initial content and remounted views are instant. Change the local key for a newly delivered group; replacing content under the same key finishes immediately. The component itself cannot declare `on` or `watch` actions.
+
+```json
+{
+  "component": "Reveal",
+  "props": {
+    "revealKey": { "$state": "/edition" },
+    "mode": "segments",
+    "intervalMs": 120
+  },
+  "children": [
+    { "component": "Text", "props": { "content": "First complete block." } },
+    { "component": "Text", "props": { "content": "Second complete block." } }
+  ]
+}
+```
+
+The first unit appears immediately. Remaining units finish within two seconds; long groups use a shorter effective interval. Zero interval, reduced motion, the device's **Instant text** preference, a hidden page or an inactive story view finish immediately. **Show all** is a host-owned native button supporting keyboard activation. Interactive descendants, including links, inputs and portrait controls, are immediate. No focus moves.
+
+The complete semantic content remains available once to assistive technology, with live announcements off. Copy, export and search use full committed text. Reveal state stays in the renderer, outside messages, settings exports, snapshots, prompts, proposals and bridge v3. A new story finishes any older reveal; duplicate completion, history recovery, reload and view remount do not replay it. Content replacement and unmount cancel old timers. Nested `Reveal` containers inside a host story group use that group's clock.
+
+When chat is following the bottom, its scroll anchor follows the currently revealed segment. A segment taller than the viewport starts at its beginning, keeping the transparent tail out of view. Finishing reveal or choosing Show all resumes following the full bottom. Scrolling up stops following until the player jumps to the latest content.
+
+This effect changes reading presentation after commit; it does not make generation faster or delay input, Stop, auto-advance or persistence. Story template policy selection is documented in [segment templates](./ui-panels.md#segment-templates). The override is documented in [settings storage](./settings-store.md#instant-text).
 
 ## Catalog boundaries
 

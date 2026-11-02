@@ -73,7 +73,7 @@ function renderActions(
       },
     });
     const refs = useSessionRuntimeRefs(state);
-    const handleSseEvent = createSseEventHandler({ ...refs, dispatch, ds });
+    const handleSseEvent = createSseEventHandler({ ...refs, dispatch });
     return {
       state,
       actions: useBuildSessionActions({

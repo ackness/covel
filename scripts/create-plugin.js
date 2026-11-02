@@ -493,10 +493,10 @@ Replace this section with the real goal. Examples: track player promises, record
 
 ## Decision Rules
 
-- If \`runtime-inputs.narrator-output.value\` is empty, call \`runtime-done\` and stop.
-- If there is no new information relevant to the plugin goal, call \`runtime-done\` and stop.
-- If existing notes already cover the same fact, call \`runtime-done\` and stop.
-- If there is useful new information, call \`notes-upsert\` once to save it, then immediately call \`runtime-done\`.
+- If \`runtime-inputs.narrator-output.value\` is empty, submit \`{}\` through \`submit-output\` and stop.
+- If there is no new information relevant to the plugin goal, submit \`{}\` through \`submit-output\` and stop.
+- If existing notes already cover the same fact, submit \`{}\` through \`submit-output\` and stop.
+- If there is useful new information, call \`notes-upsert\` once to save it, then immediately submit \`{}\` through \`submit-output\`.
 
 ## Write Shape
 
@@ -527,7 +527,7 @@ function renderCustomReadme(runtimes) {
 
 ${placeholders["{{pluginDescriptionZh}}"]}
 
-根清单和 package.json 的版本都从 0.1.0 开始，发布新版本时同时修改两处。用例文件带编辑器用的 $schema；name 和 runtimeId 必填，未知字段会在执行前报错。
+版本只在根清单中从 0.1.0 开始；package.json 不写版本。用例文件带编辑器用的 $schema；name 和 runtimeId 必填，未知字段会在执行前报错。
 
 ## Runtime
 
@@ -537,7 +537,7 @@ ${lines}
 
 1. 修改 \`README.md\`，维护给人类和开发者看的说明。
 2. 修改 \`runtimes/<name>/RUNTIME.md\`，维护 runtime 元信息和模型指令。
-3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
+3. 函数 runtime 修改 \`handler.js\` 并直接返回值；agent 修改 Markdown prompt，业务工具完成后单独用 \`submit-output\` 提交最终对象（无输出时为 \`{}\`）。
 4. \`PLUGIN.md\` 和 \`RUNTIME.md\` 只写 English；中文的名称与说明写在 \`locales/zh.yaml\`。提示词的简体中文版本是可选的 \`RUNTIME.zh.md\`，有了它就必须和 English 正文同步修改。
 5. 在 Covel 仓库根目录运行 \`pnpm validate:plugin <插件目录>\` 做静态校验，再运行 \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\`（\`<plugins-dir>\` 为本插件的上级目录）。
 `;
@@ -581,10 +581,16 @@ function renderCustomRuntimeCases(runtimes) {
                 },
               }),
             },
+          ],
+        },
+        {
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
             {
-              id: `tc-${rt.name}-done`,
-              name: "runtime-done",
-              arguments: JSON.stringify({ reason: "recorded" }),
+              id: `tc-${rt.name}-final`,
+              name: "submit-output",
+              arguments: "{}",
             },
           ],
         },

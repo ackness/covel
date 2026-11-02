@@ -17,7 +17,7 @@ You will see:
 
 - Background: a picture of the current scene. It can differ between day and night.
 - Portraits: the characters on stage stand in front of the background. The character who is speaking is highlighted.
-- Dialogue box: the story text is shown one paragraph at a time, with the speaker's name beside it (taken from the story's segments, shown once the story is complete). Click the screen to go to the next paragraph.
+- Reader: complete committed stories retain their paragraph speakers. Previous/Next paragraph and Read again navigate locally; choices and input never wait for a reading click.
 - Choices: when you need to decide, possible responses appear below the dialogue box. You can also click "✎ Write your own…" and write your own words.
 
 The name of the current scene is shown on the screen. A row of small buttons lets you open "History" (to look back at the conversation), turn "Auto-play" on or off, or enter "Fullscreen stage". To go back to the text view, click "Exit stage".
@@ -52,6 +52,8 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 - An absent scene asset registry preserves the existing backdrop. When a registry exists but does not list the location, the backdrop is empty and the stage falls back to the world cover.
 - The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the current cast immediately at commit while their previously displayed image fades out. Outgoing images do not occupy the four current actor slots. Focus follows the last resolved dialogue or action speaker on stage.
 - The current viewpoint character stays off stage; other characters bound to the same player seat can appear. A location change clears old actors before applying the new presence list. Day/night changes at the same location keep the actors. Without a presence list, existing actors remain unless the scene changes; cast selection applies until an actor record exists.
+
+Characters without stored attributes can still be selected; they do not need attributes before joining the scene.
 
 ### When it is on
 
@@ -156,3 +158,5 @@ Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, 
 ### Optional reading appearance
 
 Scene Stage offers **Stage reading**. Enable the plugin, open **Session theme** in the session toolbar, choose it and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. Immersive stage keeps the host **Use default appearance** button. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).
+
+Scene Stage opts its dialogue template into the shared [segment reveal](../reference/ui-components.md#complete-content-reveal). Only newly committed live stories use it. History, reload and reduced motion are instant; **Show all** and the **Instant text** setting finish immediately. This changes presentation after commit and does not speed generation.

@@ -11,7 +11,7 @@ import {
   loadPluginUiSpecs,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { scheduleByDag } from "@covel/runtime";
+import { normalizeHandlerResult, scheduleByDag } from "@covel/runtime";
 
 import handler from "../runtimes/cast/handler.js";
 
@@ -142,6 +142,36 @@ describe("scene cast manifests", () => {
 // (speakers / activeCastContext) is under `getToolContent(result).value`; pending proposals
 // stay on the envelope (result).
 describe("scene-stage cast handler", () => {
+  it.each([
+    ["omitted", {}, {}],
+    ["undefined", { fields: undefined }, {}],
+    ["stored", { fields: { mood: "calm" } }, { mood: "calm" }],
+  ])(
+    "keeps %s character fields valid at the runtime boundary",
+    async (_label, fields, expected) => {
+      const result = await handler({
+        sessionId: "sess-chat",
+        turnId: "turn-1",
+        pluginId: "scene-stage",
+        runtimeId: "scene-stage/cast",
+        playerMessage: "Mira arrives.",
+        world: {
+          characters: [{ id: "mira", name: "Mira", type: "npc", ...fields }],
+          seats,
+        },
+      });
+      const normalized = normalizeHandlerResult(getToolContent(result));
+      expect(normalized.diagnostics).toEqual([]);
+      expect(normalized.outcome).toMatchObject({
+        outcome: "success",
+        value: { speakers: [{ id: "mira", fields: expected }] },
+      });
+      expect(
+        getPendingProposals(result)[0].payload.value.speakers,
+      ).toMatchObject([{ id: "mira", fields: expected }]);
+    },
+  );
+
   it("excludes the primary seat's current character and selects its other bound character", async () => {
     const result = await handler({
       sessionId: "sess-chat",

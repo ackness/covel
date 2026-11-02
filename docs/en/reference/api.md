@@ -896,7 +896,7 @@ This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks
 - If another process still holds the lock, it returns `running`. In that case there may be no turn identifier.
 - If the lock connection pool cannot hand out a connection within a short wait (200 ms), it returns `unknown`. The server could not check and does not know whether a turn is running; it never reports `idle` because it found no records.
 
-The client treats `unknown` as a turn that may still be running: it offers no retry, does not move unsaved text away, and does not mark steps as finished. It checks again after a delay that grows each time. After five `unknown` answers in a row it stops checking on its own and asks the player to choose "Check status".
+The client treats `unknown` as a turn that may still be running: it offers no retry, keeps committed stories, and does not mark steps as finished. It checks again after a delay that grows each time. After five `unknown` answers in a row it stops checking on its own and asks the player to choose "Check status".
 
 #### Session replaced during the query
 
@@ -954,7 +954,7 @@ Both endpoints return `409` when no turn is in progress. `abort` stops the playe
 
 - The message is merged into the story runtime's next LLM call. When the turn commits, it is saved in the same transaction to the conversation history and the chat log; when the turn does not commit, it is not saved.
 - It applies only to runtimes with `outputKind: story`. Any other runtime runs a structured task and does not accept interjections.
-- When an interjection arrives while the final response is streaming, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
+- When an interjection arrives before final output is accepted, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
 
 `abort` (stop):
 
@@ -4257,7 +4257,7 @@ A story message also has `segments`: the story segments recorded at commit, `{ k
 
 A story message may also carry `operationFailures: { count: number }`, from `metadata.operationFailures` in storage. Only `assistant` messages with `kind: "story"` qualify. `count` must be a positive safe integer and the object must have no other fields; invalid values and other message kinds omit the field. Full history, `/messages/page` and `/view` use the same validation and return only this count, never operation records or arbitrary metadata. Absence means no recorded notice; old messages are not backfilled.
 
-The notice describes attached operations that did not apply when this story committed. Later successes or retries never clear it. Materialized snapshots still capture only a display-message boundary; forks copy the bounded messages and their notices with fresh message IDs. Whole-checkpoint export, validation and replacement preserve metadata without replaying operations or toasts. Reconnect merges fill a missing notice on the same ID while preserving live text and loaded history; an older response without the field never erases a learned notice. A delayed resume response's `narrative.completed` without a notice also retains the validated notice recovered for the same durable message ID, merging its streaming placeholder to avoid duplicate stories. A complete state replacement replaces messages with the restored content. The notice does not enter the model conversation journal. Ownership and counts: [Transactions](./transactions.md#write-service-operations); live delivery: [Protocol](./protocol.md).
+The notice describes attached operations that did not apply when this story committed. Later successes or retries never clear it. Materialized snapshots still capture only a display-message boundary; forks copy the bounded messages and their notices with fresh message IDs. Whole-checkpoint export, validation and replacement preserve metadata without replaying operations or toasts. Reconnect merges fill a missing notice on the same ID while preserving live text and loaded history; an older response without the field never erases a learned notice. A delayed resume response's `narrative.completed` without a notice also retains the validated notice recovered for the same durable message ID, merging by message ID to avoid duplicate stories. A complete state replacement replaces messages with the restored content. The notice does not enter the model conversation journal. Ownership and counts: [Transactions](./transactions.md#write-service-operations); live delivery: [Protocol](./protocol.md).
 
 ```json
 {
@@ -4502,11 +4502,15 @@ A runtime can pause partway through and wait for the player to provide data. Thi
 
 Resume a suspended runtime with the data the player submitted.
 
+A story is returned only after the resume transaction commits, and state subscriptions publish its complete `narrative.completed`. Failure or resuspension exposes no candidate. Safe runtime/step/tool progress remains available during resume, without narrative deltas.
+
 - **agent runtime**: Continues from the saved tool-call record.
 - **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The writes of child runtimes the handler called with `ctx.recursiveCall` before it suspended are saved with the suspended item. They commit with a successful resume, ahead of the handler's own writes. A failed resume leaves those saved writes buffered in the unresolved suspension for retry; abandoning the item discards them together.
 - The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
 - The time limit is the one of the original dispatch: the runtime manifest's `timeoutMs` when it sets one, otherwise the framework default.
 - A resumed runtime can suspend again; see [Suspending again](#suspending-again) below.
+
+Agent resume retains spent steps, correction counts and admitted ceilings; reply text is not a submission. A changed output schema or required-work rule, or a continuation missing the current contract, fails before a model request and leaves the suspension available to abandon. Recreate active old agent continuations and snapshots/checkpoints containing them; committed stories need not be deleted.
 
 **Request**
 
@@ -5134,6 +5138,8 @@ Pushes an event into a session's event stream from outside. Clients subscribed t
 ### Actions (SSE Bridge)
 
 #### `POST /api/actions`
+
+The stream reports runtime/step/tool progress while the provider works. It publishes one complete `narrative.completed` only after each execution commits, including setup and its opening continuation. Rejection, rollback and cancellation publish no story draft. Read saved messages after reconnect; diagnostic events cannot substitute for a committed message.
 
 Every game action from the player comes in through here: saying something, acting, running a command, answering an interaction, starting a session, and retrying. The server turns each action into one turn run, and it sends the results back over SSE, one piece at a time. The built-in front end mainly uses this endpoint.
 
@@ -6291,7 +6297,6 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 <!-- prettier-ignore -->
 | Type | Category | Description |
 | --- | --- | --- |
-| `narrative.delta` | Narrative | Increment of narrative text (streamed token by token) |
 | `narrative.completed` | Narrative | Narrative text is complete |
 | `interaction.requested` | Interaction | Asks the player for input (form, choice, or confirmation) |
 | `ui.rendered` | UI | Sent after a `ui.render` proposal is submitted |
@@ -6790,6 +6795,8 @@ Each snapshot is `{ slot, key?, value, revision }`:
 <a id="auto-advance"></a>
 
 ### Automatic advancement and session settings
+
+For agents, advancement reads only `yield` accepted through `submit-output`, processed by commit hooks and actually saved. Rejected `continue`, cancellation, failed commits and child output schedule no round. Frontend text reveal neither starts nor delays advancement.
 
 `POST /api/sessions` and `PATCH /api/sessions/:id` accept optional `autoAdvanceLimit`. GET, creation and PATCH responses return its effective number.
 

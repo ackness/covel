@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
-import { resolveCharacter, ToolError } from "@covel/plugin-handlers-utils";
+import {
+  resolveCharacter,
+  ToolError,
+  withModelView,
+  instructionLocaleFor,
+} from "@covel/plugin-handlers-utils";
 import { characterHandles } from "./character-handles.js";
 import { eventProfileIssues } from "./event-profiles.js";
 import { vocabularyEntries } from "./vocabulary.js";
@@ -414,7 +419,20 @@ export default function ({ tool }) {
         ),
       );
       const validation = validateWorldIRV1(completed);
-      if (validation.valid) return completed;
+      if (validation.valid)
+        return withModelView(completed, {
+          summary:
+            instructionLocaleFor(context?.locale) === "zh"
+              ? "成功后用 {} 调用 `submit-output`，宿主提交规范事实。entityReferences 标识事实实体，保留其中的业务引用；不要把这个索引放进最终输出。"
+              : "After success call `submit-output` with {}; the host submits the canonical facts. entityReferences identifies fact entities and preserves their business references; do not include this index in final output.",
+          // Entity IDs are part of the fact contract, including an entity with no
+          // incoming edge. This index makes their semantic references explicit
+          // to the ordinary model projection; it contains no store row metadata.
+          data: {
+            facts: completed,
+            entityReferences: completed.entities.map((entity) => entity.id),
+          },
+        });
       const details = validation.errors
         .map((error) => `${error.path}: ${error.message}`)
         .join("; ");

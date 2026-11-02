@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,12 +22,10 @@ const nameField = {
   required: true,
 };
 
-const narration = {
-  content: "The story begins.",
-  toolCalls: [],
-  finishReason: "stop",
-  usage: { inputTokens: 1, outputTokens: 1 },
-} as const;
+const narration = submittedOutput(
+  { segments: [{ kind: "narration", text: "The story begins." }] },
+  { inputTokens: 1, outputTokens: 1 },
+);
 
 /** A model that answers the character runtime with the opening form. */
 const openingForm =
@@ -39,12 +38,10 @@ const openingForm =
     if (!formTool) return narration;
     // The form tool answered with its filled preview; the model accepts it.
     if (request.messages.at(-1)?.role === "tool")
-      return {
-        content: '{"preGameDone":false}',
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
+      return submittedOutput(
+        { preGameDone: false },
+        { inputTokens: 1, outputTokens: 1 },
+      );
     return {
       content: "Your story begins.",
       toolCalls: [

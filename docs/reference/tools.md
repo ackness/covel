@@ -26,6 +26,8 @@
 
 ## 概览
 
+`submit-output` 的 schema 保持作者定义的含义；strict 只在实际目标的能力和 schema 都允许时启用，其他情况仍由宿主验证。工具支持检查、后备选择和配置方式见[工具提交能力](./slots.md#tool-submission-capabilities)。
+
 <!-- prettier-ignore -->
 | 工具名 | 来源 | 所属插件 | 审批策略 | 描述 | annotations |
 | --- | --- | --- | --- | --- | --- |
@@ -40,7 +42,7 @@
 | **world-dimension-list** | builtin | — | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则 | `readOnly`, `idempotent`, `concurrencySafe` |
 | **emit-event** | builtin | — | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），工具定义含 topic enum 与 payload schema | 默认 |
 | **suspend** | builtin | — | auto-allow | 用表单字段声明答案，挂起等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复 | 默认 |
-| **runtime-done** | builtin | — | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime | 默认 |
+| **submit-output** | generated | — | auto-allow | 按本 runtime 实际加载或宿主默认的 schema 提交最终对象 | — |
 | **delegate** | builtin | — | auto-allow | 把一件事交给子 agent 运行并拿回它的输出；可通过写服务暂存操作 | `stagesWrites` |
 | **delegate-batch** | builtin | — | auto-allow | 有界并发委托独立子 agent，准入和结果保持输入顺序 | `stagesWrites` |
 | **search-tools** | 注入 | — | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 | — |
@@ -99,13 +101,15 @@ runtime 声明的 `tools.plugin` 中有工具未注册时，即使它被 `tools.
 
 ## 同一批调用的执行
 
+整批 `PreToolUse` 先按模型顺序各运行一次，再派发任何业务调用。若原始或改写后的名字包含 `submit-output`，它必须是唯一调用；否则整批拒绝，每个原调用 ID 都收到错误，已完成的前序步骤不重跑。
+
 agent 的一条模型回复可以包含多个工具调用。调用经过 `PreToolUse` 改写后，只有在 runtime 已授权、工具声明 `readOnly: true` 且 `concurrencySafe: true` 时才进入并行池。连续满足条件的调用组成一池，最多同时执行 8 个。`concurrencySafe` 是作者的承诺：工具与其他只读调用并发时不会通过共享状态产生副作用；内核会拒绝只读工具返回的写入和事件，但不能检查外部副作用。
 
-其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`runtime-done` 都是屏障。`delegate` 和 `delegate-batch` 都是屏障。只有一次 batch 内部的子 agent 并发运行。
+其他调用是屏障，单独执行：先等前一池全部结束，屏障结束后才启动后面的调用。未知工具、未声明的名字和循环内处理的 `search-tools`、`suspend`、`submit-output` 都是屏障。`delegate` 和 `delegate-batch` 都是屏障。只有一次 batch 内部的子 agent 并发运行。
 
 工具消息、调用记录、proposal 和事件都按模型给出的顺序汇总，不按完成时间排序。池中某个工具触发自己的 `timeoutMs` 时，它返回 `timeout` 并计入失败调用；其他调用和后续循环继续。没有默认的单工具超时，省略时仍受 runtime 总时限约束；会等待网络读取的并发工具应自行设置 `timeoutMs`。
 
-因 Hook、挂起或循环结束而没有执行的调用仍有工具结果和 trace，注明跳过原因；它们不计入已执行调用、失败计数或步骤的工具统计。循环在后续模型请求（包括输出修复）前补齐所有未回答的调用，不重新执行工具。
+因 Hook、挂起或循环结束而没有执行的调用仍有工具结果和 trace，注明跳过原因；它们不计入已执行调用、失败计数或步骤的工具统计。循环在后续模型请求（包括纠正后的提交）前补齐所有未回答的调用，不重新执行工具。
 
 ## 工具调用方向
 
@@ -146,7 +150,7 @@ runtime:
       plugin: [echo-value]
 ---
 When manually triggered, read `payload.value` from the `<runtime-activation>`
-block, call `echo-value` once, then call `runtime-done`.
+block, call `echo-value` once, then call `submit-output` with `{}`.
 ```
 
 ```js
@@ -189,7 +193,7 @@ export default function (covel) {
 
 模型写出的参数 JSON 有几种反复出现的笔误，而且每种只有一个合理的意思。框架在解析时直接改正它们，省掉让模型重交的一轮。改正后的内容仍然要通过工具的 schema。
 
-修正后的参数会以合法 JSON 写回模型历史，`PreToolUse` 改写的工具名和参数也会同步。无法修正时仍返回 `invalid-input`，历史把原文保留为 JSON 字符串，不伪装成已执行的空对象。原始响应和工具调用 trace 保留诊断依据。框架不会在服务商拒绝历史参数后原样重发请求。
+普通业务工具仍可修正下表的参数笔误。assistant 历史保留供应商原始参数和调用 ID，执行使用修正或 `PreToolUse` 改写后的参数；提交工具不使用这套宽容解析。无法修正的业务参数返回 `invalid-input`。
 
 | 笔误                           | 例子                                                   | 怎么改                                                                                                                                                                                                                               |
 | ------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -460,17 +464,21 @@ interface UIRenderPart {
 
 工具返回 `{ ui: [{ parts, layout? }] }`，框架据此生成 `ui.render` proposal。每个 UI 块必须带 `parts`；没有 `parts` 的块会被拒绝。
 
-### runtime-done
+<a id="runtime-done"></a>
 
-agent 用它告诉框架“我做完了”。业务工具都调用完之后调用它，这个 runtime 就结束，不用再让模型写一段收尾的话。只有成功的 `runtime-done` 调用返回结束哨兵才会结束循环；其他工具返回同名字段只是普通数据。
+### submit-output
 
-最后才调用：所需工具调用都已成功，或没有事情要做。它不记录数据。本次回复结束后运行就结束，不再调用工具或补充正文。可选 `reason` 只保留在 trace 中。
+每个 agent 都自动获得这个宿主控制工具，未声明输出来源时，参数就是该 runtime 实际加载的输出 schema；没有 schema 时使用[宿主默认对象](./plugins.md#agent-output-submission)。它不在全局工具注册表里，各次运行持有独立且冻结的定义。函数不能调用它。
 
-| 参数   | 类型   | 必需 | 描述              |
-| ------ | ------ | ---- | ----------------- |
-| reason | string |      | 可选的 trace 备注 |
+声明 `io.output.from: { tool: name }` 时，生成的参数 schema 仍声明严格的空对象 `{}`，宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本。宿主采用该工具在本循环中最近一次成功返回的公共正文，不采用模型视图包装或 Hook 改写的显示内容；恢复后的成功结果也可用。没有成功调用时返回 `required-work` 并使用 `toolUse` 预算。规范结果仍须通过输出 schema、必需工作和 `ReviewAgentOutput`。字段限制见[输出来源](./plugins.md#agent-output-submission)。
 
-故事 runtime 的工具列表里没有它，见 [ToolExecutor](#toolexecutor)。
+先完成必需的业务工具工作，读取结果，再单独调用 `submit-output`。无业务输出且 schema 允许时传 `{}`。提交被拒绝时按错误修正后再次调用。提交成功结束计算，不代表数据已保存。
+
+提交的数据不产生新的 proposal、UI、交互、通知或事件。工具成功与存档提交仍是两件事。`submit-output` 不算业务工作，不可延迟，也不能出现在插件工具、服务导入、数据集名字或显式工具白名单里。
+
+未声明输出来源时，参数必须是一个完整 JSON 对象；不剥离围栏、不提取前缀、不修复截断内容。按批次/JSON/schema/故事格式、必需工作、`ReviewAgentOutput` 顺序判定一次。失败码为 `invalid-json`、`invalid-output`、`required-work`、`review-rejected` 或 `submission-batch`。错误只给有界字段或位置指导。混合或重复提交在任何同批业务调用执行前拒绝，并回答每个原调用 ID。此前成功的业务工作保留。`PostToolUse` 只改可见文本，不能改变内核私有的接受值；没有接受值的终止请求失败。
+
+旧工具 `runtime-done` 已移除；不要注册同名替代或继续发送旧完成调用。
 
 ### memory-search
 
@@ -630,8 +638,8 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 
 第 2、3 种是失败的工具调用：错误文本回给模型，这次调用不算“用过工具”（`requireToolUse`），也不算结束工具的完成条件。但它们对 runtime 结果的影响不同：
 
-- **未知 topic（第 2 种）不算 runtime 的失败。** 没有启用的插件声明这个 topic，模型无从改正，这次调用什么也没做。工具用 `ToolError("refused", …)`（公开 SDK）拒绝：它不算业务工作（`requireToolUse` 仍未满足，也不触发 `completeAfterTools`），也不算一条“还没解决的失败”。一个 agent 只发了这一次 emit，随后用文字或 `runtime-done` 收尾，结果是正常成功，只是没有事件发出。所以卸掉消费事件的插件，不会让发出事件的 runtime 失败。
-- **payload 不合 schema（第 3 种）是失败。** 约定存在，只是数据不对，模型可以按错误文本重发。同一个工具后来成功的一次调用会抵消它。没有重发成功、也没有其他输出就收尾的 `system` runtime 以 `tool_failed_without_output` 失败。声明了 `requireExplicitCompletion` 的 runtime 在它没解决之前，不能用 `runtime-done` 收尾。
+- **未知 topic（第 2 种）属于被拒绝的工作。** 不发事件，不算成功业务工作，也不算未解决的失败。移除可选消费者本身不会使 runtime 失败；agent 仍需满足必需工作并通过 `submit-output` 提交输出。
+- **payload 不合 schema（第 3 种）是失败调用。** 模型可以按返回错误修正；同名工具后续成功才解决这次失败，输出提交本身不算解决。
 
 **内部 topic。** 声明为 `advertise: false` 的 topic 不进 `emit-event` 的白名单。它只能由声明它的插件自己的**函数 runtime**通过 `output.events` 发出。agent 不能用 `emit-event` 直接发它，绕过中间的生成步骤。第 2 种结果里回显的可用列表也不包含内部 topic 的名字。
 
@@ -714,7 +722,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。
   - `ctx.world` 是恢复时已提交的 World Model，再叠加现场里缓冲的写入。
-  - 工具循环接着挂起前的状态：已经用掉的纠正次数（`agent.loop.corrections` 的四项）、用 `search-tools` 激活过的延迟工具、并入的玩家插话写出的正文、已经成功的完成工具给出的输出，以及这一回合的提示词片段（`PreLLMCall` 的 `promptSegments`）。激活过的工具后来不再是延迟工具时，恢复时略过它。
+  - 工具循环接着挂起前的状态：已经用掉的纠正次数（`agent.loop.corrections` 的四项）、用 `search-tools` 激活过的延迟工具、并入的玩家插话写出的正文，以及这一回合的提示词片段（`PreLLMCall` 的 `promptSegments`）。激活过的工具后来不再是延迟工具时，恢复时略过它。
   - 上下文不重新组装：保存下来的对话记录就是 runtime 运行时的上下文，`PostContextAssembly` 不再触发。
 - 恢复后的 runtime 可以再次调用 `suspend`。旧挂起项标为已处理，新挂起项接着同一次执行，见[再次挂起](./api.md#再次挂起)。子 agent 不能挂起。
 - `completion.require: tool-use` 在恢复后沿用同一完成规则：声明了 `afterTools` 时，只承认列表中的成功调用；没有列表时，承认成功的业务工具调用。挂起前失败、又没有被同名的成功调用抵消的工具仍算没完成，恢复后必须重新完成。
@@ -758,7 +766,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 | instruction | string | —    | 角色指示，最多 2,000 字符；仅角色目标接受                                        |
 | maxSteps    | number | —    | 子 agent 的步数上限，只能比提供方自己的更低                                      |
 
-**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。`delegate` 列在 `completeAfterTools` 里时，输出先经过私密投影，再作为调用方的输出接受校验：角色 agent 只传 segments，concealed 提供方不传内容。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
+**输出**：成功时，模型收到 `{data: output}`；本次委托暂存了操作时还带 `staged: {count, kinds, notice}`，只统计这次委托的操作，说明仍需等回合提交、可能被拒绝。其中 output 经过 `modelFacingJson`，不含簿记字段；代码仍读取原始输出；`stopReason` 和用量只记在 `subagent.completed` 里。委托不会自动成为调用方输出，也不满足必需业务工作。父 agent 读取已接受的子输出后，仍单独提交自己的最终结果；角色演员的私密投影只传 segments，concealed 提供方不传内容。失败时收到 `{error:{code,message,hint?}}`，`code` 是 `ctx.agents.run` 的错误码之一。除 `invalid-input` 外的失败不算这个 runtime 的工具失败，模型可以换个办法继续。
 
 **注意事项**：
 
@@ -779,7 +787,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 
 成功读取、基线和写服务操作仍须等外层工具成功且有效后才接受。失败子项不贡献证据；外层取消时，已成功子项的证据和操作也丢弃。原有的调用方/提供方服务锁和操作序号仍有效，计划顺序不保证服务效果顺序。两个委托工具都保持 `readOnly:false`、`stagesWrites:true`、`idempotent:false`、`concurrencySafe:false`，子 agent 和呈现上下文都不能调用。
 
-任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。`completeAfterTools` 在输出校验前把私密 batch 投影为 `{}`。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
+任一项解析到私密演员或 concealed 提供方时，整个 batch 参数和结果都从持久化/公开副本中隐去，包括已知目标的无效项。获授权的实时父模型仍能使用已接受输出。子输出只供父调用方编排；父 agent 单独提交自己的输出。参见 [trace 关联与隐私](./protocol.md#子-agent-事件)。
 
 ## Character 管理工具
 
@@ -816,7 +824,7 @@ agent runtime 用它把一件事交给[子 agent](./plugins.md#子-agent)：另�
 - `summary` 和 `data` 都可省略。没有显式视图时，`data` 是工具正文经过 `modelFacingJson` 的结果，并去掉顶层的 `ui` 数组。
 - `withModelView(content, { summary?, data? })` 明确选择模型看到的内容。有视图时只发送视图指定的字段；只写 `summary` 就不发送正文。`data` 仍经过 `modelFacingJson`，`summary` 原样保留。
 - `withModelView`、`withPendingProposals` 和 `withEmittedEvents` 可以按任意顺序组合，保留正文、视图和两个副作用通道。用 `getModelView` 读取视图。`_text` 不再有特殊含义。
-- `parsedResult`、`ctx.tools.call` 的返回值、完成工具的输出、UI 和交互载荷仍是完整正文。模型结果的包装不会改变它们。
+- `parsedResult`、`ctx.tools.call` 的返回值、UI 和交互载荷仍是完整正文。模型结果的包装不会改变它们。
 - 成功调用带有待提交 proposal 或领域事件时，加上 `staged`。`count` 是两者总数；`kinds` 是按首次出现顺序去重的 proposal 类型，有事件时再加 `event`。调用成功只表示暂存，仍可能在提交时被拒绝。
 - 提示由 `instructionLocaleFor(context.locale)` 选择，遵守 `COVEL_INSTRUCTION_LOCALE`：中文为“已暂存，回合结束时生效（可能被拒绝）。”，英文为“Staged: it takes effect when the turn ends and may still be rejected.”。错误消息和 hint 保持英文。
 
@@ -869,10 +877,10 @@ agent 通过本工具的会话版本获得类型 enum 和精简字段约束；�
 
 写组合工具的宿主开发者要注意：宿主提供了 `context.world` 时，组合工具只把本批新增的 proposal 叠加到这份快照上。快照里已经包含的外层上游 proposal 和待提交 proposal 不能再叠加一遍，否则版本会被多推进一次，或覆盖更新的字段。
 
-**使用者**: `char-creator/character-tracker`。它把 `sync-characters` 放进 `completeAfterTools`：工具成功后立即结束，不再请求模型收尾。这个 tracker 的配置：
+**使用者**: `char-creator/character-tracker`。它用 `completion.afterTools: [sync-characters]` 要求成功同步，然后用 `submit-output` 提交 `{}`。这个 tracker 的配置：
 
 - 声明 `toolChoice: required`，每次回复都必须调用工具。没有变化时提交空批次。
-- 使用默认的 20 步工具循环预算，所以它可以先读取角色，也可以修正失败的批次。成功同步后立即结束。
+- 使用默认的 20 步工具循环预算，所以它可以先读取角色，也可以修正失败的批次。成功同步后单独提交最终输出。
 - 每个批次的上限仍是 5 个新角色和 10 个已有角色更新。
 - 它自己才看得到的 `<existing-characters>` 名册列出每个角色的 id、姓名、别名（有才出现）、类型和 description。这一段只在角色新增或改写时才变。
 - `<character-fields>` 每行一个 id，在 12000 字符的预算内带上该角色当前的 `fields`，每回合更新。通常一次模型调用就能完成同步。超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。
@@ -1319,7 +1327,7 @@ RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型只看到 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`），没有 `data`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
+**正文输出**: `{success:true, attributeCount, dimensionCount, worldSchema, preGameDone:true}`。代码和 `world-data-provider@1` 继续读取这份完整内容。模型同时看到 `data` 中的这份规范结果与 `summary`（例如 `World initialized: 15 attributes, 2 dimensions.`）。成功后 agent 用 `{}` 调用 `submit-output`，宿主采用完整工具正文并保留 `preGameDone: true`；摘要按指令语言选择 English 或简体中文。暂存的改动仍附带 `staged` 提示。
 
 生成的 `defaultValue` 是每个新玩家和 NPC 的起始值，不是某个设定人物的示例。姓名、身份、背景等字段归入 `bio`，使用中性或空值。工具会把生成的 `bio` 字符串默认值清为空字符串，数组清为空数组，对象和 map 清为空对象，枚举则移除默认值；嵌套的个人信息采用同样的规则。数值和布尔默认值保留。世界作者提供的 schema 由 guard 原样采用，不经过这一步处理。
 
@@ -1331,7 +1339,7 @@ RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数
 
 `worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
 
-这个 runtime 声明了 `agent.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
+这个 runtime 要求 `initialize-world` 成功后再提交输出。agent 在工具成功后用 `{}` 调用 `submit-output`，由声明的输出来源提供规范对象。
 
 **使用者**: `world-init/schema-gen`
 
@@ -1451,7 +1459,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 工具声明 `{stagesWrites:false, idempotent:true}`。补全后的引用校验失败报 `invalid-input`，提示在 `entities` 中声明每个引用的 id 后重试。
 
-工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。`world-ir` 声明了 `completeAfterTools: [submit-world-facts]`：框架把成功的结果直接作为 runtime 的类型化输出，再用 `contract:world-ir@1` 的输出 schema 检查一次。
+工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。公共模型视图的 `data.facts` 是最终提交的规范事实；`data.entityReferences` 索引事实实体的业务身份，让普通模型投影保留必要的语义 ID，即使实体还没有入边。索引不属于最终输出，也不包含存储行元数据。`completion.afterTools: [submit-world-facts]` 要求先成功抽取，再用 `{}` 调用 `submit-output`。`io.output.from.tool: submit-world-facts` 直接采用规范事实，无需复制模型视图；修正最终提交不重复抽取，`contract:world-ir@1` 的业务形状保持不变。
 
 #### 逐目标评估
 
@@ -1535,7 +1543,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 输出为 `{ created, updated, skipped, ui }`，`created` / `updated` 是写入的 key。
 
-没有值得记录的新事实时，模型调用 `runtime-done`。`codex` 把这个工具列进了 `completeAfterTools`，成功后立即结束。
+没有新事实时，按业务工具约定发送空结果，再通过 `submit-output` 提交最终输出。`completeAfterTools` 只表示必需工作，不自动结束运行。
 
 ### 图像 prompt 提交工具
 
@@ -1554,9 +1562,9 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 工具做两件事：把规范化后的 `{ prompt, promptMode, composition }` 写进 `plugin_data[prompts]`，并通过 `withEmittedEvents` 发出插件自己的固定 topic。
 
-模型不用自己写 `{ topic, data }` 事件信封，所以不会漏写 topic 或写成空的。runtime 的输出 schema 只校验工具产生的可信结果。
+业务工具负责生成事件信封；runtime 的输出 schema 校验模型另外提交的输出。
 
-两个 prompt-generator 都是手动触发的 agent，声明了 `schedule.background: true`。它们的 `agent.completion.afterTools` 列出了对应的工具，所以一次成功提交后就结束。之后的 image-generator 在后台继续执行。
+两个 prompt-generator 都是手动触发的后台 agent。`agent.completion.afterTools` 要求对应业务工具成功，之后还要调用 `submit-output`。image-generator 继续在后台执行。
 
 ## 导入的服务工具
 
@@ -1576,7 +1584,7 @@ agent:
 - **结果**：和其他工具一样回给模型 `{ "data": … }`，ID、UUID 和时间戳由 `modelFacingJson` 去掉。审批、`PreToolUse` / `PostToolUse`、`tool_calls` 记录和 `tool.*` trace 都照常；审批来源按 `local` 算。
 - **时限**：一次调用最多等提供方 15 秒，超时回答 `timeout`。
 - **延迟加载**：`tools.defer: true`，或在 `defer` 列表里写导入的名字，导入就和其他工具一样延迟，用 `search-tools` 找到。
-- **不能完成 runtime**：`finishWith` 和 `completion.afterTools` 不能写导入的工具。runtime 不能靠另一个插件才能结束。
+- **不能作为必需业务工作**：`completion.afterTools` 不能写导入的工具，因为提供者可能缺席。
 
 ### 不在的工具
 
@@ -1664,7 +1672,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ## ToolExecutor
 
-所有工具调用都经过 `ToolExecutor`。它用注入的 `findTool(name, context)` 找到工具模块，然后直接调用 `module.execute(args, ctx)`。内置工具和插件工具走同一条路径。审批、trace 和结果的包装由 `ToolExecutor` 统一处理。
+业务工具调用经过 `ToolExecutor`，输出提交由 agent 循环处理。它用注入的 `findTool(name, context)` 找到工具模块，然后直接调用 `module.execute(args, ctx)`。内置工具和插件工具走同一条路径。审批、trace 和结果的包装由 `ToolExecutor` 统一处理。
 
 这一节主要给嵌入内核的宿主开发者看。插件作者只需要知道“授权”和“取消”两段。
 
@@ -1672,13 +1680,13 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 工具白名单管两件事：模型看得到哪些工具，以及实际能执行哪些工具。
 
-- agent 循环把当前 runtime 的精确授权集合放在 `ToolCallContext.authorizedToolNames` 里传给执行器。集合包括 `tools.*` 声明的全部名字，以及完成契约使用 `runtime-done` 的 runtime 和故事 runtime 的 `runtime-done`。必须通过完成工具结束的 runtime 不再自动获得它的授权。
+- 授权集合包括 runtime 声明的业务工具和宿主生成的 `submit-output`。自动授权提交工具不会扩大业务工具权限。
 - `defer` 名单里的工具也在授权集合里：延迟只影响模型一开始看不看得到，不影响授权。
 - 执行器在解析工具和审批**之前**，先检查最终的工具名是否在授权集合里。“最终”指会话覆盖和 `PreToolUse` 替换之后的名字。不在集合里时返回结构化错误 `unavailable`。
 - `search-tools` 在循环内被拦下，到不了执行器。
 - `findTool` 对没有上下文的调用一律从严：没有上下文只能找到 builtin 工具，插件工具全部拒绝。
 
-**故事 runtime 是个例外。** 故事 runtime（`io.visibility: story`）以正文结束。它的工具列表里没有 `runtime-done`，`[COMPLETION]` 段也不提它。但授权仍然保留：模型出于习惯调用了它时，循环用剩下的步数追问正文，而不是返回 `unavailable`。不把 `runtime-done` 列给故事 runtime 的原因：按字面执行指令的模型会只调用它，不写正文。
+故事和系统 agent 共用提交工具及授权规则。宿主按已准入的 runtime 生成 schema；普通工具仍按 builtin 优先、再查调用方本插件工具的规则解析。
 
 ### 取消
 
@@ -1695,7 +1703,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ### 装配
 
-宿主用 `@covel/tools` 的 `createDefaultToolRegistry({ store, eventDirectory })` 一次装好全部内置工具：UI、suspend、runtime-done、emit-event 和 character。
+宿主用 `@covel/tools` 的 `createDefaultToolRegistry({ store, eventDirectory })` 一次装好全部内置工具：UI、suspend、emit-event 和 character。
 
 - 服务端传入真实的事件目录，并按会话覆盖角色写入工具。
 - `test-runtime` 传入一个不允许任何 topic 的隔离目录。

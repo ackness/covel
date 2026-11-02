@@ -1,3 +1,4 @@
+import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
@@ -49,16 +50,14 @@ async function run(
       const done = step === finishAt;
       return {
         content: null,
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 1, outputTokens: 1 },
         toolCalls: [
           {
             id: `call-${step}`,
-            name: done ? "runtime-done" : "emit-event",
+            name: done ? "submit-output" : "emit-event",
             arguments: JSON.stringify(
-              done
-                ? { reason: "done" }
-                : { topic: "probe.progress", data: { step } },
+              done ? {} : { topic: "probe.progress", data: { step } },
             ),
           },
         ],
@@ -95,6 +94,11 @@ async function run(
             resumeSchema: {},
             createdAt: new Date().toISOString(),
             pendingContinuation: {
+              loop: {
+                ...suspendedLoopState(manifest),
+                steps: 0,
+                maxSteps: pluginLimit ?? callerLimit ?? 20,
+              },
               lifecycle: {
                 runId: "suspended-run",
                 progressRunId: "suspended-run",
@@ -102,7 +106,7 @@ async function run(
               readScopes: [],
               takenUnder: {
                 playerTurns: 0,
-                pluginVersion: "1.0.0",
+                pluginVersion: "0.0.0",
                 writes: [],
               },
               executionContext: {
@@ -127,23 +131,24 @@ describe.each(["turn", "resume"] as const)("%s tool budget", (path) => {
   it("allows 20 steps by default and can finish on the final step", async () => {
     const { result, generate } = await run(path, 20);
     expect(generate).toHaveBeenCalledTimes(20);
-    expect(result.status).toBe("success");
+    expect(result.status, result?.error).toBe("success");
   });
 
-  // The limit is followed by one finalizer request (tools off). It writes no
-  // answer here, so the step limit stays a failure.
-  it("stops unfinished work at 20 steps", async () => {
+  // The ordinary step limit is followed by one submission-only finalizer.
+  it("can finish on the one reserved submission-only step", async () => {
     const { result, generate } = await run(path, 21);
     expect(generate).toHaveBeenCalledTimes(21);
-    expect(generate.mock.calls[20]?.[0].tools).toBeUndefined();
-    expect(result.status).toBe("failed");
-    expect(result.stop).toEqual({ reason: "max-steps" });
+    expect(generate.mock.calls[20]?.[0].tools).toEqual([
+      expect.objectContaining({ name: "submit-output" }),
+    ]);
+    expect(result.status, result?.error).toBe("success");
+    expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
   });
 
   it("stops as soon as the work completes", async () => {
     const { result, generate } = await run(path, 2);
     expect(generate).toHaveBeenCalledTimes(2);
-    expect(result.status).toBe("success");
+    expect(result.status, result?.error).toBe("success");
   });
 
   it.each([
@@ -155,7 +160,7 @@ describe.each(["turn", "resume"] as const)("%s tool budget", (path) => {
       const { result, generate } = await run(path, 21, caller, plugin);
       // `expected` steps, then the finalizer request.
       expect(generate).toHaveBeenCalledTimes(expected + 1);
-      expect(result.status).toBe("failed");
+      expect(result.status, result?.error).toBe("failed");
       expect(result.stop).toEqual({ reason: "max-steps" });
     },
   );

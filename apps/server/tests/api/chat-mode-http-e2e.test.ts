@@ -1,3 +1,7 @@
+import {
+  submittedOutput,
+  completedBusinessOutput,
+} from "../helpers/output-submission.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import path from "node:path";
 import type { Hono } from "hono";
@@ -58,6 +62,17 @@ class ChatModeMockLLM implements LLMAdapter {
   }): Promise<LLMResponse> {
     const toolNames = (params.tools ?? []).map((tool) => tool.name);
     this.calls.push({ tools: toolNames, messages: params.messages });
+    for (const name of [
+      "submit-world-facts",
+      "advance-world-time",
+      "plan-story-events",
+      "generate-guide",
+      "update-dimensions",
+      "sync-characters",
+    ]) {
+      const output = completedBusinessOutput(params.messages, name);
+      if (output) return submittedOutput({});
+    }
     const systemPrompt =
       typeof params.messages[0]?.content === "string"
         ? params.messages[0].content
@@ -104,10 +119,8 @@ class ChatModeMockLLM implements LLMAdapter {
         toolCalls: [
           {
             id: `tc-affinity-done-${this.factCalls}`,
-            name: "runtime-done",
-            arguments: JSON.stringify({
-              reason: "No interaction facts to record",
-            }),
+            name: "submit-output",
+            arguments: "{}",
           },
         ],
         finishReason: "tool_calls",
@@ -191,8 +204,8 @@ class ChatModeMockLLM implements LLMAdapter {
         toolCalls: [
           {
             id: `tc-tracker-done-${this.trackerCalls}`,
-            name: "runtime-done",
-            arguments: JSON.stringify({ reason: "no character changes" }),
+            name: "sync-characters",
+            arguments: JSON.stringify({ creates: [], updates: [] }),
           },
         ],
         finishReason: "tool_calls",
@@ -208,24 +221,19 @@ class ChatModeMockLLM implements LLMAdapter {
     const latestText =
       typeof latestUser?.content === "string" ? latestUser.content : "";
 
-    return {
-      content: JSON.stringify({
-        segments: [
-          {
-            kind: "action",
-            speaker: "神代澪",
-            text: [
-              `第${this.narratorCalls}轮：神代澪把课程表压在桌角，听见你说“${latestText}”后微微抬眼。`,
-              "朝仓凛在旁边晃了晃采访本，笑着把话题推向文艺部和学园祭。",
-              "教室窗外的海风掀起窗帘，澪等着你继续接话。",
-            ].join(""),
-          },
-        ],
-      }),
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 260, outputTokens: 90 },
-    };
+    return submittedOutput({
+      segments: [
+        {
+          kind: "action",
+          speaker: "神代澪",
+          text: [
+            `第${this.narratorCalls}轮：神代澪把课程表压在桌角，听见你说“${latestText}”后微微抬眼。`,
+            "朝仓凛在旁边晃了晃采访本，笑着把话题推向文艺部和学园祭。",
+            "教室窗外的海风掀起窗帘，澪等着你继续接话。",
+          ].join(""),
+        },
+      ],
+    });
   }
 }
 

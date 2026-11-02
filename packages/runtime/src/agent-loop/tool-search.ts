@@ -6,7 +6,7 @@
  * set, builds the LLM-facing `search-tools` definition, and executes a
  * search when the agent loop intercepts the sentinel call (see
  * turn-agent-tool-loop.ts — same interception pattern as `suspend` /
- * `runtime-done`; the executor tool map never sees `search-tools`).
+ * `submit-output`; the executor tool map never sees `search-tools`).
  *
  * Authorization is inherited: the searchable pool is exactly the runtime's
  * own declared whitelist, and every schema is fetched through

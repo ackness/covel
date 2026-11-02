@@ -82,6 +82,10 @@ export interface ExecutionStep {
   detail?: string;
   errorKind?: string;
   failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
+  /** Last observed ordinary/finalizer step, used to reject stale progress. */
+  modelStep?: number;
+  /** Safe submission-rejection state; carries no candidate or review text. */
+  revising?: boolean;
   /** Qualified tool name when status is "tool". */
   toolName?: string;
   durationMs?: number;
@@ -230,8 +234,6 @@ export interface SessionState {
   /** Real-time execution progress steps from kernel. */
   executionSteps: ExecutionStep[];
   executionRecovery?: ExecutionRecovery | null;
-  /** Local unsaved prose; never part of history, stage or plugin state. */
-  unsavedNarratives?: StreamMessage[];
   /** Input stopped before execution, waiting for the composer to take it. */
   restoredInput?: {
     requestId: string;
@@ -361,13 +363,6 @@ export type SessionAction =
       runtimeId: string;
       message: StreamMessage;
     }
-  | {
-      type: "APPEND_DELTA";
-      turnId: string;
-      runtimeId: string;
-      pluginId: string;
-      delta: string;
-    }
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null; turnId?: string }
   | { type: "SET_EXECUTION_RECOVERY"; recovery: ExecutionRecovery | null }
@@ -380,16 +375,9 @@ export type SessionAction =
       error?: string;
       stalled?: boolean;
     }
-  // Player abort terminal state: drop the uncommitted streaming placeholder
-  // message(s) — the server never commits partial narrative on abort, so
-  // keeping them would show text that vanishes on refresh (audit A-04).
-  | { type: "DISCARD_TURN_STREAMS"; turnId?: string }
   | {
       type: "MERGE_RECOVERED_MESSAGES";
       messages: StreamMessage[];
-      terminalTurnId?: string;
-      unsavedNarratives?: StreamMessage[];
-      actionGeneration?: number;
     }
   | {
       // 把更旧的一批消息合并到 messages 前部（按 id 去重、整体保持 createdAt 正序），
@@ -409,6 +397,10 @@ export type SessionAction =
     }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
   | {
+      type: "EXECUTION_PROGRESS";
+      progress: import("./execution-progress.js").ExecutionProgress;
+    }
+  | {
       type: "SET_TURN_ATTEMPT_STATUS";
       turnId: string;
       status: NonNullable<ExecutionStep["attemptStatus"]>;
@@ -420,10 +412,6 @@ export type SessionAction =
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string; values?: Record<string, unknown> }
   | { type: "RESET_TO_WORLD_SELECT" }
-  | {
-      type: "REMOVE_MESSAGES_FROM_TURN";
-      turnId: string;
-    }
   | {
       type: "MERGE_COMMITTED_DIMENSIONS";
       payload: Readonly<Record<string, unknown>>;

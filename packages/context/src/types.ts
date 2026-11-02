@@ -120,41 +120,18 @@ export interface SessionMeta {
   readonly lastFormValues?: Readonly<Record<string, unknown>>;
 }
 
-/**
- * How a runtime finishes: by calling `runtime-done`, by a successful call to
- * one of its completing tools, by its structured JSON output, or, for a story
- * runtime, by the text of its reply.
- */
-export type FrameworkCompletion =
-  "runtime-done" | "completing-tool" | "structured-output" | "story";
+/** Every agent submits its final model-authored object through one host tool. */
+export type FrameworkCompletion = "submit-output";
 
-/** How a runtime finishes, with what its `[COMPLETION]` instruction names. */
 export interface FrameworkCompletionContract {
-  /**
-   * How this runtime finishes; `runtime-done` when omitted.
-   *
-   * Only a runtime that is given the `runtime-done` tool is told to call
-   * it. A schema-declared runtime does not get that tool:
-   * `buildToolDefinitions` withholds it so the early-exit branch cannot
-   * fire before the JSON envelope that downstream consumers read. A story
-   * runtime does not get it either: its result is the text of its reply.
-   * Told to "call `runtime-done` when no tool call is needed", a model
-   * that follows instructions to the letter ended the narrator's run with
-   * that call and wrote no story, three times in a row, and the turn was
-   * not committed.
-   */
   readonly completion?: FrameworkCompletion;
-  /** Tools whose successful call ends the run. Named by `completing-tool`. */
-  readonly completingTools?: readonly string[];
-  /**
-   * The run must record its result with a business tool: `runtime-done`
-   * alone does not finish it. Read by `runtime-done`.
-   */
-  readonly requireToolUse?: boolean;
+  readonly requiredWork?: import("@covel/shared/plugin-runtime").RequiredAgentWork;
 }
 
 /** Parameters for building an execution context. */
 export interface ContextBuildParams {
+  /** Effective schema resolved from the admitted runtime before assembly. */
+  readonly agentOutput?: import("@covel/shared/plugin-runtime").EffectiveAgentOutput;
   readonly promptSegments?: readonly import("@covel/shared").PromptSegment[];
   /** Runtime's prompt template. */
   readonly promptTemplate: string;

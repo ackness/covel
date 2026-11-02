@@ -54,7 +54,7 @@ function harness(workspace: SessionWorkspace) {
   return renderHook(() => {
     const [state, dispatch] = useReducer(reducer, { ...initialState, session });
     const refs = useSessionRuntimeRefs(state);
-    const handleSseEvent = createSseEventHandler({ ...refs, dispatch, ds });
+    const handleSseEvent = createSseEventHandler({ ...refs, dispatch });
     return {
       state,
       dispatch,

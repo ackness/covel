@@ -82,7 +82,7 @@ export function outputLanguageReport(events, locale) {
     for (const call of Array.isArray(payload.toolCalls)
       ? payload.toolCalls
       : []) {
-      if (!call || call.name === "runtime-done") continue;
+      if (!call) continue;
       let args;
       try {
         args = JSON.parse(call.arguments ?? "{}");

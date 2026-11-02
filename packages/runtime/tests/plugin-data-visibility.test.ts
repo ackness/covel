@@ -311,9 +311,15 @@ describe("plugin-data visibility within one execution", () => {
     const reader = fn("reader", { after: [skipping.name, passing.name] });
     const llm: LLMAdapter = {
       generate: async (): Promise<LLMResponse> => ({
-        content: "done",
-        toolCalls: [],
-        finishReason: "stop",
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify({ narrativeOutput: "done" }),
+          },
+        ],
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 1, outputTokens: 1 },
       }),
     };
@@ -572,13 +578,19 @@ describe("plugin-data visibility within one execution", () => {
             arguments: JSON.stringify({ key: "x" }),
           },
         ],
-        finishReason: "tool_calls",
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 1, outputTokens: 1 },
       },
       {
-        content: "done",
-        toolCalls: [],
-        finishReason: "stop",
+        content: null,
+        toolCalls: [
+          {
+            id: "final",
+            name: "submit-output",
+            arguments: JSON.stringify({ narrativeOutput: "done" }),
+          },
+        ],
+        finishReason: "tool_calls" as const,
         usage: { inputTokens: 1, outputTokens: 1 },
       },
     ];

@@ -77,11 +77,13 @@ function:
 
 What is new here:
 
-| This part             | Meaning                                                                                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `io.output.contract`  | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it.                    |
-| `io.output.schema`    | The shape the output must match. If it does not match, this run fails.                                                                             |
-| `io.output.recordAs`  | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                    |
+<!-- prettier-ignore -->
+| This part | Meaning |
+| --- | --- |
+| `io.output.contract` | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it. |
+| `io.output.schema` | The shape the output must match. If it does not match, this run fails. |
+| `io.output.from` | Takes a business tool’s canonical result; after success submit `{}`. See [output sources](../reference/plugins.md#agent-output-submission). |
+| `io.output.recordAs` | Saves the output under a name. Later turns can read it with `scope: committed`. |
 | `schedule.background` | Left out, the caller waits for it to finish. `true` moves it to the background. See [Background work and failures](#background-work-and-failures). |
 
 Rules:
@@ -299,16 +301,16 @@ For the full rules, see the [Plugin fields reference](../reference/plugins.md#ti
 
 ### How the loop behaves
 
-The rest of the agent loop's behaviour comes from a loop profile: whether text is shown to the player as it is written, whether the player's interjections are read, and what happens when the model keeps calling the same tool. The profile is worked out from `io.visibility`, so you rarely write it.
+The rest of the agent loop's behaviour comes from a loop profile: whether the player's interjections are read, and what happens when the model keeps calling the same tool. The profile is worked out from `io.visibility`, so you rarely write it.
 
-An agent that only answers a brief and writes no story text can use `actor`. The difference from `system`: when the model goes in circles, `actor` turns the tools off and answers, while `system` fails.
+An agent that only answers a brief and writes no story text can use `actor`. The difference from `system`: when the model goes in circles, `actor` offers only `submit-output` for the final submission, while `system` fails.
 
 ```yaml
 agent:
   loop:
     profile: actor
     finalizer:
-      deadlineReserveMs: 10000 # with 10 seconds left, stop calling tools and answer
+      deadlineReserveMs: 10000 # with 10 seconds left, request submission if business work is complete
 ```
 
 A [sub-agent](#sub-agents) that names no profile uses `actor`. Fields, values and checks are in [Plugin reference · Loop profile](../reference/plugins.md#loop-profile-agentloopprofile).

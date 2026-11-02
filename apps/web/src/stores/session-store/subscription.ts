@@ -36,8 +36,10 @@ import {
   publishRecoveredMessages,
   readRecoveredSnapshot,
 } from "./recovered-snapshot.js";
-import type { DeltaBufferRef, DeltaRafRef } from "./sse-handler.js";
-import { addBlockMessageFromSse } from "./sse-handler.js";
+import {
+  createSseEventHandler,
+  addBlockMessageFromSse,
+} from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import {
   enrichGameStateFromSnapshot,
@@ -59,8 +61,6 @@ interface UseSessionSubscriptionOptions {
   sessionGenerationRef: MutableRef<number>;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
-  deltaBufferRef: DeltaBufferRef;
-  deltaRafRef: DeltaRafRef;
   /** `SessionState.initialEventCursor`: where the first stream starts. */
   initialEventCursor?: string | null;
 }
@@ -82,8 +82,6 @@ interface ExecutionObservation {
   onSnapshotApplied?: () => void;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
-  deltaBufferRef: DeltaBufferRef;
-  deltaRafRef: DeltaRafRef;
 }
 
 function executionOwner(observation: ExecutionObservation): string {
@@ -150,6 +148,36 @@ export function createSubscriptionEventHandler(
   return (event: SubscriptionEvent): void => {
     if (!options.isCurrent()) return;
     if (applyUiSlotEvent(event.sessionId, event.type, event.payload)) return;
+    if (
+      [
+        "narrative.completed",
+        "runtime.started",
+        "runtime.completed",
+        "runtime.failed",
+        "step.started",
+        "step.completed",
+        "tool.calling",
+        "tool.completed",
+        "tool.failed",
+        "llm.calling",
+      ].includes(event.type)
+    ) {
+      createSseEventHandler({
+        dispatch: options.dispatch,
+        stateRef: options.stateRef,
+        sessionIdRef: options.sessionIdRef,
+        lastBackfilledTurnIdRef: { current: null },
+      })({
+        ...event,
+        turnId:
+          typeof event.payload?.turnId === "string" ? event.payload.turnId : "",
+        requestId: "",
+        traceId: "",
+        flowId: "",
+        seq: 0,
+      });
+      return;
+    }
     switch (event.type) {
       case "plugin.fault.latched":
       case "plugin.fault.cleared":
@@ -369,9 +397,6 @@ export async function rehydrateSessionSideState(
           ),
         apply: (snapshot) => {
           const state = executionObservation?.stateRef.current;
-          const sameOwner =
-            !!executionObservation &&
-            initialExecutionOwner === executionOwner(executionObservation);
           const ownsStream = !!state?.executing && !state.executionRecovery;
           const execution = snapshot.execution;
           const interruptedCurrentStream =
@@ -379,15 +404,7 @@ export async function rehydrateSessionSideState(
             !!execution.turnId &&
             execution.turnId === executionObservation?.activeTurnIdRef.current;
           if (state && executionObservation) {
-            publishRecoveredMessages(
-              dispatch,
-              state,
-              snapshot,
-              execution,
-              sameOwner && (!ownsStream || interruptedCurrentStream),
-              executionObservation.deltaBufferRef,
-              executionObservation.deltaRafRef,
-            );
+            publishRecoveredMessages(dispatch, snapshot);
           } else {
             dispatch({
               type: "MERGE_RECOVERED_MESSAGES",
@@ -486,8 +503,6 @@ export function useSessionSubscription({
   sessionGenerationRef,
   stateRef,
   activeTurnIdRef,
-  deltaBufferRef,
-  deltaRafRef,
   initialEventCursor,
 }: UseSessionSubscriptionOptions): void {
   const sessionGeneration = sessionGenerationRef.current;
@@ -574,8 +589,6 @@ export function useSessionSubscription({
       const observation = {
         stateRef,
         activeTurnIdRef,
-        deltaBufferRef,
-        deltaRafRef,
         onSnapshotApplied: () => {
           snapshotPublished = true;
           stateRefreshPending = false;
@@ -764,8 +777,6 @@ export function useSessionSubscription({
     sessionIdRef,
     stateRef,
     activeTurnIdRef,
-    deltaBufferRef,
-    deltaRafRef,
   ]);
 
   // Declared after the effect that creates the stream, so a stream created in

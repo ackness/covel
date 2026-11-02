@@ -1,354 +1,326 @@
-/**
- * Stream fallback in TurnExecutor.
- *
- * When the streaming LLM call throws mid-stream, the runtime either:
- *  - fails after partial output without replacing it via generate(), or
- *  - falls back to a single non-stream generate() call, or
- *  - (if both fail) surfaces a failed RuntimeResult via the outer catch.
- */
-
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import path from "node:path";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import { AiProviderError } from "@covel/ai-provider";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { DataStore } from "@covel/store";
-import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse, LLMStreamEvent } from "@covel/shared";
+import { createEventBus } from "@covel/events";
+import { AiProviderError } from "@covel/ai-provider";
+import type {
+  LLMAdapter,
+  LLMStreamEvent,
+  SubscriptionEvent,
+  TurnInput,
+} from "@covel/shared";
+import {
+  commitExecution,
+  createHookPipeline,
+  createTurnEmitter,
+  executeTurn,
+} from "../src/index.js";
+import {
+  makeExecutor,
+  manifest,
+  markTool,
+  submitted,
+} from "./_helpers/agent-loop-fixture.js";
 
-// Prime a store with one prior player message so turnNumber >= 1 and
-// main-loop priority runtimes survive the Pre-Game band filter.
-async function createMainLoopStore(sessionId: string): Promise<DataStore> {
+afterEach(() => vi.restoreAllMocks());
+
+async function fixture() {
   const store = createMemoryStore();
-  await store.appendTurnMessage({
-    id: "prior-player-0",
-    sessionId,
-    turnId: "prior-turn",
-    sourceType: "player",
-    role: "user",
-    content: "prior turn",
-    order: 0,
-    createdAt: "2024-01-01T00:00:00Z",
+  const now = new Date().toISOString();
+  await store.createSession({
+    id: "session",
+    locale: "en-US",
+    status: "active",
+    phase: "playing",
+    activePlugins: ["plug"],
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
+    seats: [
+      { id: "main", controller: "human", role: "player", characters: "auto" },
+    ],
+    createdAt: now,
+    updatedAt: now,
   });
-  return store;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────
-
-const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
-
-function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
-  return {
+  const runtime = manifest({ outputKind: "story", maxRetries: 1 });
+  const input: TurnInput = {
     origin: "player",
-    sessionId: "sess-1",
-    turnId: "turn-1",
-    playerMessage: "test",
-    ...overrides,
+    sessionId: "session",
+    turnId: "turn",
+    playerMessage: "Go",
+    locale: "en-US",
   };
-}
-
-/**
- * LLM that yields some text-deltas then throws mid-stream.
- * `generate` is a spy so tests can assert it was (or was not) invoked as fallback.
- */
-class PartialStreamThenThrowLLM implements LLMAdapter {
-  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => ({
-    content: "FALLBACK_OUTPUT",
-    toolCalls: [],
-    finishReason: "stop",
-    usage: { inputTokens: 1, outputTokens: 1 },
-  }));
-
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async *stream(): AsyncGenerator<LLMStreamEvent> {
-    yield { type: "text-delta" as const, textDelta: "Hello " };
-    yield { type: "text-delta" as const, textDelta: "world" };
-    throw new Error("upstream reset");
-  }
-}
-
-/**
- * LLM whose stream throws before yielding any content.
- * `generate` is a spy so tests can assert fallback invocation count.
- */
-class EmptyStreamThrowLLM implements LLMAdapter {
-  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => ({
-    content: "NON_STREAM_RESCUE",
-    toolCalls: [],
-    finishReason: "stop",
-    usage: { inputTokens: 2, outputTokens: 2 },
-  }));
-
-  constructor(private readonly error = new Error("connection refused")) {}
-
-  // eslint-disable-next-line @typescript-eslint/require-await, require-yield
-  async *stream(): AsyncGenerator<LLMStreamEvent> {
-    throw this.error;
-  }
-}
-
-/**
- * Stream throws immediately AND fallback generate() also throws.
- * Used to verify the outer executeOneRuntime catch path.
- */
-class BothFailLLM implements LLMAdapter {
-  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => {
-    throw new Error("fallback generate also failed");
+  const events: SubscriptionEvent[] = [];
+  const eventBus = createEventBus(store);
+  eventBus.onEmit((event) => events.push(event));
+  const emitter = createTurnEmitter({
+    store,
+    eventBus,
+    sessionId: "session",
+    turnId: "turn",
   });
-
-  // eslint-disable-next-line @typescript-eslint/require-await, require-yield
-  async *stream(): AsyncGenerator<LLMStreamEvent> {
-    throw new Error("upstream refused");
-  }
-}
-
-/**
- * Streams scripted per call: each call takes the next script; a script ends
- * either with a finish reason or by throwing. `generate` counts rescues.
- */
-class ScriptedStreamLLM implements LLMAdapter {
-  streams = 0;
-  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => ({
-    content: "NON_STREAM_RESCUE",
-    toolCalls: [],
-    finishReason: "stop",
-    usage: { inputTokens: 1, outputTokens: 1 },
-  }));
-
-  constructor(
-    private readonly scripts: readonly {
-      readonly text: string;
-      readonly end: "stop" | "length" | Error;
-    }[],
-  ) {}
-
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async *stream(): AsyncGenerator<LLMStreamEvent> {
-    const script = this.scripts[this.streams++];
-    if (!script) throw new Error("stream script queue empty");
-    yield { type: "text-delta" as const, textDelta: script.text };
-    if (script.end instanceof Error) throw script.end;
-    yield { type: "done" as const, finishReason: script.end };
-  }
-}
-
-// ── Tests ─────────────────────────────────────────────────────────
-
-describe("TurnExecutor stream recovery", () => {
-  let narratorManifest: RuntimeManifest;
-  let narratorLoaded: LoadedRuntime;
-  // Use a tool-free manifest to force the streaming path in turn-executor.
-  let noToolManifest: RuntimeManifest;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(async () => {
-    // Silence the [stream-recovery] warn output so test logs stay clean.
-    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const discoveries = await discoverPlugins(PLUGINS_DIR);
-    const narratorDiscovery = discoveries.find((d) => d.id === "narrator");
-    expect(narratorDiscovery).toBeDefined();
-
-    const manifests = await loadPluginManifest(narratorDiscovery!);
-    narratorManifest = manifests[0]!.manifest;
-    narratorLoaded = {
-      manifest: narratorManifest,
-      promptTemplate: manifests[0]!.promptTemplate,
-    };
-    noToolManifest = { ...narratorManifest, tools: undefined };
+  const hooks = createHookPipeline();
+  const work = vi.fn(markTool.execute);
+  const deps = (llm: LLMAdapter) => ({
+    store,
+    llm,
+    eventBus,
+    emitter,
+    hookPipeline: hooks,
+    toolExecutor: makeExecutor([{ ...markTool, execute: work }]),
+    loadRuntime: async () => ({
+      manifest: runtime,
+      promptTemplate: "Submit the story.",
+    }),
   });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
-
-  it("stream throws after yielding content: fails without fallback or narrative commit", async () => {
-    const llm = new PartialStreamThenThrowLLM();
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => narratorLoaded,
-      llm,
-      store: await createMainLoopStore("sess-1"),
-      onDelta: async () => {
-        /* consume deltas */
-      },
-    };
-
-    const result = await runTurnPipeline(
-      makeTurnInput(),
-      [noToolManifest],
-      deps,
-    );
-
-    expect(result.runtimeResults).toHaveLength(1);
-    const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("failed");
-    expect(rr.error).toContain("upstream reset");
-    expect(llm.generate).not.toHaveBeenCalled();
-    const commit = await finalizeExecution({
-      store: deps.store!,
-      sessionId: "sess-1",
-      executionContext: result.executionContext,
-      runtimes: [noToolManifest],
-      results: result.runtimeResults,
-      turnIds: [result.turnId],
+  const commit = (
+    execution: Awaited<ReturnType<typeof executeTurn>>,
+    rollback = false,
+  ) =>
+    commitExecution({
+      store,
+      eventBus,
+      emitter,
+      execution,
+      completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+      ...(rollback
+        ? {
+            extraInTx: async () => {
+              throw new Error("rollback");
+            },
+          }
+        : {}),
     });
-    expect(commit.status).toBe("failed");
+  return { store, runtime, input, events, hooks, work, deps, commit };
+}
+
+function completed(text: string): LLMStreamEvent[] {
+  return [
+    { type: "tool-call", ...submitted(text).toolCalls[0]! },
+    {
+      type: "done",
+      finishReason: "tool_calls",
+      usage: { inputTokens: 3, outputTokens: 2 },
+    },
+  ];
+}
+
+function scripted(scripts: readonly (readonly (LLMStreamEvent | Error)[])[]) {
+  let attempts = 0;
+  const generate = vi.fn<LLMAdapter["generate"]>(async () =>
+    submitted("Recovered story."),
+  );
+  const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>(async function* () {
+    const script = scripts[attempts++];
+    if (!script) throw new Error("unexpected stream attempt");
+    for (const event of script) {
+      if (event instanceof Error) throw event;
+      yield event;
+    }
+  });
+  return { generate, stream };
+}
+
+describe("internal provider streams and committed story delivery", () => {
+  it("reports progress while a slow tool response is pending, then publishes once after commit", async () => {
+    const f = await fixture();
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const llm: LLMAdapter = {
+      generate: async () => {
+        throw new Error("stream expected");
+      },
+      stream: async function* () {
+        yield { type: "tool-argument-delta" };
+        entered();
+        await waiting;
+        yield* completed("Whole story.");
+      },
+    };
+    const pending = executeTurn(f.input, [f.runtime], f.deps(llm));
+    await started;
+    expect(f.events.some((event) => event.type === "step.started")).toBe(true);
+    expect(f.events.some((event) => event.type.startsWith("narrative."))).toBe(
+      false,
+    );
+    expect(await f.store.listMessages("session")).toEqual([]);
+    release();
+    const execution = await pending;
+    expect(execution.result.runtimeResults[0]?.status).toBe("success");
+    expect(f.events.some((event) => event.type === "tool.completed")).toBe(
+      true,
+    );
+    expect(f.events.some((event) => event.type.startsWith("narrative."))).toBe(
+      false,
+    );
+    const outcome = await f.commit(execution);
+    expect(outcome.status).toBe("committed");
+    const stories = outcome.events.filter(
+      (event) => event.type === "narrative.completed",
+    );
+    expect(stories).toHaveLength(1);
+    const messages = await f.store.listMessages("session");
     expect(
-      commit.events.some((event) => event.type === "narrative.completed"),
-    ).toBe(false);
-    expect(
-      (await deps.store!.listMessages("sess-1")).some(
-        (message) => message.role === "assistant",
+      messages.find((message) => message.id === stories[0]?.payload.messageId)
+        ?.content,
+    ).toBe("Whole story.");
+  });
+
+  it("reports a safe rejection note and commits only the corrected submission", async () => {
+    const f = await fixture();
+    let reviews = 0;
+    f.hooks.register({
+      id: "review",
+      event: "ReviewAgentOutput",
+      handler: async () =>
+        ++reviews === 1
+          ? {
+              action: "continue",
+              replace: { correction: "Private rejected quotation." },
+            }
+          : { action: "continue" },
+    });
+    const execution = await executeTurn(
+      f.input,
+      [f.runtime],
+      f.deps(
+        scripted([completed("Rejected story."), completed("Corrected story.")]),
       ),
-    ).toBe(false);
-  });
-
-  it("stream throws with no content: falls back to generate() exactly once", async () => {
-    const llm = new EmptyStreamThrowLLM();
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => narratorLoaded,
-      llm,
-      store: await createMainLoopStore("sess-1"),
-      onDelta: async () => {
-        /* no deltas expected */
-      },
-    };
-
-    const result = await runTurnPipeline(
-      makeTurnInput(),
-      [noToolManifest],
-      deps,
     );
-
-    expect(result.runtimeResults).toHaveLength(1);
-    const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("success");
-
-    // Content comes from the fallback non-stream call.
-    const output = rr.output as Record<string, unknown>;
-    expect(output.narrativeOutput).toBe("NON_STREAM_RESCUE");
-
-    // Exactly one fallback call.
-    expect(llm.generate).toHaveBeenCalledTimes(1);
-  });
-
-  it("a provider error that refuses the request is not repeated through generate()", async () => {
-    const llm = new EmptyStreamThrowLLM(
-      new AiProviderError({
-        code: "PROVIDER_ERROR",
-        message: "[probe] HTTP 401 — invalid api key",
-        provider: "probe",
-        retriable: false,
-        statusCode: 401,
-      }),
+    const note = f.events.filter((event) => event.type === "step.completed")[0];
+    expect(note?.payload).toMatchObject({
+      runtimeId: f.runtime.name,
+      pluginId: f.runtime.pluginId,
+      turnId: "turn",
+      runId: execution.result.runtimeResults[0]?.runId,
+      step: 1,
+      notes: [
+        { kind: "output-rejected", reason: "review-rejected", attempt: 1 },
+      ],
+    });
+    expect(JSON.stringify(note)).not.toContain("Private rejected");
+    expect(f.events.some((event) => event.type.startsWith("narrative."))).toBe(
+      false,
     );
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => narratorLoaded,
-      llm,
-      store: await createMainLoopStore("sess-1"),
-      onDelta: async () => {
-        /* no deltas expected */
-      },
-    };
+    const outcome = await f.commit(execution);
+    expect(outcome.status).toBe("committed");
+    expect(
+      outcome.events.filter((event) => event.type === "narrative.completed"),
+    ).toHaveLength(1);
+    expect(
+      (await f.store.listMessages("session")).map((message) => message.content),
+    ).toEqual(["Corrected story."]);
+  });
 
-    const result = await runTurnPipeline(
-      makeTurnInput(),
-      [noToolManifest],
-      deps,
+  it("publishes no story when an accepted candidate rolls back", async () => {
+    const f = await fixture();
+    const execution = await executeTurn(
+      f.input,
+      [f.runtime],
+      f.deps(scripted([completed("Unsaved story.")])),
     );
-
-    const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("failed");
-    expect(rr.error).toContain("HTTP 401");
-    expect(llm.generate).not.toHaveBeenCalled();
+    expect(execution.result.runtimeResults[0]?.status).toBe("success");
+    expect((await f.commit(execution, true)).status).toBe("failed");
+    expect(f.events.some((event) => event.type.startsWith("narrative."))).toBe(
+      false,
+    );
+    expect(await f.store.listMessages("session")).toEqual([]);
+    expect(await f.store.listTurnMessages("session")).toEqual([]);
   });
 
-  it("stream throws AND fallback generate() also throws: runtime returns failed result", async () => {
-    const llm = new BothFailLLM();
-    const input = makeTurnInput();
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => narratorLoaded,
-      llm,
-      store: await createMainLoopStore("sess-1"),
-      onRuntimeComplete: async () => {
-        throw new Error("observer failed");
-      },
-      onDelta: async () => {
-        /* no deltas expected */
-      },
-    };
-
-    const result = await runTurnPipeline(input, [noToolManifest], deps);
-
-    expect(result.runtimeResults).toHaveLength(1);
-    const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("failed");
-    expect(rr.pluginId).toBe(noToolManifest.pluginId);
-    expect(rr.turnId).toBe(input.turnId);
-    expect(rr.runId).not.toBe("");
-    expect(rr.error).toBeTruthy();
-    expect(typeof rr.error).toBe("string");
-    // The outer catch surfaces the fallback's error message.
-    expect(rr.error).toContain("fallback generate also failed");
-  });
-
-  // A system runtime streams only as a transport: its partial output reached
-  // nobody, so it is dropped and the call retried.
-  it("a system runtime's stream that throws after output is retried", async () => {
-    const llm = new ScriptedStreamLLM([
-      { text: "half", end: new Error("socket hang up") },
-      { text: "WHOLE", end: "stop" },
+  it("discards failed text, calls and continuation, retaining billed usage and bounded retries", async () => {
+    const f = await fixture();
+    const llm = scripted([
+      [
+        { type: "text-delta", textDelta: "Failed draft." },
+        { type: "tool-argument-delta" },
+        {
+          type: "tool-call",
+          id: "partial",
+          name: "mark",
+          arguments: '{"note":"must not run"}',
+        },
+        {
+          type: "done",
+          finishReason: "error",
+          usage: { inputTokens: 7, outputTokens: 5 },
+        },
+      ],
+      completed("Fresh story."),
     ]);
-    const deltas: string[] = [];
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => narratorLoaded,
-      llm,
-      store: await createMainLoopStore("sess-1"),
-      onDelta: async (delta) => {
-        deltas.push(delta.textDelta);
-      },
-    };
-
-    const result = await runTurnPipeline(
-      makeTurnInput(),
-      [{ ...noToolManifest, outputKind: "system" }],
-      deps,
-    );
-
-    const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("success");
-    expect(JSON.stringify(rr.output)).toContain("WHOLE");
-    expect(JSON.stringify(rr.output)).not.toContain("half");
-    expect(llm.streams).toBe(2);
+    const execution = await executeTurn(f.input, [f.runtime], f.deps(llm));
+    expect(llm.stream).toHaveBeenCalledTimes(2);
     expect(llm.generate).not.toHaveBeenCalled();
-    expect(deltas).toEqual([]);
+    expect(f.work).not.toHaveBeenCalled();
+    expect(execution.result.runtimeResults[0]?.output).toMatchObject({
+      narrativeOutput: "Fresh story.",
+      segments: [{ kind: "narration", text: "Fresh story." }],
+    });
+    const responses = f.events.filter(
+      (event) => event.type === "llm.responded",
+    );
+    expect(responses.map((event) => event.payload.usage)).toEqual([
+      { inputTokens: 7, outputTokens: 5 },
+      { inputTokens: 3, outputTokens: 2 },
+    ]);
+    expect((await f.commit(execution)).status).toBe("committed");
+    expect(JSON.stringify(await f.store.listMessages("session"))).not.toContain(
+      "Failed draft",
+    );
   });
 
-  it("a system runtime's truncated stream is retried once and not rescued by generate()", async () => {
-    const llm = new ScriptedStreamLLM([
-      { text: "cut", end: "length" },
-      { text: "cut again", end: "length" },
+  it.each(["refusal", "cancel"] as const)(
+    "does not execute complete arguments followed by %s",
+    async (failure) => {
+      const f = await fixture();
+      const aborter = new AbortController();
+      const llm: LLMAdapter = {
+        generate: vi.fn(async () => submitted("Never.")),
+        stream: async function* () {
+          yield { type: "tool-call", ...submitted("Never.").toolCalls[0]! };
+          if (failure === "refusal")
+            throw new AiProviderError({
+              code: "REFUSAL",
+              provider: "test",
+              message: "Refused",
+              retriable: false,
+            });
+          aborter.abort();
+          yield { type: "done", finishReason: "tool_calls" };
+        },
+      };
+      const execution = await executeTurn(f.input, [f.runtime], {
+        ...f.deps(llm),
+        turnControl: { signal: aborter.signal },
+      });
+      expect(
+        execution.result.runtimeResults.every(
+          (result) => result.status !== "success",
+        ),
+      ).toBe(true);
+      expect(llm.generate).not.toHaveBeenCalled();
+      expect((await f.commit(execution)).status).toBe("failed");
+      expect(
+        f.events.some((event) => event.type.startsWith("narrative.")),
+      ).toBe(false);
+      expect(await f.store.listMessages("session")).toEqual([]);
+    },
+  );
+
+  it("recovers a failed hidden stream using one non-stream request", async () => {
+    const f = await fixture();
+    const llm = scripted([
+      [new Error("fetch failed")],
+      [new Error("fetch failed")],
     ]);
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => narratorLoaded,
-      llm,
-      store: await createMainLoopStore("sess-1"),
-    };
-
-    const result = await runTurnPipeline(
-      makeTurnInput(),
-      [{ ...noToolManifest, outputKind: "system" }],
-      deps,
-    );
-
-    const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("failed");
-    expect(rr.error).toMatch(/output limit/i);
-    expect(llm.streams).toBe(2);
-    expect(llm.generate).not.toHaveBeenCalled();
+    const execution = await executeTurn(f.input, [f.runtime], f.deps(llm));
+    expect(llm.stream).toHaveBeenCalledTimes(2);
+    expect(llm.generate).toHaveBeenCalledOnce();
+    expect(execution.result.runtimeResults[0]?.status).toBe("success");
+    expect((await f.commit(execution)).status).toBe("committed");
   });
 });

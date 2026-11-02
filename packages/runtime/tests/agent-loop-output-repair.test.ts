@@ -1,831 +1,301 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import type { LLMAdapter, LLMResponse } from "@covel/shared";
-import { getProtocolDefinition } from "@covel/ai-provider";
-import { tool } from "@covel/tools";
-import { z } from "zod";
-import { createMemoryStore } from "@covel/store/memory";
-import {
-  checkAgentOutput,
-  settleAgentLoop,
-} from "../src/agent-loop/settle-agent-loop.js";
-import { finalizeAgentOutput } from "../src/agent-loop/finalize-agent-output.js";
-import { createAgentSchemaGate } from "../src/agent-loop/runtime-output-validator.js";
-import { createLoopState } from "../src/agent-loop/loop-state.js";
+import type { LLMResponse } from "@covel/shared";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import type { PostLLMResponsePayload } from "../src/hooks/wire-helpers.js";
-import { executeTurn } from "../src/execution.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
-import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
-import { createGatewayAdapter } from "../src/llm/gateway-llm-adapter.js";
+import type { ReviewAgentOutputPayload } from "../src/hooks/wire-helpers.js";
+
 import {
-  input,
-  expectMatchedToolCalls,
-  makeExecutor,
   manifest,
-  prose,
   queuedLLM,
   runLoop,
-  scriptedLLM,
   toolCall,
-  type LoopRunOptions,
 } from "./_helpers/agent-loop-fixture.js";
 
-const outputSchema = {
+const schema = {
   type: "object",
+  properties: { answer: { type: "number" } },
   required: ["answer"],
-  properties: { answer: { type: "string" } },
-  additionalProperties: false,
 };
-const loaded: LoadedRuntime = {
-  manifest: manifest(),
-  promptTemplate: "Write JSON.",
-  outputSchema,
-};
-const valid = '{"answer":"fixed"}';
-
-async function run(opts: LoopRunOptions) {
-  const runtime = opts.manifest ?? manifest();
-  const loop = await runLoop({
-    ...opts,
-    manifest: runtime,
-    loaded: opts.loaded ?? loaded,
-  });
-  const args = {
-    manifest: runtime,
-    input,
-    runId: "run-loop",
-    startTime: Date.now(),
-    toolLoop: loop,
-    outputSchema: (opts.loaded ?? loaded).outputSchema,
-  };
-  return { loop, args, ...settleAgentLoop(args) };
-}
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
+const submit = (value: Record<string, unknown>, id = "submit") =>
+  toolCall("submit-output", value, id);
+const raw = (argumentsJson: string): LLMResponse => ({
+  ...submit({}),
+  toolCalls: [{ id: "bad", name: "submit-output", arguments: argumentsJson }],
 });
+const runtime = manifest({ output: { schema: "output.schema.json" } });
+const loaded = {
+  manifest: runtime,
+  promptTemplate: "prompt",
+  outputSchema: schema,
+};
+const run = (
+  llm: ReturnType<typeof queuedLLM>,
+  options: Omit<Parameters<typeof runLoop>[0], "llm"> = {},
+) => runLoop({ llm, manifest: runtime, loaded, ...options });
+const messagesText = (llm: ReturnType<typeof queuedLLM>, at = 1) =>
+  JSON.stringify(
+    llm.requests[at]?.messages.filter((message) => message.role === "tool"),
+  );
+afterEach(() => vi.useRealTimers());
 
-describe("output repair", () => {
-  it("diagnoses malformed private JSON without replacing schema field errors", async () => {
-    const llm = queuedLLM([
-      prose('{"answer":"private sentinel",}'),
-      prose('{"answer":7}'),
-      prose(valid),
-    ]);
-    const { result } = await run({
-      llm,
-      manifest: manifest({ loopProfile: { corrections: { outputRepair: 2 } } }),
-    });
-    expect(result.status).toBe("success");
-    expect(llm.requests).toHaveLength(3);
-    const syntax = String(llm.requests[1]?.messages.at(-1)?.content);
-    expect(syntax).toMatch(/JSON syntax/i);
-    expect(syntax).toMatch(/offset \d+/);
-    expect(syntax).not.toContain("private sentinel");
-    expect(syntax).not.toContain("plain prose");
-    expect(llm.requests[2]?.messages.at(-1)?.content).toContain(
-      "/answer must be string",
-    );
-  });
-
-  it("repairs schema prose with tools off, required fields and additive step events", async () => {
-    const emitter = makeEmitterSpy();
-    const llm = queuedLLM([prose("an unstructured draft"), prose(valid)]);
-    const { result, loop } = await run({ llm, deps: { emitter } });
-    expect(result.status).toBe("success");
-    expect(result.output).toEqual({ answer: "fixed" });
-    expect(loop.stop).toEqual({ reason: "completed", repaired: true });
-    expect(result.stop).toEqual(loop.stop);
-    expect(llm.requests).toHaveLength(2);
-    const request = llm.requests[1]!;
-    expect(request.tools).toBeUndefined();
-    expect(request.defaults?.toolChoice).toBeUndefined();
-    expect(request.messages).toContainEqual({
-      role: "assistant",
-      content: "an unstructured draft",
-    });
-    const message = request.messages.at(-1)?.content;
-    expect(message).toContain("plain prose instead of the JSON object");
-    expect(message).toContain("Required fields: {answer}");
-    expect(message).not.toContain("run-loop");
-    expect(message).not.toContain("plug/loop");
-    expect(message).not.toContain("an unstructured draft");
-    const steps = emitter.events.filter((e) => e.type.startsWith("step."));
-    expect(steps.map((e) => [e.type, e.payload.step])).toEqual([
-      ["step.started", 1],
-      ["step.completed", 1],
-      ["step.started", 2],
-      ["step.completed", 2],
-    ]);
-    expect(steps[2]?.payload).toMatchObject({ repair: true, toolCount: 0 });
-    expect(steps[3]?.payload).toMatchObject({
-      repair: true,
-      notes: [{ kind: "output-repair" }],
-      stopReason: "completed",
-    });
-  });
-
-  it("keeps required-field diagnostics when repairing valid JSON", async () => {
-    const llm = queuedLLM([prose("{}"), prose(valid)]);
-    const { result } = await run({ llm });
-    expect(result.status).toBe("success");
-    expect(llm.requests).toHaveLength(2);
-    const message = String(llm.requests[1]?.messages.at(-1)?.content);
-    expect(message).toMatch(/required property.*answer/);
-    expect(message).not.toMatch(/JSON syntax|plain prose/);
-  });
-
-  it.each([false, true])(
-    "replays continuation data through repeated repairs (after finalizer: %s)",
-    async (afterFinalizer) => {
-      const thinking = (response: LLMResponse, label: string): LLMResponse => ({
-        ...response,
-        reasoningContent: `Plan ${label}.`,
-        providerContinuation: {
-          protocol: "openai-chat-v1",
-          model: "fixture",
-          items: [{ type: "reasoning", field: "reasoning", label }],
-        },
-      });
-      const drafts = [
-        thinking(prose("first invalid draft"), "first"),
-        thinking(prose('{"answer":7}'), "second"),
-      ];
-      const script = [
-        ...(afterFinalizer
-          ? [thinking(toolCall("mark", { note: "a" }), "tool")]
-          : []),
-        ...drafts,
-        prose(valid),
-      ];
-      const llm = scriptedLLM((request, call) => {
-        // Emulate a thinking provider that rejects assistant drafts without
-        // the reasoning and opaque continuation returned with that draft.
-        for (const draft of drafts) {
-          const replayed = request.messages.find(
-            (message) =>
-              message.role === "assistant" && message.content === draft.content,
-          );
-          if (replayed) {
-            expect(replayed.reasoningContent).toBe(draft.reasoningContent);
-            expect(replayed.providerContinuation).toEqual(
-              draft.providerContinuation,
-            );
-          }
-        }
-        return script[call - 1]!;
-      });
-      const { result } = await run({
-        llm,
-        maxSteps: afterFinalizer ? 1 : undefined,
-        manifest: manifest({
-          loopProfile: { corrections: { outputRepair: 2 } },
-        }),
-      });
-      expect(result.status).toBe("success");
-      expect(result.output).toEqual({ answer: "fixed" });
-      expect(result.stop).toEqual({
-        reason: afterFinalizer ? "max-steps" : "completed",
-        ...(afterFinalizer ? { finalizer: true } : {}),
-        repaired: true,
-      });
-      expect(llm.requests).toHaveLength(script.length);
-      for (const [index, draft] of drafts.entries()) {
-        const request = llm.requests[index + (afterFinalizer ? 2 : 1)];
-        expect(request?.tools).toBeUndefined();
-        expect(request?.messages).toContainEqual({
-          role: "assistant",
-          content: draft.content,
-          reasoningContent: draft.reasoningContent,
-          providerContinuation: draft.providerContinuation,
-        });
-      }
+describe("in-loop output correction", () => {
+  it.each([
+    ['{"answer":', "invalid-json"],
+    ['{"answer":1} trailing', "invalid-json"],
+    ['```json\n{"answer":1}\n```', "invalid-json"],
+    ["[]", "invalid-output"],
+    ["null", "invalid-output"],
+    ['{"answer":"wrong"}', "invalid-output"],
+    ["{}", "invalid-output"],
+  ])(
+    "rejects %s without salvage and accepts the next submission",
+    async (text, code) => {
+      const llm = queuedLLM([raw(text), submit({ answer: 2 })]);
+      const loop = await run(llm);
+      expect(loop.acceptedOutput).toEqual({ answer: 2 });
+      expect(messagesText(llm)).toContain(code);
+      expect(llm.requests).toHaveLength(2);
+      expect(
+        llm.requests.every((request) => request.responseFormat === undefined),
+      ).toBe(true);
     },
   );
 
-  it("replays the accepted continuation after a review hook replaces the draft", async () => {
-    const hookPipeline = createHookPipeline();
-    const providerContinuation = {
-      protocol: "openai-chat-v1",
-      model: "fixture",
-      items: [{ type: "reasoning", field: "reasoning", label: "accepted" }],
-    };
-    hookPipeline.register<PostLLMResponsePayload>({
-      id: "rewrite-draft",
-      event: "PostLLMResponse",
-      handler: async (_context, payload) => ({
-        action: "continue",
-        replace: {
-          response: {
-            ...payload.response,
-            reasoningContent: "Accepted reasoning.",
-            providerContinuation,
-          },
-        },
-      }),
+  it("uses bounded schema field diagnostics", async () => {
+    const llm = queuedLLM([
+      submit({ answer: "secret-value" }),
+      submit({ answer: 1 }),
+    ]);
+    await run(llm);
+    const feedback = messagesText(llm);
+    expect(feedback).toContain("/answer");
+    expect(feedback).not.toContain("secret-value");
+  });
+
+  it("reports syntax positions without inventing missing segments or quoting private text", async () => {
+    const llm = queuedLLM([
+      raw('{"answer":1},"secret":"PRIVATE"'),
+      submit({ answer: 1 }),
+    ]);
+    await run(llm);
+    const feedback = messagesText(llm);
+    expect(feedback).toContain("after a closed root object");
+    expect(feedback).toContain("offset");
+    expect(feedback).not.toContain("segments");
+    expect(feedback).not.toContain("PRIVATE");
+  });
+
+  it.each([0, 1, 2, 3])(
+    "schedules exactly %i format corrections",
+    async (outputRepair) => {
+      const llm = queuedLLM([raw("{")]);
+      const m = manifest({ loopProfile: { corrections: { outputRepair } } });
+      const result = await runLoop({ llm, manifest: m, maxSteps: 10 });
+      expect(result.stop.reason).toBe("invalid-output");
+      expect(llm.requests).toHaveLength(outputRepair + 1);
+      expect(result.acceptedOutput).toBeNull();
+    },
+  );
+
+  it("keeps review, work and output-repair ceilings independent", async () => {
+    const pipeline = createHookPipeline();
+    let reviews = 0;
+    pipeline.register<ReviewAgentOutputPayload>({
+      id: "perspective",
+      event: "ReviewAgentOutput",
+      handler: async () => {
+        reviews++;
+        return reviews <= 2
+          ? {
+              action: "continue",
+              replace: { correction: "Use the requested perspective." },
+            }
+          : { action: "continue" };
+      },
     });
     const llm = queuedLLM([
-      { ...prose("invalid draft"), reasoningContent: "Raw reasoning." },
-      prose(valid),
+      submit({}),
+      toolCall("mark", { note: "once" }),
+      raw("{"),
+      submit({}),
+      submit({}),
+      submit({}),
     ]);
-    const { result } = await run({ llm, hookPipeline });
-    expect(result.status).toBe("success");
-    expect(llm.requests[1]?.messages).toContainEqual({
-      role: "assistant",
-      content: "invalid draft",
-      reasoningContent: "Accepted reasoning.",
-      providerContinuation,
-    });
-  });
-
-  it("clears a required manifest tool choice for repair", async () => {
-    const llm = queuedLLM([prose("draft"), prose(valid)]);
-    const { result } = await run({
+    const result = await runLoop({
       llm,
-      manifest: manifest({ llm: { toolChoice: "required" } }),
+      manifest: manifest({ requireToolUse: true }),
+      hookPipeline: pipeline,
+      maxSteps: 8,
     });
-    expect(result.status).toBe("success");
-    expect(llm.requests[1]?.tools).toBeUndefined();
-    expect(llm.requests[1]?.defaults?.toolChoice).toBeUndefined();
+    expect(result.acceptedOutput).toEqual({});
+    expect(result.pendingProposals).toHaveLength(1);
+    expect(reviews).toBe(3);
+    expect(llm.requests).toHaveLength(6);
   });
 
-  it("keeps repair tools off after PreLLMCall tries to restore them", async () => {
-    const hookPipeline = createHookPipeline();
-    const hook = vi.fn(async () => ({
-      action: "continue" as const,
-      replace: {
-        tools: [{ name: "restored", description: "hook tool", parameters: {} }],
+  it("shares the review counter between response guards and candidate review", async () => {
+    const pipeline = createHookPipeline();
+    let responses = 0;
+    let candidates = 0;
+    pipeline.register({
+      id: "guard",
+      event: "PostLLMResponse",
+      handler: async () =>
+        ++responses === 1
+          ? {
+              action: "continue",
+              replace: { correction: "Reject this response." },
+            }
+          : { action: "continue" },
+    });
+    pipeline.register({
+      id: "review",
+      event: "ReviewAgentOutput",
+      handler: async () => {
+        candidates++;
+        return {
+          action: "continue",
+          replace: { correction: "Reject this candidate." },
+        };
       },
-    }));
-    hookPipeline.register({
-      id: "restore-tools",
+    });
+    const llm = queuedLLM([submit({ answer: 1 })]);
+    const result = await run(llm, { hookPipeline: pipeline });
+    expect(result.stop.reason).toBe("invalid-output");
+    expect(responses).toBe(3);
+    expect(candidates).toBe(2);
+    expect(llm.requests).toHaveLength(3);
+  });
+
+  it("does not let another category rescue an exhausted format budget", async () => {
+    const llm = queuedLLM([raw("{"), raw("{")]);
+    const result = await run(llm);
+    expect(result.stop.reason).toBe("invalid-output");
+    expect(llm.requests).toHaveLength(2);
+  });
+
+  it("allows normal-step correction with under three seconds left", async () => {
+    const llm = queuedLLM([raw("{"), submit({ answer: 1 })]);
+    const result = await run(llm, { timeoutMs: 2000 });
+    expect(result.acceptedOutput).toEqual({ answer: 1 });
+  });
+
+  it("uses one submission-only reserve request and never a second repair after it", async () => {
+    const llm = queuedLLM([
+      toolCall("mark", { note: "work" }),
+      raw("{"),
+      submit({ answer: 1 }),
+    ]);
+    const result = await run(llm, { maxSteps: 1 });
+    expect(llm.requests).toHaveLength(2);
+    expect(llm.requests[1]!.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
+    expect(result.stop).toEqual({ reason: "max-steps" });
+    expect(result.acceptedOutput).toBeNull();
+  });
+
+  it("keeps the finalizer submission-only after PreLLMCall tries to add a write", async () => {
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "tools",
       event: "PreLLMCall",
-      handler: hook,
-    });
-    const llm = queuedLLM([prose("invalid draft"), prose(valid)]);
-    const { result } = await run({ llm, hookPipeline });
-    expect(result.status).toBe("success");
-    expect(hook).toHaveBeenCalledTimes(2);
-    expect(
-      llm.requests[0]?.tools?.map((definition) => definition.name),
-    ).toEqual(["restored"]);
-    expect(llm.requests[1]?.tools).toBeUndefined();
-  });
-
-  it("serializes a native tool-call draft once when tool-finished needs repair", async () => {
-    const native = [
-      { text: "invalid draft" },
-      {
-        functionCall: { id: "native-mark", name: "mark", args: { note: "a" } },
-        thoughtSignature: "synthetic-signature",
-      },
-    ];
-    const parts = [native, [{ text: valid }]];
-    const fetchMock = vi.fn<typeof fetch>(
-      async () =>
-        new Response(
-          JSON.stringify({
-            candidates: [
-              {
-                content: { role: "model", parts: parts.shift() },
-                finishReason: "STOP",
-              },
-            ],
-            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
-          }),
-          { headers: { "content-type": "application/json" } },
-        ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    const adapter = getProtocolDefinition(
-      "google-generative-ai-v1",
-    )!.createAdapter();
-    const llm = createGatewayAdapter({
-      resolveSlot: () => null,
-      generateText: (request) => {
-        expectMatchedToolCalls(request.messages);
-        return adapter.generateText(
-          {
-            baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-            apiKey: "synthetic-key",
-          },
-          { ...request, model: "gemini-fixture" },
-        );
-      },
-    });
-    const hookPipeline = createHookPipeline();
-    hookPipeline.register({
-      id: "finish-after-tool",
-      event: "PostToolUse",
       handler: async () => ({
         action: "continue",
-        replace: { terminate: true },
+        replace: {
+          tools: [
+            {
+              name: "mark",
+              description: "write",
+              parameters: { type: "object" },
+            },
+          ],
+        },
       }),
     });
-    const { result } = await run({ llm, hookPipeline });
-    expect(result.status).toBe("success");
-    expect(result.output).toEqual({ answer: "fixed" });
-    expect(result.stop).toEqual({ reason: "tool-finished", repaired: true });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const repairBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
-    expect(
-      repairBody.contents.filter(
-        (turn: { role: string }) => turn.role === "model",
-      ),
-    ).toEqual([{ role: "model", parts: native }]);
-    expect(repairBody.contents).toContainEqual({
-      role: "user",
-      parts: [
-        expect.objectContaining({
-          functionResponse: expect.objectContaining({
-            id: "native-mark",
-            name: "mark",
-          }),
-        }),
-      ],
-    });
-  });
-
-  it("keeps schema mismatch invalid after exactly one repair", async () => {
-    const llm = queuedLLM([prose('{"answer":7}')]);
-    const { result } = await run({ llm });
-    expect(llm.requests).toHaveLength(2);
-    expect(llm.requests[1]?.messages.at(-1)?.content).toContain(
-      "/answer must be string",
-    );
-    expect(result.stop).toEqual({ reason: "invalid-output" });
-    expect(result.status).toBe("failed");
-  });
-
-  it("repairs an empty completed story and commits its narrative", async () => {
-    const runtime = manifest({ outputKind: "story", tools: {} });
     const llm = queuedLLM([
-      prose('{"narrativeOutput":" "}'),
-      prose("The lantern lights the stairs."),
+      toolCall("mark", { note: "once" }),
+      submit({ answer: 1 }),
     ]);
-    const store = createMemoryStore();
-    const now = new Date().toISOString();
-    await store.createSession({
-      id: input.sessionId,
-      locale: "en-US",
-      status: "active",
-      phase: "playing",
-      activePlugins: [runtime.pluginId],
-      setupRuntimes: {},
-      seats: [
-        { id: "main", controller: "human", role: "player", characters: "auto" },
-      ],
-      completedPlayerTurns: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const execution = await executeTurn(
-      { ...input, logicalTurnId: "logical-story" },
-      [runtime],
-      {
-        store,
-        llm,
-        loadRuntime: async () => ({
-          manifest: runtime,
-          promptTemplate: "Write the story.",
-        }),
-      },
-    );
-    const result = execution.result.runtimeResults[0];
-    expect(result?.stop).toEqual({ reason: "completed", repaired: true });
-    expect(llm.requests[1]?.messages.at(-1)?.content).toContain(
-      "the story text is empty",
-    );
-    // A prose story is published as one narration segment per paragraph.
-    expect(result?.output).toEqual({
-      segments: [{ kind: "narration", text: "The lantern lights the stairs." }],
-      yield: "user",
-      narrativeOutput: "The lantern lights the stairs.",
-    });
-    const committed = await commitExecution({
-      store,
-      execution,
-      completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
-    });
-    expect(committed.status).toBe("committed");
-    expect(
-      (await store.getSession(input.sessionId))?.completedPlayerTurns,
-    ).toBe(1);
-    expect(
-      (await store.listMessages(input.sessionId))
-        .filter((message) => message.role === "assistant")
-        .map((message) => message.content),
-    ).toEqual(["The lantern lights the stairs."]);
+    const result = await run(llm, { maxSteps: 1, hookPipeline: pipeline });
+    expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
+    expect(llm.requests[1]!.tools?.map((tool) => tool.name)).toEqual([
+      "submit-output",
+    ]);
+    expect(result.pendingProposals).toHaveLength(1);
   });
 
-  it.each([0, 2])(
-    "honors the output repair budget %s",
-    async (outputRepair) => {
-      const llm = queuedLLM([prose("prose")]);
-      const { result } = await run({
-        llm,
-        manifest: manifest({ loopProfile: { corrections: { outputRepair } } }),
-      });
-      expect(llm.requests).toHaveLength(1 + outputRepair);
-      expect(result.stop).toEqual({ reason: "invalid-output" });
-    },
-  );
-
-  it("never repairs completing-tool output that fails its schema", async () => {
-    const save = tool({
-      name: "save",
-      description: "save",
-      parameters: z.object({}),
-      execute: async () => ({ answer: 7 }),
-    });
-    const llm = queuedLLM([toolCall("save", {})]);
-    const runtime = manifest({
-      requireToolUse: true,
-      completeAfterTools: ["save"],
-      tools: { plugin: ["save"] },
-      output: { schema: "./output.schema.json" },
-    });
-    const { result, loop } = await run({
-      llm,
-      manifest: runtime,
-      deps: { toolExecutor: makeExecutor([save]) },
-    });
-    expect(loop.finalToolOutput).toEqual({ answer: 7 });
+  it("attributes repeated invalid submissions to output exhaustion even on the reserve step", async () => {
+    const llm = queuedLLM([raw("{"), raw("{"), submit({ answer: 1 })]);
+    const result = await run(llm, { maxSteps: 1 });
+    expect(llm.requests).toHaveLength(2);
+    expect(result.acceptedOutput).toBeNull();
     expect(result.stop).toEqual({ reason: "invalid-output" });
+  });
+
+  it("rejects business calls in the reserve request without staging another write", async () => {
+    const llm = queuedLLM([
+      toolCall("mark", { note: "once" }),
+      toolCall("mark", { note: "twice" }),
+    ]);
+    const result = await run(llm, { maxSteps: 1 });
+    expect(result.pendingProposals).toHaveLength(1);
+    expect(result.acceptedOutput).toBeNull();
+    expect(result.stop).toEqual({ reason: "max-steps" });
+  });
+
+  it("does not launch a reserve step while required business work is missing", async () => {
+    const llm = queuedLLM([submit({})]);
+    const result = await runLoop({
+      llm,
+      manifest: manifest({ requireToolUse: true }),
+      maxSteps: 1,
+    });
+    expect(llm.requests).toHaveLength(1);
+    expect(result.stop.reason).toBe("max-steps");
+  });
+
+  it("does not launch a reserve step with less than three seconds left", async () => {
+    const llm = queuedLLM([toolCall("mark", { note: "once" })]);
+    const result = await run(llm, { maxSteps: 1, timeoutMs: 2000 });
+    expect(result.stop.reason).toBe("max-steps");
     expect(llm.requests).toHaveLength(1);
   });
 
-  it("skips repair with less than three seconds left", async () => {
-    const now = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(now);
-    const generate = vi.fn<LLMAdapter["generate"]>(async () => {
-      vi.mocked(Date.now).mockReturnValue(now + 7_001);
-      return prose("prose");
-    });
-    const { result } = await run({ llm: { generate } });
-    expect(generate).toHaveBeenCalledOnce();
-    expect(result.stop).toEqual({ reason: "invalid-output" });
-  });
-
-  it("repairs after a max-steps finalizer and keeps both stop flags", async () => {
-    const emitter = makeEmitterSpy();
-    const llm = queuedLLM([
-      toolCall("mark", { note: "a" }),
-      prose("bad finalizer"),
-      prose(valid),
-    ]);
-    const { result } = await run({ llm, maxSteps: 1, deps: { emitter } });
-    expect(llm.requests).toHaveLength(3);
-    expect(result.stop).toEqual({
-      reason: "max-steps",
-      finalizer: true,
-      repaired: true,
-    });
-    expect(
-      emitter.events
-        .filter((e) => e.type === "step.started")
-        .map((e) => e.payload),
-    ).toMatchObject([
-      { step: 1 },
-      { step: 2, finalizer: true },
-      { step: 3, repair: true },
-    ]);
-  });
-
-  it("repairs a PreStep tool-finished exit using one past the last started step", async () => {
-    const hookPipeline = createHookPipeline();
-    hookPipeline.register({
-      id: "finish",
+  it("cannot recover a hook termination that has no accepted candidate", async () => {
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "end",
       event: "PreStep",
       handler: async () => ({
         action: "continue",
         replace: { stop: { reason: "tool-finished" } },
       }),
     });
-    const emitter = makeEmitterSpy();
-    const llm = queuedLLM([prose(valid)]);
-    const { result } = await run({ llm, hookPipeline, deps: { emitter } });
-    expect(result.stop).toEqual({ reason: "tool-finished", repaired: true });
-    expect(
-      emitter.events.find((e) => e.type === "step.started")?.payload,
-    ).toMatchObject({ step: 1, repair: true });
+    const llm = queuedLLM([submit({ answer: 1 })]);
+    const result = await run(llm, { hookPipeline: pipeline });
+    expect(result.stop.reason).toBe("invalid-output");
+    expect(llm.requests).toHaveLength(0);
   });
 
-  it.each(["requireToolUse", "requireExplicitCompletion"] as const)(
-    "does not repair unmet %s",
-    async (requirement) => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
-      const llm = queuedLLM([prose("prose")]);
-      const { result } = await run({
-        llm,
-        manifest: manifest({ [requirement]: true }),
-        ...(requirement === "requireExplicitCompletion"
-          ? {
-              loaded: {
-                manifest: manifest(),
-                promptTemplate: "Finish explicitly.",
-              },
-            }
-          : {}),
-      });
-      expect(result.status).toBe("failed");
-      expect(llm.requests).toHaveLength(2); // Original tool-use correction only.
-      expect(llm.requests.at(-1)?.tools?.length).toBeGreaterThan(0);
-    },
-  );
-
-  it("preserves the original output if the repair request fails", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    let calls = 0;
-    const { result, loop } = await run({
-      llm: {
-        generate: async () => {
-          if (++calls > 1) throw new Error("provider unavailable");
-          return prose("original prose");
-        },
-      },
-    });
-    expect(calls).toBe(2);
-    expect(loop.finalContent).toBe("original prose");
-    expect(loop.stop).toEqual({ reason: "completed" });
-    expect(result.stop).toEqual({ reason: "invalid-output" });
-  });
-
-  it("resets streamed drafts and replaces all steered prose", async () => {
-    const emitter = makeEmitterSpy();
-    const chunks: { textDelta: string; reset?: true }[] = [];
-    const drafts = [
-      '{"narrativeOutput":" "}',
-      '{"narrativeOutput":" "}',
-      "The repaired story.",
-    ];
-    const llm: LLMAdapter = {
-      generate: async () => prose("fallback"),
-      stream: async function* () {
-        yield { type: "text-delta", textDelta: drafts.shift()! };
-        yield { type: "done", finishReason: "stop" };
+  it("preserves malformed arguments, original IDs, reasoning and continuation verbatim", async () => {
+    const invalid = {
+      ...raw('{"answer":'),
+      reasoningContent: "private reasoning",
+      providerContinuation: {
+        protocol: "openai-chat-v1" as const,
+        model: "fixture",
+        items: [{ type: "reasoning" as const, field: "reasoning" }],
       },
     };
-    const steering = [[], ["Look again"], [], []];
-    const { result } = await run({
-      llm,
-      manifest: manifest({ outputKind: "story", tools: {} }),
-      deps: {
-        emitter,
-        onDelta: async (chunk: { textDelta: string; reset?: true }) => {
-          chunks.push(chunk);
-        },
-        turnControl: { drainSteering: () => steering.shift() ?? [] },
-      },
-    });
-    expect(result.output).toEqual({
-      segments: [{ kind: "narration", text: "The repaired story." }],
-      yield: "user",
-      narrativeOutput: "The repaired story.",
-    });
-    const reset = chunks.findIndex((chunk) => chunk.reset);
-    expect(reset).toBeGreaterThan(0);
-    expect(
-      chunks
-        .slice(reset + 1)
-        .map((chunk) => chunk.textDelta)
-        .join(""),
-    ).toBe("The repaired story.");
-  });
-});
-
-describe("output gate agreement", () => {
-  it.each([
-    ["en-US", "zh", /未返回 JSON 对象/],
-    ["zh-CN", "en", /no JSON object was returned/],
-    ["zh-Hant", "auto", /no JSON object was returned/],
-  ] as const)(
-    "loads diagnostic prompts in the instruction language (%s, override: %s)",
-    async (locale, override, expected) => {
-      vi.stubEnv("COVEL_INSTRUCTION_LOCALE", override);
-      const { args } = await run({
-        llm: queuedLLM([prose(" \n ")]),
-        manifest: manifest({
-          loopProfile: { corrections: { outputRepair: 0 } },
-        }),
-      });
-      const checked = await checkAgentOutput({
-        ...args,
-        input: { ...args.input, locale },
-      });
-      expect(checked.ok).toBe(false);
-      if (!checked.ok) expect(checked.errors[0]).toMatch(expected);
-    },
-  );
-
-  it("reports bounded syntax diagnostics without salvaged structural symptoms or private content", async () => {
-    const secret = "PRIVATE_DRAFT_SENTINEL";
-    const prefix = JSON.stringify({ answer: `${secret} 😀` });
-    const properties = Object.fromEntries(
-      Array.from({ length: 8 }, (_, i) => [`field${i}`, { type: "string" }]),
+    const llm = queuedLLM([invalid, submit({ answer: 1 })]);
+    await run(llm);
+    const assistant = llm.requests[1]!.messages.find(
+      (message) => message.role === "assistant",
     );
-    const invalidFields = Object.fromEntries(
-      Object.keys(properties).map((key) => [key, 7]),
-    );
-    const content = `\`\`\`json\n${prefix},"tail":${JSON.stringify(invalidFields)}}\n\`\`\``;
-    const { args } = await run({
-      llm: queuedLLM([
-        { ...prose(content), reasoningContent: "PRIVATE_REASONING_SENTINEL" },
-      ]),
-      loaded: { ...loaded, outputSchema: { type: "object", properties } },
-      manifest: manifest({ loopProfile: { corrections: { outputRepair: 0 } } }),
+    expect(assistant).toMatchObject({
+      toolCalls: invalid.toolCalls,
+      reasoningContent: invalid.reasoningContent,
+      providerContinuation: invalid.providerContinuation,
     });
-    const checked = await checkAgentOutput(args);
-    expect(checked.ok).toBe(false);
-    if (!checked.ok) {
-      expect(checked.errors[0]).toMatch(/JSON syntax.*after.*root/i);
-      expect(checked.errors.join(" ")).toContain(`offset ${prefix.length}`);
-      expect(checked.errors).toHaveLength(2);
-      expect(checked.errors.every((error) => error.length <= 200)).toBe(true);
-      expect(checked.errors.join(" ")).toContain(
-        "UTF-16 code units after fence normalization",
-      );
-      expect(checked.errors.join(" ")).toMatch(/line 1, column \d+/);
-      expect(checked.errors.join(" ")).not.toMatch(/\/field\d|must be string/);
-      expect(checked.errors.join(" ")).not.toMatch(
-        /PRIVATE_|SyntaxError|\bat .*\(|run-loop|plug\/loop/,
-      );
-    }
-    const chinese = await checkAgentOutput({
-      ...args,
-      input: { ...args.input, locale: "zh-CN" },
-    });
-    expect(chinese.ok).toBe(false);
-    if (!chinese.ok) {
-      expect(chinese.errors[0]).toContain("JSON 语法错误");
-      expect(chinese.errors[0]).toContain("根对象已闭合");
-      expect(chinese.errors[0]).toContain("输入结束");
-      expect(chinese.errors.join(" ")).toContain(`偏移 ${prefix.length}`);
-      expect(chinese.errors).toHaveLength(2);
-      expect(chinese.errors.every((error) => error.length <= 200)).toBe(true);
-      expect(chinese.errors.join(" ")).not.toMatch(
-        /\/field\d|must be string|PRIVATE_/,
-      );
-    }
-  });
-
-  it.each([
-    ['{"answer":"PRIVATE_SENTINEL', /unterminated.*string/i, true],
-    ['{"answer":"PRIVATE_SENTINEL\\q"}', /escape/i, true],
-    ['{"answer":', /unexpected end.*complete JSON/i, false],
-    ['{"answer":PRIVATE_SENTINEL}', /JSON syntax/i, false],
-  ] as const)(
-    "diagnoses invalid JSON without echoing source or inventing a location (%s)",
-    async (content, reason, located) => {
-      const { args, result } = await run({
-        llm: queuedLLM([prose(content)]),
-        manifest: manifest({
-          loopProfile: { corrections: { outputRepair: 0 } },
-        }),
-      });
-      expect(result.status).toBe("failed");
-      const checked = await checkAgentOutput(args);
-      expect(checked.ok).toBe(false);
-      if (!checked.ok) {
-        expect(checked.errors[0]).toMatch(reason);
-        const feedback = checked.errors.join(" ");
-        expect(feedback).not.toContain("PRIVATE_SENTINEL");
-        expect(/offset \d+/.test(feedback)).toBe(located);
-        expect(feedback).not.toContain("plain prose");
-      }
-    },
-  );
-
-  it.each([
-    `\`\`\`json\n${valid}\n\`\`\``,
-    `A short preamble. ${valid}`,
-    `${valid}}`,
-    `Example: {"sample":true}. Final: ${valid}`,
-  ])(
-    "keeps accepted tolerant envelopes out of repair (%s)",
-    async (content) => {
-      const llm = queuedLLM([prose(content)]);
-      const { result } = await run({ llm });
-      expect(result.status).toBe("success");
-      expect(result.output).toEqual({ answer: "fixed" });
-      expect(llm.requests).toHaveLength(1);
-    },
-  );
-
-  it.each([
-    [
-      "empty story",
-      { outputKind: "story" },
-      '{"narrativeOutput":" "}',
-      false,
-      "invalid-output",
-    ],
-    ["schema prose", {}, "plain text", false, "short-circuit"],
-    ["schema mismatch", {}, '{"answer":7}', false, "short-circuit"],
-    ["valid JSON", {}, valid, true, "ok"],
-  ] as const)(
-    "agrees with settlement for %s (%s)",
-    async (_name, overrides, content, ok, gateKind) => {
-      const { args, result } = await run({
-        llm: queuedLLM([prose(content)]),
-        manifest: manifest({
-          ...overrides,
-          loopProfile: { corrections: { outputRepair: 0 } },
-        }),
-      });
-      const finalized = finalizeAgentOutput({
-        manifest: args.manifest,
-        finalContent: content,
-        executedToolCalls: [],
-        failedToolCalls: [],
-        pendingProposals: [],
-        schemaGate: createAgentSchemaGate({ ...args, collectedToolCalls: [] }),
-      });
-      expect(finalized.kind).toBe(gateKind);
-      expect((await checkAgentOutput(args)).ok).toBe(ok);
-      expect(result.status === "success").toBe(ok);
-      if (!ok) expect(result.stop).toEqual({ reason: "invalid-output" });
-    },
-  );
-
-  it("caps schema error lists without including raw output or runtime identity", async () => {
-    const properties = Object.fromEntries(
-      Array.from({ length: 8 }, (_, i) => [
-        i === 0 ? "field".repeat(60) : `field${i}`,
-        { type: "string" },
-      ]),
-    );
-    const schema = { type: "object", properties };
-    const content = JSON.stringify(
-      Object.fromEntries(Object.keys(properties).map((key) => [key, 7])),
-    );
-    const { args } = await run({
-      llm: queuedLLM([prose(content)]),
-      loaded: { ...loaded, outputSchema: schema },
-      manifest: manifest({ loopProfile: { corrections: { outputRepair: 0 } } }),
-    });
-    const checked = await checkAgentOutput(args);
-    expect(checked.ok).toBe(false);
-    if (!checked.ok) {
-      expect(checked.errors).toHaveLength(5);
-      expect(checked.errors.every((error) => error.length <= 200)).toBe(true);
-      expect(checked.errors.some((error) => error.length === 200)).toBe(true);
-      expect(checked.errors.join(" ")).not.toContain(content);
-    }
-  });
-
-  it("keeps dry runs silent and never decorates a tool-owned output", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { args } = await run({ llm: queuedLLM([prose(valid)]) });
-    const toolOutput = {
-      narrativeOutput: "story",
-      interaction: { interactionId: "a" },
-      pluginData: [{ value: "data" }],
-    };
-    const toolLoop = {
-      ...args.toolLoop,
-      finalContent: null,
-      executedToolCalls: [
-        { name: "mark", arguments: "{}", success: true, result: toolOutput },
-      ],
-      finalToolOutput: null,
-    };
-    const before = structuredClone(toolLoop);
-    // The required narrative field proves validation selected the tool result,
-    // rather than the empty fallback envelope.
-    expect(
-      await checkAgentOutput({
-        ...args,
-        outputSchema: {
-          type: "object",
-          required: ["narrativeOutput"],
-          properties: { narrativeOutput: { const: "story" } },
-        },
-        toolLoop,
-      }),
-    ).toEqual({ ok: true });
-    expect(toolLoop).toEqual(before);
-    const modelLoop = {
-      ...args.toolLoop,
-      finalContent: JSON.stringify({ answer: "fixed", pluginData: [] }),
-    };
-    const modelArgs = { ...args, outputSchema: undefined, toolLoop: modelLoop };
-    expect(await checkAgentOutput(modelArgs)).toEqual({ ok: true });
-    expect(warn).not.toHaveBeenCalled();
-    settleAgentLoop(modelArgs);
-    expect(warn).toHaveBeenCalledOnce();
-  });
-});
-
-describe("repair phase transition", () => {
-  it("allows a successful PreStep stop to enter finalizing before stopped", () => {
-    const loop = createLoopState();
-    loop.enter("awaiting-pre-step");
-    loop.enter("finalizing");
-    loop.enter("stopped");
-    expect(loop.phase).toBe("stopped");
   });
 });

@@ -16,6 +16,13 @@ export function readFailureTarget(
   return parsed.success ? parsed.data : undefined;
 }
 
+const TERMINAL_PROGRESS_STATUSES = new Set([
+  "completed",
+  "failed",
+  "skipped",
+  "suspended",
+]);
+
 const DURABLE_TERMINAL_STATES = new Set([
   "succeeded",
   "failed",
@@ -58,6 +65,13 @@ export function mergeExecutionStep(
   previous: ExecutionStep | undefined,
   incoming: ExecutionStep,
 ): ExecutionStep {
+  if (
+    previous?.runId &&
+    previous.runId === incoming.runId &&
+    TERMINAL_PROGRESS_STATUSES.has(previous.status) &&
+    ["running", "llm", "tool"].includes(incoming.status)
+  )
+    return previous;
   const sameJob =
     previous?.jobId !== undefined &&
     previous.jobId === incoming.jobId &&
@@ -124,6 +138,9 @@ export function mergeExecutionStep(
         }
       : {}),
     ...step,
+    ...(previous?.revising && TERMINAL_PROGRESS_STATUSES.has(step.status)
+      ? { revising: false }
+      : {}),
     ...(previous?.runId && !step.runId ? { runId: previous.runId } : {}),
     ...(startedAt !== undefined ? { startedAt } : {}),
     ...(previous?.reasoning || incoming.reasoning

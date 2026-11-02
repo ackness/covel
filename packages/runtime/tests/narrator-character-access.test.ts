@@ -81,7 +81,7 @@ describe.each(["narrator", "chat-mode-narrator"])(
                 arguments: JSON.stringify({ name: "椎名夏帆" }),
               },
             ],
-            finishReason: "tool_calls",
+            finishReason: "tool_calls" as const,
             usage: { inputTokens: 1, outputTokens: 1 },
           };
         const text = JSON.stringify(results);
@@ -89,17 +89,26 @@ describe.each(["narrator", "chat-mode-narrator"])(
         expect(text).toContain("吉他手");
         expect(text).not.toContain("PRIVATE OTHER SESSION");
         // The narrator asks for story segments as its response format.
-        expect(request.responseFormat?.schema).toMatchObject({
+        expect(request.responseFormat).toBeUndefined();
+        expect(
+          request.tools?.find((t) => t.name === "submit-output")?.parameters,
+        ).toMatchObject({
           required: ["segments"],
         });
         return {
-          content: JSON.stringify({
-            segments: [
-              { kind: "narration", text: "夏帆是二年 A 组的吉他手。" },
-            ],
-          }),
-          toolCalls: [],
-          finishReason: "stop",
+          content: null,
+          toolCalls: [
+            {
+              id: "final",
+              name: "submit-output",
+              arguments: JSON.stringify({
+                segments: [
+                  { kind: "narration", text: "夏帆是二年 A 组的吉他手。" },
+                ],
+              }),
+            },
+          ],
+          finishReason: "tool_calls" as const,
           usage: { inputTokens: 1, outputTokens: 1 },
         };
       });
@@ -135,7 +144,7 @@ describe.each(["narrator", "chat-mode-narrator"])(
 );
 
 it("finishes a story after a missing-character read while recording the failed call", async () => {
-  const { runRuntime, manifest, queuedLLM, toolCall, prose, makeExecutor } =
+  const { runRuntime, manifest, queuedLLM, toolCall, submitted, makeExecutor } =
     await import("./_helpers/agent-loop-fixture.js");
   const store = createMemoryStore();
   const executor = makeExecutor(createCharacterTools(store));
@@ -147,13 +156,14 @@ it("finishes a story after a missing-character read while recording the failed c
     }),
     llm: queuedLLM([
       toolCall("get-character", { name: "Unknown traveler" }),
-      prose("A traveler approaches the gate."),
+      submitted("A traveler approaches the gate."),
     ]),
     deps: { toolExecutor: executor },
   });
   expect(result.status).toBe("success");
   expect(result.toolCalls).toEqual([
     expect.objectContaining({ toolName: "get-character", output: null }),
+    expect.objectContaining({ toolName: "submit-output" }),
   ]);
   expect(await execute.mock.results[0]?.value).toMatchObject({
     success: false,

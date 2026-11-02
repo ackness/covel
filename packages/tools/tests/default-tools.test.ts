@@ -22,7 +22,6 @@ describe("default tool registry", () => {
         "create-choices",
         "create-notification",
         "suspend",
-        "runtime-done",
         "delegate",
         "delegate-batch",
         "emit-event",

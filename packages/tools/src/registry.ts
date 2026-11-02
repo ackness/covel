@@ -50,6 +50,10 @@ export class ToolRegistry {
 
   registerBuiltin(module: ToolModule): void {
     this.validateModule(module);
+    if (module.name === "submit-output")
+      throw new Error(
+        "submit-output belongs to one admitted agent; it cannot be registered globally",
+      );
     if (!reservedNames.has(module.name)) {
       throw new Error(`Framework tool "${module.name}" must reserve its name`);
     }

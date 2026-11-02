@@ -23,6 +23,8 @@
 
 ## 数据与行为
 
+角色没有 `fields` 时，cast 把属性视为空对象，仍按提及和场景显著性选择角色；已有属性原样保留。
+
 `cues.scene` 按场景注册表匹配，沿用当前昼夜变体（初次为白天）；未登记地点没有背景。实际 `sceneId` 变化时，故事提示与事件都清空已有 `direction/current` 的演员。同一地点的别名或昼夜变化不重置演员；昼夜只能通过 `scene.set` 改变。
 
 非空 `cues.present` 按精确名字或别名选出最多四名演员。先排除主玩家席位的当前角色，同一席位绑定的其他角色仍可上台。切换视角后，旧演员和已保存的说话人选择也会排除新的视角角色。继续在场者保留站位与视觉变体，新演员按从左到右的空位淡入，不在名单中的演员随提交立即从权威名单移除；cast 与 direction 提供方都显式返回 `exitTransition: "fade"`，宿主用上次显示的图片和位置播放短暂淡出，不写回插件缓存。其他提供方省略或返回 `"none"` 时立即切换；返回 `previous` 的路径保留已有策略。名单策略不覆盖已送达的显式退场。显式 `stage.direction` 离场与清台指令按各自的过渡退场，`none` 或减少动态效果立即清理。最多四名当前演员与四张退场图片重叠，缺少槽位或切换会话会丢弃画面记忆。焦点给 `segments` 中最后一个解析成功且仍在台上的对白或动作说话者；没有匹配的在台说话者时保留原焦点，否则选第一人。换场时先重置演员，再应用新名单。
@@ -57,3 +59,5 @@ start any runtime. **Use default appearance** stays in host controls, including
 immersive stage mode, and preserves the player's base theme and overrides.
 Settings, approvals and page bars keep their host appearance. See the
 [theme contract](../../docs/en/reference/theme-packages.md#restricted-themes-supplied-by-plugins).
+
+对白模板通过 `reveal: {mode: "segments"}` 选择通用的提交后分段显示，默认间隔与上限见 [Reveal](../../docs/reference/ui-components.md#完整内容的分段显示)。聊天和舞台使用同一策略；减少动态效果、立即显示文字、显示全部、历史恢复与重新挂载都会立即显示完整正文，不影响输入与回合推进。此更新只改变显示，不需要重建会话。

@@ -221,7 +221,7 @@ Related rules:
 
 - When the story is skipped for another reason (its guard, or a declared gate), the execution is not refused.
 - Client messages that have already been stored are not part of this transaction.
-- The story runtime is never given `runtime-done`. If the model calls it out of habit, the framework first asks it for the narrative with the few steps left. If the result is still empty, the runtime counts as failed.
+- Only agent output accepted through `submit-output` validation and review can enter commit. Missing or rejected submissions use bounded ordinary steps for correction; exhaustion fails the story, without substituting a draft.
 - This does not retry or undo side effects that external tools have already caused.
 - Optional system extractors can still fail after a valid story. Their failure does not discard the story.
 

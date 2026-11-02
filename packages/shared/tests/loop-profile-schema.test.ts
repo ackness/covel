@@ -1,6 +1,6 @@
 /**
- * The agent loop profile keys (`agent.loop.profile`, `stream`, `steering`,
- * `truncation`, `fallback`, `finalizer`) and their rules, on the authored
+ * The agent loop profile keys (`agent.loop.profile`, `steering`,
+ * `fallback`, `finalizer`) and their rules, on the authored
  * schema and on the compiled IR (`loopProfile`). Each rule is reported under
  * the path the format writes.
  */
@@ -51,23 +51,17 @@ describe("authored agent.loop profile keys", () => {
       "a story with every key",
       {
         profile: "story",
-        stream: true,
         steering: true,
-        truncation: "accept",
-        fallback: "answer-without-tools",
+        fallback: "submit-output",
         finalizer: { maxSteps: false, deadlineReserveMs: 5_000 },
       },
       "story",
     ],
-    [
-      "a story that turns streaming off",
-      { stream: false, truncation: "reject" },
-      "story",
-    ],
     ["an actor", { profile: "actor" }, undefined],
+    ["a story without steering", { steering: false }, "story"],
     [
-      "a system agent that answers without tools",
-      { fallback: "answer-without-tools" },
+      "a system agent with submission fallback",
+      { fallback: "submit-output" },
       "system",
     ],
     [
@@ -89,12 +83,7 @@ describe("authored agent.loop profile keys", () => {
       undefined,
       "agent.loop.profile",
     ],
-    [
-      "g2: stream on a system agent",
-      { stream: true },
-      "system",
-      "agent.loop.stream",
-    ],
+    ["g2: stream on a system agent", { stream: true }, "system", "agent.loop"],
     [
       "g2: steering on an actor",
       { profile: "actor", steering: true },
@@ -105,25 +94,13 @@ describe("authored agent.loop profile keys", () => {
       "g3: truncation accept without streaming",
       { truncation: "accept" },
       undefined,
-      "agent.loop.truncation",
+      "agent.loop",
     ],
     [
       "g3: truncation accept on a story with stream off",
       { stream: false, truncation: "accept" },
       "story",
-      "agent.loop.truncation",
-    ],
-    [
-      "g3: a story with stream off that keeps the inherited truncation",
-      { stream: false },
-      "story",
-      "agent.loop.stream",
-    ],
-    [
-      "g3: a story profile with stream off and truncation omitted",
-      { profile: "story", stream: false },
-      "story",
-      "agent.loop.stream",
+      "agent.loop",
     ],
     [
       "g4: a reserve not below the written limit",
@@ -182,8 +159,9 @@ describe("authored agent.loop profile keys", () => {
 
 describe("compiled loopProfile", () => {
   it.each<[string, Loop, "story" | "system", number?]>([
-    ["a story's overrides", { stream: false, truncation: "reject" }, "story"],
+    ["a story's overrides", { steering: false }, "story"],
     ["an actor", { preset: "actor", fallback: "fail" }, "system"],
+    ["a story without steering", { steering: false }, "story"],
     [
       "a reserve below the limit",
       { finalizer: { deadlineReserveMs: 5_000 } },
@@ -207,7 +185,7 @@ describe("compiled loopProfile", () => {
       "g2: stream on a system runtime",
       { stream: true },
       "system",
-      "loopProfile.stream",
+      "loopProfile",
     ],
     [
       "g2: steering on a system runtime",
@@ -219,13 +197,7 @@ describe("compiled loopProfile", () => {
       "g3: truncation accept on an actor",
       { preset: "actor", truncation: "accept" },
       "system",
-      "loopProfile.truncation",
-    ],
-    [
-      "g3: a story with stream off and truncation omitted",
-      { stream: false },
-      "story",
-      "loopProfile.stream",
+      "loopProfile",
     ],
     [
       "g4: a reserve not below the limit",
@@ -245,21 +217,37 @@ describe("compiled loopProfile", () => {
 });
 
 describe("LOOP_PRESETS", () => {
-  it("streams, steers and keeps truncated text only in the story preset", () => {
-    expect(LOOP_PRESETS.story).toMatchObject({
-      stream: true,
-      steering: true,
-      truncation: "accept",
-    });
-    for (const preset of [LOOP_PRESETS.actor, LOOP_PRESETS.system])
-      expect(preset).toMatchObject({
-        stream: false,
-        steering: false,
-        truncation: "reject",
-      });
+  it("steers only in the story preset and defines no presentation switches", () => {
+    expect(LOOP_PRESETS.story.steering).toBe(true);
+    for (const preset of Object.values(LOOP_PRESETS)) {
+      expect(preset).not.toHaveProperty("stream");
+      expect(preset).not.toHaveProperty("truncation");
+    }
+    expect(LOOP_PRESETS.actor.steering).toBe(false);
+    expect(LOOP_PRESETS.system.steering).toBe(false);
     expect(LOOP_PRESETS.system.fallback).toBe("fail");
-    expect(LOOP_PRESETS.actor.fallback).toBe("answer-without-tools");
+    expect(LOOP_PRESETS.actor.fallback).toBe("submit-output");
   });
+});
+
+describe("removed presentation options", () => {
+  it.each([
+    { stream: false },
+    { stream: true },
+    { truncation: "reject" },
+    { truncation: "accept" },
+  ])(
+    "rejects obsolete options in authored and compiled manifests: %j",
+    (loop) => {
+      expect(
+        runtimeAuthoringManifestSchema.safeParse(authored(loop, "story"))
+          .success,
+      ).toBe(false);
+      expect(
+        runtimeManifestInputSchema.safeParse(compiled(loop, "story")).success,
+      ).toBe(false);
+    },
+  );
 });
 
 describe("correction budgets on authored and IR schemas", () => {

@@ -49,7 +49,7 @@ describe("cost-panel aggregate", () => {
           pluginId: "guide",
           ...usage(20, 10),
         }),
-        evt("narrative.delta", { text: "x" }), // not a usage event — ignored
+        evt("runtime.started", { text: "x" }), // not a usage event — ignored
       ]),
       turn(2, "turn-2", [
         evt("llm.responded", {
@@ -144,7 +144,7 @@ describe("cost-panel aggregate", () => {
   });
 
   it("returns an empty model when no usage events exist", () => {
-    const m = aggregate([turn(1, "t", [evt("narrative.delta", {})])]);
+    const m = aggregate([turn(1, "t", [evt("runtime.started", {})])]);
 
     expect(m.totalCalls).toBe(0);
     expect(m.byRuntime).toHaveLength(0);

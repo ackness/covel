@@ -23,7 +23,7 @@ contributes:
         - 【必做】写正文之前先核对 <available-events>：凡当前回合的叙事状态命中某事件描述的发射条件（包括第一回合开场时的初始状态），必须先调用 emit-event
         发射再写正文；一次一个 topic（工具定义列出了各 topic 和 payload 的格式），工具调用不计入正文，也不要在正文里提及
 
-        - 按「回复格式」返回分段回复，并在 cues.present 中列出在场角色
+        - 用 `submit-output` 按「回复格式」提交分段回复，并在 cues.present 中列出在场角色
 
         - 回复长度按用户设置控制：short 约 120-220 字，medium 约 220-420 字，long 约 420-650 字
 ---

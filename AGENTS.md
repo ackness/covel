@@ -66,6 +66,10 @@ full browser, smoke and extension execution belongs to full-scope CI.
 Documentation-only CI skips source checks but retains documentation verification
 and Site; required aggregates always run, using job-level path selection.
 
+The real-model harness accepts `--plugins <ids>` for initial package selection.
+For read-only sanitized submission metrics, see `node scripts/submission-report.mjs --help`
+and [real-model acceptance](docs/ship/real-model.md#submission-acceptance).
+
 In source development, changing bundled plugin manifests, handlers or locales
 restarts the server.
 

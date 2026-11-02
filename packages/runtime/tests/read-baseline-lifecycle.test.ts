@@ -8,7 +8,11 @@ import {
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import { readBaselineFixture } from "./helpers/read-baseline-fixture.js";
-import { prose, queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
+import {
+  submitted,
+  queuedLLM,
+  toolCall,
+} from "./_helpers/agent-loop-fixture.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 
 const suspend = {
@@ -82,7 +86,7 @@ describe("pending read-derived calculations", () => {
           toolExecutor,
           llm: queuedLLM([
             toolCall("read", {}),
-            again ? ask : prose("Calculation complete."),
+            again ? ask : submitted("Calculation complete."),
           ]),
           loadRuntime: async () => ({ manifest, promptTemplate: "Continue." }),
         });

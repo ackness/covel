@@ -216,8 +216,8 @@ export function checkPromptVariants({
     plugins.map((plugin) => [plugin, promptDirs(plugin, problems)]),
   );
 
-  // Tool names any bundled prompt may mention, plus the builtin completion tool.
-  const knownTools = new Set(["runtime-done"]);
+  // Tool names any bundled prompt may mention, plus host output submission.
+  const knownTools = new Set(["submit-output"]);
   for (const plugin of plugins)
     for (const { dir, stem, template } of directories.get(plugin)) {
       if (template) continue;

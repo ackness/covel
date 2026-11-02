@@ -228,10 +228,19 @@ export interface SuspensionWriteBaseline {
 }
 
 /**
- * Agent loop state that the transcript cannot carry. Each key is left out
- * when empty, and an absent key means the empty state.
+ * Admitted agent contract and logical loop budget, never an accepted candidate.
  */
 export interface SuspendedLoopState {
+  /** Ordinary steps already started, including the step that suspended. */
+  readonly steps: number;
+  /** Admitted ceiling, including any PreStep reductions. Resume cannot raise it. */
+  readonly maxSteps: number;
+  readonly rejectionAttempts: number;
+  readonly correctionLimits: Readonly<
+    Record<"toolUse" | "review" | "loopPerturbation" | "outputRepair", number>
+  >;
+  /** Exact admitted contract; checked against the loaded artifact on resume. */
+  readonly outputContract: import("@covel/shared/plugin-runtime").EffectiveAgentOutput;
   /** Corrections already spent, by kind; kinds at 0 are left out. */
   readonly corrections?: Readonly<
     Partial<
@@ -240,10 +249,6 @@ export interface SuspendedLoopState {
   >;
   /** Deferred tools that `search-tools` activated before the suspension. */
   readonly activatedTools?: readonly string[];
-  /** Prose written before a late player interjection, in order. */
-  readonly steeredProse?: readonly string[];
-  /** The output of a completing tool that succeeded before the suspension. */
-  readonly completingToolOutput?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -302,15 +307,13 @@ export interface SuspensionRecord {
     readonly delegation?: import("@covel/shared").DelegationSnapshot;
     /** Full LLMMessage[] up to the suspend point. */
     readonly messages: readonly unknown[];
-    /** If the LLM produced narrative text alongside the suspend tool call. */
-    readonly partialContent?: string;
     /** ToolCallRecord[] accumulated before the suspend point. */
     readonly toolCallsSoFar: readonly unknown[];
-    /** Execution evidence for completion checks after an agent resumes. */
-    readonly completionCalls?: readonly {
+    /** Executor-owned business results/evidence, before PostToolUse projections. */
+    readonly businessCalls?: readonly {
       readonly name: string;
       readonly success: boolean;
-      readonly done: boolean;
+      readonly result: import("@covel/shared").JsonValue;
     }[];
     /**
      * Proposals buffered mid-turn at the suspend point.

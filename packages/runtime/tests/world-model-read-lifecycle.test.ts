@@ -12,7 +12,11 @@ import {
   resumeSuspendedRuntime,
 } from "../src/index.js";
 import { attachNestedResults } from "../src/turn-executor/nested-results.js";
-import { prose, queuedLLM, toolCall } from "./_helpers/agent-loop-fixture.js";
+import {
+  submitted,
+  queuedLLM,
+  toolCall,
+} from "./_helpers/agent-loop-fixture.js";
 import {
   fixture,
   fn,
@@ -72,7 +76,7 @@ describe("world read lifecycle", () => {
       deps: {
         llm: {
           generate: async () =>
-            calls++ === 0 ? toolCall(peek.name, {}) : prose("Complete"),
+            calls++ === 0 ? toolCall(peek.name, {}) : submitted("Complete"),
         },
       },
     });
@@ -171,7 +175,7 @@ describe("world read lifecycle", () => {
             generate: async () =>
               childCalls++ === 0
                 ? toolCall("list-characters", {})
-                : prose("Complete"),
+                : submitted("Complete"),
           },
         },
       });
@@ -449,7 +453,7 @@ describe("world read lifecycle", () => {
           generate: async () =>
             childCalls++ % 2 === 0
               ? toolCall(peek.name, {})
-              : prose("Complete"),
+              : submitted("Complete"),
         },
       },
     });

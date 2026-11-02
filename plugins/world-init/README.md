@@ -26,3 +26,5 @@
 ## 开发
 
 修改 guard、工具、维度契约或 runtime 提示词后，运行 `plugins/world-init` 测试与 runtime pre-game / dimension 相关测试。
+
+初始化工具公开规范 schema、数量和 `preGameDone: true`。成功后用 `{}` 调用 `submit-output`，`io.output.from.tool: initialize-world` 直接采用完整工具正文，无需模型复制完成字段。维度追踪仍必须先结算 `update-dimensions`（无变化时 `updates: []`），再用 `submit-output` 提交 `{}`；修正最终提交不重复结算。

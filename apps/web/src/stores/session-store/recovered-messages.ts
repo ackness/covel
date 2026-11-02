@@ -2,14 +2,10 @@ import { projectStoryOperationFailures } from "@covel/shared";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
 import type { StreamMessage } from "./types.js";
 
-const isStream = (message: StreamMessage) => message.id.startsWith("stream_");
-
 /** Fill reconnect gaps without replacing live text or the loaded history window. */
 export function mergeRecoveredMessages(
   current: StreamMessage[],
   recovered: StreamMessage[],
-  executing: boolean,
-  terminalTurnId?: string,
 ): StreamMessage[] {
   if (recovered.length === 0) return current;
   let messages = current;
@@ -39,13 +35,12 @@ export function mergeRecoveredMessages(
       // acting character.
       else if (row) {
         const segments =
-          !isStream(row) && !row.segments && message.segments
+          !row.segments && message.segments
             ? { segments: message.segments }
             : {};
         const actions =
           !row.actions && message.actions ? { actions: message.actions } : {};
         const notice =
-          !isStream(row) &&
           row.role === "assistant" &&
           row.kind === "story" &&
           !row.operationFailures
@@ -76,23 +71,6 @@ export function mergeRecoveredMessages(
       previous = echo;
       continue;
     }
-    const stream =
-      message.turnId && message.runtimeId && message.kind === "story"
-        ? messages.findIndex(
-            (row) =>
-              isStream(row) &&
-              row.turnId === message.turnId &&
-              row.runtimeId === message.runtimeId,
-          )
-        : -1;
-    if (stream >= 0) {
-      // Keep an active attempt intact; a closed attempt can recover its full text.
-      if (!executing || message.turnId === terminalTurnId)
-        replace(stream, message);
-      previous = stream;
-      continue;
-    }
-
     let insertion = previous >= 0 ? previous + 1 : -1;
     if (insertion < 0) {
       // The next shared ID is an ordering anchor even if its local clock differs.
@@ -116,10 +94,9 @@ export function mergeRecoveredMessages(
     }
     if (insertion < 0) {
       // With no overlap, retain existing row order and place only the missing
-      // durable row. Streaming/client-pending tails never act as clock anchors.
+      // durable row. Client-pending tails never act as clock anchors.
       insertion = messages.findIndex(
         (row) =>
-          isStream(row) ||
           (row.role === "user" && !row.turnId) ||
           (row.kind !== "plugin-message" && row.timestamp > message.timestamp),
       );

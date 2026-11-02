@@ -128,7 +128,6 @@ describe("host operation failure footer", () => {
     { role: "user" as const },
     { role: "system" as const },
     { kind: "plugin" },
-    { id: "stream_story" },
     { operationFailures: { count: 0 } },
     { operationFailures: { count: 1, summary: "PRIVATE-SUMMARY" } },
   ])("renders no marker for invalid or non-story data %j", (extra) => {

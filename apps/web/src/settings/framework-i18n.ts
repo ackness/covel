@@ -47,6 +47,10 @@ function frameworkSettingText(
         "A language marked experimental has a translated interface. The instructions the models read stay in English, so the quality of the story depends on the model.",
       ),
     },
+    "ui.instantText": {
+      label: t("settings.frameworkEntries.instantText.label"),
+      description: t("settings.frameworkEntries.instantText.description"),
+    },
     "ui.chatMessageWindow": {
       label: t(
         "settings.frameworkEntries.chatMessageWindow.label",

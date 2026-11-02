@@ -40,7 +40,7 @@ test("a declarative community notebook commits without grants, retains content c
         type: "function",
         function: {
           name: model.rawMessages.some((message) => message.role === "tool")
-            ? "runtime-done"
+            ? "submit-output"
             : "notes-upsert",
           arguments: JSON.stringify(
             model.rawMessages.some((message) => message.role === "tool")

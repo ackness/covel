@@ -4,7 +4,6 @@ import * as api from "@/services/api";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
-import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import type { SessionSnapshot, SnapshotMessage } from "@covel/shared";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import { refreshSessionActionKinds } from "./action-kinds-refresh.js";
@@ -318,7 +317,6 @@ export async function restoreSessionState({
   // Retain the recovery target while hydration is pending, without publishing
   // an executable session. A new visit invalidates all pending restore work.
   sessionIdRef.current = targetSessionId;
-  clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
   dispatch({
     type: "SET_EXECUTION_RECOVERY",

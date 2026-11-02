@@ -38,7 +38,7 @@ const defaultGenerate: LLMAdapter["generate"] = async (params) => {
     toolCalls: [
       {
         id: answered ? "done" : "note",
-        name: answered ? "runtime-done" : "notes-upsert",
+        name: answered ? "submit-output" : "notes-upsert",
         arguments: JSON.stringify(
           answered
             ? {}
@@ -578,12 +578,21 @@ async function approveReviewProvider() {
   expect((await enableProvider()).status).toBe(200);
 }
 const storyReply = (): Awaited<ReturnType<LLMAdapter["generate"]>> => ({
-  content: JSON.stringify({
-    segments: [{ kind: "narration", text: "The notebook story continues." }],
-    yield: "user",
-  }),
-  toolCalls: [],
-  finishReason: "stop",
+  content: null,
+  toolCalls: [
+    {
+      id: "story-submit",
+      name: "submit-output",
+      arguments: JSON.stringify({
+        narrativeOutput: "The notebook story continues.",
+        segments: [
+          { kind: "narration", text: "The notebook story continues." },
+        ],
+        yield: "user",
+      }),
+    },
+  ],
+  finishReason: "tool_calls",
   usage: { inputTokens: 2, outputTokens: 2 },
 });
 const eventsFrom = (stream: string) =>
@@ -775,7 +784,7 @@ it.each([false, true])(
         });
       if (count === 1) return toolReply("review-note", { text: "kept" });
       if (count === 2) return toolReply("review-note", { text: "rejected" });
-      return story ? storyReply() : toolReply("runtime-done", {});
+      return story ? storyReply() : toolReply("submit-output", {});
     });
     await build(false, true);
     await approveReviewProvider();
@@ -935,7 +944,7 @@ it("keeps event consent while running a declarative subscriber without code or r
       [{ dataset: "notes", tools: ["list"] }],
     );
   });
-  generate.mockResolvedValueOnce(toolReply("runtime-done", {}));
+  generate.mockResolvedValueOnce(toolReply("submit-output", {}));
   await build(false, true);
   const emit = () =>
     request(`/api/sessions/${sessionId}/plugin-rpc`, "POST", {
@@ -1093,7 +1102,7 @@ HIDDEN-PROVIDER-PROMPT
       return toolReply("notes-upsert", {
         record: { id: "survives", text: "The notebook still works." },
       });
-    return toolReply("runtime-done", {});
+    return toolReply("submit-output", {});
   });
   await build(false, true);
   expect(

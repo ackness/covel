@@ -1,3 +1,4 @@
+import { submittedOutput } from "../helpers/output-submission.js";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -235,15 +236,14 @@ describe("world locale fallback through the player API", () => {
           llmAdapter: {
             generate: async (request) => {
               modelPrompts.push(JSON.stringify(request.messages));
-              return {
-                content: JSON.stringify({
+              return submittedOutput(
+                {
+                  narrativeOutput: "The beacon shines.",
                   segments: [{ kind: "narration", text: "The beacon shines." }],
                   cues: { present: [] },
-                }),
-                toolCalls: [],
-                finishReason: "stop",
-                usage: { inputTokens: 1, outputTokens: 1 },
-              };
+                },
+                { inputTokens: 1, outputTokens: 1 },
+              );
             },
           },
         });

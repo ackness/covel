@@ -225,8 +225,10 @@ describe("MockLLM", () => {
     const response = await llm.generate({
       messages: [{ role: "user", content: "hello" }],
     });
-    expect(response.finishReason).toBe("stop");
-    expect(response.toolCalls).toEqual([]);
+    expect(response.finishReason).toBe("tool_calls");
+    expect(response.toolCalls).toEqual([
+      { id: "final", name: "submit-output", arguments: "{}" },
+    ]);
   });
 
   it("should record all calls", async () => {

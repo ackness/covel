@@ -1,10 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import {
-  clearAllStreamingText,
-  getStreamingText,
-} from "@/stores/streaming-text-store.js";
-import type { DataService, SessionWorkspace } from "@/services/data-service.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import type {
   ConnectionState,
   SessionSubscriptionOptions,
@@ -115,8 +111,7 @@ function setup() {
     sessionGenerationRef: { current: 1 },
     stateRef: { current: { ...initialState, session } as SessionState },
     activeTurnIdRef: { current: null as string | null },
-    deltaBufferRef: { current: new Map() },
-    deltaRafRef: { current: null },
+
     workspace: {
       hydrate: vi
         .fn<SessionWorkspace["hydrate"]>()
@@ -151,7 +146,6 @@ function event(type: string): SubscriptionEvent {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  clearAllStreamingText();
 });
 
 beforeEach(() => {
@@ -1211,16 +1205,7 @@ it("a replaced recovery cannot continue pagination or publish its older window",
   expect(options.dispatch).not.toHaveBeenCalled();
 });
 
-it("bridge publication preserves a newer healthy POST tail and queued delta", async () => {
-  const frames = new Map<number, FrameRequestCallback>();
-  let frameId = 0;
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
-    frames.set(++frameId, cb);
-    return frameId;
-  });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
-    frames.delete(id);
-  });
+it("bridge publication preserves a newer POST completion and progress", async () => {
   const pending = deferred<unknown>();
   const { streams, options } = setupHistoryGap();
   api.listMessagesPage
@@ -1231,13 +1216,12 @@ it("bridge publication preserves a newer healthy POST tail and queued delta", as
   });
   options.dispatch({ type: "SET_EXECUTING", value: true });
   options.activeTurnIdRef.current = "new";
-  const stream = createSseEventHandler({
+  const handle = createSseEventHandler({
     ...options,
-    ds: {} as DataService,
     lastBackfilledTurnIdRef: { current: null },
   });
-  stream({
-    type: "narrative.delta",
+  handle({
+    type: "narrative.completed",
     sessionId: session.id,
     turnId: "new",
     requestId: "new",
@@ -1249,41 +1233,17 @@ it("bridge publication preserves a newer healthy POST tail and queued delta", as
       runtimeId: "story/main",
       pluginId: "story",
       kind: "story",
-      delta: "healthy",
-    },
-  });
-  for (const cb of [...frames.values()]) cb(0);
-  expect(getStreamingText("stream_new_story/main")).toBe("healthy");
-  stream({
-    type: "narrative.delta",
-    sessionId: session.id,
-    turnId: "new",
-    requestId: "new",
-    traceId: "trace",
-    flowId: "flow",
-    seq: 2,
-    timestamp: session.createdAt,
-    payload: {
-      runtimeId: "story/main",
-      pluginId: "story",
-      kind: "story",
-      delta: " queued",
+      messageId: "new-story",
+      content: "Healthy full story",
     },
   });
   await act(async () => {
     pending.resolve({ items: historyWindow(1, 80), nextCursor: null });
   });
-  expect(options.stateRef.current.messages.at(-1)?.id).toBe(
-    "stream_new_story/main",
-  );
-  expect(getStreamingText("stream_new_story/main")).toBe("healthy");
+  expect(options.stateRef.current.messages.at(-1)?.id).toBe("new-story");
   expect(options.stateRef.current.executing).toBe(true);
   expect(options.stateRef.current.executionRecovery).toBeNull();
   expect(
     options.stateRef.current.messages.filter((m) => m.id.startsWith("m")),
   ).toHaveLength(160);
-  expect(options.deltaBufferRef.current.size).toBe(1);
-  // Prevent this test's scheduled flush from escaping the fixture.
-  const { clearNarrativeDeltaBuffer } = await import("../sse-handler.js");
-  clearNarrativeDeltaBuffer(options.deltaBufferRef, options.deltaRafRef);
 });

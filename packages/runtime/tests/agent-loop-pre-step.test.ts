@@ -1,3 +1,4 @@
+import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 /**
  * The `PreStep` hook: what it sees, how it narrows a step's tools, changes
  * the tool choice, lowers the steps left or ends the loop, and what it cannot
@@ -20,7 +21,7 @@ import {
   makeExecutor,
   manifest,
   markTool,
-  prose,
+  submitted,
   queuedLLM,
   runLoop,
   runRuntime,
@@ -61,7 +62,7 @@ describe("PreStep", () => {
   it("sees the step, the steps left, the limit, the tools and the tool choice", async () => {
     const { pipeline, seen } = preStepPipeline(() => undefined);
     await runLoop({
-      llm: queuedLLM([toolCall("mark", { note: "a" }), prose("done")]),
+      llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
       manifest: twoTools,
       deps: { toolExecutor: twoToolExecutor() },
       hookPipeline: pipeline,
@@ -92,7 +93,7 @@ describe("PreStep", () => {
     );
     const emitter = makeEmitterSpy();
     // The model calls `mark` although the hook took it away for step 1.
-    const llm = queuedLLM([toolCall("mark", { note: "a" }), prose("done")]);
+    const llm = queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]);
     const result = await runLoop({
       llm,
       manifest: twoTools,
@@ -106,6 +107,7 @@ describe("PreStep", () => {
     // Execution stays bound by the manifest: the removed tool still runs.
     expect(result.collectedToolCalls.map((call) => call.toolName)).toEqual([
       "mark",
+      "submit-output",
     ]);
     expect(result.executedToolCalls[0]?.success).toBe(true);
     const completed = emitter.events.find(
@@ -126,7 +128,7 @@ describe("PreStep", () => {
       action: "continue",
       replace: { toolChoice: "required" },
     }));
-    const llm = queuedLLM([toolCall("mark", { note: "a" }), prose("done")]);
+    const llm = queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]);
     await runLoop({ llm, hookPipeline: required.pipeline });
     expect(llm.requests[0]?.defaults?.toolChoice).toBe("required");
 
@@ -135,7 +137,7 @@ describe("PreStep", () => {
       action: "continue",
       replace: { toolChoice: "auto" },
     }));
-    const forced = queuedLLM([prose("done")]);
+    const forced = queuedLLM([submitted("done")]);
     await runLoop({
       llm: forced,
       manifest: manifest({ llm: { toolChoice: "required" } }),
@@ -150,8 +152,9 @@ describe("PreStep", () => {
       replace: { toolChoice: "auto" },
     }));
     const correcting = queuedLLM([
-      prose("nothing to do"),
+      submitted("nothing to do"),
       toolCall("mark", { note: "a" }),
+      submitted("done"),
     ]);
     await runLoop({
       llm: correcting,
@@ -169,7 +172,7 @@ describe("PreStep", () => {
       action: "continue",
       replace: { tools: ["save"], toolChoice: { name: "mark" } },
     }));
-    const namedLLM = queuedLLM([prose("done")]);
+    const namedLLM = queuedLLM([submitted("done")]);
     await runLoop({
       llm: namedLLM,
       manifest: twoTools,
@@ -183,9 +186,9 @@ describe("PreStep", () => {
     let n = 0;
     const busy = () =>
       scriptedLLM((params) =>
-        params.tools
+        params.tools?.some((tool) => tool.name !== "submit-output")
           ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`)
-          : prose(""),
+          : submitted(""),
       );
     const lower = preStepPipeline((payload) =>
       payload.step === 1
@@ -201,7 +204,11 @@ describe("PreStep", () => {
     expect(result.stop.reason).toBe("max-steps");
     expect(result.effectiveMaxSteps).toBe(5);
     expect(lower.seen.map((entry) => entry.payload.maxSteps)).toEqual([5, 2]);
-    expect(lowered.requests.filter((request) => request.tools)).toHaveLength(2);
+    expect(
+      lowered.requests.filter((request) =>
+        request.tools?.some((tool) => tool.name !== "submit-output"),
+      ),
+    ).toHaveLength(2);
 
     const raise = preStepPipeline(() => ({
       action: "continue",
@@ -209,26 +216,30 @@ describe("PreStep", () => {
     }));
     const raised = busy();
     await runLoop({ llm: raised, hookPipeline: raise.pipeline, maxSteps: 3 });
-    expect(raised.requests.filter((request) => request.tools)).toHaveLength(3);
+    expect(
+      raised.requests.filter((request) =>
+        request.tools?.some((tool) => tool.name !== "submit-output"),
+      ),
+    ).toHaveLength(3);
     expect(raise.seen.map((entry) => entry.payload.maxSteps)).toEqual([
       3, 3, 3,
     ]);
   });
 
-  it("ends the loop as tool-finished before any model call, and settle still judges the contract", async () => {
+  it("rejects a hook stop before any accepted submission", async () => {
     const stop = () =>
       preStepPipeline(() => ({
         action: "continue",
         replace: { stop: { reason: "tool-finished" } },
       }));
-    const llm = queuedLLM([prose("never")]);
+    const llm = queuedLLM([submitted("never")]);
     const finished = await runRuntime({
       llm,
       deps: { hookPipeline: stop().pipeline },
     });
     expect(llm.requests).toHaveLength(0);
-    expect(finished.stop).toEqual({ reason: "tool-finished" });
-    expect(finished.status).toBe("success");
+    expect(finished.stop).toEqual({ reason: "invalid-output" });
+    expect(finished.status).toBe("failed");
 
     const contract = await runRuntime({
       llm,
@@ -236,8 +247,8 @@ describe("PreStep", () => {
       deps: { hookPipeline: stop().pipeline },
     });
     expect(contract.status).toBe("failed");
-    expect(contract.error).toContain("requireToolUse");
-    expect(contract.stop).toEqual({ reason: "tool-finished" });
+    expect(contract.error).toContain("accepted submission");
+    expect(contract.stop).toEqual({ reason: "invalid-output" });
   });
 
   it("cancels the loop as a failure that keeps its tool calls", async () => {
@@ -252,7 +263,7 @@ describe("PreStep", () => {
         : undefined,
     );
     const result = await runRuntime({
-      llm: queuedLLM([toolCall("mark", { note: "a" }), prose("never")]),
+      llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("never")]),
       deps: { hookPipeline: pipeline },
     });
     expect(result.status).toBe("failed");
@@ -269,11 +280,11 @@ describe("PreStep", () => {
       replace: { stop: { reason: "completed" }, stepsRemaining: 0 },
     }));
     const result = await runLoop({
-      llm: queuedLLM([prose("done")]),
+      llm: queuedLLM([submitted("done")]),
       hookPipeline: pipeline,
     });
     expect(result.stop).toEqual({ reason: "completed" });
-    expect(result.finalContent).toBe("done");
+    expect(result.acceptedOutput?.narrativeOutput).toBe("done");
   });
 
   it("skips a handler that throws or times out, and reads abort as no change", async () => {
@@ -294,7 +305,10 @@ describe("PreStep", () => {
           handler,
           timeoutMs ? { timeoutMs } : {},
         );
-        const llm = queuedLLM([toolCall("mark", { note: "a" }), prose("done")]);
+        const llm = queuedLLM([
+          toolCall("mark", { note: "a" }),
+          submitted("done"),
+        ]);
         const result = await runLoop({
           llm,
           manifest: twoTools,
@@ -340,7 +354,7 @@ describe("PreStep", () => {
         return { action: "continue" };
       },
     });
-    const llm = queuedLLM([prose("done")]);
+    const llm = queuedLLM([submitted("done")]);
     await runLoop({
       llm,
       manifest: twoTools,
@@ -356,9 +370,9 @@ describe("PreStep", () => {
     const { pipeline, seen } = preStepPipeline(() => undefined);
     let n = 0;
     const llm = scriptedLLM((params) =>
-      params.tools
+      params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch")
-        : prose("final"),
+        : submitted("final"),
     );
     const result = await runLoop({ llm, hookPipeline: pipeline, maxSteps: 2 });
     expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
@@ -383,9 +397,10 @@ describe("PreStep", () => {
         resumeSchema: {},
         createdAt: new Date().toISOString(),
         pendingContinuation: {
+          loop: suspendedLoopState(runtime),
           lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
           readScopes: [],
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0", writes: [] },
           executionContext: {
             executionId: "prior-run",
             origin: "manual",
@@ -401,7 +416,7 @@ describe("PreStep", () => {
       {
         store: createMemoryStore(),
         hookPipeline: pipeline,
-        llm: queuedLLM([toolCall("mark", { note: "a" }), prose("done")]),
+        llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
         toolExecutor: makeExecutor(),
         loadRuntime: async () => ({
           manifest: runtime,
@@ -410,6 +425,6 @@ describe("PreStep", () => {
       },
     );
     expect(result.status).toBe("success");
-    expect(seen.map((entry) => entry.payload.step)).toEqual([1, 2]);
+    expect(seen.map((entry) => entry.payload.step)).toEqual([2, 3]);
   });
 });

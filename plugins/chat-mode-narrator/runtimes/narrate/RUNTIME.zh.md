@@ -71,7 +71,7 @@
 
 ## 回复格式
 
-- 回复以 JSON 对象返回，`segments` 数组按阅读顺序容纳整段回复。
+- 用 `submit-output` 提交回复，`segments` 按阅读顺序排列，可附带 `cues` 和 `yield`。
 - `narration` 段写场景和描写。`dialogue` 段写一位角色说出的话，保留引号，`speaker` 写这位角色。`action` 段写一位角色的动作，`speaker` 写这位角色。
 - 每段文字是完整的正文，段内不空行。
 - `speaker` 按已注入的角色档案或 `runtime-inputs.plan.value.cast` 里的名字写，不写 ID。还没有档案的角色，按故事里对他的称呼写。

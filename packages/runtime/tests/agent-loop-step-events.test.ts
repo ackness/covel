@@ -14,7 +14,7 @@ import {
   makeExecutor,
   manifest,
   markTool,
-  prose,
+  submitted,
   queuedLLM,
   runLoop,
   scriptedLLM,
@@ -84,7 +84,7 @@ function expectOneCompletedPerStarted(rows: readonly Row[]): void {
 describe("step events", () => {
   it("orders step events around the model and tool events of each step", async () => {
     const { rows } = await traced({
-      llm: queuedLLM([toolCall("mark", { note: "a" }), prose("done")]),
+      llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
     });
     const sequence = rows
       .filter((row) => /^(step|llm|tool)\./.test(row.type))
@@ -103,6 +103,8 @@ describe("step events", () => {
       "step.started(2)",
       "llm.calling",
       "llm.responded",
+      "tool.calling",
+      "tool.completed",
       "step.completed(2)",
     ]);
     expectOneCompletedPerStarted(rows);
@@ -110,7 +112,7 @@ describe("step events", () => {
 
   it("carries identity, usage, finish reason, tool calls, and the stop on the last step only", async () => {
     const { rows } = await traced({
-      llm: queuedLLM([toolCall("mark", { note: "a" }), prose("done")]),
+      llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
     });
     const [started1, completed1, , completed2] = stepRows(rows).map(
       (row) => row.payload,
@@ -143,9 +145,9 @@ describe("step events", () => {
     expect(typeof completed1?.durationMs).toBe("number");
     expect(completed2).toMatchObject({
       step: 2,
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
-      toolCalls: [],
+      finishReason: "tool_calls",
+      usage: { inputTokens: 3, outputTokens: 2 },
+      toolCalls: [{ name: "submit-output", success: true }],
       stopReason: "completed",
     });
   });
@@ -158,7 +160,7 @@ describe("step events", () => {
         llm: scriptedLLM(() => {
           calls += 1;
           if (calls === 1) throw new Error("rate limited, try again");
-          return prose("done");
+          return submitted("done");
         }),
         manifest: manifest({ maxRetries: 1 }),
       });
@@ -177,11 +179,12 @@ describe("step events", () => {
   it("notes a correction, a rejected draft, a perturbation and an activated tool", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      // A requireToolUse runtime that first answers in prose gets corrected.
+      // A submission before required business work gets corrected.
       const correction = await traced({
         llm: queuedLLM([
-          prose("nothing to do"),
+          submitted("nothing to do"),
           toolCall("mark", { note: "a" }),
+          submitted("done"),
         ]),
         manifest: manifest({
           requireToolUse: true,
@@ -189,7 +192,7 @@ describe("step events", () => {
         }),
       });
       expect(stepRows(correction.rows)[1]?.payload.notes).toEqual([
-        { kind: "no-tool-correction" },
+        { kind: "output-rejected", reason: "required-work", attempt: 1 },
       ]);
 
       // A rejected draft.
@@ -204,11 +207,11 @@ describe("step events", () => {
             : { action: "continue" },
       });
       const rejected = await traced({
-        llm: queuedLLM([prose("draft"), prose("final")]),
+        llm: queuedLLM([submitted("draft"), submitted("final")]),
         hookPipeline,
       });
       expect(stepRows(rejected.rows)[1]?.payload.notes).toEqual([
-        { kind: "review-rejected" },
+        { kind: "output-rejected", reason: "review-rejected", attempt: 1 },
       ]);
 
       // A perturbation after the same call three times in a row.
@@ -217,7 +220,7 @@ describe("step events", () => {
         llm: scriptedLLM((_params, call) =>
           call <= 3
             ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-            : prose("moved on"),
+            : submitted("moved on"),
         ),
         maxSteps: 10,
       });
@@ -237,7 +240,7 @@ describe("step events", () => {
       const activated = await traced({
         llm: queuedLLM([
           toolCall(SEARCH_TOOLS_TOOL_NAME, { query: "roll dice" }),
-          prose("rolled"),
+          submitted("rolled"),
         ]),
         manifest: manifest({
           tools: { builtin: ["roll-dice"], defer: true },
@@ -277,9 +280,9 @@ describe("step events", () => {
     let n = 0;
     const { rows } = await traced({
       llm: scriptedLLM((params) =>
-        params.tools
+        params.tools?.some((tool) => tool.name !== "submit-output")
           ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "scratch")
-          : prose("final"),
+          : submitted("final"),
       ),
       maxSteps: 2,
     });
@@ -289,8 +292,8 @@ describe("step events", () => {
     expect(steps[4]).toMatchObject({
       step: 3,
       finalizer: true,
-      toolCount: 0,
-      toolChoice: "auto",
+      toolCount: 1,
+      toolChoice: { name: "submit-output" },
     });
     expect(steps[5]).toMatchObject({
       step: 3,
@@ -311,7 +314,7 @@ describe("step events", () => {
       }),
     });
     const { rows } = await traced({
-      llm: queuedLLM([toolCall("mark", { note: "hidden" }), prose("done")]),
+      llm: queuedLLM([toolCall("mark", { note: "hidden" }), submitted("done")]),
       hookPipeline,
       concealed: ["plug/loop"],
     });
@@ -331,6 +334,7 @@ describe("step events", () => {
       "finalizer",
       "retries",
       "notes",
+      "submissionAccepted",
     ]);
     const steps = stepRows(rows);
     expect(steps.length).toBeGreaterThan(0);
@@ -343,6 +347,12 @@ describe("step events", () => {
       { kind: "tool-narrowed", count: 1, ignored: 1 },
     ]);
     expect(steps[1]?.payload).not.toHaveProperty("toolCalls");
+    expect(steps.map((row) => row.payload.submissionAccepted)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      true,
+    ]);
     expect(JSON.stringify(steps)).not.toContain("mark");
     expect(JSON.stringify(steps)).not.toContain("secret-tool");
   });
@@ -358,11 +368,11 @@ describe("step events", () => {
         },
       } as unknown as TurnEmitter;
       const result = await runLoop({
-        llm: queuedLLM([toolCall("mark", { note: "a" }), prose("done")]),
+        llm: queuedLLM([toolCall("mark", { note: "a" }), submitted("done")]),
         deps: { emitter, toolExecutor: makeExecutor([markTool]) },
       });
       expect(result.stop).toEqual({ reason: "completed" });
-      expect(result.finalContent).toBe("done");
+      expect(result.acceptedOutput?.narrativeOutput).toBe("done");
     } finally {
       warn.mockRestore();
     }

@@ -10,7 +10,6 @@ import {
   extractPendingFormMessages,
   filterStalePrompts,
   hasSubmittedForm,
-  initialStageReadStoryKey,
   mergeChoices,
   resolveBackdrop,
   stageStoryKey,
@@ -27,23 +26,13 @@ const worldVisual: WorldVisual = {
 const ref = (id: string) => ({ id, mime: "image/png", size: 100 });
 
 describe("stage story identity", () => {
-  it("keeps streaming and durable messages in one turn on the same key", () => {
-    expect(
-      stageStoryKey({ id: "stream_turn-1_narrator", turnId: "turn-1" }),
-    ).toBe("turn-1");
-    expect(stageStoryKey({ id: "message-1", turnId: "turn-1" })).toBe("turn-1");
-  });
-
-  it("does not mark a streaming placeholder read on the first stage render", () => {
-    expect(
-      initialStageReadStoryKey({
-        id: "stream_turn-1_narrator",
-        turnId: "turn-1",
-      }),
-    ).toBeUndefined();
-    expect(
-      initialStageReadStoryKey({ id: "message-1", turnId: "turn-1" }),
-    ).toBe("turn-1");
+  it("uses each durable message ID even for multiple stories in one turn", () => {
+    expect(stageStoryKey({ id: "message-1", turnId: "turn-1" })).toBe(
+      "message-1",
+    );
+    expect(stageStoryKey({ id: "message-2", turnId: "turn-1" })).toBe(
+      "message-2",
+    );
   });
 });
 

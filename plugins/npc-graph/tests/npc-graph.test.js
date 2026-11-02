@@ -82,7 +82,7 @@ describe("npc-graph manifests", () => {
     // Narrator-downstream layer — post-turn stage, run in parallel with guide,
     // codex, and character-tracker.
     expect(extractor.stage).toBe("post-turn");
-    expect(extractor.completeAfterTools).toEqual(["upsert-npc-graph"]);
+    expect(extractor.completeAfterTools).toBeUndefined();
     expect(extractor.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(extractor.maxRetries).toBe(3);
     expect(extractor.outputContract).toBe("npc-graph@1");

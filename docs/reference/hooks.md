@@ -1,6 +1,6 @@
 # Hook
 
-Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或结束、回合开始或结束、某个 runtime 运行前后、每次模型调用前后、每次工具调用前后、每条写入提交前后。本页列出全部 17 个事件，以及每个事件给 handler 什么、handler 可以返回什么。写 Hook 的插件作者需要它。
+Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或结束、回合开始或结束、某个 runtime 运行前后、每次模型调用前后、每次工具调用前后、每条写入提交前后。本页列出全部 18 个事件，以及每个事件给 handler 什么、handler 可以返回什么。写 Hook 的插件作者需要它。
 
 一个 Hook 只做三件事之一：
 
@@ -119,6 +119,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 | `PreStep`             | runtime | sequential | no    | 收窄这一步的工具、改工具选择、减少剩余步数，或结束循环 |
 | `PreLLMCall`          | runtime | sequential | no    | 改写一次调用的消息、模型和工具                         |
 | `PostLLMResponse`     | runtime | sequential | no    | 改写回答，或要求模型改正                               |
+| `ReviewAgentOutput`   | runtime | sequential | yes   | 接受校验后的输出，或要求重新提交                       |
 | `PostRuntime`         | runtime | sequential | no    | 改写 runtime 的结果                                    |
 | `PreToolUse`          | runtime | sequential | yes   | 中止工具调用，或改写它的名字、参数                     |
 | `PostToolUse`         | runtime | sequential | no    | 改写工具结果，或结束工具循环                           |
@@ -217,7 +218,7 @@ agent runtime 的工具循环每走一步、调用模型之前触发一次：在
 - `replace.toolChoice`：这一步的工具选择，替换清单的 `agent.toolChoice`。`"auto"` 表示不指定；`{ name }` 必须是这一步提供的工具。runtime 要求模型改正、必须调用工具的那一步，`"auto"` 不会取消这个要求。
 - `replace.stepsRemaining`：把剩余步数减到这个整数（至少 1，包括这一步）。比当前值大的数被忽略，步数只能减少。用完后循环以 `max-steps` 结束。
 - `replace.stop: { reason, message? }`：在这一步调用模型之前结束循环。`reason` 只能是这两个：
-  - `"tool-finished"`：按成功结束，和 `PostToolUse` 的 `terminate` 一样。runtime 的完成条件（`agent.completion`）照常检查。
+  - `"tool-finished"`：请求结束循环；没有已接受的提交时，以 `invalid-output` 失败。
   - `"cancelled"`：runtime 失败，错误是 `Runtime "<id>" was stopped by a PreStep hook`，后面跟 `message`。已经做过的工具调用留在失败的结果里。
 
 `abort` 等于“什么都不变”。`PreStep` 先运行，`PreLLMCall` 再改写这次调用：`PreLLMCall` 的 `replace.tools` 会覆盖 `PreStep` 收窄后的工具。
@@ -229,7 +230,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行带着挂起前保存的同一份列表。
 
 - `replace.messages`、`replace.model`、`replace.tools` 只改这一次调用，runtime 自己的对话记录不变。
-- 输出修复请求在 Hook 处理后仍会关闭工具；`replace.tools` 不能为修复步骤重新启用工具。
+- 收尾和循环回退请求在 Hook 后仍只提供 `submit-output`；不能恢复业务工具。
 - `replace.stream: false` 让这次调用不走流式。
 - `abort` 等于“什么都不变”。
 
@@ -239,10 +240,16 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 
 负载：`{ response, messages }`，即回答，以及实际发出去的消息。
 
-要求分段故事的 story runtime（`io.output.schema: contract:narrative-engine@2`）的 `response.content` 是模型写的 JSON，不是正文；审查文字时读各段的 `text`（见[故事输出](./plugins.md#故事输出)）。
+最终输出在 `ReviewAgentOutput` 中审查；这里的 `response` 始终是一次真实供应商响应，可能只有工具调用。
 
-- `replace.response` 替换回答。
-- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。每次退回消耗一次 `agent.loop.corrections.review` 预算，默认允许纠正两次；预算用尽后再次退回，runtime 以 `invalid-output` 失败。配置见[循环 profile](./plugins.md#循环-profileagentloopprofile)。
+- `replace.response` 改写待处理回答，不能创造调用或更改供应商的原调用 ID、推理和 continuation。
+- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，每个原调用 ID 都收到相关联的错误；原始 assistant 消息和 continuation 保留，模型在下一普通步骤重新提交。每次退回消耗一次 `agent.loop.corrections.review` 预算，默认允许纠正两次；预算用尽后再次退回，runtime 以 `invalid-output` 失败。配置见[循环 profile](./plugins.md#循环-profileagentloopprofile)。
+
+### `ReviewAgentOutput`
+
+`submit-output` 的完整对象通过 schema、故事不变量和必需工作检查后触发。负载类型由 SDK 导出为 `ReviewAgentOutputPayload`：`{ output, toolCall: { id, name }, toolResults, correction? }`。`toolCall` 保留供应商最初的身份；`toolResults` 只有本 runtime 已完成调用（不含提交工具）的公开 `toolCallId`、`toolName` 和 `output`，不含隐藏提交元数据或私有子 agent 值。
+
+返回 `continue` 接受；`replace.correction` 要求修正，最多保留 2000 字符，与 `PostLLMResponse` 共用审查预算。一个 reviewer 的纠正不能被后续 reviewer 清除。其他替换字段无效，不能修改候选值、工具证据、effects 或 completion。直接修改负载也无效。抛错、超时或无效结果按 guard 失败关闭，不作为模型可纠正错误；`abort` 终止本次运行。`ctx.pluginId` / `runtimeId` 仍指被审查的 runtime，`getOwnSettings()` 仍读取 handler 所属插件设置。
 
 ### `PostRuntime`
 
@@ -250,13 +257,15 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 
 负载：`{ result, resumed? }`。`result` 是 `RuntimeResult`。结束的是从挂起中恢复的运行时，`resumed` 为 `true`；否则没有这个字段。
 
+agent 只有已经接受 `submit-output` 才能成功；Hook 不能把未提交、失败或跳过的 agent 恢复为成功。函数的恢复规则保持不变。
+
 `replace.result` 替换结果。内核对替换后的结果做这几件事：
 
 - 保留原结果的 `pluginId`、`runtimeId`、`runId`、`turnId`。
 - 写入只来自 runtime 自己：`pendingProposals`、`effects` 和 `completion` 一律取原结果的值，Hook 加的会被丢掉。要拦下一条写入，用 `PreStateCommit`。
 - Hook 改了 `status` 时（比如把失败改成成功），这次运行的 `pendingProposals`、`effects` 和 `completion` 全部丢弃。失败的函数 handler 在失败前攒下的写入也不提交。setup runtime 被 Hook 从失败改成成功，也不记为完成，仍是待完成。
 - handler 改了 `output` 却没动 `canonicalValue` 时，内核丢掉旧的 `canonicalValue`。这样其他 runtime 读到的值不会和改写后的输出对不上。
-- 再按 runtime 的 `output.schema` 检查一遍：函数 runtime 检查 `canonicalValue`，agent 在 Hook 改了 `output` 时检查 `output`。从失败或跳过改成成功的结果没有 `canonicalValue`，检查的是 `output`，和正常成功走同样的检查。不符合时 runtime 以 `output-schema-invalid` 失败，什么都不提交。
+- 再按 runtime 的 `output.schema` 检查一遍：函数 runtime 检查 `canonicalValue`，agent 在 Hook 改了 `output` 时检查 `output`。函数从失败或跳过改成成功的结果没有 `canonicalValue`，检查的是 `output`，和正常成功走同样的检查。不符合时 runtime 以 `output-schema-invalid` 失败，什么都不提交。
 
 ### `PreToolUse`
 
@@ -267,7 +276,7 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 - `abort` 跳过这次调用，`reason` 作为工具的 `refused` 错误回给模型。agent 循环还记录 `tool.calling` / `tool.failed`，带 `skipped: true` 和 `skipReason: "hook-aborted"`；不计入已执行调用或失败计数。
 - `replace.toolCall` 可以改 `name` 或 `arguments`，`id` 保持不变。
 
-同一批 agent 工具调用中，`PreToolUse` 每次只运行一次，按模型顺序执行。在一段可并发的只读调用中，所有成员的 Hook 先按顺序运行，再启动工具。原始名字不是可并发工具的调用不会被提前查看；它的 Hook 等前一步结束后才运行。提前查看的调用如果被改写成屏障，就留到下一步单独执行，已经得到的 Hook 结果保留，不重复触发。并行池和屏障的规则见[工具参考](./tools.md#同一批调用的执行)。
+整批 `PreToolUse` 在任何业务工具派发前按模型顺序各运行一次。内核检查原始及最终名字，拒绝混合提交批次，再按原有只读池/屏障规则运行普通工具。assistant 历史保留原始调用；执行和授权使用改写后的名字与参数。
 
 ### `PostToolUse`
 

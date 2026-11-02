@@ -20,7 +20,7 @@ import {
 import type { ExecutionDeps } from "../src/execution.js";
 import {
   makeExecutor,
-  prose,
+  submitted,
   queuedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -160,7 +160,7 @@ describe("progress of a nested agent that suspends", () => {
       suspension,
       {},
       asker,
-      depsFor(store, [prose("All answered.")]),
+      depsFor(store, [submitted("All answered.")]),
       { activeRuntimes: runtimes },
     );
     expect(resumed.result.status).toBe("success");

@@ -8,6 +8,8 @@ import { collectExecutionJournal } from "../src/execution-journal.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { PostLLMResponsePayload } from "../src/hooks/wire-helpers.js";
 
+const responseIsContent = (response: LLMResponse) =>
+  !response.toolCalls.some((call) => call.name === "submit-output");
 const story: RuntimeManifest = {
   name: "third-party-story",
   pluginId: "third-party-story",
@@ -23,6 +25,23 @@ const text = (content: string): LLMResponse => ({
   toolCalls: [],
   finishReason: "stop",
   usage: { inputTokens: 1, outputTokens: 1 },
+});
+
+const submitted = (content: string): LLMResponse => ({
+  ...text(""),
+  toolCalls: [
+    {
+      id: "submit",
+      name: "submit-output",
+      arguments: JSON.stringify({ narrativeOutput: content }),
+    },
+  ],
+  finishReason: "tool_calls",
+});
+const segmented = (content: string): LLMResponse => ({
+  ...text(""),
+  toolCalls: [{ id: "submit", name: "submit-output", arguments: content }],
+  finishReason: "tool_calls",
 });
 
 async function run(
@@ -71,6 +90,7 @@ async function run(
       );
       if (
         structured &&
+        responseIsContent(payload.response) &&
         (!payload.response.content?.trim() ||
           (rewriteBlank && payload.response.content.startsWith("Rewrite")))
       ) {
@@ -116,9 +136,6 @@ async function run(
       usage: reply.usage,
     };
   });
-  const onDelta = vi.fn(
-    async (_delta: { textDelta: string; reset?: true }) => undefined,
-  );
   const toolExecutor = {
     execute: vi.fn(),
     getToolInfo: () => ({
@@ -147,7 +164,6 @@ async function run(
       hookPipeline: pipeline,
       llm: { generate, stream },
       toolExecutor,
-      onDelta,
       loadRuntime: async () => ({
         manifest: { ...story, maxSteps },
         promptTemplate: "Continue the scene.",
@@ -177,7 +193,6 @@ async function run(
     stream,
     toolExecutor,
     store,
-    onDelta,
     reviews,
   };
 }
@@ -193,7 +208,7 @@ describe("plugin response validation", () => {
             { id: "unexecuted", name: "emit-event", arguments: "{}" },
           ],
         },
-        text(
+        segmented(
           JSON.stringify({
             segments: [{ kind: "narration", text: "Rain falls." }],
           }),
@@ -222,13 +237,13 @@ describe("plugin response validation", () => {
     ["zh-CN", " \n ", false],
     ["zh-CN", "Rewrite this draft", true],
   ] as const)(
-    "adds localized JSON feedback to an existing blank rejection (%s, %j, rewritten: %s)",
+    "keeps response review separate from missing-submission validation (%s, %j, rewritten: %s)",
     async (locale, content, rewriteBlank) => {
       const replacement = JSON.stringify({
         segments: [{ kind: "narration", text: "Rain falls." }],
       });
       const { result, generate, reviews } = await run(
-        [{ ...text(""), content }, text(replacement)],
+        [{ ...text(""), content }, segmented(replacement)],
         6,
         { locale, structured: true, rewriteBlank },
       );
@@ -239,36 +254,18 @@ describe("plugin response validation", () => {
         stop: { reason: "completed" },
       });
       const request = generate.mock.calls[1]![0];
-      expect(request.responseFormat?.type).toBe("json_schema");
+      expect(request.responseFormat).toBeUndefined();
       // This correction spends review budget and keeps the normal tool surface.
       expect(request.tools?.length).toBeGreaterThan(0);
       const correction = String(request.messages.at(-1)?.content);
       expect(correction).toContain(
         "Write the story from the selected perspective.",
       );
-      if (locale === "zh-CN") {
-        expect(correction).toMatch(/空白|为空/);
-        expect(correction).toContain("未返回 JSON 对象");
-        expect(correction).toContain("完整对象");
-        expect(correction).not.toMatch(/empty|whitespace|no JSON/i);
-      } else {
-        expect(correction).toMatch(/empty or whitespace-only/i);
-        expect(correction).toMatch(/no JSON object was returned/i);
-        expect(correction).toMatch(/complete object.*schema.*segments/i);
-      }
-      if (rewriteBlank) {
+      expect(correction).not.toMatch(/no JSON|segments array is missing/);
+      if (rewriteBlank)
         expect(request.messages).toContainEqual(
-          expect.objectContaining({
-            role: "assistant",
-            content: " \n ",
-            reasoningContent: "Reviewed reasoning.",
-            providerContinuation: expect.any(Object),
-          }),
+          expect.objectContaining({ role: "assistant", content }),
         );
-        expect(
-          request.messages.some((message) => message.content === content),
-        ).toBe(false);
-      }
     },
   );
 
@@ -279,33 +276,31 @@ describe("plugin response validation", () => {
     };
     const { result, generate, stream, toolExecutor } = await run([
       rejected,
-      text("I watch the harbor."),
+      submitted("I watch the harbor."),
     ]);
     expect(stream).not.toHaveBeenCalled();
     expect(toolExecutor.execute).not.toHaveBeenCalled();
     expect(generate).toHaveBeenCalledTimes(2);
     const retry = generate.mock.calls[1]![0].messages;
     expect(retry.at(-1)?.content).toContain("Use the selected perspective");
-    expect(retry.at(-1)?.content).toContain("resend the complete response");
-    expect(retry.flatMap((message) => message.toolCalls ?? [])).toEqual([]);
+
+    expect(retry.flatMap((message) => message.toolCalls ?? [])).toEqual(
+      rejected.toolCalls,
+    );
     expect(result.runtimeResults[0]).toMatchObject({
       status: "success",
       output: { narrativeOutput: "I watch the harbor." },
     });
   });
-  it("tells a Chinese session in Chinese that the draft was not accepted", async () => {
+  it("keeps the reviewer correction unchanged in a Chinese session", async () => {
     const { generate } = await run(
-      [text("Rejected draft"), text("I watch the harbor.")],
+      [text("Rejected draft"), submitted("I watch the harbor.")],
       6,
       { locale: "zh-CN" },
     );
-    const [rejection, correction] = String(
-      generate.mock.calls[1]![0].messages.at(-1)?.content,
-    ).split("\n");
-    expect(rejection).toContain("草稿未被接受");
-    expect(rejection).not.toMatch(/[A-Za-z]/);
-    // The plugin's own correction follows, as the plugin wrote it.
-    expect(correction).toBe("Use the selected perspective.");
+    expect(
+      String(generate.mock.calls[1]![0].messages.at(-1)?.content),
+    ).toContain("Use the selected perspective.");
   });
   it("sends a rejected draft back with its reasoning", async () => {
     const providerContinuation = {
@@ -319,7 +314,7 @@ describe("plugin response validation", () => {
         reasoningContent: "Plan the scene.",
         providerContinuation,
       },
-      text("I watch the harbor."),
+      submitted("I watch the harbor."),
     ]);
     const retry = generate.mock.calls[1]![0].messages;
     // Thinking-mode providers reject an assistant turn without its reasoning.
@@ -331,23 +326,19 @@ describe("plugin response validation", () => {
       providerContinuation,
     });
   });
-  it("streams drafts and resets the rejected one before the accepted story", async () => {
-    const { result, stream, onDelta } = await run(
-      [text("Rejected draft"), text("I watch the harbor.")],
+  it("discards a rejected streamed draft before committing the accepted story", async () => {
+    const { result, stream, committed, store } = await run(
+      [text("Rejected draft"), submitted("I watch the harbor.")],
       6,
       { streaming: true },
     );
     expect(stream).toHaveBeenCalledTimes(2);
+    expect(committed.status).toBe("committed");
+    const messages = await store.listMessages("review");
     expect(
-      onDelta.mock.calls.map(([delta]) => [
-        delta.textDelta,
-        delta.reset ?? false,
-      ]),
-    ).toEqual([
-      ["Rejected draft", false],
-      ["", true],
-      ["I watch the harbor.", false],
-    ]);
+      messages.filter((message) => message.role === "assistant"),
+    ).toHaveLength(1);
+    expect(JSON.stringify(messages)).not.toContain("Rejected draft");
     expect(result.runtimeResults[0]).toMatchObject({
       status: "success",
       output: { narrativeOutput: "I watch the harbor." },
@@ -361,9 +352,7 @@ describe("plugin response validation", () => {
       status: "failed",
       output: null,
     });
-    expect(result.runtimeResults[0]?.error).toContain(
-      "Response validation failed",
-    );
+    expect(result.runtimeResults[0]?.error).toContain("review-rejected");
     expect(committed.status).toBe("failed");
     expect(await store.listMessages("review")).toEqual([]);
     expect(await store.listTurnMessages("review")).toEqual([]);
