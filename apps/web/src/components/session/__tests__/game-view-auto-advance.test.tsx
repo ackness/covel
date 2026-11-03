@@ -163,9 +163,10 @@ it.each(["chat", "stage", "immersive stage"])(
       );
     });
     expect(actions.abortActiveTurn).toHaveBeenCalledTimes(1);
-    expect(controls().queryAllByRole("status")).toHaveLength(0);
+    // A stopped run leaves no empty bar across the session backdrop.
+    expect(screen.queryByTestId("auto-advance-control")).toBeNull();
     expect(
-      controls().queryByRole("button", {
+      screen.queryByRole("button", {
         name: i18n.t("session.autoAdvanceStop"),
       }),
     ).toBeNull();
@@ -173,8 +174,7 @@ it.each(["chat", "stage", "immersive stage"])(
     state = reducer(state, { type: "SET_EXECUTING", value: false });
     state = reducer(state, { type: "SET_ADVANCE", advance: null });
     rerender(view());
-    expect(controls().queryAllByRole("status")).toHaveLength(0);
-    expect(controls().queryByRole("combobox")).toBeNull();
+    expect(screen.queryByTestId("auto-advance-control")).toBeNull();
     expect(actions.setAutoAdvanceLimit).not.toHaveBeenCalled();
   },
 );

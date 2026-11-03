@@ -37,7 +37,8 @@ for (const mode of ["chat", "stage"] as const) {
       });
       await page.goto(`/session?sid=${host.sessionId}`);
       const controls = page.getByTestId("auto-advance-control");
-      await expect(controls).toBeVisible();
+      // Idle auto-advance leaves no empty bar across the session backdrop.
+      await expect(controls).toHaveCount(0);
       await composerInput(page).fill("Begin");
       await composerInput(page).press("Enter");
       await expect.poll(() => host.calls()).toBe(3);
@@ -58,15 +59,15 @@ for (const mode of ["chat", "stage"] as const) {
         controls.getByRole("button", { name: "停止推进" }),
       ).toBeVisible();
       await controls.getByRole("button", { name: "停止推进" }).click();
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(controls).toHaveCount(0);
       expect(
         (await host.store.listMessages(host.sessionId)).filter(
           (message) => message.role === "assistant",
         ),
       ).toHaveLength(4);
       await page.reload();
-      await expect(controls).toBeVisible();
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(composer(page)).toHaveAttribute("data-executing", "false");
+      await expect(controls).toHaveCount(0);
       await page.getByRole("button", { name: "解析视图", exact: true }).click();
       await openStudioConfiguration(page);
       await page.getByLabel("自动推进轮数", { exact: true }).fill("0");
