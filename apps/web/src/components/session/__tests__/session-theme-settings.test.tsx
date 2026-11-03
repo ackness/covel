@@ -243,6 +243,28 @@ it("retires an active source immediately on active-set refresh and keeps changed
   rerender({ active: false });
   await waitFor(() => expect(result.current.source?.state.packs).toEqual([]));
 });
+it("keeps the theme when the plugin list reloads with the same activations", async () => {
+  const { store } = await themeStore();
+  state.store = store;
+  state.fetch.mockResolvedValue(response());
+  const { result, rerender } = renderHook(
+    ({ list }) => usePluginThemes("session-one", list, "zh-CN"),
+    { initialProps: { list: plugins } },
+  );
+  await waitFor(() =>
+    expect(result.current.source?.state.status).toBe("ready"),
+  );
+  await act(async () => {
+    await result.current.source!.select(choiceOf(themeFixture()));
+  });
+  const effective = result.current.source?.state.effective;
+  expect(effective).not.toBeNull();
+  expect(state.fetch).toHaveBeenCalledTimes(1);
+  // A reload after a turn hands over a new array with the same plugins.
+  rerender({ list: plugins.map((plugin) => ({ ...plugin })) });
+  expect(state.fetch).toHaveBeenCalledTimes(1);
+  expect(result.current.source?.state.effective).toBe(effective);
+});
 it("keeps Off blocked when its save fails and a delayed theme response arrives", async () => {
   const { store, save } = await themeStore();
   state.store = store;
