@@ -120,6 +120,11 @@ export interface PluginDataInjectDecl {
   readonly format?: "summary" | "full" | "ids-only";
   /** Upper bound on entries rendered. Defaults to 50. */
   readonly maxEntries?: number;
+  /**
+   * Top-level value properties shown to the model, in this order. Others are
+   * left out; non-object values are shown whole. Defaults to every property.
+   */
+  readonly fields?: readonly string[];
 }
 
 /**

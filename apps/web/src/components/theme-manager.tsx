@@ -7,7 +7,7 @@ import { ContrastNotice } from "@/components/appearance/ContrastNotice.js";
 import { importCssImages } from "@/lib/import-image.js";
 import { useSettingsWritable } from "@/settings/use-settings-save.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import { Check, Download, Palette, Trash2, Upload } from "lucide-react";
@@ -51,9 +51,16 @@ export function ThemeManagerWidget() {
   const themes = getRegisteredThemes();
   const appearance = storedThemeSelection(store).id;
 
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  useEffect(() => () => clearTimeout(noticeTimer.current), []);
+
   function flash(message: string) {
     setNotice(message);
-    setTimeout(() => setNotice(null), 2500);
+    // A later notice restarts the timer; unmounting cancels it.
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 2500);
   }
 
   async function handleImport(

@@ -137,9 +137,7 @@ export async function prepareAgentToolSurface(args: {
           pluginId: resolution.pluginId,
         } as const;
         absent.set(name, absentImportTool(name, contract, notAllowed));
-        console.info(
-          `[service-imports] runtime "${manifest.name}" in session ${input.sessionId}: imported tool "${name}" (${contract}) is absent: ${absentReason(notAllowed)}`,
-        );
+        logAbsentImport(input.sessionId, manifest, name, contract, notAllowed);
         continue;
       }
     }
@@ -148,13 +146,42 @@ export async function prepareAgentToolSurface(args: {
       continue;
     }
     absent.set(name, absentImportTool(name, contract, resolution));
-    // The author's diagnostic; the model only learns that the tool is
-    // unavailable, and why, without plugin IDs.
-    console.info(
-      `[service-imports] runtime "${manifest.name}" in session ${input.sessionId}: imported tool "${name}" (${contract}) is absent: ${absentReason(resolution)}`,
-    );
+    logAbsentImport(input.sessionId, manifest, name, contract, resolution);
   }
   return { available, absent, declarative, output };
+}
+
+const MAX_LOGGED_ABSENCES = 2_000;
+const loggedAbsences = new Set<string>();
+
+/**
+ * The author's diagnostic; the model only learns that the tool is
+ * unavailable, and why, without plugin IDs. An import is optional, so a
+ * missing provider is ordinary: each absence is logged once per session and
+ * again only when its reason changes, instead of on every run.
+ */
+function logAbsentImport(
+  sessionId: string,
+  manifest: RuntimeManifest,
+  name: string,
+  contract: string,
+  absent: AbsentImport,
+): void {
+  const reason = absentReason(absent);
+  const key = JSON.stringify([
+    sessionId,
+    manifest.pluginId,
+    manifest.name,
+    name,
+    contract,
+    reason,
+  ]);
+  if (loggedAbsences.has(key)) return;
+  if (loggedAbsences.size >= MAX_LOGGED_ABSENCES) loggedAbsences.clear();
+  loggedAbsences.add(key);
+  console.info(
+    `[service-imports] runtime "${manifest.name}" in session ${sessionId}: imported tool "${name}" (${contract}) is absent: ${reason}`,
+  );
 }
 
 function absentReason(absent: AbsentImport): string {

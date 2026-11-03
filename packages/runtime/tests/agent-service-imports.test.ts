@@ -625,6 +625,33 @@ describe("an absent import", () => {
     }
   });
 
+  it("is logged once per session and reason, not on every run", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    // No provider is active, so the import is missing in every session.
+    const services = new PluginServiceRegistry({
+      list: async () => [],
+      ensure: async () => {},
+      paused: async () => [],
+    });
+    const manifest = agent({ name: "caller/logged-once" });
+    const prepare = (sessionId: string) =>
+      prepareAgentToolSurface({
+        manifest,
+        input: { sessionId },
+        deps: { services },
+      });
+    const logged = () =>
+      info.mock.calls.filter(([line]) =>
+        String(line).includes('runtime "caller/logged-once"'),
+      ).length;
+
+    await prepare("logged-once-a");
+    await prepare("logged-once-a");
+    expect(logged()).toBe(1);
+    await prepare("logged-once-b");
+    expect(logged()).toBe(2);
+  });
+
   it("is not found by search-tools when deferred", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const { deps, toolExecutor } = await fixture();

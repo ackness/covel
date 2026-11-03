@@ -14,10 +14,17 @@ import type { ValidationResult } from "./types.js";
 // public $id. Do not register validate-once schemas globally: Ajv otherwise
 // throws when a hot reload or second plugin supplies a distinct object with
 // the same id. Local $refs still compile within each validation call.
-const ajvDraft7 = new Ajv({ allErrors: true, addUsedSchema: false });
+// `type: ["string", "number"]` is standard JSON Schema; strict mode would
+// otherwise log a warning for every author schema that uses a type array.
+const ajvDraft7 = new Ajv({
+  allErrors: true,
+  addUsedSchema: false,
+  allowUnionTypes: true,
+});
 const ajvDraft2020 = new Ajv2020({
   allErrors: true,
   addUsedSchema: false,
+  allowUnionTypes: true,
 });
 
 function validatorFor(schema: Readonly<Record<string, unknown>>) {

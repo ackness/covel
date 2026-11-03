@@ -1,5 +1,5 @@
 ---
-version: 0.0.43
+version: 0.0.44
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -67,6 +67,9 @@ runtime:
     selfData:
       - namespace: affinity
         as: <existing-affinity>
+        # The panel's display fields (bar value, colours, tier label) would
+        # crowd the reason and history out of each truncated summary.
+        fields: [name, score, tier, lastDelta, lastReason, notes, history]
   agent:
     history:
       maxTurns: 0

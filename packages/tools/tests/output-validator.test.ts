@@ -1,7 +1,27 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { validateOutput } from "../src/output-validator.js";
 
 describe("validateOutput", () => {
+  it.each([
+    ["draft-07", undefined],
+    ["2020-12", "https://json-schema.org/draft/2020-12/schema"],
+  ])("accepts %s type arrays without a strict-mode warning", (_, $schema) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const schema = {
+        ...($schema ? { $schema } : {}),
+        type: "object",
+        properties: { value: { type: ["string", "number", "boolean"] } },
+        required: ["value"],
+      };
+      expect(validateOutput({ value: 3 }, schema)).toEqual({ valid: true });
+      expect(validateOutput({ value: null }, schema).valid).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("should return valid for output matching schema", () => {
     const schema = {
       type: "object",

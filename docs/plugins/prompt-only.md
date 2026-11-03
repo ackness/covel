@@ -245,6 +245,7 @@ runtime:
 | `io.selfData` 的 `namespace`        | 读自己的哪一块数据，这里就是数据集的名字                                                                                     |
 | `as`                                | 这块内容在提示词里的标签。提示词里用同一个标签引用它                                                                         |
 | `maxEntries`                        | 最多放进多少条，默认 50                                                                                                      |
+| `fields`（可选）                    | 每条记录给模型看的字段和顺序，例如去掉只给界面用的颜色、进度条数值。不写则全部                                               |
 | `agent.tools.datasets`              | 模型能用这个数据集的哪些工具。这里只给 `observations-upsert`；只写 `observations` 则给数据集提供的全部工具（读、列、写、改） |
 
 然后在提示词里告诉模型怎么用：

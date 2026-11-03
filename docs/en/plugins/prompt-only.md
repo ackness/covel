@@ -245,6 +245,7 @@ runtime:
 | `namespace` in `io.selfData`        | Which block of its own data to read; here, the dataset's name                                                                                                                |
 | `as`                                | The tag for this content in the prompt. The prompt refers to it with the same tag                                                                                            |
 | `maxEntries`                        | The most entries to put in. The default is 50                                                                                                                                |
+| `fields` (optional)                 | Which fields of each record the model sees, in order; for example, leave out colours and bar values that only the UI uses. All fields when omitted                           |
 | `agent.tools.datasets`              | Which of the dataset's tools the model can use. Here only `observations-upsert`; writing just `observations` gives every tool the dataset offers (read, list, write, change) |
 
 Then tell the model how to use them in the prompt:

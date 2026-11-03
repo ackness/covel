@@ -507,7 +507,7 @@ io:
 
 #### `io.selfData`
 
-`io.selfData` puts a bounded page of own data from the named namespace into the agent prompt. `maxEntries` sets the window and `format` sets its display. If the runtime also holds write tools for that namespace, injected keys count toward its read baseline: a replacement based on an old value fails with `conflict` if the same key changes during the model request. An extra read-tool call is not needed to enable protection. Without corresponding write tools, injection records no baseline; keys outside the window still need explicit reads. See [read-baseline preconditions](./transactions.md#read-baselines) for full-value, absence and commit-isolation rules.
+`io.selfData` puts a bounded page of own data from the named namespace into the agent prompt. `maxEntries` sets the window, `format` sets its display, and `fields` lists the top-level value properties the model sees, in order (all of them when omitted). Leave out fields derived only for the UI (bar values, colours); `summary` truncates each entry, so put what matters first. A value that is not an object is shown whole. `fields` changes only the prompt: read baselines and tools still see the complete value. If the runtime also holds write tools for that namespace, injected keys count toward its read baseline: a replacement based on an old value fails with `conflict` if the same key changes during the model request. An extra read-tool call is not needed to enable protection. Without corresponding write tools, injection records no baseline; keys outside the window still need explicit reads. See [read-baseline preconditions](./transactions.md#read-baselines) for full-value, absence and commit-isolation rules.
 
 #### How inputs are read
 
