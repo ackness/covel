@@ -26,6 +26,11 @@ export interface StageSpritesProps {
    * authoritative stage-direction `actors: []` instead permits departure. */
   readonly retainWhenEmpty?: boolean;
   readonly exitTransition?: ExitTransition;
+  /**
+   * The character speaking the line being read. While they are on stage,
+   * they are the one highlighted instead of the cast's active actor.
+   */
+  readonly speakingId?: string;
 }
 
 export function StageSprites({
@@ -35,6 +40,7 @@ export function StageSprites({
   dimmed = false,
   retainWhenEmpty = true,
   exitTransition,
+  speakingId,
 }: StageSpritesProps): ReactElement {
   const { live, outgoing, validKeys, finish } = useStageSpriteTransitions({
     speakers,
@@ -43,6 +49,11 @@ export function StageSprites({
     retainWhenEmpty,
     exitTransition,
   });
+  const speakingOnStage =
+    speakingId !== undefined &&
+    live.some(({ slot }) => slot.characterId === speakingId && !slot.exiting);
+  const isActive = (slot: { characterId: string; active?: boolean }) =>
+    speakingOnStage ? slot.characterId === speakingId : !!slot.active;
 
   return (
     <div
@@ -89,13 +100,13 @@ export function StageSprites({
             style={{
               left: `${lane.leftPct}%`,
               width: `${lane.widthPct}%`,
-              zIndex: slot.exiting ? 0 : slot.active ? 2 : 1,
+              zIndex: slot.exiting ? 0 : isActive(slot) ? 2 : 1,
             }}
           >
             <div
               className={clsx(
                 "flex h-full w-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
-                slot.active && !slot.exiting
+                isActive(slot) && !slot.exiting
                   ? "ui-stage-sprite-active"
                   : "ui-stage-sprite-inactive",
               )}
@@ -138,7 +149,7 @@ export function StageSprites({
               <span
                 className={clsx(
                   "ui-stage-panel absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors duration-300",
-                  slot.active
+                  isActive(slot)
                     ? "border-(--accent-primary) text-(--accent-primary)"
                     : "text-muted-foreground",
                 )}

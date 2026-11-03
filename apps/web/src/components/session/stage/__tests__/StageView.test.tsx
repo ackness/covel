@@ -227,8 +227,9 @@ describe("stage decision lifecycle", () => {
       ],
     };
     view.rerender(<StageView {...props} messages={[previousStory, message]} />);
-    expect(screen.getByText("First.")).toBeDefined();
-    expect(screen.getByText("Second.")).toBeDefined();
+    // The new story opens line by line above the live decision panel.
+    expect(screen.getByTestId("stage-reader-line").textContent).toBe("First.");
+    expect(screen.queryByText("Second.")).toBeNull();
     const input = screen.getByTestId(
       "stage-decision-input",
     ) as HTMLTextAreaElement;
@@ -236,6 +237,102 @@ describe("stage decision lifecycle", () => {
     fireEvent.change(input, { target: { value: "Continue immediately" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(props.onSendMessage).toHaveBeenCalledWith("Continue immediately");
+  });
+  it("pages a new story by line with speakers, progress and show all", () => {
+    stageSlots.realSprites = true;
+    stageSlots.items = [
+      {
+        slot: "stage.cast@1",
+        value: {
+          actors: [
+            { characterId: "char-aya", displayName: "阿雅", active: false },
+            { characterId: "char-ren", displayName: "蓮", active: true },
+          ],
+          retainWhenEmpty: false,
+          exitTransition: "fade",
+        },
+      },
+    ];
+    const props = fixture();
+    const view = render(<StageView {...props} />);
+    const message = {
+      ...previousStory,
+      id: "paged",
+      turnId: "paged",
+      content: "雨停了。\n\n「走吧。」",
+      segments: [
+        { kind: "narration" as const, text: "雨停了。" },
+        {
+          kind: "dialogue" as const,
+          text: "「走吧。」",
+          speaker: "阿雅",
+          speakerId: "char-aya",
+        },
+      ],
+    };
+    view.rerender(<StageView {...props} messages={[previousStory, message]} />);
+    const line = () => screen.getByTestId("stage-reader-line").textContent;
+    expect(line()).toBe("雨停了。");
+    expect(screen.queryByTestId("stage-reader-speaker")).toBeNull();
+    expect(screen.getByTestId("stage-reader-progress").textContent).toBe(
+      "1 / 2",
+    );
+
+    fireEvent.keyDown(window, { key: " " });
+    expect(line()).toBe("「走吧。」");
+    expect(screen.getByTestId("stage-reader-speaker").textContent).toBe("阿雅");
+    expect(screen.getByTestId("stage-reader-progress").textContent).toBe(
+      "2 / 2",
+    );
+    // The speaking character is highlighted instead of the cast's active one.
+    const sprite = (id: string) =>
+      document.querySelector(`[data-character-id="${id}"] > div`)?.className;
+    expect(sprite("char-aya")).toContain("ui-stage-sprite-active");
+    expect(sprite("char-ren")).toContain("ui-stage-sprite-inactive");
+
+    // Typing in the panel never pages the story.
+    fireEvent.keyDown(screen.getByTestId("stage-decision-input"), {
+      key: "ArrowLeft",
+    });
+    expect(line()).toBe("「走吧。」");
+
+    fireEvent.click(screen.getByTestId("stage-reader-show-all"));
+    expect(screen.queryByTestId("stage-reader")).toBeNull();
+    expect(screen.getByText("雨停了。")).toBeDefined();
+    expect(screen.getByText("「走吧。」")).toBeDefined();
+  });
+  it("auto-plays each line for a time that grows with its length", () => {
+    vi.useFakeTimers();
+    const props = fixture();
+    const view = render(<StageView {...props} />);
+    view.rerender(
+      <StageView
+        {...props}
+        messages={[
+          previousStory,
+          {
+            ...previousStory,
+            id: "auto",
+            turnId: "auto",
+            content: "Short.\n\nNext.",
+            segments: [
+              { kind: "narration" as const, text: "Short." },
+              { kind: "narration" as const, text: "Next." },
+            ],
+          },
+        ]}
+      />,
+    );
+    const autoPlay = document.querySelector("button[aria-pressed]");
+    expect(autoPlay).not.toBeNull();
+    fireEvent.click(autoPlay!);
+    expect(screen.getByTestId("stage-reader-line").textContent).toBe("Short.");
+    act(() => vi.advanceTimersByTime(1799));
+    expect(screen.getByTestId("stage-reader-line").textContent).toBe("Short.");
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByTestId("stage-reader-line").textContent).toBe("Next.");
+    act(() => vi.advanceTimersByTime(1800));
+    expect(screen.queryByTestId("stage-reader")).toBeNull();
   });
   it("retains resolved speakers and navigation without gating input", () => {
     const props = fixture();

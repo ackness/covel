@@ -2401,7 +2401,10 @@
     "thinkingLabel": "叙事生成中…",
     "previousParagraph": "上一段",
     "nextParagraph": "下一段",
-    "readAgain": "重新阅读"
+    "readAgain": "重新阅读",
+    "readerLabel": "剧情",
+    "readerProgress": "{{current}} / {{total}}",
+    "readerShowAll": "显示全文"
   },
   "common": {
     "preview": "预览",

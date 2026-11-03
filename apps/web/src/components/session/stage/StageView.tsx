@@ -11,9 +11,8 @@ import { projectStoryOperationFailures, stageCastSchema } from "@covel/shared";
  * the components). UI slots supply committed values and turn previews.
  */
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
-import { useMemo, useState, type ReactElement } from "react";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { Loader2 } from "lucide-react";
 import type {
   StageBackdropModel,
   StageChoicesModel,
@@ -40,7 +39,8 @@ import { MessageBlockRenderer } from "../chat-messages/message-blocks.js";
 import { StageBackdrop } from "./StageBackdrop.js";
 import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
-import { StageDialog, type StageDialogProps } from "./StageDialog.js";
+import { StageDialog } from "./StageDialog.js";
+import { StageReader } from "./StageReader.js";
 import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
@@ -174,6 +174,14 @@ export function StageView(props: StageViewProps): ReactElement {
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
+  // A story already on screen when the stage opens counts as read; each story
+  // committed after that opens line by line at the top of the decision panel.
+  const [readStoryId, setReadStoryId] = useState(storyMsg?.id);
+  const [speakingId, setSpeakingId] = useState<string | undefined>();
+  const finishReading = useCallback(
+    () => setReadStoryId(storyMsg?.id),
+    [storyMsg?.id],
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -216,6 +224,8 @@ export function StageView(props: StageViewProps): ReactElement {
   }, [storyTurnId, props.executionSteps, messages]);
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
   // Only execution controls action availability; reading never gates input.
+  const reading =
+    !!storyMsg && storyMsg.id !== readStoryId && !executing && !advancing;
   const choicesVisible = advancing || !executing;
 
   return (
@@ -235,9 +245,10 @@ export function StageView(props: StageViewProps): ReactElement {
             speakers={speakers}
             presence={presence}
             sessionId={session.id}
-            dimmed={choicesVisible}
+            dimmed={choicesVisible && !reading}
             retainWhenEmpty={cast.retainWhenEmpty}
             exitTransition={cast.exitTransition}
+            speakingId={reading ? speakingId : undefined}
           />
         )}
         <StageHud
@@ -250,11 +261,11 @@ export function StageView(props: StageViewProps): ReactElement {
           onToggleImmersive={onToggleImmersive}
           onExit={() => onViewModeChange("parsed")}
         />
-        {executing && (
-          <CommittedStageDialog
+        {executing && storyMsg && (
+          <StageDialog
+            key={storyMsg.id}
             sessionId={session.id}
             message={storyMsg}
-            executing
             autoPlay={autoPlay}
             reducedMotion={reducedMotion}
           />
@@ -262,7 +273,17 @@ export function StageView(props: StageViewProps): ReactElement {
         <StageChoices
           hideInput={props.composerReplaced}
           storyReview={
-            storyMsg ? (
+            reading && storyMsg ? (
+              <StageReader
+                key={storyMsg.id}
+                sessionId={session.id}
+                message={storyMsg}
+                autoPlay={autoPlay}
+                reducedMotion={reducedMotion}
+                onSpeakerChange={setSpeakingId}
+                onFinish={finishReading}
+              />
+            ) : storyMsg ? (
               <StageDialog
                 key={storyMsg.id}
                 inline
@@ -360,33 +381,5 @@ export function StageView(props: StageViewProps): ReactElement {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-/** The previous committed story remains readable while an action is running. */
-function CommittedStageDialog({
-  message,
-  executing,
-  ...props
-}: Omit<StageDialogProps, "message"> & {
-  message?: StreamMessage;
-  executing: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <>
-      {message && <StageDialog {...props} key={message.id} message={message} />}
-      {executing && (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center px-4"
-          data-testid="stage-thinking"
-        >
-          <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            <span>{t("stage.thinkingLabel")}</span>
-          </div>
-        </div>
-      )}
-    </>
   );
 }
