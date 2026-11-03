@@ -5,10 +5,7 @@ import {
   pendingDimensionSettlements,
   snapshotUserSettings,
 } from "@covel/runtime";
-import {
-  getPluginTrustInfo,
-  pluginRuntimeManifests,
-} from "@covel/plugin-loader";
+import { pluginRuntimeManifests } from "@covel/plugin-loader";
 import {
   sessionWorldContextV1,
   type RuntimeResult,
@@ -22,6 +19,7 @@ import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js"
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
+import { runtimeRunsWithoutPrompt } from "./approval-preflight.js";
 
 /**
  * Settle what an earlier turn left unsettled, before the next turn starts.
@@ -74,15 +72,6 @@ export async function retryPendingDimensionSettlements(
     });
     if (!pending || pending.receipts.length === 0) return;
     const { providerPluginId } = pending;
-    // A manual run of a community runtime needs the player's grant for it;
-    // the notice asks for one, an automatic run must not go around it.
-    if (
-      getPluginTrustInfo(
-        providerPluginId,
-        pluginRegistry.get(providerPluginId)?.source,
-      ).source === "community"
-    )
-      return;
     const extensionHost = c.get("pluginExtensions");
     if (!extensionHost) return;
     const runnable = runnablePluginIds(session.activePlugins, pluginRegistry);
@@ -106,6 +95,18 @@ export async function retryPendingDimensionSettlements(
     if (
       !trackerRuntimeId ||
       context.dimensionProviderPluginId !== providerPluginId
+    )
+      return;
+    // The retry needs the grants a manual run of the tracker needs. When the
+    // player still has to give one, the notice asks; this run must not go
+    // around it.
+    if (
+      !(await runtimeRunsWithoutPrompt(
+        c,
+        session,
+        providerPluginId,
+        trackerRuntimeId,
+      ))
     )
       return;
 

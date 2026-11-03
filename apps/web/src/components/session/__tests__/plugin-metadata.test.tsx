@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { PluginListPanel } from "../plugin-list-panel.js";
-import { isBuiltinDefaultPackage } from "../session-prep-screen.js";
+import { isDefaultPackage } from "../session-prep-screen.js";
 import { worldStorageLabel } from "../world-select-screen.js";
 import type { WorldRecord } from "@/services/api.js";
 
@@ -107,16 +107,50 @@ describe("session plugin metadata UI", () => {
     },
   );
 
-  it("seeds builtin core defaults before the session plan loads", () => {
-    expect(isBuiltinDefaultPackage({ kind: "core", source: "builtin" })).toBe(
-      true,
-    );
-    expect(isBuiltinDefaultPackage({ kind: "core", source: "community" })).toBe(
-      false,
-    );
-    expect(isBuiltinDefaultPackage({ kind: "plugin", source: "builtin" })).toBe(
-      false,
-    );
+  it("seeds every authorized core package before the session plan loads", () => {
+    expect(
+      isDefaultPackage({
+        kind: "core",
+        source: "builtin",
+        executionMode: "code",
+      }),
+    ).toBe(true);
+    // A community core package starts selected whenever the player could add
+    // it without a new approval, exactly as the server resolver treats it.
+    expect(
+      isDefaultPackage({
+        kind: "core",
+        source: "community",
+        executionMode: "declarative",
+      }),
+    ).toBe(true);
+    expect(
+      isDefaultPackage({
+        kind: "core",
+        source: "community",
+        executionMode: "code",
+        trust: {
+          source: null,
+          trustedSource: true,
+          integrity: "verified",
+          autoApproved: true,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isDefaultPackage({
+        kind: "core",
+        source: "community",
+        executionMode: "code",
+      }),
+    ).toBe(false);
+    expect(
+      isDefaultPackage({
+        kind: "plugin",
+        source: "builtin",
+        executionMode: "code",
+      }),
+    ).toBe(false);
   });
 
   it("labels world storage locations", async () => {

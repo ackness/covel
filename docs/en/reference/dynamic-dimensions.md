@@ -238,7 +238,7 @@ There are five states: `pending-settlement`, `settled`, `no-change`, `manual`, a
 3. If this retry succeeds, the turn goes ahead as usual.
 4. Only if it still fails is the turn blocked. The error message tells the player to retry or skip in the pending-settlement prompt, and then send again.
 
-If the dimension is provided by a community plugin, there is no automatic retry, because a manual run requires the player's approval, and it can only be done from the panel.
+The automatic retry runs only when the tracker can run without a new player approval: a bundled plugin, a freshly verified declarative package, or a community plugin that already holds this session's server-code and runtime grants (including grants a trusted source covers). When approval is still needed there is no automatic retry and no approval prompt; the player retries from the panel.
 
 **The player's actions** use the recovery information that the host verified in the snapshot (recovery metadata). They call the existing runtime RPC:
 

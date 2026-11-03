@@ -9,7 +9,8 @@ import {
   pluginTagLabel,
 } from "@/lib/session-plugin-selection.js";
 import {
-  isBuiltinDefaultPackage,
+  isAuthorizedPackage,
+  isDefaultPackage,
   requiredPluginIdsForWorld,
 } from "./plugin-selection-helpers.js";
 import * as api from "@/services/api.js";
@@ -142,10 +143,7 @@ export function usePluginSelection(
   }, [worldId, pluginPlanRequest, prepareWorldForServer]);
 
   const corePluginIds = useMemo(
-    () =>
-      new Set(
-        plugins.filter(isBuiltinDefaultPackage).map((plugin) => plugin.id),
-      ),
+    () => new Set(plugins.filter(isDefaultPackage).map((plugin) => plugin.id)),
     [plugins],
   );
   const worldRequiredPluginIds = useMemo(
@@ -181,10 +179,7 @@ export function usePluginSelection(
         .filter((plugin) => plugin.hostState !== "error")
         .map((plugin) => ({
           ...plugin,
-          authorized:
-            plugin.source === "builtin" ||
-            plugin.executionMode === "declarative" ||
-            plugin.trust?.autoApproved === true,
+          authorized: isAuthorizedPackage(plugin),
         })),
     [plugins],
   );
