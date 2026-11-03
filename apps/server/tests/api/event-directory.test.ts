@@ -575,40 +575,69 @@ it("keeps an unreadable advertised topic and omits internal topics", async () =>
   ]);
 });
 
-it("retains referenced payload schemas in the catalogue", async () => {
-  const registry = createPluginRegistry();
-  const root = await makePluginRoot();
-  await writeSchema(root, "referenced.json", {
-    type: "object",
-    properties: { value: { $ref: "#/$defs/value" } },
-    required: ["value"],
-    $defs: { value: { type: "number" } },
-  });
-  registerPlugin(
-    registry,
-    "reference-owner",
-    parsedManifest({
-      name: "reference-owner/main",
-      pluginId: "reference-owner",
-      events: [
-        {
-          topic: "value.changed",
-          schema: "referenced.json",
-          description: "Value changed",
-          advertise: true,
+it.each([
+  [
+    "a local reference, described by the tool",
+    {
+      type: "object",
+      properties: { value: { $ref: "#/$defs/value" } },
+      required: ["value"],
+      $defs: { value: { type: "number" } },
+    },
+    false,
+  ],
+  [
+    "a recursive reference, which the tool cannot describe",
+    {
+      type: "object",
+      properties: { value: { $ref: "#/$defs/node" } },
+      required: ["value"],
+      $defs: {
+        node: {
+          type: "object",
+          properties: { child: { $ref: "#/$defs/node" } },
         },
-      ],
-    }),
-    root,
-  );
-  registry.syncSessionActivations("reference-session", ["reference-owner"]);
-  const directory = createEventDirectory({
-    registry,
-    resolvePluginDir: () => root,
-  });
-  const catalog = await directory.catalogText("reference-session", "en-US");
-  expect(catalog).toContain("- value.changed: Value changed (required: value)");
-  expect(catalog).toContain('payload schema: {"type":"object"');
-  expect(catalog).toContain('"$ref":"#/$defs/value"');
-  expect(catalog).toContain('"$defs":{"value":{"type":"number"}}');
-});
+      },
+    },
+    true,
+  ],
+])(
+  "repeats a payload schema in the catalogue only when the tool cannot describe it: %s",
+  async (_name, schema, repeated) => {
+    const registry = createPluginRegistry();
+    const root = await makePluginRoot();
+    await writeSchema(root, "referenced.json", schema);
+    registerPlugin(
+      registry,
+      "reference-owner",
+      parsedManifest({
+        name: "reference-owner/main",
+        pluginId: "reference-owner",
+        events: [
+          {
+            topic: "value.changed",
+            schema: "referenced.json",
+            description: "Value changed",
+            advertise: true,
+          },
+        ],
+      }),
+      root,
+    );
+    registry.syncSessionActivations("reference-session", ["reference-owner"]);
+    const directory = createEventDirectory({
+      registry,
+      resolvePluginDir: () => root,
+    });
+    const catalog = await directory.catalogText("reference-session", "en-US");
+    expect(catalog).toContain(
+      "- value.changed: Value changed (required: value)",
+    );
+    if (repeated) {
+      expect(catalog).toContain('payload schema: {"type":"object"');
+      expect(catalog).toContain('"$ref":"#/$defs/node"');
+    } else {
+      expect(catalog).not.toContain("payload schema:");
+    }
+  },
+);

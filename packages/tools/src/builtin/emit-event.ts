@@ -87,13 +87,30 @@ export function createEmitEventTool(deps: {
   });
 }
 
-/** References may be nested; never send a provider a dangling reference. */
-export function schemaHasReferences(value: unknown): boolean {
-  if (value === null || typeof value !== "object") return false;
-  return Object.entries(value).some(
-    ([key, child]) =>
-      key === "$ref" || key === "$defs" || schemaHasReferences(child),
-  );
+/** The payload shape the emit-event tool can show a model, if any. */
+function describedPayload(
+  schema: Record<string, unknown> | undefined,
+): Readonly<Record<string, unknown>> {
+  if (!schema) throw new Error("schema unavailable");
+  const payload = modelToolSchema(schema);
+  if (payload.type !== "object")
+    throw new Error("payload must describe an object");
+  return payload;
+}
+
+/**
+ * Whether the emit-event tool can describe this payload. The prompt's event
+ * catalogue repeats only the schemas the tool cannot show.
+ */
+export function canDescribeEventPayload(schema: unknown): boolean {
+  if (schema === null || typeof schema !== "object" || Array.isArray(schema))
+    return false;
+  try {
+    describedPayload(schema as Record<string, unknown>);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Advertise payload shapes without tightening the execution-time topic gate. */
@@ -105,10 +122,7 @@ export function buildSessionEmitEventTool(
   const base = createEmitEventTool(deps);
   const described = topics.flatMap(({ topic, schema }) => {
     try {
-      if (!schema) throw new Error("schema unavailable");
-      const payload = modelToolSchema(schema);
-      if (payload.type !== "object")
-        throw new Error("payload must describe an object");
+      const payload = describedPayload(schema);
       return [{ topic, payload: { ...payload, title: topic } }];
     } catch (error) {
       console.warn(
