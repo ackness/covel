@@ -94,7 +94,7 @@ function show(outputDrafts: readonly OutputDraft[]) {
   );
 }
 
-it("shows finished lines under the turn while it is written", () => {
+it("shows finished lines with their speakers under the turn while it is written", () => {
   show([draft]);
   const row = screen.getByTestId("output-draft");
   expect(row.closest("[data-turn-id]")?.getAttribute("data-turn-id")).toBe(
@@ -103,6 +103,12 @@ it("shows finished lines under the turn while it is written", () => {
   expect(row.getAttribute("data-draft-state")).toBe("writing");
   expect(row.textContent).toContain("The rain stopped.");
   expect(row.textContent).toContain("“Let's go.”");
+  // Dialogue without a template still names its speaker.
+  expect(
+    within(row)
+      .getAllByTestId("segment-speaker")
+      .map((name) => name.textContent),
+  ).toEqual(["Aya"]);
   // The line being written waits for its end at the default preference.
   expect(row.textContent).not.toContain("“Wai");
   expect(within(row).getByRole("status").textContent).toBe("Writing…");
