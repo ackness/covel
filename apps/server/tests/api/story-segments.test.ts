@@ -24,7 +24,7 @@ const text = (content: LLMMessageContent): string =>
     ? content
     : content.map((part) => (part.type === "text" ? part.text : "")).join("");
 
-/** Answers every narrator request with one segmented story, streamed. */
+/** Answers every narrator request with one segmented story, streamed in pieces. */
 class SegmentedNarrator implements LLMAdapter {
   requests: { role: string; content: string }[][] = [];
   rejectNext = false;
@@ -37,7 +37,8 @@ class SegmentedNarrator implements LLMAdapter {
     );
     if (this.rejectNext) {
       this.rejectNext = false;
-      return JSON.stringify({ segments: [] });
+      // Readable as it streams, but "aside" is not a segment kind.
+      return JSON.stringify({ segments: [{ kind: "aside", text: "草稿。" }] });
     }
     return JSON.stringify({
       segments: [
@@ -63,12 +64,19 @@ class SegmentedNarrator implements LLMAdapter {
   async *stream(
     params: Parameters<NonNullable<LLMAdapter["stream"]>>[0],
   ): AsyncIterable<LLMStreamEvent> {
-    yield { type: "tool-argument-delta" };
+    const args = this.answer(params);
+    for (let at = 0; at < args.length; at += 16)
+      yield {
+        type: "tool-argument-delta",
+        index: 0,
+        ...(at === 0 ? { id: "submit", name: "submit-output" } : {}),
+        argumentsDelta: args.slice(at, at + 16),
+      };
     yield {
       type: "tool-call",
       id: "submit",
       name: "submit-output",
-      arguments: this.answer(params),
+      arguments: args,
     };
     yield { type: "done", finishReason: "tool_calls" };
   }
@@ -225,7 +233,7 @@ describe("segmented stories through the API", () => {
     { kind: "dialogue", speaker: "陌生人", text: "「等等！」" },
   ];
 
-  it("reports progress then one complete story with resolved speakers after durable commit", async () => {
+  it("shows the story as drafts, then one complete story with resolved speakers after durable commit", async () => {
     expect(firstTurn.some((frame) => frame.type === "narrative.delta")).toBe(
       false,
     );
@@ -245,12 +253,45 @@ describe("segmented stories through the API", () => {
       firstTurn.find((frame) => frame.type === "execution.completed")?.payload
         .committed,
     ).toBe(true);
-    const beforeStory = firstTurn.slice(
-      0,
-      firstTurn.findIndex((frame) => frame.type === "narrative.completed"),
+    const storyAt = firstTurn.findIndex(
+      (frame) => frame.type === "narrative.completed",
     );
-    expect(JSON.stringify(beforeStory)).not.toContain("雨停了，港口");
+    const beforeStory = firstTurn.slice(0, storyAt);
+    // Story text arrives early only as drafts, unit by unit, never as raw
+    // tool arguments.
+    const drafts = beforeStory.filter((frame) => frame.type === "output.draft");
+    expect(
+      drafts.map((frame) =>
+        (frame.payload.units as { text: string }[]).map((unit) => unit.text),
+      ),
+    ).toEqual([
+      ["雨停了，港口的灯一盏盏亮起。"],
+      ["雨停了，港口的灯一盏盏亮起。", "「走吧，船要开了。」"],
+      ["雨停了，港口的灯一盏盏亮起。", "「走吧，船要开了。」", "「等等！」"],
+    ]);
+    expect(drafts[1]?.payload).toMatchObject({
+      runtimeId: "narrator",
+      pluginId: "narrator",
+      mode: "units",
+      units: [
+        { meta: { kind: "narration" } },
+        { meta: { kind: "dialogue", speaker: "小雅" } },
+      ],
+    });
+    const accepted = beforeStory.filter(
+      (frame) => frame.type === "output.accepted",
+    );
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]?.payload.draftId).toBe(drafts[0]?.payload.draftId);
+    const others = beforeStory.filter(
+      (frame) =>
+        frame.type !== "output.draft" && frame.type !== "output.accepted",
+    );
+    expect(JSON.stringify(others)).not.toContain("雨停了，港口");
     expect(JSON.stringify(beforeStory)).not.toContain('"arguments"');
+    expect(firstTurn.some((frame) => frame.type === "output.retracted")).toBe(
+      false,
+    );
     expect(firstTurn.some((frame) => frame.type === "message.completed")).toBe(
       false,
     );
@@ -303,7 +344,7 @@ describe("segmented stories through the API", () => {
     expect(JSON.stringify(history)).not.toContain(AYA_ID);
   });
 
-  it("reports a safe rejection note, then publishes only the accepted story", async () => {
+  it("reports a safe rejection note, retracts its draft, then publishes only the accepted story", async () => {
     llm.rejectNext = true;
     const events = await turn("req-story-revise", "看海");
     const rejection = events.find((frame) => frame.type === "step.completed");
@@ -313,6 +354,16 @@ describe("segmented stories through the API", () => {
     expect(events.some((frame) => frame.type === "narrative.delta")).toBe(
       false,
     );
+    const drafting = events
+      .filter((frame) => frame.type.startsWith("output."))
+      .map((frame) =>
+        frame.type === "output.retracted"
+          ? `retracted ${String(frame.payload.reason)}`
+          : `${frame.type.slice(7)} ${(frame.payload.units as { text: string }[]).length}`,
+      );
+    expect(drafting[0]).toBe("draft 1");
+    expect(drafting[1]).toBe("retracted revising");
+    expect(drafting.at(-1)).toBe("accepted 3");
     expect(
       events.filter((frame) => frame.type === "narrative.completed"),
     ).toHaveLength(1);
@@ -323,6 +374,11 @@ describe("segmented stories through the API", () => {
     const before = await boot.store.listMessages(sessionId);
     try {
       const events = await turn("req-story-rollback", "上岸");
+      // The runtime accepted the story, but only a commit makes it one; the
+      // client drops drafts when the execution ends uncommitted.
+      expect(events.some((frame) => frame.type === "output.accepted")).toBe(
+        true,
+      );
       expect(events.some((frame) => frame.type.startsWith("narrative."))).toBe(
         false,
       );
