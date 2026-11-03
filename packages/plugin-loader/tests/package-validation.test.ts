@@ -717,3 +717,59 @@ describe("tool-sourced agent output", () => {
     },
   );
 });
+
+describe("live story output", () => {
+  const storyAgent = {
+    schedule: { trigger: { type: "manual" } },
+    agent: {},
+  };
+
+  it("accepts a live mode on a story agent", async () => {
+    const root = await fixture({
+      runtime: {
+        ...storyAgent,
+        io: { visibility: "story", output: { live: "text" } },
+      },
+    });
+    expect((await parity(root)).ok).toBe(true);
+  });
+
+  it.each([
+    [
+      "a function runtime",
+      { function: { handler: "./handler.js" } },
+      { visibility: "story", output: { live: "units" } },
+      "only supported by agent",
+    ],
+    [
+      "system output",
+      storyAgent,
+      { output: { live: "units" } },
+      "needs visibility: story",
+    ],
+    [
+      "tool-sourced output",
+      { ...storyAgent, agent: { tools: { plugin: ["calculate"] } } },
+      {
+        visibility: "story",
+        output: { from: { tool: "calculate" }, live: "units" },
+      },
+      "needs model-written output",
+    ],
+  ])("rejects live drafts for %s", async (_label, runtime, io, message) => {
+    const root = await fixture(
+      {
+        entry: "./server/index.js",
+        contributes: { tools: ["calculate"] },
+        runtime: { schedule: storyAgent.schedule, ...runtime, io },
+      },
+      {
+        "server/index.js": "throw new Error('must never run')",
+        "output.schema.json": JSON.stringify({ type: "object" }),
+      },
+    );
+    const report = await parity(root);
+    expect(report.ok).toBe(false);
+    expect(report.cliFailure).toContain(message);
+  });
+});

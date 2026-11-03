@@ -1,4 +1,5 @@
 import { agentOutputContract } from "./agent-output-contract.js";
+import { createDraftForwarder } from "../output-draft/draft-forwarder.js";
 import type { UpstreamWorldWrite } from "../function-runtime/upstream-world-model.js";
 import { settleAgentLoop } from "./settle-agent-loop.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -397,7 +398,17 @@ export async function executeAgentRuntime({
       : toolExecutor
         ? { ...deps, toolExecutor }
         : deps;
-  const toolLoop = await runAgentToolLoop({
+  const drafts = createDraftForwarder({
+    sink: deps.outputDrafts,
+    manifest,
+    schema: agentOutput.schema,
+    turnId: input.turnId,
+    runId,
+    toolName: agentOutput.toolName,
+  });
+  let toolLoop: Awaited<ReturnType<typeof runAgentToolLoop>>;
+  try {
+    toolLoop = await runAgentToolLoop({
     worldBase,
     upstreamProposals,
     pluginDataVisibility,
@@ -427,8 +438,15 @@ export async function executeAgentRuntime({
     runId,
     executionContext,
     ...(progressScopeId !== undefined ? { progressScopeId } : {}),
+    ...(drafts ? { drafts } : {}),
   });
+  } catch (error) {
+    drafts?.stop();
+    throw error;
+  }
   if ("status" in toolLoop) {
+    // A suspended run commits no story this execution.
+    drafts?.stop();
     if (toolLoop.status === "suspended")
       attachReadDependencies(toolLoop, pluginDataVisibility.recorder);
     return toolLoop;
@@ -456,6 +474,7 @@ export async function executeAgentRuntime({
         : {}),
     },
   );
+  if (result.status !== "success") drafts?.stop();
   if (settled.kind === "success" && result.status === "success") {
     attachReadDependencies(result, pluginDataVisibility.recorder);
     operations?.attachTo(result, true);

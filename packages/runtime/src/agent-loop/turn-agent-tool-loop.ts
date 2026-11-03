@@ -57,6 +57,7 @@ import {
   executeToolSearch,
   SEARCH_TOOLS_TOOL_NAME,
 } from "./tool-search.js";
+import type { DraftForwarder } from "../output-draft/draft-forwarder.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
 import {
   createPictureLoader,
@@ -187,6 +188,8 @@ export interface RunAgentToolLoopOptions {
    * sub-agent cannot, and gets an unavailable tool result instead.
    */
   readonly allowSuspend?: boolean;
+  /** Shows the story submission while the model writes it. */
+  readonly drafts?: DraftForwarder;
 }
 
 export async function runAgentToolLoop(
@@ -260,6 +263,7 @@ async function runAgentToolLoopWithinBudget(
     progressScopeId,
     initialState,
     allowSuspend = true,
+    drafts,
   }: RunAgentToolLoopOptions,
   budget: ReturnType<typeof createAgentLoopBudget>,
   stepEvents: StepRecorder,
@@ -547,6 +551,7 @@ async function runAgentToolLoopWithinBudget(
           // spent delivering output does not count against the loop either.
           onStreamTime: budget.extend,
           useStreaming: useStreaming && llmRequest.stream !== false,
+          ...(drafts ? { argumentStream: drafts.observe() } : {}),
           reportRetry,
           requireToolCall: step.requireToolCall,
           submissionRequested: step.submissionRequested,
@@ -670,7 +675,10 @@ async function runAgentToolLoopWithinBudget(
       };
       resultText = renderToolError(error);
     }
-    if (evaluated.candidate) acceptedOutput = evaluated.candidate;
+    if (evaluated.candidate) {
+      acceptedOutput = evaluated.candidate;
+      drafts?.accept(evaluated.candidate);
+    }
     const durationMs = Date.now() - started;
     await emit(error ? "tool.failed" : "tool.completed", {
       success: !error,
@@ -1369,6 +1377,8 @@ async function runAgentToolLoopWithinBudget(
       modelCall.reviewMessages,
       submissionOnly,
     );
+    // Whatever this response showed and did not get accepted is void.
+    if (!acceptedOutput) drafts?.revise();
     if (suspended) return suspended;
     loop.enter("deciding");
     budget.assertLive();
@@ -1447,6 +1457,7 @@ async function runAgentToolLoopWithinBudget(
         modelCall.reviewMessages,
         true,
       );
+      if (!acceptedOutput) drafts?.revise();
       budget.assertLive();
       if (acceptedOutput) {
         loop.stop = { reason: finalizerExit, finalizer: true };

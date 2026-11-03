@@ -56,6 +56,12 @@ export interface AgentLoopDeps {
   ) => string | undefined;
   /** Optional EventBus for emitting subscription events during turn execution. */
   readonly eventBus?: EventBus;
+  /**
+   * The live action stream's sink for story drafts. Only a request that
+   * streams to its player sets it; sub-agents, resumes and background work
+   * never inherit it.
+   */
+  readonly outputDrafts?: import("../output-draft/draft-forwarder.js").OutputDraftSink;
 
   /** Called when a runtime completes execution (e.g. on suspension). */
   readonly onRuntimeComplete?: (info: {

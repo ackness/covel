@@ -148,12 +148,13 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.output`
 
-| Field      | Type   | Required | Description                                                                                                                                             |
-| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object | no       | Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract. |
-| `contract` | string | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.                                                    |
-| `schema`   | string | no       | Private schema that validates the runtime's output.                                                                                                     |
-| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.                                                                 |
+| Field      | Type                             | Required | Description                                                                                                                                                                                                                                              |
+| ---------- | -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `from`     | object                           | no       | Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract.                                                                                                  |
+| `contract` | string                           | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.                                                                                                                                                     |
+| `schema`   | string                           | no       | Private schema that validates the runtime's output.                                                                                                                                                                                                      |
+| `live`     | `"off"` or `"units"` or `"text"` | no       | How a story shows while the model writes it: `units` shows each paragraph or line once it is complete, `text` shows it as it is typed, `off` waits for the commit. Story runtimes only. Defaults to `units`; players can choose a more cautious setting. |
+| `recordAs` | string                           | no       | Export key under which the output is persisted for later executions. Requires `schema`.                                                                                                                                                                  |
 
 ## `io.output.from`
 

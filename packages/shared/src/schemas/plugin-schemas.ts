@@ -329,6 +329,7 @@ export const outputKindSchema = z.enum(["story", "system"]);
 const outputConfigSchema = z
   .object({
     from: z.strictObject({ tool: z.string().min(1) }).optional(),
+    live: z.enum(["off", "units", "text"]).optional(),
     // The loader resolves public schema URIs and checks path containment.
     // Both forms use the same non-empty string declaration.
     schema: z.string().min(1).optional(),
