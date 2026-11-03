@@ -5920,7 +5920,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 - 按事件类型提供 `runtimeId`、`pluginId`、`stage`、`operation`、`provider`、`model`、`slot`、`attempt`、`durationMs`、`startedAt`、`error`、`warning`、`tool`、`prompt`。
 - 摘要只读取 payload 的顶层字段。
 - `severity` 是 `info`、`warning` 或 `error`。同时有错误和慢调用警告时，取 `error`。
-- `warning`：成功的 LLM、gateway、utils、tool、runtime 调用或任务，耗时达到 1000ms 时带 `warning: { code: "slow", thresholdMs: 1000 }`。
+- `warning`：成功的调用或任务耗时达到自己类型的阈值时带 `warning: { code: "slow", thresholdMs }`：模型调用（`llm.responded`、`gateway.responded`）20000ms，runtime 与函数（`runtime.completed`、`function.completed`）30000ms，工具与 utils 请求（`tool.completed`、`utils.fetch.responded`）5000ms。
 - `error`：失败详情在 `diagnostic.error.{message,code?,details?}`。
 - `prompt`：提示词摘要。`contentAvailable` 表示正文是否已记录，`contentPath` 指向正文所在的 `payload.messages`。
 - `tool`：工具名、call ID、参数和结果是否存在、它们在原始 payload 里的路径；能推断时还给出 `success` 和 `durationMs`。参数和结果的正文只在原始 `payload` 里。

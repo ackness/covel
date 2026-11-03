@@ -5922,7 +5922,7 @@ Contents of `diagnostic`:
 - Depending on the event type, it provides `runtimeId`, `pluginId`, `stage`, `operation`, `provider`, `model`, `slot`, `attempt`, `durationMs`, `startedAt`, `error`, `warning`, `tool`, and `prompt`.
 - The summary reads only the top-level fields of the payload.
 - `severity` is `info`, `warning`, or `error`. When both an error and a slow-call warning apply, it uses `error`.
-- `warning`: For a successful LLM, gateway, utils, tool, runtime call, or task that takes 1000ms or more, it includes `warning: { code: "slow", thresholdMs: 1000 }`.
+- `warning`: A successful call or task that reaches the threshold for its type includes `warning: { code: "slow", thresholdMs }`: 20000ms for model calls (`llm.responded`, `gateway.responded`), 30000ms for runtimes and functions (`runtime.completed`, `function.completed`), and 5000ms for tools and utils requests (`tool.completed`, `utils.fetch.responded`).
 - `error`: The failure details are in `diagnostic.error.{message,code?,details?}`.
 - `prompt`: A summary of the prompt. `contentAvailable` says whether the text was recorded, and `contentPath` points to the text in `payload.messages`.
 - `tool`: The tool name, the call ID, whether arguments and results exist, and their paths in the original payload. Where it can work them out, it also gives `success` and `durationMs`. The text of the arguments and results is only in the original `payload`.
