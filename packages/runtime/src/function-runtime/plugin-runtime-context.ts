@@ -55,10 +55,7 @@ import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
 import { createProgressReporter } from "../job-status/job-status.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
-import {
-  createAssetProgressEmitter,
-  isTrustedPluginSource,
-} from "../turn-executor/turn-runtime-helpers.js";
+import { createAssetProgressEmitter } from "../turn-executor/turn-runtime-helpers.js";
 import { withGatewayTrace } from "./gateway-trace.js";
 import {
   promptCacheKeyFor,
@@ -262,17 +259,14 @@ async function createOrdinaryPluginRuntimeContext({
         ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
       })
     : undefined;
-  const isTrustedSource = isTrustedPluginSource(deps, manifest);
-  // Community HTTP fail-closed: a community plugin may only reach an
-  // origin+method declared under permissions.http; trusted plugins pass through
-  // unchanged (SSRF still enforced inside fetchWithRetry either way). Built
+  // HTTP fail-closed: every plugin may only reach an origin+method declared
+  // under permissions.http (SSRF is still enforced inside fetchWithRetry). Built
   // BEFORE the media/images/speech handles so `ctx.media.ingestUrl` (and every
   // URL a gateway result asks us to ingest) is subject to the same allowlist as
   // `ctx.utils.fetchWithRetry`, and BEFORE the trace wrapper so a denied call
   // never emits a spurious calling event; enforcement is not trace-gated.
   const permissionedUtils = runtimeUtils
     ? enforceHttpPermissions(runtimeUtils, {
-        isCommunity: !isTrustedSource,
         httpPermissions: manifest.permissions?.http ?? [],
         runtimeId: manifest.name,
       })

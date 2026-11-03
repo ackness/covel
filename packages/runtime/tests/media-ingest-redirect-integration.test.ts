@@ -85,7 +85,6 @@ function productionUtils() {
 
 function communityUtils(declaredOrigins: readonly string[]) {
   return enforceHttpPermissions(productionUtils(), {
-    isCommunity: true,
     httpPermissions: declaredOrigins.map((origin) => ({
       origin,
       methods: ["GET"],

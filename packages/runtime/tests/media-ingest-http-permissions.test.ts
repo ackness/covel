@@ -2,9 +2,8 @@
  * `permissions.http` coverage for `ctx.media.ingestUrl`.
  *
  * `ctx.media` is built from the same permission-enforcing utils facade as
- * `ctx.utils`, so a community runtime cannot use media ingest as an
- * undeclared outbound channel (audit review-contract-security S2). Trusted
- * (builtin) runtimes stay unenforced — SSRF policy still applies to both.
+ * `ctx.utils`, so no runtime, bundled or community, can use media ingest as
+ * an undeclared outbound channel. SSRF policy still applies on top.
  *
  * The utils double mirrors the production injection
  * (`@covel/ai-provider` `plugin-utils.fetchWithRetry`): a 3xx is only returned
@@ -80,7 +79,6 @@ function makeTurnInput(runtimeId: string): TurnInput {
 async function runIngest(options: {
   readonly manifest: RuntimeManifest;
   readonly targetUrl: string;
-  readonly pluginSource: "community" | "builtin";
 }): Promise<{ error: string | undefined; fetched: readonly string[] }> {
   const utils = productionShapedUtils();
   let error: string | undefined;
@@ -109,7 +107,6 @@ async function runIngest(options: {
     store: createMemoryStore(),
     mediaStore: createMemoryMediaStore(),
     utils,
-    getPluginSource: () => options.pluginSource,
   };
 
   await runTurnPipeline(
@@ -121,11 +118,10 @@ async function runIngest(options: {
 }
 
 describe("ctx.media.ingestUrl obeys permissions.http", () => {
-  it("denies a community runtime an undeclared origin without sending the request", async () => {
+  it("denies an undeclared origin without sending the request", async () => {
     const { error, fetched } = await runIngest({
       manifest: fnManifest({ permissions: { http: [] } }),
       targetUrl: "https://cdn.example.test/image.png",
-      pluginSource: "community",
     });
 
     expect(error).toMatch(/http permission denied/);
@@ -143,7 +139,6 @@ describe("ctx.media.ingestUrl obeys permissions.http", () => {
         },
       }),
       targetUrl: "https://img.example.test/redirect",
-      pluginSource: "community",
     });
 
     expect(error).toBeUndefined();
@@ -153,7 +148,7 @@ describe("ctx.media.ingestUrl obeys permissions.http", () => {
     ]);
   });
 
-  it("denies a community runtime whose redirect hop leaves the allowlist", async () => {
+  it("denies a redirect hop that leaves the allowlist", async () => {
     const { error, fetched } = await runIngest({
       manifest: fnManifest({
         permissions: {
@@ -161,21 +156,10 @@ describe("ctx.media.ingestUrl obeys permissions.http", () => {
         },
       }),
       targetUrl: "https://img.example.test/redirect",
-      pluginSource: "community",
     });
 
     expect(error).toMatch(/http permission denied/);
     // The first hop was permitted; the second was rejected before fetching.
     expect(fetched).toEqual(["https://img.example.test/redirect"]);
-  });
-
-  it("does not enforce permissions.http for a trusted builtin runtime", async () => {
-    const { error } = await runIngest({
-      manifest: fnManifest({ permissions: { http: [] } }),
-      targetUrl: "https://cdn.example.test/image.png",
-      pluginSource: "builtin",
-    });
-
-    expect(error).toBeUndefined();
   });
 });

@@ -147,7 +147,6 @@ async function fixture() {
     c.set("sessionLock", lock);
     c.set("eventBus", eventBus);
     c.set("loadRuntimeFn", loadRuntime);
-    c.set("getPluginSource", () => "builtin");
     c.set("llmAdapter", llm);
     await next();
   });

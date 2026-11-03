@@ -3500,7 +3500,7 @@ provider 返回的原始内容只是 handler 的临时输入，例如 OpenAI 的
   - 插件自己调用 `ctx.utils.fetchWithRetry` 时，默认（或 `redirect: "follow"` / `"error"`）遇到 3xx 会直接抛错。只有显式传 `redirect: "manual"` 才会把 3xx 交回调用方，由调用方负责校验每一跳。
 - **权限**
   - `ctx.media` 和 `ctx.utils` 共用同一套 `permissions.http` 检查。
-  - 社区 runtime 通过 `ingestUrl` 访问没有声明的 origin 会被拒绝（`http permission denied: …`）。`ctx.images.generate` / `ctx.speech.*` 返回的远程 URL 落库时也走这条路。即使这个 URL 只出现在 provider 的响应里也一样，所以图片 CDN 之类的 origin 必须写进 `permissions.http`。
+  - runtime（内置或社区）通过 `ingestUrl` 访问没有声明的 origin 会被拒绝（`http permission denied: …`）。`ctx.images.generate` / `ctx.speech.*` 返回的远程 URL 落库时也走这条路。即使这个 URL 只出现在 provider 的响应里也一样，所以图片 CDN 之类的 origin 必须写进 `permissions.http`。
   - 内置（受信任）runtime 不强制这份白名单。SSRF 策略对两者始终生效。
 
 当前生效的 `media.image-flow@1` 扩展声明的素材 runtime 还有额外要求：

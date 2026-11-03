@@ -96,11 +96,40 @@ describe("covel.http of a package's entry", () => {
     expect(sent).toEqual(["https://api.declared.example/v1"]);
   });
 
-  it("leaves a builtin entry's requests to the SSRF guard alone, as for runtimes", async () => {
-    const { api } = fixture("builtin", "http-builtin");
-    await api.http.fetchWithRetry("https://undeclared.example/x");
-    expect(sent).toEqual(["https://undeclared.example/x"]);
-  });
+  it.each(["builtin", "community"] as const)(
+    "holds a %s entry and its service to the same declared origins",
+    async (source) => {
+      const { api, batch, service } = fixture(source, `http-${source}`);
+      await expect(
+        api.http.fetchWithRetry("https://undeclared.example/x"),
+      ).rejects.toThrow(/http permission denied/);
+      api.registerService({
+        name: "probe",
+        contract: "probe@1",
+        input: { parse: (value: unknown) => value as string },
+        output: { parse: (value: unknown) => value },
+        handler: async (url, context) => {
+          await context.utils!.fetchWithRetry(url);
+          return "sent";
+        },
+      });
+      batch.commit();
+      const context = {
+        callerPluginId: "caller",
+        signal: new AbortController().signal,
+        services: {},
+        utils: {
+          validateBaseUrl: () => ({ ok: true }),
+          fetchWithRetry: vi.fn(async () => new Response("caller")),
+        },
+      } as never;
+      await expect(
+        service().handler("https://undeclared.example/y", context),
+      ).rejects.toThrow(/http permission denied/);
+      await api.http.fetchWithRetry("https://api.declared.example/v1");
+      expect(sent).toEqual(["https://api.declared.example/v1"]);
+    },
+  );
 
   it("checks a community service against the provider's package, not the caller's utils", async () => {
     const { api, batch, service } = fixture("community", "http-service");

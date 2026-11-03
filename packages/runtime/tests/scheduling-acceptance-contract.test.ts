@@ -267,7 +267,6 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       }),
       llm: new NoopLLM(),
       store,
-      getPluginSource: () => "builtin",
     };
 
     // ── Execution 1 (setup band): only schema-gen runs; player-init (main loop)

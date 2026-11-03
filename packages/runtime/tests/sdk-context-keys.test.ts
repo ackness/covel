@@ -224,7 +224,6 @@ describe("host context against the public SDK", () => {
       store: await seededStore(),
       gateway: gateway(),
       mediaStore: createMemoryMediaStore(),
-      getPluginSource: () => "builtin",
     };
 
     await runTurnPipeline(input, [manifest], deps);

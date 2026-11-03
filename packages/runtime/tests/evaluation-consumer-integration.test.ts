@@ -134,7 +134,6 @@ describe("plugin-owned evaluation integration", () => {
         store,
         services,
         gateway,
-        getPluginSource: () => "builtin",
         toolExecutor: createToolExecutor({
           findTool: (name) => tools.get(name),
           store,

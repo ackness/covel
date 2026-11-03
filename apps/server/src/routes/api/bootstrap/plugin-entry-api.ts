@@ -76,14 +76,13 @@ export function buildEntryApi(
     discoveryMap.get(pluginId)?.source,
   );
   const pluginTrust: RpcTrustLevel = trustInfo.source;
-  const isCommunity = pluginTrust === "community";
-  const http = createEntryHttp(pluginId, isCommunity, httpPermissions);
-  // A service or extension provider's code sends its own requests, so a
-  // community provider reaches what its package declares, whoever calls it.
+  const http = createEntryHttp(pluginId, httpPermissions);
+  // A service or extension provider's code sends its own requests, so it
+  // reaches what its own package declares, whoever calls it.
   const ownUtils = <C extends { utils?: unknown; signal: AbortSignal }>(
     context: C,
   ): C =>
-    isCommunity && context.utils
+    context.utils
       ? { ...context, utils: withCallSignal(http, context.signal) }
       : context;
 

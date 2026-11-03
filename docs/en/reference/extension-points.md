@@ -94,7 +94,7 @@ A provider's handler receives two arguments: the input the extension point defin
 - `ctx.world` is the session's World Model view: `characters`, `characterSchema`, `dimensions`, and the session's seats, `seats`. Every call site gives this session's view, including calls outside a turn (the image flow, history compaction, UI slots), which read the committed state.
 - To find the character the player is acting as, use the SDK's `actingCharacterOf([], ctx.world.characters, ctx.world.seats)`, not `find(type === "player")`: a session may have several `type: player` characters. Extension providers have no actions and pass `[]`, returning the primary seat’s current character. For the full rule, see [Seats](./world-model.md#seats).
 - It cannot read other plugins' private namespaces from here.
-- A community provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
+- A provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
 
 Service and extension contexts share `sessionId`, `locale`, the provider's own `messages`, read-only `pluginData`, `world`, and `getOwnSettings()`; see the [service context](./plugin-extensions.md#what-a-service-can-and-cannot-access) for in-execution visibility rules. Extensions still read their own execution snapshot.
 

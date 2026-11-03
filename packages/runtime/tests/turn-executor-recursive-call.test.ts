@@ -32,9 +32,9 @@ function manifest(
 }
 
 describe("runTurnPipeline recursiveCall", () => {
-  it.each(["builtin", "community"] as const)(
-    "rejects targets in another package for a %s caller",
-    async (source) => {
+  it(
+    "rejects targets in another package",
+    async () => {
       for (const targetId of ["leaf", "leaf/worker", "probe-extra/worker"]) {
         const caller = manifest("probe/caller");
         const target = manifest(targetId, { trigger: { type: "manual" } });
@@ -57,7 +57,6 @@ describe("runTurnPipeline recursiveCall", () => {
                   }
                 : targetHandler,
           }),
-          getPluginSource: () => source,
           llm: { generate: vi.fn() },
           emitter,
         });
@@ -651,7 +650,6 @@ describe("runTurnPipeline recursiveCall", () => {
       loadRuntime: async (rt) => loaded.get(rt.name),
       llm: { generate: vi.fn() },
       store,
-      getPluginSource: () => "builtin",
     };
 
     const result = await runTurnPipeline(input, [caller, leaf], deps);

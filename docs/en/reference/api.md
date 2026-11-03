@@ -3500,7 +3500,7 @@ Outbound rules for `ctx.media.ingestUrl()`:
   - When a plugin calls `ctx.utils.fetchWithRetry` itself, a 3xx response throws an error by default (or with `redirect: "follow"` / `"error"`). Only an explicit `redirect: "manual"` hands the 3xx back to the caller, and the caller is then responsible for checking every hop.
 - **Permissions**
   - `ctx.media` and `ctx.utils` share the same `permissions.http` check.
-  - A community runtime that uses `ingestUrl` to reach an origin it did not declare is refused (`http permission denied: …`). Remote URLs returned by `ctx.images.generate` / `ctx.speech.*` also take this path when they are stored. This applies even when the URL appears only in the provider's response. So an origin such as an image CDN must be written into `permissions.http`.
+  - A runtime, bundled or community, that uses `ingestUrl` to reach an origin it did not declare is refused (`http permission denied: …`). Remote URLs returned by `ctx.images.generate` / `ctx.speech.*` also take this path when they are stored. This applies even when the URL appears only in the provider's response. So an origin such as an image CDN must be written into `permissions.http`.
   - A built-in (trusted) runtime is not forced to follow this allowlist. The SSRF policy always applies to both.
 
 The asset runtimes declared by the currently active `media.image-flow@1` extension have extra requirements:

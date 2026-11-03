@@ -143,7 +143,6 @@ describe("resume commit composition", () => {
         c.set("sessionLock", createInProcessSessionLock());
         c.set("eventBus", eventBus);
         c.set("loadRuntimeFn", loadRuntime);
-        c.set("getPluginSource", () => "builtin");
         c.set("llmAdapter", {
           generate: async () => {
             throw new Error("function must not use LLM");
@@ -318,7 +317,6 @@ describe("resume commit composition", () => {
             completion: "done",
           }),
         }));
-        c.set("getPluginSource", () => "builtin");
         c.set("llmAdapter", {
           generate: async () => {
             throw new Error("function must not use LLM");

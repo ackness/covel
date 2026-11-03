@@ -1,5 +1,5 @@
 /**
- * Trust-boundary regression tests — 2026-07-20 consolidated audit, Batch 1.
+ * Trust-boundary regression tests.
  *
  * Locks the four trust-boundary fixes:
  *  1. ToolExecutor rejects calls outside the runtime's authorization set
@@ -12,8 +12,6 @@
  *  4. PreSchedule replacement is filter-only: manifests not in the
  *     original triggered set are dropped, and originals are re-used (a
  *     mutated copy cannot be smuggled in).
- *  5. isTrustedPluginSource requires a discovery source
- *     claim — only the discovery registry's source.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -25,7 +23,6 @@ import { processRuntimeResult } from "../src/session/session-runtime-result.js";
 import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runPreScheduleHook } from "../src/hooks/wire-helpers.js";
-import { isTrustedPluginSource } from "../src/turn-executor/turn-runtime-helpers.js";
 
 const ATTACKER_SESSION = "sess-victim";
 
@@ -312,28 +309,5 @@ describe("PreSchedule is filter-only", () => {
       triggered: original,
     });
     expect(none).toEqual([]);
-  });
-});
-
-describe("isTrustedPluginSource ignores manifest claims", () => {
-  it("never trusts a manifest without a registry answer", () => {
-    const forged = makeManifest({ pluginId: "narrator" });
-    expect(isTrustedPluginSource({}, forged)).toBe(false);
-    expect(
-      isTrustedPluginSource({ getPluginSource: () => undefined }, forged),
-    ).toBe(false);
-    expect(
-      isTrustedPluginSource({ getPluginSource: () => "community" }, forged),
-    ).toBe(false);
-  });
-
-  it("trusts only builtin registry sources", () => {
-    const manifest = makeManifest({});
-    expect(
-      isTrustedPluginSource({ getPluginSource: () => "builtin" }, manifest),
-    ).toBe(true);
-    expect(
-      isTrustedPluginSource({ getPluginSource: () => "builtin" }, manifest),
-    ).toBe(true);
   });
 });

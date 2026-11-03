@@ -135,7 +135,6 @@ export async function batchRetryFixture() {
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", registry);
-    c.set("getPluginSource", () => "builtin");
     c.set("llmAdapter", {
       generate: async () => {
         throw new Error("No live models in fixture");

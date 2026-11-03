@@ -1,11 +1,10 @@
 /**
- * Community HTTP permission fail-closed matrix (03 §4 groundwork).
+ * HTTP permission fail-closed matrix.
  *
- * A community plugin's `ctx.utils.fetchWithRetry` may only reach an
- * origin+method it declared under `permissions.http`; anything else is rejected
- * before the request is sent. Trusted (builtin) plugins are not
- * enforced. The SSRF guard is unaffected — it still runs inside the wrapped
- * `fetchWithRetry` for permitted origins.
+ * A plugin's `ctx.utils.fetchWithRetry` may only reach an origin+method it
+ * declared under `permissions.http`, whatever its source; anything else is
+ * rejected before the request is sent. The SSRF guard is unaffected — it still
+ * runs inside the wrapped `fetchWithRetry` for permitted origins.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -32,11 +31,10 @@ const perms: readonly HttpPermissionDecl[] = [
   { origin: "https://data.example.com" }, // methods default to GET only
 ];
 
-describe("enforceHttpPermissions (community)", () => {
+describe("enforceHttpPermissions", () => {
   it("allows a declared origin + method through to the underlying utils", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {
-      isCommunity: true,
       httpPermissions: perms,
       runtimeId: "p/rt",
     });
@@ -49,7 +47,6 @@ describe("enforceHttpPermissions (community)", () => {
   it("defaults an omitted request method to GET (declared origin allows it)", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {
-      isCommunity: true,
       httpPermissions: perms,
       runtimeId: "p/rt",
     });
@@ -60,7 +57,6 @@ describe("enforceHttpPermissions (community)", () => {
   it("rejects an undeclared origin without calling the underlying fetch", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {
-      isCommunity: true,
       httpPermissions: perms,
       runtimeId: "p/rt",
     });
@@ -73,7 +69,6 @@ describe("enforceHttpPermissions (community)", () => {
   it("rejects a declared origin with an undeclared method (POST to a GET-only origin)", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {
-      isCommunity: true,
       httpPermissions: perms,
       runtimeId: "p/rt",
     });
@@ -86,7 +81,6 @@ describe("enforceHttpPermissions (community)", () => {
   it("rejects when the plugin declares no http permissions at all", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {
-      isCommunity: true,
       httpPermissions: [],
       runtimeId: "p/rt",
     });
@@ -97,18 +91,17 @@ describe("enforceHttpPermissions (community)", () => {
   });
 });
 
-describe("enforceHttpPermissions (trusted builtin)", () => {
-  it("does not enforce — returns the utils unchanged so any origin passes", async () => {
+describe("enforceHttpPermissions without declarations", () => {
+  it("reaches nothing: the allowlist does not depend on package source", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {
-      isCommunity: false,
-      httpPermissions: [], // no declarations, yet trusted calls still pass
-      runtimeId: "core/rt",
+      httpPermissions: [],
+      runtimeId: "bundled/rt",
     });
-    expect(guarded).toBe(utils); // unchanged reference
-    await guarded.fetchWithRetry("https://anywhere.example.net/x", {
-      method: "DELETE",
-    });
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(guarded).not.toBe(utils);
+    await expect(
+      guarded.fetchWithRetry("https://anywhere.example.net/x"),
+    ).rejects.toThrow(/http permission denied/);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

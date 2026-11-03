@@ -94,7 +94,7 @@ export default function (covel) {
 - `ctx.world` 是会话的 World Model 视图：`characters`、`characterSchema`、`dimensions`，以及会话的座位 `seats`。每个调用点都给出这一局的视图，回合外的调用（图片流程、历史压缩、界面槽位）也一样，读到的是已提交的状态。
 - 要找玩家此刻扮演的角色，用 SDK 的 `actingCharacterOf([], ctx.world.characters, ctx.world.seats)`，不要用 `find(type === "player")`：一局可以有多个 `type: player` 的角色。扩展提供者没有行动，传 `[]`，返回主座位的当前角色。完整规则见[座位](./world-model.md#座位)。
 - 不能通过这里读其他插件的私有 namespace。
-- 社区提供者的 `ctx.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源（见[插件参考](./plugins.md#runtime-分组字段)）。
+- 提供者的 `ctx.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源（见[插件参考](./plugins.md#runtime-分组字段)）。
 
 服务与扩展上下文共用 `sessionId`、`locale`、提供者自己的 `messages`、只读 `pluginData`、`world` 和 `getOwnSettings()`；服务的执行内可见规则见[服务上下文](./plugin-extensions.md#服务能拿到什么不能拿到什么)，扩展仍读取自己的执行快照。
 
