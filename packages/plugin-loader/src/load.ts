@@ -14,6 +14,7 @@ import {
 import { assertInsideRoot } from "./path-containment.js";
 import { fileExists } from "./file-system.js";
 import {
+  PackageInventoryError,
   packageFileSignature,
   readPackageInventory,
 } from "./package-inventory.js";
@@ -355,8 +356,16 @@ export async function loadPluginDefinition(
   locale?: string,
 ): Promise<PluginDefinition> {
   if (discovery.layoutError) throw new Error(discovery.layoutError);
+  let inventoryFailure: { message: string; file?: string } | undefined;
   const inventory = await readPackageInventory(discovery.rootPath).catch(
-    () => undefined,
+    (error: unknown) => {
+      if (error instanceof PackageInventoryError)
+        inventoryFailure = {
+          message: error.message,
+          ...(error.file ? { file: error.file } : {}),
+        };
+      return undefined;
+    },
   );
   for (const warning of discovery.layoutWarnings ?? [])
     console.warn(`[plugin-loader] ${warning}`);
@@ -555,7 +564,7 @@ export async function loadPluginDefinition(
           signature: inventory.signature,
           digest: inventory.digest,
         }
-      : unknownExecutionAssessment(),
+      : unknownExecutionAssessment(inventoryFailure),
   };
 }
 

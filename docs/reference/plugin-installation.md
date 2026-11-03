@@ -12,7 +12,7 @@
 
 事件 runtime 也可由玩家操作显式调用。起始回合、冷却回合和运行次数上限只约束自动事件投递；显式调用绕过这些限制，因此每次玩家操作都可能再次调用模型。
 
-宿主从实际文件与清单推导必填的 `executionMode`：`declarative`、`code` 或 `unknown`。没有作者填写的模式开关。静态校验、归档预览、发现和执行检查共用判定；无法完整读取、链接或扫描中变化得到 `unknown`，不会获得豁免。应用内校验与结构化诊断保留执行分类、包内路径、字段和原因。`pnpm validate:plugin` 只打印静态校验结果，不输出执行分类或检查诊断；校验成功不是声明式准入证明。
+宿主从实际文件与清单推导必填的 `executionMode`：`declarative`、`code` 或 `unknown`。没有作者填写的模式开关。静态校验、归档预览、发现和执行检查共用判定；无法完整读取、链接或扫描中变化得到 `unknown`，不会获得豁免；诊断指出让检查停下的包内文件。源码检出里的内置插件是 pnpm 工作区成员，`node_modules` 中是链接，所以显示 `unknown`；桌面安装包不带这个目录。应用内校验与结构化诊断保留执行分类、包内路径、字段和原因。`pnpm validate:plugin` 只打印静态校验结果，不输出执行分类或检查诊断；校验成功不是声明式准入证明。
 
 - 可以声明 agent、自己的数据集、设置、数据接收、固定提示段、JSON 界面、模板、视图和输入模式，以及可选的读/写服务导入。声明输出契约不等于提供可执行服务。
 - `entry`（包括自动发现的 `server/index.js`）、`function`、guard、非空 HTTP 权限，或 hooks/tools/wires/services/actions/forms/extensions/worldProjections 的可执行注册声明，都属于 `code`。禁用、无效和本地化 runtime 中的原始声明仍参与检查。
