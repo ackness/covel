@@ -23,7 +23,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 
 function setup(
   overrides: Partial<RuntimeManifest> = {},
-  schema = segmentsSchema,
+  schema: Readonly<Record<string, unknown>> = segmentsSchema,
 ) {
   const events: OutputDraftEvent[] = [];
   const forwarder = createDraftForwarder({
