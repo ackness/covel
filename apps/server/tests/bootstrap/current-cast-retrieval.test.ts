@@ -85,7 +85,6 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
     [graph, cast],
     {
       store,
-      getPluginSource: () => "builtin",
       llm: { generate },
       loadRuntime: (manifest) =>
         loadRuntime(byId.get(manifest.pluginId)!, manifest.name),

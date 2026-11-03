@@ -3,7 +3,6 @@ import type {
   LoadedRuntime,
   PluginRuntimeGateway,
   PluginRuntimeUtils,
-  PluginSource,
 } from "@covel/shared/plugin-runtime";
 import type { DataStore } from "@covel/store";
 import type {
@@ -150,13 +149,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * test harnesses; handlers must null-check before use.
    */
   readonly utils?: PluginRuntimeUtils;
-  /**
-   * Resolve trust from plugin discovery source. Registry/bootstrap wires this
-   * from the directory a plugin was loaded from, which is stronger than the
-   * author-supplied package kind.
-   */
-  readonly getPluginSource?: (pluginId: string) => PluginSource | undefined;
-
   /** Called when a runtime starts execution. */
   readonly onRuntimeStart?: (info: {
     runtimeId: string;

@@ -1,9 +1,8 @@
 /**
  * An agent guard and a function handler receive the same context under the
- * same rules, whatever the plugin's source: a bundled plugin has no
- * capability a community plugin lacks, and a community guard has every
- * capability a community handler has. Source changes only the security rule
- * on outbound HTTP (`permissions.http`).
+ * same rules. The runtime never sees a package's source, so a bundled plugin
+ * has no capability a community plugin lacks, and outbound HTTP follows each
+ * runtime's `permissions.http` either way.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -19,7 +18,6 @@ import type {
   PluginRuntimeGateway,
   PluginRuntimeUtils,
 } from "@covel/shared/plugin-runtime";
-import type { PluginSource } from "@covel/plugin-loader";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { executeAgentGuard } from "../src/agent-loop/turn-agent-guard.js";
 import { executeFunctionRuntime } from "../src/function-runtime/turn-function-runtime.js";
@@ -67,7 +65,7 @@ function gateway(): PluginRuntimeGateway {
   };
 }
 
-async function deps(source: PluginSource): Promise<TurnExecutorDeps> {
+async function deps(): Promise<TurnExecutorDeps> {
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
@@ -105,7 +103,6 @@ async function deps(source: PluginSource): Promise<TurnExecutorDeps> {
     gateway: gateway(),
     utils,
     mediaStore: createMemoryMediaStore(),
-    getPluginSource: () => source,
   };
 }
 
@@ -134,9 +131,7 @@ const common = {
   timeoutMs: 5_000,
 };
 
-async function handlerContext(
-  source: PluginSource,
-): Promise<FunctionHandlerContext> {
+async function handlerContext(): Promise<FunctionHandlerContext> {
   let seen: FunctionHandlerContext | undefined;
   const m = manifest("function");
   await executeFunctionRuntime({
@@ -150,19 +145,18 @@ async function handlerContext(
         return { outcome: "success", value: {} };
       },
     },
-    deps: await deps(source),
+    deps: await deps(),
     createRecursiveCall: () => nested,
   });
   return seen!;
 }
 
 async function guardRun(
-  source: PluginSource,
   body: (ctx: FunctionHandlerContext) => Promise<void> = async () => {},
 ) {
   let seen: FunctionHandlerContext | undefined;
   const recursive = vi.fn(nested);
-  const runtimeDeps = await deps(source);
+  const runtimeDeps = await deps();
   const m = manifest("agent");
   const result = await executeAgentGuard({
     ...common,
@@ -183,32 +177,20 @@ async function guardRun(
 }
 
 describe("agent guard context", () => {
-  it.each(["builtin", "community"] as const)(
-    "has the fields a %s function handler has",
-    async (source) => {
-      const handler = await handlerContext(source);
-      const { context: guard } = await guardRun(source);
-      expect(Object.keys(guard).sort()).toEqual(Object.keys(handler).sort());
-    },
-  );
-
-  it("is the same for a bundled and a community guard", async () => {
-    const { context: builtin } = await guardRun("builtin");
-    const { context: community } = await guardRun("community");
-    expect(Object.keys(community).sort()).toEqual(Object.keys(builtin).sort());
-    expect(Object.keys(community.store).sort()).toEqual(
-      Object.keys(builtin.store).sort(),
-    );
+  it("has the fields a function handler has", async () => {
+    const handler = await handlerContext();
+    const { context: guard } = await guardRun();
+    expect(Object.keys(guard).sort()).toEqual(Object.keys(handler).sort());
   });
 
   it("receives the run's input bindings, frozen", async () => {
-    const { context } = await guardRun("community");
+    const { context } = await guardRun();
     expect(context.inputs).toEqual(inputs);
     expect(Object.isFrozen(context.inputs!.rules)).toBe(true);
   });
 
-  it("lets a community guard start a nested turn and log", async () => {
-    const { result, recursive } = await guardRun("community", async (ctx) => {
+  it("lets a guard start a nested turn and log", async () => {
+    const { result, recursive } = await guardRun(async (ctx) => {
       await ctx.recursiveCall({ playerMessage: "again" });
       await ctx.logger!.info("ran");
     });
@@ -216,9 +198,9 @@ describe("agent guard context", () => {
     expect(recursive).toHaveBeenCalledOnce();
   });
 
-  it("holds a community guard's HTTP to its permissions", async () => {
+  it("holds a guard's HTTP to its permissions", async () => {
     let denied: unknown;
-    const { utils } = await guardRun("community", async (ctx) => {
+    const { utils } = await guardRun(async (ctx) => {
       await ctx.utils!.fetchWithRetry("https://allowed.example.com/x");
       denied = await ctx
         .utils!.fetchWithRetry("https://other.example.com/x")

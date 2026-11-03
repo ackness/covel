@@ -565,7 +565,7 @@ ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, 
 
 ### Permissions do not grow across plugins
 
-A gateway used by a service inherits the request settings, tracing, cancellation, and revocation boundaries of the runtime that made the call. HTTP requests are sent by the provider's code, so they are checked against the provider's declaration: in a community provider's handler, `context.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package, whoever the caller is. An extension handler works the same way. If the gateway already has a standard method for the job, use the gateway first.
+A gateway used by a service inherits the request settings, tracing, cancellation, and revocation boundaries of the runtime that made the call. HTTP requests are sent by the provider's code, so they are checked against the provider's declaration: in a provider's handler, `context.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package, whoever the caller is. An extension handler works the same way. If the gateway already has a standard method for the job, use the gateway first.
 
 ### The scope of "no framework change needed"
 

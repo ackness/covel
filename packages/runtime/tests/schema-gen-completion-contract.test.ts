@@ -115,7 +115,6 @@ describe("schema-gen completion and public output contract", () => {
         {
           store,
           llm: { generate },
-          getPluginSource: () => "builtin",
           toolExecutor: createToolExecutor({
             findTool: (name) =>
               name === "initialize-world" ? initialize : undefined,

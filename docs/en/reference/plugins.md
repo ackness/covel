@@ -185,7 +185,7 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | `effects`     | Read and write resources, and `parallelSafe`                                                               |
 | `permissions` | Declaration of the permissions the execution needs                                                         |
 
-The root `PLUGIN.md` can also have `permissions.http`. It covers the code of the `entry` module: in a community package, `covel.http` (used in tools, hooks, RPC, services, extensions and wires) reaches only the origins and methods listed in the `permissions.http` of the root file and of each runtime. A wire can also reach the endpoint of the slot it is serving. An undeclared request fails before it is sent: `http permission denied: …`.
+The root `PLUGIN.md` can also have `permissions.http`. It covers the code of the `entry` module: in every package, bundled or community, `covel.http` (used in tools, hooks, RPC, services, extensions and wires) reaches only the origins and methods listed in the `permissions.http` of the root file and of each runtime. A wire can also reach the endpoint of the slot it is serving. An undeclared request fails before it is sent: `http permission denied: …`.
 
 ```yaml
 permissions:

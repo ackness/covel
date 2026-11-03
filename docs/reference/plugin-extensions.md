@@ -565,7 +565,7 @@ ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, 
 
 ### 权限不会因为跨插件而变大
 
-服务里的 gateway 继承发起调用的 runtime 的请求配置、追踪、取消和撤销边界。HTTP 请求由提供方的代码发出，所以按提供方的声明检查：社区提供方处理函数里的 `context.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源，不管调用方是谁。扩展的处理函数也是这样。gateway 已经有标准方法的能力，优先走 gateway。
+服务里的 gateway 继承发起调用的 runtime 的请求配置、追踪、取消和撤销边界。HTTP 请求由提供方的代码发出，所以按提供方的声明检查：提供方处理函数里的 `context.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源，不管调用方是谁。扩展的处理函数也是这样。gateway 已经有标准方法的能力，优先走 gateway。
 
 ### “不用改框架”的范围
 

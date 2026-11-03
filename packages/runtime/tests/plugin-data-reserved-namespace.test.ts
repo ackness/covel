@@ -52,7 +52,6 @@ async function runBundledHandler(
     loaded: { manifest, promptTemplate: "", handler },
     deps: {
       store,
-      getPluginSource: () => "builtin",
     } as unknown as TurnExecutorDeps,
     hookPipeline: undefined,
     triggerEvent: undefined,

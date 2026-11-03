@@ -462,8 +462,6 @@ async function assembleApi(
   });
   owned.closeTools = () => toolExecutor.close();
 
-  const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
-
   let trustedSources: TrustedSourceService | undefined;
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
     createBootstrapPluginRpc({
@@ -710,7 +708,6 @@ async function assembleApi(
           ? { gateway: requestServices.gateway }
           : {}),
         ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
-        getPluginSource,
         ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
         toolExecutor,
         resolveModel,
@@ -885,7 +882,6 @@ async function assembleApi(
       compactionFailures.reset(id),
     );
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
-    c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
     c.set("preloadPluginRuntimes", preloadPluginRuntimes);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);

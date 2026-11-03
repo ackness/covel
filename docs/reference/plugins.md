@@ -185,7 +185,7 @@ entry 里的注册和清单里的声明双向核对：注册了却没声明，�
 | `effects`     | 读写资源与 `parallelSafe`                                                                |
 | `permissions` | 执行权限声明                                                                             |
 
-根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
+根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：每个包（内置或社区）的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
 
 ```yaml
 permissions:

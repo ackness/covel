@@ -5,7 +5,6 @@ import type {
   LoadedRuntime,
   PluginRuntimeGateway,
   PluginRuntimeUtils,
-  PluginSource,
 } from "@covel/plugin-loader";
 import type { EventBus } from "@covel/events";
 import type {
@@ -36,7 +35,6 @@ type ResolveModelFn = (
 ) => string | undefined;
 type EnsureEmbeddingLockFn = (sessionId: string) => Promise<void>;
 type PrepareToolsForSessionFn = (sessionId: string) => Promise<void>;
-type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
 /**
  * Activate a community plugin's server `entry` module after approval.
  * Idempotent: returns immediately on the second call. No-op for builtin
@@ -172,7 +170,6 @@ declare module "hono" {
     clearCompactionFailures?: (sessionId: string) => void;
     /** Release revision and full-commit replay state after session deletion. */
     clearBrowserWorkspace?: (sessionId: string) => void;
-    getPluginSource?: GetPluginSourceFn;
     /**
      * Reserved plugin IDs (the bundled `plugins/` set, derived at boot from
      * the discovery result via `deriveBuiltinPluginIds`). The plugin install

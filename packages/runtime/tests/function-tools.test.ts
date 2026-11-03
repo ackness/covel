@@ -72,7 +72,6 @@ async function fixture(
         throw new Error("No LLM expected");
       }),
     },
-    getPluginSource: () => "community" as const,
     toolExecutor: createToolExecutor({
       findTool: (name) => tools.find((tool) => tool.name === name),
       getToolSource: () => "builtin",

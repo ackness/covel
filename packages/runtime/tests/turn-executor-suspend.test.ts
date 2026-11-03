@@ -865,7 +865,6 @@ describe("TurnExecutor — function runtime suspend", () => {
           usage: { inputTokens: 0, outputTokens: 0 },
         }),
       },
-      getPluginSource: () => "community",
       store,
       eventBus,
     };
@@ -908,7 +907,6 @@ describe("TurnExecutor — function runtime suspend", () => {
           usage: { inputTokens: 0, outputTokens: 0 },
         }),
       },
-      getPluginSource: () => "community",
       store,
       eventBus,
     };

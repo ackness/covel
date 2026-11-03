@@ -155,7 +155,7 @@ describe("agent guard deadline (R-12)", () => {
     const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
-      makeDeps(loaded, { store, getPluginSource: () => "builtin" }),
+      makeDeps(loaded, { store }),
     );
     expect(result.runtimeResults[0]!.status).toBe("failed");
 
@@ -200,7 +200,6 @@ describe("agent guard deadline (R-12)", () => {
       [loaded.manifest],
       makeDeps(loaded, {
         turnControl: { signal: controller.signal },
-        getPluginSource: () => "builtin",
         utils: {
           validateBaseUrl: () => ({ ok: true }),
           fetchWithRetry,

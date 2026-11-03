@@ -152,7 +152,6 @@ export async function runRuntimeDebug(
       services,
       extensions,
       pluginIds,
-      discoveries,
       registry,
       hookPipeline,
       hookSettings,
@@ -208,7 +207,6 @@ export async function runRuntimeDebug(
       gateway: liveAdapters?.gateway ?? makeGateway(options),
       utils: PLUGIN_UTILS,
       mediaStore,
-      getPluginSource: (id) => discoveries.get(id)?.source,
       store,
       toolExecutor: (toolExecutor = createToolExecutor({
         findTool: (name, context) => tools.find(name, context.pluginId),

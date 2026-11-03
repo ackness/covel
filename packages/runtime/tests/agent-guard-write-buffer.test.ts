@@ -127,7 +127,6 @@ async function runGuardTurn(removedStateWrite = false): Promise<{
     }),
     llm: new NoopLLM(),
     store,
-    getPluginSource: () => "builtin",
   };
 
   const input: TurnInput = {

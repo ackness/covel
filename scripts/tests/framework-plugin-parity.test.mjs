@@ -23,10 +23,6 @@ const SOURCE_COMPARISON_ALLOWLIST = new Map([
     "packages/shared/src/plugin-selection.ts",
     "only authorized packages join a session automatically",
   ],
-  [
-    "packages/runtime/src/turn-executor/turn-runtime-helpers.ts",
-    "the single trust predicate the runtime uses",
-  ],
   ["apps/server/src/routes/api/plugin-rpc.ts", "community code approval"],
   [
     "apps/server/src/routes/api/plugin-rpc/event-dispatch.ts",

@@ -4,21 +4,10 @@
  */
 
 import type { EventBus } from "@covel/events";
-import type {
-  AssetProgressInput,
-  PluginSource,
-} from "@covel/shared/plugin-runtime";
-import type {
-  RuntimeManifest,
-  RuntimeResult,
-  ToolCallRecord,
-} from "@covel/shared";
+import type { AssetProgressInput } from "@covel/shared/plugin-runtime";
+import type { RuntimeResult, ToolCallRecord } from "@covel/shared";
 import type { RuntimeOutputRecord } from "@covel/store";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-
-export interface PluginSourceDeps {
-  readonly getPluginSource?: (pluginId: string) => PluginSource | undefined;
-}
 
 /** Emit a subscription-style event via the EventBus if present. */
 export function emitSubEvent(
@@ -37,20 +26,6 @@ export function emitSubEvent(
     timestamp: new Date().toISOString(),
     payload: { ...payload, _subTopic: subTopic, _subType: subType },
   });
-}
-
-/**
- * Trust is derived EXCLUSIVELY from the immutable discovery registry
- * (`getPluginSource` — set from the plugin's load path at boot, never from
- * plugin-supplied data). Without a registry answer callers get the scoped
- * capability view, which is the safe default.
- */
-export function isTrustedPluginSource(
-  deps: PluginSourceDeps,
-  manifest: RuntimeManifest,
-): boolean {
-  const source = deps.getPluginSource?.(manifest.pluginId);
-  return source === "builtin";
 }
 
 export function createAssetProgressEmitter(

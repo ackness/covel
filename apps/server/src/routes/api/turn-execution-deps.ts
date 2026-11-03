@@ -20,7 +20,6 @@ export function buildTurnExecutorDeps(
 ): Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter"> {
   const gateway = c.get("pluginGateway");
   const utils = c.get("pluginUtils");
-  const getPluginSource = c.get("getPluginSource");
   const mediaStore = c.get("mediaStore");
   const contextBudget = c.get("turnContextBudget");
   const eventDirectory = c.get("eventDirectory");
@@ -40,7 +39,6 @@ export function buildTurnExecutorDeps(
       ? { extensions: c.get("pluginExtensions") }
       : {}),
     ...(utils ? { utils } : {}),
-    ...(getPluginSource ? { getPluginSource } : {}),
     ...(mediaStore ? { mediaStore } : {}),
     toolExecutor: c.get("toolExecutor"),
     resolveModel: c.get("resolveModel"),

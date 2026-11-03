@@ -38,23 +38,20 @@ export function withWireEndpoint<T>(
 }
 
 /**
- * `covel.http` of one package. A community package reaches only the origins
- * and methods its `PLUGIN.md` declares under `permissions.http` (the root and
- * every runtime), plus the endpoint of a slot its wire is serving. The SSRF
- * guard inside `fetchWithRetry` runs either way.
+ * `covel.http` of one package. Every package, bundled or community, reaches
+ * only the origins and methods its `PLUGIN.md` declares under
+ * `permissions.http` (the root and every runtime), plus the endpoint of a slot
+ * its wire is serving. The SSRF guard inside `fetchWithRetry` runs either way.
  */
 export function createEntryHttp(
   pluginId: string,
-  isCommunity: boolean,
   httpPermissions: readonly HttpPermissionDecl[],
 ): PluginHttp {
   const raw: PluginHttp = {
     fetchWithRetry,
     validateBaseUrl: validateBaseUrlForPlugin,
   };
-  if (!isCommunity) return raw;
   const checked = enforceHttpPermissions(raw, {
-    isCommunity,
     httpPermissions,
     runtimeId: pluginId,
   });

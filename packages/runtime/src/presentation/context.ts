@@ -47,7 +47,6 @@ import { createRuntimeImagesContext } from "../function-runtime/runtime-images-c
 import { createRuntimeMusicContext } from "../function-runtime/runtime-music-context.js";
 import { createRuntimeSpeechContext } from "../function-runtime/runtime-speech-context.js";
 import { enforceHttpPermissions } from "../function-runtime/http-permissions.js";
-import { isTrustedPluginSource } from "../turn-executor/turn-runtime-helpers.js";
 import { makeRevocableCapability } from "../function-runtime/plugin-handler-helpers.js";
 import { createPresentationBudget } from "./budget.js";
 import { presentationLimits, presentationNamespaces } from "./policy.js";
@@ -232,7 +231,6 @@ export async function createPresentationContext(
     : undefined;
   const utils = deps.utils
     ? enforceHttpPermissions(withDefaultUtilsSignal(deps.utils, abort.signal), {
-        isCommunity: !isTrustedPluginSource(deps, manifest),
         httpPermissions: manifest.permissions?.http ?? [],
         runtimeId: manifest.name,
       })
