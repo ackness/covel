@@ -434,6 +434,50 @@ describe("gateway", () => {
     ]);
   });
 
+  it("starts over with a reset when it falls back after argument fragments", async () => {
+    const streamText = vi.fn<ModelProviderAdapter["streamText"]>(
+      async function* (_config, params) {
+        yield {
+          type: "tool-argument-delta",
+          index: 0,
+          name: "submit-output",
+          argumentsDelta: params.model === "test-model" ? '{"a"' : "{}",
+        };
+        if (params.model === "test-model")
+          throw new AiProviderError({
+            message: "provider failure",
+            code: "PROVIDER_ERROR",
+            provider: "test",
+            retriable: true,
+            statusCode: 500,
+          });
+        yield {
+          type: "tool-call",
+          id: "call",
+          name: "submit-output",
+          arguments: "{}",
+        };
+        yield {
+          type: "done",
+          finishReason: "tool_calls",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    );
+    const { gateway } = setup({ streamText });
+    const events = await Array.fromAsync(
+      gateway.streamText({ messages: [{ role: "user", content: "hi" }] }),
+    );
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(events.map((event) => event.type)).toEqual([
+      "tool-argument-delta",
+      "stream-reset",
+      "tool-argument-delta",
+      "tool-call",
+      "done",
+    ]);
+  });
+
   it("does not fallback after a streamed tool call is observable", async () => {
     let callCount = 0;
     const { gateway } = setup({

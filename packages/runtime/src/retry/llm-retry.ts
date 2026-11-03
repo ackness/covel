@@ -38,6 +38,7 @@ import type {
   LLMMessage,
   LLMResponseFormat,
   LLMResponse,
+  LLMStreamEvent,
   LLMTargetIdentity,
   LLMToolCall,
   LLMToolDefinition,
@@ -453,6 +454,23 @@ export interface StreamLLMWithRetryParams extends CallLLMWithRetryParams {
    * keeps writing does not spend the runtime's time. Silence still does.
    */
   readonly onStreamTime?: (streamedMs: number) => void;
+  /**
+   * A live view of tool-call arguments while they stream, for drafts. It
+   * never changes what this call returns: `reset` tells the observer that
+   * everything it saw for that attempt is void (a gateway fallback started
+   * over, or the attempt failed and may be retried).
+   */
+  readonly argumentStream?: ArgumentStreamObserver;
+}
+
+export type ToolArgumentFragment = Omit<
+  Extract<LLMStreamEvent, { type: "tool-argument-delta" }>,
+  "type"
+>;
+
+export interface ArgumentStreamObserver {
+  readonly fragment: (attempt: number, fragment: ToolArgumentFragment) => void;
+  readonly reset: (attempt: number) => void;
 }
 
 export interface StreamLLMResult {
@@ -652,6 +670,10 @@ export async function streamLLMWithRetry(
           if (event.type === "tool-argument-delta") {
             // The model is writing a tool call: not silence, and not output.
             noteOutput();
+            const { type: _type, ...fragment } = event;
+            params.argumentStream?.fragment(attempt, fragment);
+          } else if (event.type === "stream-reset") {
+            params.argumentStream?.reset(attempt);
           } else if (event.type === "text-delta") {
             if (event.textDelta.length > 0) noteOutput();
             streamedContent += event.textDelta;
@@ -756,6 +778,7 @@ export async function streamLLMWithRetry(
           attempt,
           streaming: true,
         });
+        params.argumentStream?.reset(attempt);
 
         // Discard all text, calls and continuation from this failed attempt.
         // Retry uses fresh buffers under the same request and runtime budgets.

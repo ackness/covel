@@ -132,6 +132,8 @@ export interface GatewayLike {
     id?: string;
     name?: string;
     arguments?: string;
+    index?: number;
+    argumentsDelta?: string;
     reasoningContent?: string;
     providerContinuation?: LLMProviderContinuation;
     usage?: LLMUsageSummary;
@@ -318,7 +320,20 @@ export function createGatewayAdapter(
         callOptions(params),
       )) {
         if (event.type === "tool-argument-delta") {
-          yield { type: "tool-argument-delta" as const };
+          yield {
+            type: "tool-argument-delta" as const,
+            ...(event.index !== undefined ? { index: event.index } : {}),
+            ...(event.id ? { id: event.id } : {}),
+            ...(event.name ? { name: event.name } : {}),
+            ...(event.argumentsDelta !== undefined
+              ? { argumentsDelta: event.argumentsDelta }
+              : {}),
+            ...(event.arguments !== undefined
+              ? { arguments: event.arguments }
+              : {}),
+          };
+        } else if (event.type === "stream-reset") {
+          yield { type: "stream-reset" as const };
         } else if (
           event.type === "text-delta" &&
           event.textDelta !== undefined

@@ -407,8 +407,25 @@ export interface ObjectGenerationResult<TObject = unknown> {
 // ── Streaming ──────────────────────────────────────────────────────
 
 export type StreamEvent =
-  /** A fragment of a tool call's arguments arrived; it carries no call. */
-  | { type: "tool-argument-delta" }
+  /**
+   * A fragment of a tool call's arguments arrived. The whole call still
+   * comes as `tool-call` at the end; this is progress and, where the provider
+   * streams arguments, their text so far. `index` keys the call within this
+   * response; `arguments`, when present, replaces everything streamed so far.
+   */
+  | {
+      type: "tool-argument-delta";
+      index?: number;
+      id?: string;
+      name?: string;
+      argumentsDelta?: string;
+      arguments?: string;
+    }
+  /**
+   * The gateway is starting this response over (a fallback to another
+   * target after output had begun); discard everything streamed so far.
+   */
+  | { type: "stream-reset" }
   | { type: "text-delta"; textDelta: string }
   | { type: "reasoning-delta"; reasoningDelta: string }
   | { type: "tool-call"; id: string; name: string; arguments: string }

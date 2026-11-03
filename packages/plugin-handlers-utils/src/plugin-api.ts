@@ -1006,8 +1006,21 @@ export interface PluginTextResult {
 export type PluginTextStreamEvent =
   | { type: "text-delta"; textDelta: string }
   | { type: "reasoning-delta"; reasoningDelta: string }
-  /** A fragment of a tool call's arguments arrived; it carries no call. */
-  | { type: "tool-argument-delta" }
+  /**
+   * A fragment of a tool call's arguments arrived; the whole call still
+   * follows as `tool-call`. `index` keys the call within this response,
+   * `argumentsDelta` is the new text, and `arguments`, when present, replaces
+   * everything sent so far. A wire that cannot stream arguments may send
+   * none of these fields.
+   */
+  | {
+      type: "tool-argument-delta";
+      index?: number;
+      id?: string;
+      name?: string;
+      argumentsDelta?: string;
+      arguments?: string;
+    }
   | { type: "tool-call"; id: string; name: string; arguments: string }
   /** Last event of every stream. */
   | {

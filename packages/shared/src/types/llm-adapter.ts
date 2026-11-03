@@ -129,8 +129,22 @@ export interface LLMResponseFormat {
 }
 
 export type LLMStreamEvent =
-  /** A fragment of a tool call's arguments arrived; it carries no call. */
-  | { readonly type: "tool-argument-delta" }
+  /**
+   * A fragment of a tool call's arguments arrived; the whole call still
+   * follows as `tool-call`. `index` keys the call within this response,
+   * `argumentsDelta` is the new text, and `arguments`, when present, replaces
+   * everything streamed so far. Providers that send calls whole carry none.
+   */
+  | {
+      readonly type: "tool-argument-delta";
+      readonly index?: number;
+      readonly id?: string;
+      readonly name?: string;
+      readonly argumentsDelta?: string;
+      readonly arguments?: string;
+    }
+  /** The response starts over (a gateway fallback); drop what was streamed. */
+  | { readonly type: "stream-reset" }
   | { readonly type: "reasoning-delta"; readonly reasoningDelta: string }
   | { readonly type: "text-delta"; readonly textDelta: string }
   | {
