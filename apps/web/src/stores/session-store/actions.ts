@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import i18n from "i18next";
 import { confirmPluginApproval } from "@/lib/approval-message.js";
 import type {
@@ -93,7 +99,18 @@ export function useBuildSessionActions({
     sessionId: string;
     generation: number;
     token: symbol;
+    /** Resolves when the admitted action, including its save, settles. */
+    settled: Promise<void>;
+    /** The page has shown this action executing. */
+    started: boolean;
   } | null>(null);
+  // `execution.completed` re-enables input while the admitted action is still
+  // saving its commit. Once the page has shown it executing and stopped, only
+  // that save remains: new input waits for it instead of being dropped.
+  useLayoutEffect(() => {
+    if (state.executing && admittedInput.current)
+      admittedInput.current.started = true;
+  }, [state.executing]);
   const pendingAdvanceInput = useRef<{
     sessionId: string;
     generation: number;
@@ -346,10 +363,15 @@ export function useBuildSessionActions({
         return false;
       const owner = claimAction(state.session.id);
       const token = Symbol("admitted-input");
+      let settle!: () => void;
       admittedInput.current = {
         sessionId: state.session.id,
         generation: sessionGenerationRef.current,
         token,
+        settled: new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+        started: false,
       };
 
       dispatch({ type: "SET_ADVANCE", advance: null });
@@ -371,6 +393,7 @@ export function useBuildSessionActions({
           owner.isCurrent,
         );
         if (state.session) resyncSession(state.session.id, owner.isCurrent);
+        settle();
       });
       return true;
     },
@@ -445,6 +468,33 @@ export function useBuildSessionActions({
       const sid = sessionIdRef.current;
       const generation = sessionGenerationRef.current;
       if (!sid) return false;
+      const saving = admittedInput.current;
+      if (
+        saving?.sessionId === sid &&
+        saving.generation === generation &&
+        saving.started &&
+        !state.executing
+      ) {
+        // The previous action's story is in; only its save is still running.
+        const token = Symbol("queued-input");
+        pendingAdvanceInput.current = { sessionId: sid, generation, token };
+        void saving.settled
+          .then(async () => {
+            const seats = hasPendingSeatSwitch(sid)
+              ? await settleSeatSwitches(sid, generation)
+              : undefined;
+            if (
+              sessionIdRef.current === sid &&
+              sessionGenerationRef.current === generation
+            )
+              startActions(actions, seats, false, currentOwner);
+          })
+          .finally(() => {
+            if (pendingAdvanceInput.current?.token === token)
+              pendingAdvanceInput.current = null;
+          });
+        return true;
+      }
       if (!hasPendingSeatSwitch(sid))
         return startActions(actions, undefined, false, currentOwner);
       const token = Symbol("seat-input");

@@ -214,6 +214,61 @@ describe("same-session action ownership", () => {
     },
   );
 
+  it("queues input sent while the previous action is still saving, and rejects a rapid double send", async () => {
+    const pendingCommit = deferred();
+    let calls = 0;
+    const workspace: SessionWorkspace = {
+      run: async (_sid, _request, mutate) => {
+        const index = calls++;
+        const value = await mutate();
+        if (index === 0) await pendingCommit.promise;
+        return value;
+      },
+      hydrate: vi.fn(),
+      checkpoint: vi.fn(),
+    };
+    const send = vi
+      .spyOn(api, "sendAction")
+      .mockImplementation(() => new AbortController());
+    const { result } = renderActions(workspace);
+    let accepted: boolean[] = [];
+    await act(async () => {
+      accepted = [
+        result.current.actions.sendMessage("First"),
+        // A second submission before the page shows the first one running.
+        result.current.actions.sendMessage("Duplicate"),
+      ];
+    });
+    expect(accepted).toEqual([true, false]);
+    expect(send).toHaveBeenCalledOnce();
+    const [, firstEvent, , firstDone] = send.mock.calls[0]!;
+    await act(async () => {
+      firstEvent(event("execution.completed", "first", { committed: true }));
+      firstDone?.();
+    });
+    // The story is in and input is enabled, but the commit is still saving.
+    expect(result.current.state.executing).toBe(false);
+
+    let queued = false;
+    await act(async () => {
+      queued = result.current.actions.sendMessage("Second");
+    });
+    expect(queued).toBe(true);
+    expect(send).toHaveBeenCalledOnce();
+    await act(async () => {
+      expect(result.current.actions.sendMessage("Third")).toBe(false);
+    });
+
+    await act(async () => pendingCommit.resolve());
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]?.[0]).toMatchObject({
+      payload: expect.objectContaining({
+        actions: [{ kind: "say", text: "Second" }],
+      }),
+    });
+    expect(result.current.state.executing).toBe(true);
+  });
+
   it("does not create an empty player turn when no failed task is selected", () => {
     const workspace: SessionWorkspace = {
       run: async (_sid, _request, mutate) => mutate(),
