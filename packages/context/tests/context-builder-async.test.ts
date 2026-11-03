@@ -291,6 +291,7 @@ describe("buildContext — format variants", () => {
   async function buildWithFormat(
     format: "summary" | "full" | "ids-only",
     row: PluginDataRecord = entry,
+    fields?: readonly string[],
   ) {
     const store = makeStoreStub([row]);
     const manifest = makeManifest({
@@ -302,6 +303,7 @@ describe("buildContext — format variants", () => {
             as: "<existing-entries>",
             format,
             maxEntries: 50,
+            ...(fields ? { fields } : {}),
           },
         ],
       },
@@ -356,6 +358,39 @@ describe("buildContext — format variants", () => {
     expect((await buildWithFormat("full", row)).turnContext).toContain(
       '- edge-knows-about-1: {"fact":"认识守灯人","validAt":2}',
     );
+  });
+
+  it("shows only the declared fields, in the declared order", async () => {
+    const row = makeEntry(
+      "rin",
+      {
+        name: "Rin",
+        score: 13,
+        scoreBar: 113,
+        tierColor: "amber",
+        lastReason: "You talked after class",
+      },
+      "2025-01-01T00:00:00.000Z",
+      "2025-01-02T00:00:00.000Z",
+    );
+    const fields = ["lastReason", "name", "score", "missing"];
+    expect(
+      (await buildWithFormat("summary", row, fields)).turnContext,
+    ).toContain(
+      '- rin | {"lastReason":"You talked after class","name":"Rin","score":13}',
+    );
+    expect((await buildWithFormat("full", row, fields)).turnContext).toContain(
+      '- rin: {"lastReason":"You talked after class","name":"Rin","score":13}',
+    );
+    const scalar = makeEntry(
+      "count",
+      3,
+      "2025-01-01T00:00:00.000Z",
+      "2025-01-02T00:00:00.000Z",
+    );
+    expect(
+      (await buildWithFormat("summary", scalar, fields)).turnContext,
+    ).toContain("- count | 3");
   });
 
   it("keeps an id that is not the row key", async () => {

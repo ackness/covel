@@ -507,7 +507,7 @@ io:
 
 #### `io.selfData`
 
-`io.selfData` 把指定 namespace 中有界的一页自有数据放进 agent 提示词。`maxEntries` 决定窗口，`format` 决定显示方式。若 runtime 同时持有该 namespace 的写工具，注入的键也计入读取基线：模型请求期间同一个键变化后，依赖旧值的替换以 `conflict` 拒绝。无需为了启用保护再调用一次读取工具。没有对应写工具时不记录注入基线；窗口外的键仍需显式读取。完整值、缺失和提交隔离的规则见[读取基线前提条件](./transactions.md#read-baselines)。
+`io.selfData` 把指定 namespace 中有界的一页自有数据放进 agent 提示词。`maxEntries` 决定窗口，`format` 决定显示方式，`fields` 决定每条值里给模型看哪些顶层字段、按什么顺序（不写则全部）。只给界面用的派生字段（进度条数值、颜色）应排除在外；`summary` 会截断每条，要紧的字段放前面。值不是对象时整条显示。`fields` 只改变提示词，读取基线和工具读到的仍是完整值。若 runtime 同时持有该 namespace 的写工具，注入的键也计入读取基线：模型请求期间同一个键变化后，依赖旧值的替换以 `conflict` 拒绝。无需为了启用保护再调用一次读取工具。没有对应写工具时不记录注入基线；窗口外的键仍需显式读取。完整值、缺失和提交隔离的规则见[读取基线前提条件](./transactions.md#read-baselines)。
 
 #### 输入怎样读取
 

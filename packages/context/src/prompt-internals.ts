@@ -279,7 +279,9 @@ async function resolvePluginDataInject(
   }
 
   const format = inject.format ?? "summary";
-  const serialized = escapeXmlContent(serializeEntries(entries, format));
+  const serialized = escapeXmlContent(
+    serializeEntries(entries, format, inject.fields),
+  );
   const countLine =
     total <= entries.length
       ? ""
@@ -303,13 +305,15 @@ const SUMMARY_VALUE_CAP = 200;
 function serializeEntries(
   entries: readonly PluginDataRecord[],
   format: "summary" | "full" | "ids-only",
+  fields: readonly string[] | undefined,
 ): string {
-  return entries.map((entry) => formatEntry(entry, format)).join("\n");
+  return entries.map((entry) => formatEntry(entry, format, fields)).join("\n");
 }
 
 function formatEntry(
   entry: PluginDataRecord,
   format: "summary" | "full" | "ids-only",
+  fields: readonly string[] | undefined,
 ): string {
   if (format === "ids-only") {
     return `- ${entry.key}`;
@@ -318,7 +322,10 @@ function formatEntry(
   // for the model; `updatedAt` also changed the line at every rewrite. A
   // value that repeats the row key as its `id` says it once, on the line.
   const json = safeStringify(
-    withoutRowKey(modelFacingJson(entry.value), entry.key),
+    withoutRowKey(
+      modelFacingJson(selectFields(entry.value, fields)),
+      entry.key,
+    ),
   );
   if (format === "full") {
     return `- ${entry.key}: ${json}`;
@@ -329,6 +336,26 @@ function formatEntry(
       ? `${json.slice(0, SUMMARY_VALUE_CAP)}...`
       : json;
   return `- ${entry.key} | ${compact}`;
+}
+
+/** Keep the declared top-level properties, in the declared order. */
+function selectFields(
+  value: unknown,
+  fields: readonly string[] | undefined,
+): unknown {
+  if (
+    !fields ||
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
+    return value;
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(
+    fields
+      .filter((name) => Object.hasOwn(record, name))
+      .map((name) => [name, record[name]]),
+  );
 }
 
 function withoutRowKey(value: unknown, key: string): unknown {

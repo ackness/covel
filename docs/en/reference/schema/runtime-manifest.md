@@ -138,12 +138,13 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.selfData[]`
 
-| Field        | Type                                    | Required | Description                                                                                                                                          |
-| ------------ | --------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `namespace`  | string                                  | yes      | Own data namespace to inline. Data of other plugins cannot be read.                                                                                  |
-| `as`         | string                                  | yes      | Tag that wraps the injected block in the prompt. Example: `"<existing-affinity>"`.                                                                   |
-| `format`     | `"summary"` or `"full"` or `"ids-only"` | no       | `summary` lists key, update time and truncated JSON. `ids-only` lists keys. `full` lists complete JSON. Defaults to `summary`. Default: `"summary"`. |
-| `maxEntries` | integer                                 | no       | Maximum number of entries injected. Above it, half are the oldest and half the most recently updated. Defaults to 50. Default: `50`.                 |
+| Field        | Type                                    | Required | Description                                                                                                                                                                                                                                                         |
+| ------------ | --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `namespace`  | string                                  | yes      | Own data namespace to inline. Data of other plugins cannot be read.                                                                                                                                                                                                 |
+| `as`         | string                                  | yes      | Tag that wraps the injected block in the prompt. Example: `"<existing-affinity>"`.                                                                                                                                                                                  |
+| `format`     | `"summary"` or `"full"` or `"ids-only"` | no       | `summary` lists key, update time and truncated JSON. `ids-only` lists keys. `full` lists complete JSON. Defaults to `summary`. Default: `"summary"`.                                                                                                                |
+| `maxEntries` | integer                                 | no       | Maximum number of entries injected. Above it, half are the oldest and half the most recently updated. Defaults to 50. Default: `50`.                                                                                                                                |
+| `fields`     | list of string                          | no       | Top-level value properties shown to the model, in this order; others are left out. Use it to drop display-only fields and to put what matters first, since `summary` truncates each entry. Values that are not objects are shown whole. Defaults to every property. |
 
 ## `io.output`
 

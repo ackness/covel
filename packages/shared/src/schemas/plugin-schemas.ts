@@ -268,6 +268,17 @@ export const pluginDataInjectDeclSchema = z
       .describe(
         "Maximum number of entries injected. Above it, half are the oldest and half the most recently updated. Defaults to 50.",
       ),
+    fields: z
+      .array(z.string().min(1).max(64))
+      .min(1)
+      .max(32)
+      .refine((names) => new Set(names).size === names.length, {
+        message: "fields must not repeat a name",
+      })
+      .optional()
+      .describe(
+        "Top-level value properties shown to the model, in this order; others are left out. Use it to drop display-only fields and to put what matters first, since `summary` truncates each entry. Values that are not objects are shown whole. Defaults to every property.",
+      ),
   })
   .strict();
 

@@ -361,6 +361,17 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 500
+              },
+              "fields": {
+                "description": "Top-level value properties shown to the model, in this order; others are left out. Use it to drop display-only fields and to put what matters first, since `summary` truncates each entry. Values that are not objects are shown whole. Defaults to every property.",
+                "minItems": 1,
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
               }
             },
             "required": ["namespace", "as"],
