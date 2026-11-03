@@ -2545,7 +2545,10 @@
     "thinkingLabel": "Сцена складывается…",
     "previousParagraph": "Предыдущий абзац",
     "nextParagraph": "Следующий абзац",
-    "readAgain": "Прочитать снова"
+    "readAgain": "Прочитать снова",
+    "readerLabel": "Сюжет",
+    "readerProgress": "{{current}} / {{total}}",
+    "readerShowAll": "Показать всё"
   },
   "common": {
     "preview": "Предварительный просмотр",

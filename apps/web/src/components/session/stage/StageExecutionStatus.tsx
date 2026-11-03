@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { projectExecutionTurns } from "@/stores/session-store/execution-projection.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
@@ -40,7 +40,7 @@ export function StageExecutionStatus({
   const showTasks =
     !!turn?.steps.length &&
     (executing || turn.steps.some((step) => step.status === "failed"));
-  if (!showTasks && !executionError) return null;
+  if (!executing && !showTasks && !executionError) return null;
   const resolvedError = resolveI18nSentinel(executionError ?? undefined, t);
   const canRetry = !executing && !!turn?.turnId && !!onRetryRuntime;
   return (
@@ -50,6 +50,18 @@ export function StageExecutionStatus({
       data-turn-id={turn?.turnId}
     >
       <div className="ui-stage-panel pointer-events-auto max-h-[45vh] w-full max-w-2xl overflow-y-auto rounded-(--radius-card) px-4 py-3 text-sm">
+        {/* One surface: the progress line heads the task list instead of
+            sitting under it. */}
+        {executing && (
+          <div
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+            data-testid="stage-thinking"
+            aria-live="polite"
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            <span>{t("stage.thinkingLabel")}</span>
+          </div>
+        )}
         {showTasks && turn && (
           <ExecutionTimeline
             recoveryTurnId={recoveryTurnId}

@@ -2469,7 +2469,10 @@
     "thinkingLabel": "Weaving the scene…",
     "previousParagraph": "Previous paragraph",
     "nextParagraph": "Next paragraph",
-    "readAgain": "Read again"
+    "readAgain": "Read again",
+    "readerLabel": "Story",
+    "readerProgress": "{{current}} / {{total}}",
+    "readerShowAll": "Show all"
   },
   "common": {
     "preview": "Preview",

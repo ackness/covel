@@ -17,7 +17,8 @@ You will see:
 
 - Background: a picture of the current scene. It can differ between day and night.
 - Portraits: the characters on stage stand in front of the background. The character who is speaking is highlighted.
-- Reader: complete committed stories retain their paragraph speakers. Previous/Next paragraph and Read again navigate locally; choices and input never wait for a reading click.
+- Reader: a newly committed story appears line by line at the top of the response panel. Dialogue shows the speaker's nameplate, and that character's portrait is highlighted on stage. Click the text box or press Space, Enter or → for the next line and ← for the previous one; Esc or "Show all" shows the whole story. With "Auto-play" on, each line stays for a time that grows with its length, then turns. Paging is local: choices and input stay available and never wait for you to finish reading.
+- While generating: the top of the response panel shows a progress line ("Weaving the scene…"), replaced by the reader once the story commits.
 - Choices: when you need to decide, possible responses appear below the dialogue box. You can also click "✎ Write your own…" and write your own words.
 
 The name of the current scene is shown on the screen. A row of small buttons lets you open "History" (to look back at the conversation), turn "Auto-play" on or off, or enter "Fullscreen stage". To go back to the text view, click "Exit stage".

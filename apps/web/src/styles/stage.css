@@ -223,6 +223,32 @@
     animation: ui-stage-choice-in 260ms ease-out both;
   }
 
+  /* Story reader: one line per page, entering like a choice. */
+  .ui-stage-line {
+    animation: ui-stage-choice-in 220ms ease-out both;
+  }
+
+  .ui-stage-nameplate {
+    border-color: color-mix(in oklab, var(--accent-primary) 45%, transparent);
+    color: var(--accent-primary);
+  }
+
+  @keyframes ui-stage-next-hint {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(2px);
+    }
+  }
+
+  .ui-stage-next-hint {
+    animation: ui-stage-next-hint 1.2s ease-in-out infinite;
+  }
+
   .ui-stage-choice-item:focus-visible {
     outline: none;
     border-color: var(--accent-primary);
