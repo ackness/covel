@@ -215,6 +215,7 @@ permissions:
 | `agent.reasoning` | `true`：沿用模型自己的思考设置 |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
 | `agent.loop.profile` | `io.visibility: story` 的 runtime 用 `story`，其他用 `system` |
+| `io.output.live` | `io.visibility: story` 的 agent 用 `units`，其他 runtime 没有草稿 |
 | `agent.loop.steering`、`fallback`、`finalizer.*`、`corrections.*` | 所选 profile 的值，见[循环 profile](#循环-profileagentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
@@ -430,6 +431,16 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 未声明输出来源时，工具参数来自实际加载的输出 schema：显式文件、`contract:` 引用和约定文件 `output.schema.json` 优先。schema 必须描述对象，不能用标量或数组，也不会被包装或改写。schema 只出现在工具定义里，agent 完成不请求 JSON 内容响应格式。
 
 若最终输出就是某个业务工具的结果，可声明 `io.output.from: { tool: save-facts }`。该工具必须在本 runtime 的自有／builtin 业务工具白名单内，不能是宿主控制工具或可选导入服务；函数 runtime 不能使用。必须实际加载输出 schema 或契约，约定的 `output.schema.json` 也可用。模型在工具成功后单独用 `{}` 调用 `submit-output`。生成的参数 schema 仍声明空对象；此模式下宿主忽略全部调用参数，包括 `parameters`／`arguments` 包装、多余字段和畸形 JSON 文本，参数不能替代规范结果。宿主取本次循环中该工具最近一次成功调用的公共正文（不是 `summary` / `data` / `staged` 模型视图），按输出 schema 和既有契约门控校验，再照常运行 `ReviewAgentOutput`。没有成功调用时返回 `required-work`，消耗 `toolUse` 预算。挂起保留输出来源与执行器结果，快照和浏览器 checkpoint 同样保存这份合同，恢复后不用重跑成功工作。工具效果仍只通过原来的 proposal 提交。
+
+<a id="story-drafts"></a>
+
+故事 agent 写 `submit-output` 时，玩家在提交前就能看到草稿。`io.output.live` 选择草稿的粒度：
+
+- `units`（默认）：每写完一段显示一段。故事输出有 `segments` 时一个段落是一段，否则整段 `narrativeOutput` 是一段。
+- `text`：还显示正在写的那一段。
+- `off`：没有草稿，故事在提交后出现。
+
+草稿只是显示：宿主不校验它，它不进 trace、不存库，也不改变输出。重试、换服务商或提交被拒绝时，已经显示的草稿先撤回；回滚或失败时玩家只看到撤回。玩家的“生成中显示故事”只能比作者更保守。只有 `io.visibility: story` 且输出由模型写出的 agent 能写 `units` 或 `text`：函数 runtime、`system` runtime 和 `io.output.from` 这样写会被拒绝。`io.concealed` 的 runtime 没有草稿。事件见[草稿事件](./protocol.md#草稿事件)。
 
 实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
 

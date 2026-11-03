@@ -17,7 +17,7 @@
 
 插件文件引用按[声明目录规则](../reference/plugins.md#declaration-paths)解析，并检查解析后的真实路径仍在包内。约定的 `output.schema.json` 也不能通过符号链接逃出包，或从父仓库继承。
 
-游戏 action 流和普通订阅只携带不含正文的步骤/模型/工具/Hook/子调用/gateway 进度。公开 `runtime` topic 只缓存步骤与工具活动的安全副本，不把 trace 内容带入回放；步骤 note 只含固定拒绝类别和计数。concealed 步骤用布尔值 `submissionAccepted` 保留成功提交的处置，不保留工具列表。接受值只有提交后才作为故事可见，提交参数和原始审查细节不能投影为玩家故事。完整诊断 trace 与显式 trace 订阅仍遵守原有访问、concealed 和委托隐私规则。见[协议](../reference/protocol.md#叙事事件)。
+游戏 action 流和普通订阅只携带不含正文的步骤/模型/工具/Hook/子调用/gateway 进度。公开 `runtime` topic 只缓存步骤与工具活动的安全副本，不把 trace 内容带入回放；步骤 note 只含固定拒绝类别和计数。concealed 步骤用布尔值 `submissionAccepted` 保留成功提交的处置，不保留工具列表。故事只有提交后才成为消息。提交前，非 concealed 故事 runtime 的 `submit-output` 参数可以作为草稿，只发到发起这次 action 的流；草稿只取输出里的故事正文（`segments` 的正文、`kind`、`speaker`，或 `narrativeOutput`），其他字段、其他工具的参数和审查细节都不进入。草稿是没有经过审查的模型文字：`ReviewAgentOutput`、`PreStateCommit` 等 Hook 仍决定提交什么，被拒绝或回滚的草稿会撤回，但玩家可能已经看到它。只想看审查后文字的玩家选“回合保存后”，作者写 `io.output.live: off`。完整诊断 trace 与显式 trace 订阅仍遵守原有访问、concealed 和委托隐私规则。见[协议](../reference/protocol.md#草稿事件)。
 
 订阅关闭诊断只记录随机连接标识、固定原因与错误类别、阶段、状态码、计数和时长。异常的 `name`、message、stack、cause 及请求 URL、令牌、事件/模型正文都不直接进入这组日志。`X-Covel-Subscription-Id` 只关联控制台记录，不能授权；响应头暴露不改变 CORS origin 或 owner 校验。见[订阅协议](../reference/protocol.md)。
 

@@ -140,11 +140,27 @@ In the tables, "S→C" means sent from the server to the client.
 | `narrative.completed` | S→C       | Complete committed narrative | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.completed` and `runtime.started` carry `kind`; clients read it directly.
-- A story becomes visible only after its durable commit. Submission acceptance and `runtime.completed` describe computation, and do not publish a story. Rollback, refusal and cancellation publish no candidate.
+- A story becomes a message only after its durable commit. Submission acceptance and `runtime.completed` describe computation, and do not write a story. Rollback, refusal and cancellation produce no message; before the commit the player sees only drafts (see the next section).
 - Actions, setup/opening, resume and state subscriptions use the same commit boundary. A resumed HTTP response returns committed events; recovery reads saved messages. Child output remains private to its parent until composition and commit.
 - While waiting, runtime/step/tool/job events report progress. `step.completed.notes` can carry `output-rejected` with a safe reason and integer attempt count; it never carries reviewer text or arguments and implies no percentage.
-- `narrative.delta`, its reset/segment payloads and the host `onDelta` callback are removed. Clients must update with the server; no alias is accepted. Provider streaming remains an internal transport.
+- There is no `narrative.delta` and no host `onDelta` callback. Before the commit a story appears only as draft events.
 - When a speaker or present name in the story could not be resolved to a character (no match, or more than one), `narrative.completed` carries `unresolvedSpeakers`: those names in order of first appearance; it is omitted when there are none.
+
+### Draft events
+
+While a story runtime writes `submit-output`, the server sends what it has written so far to the player as a draft. Drafts travel only on the `/api/actions` stream: they never enter traces, storage or the state subscription, and after a reconnect only the committed story is visible.
+
+| Event type         | Direction | Description                                    | Payload                                                           |
+| ------------------ | --------- | ---------------------------------------------- | ----------------------------------------------------------------- |
+| `output.draft`     | S→C       | The draft written so far                       | `{ turnId, runtimeId, pluginId, draftId, mode, units, partial? }` |
+| `output.retracted` | S→C       | This draft is void                             | `{ turnId, runtimeId, pluginId, draftId, reason }`                |
+| `output.accepted`  | S→C       | The submission tool accepted it; awaits commit | `{ turnId, runtimeId, pluginId, draftId, units }`                 |
+
+- Every event carries the whole draft, not a delta: the client replaces the old one with the new one, so missing a few in between changes nothing. When the server cannot write fast enough it keeps only the latest draft of the same `draftId`.
+- `units` are the finished parts: `{ text, meta? }`. When the story output has `segments`, each segment is one unit and `meta` carries `kind` and `speaker`; otherwise the whole `narrativeOutput` is one unit. With `mode: "text"`, `partial` is the part being written.
+- `draftId` identifies one attempt of one model request. On a retry, a provider switch or a rejected submission, `output.retracted` (`reason: "revising"`) comes first, then the new draft; when the runtime fails or suspends the `reason` is `"stopped"`.
+- `output.accepted` is not a commit. It becomes a message when `narrative.completed` arrives; when the execution ends without a commit, the client drops every draft.
+- Only story runtimes (`io.visibility: story`) whose output the model writes have drafts; `io.concealed`, `io.output.from` and function runtimes have none. Authors choose the granularity with `io.output.live`, and the player's "Show the story as it is written" can only be more cautious; see [plugins.md](./plugins.md).
 
 ### Interaction events
 
@@ -1210,7 +1226,10 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 `handleSseEvent` is the only handler for in-turn events. By event type, it passes each event to the matching state slice:
 
 ```
-narrative.completed   → messages (completed)
+narrative.completed   → messages (completed); drops that runtime's draft
+output.draft          → outputDrafts (replaces the runtime's draft)
+output.retracted      → outputDrafts (revising: keeps the place; stopped: removed)
+output.accepted       → outputDrafts (accepted, awaiting commit)
 interaction.requested → messages (block)
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
@@ -1220,7 +1239,7 @@ runtime.deferred      → executionSteps (pending, attached to the source turn b
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
 job-status.updated    → executionSteps (background terminal state, by data.originTurnId)
-execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false
+execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false and drop the turn's drafts
 error.occurred        → executionError
 ```
 
@@ -1307,7 +1326,7 @@ The field used to send thinking back is determined by the endpoint address, so C
 
 **`providerContinuation`: passing native content back on tool continuation**
 
-Provider streams remain internal transport. `tool-argument-delta` reports activity without argument fragments. Complete calls reach the loop only after protocol terminal and refusal checks; a later refusal fails the request even after a full tool block arrives. Usage, reasoning continuation and idle timers remain intact, and tool arguments never become player story text. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for strict selection and endpoint scope.
+`tool-argument-delta` reports activity and, when the provider supplies them, argument fragments (`index`, `id`, `name`, `argumentsDelta`, or `arguments` replacing all arguments). Before the gateway switches to the next provider it sends `stream-reset`, which voids the earlier fragments. Complete calls still reach the loop only after protocol terminal and refusal checks; a later refusal fails the request even after a full tool block arrives. Fragments only produce story drafts: they are not tool results and never become player story text directly. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for strict selection and endpoint scope.
 
 - It saves the provider's native answer entries in their original order, including signed and encrypted thinking. It is used for a tool continuation only when the protocol, model, and address are all the same.
 - A native Gemini tool turn keeps its ordered parts, which carry `thoughtSignature`.

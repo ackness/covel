@@ -54,6 +54,7 @@
 | Slot | 槽位 | 设置界面里叫“模型用途”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
 | Story-attached operation | 故事附带的操作 | 故事或 setup 所在提交单元里的操作：各自一个 savepoint，失败只丢它自己，故事照常提交。 |
+| Story draft | 故事草稿 | 故事 runtime 提交前已经写出的部分，只用来显示；不是输出，不保存。 |
 | Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
 | Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
@@ -355,6 +356,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 它写在 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason` 里。函数 runtime 没有结束原因。
 
 详见：[协议参考的结束原因](./protocol.md#stop-reasons)、[回合管线](../internals/flow.md)。
+
+## Story draft
+
+故事 agent 写 `submit-output` 时已经写出的部分，在回合提交前显示给玩家。它没有经过审查，不进 trace、不保存，也不改变输出；重试或提交被拒绝时撤回，提交后由故事消息取代。作者用 `io.output.live` 选择粒度，玩家用“生成中显示故事”选择多早看到。
+
+详见：[插件参考：故事草稿](./plugins.md#story-drafts)、[协议：草稿事件](./protocol.md#草稿事件)。
 
 ## Story segment
 

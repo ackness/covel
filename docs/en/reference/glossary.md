@@ -54,6 +54,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Slot | 槽位 | In the settings UI it is called "model role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
 | Story-attached operation | 故事附带的操作 | An operation in the commit unit of the story or setup: each gets its own savepoint, and when it fails only it is dropped while the story commits. |
+| Story draft | 故事草稿 | The part of a story runtime's output written before the commit, shown for display only; not output and never stored. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
@@ -357,6 +358,12 @@ How an agent runtime's tool loop ended, for example `completed` (the model gave 
 It is written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. Function runtimes have no stop reason.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn pipeline](../internals/flow.md).
+
+## Story draft
+
+The part a story agent has written of `submit-output`, shown to the player before the turn commits. It is unreviewed, never enters traces or storage and does not change the output; a retry or a rejected submission retracts it, and the committed story message replaces it. Authors choose its granularity with `io.output.live`; players choose how early to see it with "Show the story as it is written".
+
+See: [plugin reference: story drafts](./plugins.md#story-drafts), [protocol: draft events](./protocol.md#draft-events).
 
 ## Story segment
 

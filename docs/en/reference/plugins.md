@@ -215,6 +215,7 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `agent.reasoning` | `true`: the model's own reasoning setting applies |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `agent.loop.profile` | `story` for a runtime with `io.visibility: story`, `system` for any other |
+| `io.output.live` | `units` for an agent with `io.visibility: story`; other runtimes have no drafts |
 | `agent.loop.steering`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
@@ -430,6 +431,16 @@ Every agent submits its final result with the host-generated `submit-output` too
 Without an output source, parameters come from the actual loaded output schema: explicit files, `contract:` references and the `output.schema.json` convention take precedence. The schema must describe an object, not a scalar or array, and is neither wrapped nor rewritten. It appears only in the tool definition; agent completion requests no JSON content response format.
 
 When final output is a business tool’s result, declare `io.output.from: { tool: save-facts }`. The tool must be an allowlisted own or builtin business tool, never a host control or optional service import; function runtimes cannot use this field. An output schema or contract must actually load, including the `output.schema.json` convention. After the tool succeeds, the model calls `submit-output` alone with `{}`. The generated parameter schema still advertises an empty object. In this mode the host ignores all call arguments, including `parameters` / `arguments` wrappers, extra fields and malformed JSON text; arguments cannot replace the canonical result. The host takes that tool’s latest successful public content in this loop (rather than the `summary` / `data` / `staged` model view), validates the output schema and existing contract gates, then runs `ReviewAgentOutput` as usual. With no successful call, `required-work` spends the `toolUse` budget. Suspension retains the source and executor results, including through snapshots and browser checkpoints, so resumed submission need not repeat work. Tool effects still require their original proposals and commit.
+
+<a id="story-drafts"></a>
+
+While a story agent writes `submit-output`, the player sees a draft before the commit. `io.output.live` chooses how fine the draft is:
+
+- `units` (default): each part shows once it is written. When the story output has `segments`, one segment is one part; otherwise the whole `narrativeOutput` is one part.
+- `text`: also shows the part being written.
+- `off`: no draft; the story appears after the commit.
+
+A draft is display only: the host does not validate it, it never enters traces or storage, and it does not change the output. On a retry, a provider switch or a rejected submission, the draft already shown is retracted first; on a rollback or failure the player sees only the retraction. The player's "Show the story as it is written" can only be more cautious than the author. Only an agent with `io.visibility: story` whose output the model writes may declare `units` or `text`: a function runtime, a `system` runtime or `io.output.from` is rejected. A runtime with `io.concealed` has no drafts. For the events see [Draft events](./protocol.md#draft-events).
 
 The actual model must support tools. Strict and non-strict submissions use the same host validation, preserving optional properties and open objects. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for target checks, same-tag fallback and strict profiles. Submission steps prefer a named `submit-output` choice, narrowed to `required` or `auto` when thinking capabilities require it; the player's reasoning choice is never disabled to force submission.
 

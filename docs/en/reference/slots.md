@@ -882,15 +882,15 @@ Agent completion uses the schema in tool arguments without `responseFormat`, `te
 
 ## Provider streaming responses
 
-All agent runtimes use provider streaming when the adapter supports it. Text, reasoning and payload-free tool-argument activity refresh first-output/idle guards. The runtime buffers the entire response and executes calls only after a valid provider terminal result. Players receive the complete story after acceptance and commit.
+All agent runtimes use provider streaming when the adapter supports it. Text, reasoning and tool-argument activity refresh first-output/idle guards. The runtime buffers the entire response and executes calls only after a valid provider terminal result. A story agent's `submit-output` argument fragments are also shown to the player as a draft, and a failed attempt is retracted first (see [story drafts](./plugins.md#story-drafts)); players receive the complete story after commit.
 
-| Case                                                                               | Behavior                                                                                            |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| A stream fails after partial output                                                | Discard every buffer and retry within `maxRetries`; never execute partial calls or combine attempts |
-| `length` / `max_tokens` truncation                                                 | Retry at most once, then fail; no partial story and no non-stream rescue                            |
-| Transient stream failure exhausts retries                                          | Use bounded non-stream recovery if budget remains; failed output was never player-visible           |
-| The provider rejects the request (401, 400, configuration/schema error or refusal) | Do not repeat the same request through non-stream recovery                                          |
-| HTTP 200 contains a provider error                                                 | Retain the error classification and any reported usage; do not report success                       |
+| Case                                                                               | Behavior                                                                                                         |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| A stream fails after partial output                                                | Discard every buffer and retry within `maxRetries`; never execute partial calls or combine attempts              |
+| `length` / `max_tokens` truncation                                                 | Retry at most once, then fail; no partial story and no non-stream rescue                                         |
+| Transient stream failure exhausts retries                                          | Use bounded non-stream recovery if budget remains; failed output was at most shown as a draft, already retracted |
+| The provider rejects the request (401, 400, configuration/schema error or refusal) | Do not repeat the same request through non-stream recovery                                                       |
+| HTTP 200 contains a provider error                                                 | Retain the error classification and any reported usage; do not report success                                    |
 
 Other rules:
 

@@ -140,12 +140,28 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `narrative.completed` | S→C  | 完整的已提交叙事 | `{ content, kind, messageId, runtimeId, pluginId, segments?, unresolvedSpeakers? }` |
 
 - `narrative.completed` 和 `runtime.started` 带 `kind`，客户端直接读取。
-- 故事只有持久提交后才对玩家可见。提交工具接受值和 `runtime.completed` 只说明计算结束，不发布故事。回滚、拒答和取消都不发布候选。
+- 故事只有持久提交后才成为消息。提交工具接受值和 `runtime.completed` 只说明计算结束，不写入故事。回滚、拒答和取消都不产生消息；提交前玩家看到的只是草稿（见下一节）。
 - action、准备/开场、恢复和状态订阅使用同一提交边界。恢复 HTTP 响应返回已提交事件，断线恢复读取已保存消息。子 agent 的输出只交给父方，经过组合与提交后才成为玩家故事。
 - 等待期间使用 runtime/step/tool/job 事件显示进度。`step.completed.notes` 的 `output-rejected` 只带安全类别和整数尝试次数，不带审查文字或参数，也不表示百分比。
-- 删除 `narrative.delta`、它的 reset/segment 负载和宿主 `onDelta` 回调。客户端必须与服务端同步升级，不接受别名。provider 流式响应仍是内部传输。
+- 没有 `narrative.delta`，也没有宿主 `onDelta` 回调。提交前的故事只以草稿事件出现。
 - 故事里有说话人或在场名字没能解析成角色（没有匹配，或匹配到多个）时，`narrative.completed` 带 `unresolvedSpeakers`：这些名字按首次出现的顺序排列，没有时省略。
 - 故事的 `narrative.completed` 带 `segments`：提交时解析过说话人的段落，形状和 `/messages` 的 `segments` 相同（见 [api.md](./api.md#get-apisessionsidmessages)）。客户端用它给刚看完的这一回合显示名牌和说话人，不必再读消息；其他 `kind` 的事件没有这个字段。
+
+### 草稿事件
+
+故事 runtime 写 `submit-output` 时，服务端把已经写出的部分作为草稿发给玩家。草稿只走 `/api/actions` 的流，不进 trace、不存库、不经过状态订阅；断线后只能看到提交后的故事。
+
+| 事件类型           | 方向 | 描述                       | 负载                                                              |
+| ------------------ | ---- | -------------------------- | ----------------------------------------------------------------- |
+| `output.draft`     | S→C  | 到目前为止写出的草稿       | `{ turnId, runtimeId, pluginId, draftId, mode, units, partial? }` |
+| `output.retracted` | S→C  | 这份草稿作废               | `{ turnId, runtimeId, pluginId, draftId, reason }`                |
+| `output.accepted`  | S→C  | 提交工具接受了它，等待提交 | `{ turnId, runtimeId, pluginId, draftId, units }`                 |
+
+- 每个事件都带完整的草稿，不是增量：客户端用新的替换旧的，漏掉中间几个也不影响结果。服务端发不出去时只保留同一 `draftId` 的最新一份。
+- `units` 是写完的段落：`{ text, meta? }`。故事输出有 `segments` 时，每段是一个单元，`meta` 带 `kind` 和 `speaker`；否则整段 `narrativeOutput` 是一个单元。`mode: "text"` 时 `partial` 是正在写的那一段。
+- `draftId` 区分一次模型请求里的一次尝试。重试、换服务商或提交被拒绝时，先发 `output.retracted`（`reason: "revising"`），再开始新的草稿；runtime 失败或挂起时 `reason` 为 `"stopped"`。
+- `output.accepted` 不是提交。`narrative.completed` 到达时它变成消息；执行结束而没有提交时，客户端丢掉所有草稿。
+- 只有故事 runtime（`io.visibility: story`）且输出由模型写出时才有草稿；`io.concealed`、`io.output.from` 和 function runtime 没有。作者用 `io.output.live` 选择粒度，玩家的“生成中显示故事”只能更保守，见 [plugins.md](./plugins.md)。
 
 ### 交互事件
 
@@ -1211,7 +1227,10 @@ interface SseEnvelope {
 `handleSseEvent` 是回合内事件唯一的处理器。它按事件类型，把事件交给对应的状态片段：
 
 ```
-narrative.completed   → messages (completed)
+narrative.completed   → messages (completed); drops that runtime's draft
+output.draft          → outputDrafts (replaces the runtime's draft)
+output.retracted      → outputDrafts (revising: keeps the place; stopped: removed)
+output.accepted       → outputDrafts (accepted, awaiting commit)
 interaction.requested → messages (block)
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
@@ -1221,7 +1240,7 @@ runtime.deferred      → executionSteps (pending, attached to the source turn b
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
 job-status.updated    → executionSteps (background terminal state, by data.originTurnId)
-execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false
+execution.completed   → committed=true: finalize; committed=false: settle progress + executionError; both set executing=false and drop the turn's drafts
 error.occurred        → executionError
 ```
 
@@ -1308,7 +1327,7 @@ error.occurred        → executionError
 
 **`providerContinuation`：工具续调时带回原生内容**
 
-服务商流保持内部传输用途。`tool-argument-delta` 只报告活动，不携带参数片段；完整调用等待协议终态和拒绝检查之后才交给循环。即使完整工具块已到达，后续拒绝仍使本次调用失败。用量、思考续调和空闲计时保留，工具参数不变成玩家正文。strict 选择与端点范围见[工具提交能力](./slots.md#tool-submission-capabilities)。
+`tool-argument-delta` 报告活动，并在服务商提供时带上参数片段（`index`、`id`、`name`、`argumentsDelta`，或替换全部参数的 `arguments`）。gateway 换到下一个服务商之前发 `stream-reset`，之前的片段作废。完整调用仍然等待协议终态和拒绝检查之后才交给循环；即使完整工具块已到达，后续拒绝仍使本次调用失败。片段只用来生成故事草稿，不是工具结果，也不直接变成玩家正文。strict 选择与端点范围见[工具提交能力](./slots.md#tool-submission-capabilities)。
 
 - 它按原顺序保存服务商原生的回答条目，包括签名和加密的思考。只在协议、模型和地址都相同时，用于工具续调。
 - Gemini 原生的工具回合保留带 `thoughtSignature` 的、有顺序的 part。

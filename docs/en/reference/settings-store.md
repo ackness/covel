@@ -335,3 +335,15 @@ Main/composer selection lasts only for the current mount/session visit, without 
 ### Instant text
 
 Settings → General → **Instant text** stores the device-local boolean `ui.instantText`, default `false`. Turning it on overrides any plugin segment-reveal policy and immediately finishes an active reveal. Turning it off permits future opted-in content; it does not replay existing text. Ordinary SettingsStore validation, persistence, export and revision handling apply. This preference does not enter session metadata, snapshots or proposals; individual reveal timers and visibility never enter settings. Without an authored reveal policy, rendering is instant regardless of the preference.
+
+### Show the story as it is written
+
+Settings → General → **Show the story as it is written** stores the device-local key `ui.liveOutput`, default `units`:
+
+| Value       | Option                 | What the player sees                            |
+| ----------- | ---------------------- | ----------------------------------------------- |
+| `text`      | As it is written       | The finished parts, plus the part being written |
+| `units`     | Line by line           | The finished parts                              |
+| `committed` | Once the turn is saved | No draft; the story appears after the commit    |
+
+The preference can only be more cautious than the author's `io.output.live`: when the author declares `units`, choosing `text` still shows only finished parts, and when the author declares `off` there is no draft. A story already read as a draft in the chat is not revealed again after the commit. The stage view does not show drafts yet; there the story appears after the commit as before. The preference does not enter session metadata, snapshots or proposals. See [story drafts](./plugins.md#story-drafts).
