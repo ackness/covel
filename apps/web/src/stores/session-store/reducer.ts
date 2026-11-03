@@ -1,4 +1,5 @@
 import { executionProgressStep } from "./execution-progress.js";
+import { reduceOutputDrafts } from "./output-drafts.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import {
@@ -162,6 +163,7 @@ export const initialState: SessionState = {
   messageUiSpecs: [],
   segmentUiSpecs: [],
   pendingInteractionDrafts: [],
+  outputDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
   assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
@@ -197,6 +199,7 @@ const SESSION_RESET: Partial<SessionState> = {
   messageUiSpecs: [],
   segmentUiSpecs: [],
   pendingInteractionDrafts: [],
+  outputDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
   assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
@@ -866,6 +869,15 @@ export function reducer(
       };
     case "CLEAR_DRAFTS":
       return { ...state, pendingInteractionDrafts: [] };
+    case "OUTPUT_DRAFT":
+    case "OUTPUT_DRAFT_RETRACTED":
+    case "CLEAR_OUTPUT_DRAFT":
+    case "CLEAR_OUTPUT_DRAFTS": {
+      const outputDrafts = reduceOutputDrafts(state.outputDrafts, action);
+      return outputDrafts === state.outputDrafts
+        ? state
+        : { ...state, outputDrafts };
+    }
     case "ASSET_GENERATED": {
       // Append the asset to its turn's bucket. We construct a new Map and a
       // new readonly array on every dispatch so memoised consumers (the

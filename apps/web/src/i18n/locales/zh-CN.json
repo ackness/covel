@@ -566,7 +566,9 @@
       "saving": "正在保存…"
     },
     "revisingResponse": "正在修改回复",
-    "showAll": "显示全部"
+    "showAll": "显示全部",
+    "draftWriting": "正在写…",
+    "draftRevising": "正在修改…"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -1009,6 +1011,10 @@
       "instantText": {
         "label": "立即显示文字",
         "description": "立即显示完整故事，覆盖插件的分段显示设置。"
+      },
+      "liveOutput": {
+        "label": "生成中显示故事",
+        "description": "故事什么时候出现：边写边显示、每句写完后显示，或回合保存后才显示。插件只能限制得更严，不能放宽。"
       }
     },
     "operatorAccessTitle": "托管服务运维访问",
@@ -1592,6 +1598,11 @@
       "extensions": "扩展",
       "forms": "表单",
       "datasets": "数据集"
+    },
+    "liveOutput": {
+      "text": "边写边显示",
+      "units": "每句写完后",
+      "committed": "回合保存后"
     }
   },
   "appearance": {

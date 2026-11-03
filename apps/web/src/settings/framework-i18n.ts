@@ -51,6 +51,10 @@ function frameworkSettingText(
       label: t("settings.frameworkEntries.instantText.label"),
       description: t("settings.frameworkEntries.instantText.description"),
     },
+    "ui.liveOutput": {
+      label: t("settings.frameworkEntries.liveOutput.label"),
+      description: t("settings.frameworkEntries.liveOutput.description"),
+    },
     "ui.chatMessageWindow": {
       label: t(
         "settings.frameworkEntries.chatMessageWindow.label",
@@ -210,6 +214,11 @@ export function resolveSettingOptionText(
       fallback,
     );
   }
+  if (!entry.pluginId && entry.key === "ui.liveOutput")
+    return i18n.getFixedT(locale)(
+      `settings.liveOutput.${option.value}`,
+      fallback,
+    );
   if (entry.pluginId || entry.key !== "ui.scheme") return fallback;
   if (option.value !== "light" && option.value !== "dark") return fallback;
   return i18n.getFixedT(locale)(

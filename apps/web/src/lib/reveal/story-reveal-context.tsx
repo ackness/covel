@@ -33,7 +33,14 @@ export function StoryRevealProvider({
   useLayoutEffect(() => visit.afterRender(messages), [visit, messages]);
   return <StoryRevealContext value={visit}>{children}</StoryRevealContext>;
 }
-export function useStoryReveal(message: CommittedStory) {
+/**
+ * `showsDrafts`: this surface rendered the story while it was written, so a
+ * story already read there is not revealed a second time.
+ */
+export function useStoryReveal(
+  message: CommittedStory,
+  { showsDrafts = false }: { readonly showsDrafts?: boolean } = {},
+) {
   const visit = useContext(StoryRevealContext);
   const latest = useSyncExternalStore(
     visit?.subscribe ?? emptySubscribe,
@@ -44,7 +51,9 @@ export function useStoryReveal(message: CommittedStory) {
     () => storyRevision(message),
     [message.id, message.content, message.segments],
   );
-  const live = visit?.eligible(revision) ?? false;
+  const live =
+    (visit?.eligible(revision) ?? false) &&
+    !(showsDrafts && visit?.shownAsDraft(revision));
   useLayoutEffect(() => {
     visit?.claim(revision);
   }, [visit, revision]);

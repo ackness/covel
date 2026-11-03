@@ -28,6 +28,12 @@ import {
   runtimeJobCorrelationId,
 } from "./execution-steps.js";
 import { invalidateSessionResource } from "./session-resource-reads.js";
+import { getSettings } from "@/settings/store.js";
+import {
+  draftWasShown,
+  outputDraftAction,
+  readLiveOutputPreference,
+} from "./output-drafts.js";
 import { retryStepMetadata } from "./execution-projection.js";
 import { buildRetryAttemptSteps } from "./execution-attempts.js";
 import type {
@@ -239,7 +245,19 @@ export function createSseEventHandler(
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
               ...(segments.success ? { segments: segments.data } : {}),
             };
-            admitCommittedStory(envelope.sessionId, msg);
+            // Surfaces that showed this story as a draft do not reveal it
+            // a second time; it simply becomes the committed message.
+            admitCommittedStory(
+              envelope.sessionId,
+              msg,
+              !!turnId &&
+                draftWasShown(
+                  deps.stateRef.current.outputDrafts,
+                  turnId,
+                  runtimeId,
+                  liveOutputPreference(),
+                ),
+            );
             deps.dispatch({
               type: "COMPLETE_MESSAGE",
               turnId: turnId ?? "unknown",
@@ -249,9 +267,18 @@ export function createSseEventHandler(
           }
         }
 
+        if (turnId)
+          deps.dispatch({ type: "CLEAR_OUTPUT_DRAFT", turnId, runtimeId });
         // The browser stores the complete post-action checkpoint after the SSE
         // stream closes. Persisting individual server messages here would
         // create local revisions that race and conflict with that checkpoint.
+        break;
+      }
+      case "output.draft":
+      case "output.retracted":
+      case "output.accepted": {
+        const action = outputDraftAction(eventType, payload);
+        if (action) deps.dispatch(action);
         break;
       }
       case "interaction.requested": {
@@ -328,6 +355,12 @@ export function createSseEventHandler(
         break;
       }
       case "runtime.failed": {
+        if (turnId && typeof payload.runtimeId === "string")
+          deps.dispatch({
+            type: "CLEAR_OUTPUT_DRAFT",
+            turnId,
+            runtimeId: payload.runtimeId,
+          });
         deps.dispatch({
           type: "UPSERT_EXECUTION_STEP",
           step: createExecutionStepUpdate({
@@ -392,6 +425,11 @@ export function createSseEventHandler(
           type: "FINALIZE_HANGING_RUNTIMES",
           ...(turnId ? { turnId } : {}),
           reason: "__i18n:session.reasonConnectionClosed__",
+        });
+        // Whatever was not committed by now never will be.
+        deps.dispatch({
+          type: "CLEAR_OUTPUT_DRAFTS",
+          ...(turnId ? { turnId } : {}),
         });
         break;
       }
@@ -507,6 +545,11 @@ export function createSseEventHandler(
           type: "FINALIZE_HANGING_RUNTIMES",
           ...(turnId ? { turnId } : {}),
           reason: "__i18n:session.reasonConnectionClosed__",
+        });
+        // Whatever was not committed by now never will be.
+        deps.dispatch({
+          type: "CLEAR_OUTPUT_DRAFTS",
+          ...(turnId ? { turnId } : {}),
         });
         break;
       }
@@ -627,6 +670,14 @@ export function createSseEventHandler(
         assertNeverEvent(eventType);
     }
   };
+}
+
+function liveOutputPreference() {
+  try {
+    return readLiveOutputPreference(getSettings().get("ui.liveOutput"));
+  } catch {
+    return readLiveOutputPreference(undefined);
+  }
 }
 
 /**

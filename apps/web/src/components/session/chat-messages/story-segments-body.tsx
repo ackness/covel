@@ -52,7 +52,8 @@ export function StoryMessageBody({
   readonly message: Pick<StreamMessage, "id" | "content" | "segments">;
   readonly sessionId: string | undefined;
 }) {
-  const admission = useStoryReveal(message);
+  // The chat shows drafts, so a story read there as a draft is not replayed.
+  const admission = useStoryReveal(message, { showsDrafts: true });
   const state = useContext(SessionStateContext);
   const entries = state?.segmentUiSpecs;
   const templates = useMemo(

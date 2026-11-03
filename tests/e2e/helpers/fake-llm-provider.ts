@@ -44,7 +44,10 @@ export interface FakeReply {
   readonly text: string;
   readonly toolCalls?: readonly FakeToolCall[];
   readonly error?: { readonly status: number; readonly message: string };
-  /** Spread the answer evenly over this time. Without it the answer is sent at once. */
+  /**
+   * Spread the answer evenly over this time, tool-call arguments included.
+   * Without it the answer is sent at once.
+   */
   readonly streamMs?: number;
   /** Send the first piece and then nothing: the connection stays open. */
   readonly stall?: boolean;
@@ -86,6 +89,52 @@ function messageText(content: unknown): string {
     .join("");
 }
 
+/** Tool calls written piece by piece, as a provider streams their arguments. */
+async function streamToolCalls(
+  res: http.ServerResponse,
+  reply: FakeReply,
+  calls: readonly FakeToolCall[],
+  streamMs: number,
+) {
+  for (const [index, call] of calls.entries()) {
+    if (res.destroyed) return;
+    res.write(
+      chunk({
+        ...(index === 0 ? { role: "assistant" } : {}),
+        tool_calls: [
+          {
+            index,
+            id: call.id,
+            type: call.type,
+            function: { name: call.function.name, arguments: "" },
+          },
+        ],
+      }),
+    );
+    const args = call.function.arguments;
+    const count = Math.max(1, Math.round(streamMs / PIECE_INTERVAL_MS));
+    const size = Math.max(1, Math.ceil(args.length / count));
+    for (let at = 0; at < args.length; at += size) {
+      if (res.destroyed) return;
+      const last = index === calls.length - 1 && at + size >= args.length;
+      // The last piece waits for the hold, so the call stays unfinished.
+      if (last && reply.hold) await reply.hold;
+      if (res.destroyed) return;
+      res.write(
+        chunk({
+          tool_calls: [
+            { index, function: { arguments: args.slice(at, at + size) } },
+          ],
+        }),
+      );
+      if (!last) await pause(PIECE_INTERVAL_MS);
+    }
+  }
+  res.write(chunk({}, "tool_calls"));
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
 async function streamReply(res: http.ServerResponse, reply: FakeReply) {
   res.writeHead(200, {
     "content-type": "text/event-stream",
@@ -102,6 +151,10 @@ async function streamReply(res: http.ServerResponse, reply: FakeReply) {
   }
   const delay = reply.streamMs ? reply.streamMs / pieces.length : 0;
 
+  if (reply.toolCalls?.length && reply.streamMs) {
+    await streamToolCalls(res, reply, reply.toolCalls, reply.streamMs);
+    return;
+  }
   if (reply.toolCalls?.length) {
     if (reply.hold) await reply.hold;
     if (res.destroyed) return;

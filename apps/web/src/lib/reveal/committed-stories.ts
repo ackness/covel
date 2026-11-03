@@ -10,6 +10,8 @@ export const storyRevision = (message: CommittedStory): string =>
 export function createStoryRevealVisit(history: readonly CommittedStory[]) {
   const known = new Set(history.map((message) => message.id));
   const pending = new Set<string>();
+  // Revisions the player already read as a draft on surfaces that show drafts.
+  const drafted = new Set<string>();
   const listeners = new Set<() => void>();
   let latest = "";
   return {
@@ -20,18 +22,21 @@ export function createStoryRevealVisit(history: readonly CommittedStory[]) {
       };
     },
     snapshot: () => latest,
-    admit(message: CommittedStory) {
+    admit(message: CommittedStory, shownAsDraft = false) {
       // A known durable ID is either duplicate delivery or authoritative
       // replacement. Neither is eligible for a new animation.
       if (known.has(message.id)) return;
       known.add(message.id);
       const revision = storyRevision(message);
       pending.clear();
+      drafted.clear();
       latest = revision;
       pending.add(revision);
+      if (shownAsDraft) drafted.add(revision);
       for (const listener of listeners) listener();
     },
     eligible: (revision: string) => pending.has(revision),
+    shownAsDraft: (revision: string) => drafted.has(revision),
     claim(revision: string) {
       pending.delete(revision);
     },
@@ -39,6 +44,7 @@ export function createStoryRevealVisit(history: readonly CommittedStory[]) {
       for (const message of messages) known.add(message.id);
       // Views that were inactive when delivery rendered must not replay it later.
       pending.clear();
+      drafted.clear();
     },
   };
 }
@@ -56,10 +62,15 @@ export function registerStoryRevealVisit(
     if (!entries.size) visits.delete(sessionId);
   };
 }
-/** Only the committed live-delivery path calls this; snapshot hydration never does. */
+/**
+ * Only the committed live-delivery path calls this; snapshot hydration never
+ * does. `shownAsDraft` says the player already read it while it was written.
+ */
 export function admitCommittedStory(
   sessionId: string,
   message: CommittedStory,
+  shownAsDraft = false,
 ): void {
-  for (const visit of visits.get(sessionId) ?? []) visit.admit(message);
+  for (const visit of visits.get(sessionId) ?? [])
+    visit.admit(message, shownAsDraft);
 }

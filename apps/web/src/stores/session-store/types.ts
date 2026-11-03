@@ -10,6 +10,7 @@ import type {
   TurnAction,
 } from "@covel/shared";
 import type * as api from "@/services/api";
+import type { OutputDraft, OutputDraftAction } from "./output-drafts.js";
 
 export interface StreamMessage {
   id: string;
@@ -284,6 +285,8 @@ export interface SessionState {
    * session reset, or explicit dismissal.
    */
   pendingInteractionDrafts: PendingInteractionDraft[];
+  /** Story drafts of the running turn, one per story runtime; never stored. */
+  outputDrafts: readonly OutputDraft[];
 
   /**
    * Assets emitted via `asset.generated` SSE keyed by turnId. Populated by the
@@ -324,6 +327,7 @@ export interface ExecutionRecovery {
 }
 
 export type SessionAction =
+  | OutputDraftAction
   | {
       type: "SET_OPERATION_FAILURES";
       sessionId: string;

@@ -612,7 +612,9 @@
       "saving": "Saving…"
     },
     "revisingResponse": "Revising response",
-    "showAll": "Show all"
+    "showAll": "Show all",
+    "draftWriting": "Writing…",
+    "draftRevising": "Revising…"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1055,6 +1057,10 @@
       "instantText": {
         "label": "Instant text",
         "description": "Show complete stories immediately, even when a plugin requests segment reveal."
+      },
+      "liveOutput": {
+        "label": "Show the story as it is written",
+        "description": "How early to read the story: as it is written, one finished line at a time, or only once the turn is saved. A plugin may allow less, never more."
       }
     },
     "operatorAccessTitle": "Hosted operator access",
@@ -1656,6 +1662,11 @@
       "extensions": "Extensions",
       "forms": "Forms",
       "datasets": "Datasets"
+    },
+    "liveOutput": {
+      "text": "As it is written",
+      "units": "Line by line",
+      "committed": "Once the turn is saved"
     }
   },
   "appearance": {

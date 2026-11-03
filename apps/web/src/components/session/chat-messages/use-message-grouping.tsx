@@ -35,6 +35,8 @@ interface UseMessageGroupingArgs {
   readonly expandUpdates?: boolean;
   /** Open the latest turn's results even when older ones stay folded. */
   readonly expandLatestUpdates?: boolean;
+  /** Story drafts of a turn, shown after its committed messages. */
+  readonly renderDrafts?: (turnId: string) => ReactNode;
 }
 
 /**
@@ -56,6 +58,7 @@ export function useMessageGrouping({
   foldUpdates = false,
   expandUpdates = false,
   expandLatestUpdates = false,
+  renderDrafts,
 }: UseMessageGroupingArgs): ReactNode[] {
   const { i18n } = useTranslation();
   const projection = useMemo(
@@ -116,7 +119,8 @@ export function useMessageGrouping({
     key: string,
     node: ReactNode,
     group: ExecutionTurn,
-    kind: "message" | "updates" | "execution" | "assets" | "reasoning",
+    kind:
+      "message" | "draft" | "updates" | "execution" | "assets" | "reasoning",
   ) => {
     if (!node) return;
     rendered.push(
@@ -146,6 +150,13 @@ export function useMessageGrouping({
         "message",
       );
     }
+    if (group.turnId && renderDrafts)
+      addRow(
+        `draft-${group.turnId}`,
+        renderDrafts(group.turnId),
+        group,
+        "draft",
+      );
     if (updates.length)
       addRow(
         `updates-${group.key}`,

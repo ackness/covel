@@ -54,6 +54,7 @@ function stateFor(
     messageUiSpecs: [],
     segmentUiSpecs: [],
     pendingInteractionDrafts: [],
+    outputDrafts: [],
     assetsByTurn: new Map(),
     assetProgressByTurn: new Map(),
     submittedBlockIds: new Set(),
