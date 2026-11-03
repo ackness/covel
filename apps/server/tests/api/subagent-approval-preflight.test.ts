@@ -16,6 +16,7 @@ import type { SessionRecord } from "@covel/store";
 import {
   preflightActionApprovals,
   preflightRuntimeApprovals,
+  runtimeRunsWithoutPrompt,
 } from "../../src/routes/api/actions/approval-preflight.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
@@ -86,11 +87,14 @@ const guard: RuntimeManifest = {
   outputContract: "test-actor@1",
 };
 
-function setup(): { app: Hono; gate: RpcApprovalGate } {
+function setup(implicitGrant?: () => boolean): {
+  app: Hono;
+  gate: RpcApprovalGate;
+} {
   const registry: PluginRegistry = createPluginRegistry();
   registry.register(entry(narrator, "builtin"));
   registry.register(entry(guard, "community"));
-  const gate = createRpcApprovalGate();
+  const gate = createRpcApprovalGate(implicitGrant ? { implicitGrant } : {});
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("pluginRegistry", registry);
@@ -109,6 +113,16 @@ function setup(): { app: Hono; gate: RpcApprovalGate } {
   );
   app.post("/resume", async (c) =>
     respond(await preflightRuntimeApprovals(c, session, [narrator.name])),
+  );
+  app.get("/silent", async (c) =>
+    Response.json({
+      ok: await runtimeRunsWithoutPrompt(
+        c,
+        session,
+        c.req.query("plugin")!,
+        c.req.query("runtime")!,
+      ),
+    }),
   );
   return { app, gate };
 }
@@ -149,4 +163,36 @@ describe("sub-agent provider admission", () => {
       expect(admitted.status).toBe(200);
     },
   );
+});
+
+describe("runtimes the host may run without asking", () => {
+  const silent = async (app: Hono, manifest: RuntimeManifest) =>
+    (
+      (await (
+        await app.request(
+          `/silent?plugin=${manifest.pluginId}&runtime=${encodeURIComponent(manifest.name)}`,
+        )
+      ).json()) as { ok: boolean }
+    ).ok;
+
+  it("admits a community runtime once it has the same grants as a manual run", async () => {
+    const { app, gate } = setup();
+    expect(await silent(app, narrator)).toBe(true);
+    expect(await silent(app, guard)).toBe(false);
+    // Checking never opens a prompt of its own.
+    expect(gate.listAllPendingForSession(session.id)).toHaveLength(0);
+
+    for (let granted = 0; granted < 2; granted += 1) {
+      expect(await silent(app, guard)).toBe(false);
+      const response = await app.request("/resume", { method: "POST" });
+      const body = (await response.json()) as { approvalId: string };
+      expect(grant(gate, body.approvalId).ok).toBe(true);
+    }
+    expect(await silent(app, guard)).toBe(true);
+  });
+
+  it("admits a community runtime that the instance policy grants implicitly", async () => {
+    const { app } = setup(() => true);
+    expect(await silent(app, guard)).toBe(true);
+  });
 });

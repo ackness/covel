@@ -159,9 +159,9 @@ describe("package validation endpoints", () => {
       mode: "unknown",
       diagnostics: [
         {
-          file: "PLUGIN.md",
+          file: "node_modules/linked.md",
           message:
-            "Package inspection is incomplete or changed; reload a readable, stable package.",
+            "Package inspection stopped: Package contains a linked or unsupported file: node_modules/linked.md. Remove links and special files to assess the package.",
         },
       ],
     };

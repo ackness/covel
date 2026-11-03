@@ -24,6 +24,7 @@ These are the grounds for every trade-off. Where the code disagrees with them, t
 - Every framework capability serves every plugin, not just the bundled ones.
 - Bundled plugins are examples shipped with the app to show what the framework can do. They use the same interfaces as community plugins, and nothing a community plugin cannot use. The only difference is trust: bundled plugins ship with the app and run without the player's approval.
 - Framework code makes no special case for any particular plugin; see "The core: the kernel provides primitives, plugins carry gameplay" below. With every plugin removed, the framework must still run.
+- Source (`builtin` / `community`) decides only trust: approval, code-execution grants, whether a package can be uninstalled, and its source label. Capabilities, default selection, output paths and presentation always come from declarations. In `pnpm check`, `scripts/tests/framework-plugin-parity.test.mjs` rejects bundled plugin ID literals in framework code and source comparisons outside an allowlist; each allowlist entry states which trust use it serves.
 - One narrative plugin must be enough to play a world from start to finish. Every other plugin is there to enrich play.
 - The four bundled worlds are demos too. Mistport, Harukaze Academy and Lantern Barrow each show one play style: traditional narrative, stage mode and tabletop rules. Emberback is written in English for English-speaking players, and shows how a world carries several languages.
 

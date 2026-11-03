@@ -22,15 +22,28 @@ export interface PluginExecutionProof extends PluginExecutionAssessment {
   readonly digest?: string;
 }
 
-export function unknownExecutionAssessment(): PluginExecutionAssessment {
+/**
+ * The assessment when the package files could not be inspected completely.
+ * A known cause names the file that stopped the inspection; a source
+ * checkout's `node_modules` links are a common one.
+ */
+export function unknownExecutionAssessment(cause?: {
+  readonly message: string;
+  readonly file?: string;
+}): PluginExecutionAssessment {
   return {
     mode: "unknown",
     diagnostics: [
-      {
-        file: "PLUGIN.md",
-        message:
-          "Package inspection is incomplete or changed; reload a readable, stable package.",
-      },
+      cause
+        ? {
+            file: cause.file ?? "PLUGIN.md",
+            message: `Package inspection stopped: ${cause.message}. Remove links and special files to assess the package.`,
+          }
+        : {
+            file: "PLUGIN.md",
+            message:
+              "Package inspection is incomplete or changed; reload a readable, stable package.",
+          },
     ],
   };
 }

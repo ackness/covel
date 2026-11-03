@@ -21,8 +21,19 @@ const TRACE_PAGE_EVENT_LIMIT = 400;
  * every event of a long session at once is what this bounds.
  */
 export const TRACE_FULL_EVENT_LIMIT = 5_000;
-/** Simple, explainable threshold for slow successful calls/tasks. */
-const SLOW_TRACE_WARNING_MS = 1_000;
+/**
+ * When a successful call or task counts as slow, by what it measures. A model
+ * answer routinely takes seconds and a runtime may make several model calls,
+ * so one threshold for everything marked every model call slow.
+ */
+const SLOW_TRACE_WARNING_MS: Readonly<Record<string, number>> = {
+  "llm.responded": 20_000,
+  "gateway.responded": 20_000,
+  "runtime.completed": 30_000,
+  "function.completed": 30_000,
+  "tool.completed": 5_000,
+  "utils.fetch.responded": 5_000,
+};
 
 /**
  * Group a flat, chronologically-ordered event list into per-turn summaries,
@@ -367,20 +378,10 @@ function buildSlowWarning(
   durationMs: number | undefined,
   error: TraceDiagnosticError | undefined,
 ): TraceDiagnosticWarning | undefined {
-  if (error || durationMs == null || durationMs < SLOW_TRACE_WARNING_MS) {
+  const thresholdMs = SLOW_TRACE_WARNING_MS[displayType];
+  if (error || durationMs == null || thresholdMs === undefined)
     return undefined;
-  }
-  const slowTypes = new Set([
-    "llm.responded",
-    "gateway.responded",
-    "utils.fetch.responded",
-    "tool.completed",
-    "runtime.completed",
-    "function.completed",
-  ]);
-  return slowTypes.has(displayType)
-    ? { code: "slow", thresholdMs: SLOW_TRACE_WARNING_MS }
-    : undefined;
+  return durationMs >= thresholdMs ? { code: "slow", thresholdMs } : undefined;
 }
 
 function buildToolDiagnostic(

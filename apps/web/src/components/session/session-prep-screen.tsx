@@ -59,9 +59,9 @@ import { usePrepRuntimeBindings } from "./session-prep/use-prep-runtime-bindings
 import { useSessionHistory } from "./session-prep/use-session-history.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { getDataService } from "@/services/data-service.js";
-import { isBuiltinDefaultPackage } from "./session-prep/plugin-selection-helpers.js";
+import { isDefaultPackage } from "./session-prep/plugin-selection-helpers.js";
 
-export { isBuiltinDefaultPackage };
+export { isDefaultPackage };
 
 const worldPluginSettingsSchema = z.record(
   z.string(),

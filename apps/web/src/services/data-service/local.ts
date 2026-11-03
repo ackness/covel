@@ -671,7 +671,7 @@ export class LocalDataService implements DataService {
   ): Promise<void> {
     await this.recoverPendingCommitNow(sessionId, actionId);
     const vault = await this.ready();
-    if (!(await vault.getLatestCheckpoint(sessionId)))
+    if (!(await vault.getSession(sessionId)))
       throw new Error(`Session not found: ${sessionId}`);
     await vault.stagePendingCommit(sessionId, actionId);
   }
@@ -782,19 +782,21 @@ export class LocalDataService implements DataService {
     actionId: string,
   ): Promise<void> {
     const vault = await this.ready();
-    const current = await vault.getLatestCheckpoint(sessionId);
-    if (!current) throw new Error(`Session not found: ${sessionId}`);
+    // The head carries the revision and world id without reading, validating
+    // and copying the whole checkpoint, which grows with the session.
+    const head = await vault.getSession(sessionId);
+    if (!head) throw new Error(`Session not found: ${sessionId}`);
     const commit = await api.fetchBrowserCommit(
       sessionId,
       actionId,
-      current.revision,
+      head.revision,
     );
     // The server mirror deliberately uses locale-resolved WorldRecord strings.
     // The browser remains authoritative for the richer local world document,
     // so do not let a returned execution commit downgrade its i18n fields.
-    const browserWorld = current.session.worldId
-      ? await vault.getWorld(current.session.worldId)
-      : current.world;
+    const browserWorld = head.session.worldId
+      ? await vault.getWorld(head.session.worldId)
+      : ((await vault.getLatestCheckpoint(sessionId))?.world ?? null);
     await vault.applySessionCommit(
       {
         ...commit,

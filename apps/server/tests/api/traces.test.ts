@@ -315,45 +315,50 @@ describe("traceRoutes", () => {
     });
   });
 
-  it("marks slow successful calls with warning severity while preserving error priority", async () => {
-    const store = createMemoryStore();
-    await store.createSession(makeSession("sess-slow"));
-    await store.addTraceEvent({
-      id: "slow-event",
-      sessionId: "sess-slow",
-      type: "tool.completed",
-      traceId: "trace-slow",
-      turnId: "turn-slow",
-      payload: {
-        toolName: "inspect",
-        toolCallId: "call-slow",
-        result: { ok: true },
-        success: true,
-        durationMs: 1000,
-      },
-      createdAt: "2026-04-26T00:00:00.000Z",
-    });
-    const app = makeApp(store);
-    const res = await app.request("/api/traces/sess-slow");
-    const body = (await res.json()) as {
-      events: Array<{
-        eventOrder: number;
-        diagnostic: Record<string, unknown>;
-      }>;
-    };
-    expect(body.events[0]).toMatchObject({
-      eventOrder: 0,
-      diagnostic: {
-        severity: "warning",
-        warning: { code: "slow", thresholdMs: 1000 },
-        tool: {
-          resultAvailable: true,
-          resultPath: "payload.result",
+  it.each([
+    ["tool.completed", 4_999, undefined],
+    ["tool.completed", 5_000, 5_000],
+    ["llm.responded", 12_000, undefined],
+    ["llm.responded", 20_000, 20_000],
+    ["runtime.completed", 25_000, undefined],
+    ["runtime.completed", 30_000, 30_000],
+  ] as const)(
+    "marks a successful %s of %ims slow only past its own threshold",
+    async (type, durationMs, thresholdMs) => {
+      const store = createMemoryStore();
+      await store.createSession(makeSession("sess-slow"));
+      await store.addTraceEvent({
+        id: "slow-event",
+        sessionId: "sess-slow",
+        type,
+        traceId: "trace-slow",
+        turnId: "turn-slow",
+        payload: {
+          toolName: "inspect",
+          toolCallId: "call-slow",
+          result: { ok: true },
           success: true,
+          durationMs,
         },
-      },
-    });
-  });
+        createdAt: "2026-04-26T00:00:00.000Z",
+      });
+      const app = makeApp(store);
+      const res = await app.request("/api/traces/sess-slow");
+      const body = (await res.json()) as {
+        events: Array<{ diagnostic: Record<string, unknown> }>;
+      };
+      const diagnostic = body.events[0]!.diagnostic;
+      if (thresholdMs === undefined) {
+        expect(diagnostic.severity).toBe("info");
+        expect(diagnostic).not.toHaveProperty("warning");
+      } else {
+        expect(diagnostic).toMatchObject({
+          severity: "warning",
+          warning: { code: "slow", thresholdMs },
+        });
+      }
+    },
+  );
 
   it("does not synthesize asset events from plugin_data records", async () => {
     const store = createMemoryStore();

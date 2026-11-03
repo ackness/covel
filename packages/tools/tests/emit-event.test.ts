@@ -2,7 +2,7 @@ import { getModelView, ToolError } from "@covel/plugin-handlers-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSessionEmitEventTool,
-  schemaHasReferences,
+  canDescribeEventPayload,
   createEmitEventTool,
 } from "../src/builtin/emit-event.js";
 import { getEmittedEvents, getPendingProposals } from "../src/result.js";
@@ -356,29 +356,129 @@ describe("session event definitions", () => {
   });
 });
 
-describe("schema reference detection", () => {
+describe("local schema references", () => {
+  const deps = {
+    directory: makeDirectory([{ topic: "a.b", requires: "cues" }]),
+  };
+  it("writes out shared definitions so the model sees the whole payload", () => {
+    const tool = buildSessionEmitEventTool(deps, [
+      {
+        topic: "a.b",
+        schema: {
+          $id: "plugin://owner/a.b",
+          type: "object",
+          required: ["cues"],
+          properties: {
+            cues: {
+              type: "array",
+              items: {
+                oneOf: [
+                  { $ref: "#/$defs/enter" },
+                  { $ref: "#/$defs/leave", description: "Leave the stage" },
+                ],
+              },
+            },
+          },
+          $defs: {
+            key: { type: "string", minLength: 1 },
+            enter: {
+              type: "object",
+              required: ["type", "character"],
+              properties: {
+                type: { const: "enter" },
+                character: { $ref: "#/$defs/key" },
+              },
+            },
+            leave: {
+              type: "object",
+              properties: {
+                type: { const: "leave" },
+                character: { $ref: "#/$defs/key" },
+                // A `$ref` key inside data stays data.
+                note: { type: "object", default: { $ref: "kept" } },
+              },
+            },
+          },
+        },
+      },
+    ])!;
+    const data = (tool.jsonSchema as { properties: { data: unknown } })
+      .properties.data;
+    expect(data).toMatchObject({
+      properties: {
+        cues: {
+          items: {
+            oneOf: [
+              {
+                type: "object",
+                required: ["type", "character"],
+                properties: {
+                  character: { type: "string", minLength: 1 },
+                },
+              },
+              {
+                description: "Leave the stage",
+                properties: {
+                  character: { type: "string", minLength: 1 },
+                  note: { type: "object", default: { $ref: "kept" } },
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(data)).not.toContain("$defs");
+    expect(JSON.stringify(data)).not.toContain('"#/');
+  });
+
   it.each([
-    ["flat reference", { $ref: "#" }, true],
-    ["flat definitions", { $defs: {} }, true],
-    ["nested reference", { properties: { value: { $ref: "#" } } }, true],
-    ["nested definitions", { properties: { value: { $defs: {} } } }, true],
     [
-      "reference in an array",
-      { anyOf: [{ type: "string" }, { $ref: "#" }] },
+      "a local reference",
+      {
+        type: "object",
+        properties: { value: { $ref: "#/$defs/value" } },
+        $defs: { value: { type: "number" } },
+      },
       true,
     ],
-    ["array without references", [{ type: "object" }], false],
     [
-      "plain schema",
-      { type: "object", properties: { value: { type: "number" } } },
+      "a recursive reference",
+      {
+        type: "object",
+        properties: { node: { $ref: "#/$defs/node" } },
+        $defs: {
+          node: {
+            type: "object",
+            properties: { child: { $ref: "#/$defs/node" } },
+          },
+        },
+      },
       false,
     ],
+    ["a root self-reference", { properties: { nested: { $ref: "#" } } }, false],
+    [
+      "a dangling reference",
+      { type: "object", properties: { value: { $ref: "#/$defs/missing" } } },
+      false,
+    ],
+    [
+      "a reference to another document",
+      { type: "object", properties: { value: { $ref: "other.json" } } },
+      false,
+    ],
+    [
+      "a nested identifier",
+      {
+        type: "object",
+        properties: { value: { $id: "inner", type: "number" } },
+      },
+      false,
+    ],
+    ["a non-object payload", { type: "string" }, false],
     ["null", null, false],
-    ["undefined", undefined, false],
-    ["string", "$ref", false],
-    ["number", 1, false],
-    ["boolean", false, false],
-  ])("detects references in %s", (_name, value, expected) => {
-    expect(schemaHasReferences(value)).toBe(expected);
+    ["an array", [{ type: "object" }], false],
+  ])("decides whether the tool can describe %s", (_name, schema, expected) => {
+    expect(canDescribeEventPayload(schema)).toBe(expected);
   });
 });

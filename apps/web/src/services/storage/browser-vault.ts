@@ -1,5 +1,5 @@
 import {
-  applySessionCommit as reduceSessionCommit,
+  applyValidatedSessionCommit,
   validateBrowserCheckpoint,
   validateSessionCommit,
   type BrowserCheckpoint,
@@ -193,10 +193,6 @@ async function hashCheckpointJson(serialized: string): Promise<string> {
   return `sha256:${await sha256Hex(new TextEncoder().encode(serialized).buffer)}`;
 }
 
-function cloneCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
-  return structuredClone(checkpoint);
-}
-
 /**
  * Browser-authoritative durable storage.
  *
@@ -204,6 +200,14 @@ function cloneCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
  * the checkpoint's explicit `snapshots` domain; storing a complete checkpoint
  * after every action would otherwise grow quadratically with session length.
  * Small commit metadata remains append-only to make action retries idempotent.
+ *
+ * A checkpoint grows with the session and every commit runs on the page's main
+ * thread, so the commit path walks it as few times as correctness allows:
+ * - Every write validates its input, so a stored checkpoint is trusted when a
+ *   commit is reduced onto it instead of being validated again.
+ * - IndexedDB stores and returns structured clones, so values are neither
+ *   copied before a write nor after a read. A returned checkpoint is either a
+ *   fresh read or derived from the caller's own input, never shared state.
  */
 export class BrowserVault {
   private readonly db: BrowserVaultDatabase;
@@ -271,26 +275,24 @@ export class BrowserVault {
                 `Checkpoint revision ${checkpoint.revision} already exists for session ${checkpoint.sessionId}`,
               );
             }
-            return cloneCheckpoint(current.checkpoint);
+            return current.checkpoint;
           }
         }
 
         await this.db.checkpoints.put({
           sessionId: checkpoint.sessionId,
           revision: checkpoint.revision,
-          checkpoint: cloneCheckpoint(checkpoint),
+          checkpoint,
           committedAt: checkpoint.committedAt,
         });
         await this.db.heads.put({
           sessionId: checkpoint.sessionId,
           revision: checkpoint.revision,
           updatedAt: checkpoint.committedAt,
-          session: structuredClone(checkpoint.session),
+          session: checkpoint.session,
         });
-        if (checkpoint.world) {
-          await this.db.worlds.put(structuredClone(checkpoint.world));
-        }
-        return cloneCheckpoint(checkpoint);
+        if (checkpoint.world) await this.db.worlds.put(checkpoint.world);
+        return checkpoint;
       },
     );
   }
@@ -348,25 +350,28 @@ export class BrowserVault {
           return {
             applied: false,
             duplicate: true,
-            checkpoint: cloneCheckpoint(current.checkpoint),
+            checkpoint: current.checkpoint,
           };
         }
 
         const current = await this.db.checkpoints.get(
           commit.checkpoint.sessionId,
         );
-        const next = reduceSessionCommit(current?.checkpoint ?? null, commit);
+        const next = applyValidatedSessionCommit(
+          current?.checkpoint ?? null,
+          commit,
+        );
         await this.db.checkpoints.put({
           sessionId: next.sessionId,
           revision: next.revision,
-          checkpoint: cloneCheckpoint(next),
+          checkpoint: next,
           committedAt: next.committedAt,
         });
         await this.db.heads.put({
           sessionId: next.sessionId,
           revision: next.revision,
           updatedAt: next.committedAt,
-          session: structuredClone(next.session),
+          session: next.session,
         });
         await this.db.commits.add({
           id,
@@ -377,13 +382,9 @@ export class BrowserVault {
           checkpointDigest: digest,
           committedAt: next.committedAt,
         });
-        if (next.world) await this.db.worlds.put(structuredClone(next.world));
+        if (next.world) await this.db.worlds.put(next.world);
         await clearPending();
-        return {
-          applied: true,
-          duplicate: false,
-          checkpoint: cloneCheckpoint(next),
-        };
+        return { applied: true, duplicate: false, checkpoint: next };
       },
     );
   }
@@ -411,9 +412,7 @@ export class BrowserVault {
 
   async getCheckpoint(sessionId: string): Promise<BrowserCheckpoint | null> {
     const record = await this.db.checkpoints.get(sessionId);
-    return record
-      ? cloneCheckpoint(validateBrowserCheckpoint(record.checkpoint))
-      : null;
+    return record ? validateBrowserCheckpoint(record.checkpoint) : null;
   }
 
   async getLatestCheckpoint(

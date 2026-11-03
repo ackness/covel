@@ -9,6 +9,9 @@ export function AutoAdvanceControl() {
   const [error, setError] = useState<string>();
   const advance = state.advance;
   const active = advance && advance.phase !== "stopped";
+  // An idle bar would still paint its padding and page surface as a strip
+  // across the session backdrop, so it only exists while there is something to show.
+  if (!active && !error) return null;
   return (
     <div
       data-testid="auto-advance-control"

@@ -524,7 +524,7 @@ The shared framework loader tries these in order: an exact locale match, the mai
 Apart from templates and bodies, the assembly code writes a few sentences of its own:
 
 - The title of the world rules
-- The event-emission notes for `<available-events>`: call `emit-event` once per event; the tool definition lists topics and payload shapes. The catalogue keeps descriptions and required-field summaries. It includes a complete payload schema only when references (`$ref` / `$defs`) force the tool definition to use a plain object; unreadable schemas only show an unavailable marker
+- The event-emission notes for `<available-events>`: call `emit-event` once per event; the tool definition lists topics and payload shapes. The catalogue keeps descriptions and required-field summaries. It includes a complete payload schema only for a schema the tool definition cannot describe, such as a recursive one; unreadable schemas only show an unavailable marker
 - The explanatory sentence after the history summary block
 - Markers for content that was trimmed or truncated
 - Retry hints

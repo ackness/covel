@@ -524,7 +524,7 @@ pnpm prompt:prefix apps/server/data/covel.db --json
 模板和正文之外，装配代码自己也写几句话：
 
 - 世界规则的标题
-- `<available-events>` 的事件发射说明：每个事件调用一次 `emit-event`，topic 和 payload 格式见工具定义。目录保留描述和必填字段摘要；只有工具定义因 schema 含 `$ref` / `$defs` 而退回普通对象时，目录才附上完整 payload schema；读取失败只标注不可用
+- `<available-events>` 的事件发射说明：每个事件调用一次 `emit-event`，topic 和 payload 格式见工具定义。目录保留描述和必填字段摘要；只有工具定义无法描述的 schema（例如含递归引用）才在目录中附上完整 payload schema；读取失败只标注不可用
 - 历史摘要块后面的说明句
 - 被裁掉或被截断内容的标记
 - 重试提示

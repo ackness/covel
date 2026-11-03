@@ -47,6 +47,82 @@ function commonType(values: readonly string[], path: string): string {
   return [...unique][0]!;
 }
 
+/** Keywords whose values are data, never schemas: a `$ref` key there is a value. */
+const dataKeywords = new Set(["enum", "const", "default", "examples"]);
+/** Expanding shared definitions may repeat them; past this a schema is refused. */
+const MAX_INLINED_NODES = 5000;
+
+function resolvePointer(root: unknown, ref: string, path: string): unknown {
+  if (ref !== "#" && !ref.startsWith("#/"))
+    throw new Error(`${path}: only local references can be inlined`);
+  let node = root;
+  for (const raw of ref === "#" ? [] : ref.slice(2).split("/")) {
+    const segment = decodeURIComponent(raw)
+      .replaceAll("~1", "/")
+      .replaceAll("~0", "~");
+    if (!isObject(node) || !(segment in node))
+      throw new Error(`${path}: reference ${ref} does not resolve`);
+    node = node[segment];
+  }
+  return node;
+}
+
+/**
+ * Replace local `#/...` references with the schemas they point to, so a model
+ * provider never receives a dangling reference. Recursive definitions cannot
+ * be written out and are refused, as are references to other documents.
+ */
+function inlineLocalReferences(root: Record<string, unknown>): unknown {
+  let nodes = 0;
+  const visit = (
+    value: unknown,
+    path: string,
+    active: readonly string[],
+  ): unknown => {
+    if (Array.isArray(value))
+      return value.map((child, index) =>
+        visit(child, `${path}.${index}`, active),
+      );
+    if (!isObject(value)) return value;
+    if ((nodes += 1) > MAX_INLINED_NODES)
+      throw new Error(
+        `${path}: schema is too large once references are inlined`,
+      );
+    if (path !== "$" && typeof value.$id === "string")
+      throw new Error(
+        `${path}.$id: nested schema identifiers cannot be inlined`,
+      );
+    const { $ref: ref, ...rest } = value;
+    let base: Record<string, unknown> = {};
+    if (ref !== undefined) {
+      if (typeof ref !== "string")
+        throw new Error(`${path}.$ref: expected a reference string`);
+      if (active.includes(ref))
+        throw new Error(
+          `${path}.$ref: recursive reference ${ref} cannot be inlined`,
+        );
+      const target = visit(resolvePointer(root, ref, `${path}.$ref`), path, [
+        ...active,
+        ref,
+      ]);
+      if (!isObject(target))
+        throw new Error(
+          `${path}.$ref: reference ${ref} is not a schema object`,
+        );
+      base = target;
+    }
+    const node: Record<string, unknown> = { ...base };
+    for (const [key, child] of Object.entries(rest)) {
+      if (key === "$defs" || key === "definitions") continue;
+      node[key] = dataKeywords.has(key)
+        ? child
+        : visit(child, `${path}.${key}`, active);
+    }
+    return node;
+  };
+  return visit(root, "$", []);
+}
+
 function normalizeNode(value: unknown, path: string): Record<string, unknown> {
   if (!isObject(value)) throw new Error(`${path}: expected a schema object`);
   const node = { ...value };
@@ -125,7 +201,9 @@ function normalizeNode(value: unknown, path: string): Record<string, unknown> {
 
 /**
  * Describe an author schema to a model without changing its validator.
- * Only schema positions are visited: enum/const/default/examples hold data.
+ * Local references are written out first, so `$defs` in an author schema are
+ * described in full. Only schema positions are visited: enum/const/default/
+ * examples hold data.
  * Throw if no single type can be described safely, so the caller can omit
  * the optional capability instead of breaking the entire model request.
  */
@@ -133,6 +211,6 @@ export function modelToolSchema(
   schema: Record<string, unknown>,
 ): Readonly<Record<string, unknown>> {
   return toolParametersJsonSchema({
-    toJSONSchema: () => normalizeNode(schema, "$"),
+    toJSONSchema: () => normalizeNode(inlineLocalReferences(schema), "$"),
   });
 }

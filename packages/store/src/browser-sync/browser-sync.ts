@@ -335,8 +335,22 @@ export function applySessionCommit(
   current: BrowserCheckpoint | null,
   commit: SessionCommit,
 ): BrowserCheckpoint {
-  const next = validateSessionCommit(commit);
-  const previous = current === null ? null : validateBrowserCheckpoint(current);
+  return applyValidatedSessionCommit(
+    current === null ? null : validateBrowserCheckpoint(current),
+    validateSessionCommit(commit),
+  );
+}
+
+/**
+ * {@link applySessionCommit} for inputs that already passed
+ * `validateBrowserCheckpoint` / `validateSessionCommit`, such as a checkpoint
+ * a store validated when it wrote it. Validation walks the whole checkpoint,
+ * so a caller holding validated values skips repeating it on every commit.
+ */
+export function applyValidatedSessionCommit(
+  previous: BrowserCheckpoint | null,
+  next: SessionCommit,
+): BrowserCheckpoint {
   const sessionId = next.checkpoint.sessionId;
 
   if (previous === null) {

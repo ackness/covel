@@ -1035,6 +1035,31 @@ describe("LocalDataService browser-authoritative sync", () => {
     });
   });
 
+  it("applies a server commit from the session head without reading the whole checkpoint", async () => {
+    const service = await serviceWithWorld();
+    await createSave(service, "world-1", "sess-1", [], "en-US");
+    // The fake server reads the vault, so prepare its answer before spying.
+    const download = api.fetchBrowserCommit.getMockImplementation()!;
+    api.fetchBrowserCommit.mockResolvedValueOnce(
+      await download("sess-1", "turn-1", 1),
+    );
+    const fullRead = vi.spyOn(vault, "getLatestCheckpoint");
+
+    await service.commitFromServer("sess-1", "turn-1");
+
+    expect(fullRead).not.toHaveBeenCalled();
+    expect(api.fetchBrowserCommit).toHaveBeenLastCalledWith(
+      "sess-1",
+      "turn-1",
+      1,
+    );
+    fullRead.mockRestore();
+    await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
+      revision: 2,
+      actionId: "turn-1",
+    });
+  });
+
   it("keeps the browser world document when applying a server commit", async () => {
     const service = await serviceWithWorld("localized-world");
     await vault.upsertWorld({

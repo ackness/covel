@@ -76,6 +76,33 @@ function isSubagentProvider(manifest: RuntimeManifest): boolean {
   return manifest.subagentOnly === true;
 }
 
+/**
+ * Whether the host may run one runtime now without asking the player: the
+ * same grants an action preflight requires, but never opening a prompt.
+ * Bundled, freshly verified declarative, trusted-source and already granted
+ * packages all qualify; package source alone never decides it.
+ */
+export async function runtimeRunsWithoutPrompt(
+  c: Context,
+  session: SessionRecord,
+  pluginId: string,
+  runtimeName: string,
+): Promise<boolean> {
+  const trust = getPluginTrustInfo(
+    pluginId,
+    c.get("pluginRegistry").get(pluginId)?.source,
+  );
+  if (trust.autoLoad) return true;
+  if (await refreshDeclarativeEligibility(c.get("trustedSources"), pluginId))
+    return true;
+  if (requireAccess(c, "plugin.community")) return false;
+  const gate = c.get("rpcApprovalGate");
+  const scope = sessionApprovalScope(session, pluginId);
+  return [COMMUNITY_SERVER_CODE_ACTION, `runtime:${runtimeName}`].every(
+    (action) => gate.hasGrant(session.id, pluginId, action, scope),
+  );
+}
+
 async function preflightApprovals(
   c: Context,
   session: SessionRecord,

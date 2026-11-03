@@ -1,4 +1,4 @@
-import { schemaHasReferences } from "@covel/tools";
+import { canDescribeEventPayload } from "@covel/tools";
 import { compareText } from "@covel/shared";
 import type { PackageManifest } from "@covel/plugin-loader";
 /**
@@ -308,9 +308,9 @@ export function createEventDirectory(
         try {
           const raw = (await loadSchema(entry)).raw;
           fields = requiredFieldsSummary(raw);
-          // Referenced schemas cannot be inlined in the tool definition;
-          // the catalogue retains their complete payload shape.
-          if (schemaHasReferences(raw))
+          // A payload the emit-event tool cannot describe (a recursive
+          // definition, for example) keeps its complete shape here.
+          if (!canDescribeEventPayload(raw))
             payloadSchema = JSON.stringify(
               typeof raw === "object" && raw !== null
                 ? Object.fromEntries(

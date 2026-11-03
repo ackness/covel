@@ -15,9 +15,12 @@ export interface PackageFile {
 
 /** Unsupported, oversized or changing content cannot establish an inventory. */
 export class PackageInventoryError extends Error {
-  constructor(message: string) {
-    super(message);
+  /** The package-relative path that stopped the inspection, when one did. */
+  readonly file?: string;
+  constructor(message: string, file?: string) {
+    super(file ? `${message}: ${file}` : message);
     this.name = "PackageInventoryError";
+    if (file) this.file = file;
   }
 }
 
@@ -49,7 +52,8 @@ export async function packageFileSignature(directory: string): Promise<string> {
     const stat = await lstat(absolute, { bigint: true });
     if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory()))
       throw new PackageInventoryError(
-        "Package contains linked or unsupported files",
+        "Package contains a linked or unsupported file",
+        relative || undefined,
       );
     if (!relative && !stat.isDirectory())
       throw new PackageInventoryError("Package root is not a directory");
@@ -94,7 +98,10 @@ export async function readPackageInventory(directory: string): Promise<{
       const absolute = path.join(directory, relativePath);
       const stat = await lstat(absolute);
       if (stat.isSymbolicLink())
-        throw new PackageInventoryError("Package contains linked files");
+        throw new PackageInventoryError(
+          "Package contains a linked file",
+          relativePath,
+        );
       if (stat.isDirectory()) {
         directories.push(relativePath);
         await visit(relativePath);

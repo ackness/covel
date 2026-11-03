@@ -18,6 +18,7 @@ import {
   loadPluginSummary,
   loadRuntime,
 } from "@covel/plugin-loader";
+import { buildSessionEmitEventTool } from "@covel/tools";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../../plugins");
@@ -117,12 +118,38 @@ describe("event directory — real scene-stage manifest", () => {
     const directory = await setupSceneStageDirectory();
     const topics = await directory.listTopics(SESSION_ID);
     expect([...topics].sort()).toEqual(["scene.set", "stage.direction"]);
+    // The emit-event tool describes both payloads in full, so the catalogue
+    // lists the topics without repeating their schemas.
     const catalog = await directory.catalogText(SESSION_ID, "en-US");
-    expect(catalog).toContain('"enum":["actor.enter","actor.update"]');
-    expect(catalog).toContain('"required":["type","character"]');
-    expect(catalog).toContain('"$defs"');
-    expect(catalog).toContain("payload schema:");
+    expect(catalog).toContain("- stage.direction:");
+    expect(catalog).not.toContain("payload schema:");
     expect(catalog).not.toContain('"timeOfDay"');
+    const described = await directory.describeTopics!(SESSION_ID);
+    const tool = buildSessionEmitEventTool(
+      { directory },
+      described.map(({ topic, schema }) => ({ topic, schema })),
+    )!;
+    const properties = (
+      tool.jsonSchema as {
+        properties: {
+          topic: { enum: string[] };
+          data: { anyOf: Record<string, unknown>[] };
+        };
+      }
+    ).properties;
+    expect(properties.topic.enum.sort()).toEqual([
+      "scene.set",
+      "stage.direction",
+    ]);
+    const direction = JSON.stringify(
+      properties.data.anyOf.find(
+        (payload) => payload.title === "stage.direction",
+      ),
+    );
+    expect(direction).toContain('"enum":["actor.enter","actor.update"]');
+    expect(direction).toContain('"required":["type","character"]');
+    expect(direction).not.toContain("$ref");
+    expect(direction).not.toContain("$defs");
   });
 
   it("validates a conforming scene.set payload against the on-disk schema", async () => {
