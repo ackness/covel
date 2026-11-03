@@ -5,8 +5,12 @@ import { subscribeToast, type ToastEvent } from "@/lib/toast-channel.js";
 import { toFrontendMessage } from "@/services/data-service/mappers.js";
 import { toStreamMessages } from "@/stores/session-store/restore-session.js";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  BROWSER_CHECKPOINT_SCHEMA_VERSION,
+  validateBrowserCheckpoint,
+  validateSessionCommit,
+} from "@covel/store/browser-sync";
 import { replaceSessionFromCheckpoint } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type {
@@ -18,6 +22,17 @@ import {
   BrowserVaultConflictError,
   BrowserVaultSecretError,
 } from "../browser-vault.js";
+
+// Pass-through spies count how often a commit walks the whole checkpoint.
+vi.mock("@covel/store/browser-sync", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@covel/store/browser-sync")>();
+  return {
+    ...actual,
+    validateBrowserCheckpoint: vi.fn(actual.validateBrowserCheckpoint),
+    validateSessionCommit: vi.fn(actual.validateSessionCommit),
+  };
+});
 
 let vault: BrowserVault;
 let databaseNumber = 0;
@@ -130,6 +145,36 @@ describe("BrowserVault checkpoints", () => {
 });
 
 describe("BrowserVault session commits", () => {
+  it("validates a commit once and trusts the checkpoint it stored", async () => {
+    await vault.applySessionCommit(commit(checkpoint("session-a", 1, "boot")));
+    vi.mocked(validateBrowserCheckpoint).mockClear();
+    vi.mocked(validateSessionCommit).mockClear();
+
+    await vault.applySessionCommit(commit(checkpoint("session-a", 2, "turn")));
+
+    // Validating the commit walks its checkpoint once; the stored one is
+    // trusted rather than validated again.
+    expect(validateSessionCommit).toHaveBeenCalledTimes(1);
+    expect(validateBrowserCheckpoint).not.toHaveBeenCalled();
+    expect((await vault.getSession("session-a"))?.revision).toBe(2);
+  });
+
+  it("returns checkpoints that do not alias stored state", async () => {
+    const { checkpoint: applied } = await vault.applySessionCommit(
+      commit(checkpoint("session-a", 1, "boot")),
+    );
+    Object.assign(applied.session, { status: "ended" });
+    const read = await vault.getLatestCheckpoint("session-a");
+    expect(read?.session.status).toBe("active");
+    Object.assign(read!.session, { status: "ended" });
+    expect((await vault.getLatestCheckpoint("session-a"))?.session.status).toBe(
+      "active",
+    );
+    expect((await vault.getSession("session-a"))?.session.status).toBe(
+      "active",
+    );
+  });
+
   it("keeps commit metadata bounded as the session grows", async () => {
     for (let revision = 1; revision <= 10; revision++) {
       await vault.applySessionCommit(

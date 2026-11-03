@@ -7,6 +7,7 @@ export {
   BrowserSyncValidationError,
   RevisionConflictError,
   applySessionCommit,
+  applyValidatedSessionCommit,
   assertPersistenceProfile,
   initialBrowserCheckpointActionId,
   isPersistenceProfile,
