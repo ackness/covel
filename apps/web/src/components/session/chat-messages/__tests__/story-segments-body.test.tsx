@@ -163,9 +163,9 @@ describe("story segment templates in the chat view", () => {
     expect(within(parts[1]!).getByText("阿雅")).toBeDefined();
     expect(within(parts[1]!).getByText("companion")).toBeDefined();
     expect(within(parts[1]!).getByText("「走吧。」")).toBeDefined();
-    // The throwing template falls back for its own segment only.
+    // The throwing template falls back to the default for its own segment.
     expect(parts[2]!.dataset.segmentTemplate).toBe("broken");
-    expect(parts[2]!.textContent).toBe("「等等！」");
+    expect(parts[2]!.textContent).toBe("陌生人「等等！」");
   });
 
   it.each(["parsed", "detailed"] as const)(
@@ -263,8 +263,17 @@ describe("story segment templates in the chat view", () => {
     expect(body.textContent).not.toContain("Again");
   });
 
-  it("renders a story with no matching template exactly as before", () => {
-    const unmatched = renderMessage(story, {
+  it("renders a story with no template and no named speaker as plain narrative", () => {
+    const narration = {
+      ...story,
+      segments: [
+        { kind: "narration" as const, text: "雨停了。" },
+        // A narration segment's speaker is not shown.
+        { kind: "narration" as const, speaker: "阿雅", text: "风很冷。" },
+      ],
+      content: "雨停了。\n\n风很冷。",
+    };
+    const unmatched = renderMessage(narration, {
       specs: [
         {
           pluginId: "plates",
@@ -273,10 +282,37 @@ describe("story segment templates in the chat view", () => {
       ],
     }).container.innerHTML;
     cleanup();
-    const { segments: _segments, ...plain } = story;
+    const { segments: _segments, ...plain } = narration;
     const before = renderMessage(plain).container.innerHTML;
     expect(unmatched).toBe(before);
     expect(screen.queryByTestId("story-segments")).toBeNull();
+  });
+
+  const nothingMatches: UISlotEntry[] = [
+    {
+      pluginId: "plates",
+      specs: [{ ...nameplate, match: { kind: "action" as const } }],
+    },
+  ];
+  it.each<[string, UISlotEntry[]]>([
+    ["no templates", []],
+    ["templates that match nothing", nothingMatches],
+  ])("names dialogue speakers with %s", (_label, specs) => {
+    renderMessage(story, { specs });
+    const body = screen.getByTestId("story-segments");
+    const parts = [
+      ...body.querySelectorAll("[data-reveal-unit] > div"),
+    ] as HTMLElement[];
+    expect(parts.map((part) => part.textContent)).toEqual([
+      "雨停了。",
+      "阿雅「走吧。」",
+      "陌生人「等等！」",
+    ]);
+    expect(
+      within(body)
+        .getAllByTestId("segment-speaker")
+        .map((plate) => plate.textContent),
+    ).toEqual(["阿雅", "陌生人"]);
   });
 
   it("draws full committed story through templates regardless of its durable ID", () => {

@@ -4,12 +4,14 @@ import { useStoryReveal } from "@/lib/reveal/story-reveal-context.js";
  * The body of a committed story in the chat view, drawn through the plugin
  * segment templates (`contributes.ui.segment`) that match its segments.
  *
- * A story with no matching template renders exactly as before
- * (`NarrativeMessageBody` of its content). Otherwise each segment renders in
- * order: a matched one through its template, inside a boundary that falls
- * back to that segment's default text, and an unmatched one as default
- * prose. Templates are display-only json-render views with no actions,
- * drawn with the display components alone (`segmentTemplateRegistry`).
+ * A story with no matching template and no named speaker renders as plain
+ * narrative (`NarrativeMessageBody` of its content). Otherwise each segment
+ * renders in order: a matched one through its template, inside a boundary
+ * that falls back to that segment's default, and an unmatched one as the
+ * default: its text, headed by the speaker's name for a non-narration
+ * segment that names one. Templates are display-only json-render views with
+ * no actions, drawn with the display components alone
+ * (`segmentTemplateRegistry`).
  */
 import {
   Component,
@@ -58,10 +60,15 @@ export function StoryMessageBody({
     [entries],
   );
   const segments = message.segments;
-  const plan = useMemo(
-    () => (segments ? planSegmentTemplates(templates, segments) : undefined),
-    [templates, segments],
-  );
+  const plan = useMemo(() => {
+    if (!segments) return undefined;
+    // Without a matching template, named speakers still get the default
+    // nameplate instead of disappearing into plain prose.
+    return (
+      planSegmentTemplates(templates, segments) ??
+      (segments.some(speakerOf) ? segments.map(() => undefined) : undefined)
+    );
+  }, [templates, segments]);
   if (!segments || !plan)
     return (
       <NarrativeMessageBody
@@ -122,7 +129,7 @@ const TemplatedStory = memo(function TemplatedStory({
         {segments.map((segment, index) => {
           const template = plan[index];
           const fallback = (
-            <Markdown themeSessionId={sessionId}>{segment.text}</Markdown>
+            <DefaultSegment segment={segment} sessionId={sessionId} />
           );
           if (!template) return <div key={index}>{fallback}</div>;
           return (
@@ -148,6 +155,38 @@ const TemplatedStory = memo(function TemplatedStory({
     </div>
   );
 });
+
+type Segment = NonNullable<StreamMessage["segments"]>[number];
+
+/** The speaker a segment's default rendering names, if any. */
+function speakerOf(segment: Segment): string | undefined {
+  const speaker = segment.speaker?.trim();
+  return segment.kind !== "narration" && speaker ? speaker : undefined;
+}
+
+/** A segment without a template: its text, headed by its speaker's name. */
+function DefaultSegment({
+  segment,
+  sessionId,
+}: {
+  readonly segment: Segment;
+  readonly sessionId: string;
+}) {
+  const speaker = speakerOf(segment);
+  return (
+    <>
+      {speaker && (
+        <span
+          data-testid="segment-speaker"
+          className="not-prose mb-0.5 block text-xs font-semibold text-(--accent-primary)"
+        >
+          {speaker}
+        </span>
+      )}
+      <Markdown themeSessionId={sessionId}>{segment.text}</Markdown>
+    </>
+  );
+}
 
 function SegmentTemplateView({
   sessionId,

@@ -48,7 +48,7 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 ### What you will see
 
 - The background and portraits on the stage come from this plugin. Speaker name tags come from the narrator's story segments and do not need it.
-- Dialogue segments in chat gain a speaker nameplate and a compact avatar when available, with click-to-enlarge and dismissal. Stories without segments still use the normal text view.
+- Dialogue segments in chat gain a speaker nameplate and a compact avatar when available, with click-to-enlarge and dismissal. Without it, chat still shows the speaker's name as text. Stories without segments still use the normal text view.
 - On the right there is a "Scene" tab. It contains a read-only "Scene" panel (the scene name, day or night, and where the background comes from) and a "Cast" panel. The "Cast" panel also says why each character was chosen, for example "Mentioned", "In scene", "Profile", or "Recent".
 - An absent scene asset registry preserves the existing backdrop. When a registry exists but does not list the location, the backdrop is empty and the stage falls back to the world cover.
 - The story's `cues.scene`, written when the location changes, selects the location and non-empty `cues.present` selects who is on stage. Updates commit with the story. Continuing actors keep their position and visual; new actors fade into free positions from left to right, and absent actors leave the current cast immediately at commit while their previously displayed image fades out. Outgoing images do not occupy the four current actor slots. Focus follows the last resolved dialogue or action speaker on stage.

@@ -97,7 +97,10 @@ export function usePluginThemes(
       cancelled = true;
       source.replace([], "loading");
     };
-  }, [loaded, sessionId, key, activeKey, language, plugins]);
+    // `active` follows `activeKey`, not the list's identity: a plugin list
+    // reloaded with the same activations must not drop and refetch the theme
+    // (every themed Markdown body would re-render twice).
+  }, [loaded, sessionId, key, active, language]);
   return {
     source: loaded?.sessionId === sessionId ? loaded.source : undefined,
     reload: () => setRevision((value) => value + 1),

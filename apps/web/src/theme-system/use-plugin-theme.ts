@@ -18,18 +18,18 @@ export function usePluginThemePart(
       store ? subscribePluginThemes(store, listener) : () => {},
     [store],
   );
-  const read = useCallback(
-    () => (store ? pluginThemeRevision(store) : 0),
-    [store],
-  );
-  useSyncExternalStore(subscribe, read, read);
-  const source =
-    sessionId && store
-      ? currentPluginThemeSession(store, sessionId)
-      : undefined;
-  if (!source?.state.effective) return {};
+  // The snapshot is the scope itself, not the registry revision: a refresh
+  // that leaves this session's effective theme alone must not re-render (and
+  // re-parse) every Markdown body on the page.
+  const read = useCallback(() => {
+    if (!sessionId || !store) return "";
+    const source = currentPluginThemeSession(store, sessionId);
+    return source?.state.effective ? source.scope : "";
+  }, [store, sessionId]);
+  const scope = useSyncExternalStore(subscribe, read, read);
+  if (!scope) return {};
   return {
-    "data-covel-theme-scope": source.scope,
+    "data-covel-theme-scope": scope,
     "data-covel-theme-part": part,
   };
 }
