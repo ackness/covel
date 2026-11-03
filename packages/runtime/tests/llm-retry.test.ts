@@ -666,6 +666,51 @@ describe("streamLLMWithRetry", () => {
     expect(onRetry.mock.calls[0]![0]!.reason).toBe("transient-error");
   });
 
+  it("shows argument fragments per attempt and voids a failed or restarted one", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "tool-argument-delta", index: 0, argumentsDelta: '{"a"' },
+        ],
+        throwAtEnd: new Error("rate limited"),
+      },
+      {
+        events: [
+          { type: "tool-argument-delta", index: 0, argumentsDelta: "{" },
+          { type: "stream-reset" },
+          { type: "tool-argument-delta", index: 0, argumentsDelta: "{}" },
+          {
+            type: "tool-call",
+            id: "call",
+            name: "submit-output",
+            arguments: "{}",
+          },
+          { type: "done", finishReason: "tool_calls" },
+        ],
+      },
+    ]);
+    const seen: string[] = [];
+    const result = await streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 }),
+      deadline: Date.now() + 10_000,
+      argumentStream: {
+        fragment: (attempt, fragment) =>
+          seen.push(`${attempt}:${fragment.argumentsDelta}`),
+        reset: (attempt) => seen.push(`${attempt}:reset`),
+      },
+    });
+    expect(result.response.toolCalls).toHaveLength(1);
+    expect(seen).toEqual([
+      '0:{"a"',
+      "0:reset",
+      "1:{",
+      "1:reset",
+      "1:{}",
+    ]);
+  });
+
   it("fires first-token timeout when the stream stalls before any token", async () => {
     const llm = createScriptedStreamLLM([
       {

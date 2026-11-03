@@ -665,7 +665,14 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
             };
             existing.arguments += argsDelta.delta;
             toolCallAcc.set(argsDelta.itemId, existing);
-            if (argsDelta.delta) yield { type: "tool-argument-delta" };
+            if (argsDelta.delta)
+              yield {
+                type: "tool-argument-delta",
+                index: [...toolCallAcc.keys()].indexOf(argsDelta.itemId),
+                ...(existing.callId ? { id: existing.callId } : {}),
+                ...(existing.name ? { name: existing.name } : {}),
+                argumentsDelta: argsDelta.delta,
+              };
           }
 
           const argsDone = readResponsesStreamFunctionCallArgsDone(payload);
@@ -676,9 +683,18 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
               arguments: "",
             };
             // The `done` event carries the authoritative full argument string.
+            const replaced = existing.arguments !== argsDone.arguments;
             existing.arguments = argsDone.arguments;
             if (argsDone.name) existing.name = argsDone.name;
             toolCallAcc.set(argsDone.itemId, existing);
+            if (replaced)
+              yield {
+                type: "tool-argument-delta",
+                index: [...toolCallAcc.keys()].indexOf(argsDone.itemId),
+                ...(existing.callId ? { id: existing.callId } : {}),
+                ...(existing.name ? { name: existing.name } : {}),
+                arguments: argsDone.arguments,
+              };
           }
 
           const terminalStatus = terminalResponseStatus(payload.type);

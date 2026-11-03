@@ -181,8 +181,17 @@ it("does not release chat tool arguments from a truncated generation", async () 
       output.push(event);
   };
   await expect(run()).rejects.toThrow("terminal event");
-  // Argument activity is reported; the call itself is never released.
-  expect(output).toEqual([{ type: "tool-argument-delta" }]);
+  // Argument text is reported as a fragment; the call itself is never
+  // released.
+  expect(output).toEqual([
+    {
+      type: "tool-argument-delta",
+      index: 0,
+      id: "call",
+      name: "write",
+      argumentsDelta: "{}",
+    },
+  ]);
 });
 
 it("gives streamed tool calls without an id one that no other step of the loop has", async () => {

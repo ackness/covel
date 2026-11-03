@@ -871,6 +871,8 @@ async function runProvider({
       : undefined;
     const subDeps: TurnExecutorDeps = {
       ...deps,
+      // A sub-agent's output goes to its caller, never to the player.
+      outputDrafts: undefined,
       emitter,
       // The player's abort and the caller's cancellation reach the sub-agent;
       // the steering queue does not.

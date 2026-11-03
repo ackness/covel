@@ -408,6 +408,11 @@
               "type": "string",
               "description": "Private schema that validates the runtime's output."
             },
+            "live": {
+              "type": "string",
+              "enum": ["off", "units", "text"],
+              "description": "How a story shows while the model writes it: `units` shows each paragraph or line once it is complete, `text` shows it as it is typed, `off` waits for the commit. Story runtimes only. Defaults to `units`; players can choose a more cautious setting."
+            },
             "recordAs": {
               "type": "string",
               "description": "Export key under which the output is persisted for later executions. Requires `schema`."

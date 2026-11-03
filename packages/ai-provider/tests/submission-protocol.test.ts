@@ -185,9 +185,23 @@ describe.each(protocols)(
             arguments: raw,
           },
         ]);
-        expect(
-          output.filter((event) => event.type === "tool-argument-delta"),
-        ).toEqual([{ type: "tool-argument-delta" }]);
+        const fragments = output.filter(
+          (event) => event.type === "tool-argument-delta",
+        );
+        if (name === "gemini") {
+          // Gemini sends calls whole: progress only, no argument text.
+          expect(fragments).toEqual([{ type: "tool-argument-delta" }]);
+        } else {
+          // The fragments add up to the arguments, for the named call.
+          expect(fragments).toEqual([
+            expect.objectContaining({
+              index: 0,
+              id: "call",
+              name: "submit-output",
+              argumentsDelta: raw,
+            }),
+          ]);
+        }
         expect(output.at(-1)).toMatchObject({
           type: "done",
           usage: { inputTokens: 2, outputTokens: 3 },
@@ -221,3 +235,71 @@ describe.each(protocols)(
     });
   },
 );
+
+it("replaces streamed Responses arguments with the authoritative ones", async () => {
+  const events = [
+    {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: {
+        type: "function_call",
+        id: "item",
+        call_id: "call",
+        name: "submit-output",
+        arguments: "",
+      },
+    },
+    {
+      type: "response.function_call_arguments.delta",
+      item_id: "item",
+      delta: '{"a":',
+    },
+    {
+      type: "response.function_call_arguments.done",
+      item_id: "item",
+      arguments: '{"a":1}',
+    },
+    {
+      type: "response.completed",
+      response: {
+        status: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        output: [],
+      },
+    },
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+    ),
+  );
+  const output: StreamEvent[] = [];
+  for await (const event of createOpenAiResponsesAdapter().streamText(
+    { baseUrl: "https://fixture.invalid/v1" },
+    { model: "synthetic", messages: [] },
+  ))
+    output.push(event);
+  expect(
+    output.filter((event) => event.type === "tool-argument-delta"),
+  ).toEqual([
+    {
+      type: "tool-argument-delta",
+      index: 0,
+      id: "call",
+      name: "submit-output",
+      argumentsDelta: '{"a":',
+    },
+    {
+      type: "tool-argument-delta",
+      index: 0,
+      id: "call",
+      name: "submit-output",
+      arguments: '{"a":1}',
+    },
+  ]);
+});

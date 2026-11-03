@@ -264,6 +264,7 @@ export function compileRuntimeManifest(
             schema: output.schema,
             recordAs: output.recordAs,
             ...(output.from ? { from: output.from } : {}),
+            ...(output.live ? { live: output.live } : {}),
           },
         }
       : {}),

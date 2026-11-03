@@ -24,6 +24,7 @@ import type { LLMMessage, LLMResponse } from "@covel/shared";
 import {
   callLLMWithRetry,
   streamLLMWithRetry,
+  type ArgumentStreamObserver,
   type RetryInfo,
 } from "../retry/llm-retry.js";
 import { LLMRetryError, type RetryPolicy } from "../retry/retry-common.js";
@@ -34,6 +35,8 @@ import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {
   readonly manifest: RuntimeManifest;
+  /** Watches tool-call arguments while they stream (output drafts). */
+  readonly argumentStream?: ArgumentStreamObserver;
   readonly deps: AgentLoopDeps;
   readonly messages: LLMMessage[];
   readonly effectiveModel: string | undefined;
@@ -207,6 +210,7 @@ async function requestStreaming(
     const streamed = await streamLLMWithRetry({
       ...callParams,
       onStreamTime: opts.onStreamTime,
+      ...(opts.argumentStream ? { argumentStream: opts.argumentStream } : {}),
     });
     response = streamed.response;
   } catch (streamError) {
@@ -242,6 +246,8 @@ async function requestStreaming(
         "PROVIDER_ERROR: model response ended with tool_calls but no structured calls",
       );
     }
+    // Whatever streamed for the lost calls is void.
+    opts.argumentStream?.reset(-1);
     response = await callLLMWithRetry(callParams);
   }
   return response;

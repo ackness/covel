@@ -244,6 +244,12 @@ export const runtimeAuthoringManifestSchema = z
               .string()
               .describe("Private schema that validates the runtime's output.")
               .optional(),
+            live: z
+              .enum(["off", "units", "text"])
+              .describe(
+                "How a story shows while the model writes it: `units` shows each paragraph or line once it is complete, `text` shows it as it is typed, `off` waits for the commit. Story runtimes only. Defaults to `units`; players can choose a more cautious setting.",
+              )
+              .optional(),
             recordAs: z
               .string()
               .describe(

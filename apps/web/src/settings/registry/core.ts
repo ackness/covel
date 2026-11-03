@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIVE_OUTPUT_PREFERENCES } from "@/stores/session-store/output-drafts.js";
 import type { SettingsStoreApi } from "@covel/settings";
 import {
   TRACE_RETENTION_SERVER_SETTING,
@@ -74,6 +75,18 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     label: "Instant text",
     description:
       "Show complete stories immediately, even when a plugin requests segment reveal.",
+  });
+
+  store.register({
+    key: "ui.liveOutput",
+    schema: z.enum(LIVE_OUTPUT_PREFERENCES),
+    default: "units",
+    group: "general",
+    widget: "select",
+    options: LIVE_OUTPUT_PREFERENCES.map((value) => ({ value, label: value })),
+    label: "Show the story as it is written",
+    description:
+      "How early to read the story: as it is written, one finished line at a time, or only once the turn is saved. A plugin may allow less, never more.",
   });
 
   store.register({

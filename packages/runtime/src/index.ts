@@ -73,6 +73,10 @@ export {
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
 export type {
+  OutputDraftEvent,
+  OutputDraftSink,
+} from "./output-draft/draft-forwarder.js";
+export type {
   PluginDataReadObservation,
   PluginDataReadProbe,
 } from "./function-runtime/upstream-plugin-data.js";

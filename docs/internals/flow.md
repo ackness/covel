@@ -761,7 +761,7 @@ io:
 组件清单见 [UI 组件](../reference/ui-components.md)。
 
 > [!IMPORTANT]
-> 玩家故事正文只在持久提交后出现。等待期间通过 runtime/step/tool/job 事件显示进度，包括安全的提交拒绝提示。provider 流式传输、工具参数心跳和 `PreLLMCall.replace.stream` 只决定内部传输，不向故事界面发送草稿或 reset。
+> 玩家故事正文只在持久提交后成为消息。提交前，故事 agent 写 `submit-output` 的参数会作为草稿发到发起这次 action 的流（`output.draft` / `output.retracted` / `output.accepted`，见[协议](../reference/protocol.md#草稿事件)）：重试、换服务商和被拒绝的提交都先撤回已经显示的草稿，草稿从不进入 trace 或存储。等待期间还通过 runtime/step/tool/job 事件显示进度，包括安全的提交拒绝提示。`PreLLMCall.replace.stream` 关掉流式时没有草稿。
 >
 > 只有 `execution.completed.committed` 或已提交的记录，才能确认本回合已经保存。单个 runtime 的成功事件不是整个回合的提交凭据。
 
@@ -1037,7 +1037,7 @@ turn_messages (canonical 追加式执行日志):
 
 runtime 的生命周期事件由 `TraceRecorder` 写入，恢复入口也记录开始和终态。保存的递归工作在提交或退出挂起之后追加同一 run 的有效状态修正，先持久化，再送到订阅客户端和发起动作的流，每条流只转发一次。修正不重新提交提案、不执行 Hook，也不增加子调用的插件故障计数。
 
-不产生叙事增量。接受后的 story runtime 在 trace 中记录一条 `message.completed`；只有提交后的 `narrative.completed` 进入玩家故事。
+不产生叙事增量，故事草稿也不是 trace 事件。接受后的 story runtime 在 trace 中记录一条 `message.completed`；只有提交后的 `narrative.completed` 进入玩家故事。
 
 事件的完整 payload 见[协议参考](../reference/protocol.md)的“转发的运行时内部事件”一节。
 

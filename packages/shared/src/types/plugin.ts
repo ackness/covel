@@ -193,6 +193,11 @@ export interface LoopProfileSpec {
 export interface OutputConfig {
   /** Use the latest successful own/builtin tool result as the submitted output. */
   readonly from?: { readonly tool: string };
+  /**
+   * How a story shows while the model writes it: `units` (each paragraph or
+   * line once complete, the default), `text` (as it is typed) or `off`.
+   */
+  readonly live?: "off" | "units" | "text";
   /** Relative path to output.schema.json. */
   readonly schema?: string;
   /** Record name for other runtimes to query. */

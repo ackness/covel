@@ -19,6 +19,11 @@ import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
 import { useImageGeneration } from "./chat-messages/use-image-generation.js";
 import { useLoadOlderMessages } from "./chat-messages/use-load-older-messages.js";
 import { useMessageGrouping } from "./chat-messages/use-message-grouping.js";
+import { OutputDraftMessage } from "./chat-messages/output-draft-message.js";
+import {
+  readLiveOutputPreference,
+  visibleDraftUnits,
+} from "@/stores/session-store/output-drafts.js";
 import { isPreGameSession } from "@/stores/session-store/selectors.js";
 import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
 import type {
@@ -74,6 +79,7 @@ export const ChatMessages = memo(function ChatMessages(
     <ChatMessagesContent
       {...props}
       olderMessagesCursor={state.olderMessagesCursor}
+      outputDrafts={state.outputDrafts}
       dimensions={state.gameState.dimensions}
       loadOlderMessages={loadOlderMessages}
     />
@@ -82,6 +88,7 @@ export const ChatMessages = memo(function ChatMessages(
 
 const ChatMessagesContent = memo(function ChatMessagesContent({
   content,
+  outputDrafts,
   olderMessagesCursor,
   dimensions,
   loadOlderMessages,
@@ -105,12 +112,15 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   onBeginAdventure,
   messagesEndRef,
 }: ChatMessagesProps & {
+  outputDrafts: SessionState["outputDrafts"];
   olderMessagesCursor: SessionState["olderMessagesCursor"];
   dimensions: SessionState["gameState"]["dimensions"];
   loadOlderMessages: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [expandUpdates] = useSetting<boolean>("ui.expandTurnUpdates");
+  const [liveOutput] = useSetting<string>("ui.liveOutput");
+  const preference = readLiveOutputPreference(liveOutput);
   const { turnNotes, backdrop } = useThemeLayout();
   const sessionId = session.id;
   // Sticky-bottom auto-scroll. Follows new messages only while the user is
@@ -118,8 +128,17 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   // scroll up. Keep the native scroll element in state because auto-scroll,
   // older-message observation, and prepend compensation all share it.
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
+  // Growing drafts follow the bottom like new messages do.
+  const draftSize = outputDrafts.reduce(
+    (size, draft) =>
+      size +
+      draft.units.length +
+      (draft.partial?.text.length ?? 0) +
+      Number(draft.revising),
+    0,
+  );
   const { scrollRef, showJumpButton, jumpToBottom } = useAutoScroll(
-    messages.length,
+    `${messages.length}:${draftSize}`,
   );
   const setScrollViewport = useCallback(
     (node: HTMLDivElement | null) => {
@@ -263,6 +282,26 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     return renderMessage(msg, index);
   };
 
+  const renderDrafts = (turnId: string) => {
+    if (preference === "committed") return null;
+    const drafts = outputDrafts.filter(
+      (draft) =>
+        draft.turnId === turnId &&
+        (draft.revising || visibleDraftUnits(draft, preference)),
+    );
+    if (drafts.length === 0) return null;
+    return drafts.map((draft) => (
+      <OutputDraftMessage
+        key={draft.runtimeId}
+        draft={draft}
+        preference={preference}
+        sessionId={sessionId}
+        viewMode={renderViewMode}
+        t={t}
+      />
+    ));
+  };
+
   const publicRows = useMessageGrouping({
     recoveryTurnId,
     messages,
@@ -276,6 +315,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     foldUpdates: viewMode === "parsed",
     expandUpdates: expandUpdates === true,
     expandLatestUpdates: turnNotes === "inline",
+    ...(content === "pending" ? {} : { renderDrafts }),
   });
 
   return (

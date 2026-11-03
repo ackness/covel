@@ -521,9 +521,16 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
               if (tcd.name) existing.name = tcd.name;
               if (tcd.argumentsDelta) existing.arguments += tcd.argumentsDelta;
               toolCallAcc.set(tcd.index, existing);
-              // The call is emitted whole at the end; until then this tells
-              // the caller the model is still writing.
-              if (tcd.argumentsDelta) yield { type: "tool-argument-delta" };
+              // The call is emitted whole at the end; until then the caller
+              // sees the model writing it.
+              if (tcd.argumentsDelta)
+                yield {
+                  type: "tool-argument-delta",
+                  index: tcd.index,
+                  ...(existing.id ? { id: existing.id } : {}),
+                  ...(existing.name ? { name: existing.name } : {}),
+                  argumentsDelta: tcd.argumentsDelta,
+                };
             }
           }
 

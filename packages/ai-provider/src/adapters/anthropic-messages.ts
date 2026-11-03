@@ -629,10 +629,18 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
             payload.type === "content_block_delta" &&
             delta?.type === "input_json_delta"
           ) {
-            const pending = pendingToolBlocks.get(Number(payload.index ?? 0));
+            const index = Number(payload.index ?? 0);
+            const pending = pendingToolBlocks.get(index);
             const fragment = String(delta.partial_json ?? "");
             if (pending) pending.json += fragment;
-            if (pending && fragment) yield { type: "tool-argument-delta" };
+            if (pending && fragment)
+              yield {
+                type: "tool-argument-delta",
+                index,
+                ...(pending.id ? { id: pending.id } : {}),
+                ...(pending.name ? { name: pending.name } : {}),
+                argumentsDelta: fragment,
+              };
           }
 
           if (payload.type === "content_block_stop") {

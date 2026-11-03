@@ -111,6 +111,7 @@ import {
   type TurnInterjection,
 } from "./turn-control.js";
 import { ActionRejectedError } from "./actions/action-rejection.js";
+import { createOutputDraftDelivery } from "./output-draft-delivery.js";
 import {
   assertRecoverableTurn,
   recoveryAction,
@@ -656,6 +657,20 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       }
       return Promise.resolve();
     };
+    // Story drafts: order fixed on arrival, content read when written, so a
+    // slow reader receives the latest draft instead of every one.
+    const outputDrafts = createOutputDraftDelivery((eventType, payload) => {
+      const envelope = makeEnvelope(eventType, {});
+      writes.enqueue(() => {
+        const latest = payload();
+        if (!latest) return Promise.resolve();
+        const data = JSON.stringify({
+          ...envelope,
+          payload: { ...latest, ...envelope.payload },
+        });
+        return stream.writeSSE({ data });
+      });
+    });
 
     if (admissionRejection) {
       // Keep the action stream's refusal shape for form issues and drafts,
@@ -1342,6 +1357,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             eventBus,
             store,
             emitter,
+            outputDrafts,
             onRuntimeStart: async (info) => {
               try {
                 await trace.runtimeStarted(info);

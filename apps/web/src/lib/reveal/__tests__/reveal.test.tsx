@@ -204,8 +204,14 @@ const message = (id: string) => ({
   content: id,
   segments: [{ kind: "narration", text: id }],
 });
-function Story({ value }: { value: ReturnType<typeof message> }) {
-  const admission = useStoryReveal(value);
+function Story({
+  value,
+  showsDrafts = false,
+}: {
+  value: ReturnType<typeof message>;
+  showsDrafts?: boolean;
+}) {
+  const admission = useStoryReveal(value, { showsDrafts });
   return (
     <Reveal revealKey={value.id} {...admission} mode="segments">
       {children}
@@ -215,13 +221,18 @@ function Story({ value }: { value: ReturnType<typeof message> }) {
 function Visit({
   values,
   show = true,
+  showsDrafts = false,
 }: {
   values: ReturnType<typeof message>[];
   show?: boolean;
+  showsDrafts?: boolean;
 }) {
   return (
     <StoryRevealProvider sessionId="test" messages={values}>
-      {show && values.map((value) => <Story key={value.id} value={value} />)}
+      {show &&
+        values.map((value) => (
+          <Story key={value.id} value={value} showsDrafts={showsDrafts} />
+        ))}
     </StoryRevealProvider>
   );
 }
@@ -293,5 +304,17 @@ describe("live committed admission", () => {
     view.rerender(<Visit values={[first, inactive]} show={false} />);
     view.rerender(<Visit values={[first, inactive]} />);
     expect(hidden()).toBe(0);
+  });
+  it("does not replay a story read as a draft where drafts are shown", () => {
+    const first = message("first"),
+      next = message("next");
+    for (const showsDrafts of [true, false]) {
+      const view = render(<Visit values={[first]} showsDrafts={showsDrafts} />);
+      act(() => admitCommittedStory("test", next, true));
+      view.rerender(<Visit values={[first, next]} showsDrafts={showsDrafts} />);
+      // A surface without drafts still reveals it as a new story.
+      expect(hidden()).toBe(showsDrafts ? 0 : 2);
+      view.unmount();
+    }
   });
 });

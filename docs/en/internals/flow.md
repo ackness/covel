@@ -762,7 +762,7 @@ When the frontend receives an SSE event, it first turns the event into a message
 For the list of components, see [UI components](../reference/ui-components.md).
 
 > [!IMPORTANT]
-> Player story text appears only after durable commit. Runtime/step/tool/job events report progress while waiting, including safe submission-rejection notes. Provider streaming, tool-argument heartbeats and `PreLLMCall.replace.stream` select internal transport only; no draft or reset reaches the story pane.
+> Player story text becomes a message only after durable commit. Before that, the arguments a story agent writes into `submit-output` travel as a draft on the stream of the action that started the run (`output.draft` / `output.retracted` / `output.accepted`, see [protocol](../reference/protocol.md#draft-events)): a retry, a provider switch or a rejected submission first retracts the draft already shown, and drafts never enter traces or storage. Runtime/step/tool/job events also report progress while waiting, including safe submission-rejection notes. When `PreLLMCall.replace.stream` turns streaming off there is no draft.
 >
 > Only `execution.completed.committed` or a committed record confirms that this turn was saved. A success event from a single runtime is not proof that the whole turn was committed.
 
@@ -1038,7 +1038,7 @@ The events it emits include:
 
 Runtime lifecycle events use `TraceRecorder`, including starts and terminals at the resume entry. After commit or a suspension exit, saved recursive work appends an effective-status correction for the same run, persisting it before delivery to subscribers and the initiating action stream, once per stream. Corrections do not recommit proposals, rerun Hooks or count innocent child runs as plugin faults.
 
-Story deltas do not exist. Each accepted story runtime records one `message.completed` in traces; only a committed `narrative.completed` enters the player story feed.
+Story deltas do not exist, and story drafts are not trace events. Each accepted story runtime records one `message.completed` in traces; only a committed `narrative.completed` enters the player story feed.
 
 For the full payloads of the events, see the section "Forwarded runtime internal events" in the [protocol reference](../reference/protocol.md).
 

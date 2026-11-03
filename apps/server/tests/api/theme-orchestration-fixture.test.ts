@@ -48,7 +48,7 @@ async function* actionEvents(response: Response) {
   }
 }
 
-it("keeps the theme story private until commit and preserves an explicit operation retry", async () => {
+it("shows the theme story only as drafts before commit and preserves an explicit operation retry", async () => {
   const fixture = await startThemeOrchestrationHost();
   const { host } = fixture;
   try {
@@ -112,7 +112,16 @@ it("keeps the theme story private until commit and preserves an explicit operati
         0,
         events.findIndex((event) => event.type === "narrative.completed"),
       );
-      expect(JSON.stringify(beforeStory)).not.toContain(committedThemeStory);
+      // Before the commit the story reaches the player only as drafts.
+      const drafts = beforeStory.filter((event) =>
+        event.type.startsWith("output."),
+      );
+      expect(JSON.stringify(drafts)).toContain(committedThemeStory);
+      expect(
+        JSON.stringify(
+          beforeStory.filter((event) => !event.type.startsWith("output.")),
+        ),
+      ).not.toContain(committedThemeStory);
       expect(
         events.find((event) => event.type === "execution.completed"),
       ).toMatchObject({ payload: { committed: true } });

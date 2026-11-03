@@ -469,6 +469,9 @@ export function createGateway(deps: GatewayDependencies) {
     const failedAccounts = createFailedAccountTracker();
     let metadataTarget: string | undefined;
     let initialTarget: ResolvedTarget | undefined;
+    // Argument fragments do not stop a fallback, but the consumer must learn
+    // that the next target starts the response over.
+    let streamedArguments = false;
 
     for (const [index, target] of targets.entries()) {
       const { provider, resolved } = prepareTarget(
@@ -515,6 +518,10 @@ export function createGateway(deps: GatewayDependencies) {
           options,
         );
         let completion: Extract<StreamEvent, { type: "done" }> | undefined;
+        if (streamedArguments) {
+          streamedArguments = false;
+          yield { type: "stream-reset" };
+        }
 
         for await (const event of iterateLlmRequest(
           resolved.adapter.streamText(
@@ -544,6 +551,7 @@ export function createGateway(deps: GatewayDependencies) {
           ) {
             emittedDelta = true;
           }
+          if (event.type === "tool-argument-delta") streamedArguments = true;
           if (event.type === "done") {
             assertSuccessfulFinishReason(
               event.finishReason,

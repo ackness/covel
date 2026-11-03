@@ -92,6 +92,7 @@ export interface RuntimeRuleView extends PresentationRuleView {
   /** Ordering-only upstreams. */
   readonly after?: readonly unknown[];
   readonly output?: {
+    readonly live?: string;
     readonly schema?: string;
     readonly recordAs?: string;
     readonly from?: { readonly tool: string };
@@ -489,6 +490,23 @@ export function runtimeRuleIssues(
       add(
         at("output", "from", "tool"),
         "output source must name an authorized own or builtin business tool",
+      );
+  }
+  if (m.output?.live !== undefined) {
+    if (m.runtimeType === "function")
+      add(
+        at("output", "live"),
+        "output.live is only supported by agent runtimes",
+      );
+    else if (m.visibility !== "story")
+      add(
+        at("output", "live"),
+        "output.live needs visibility: story; only story output reaches players",
+      );
+    else if (m.output.from && m.output.live !== "off")
+      add(
+        at("output", "live"),
+        "output.live needs model-written output; output.from submits a tool result",
       );
   }
   for (const [i, tool] of (m.requiredBusinessTools ?? []).entries()) {

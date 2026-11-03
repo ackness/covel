@@ -811,6 +811,10 @@
           "required": ["tool"],
           "additionalProperties": false
         },
+        "live": {
+          "type": "string",
+          "enum": ["off", "units", "text"]
+        },
         "schema": {
           "type": "string",
           "minLength": 1

@@ -3,6 +3,7 @@ import type {
   TurnAction,
 } from "@covel/plugin-handlers-utils";
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
+import type { DisplayUnit } from "../plugin-runtime/output-display.js";
 import type { Stage } from "./runtime-scheduling.js";
 
 /**
@@ -62,6 +63,46 @@ export interface NarrativeCompletedPayload {
    * show nameplates for the turn it just watched without reading messages.
    */
   readonly segments?: readonly StoryMessageSegment[];
+}
+
+/**
+ * Identifies one attempt of a story runtime's output while the model writes
+ * it. A new attempt of the same runtime in the same turn has a new
+ * `draftId` and replaces the old one.
+ */
+export interface OutputDraftIdentity {
+  readonly turnId: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly draftId: string;
+}
+
+/**
+ * The story so far: every complete unit (paragraph or line), plus, in `text`
+ * mode, the unit being written. Each event carries the whole draft, so a
+ * client may drop or repeat any of them.
+ */
+export interface OutputDraftPayload extends OutputDraftIdentity {
+  readonly mode: "units" | "text";
+  readonly units: readonly DisplayUnit[];
+  readonly partial?: DisplayUnit;
+}
+
+/**
+ * The draft is void. `revising`: the model writes it again (a rejected
+ * submission, a retry or a fallback); `stopped`: this runtime will not
+ * commit a story this execution.
+ */
+export interface OutputRetractedPayload extends OutputDraftIdentity {
+  readonly reason: "revising" | "stopped";
+}
+
+/**
+ * The submission passed every check and waits for the commit. These units
+ * are final unless the commit fails; `narrative.completed` replaces them.
+ */
+export interface OutputAcceptedPayload extends OutputDraftIdentity {
+  readonly units: readonly DisplayUnit[];
 }
 
 export interface InteractionRequestedPayload {
@@ -369,6 +410,16 @@ export type CovelEvent =
       readonly type: "narrative.completed";
       readonly payload: NarrativeCompletedPayload;
     }
+  // Output drafts: written directly to the action stream, never traced
+  | { readonly type: "output.draft"; readonly payload: OutputDraftPayload }
+  | {
+      readonly type: "output.retracted";
+      readonly payload: OutputRetractedPayload;
+    }
+  | {
+      readonly type: "output.accepted";
+      readonly payload: OutputAcceptedPayload;
+    }
   // Interaction
   | {
       readonly type: "interaction.requested";
@@ -653,6 +704,9 @@ export const COVEL_EVENT_META = {
   "plugin.fault.latched": { forwardToActionStream: true },
   "plugin.fault.cleared": { forwardToActionStream: true },
   "narrative.completed": { forwardToActionStream: false },
+  "output.draft": { forwardToActionStream: false },
+  "output.retracted": { forwardToActionStream: false },
+  "output.accepted": { forwardToActionStream: false },
   "interaction.requested": { forwardToActionStream: false },
   "ui.rendered": { forwardToActionStream: true },
   "ui.part.update": { forwardToActionStream: false },
