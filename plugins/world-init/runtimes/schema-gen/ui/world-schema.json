@@ -1,8 +1,8 @@
 {
   "id": "world-schema",
   "group": "world-data",
-  "groupLabel": "World",
-  "shortLabel": "World",
+  "groupLabel": "World state",
+  "shortLabel": "World state",
   "label": "Character traits",
   "icon": "sliders-horizontal",
   "dataSource": { "source": "session.characterSchema" },

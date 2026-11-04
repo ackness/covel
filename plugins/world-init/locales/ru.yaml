@@ -15,7 +15,7 @@ runtimes/edit-dimensions/RUNTIME.md:
 runtimes/schema-gen/RUNTIME.md:
   description: Один раз в начале игры настраивает характеристики персонажей и сведения о мире.
 messages:
-  World: Мир
+  World state: Состояние мира
   Overview: Обзор
   Character traits: Характеристики персонажей
   Character traits are not ready yet. Waiting for the world to get ready…: Характеристики персонажей ещё не готовы. Подождите, пока мир подготовится…

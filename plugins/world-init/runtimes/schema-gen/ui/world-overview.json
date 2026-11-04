@@ -1,8 +1,8 @@
 {
   "id": "world-overview",
   "group": "world-data",
-  "groupLabel": "World",
-  "shortLabel": "World",
+  "groupLabel": "World state",
+  "shortLabel": "World state",
   "groupOrder": 300,
   "label": "Overview",
   "icon": "map",

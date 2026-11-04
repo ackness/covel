@@ -10,7 +10,7 @@ PLUGIN.md:
         authoring:
           title: 世界规则
 messages:
-  World: 世界
+  World state: 世界状态
   Rules: 规则
   This world has no special rules.: 这个世界没有特别的规则。
   Lasting rules and taboos of this world. You can read them but not change them.: 这个世界长期有效的规则和禁忌，只能查看，不能修改。

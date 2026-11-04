@@ -10,7 +10,7 @@ PLUGIN.md:
         authoring:
           title: Правила мира
 messages:
-  World: Мир
+  World state: Состояние мира
   Rules: Правила
   This world has no special rules.: У этого мира нет особых правил.
   Lasting rules and taboos of this world. You can read them but not change them.: Постоянные правила и запреты этого мира. Их можно читать, но нельзя менять.

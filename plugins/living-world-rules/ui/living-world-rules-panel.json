@@ -1,7 +1,7 @@
 {
   "id": "living-world-rules",
   "group": "world-data",
-  "groupLabel": "World",
+  "groupLabel": "World state",
   "label": "Rules",
   "shortLabel": "Rules",
   "icon": "book-marked",

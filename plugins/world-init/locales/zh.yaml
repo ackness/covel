@@ -15,7 +15,7 @@ runtimes/edit-dimensions/RUNTIME.md:
 runtimes/schema-gen/RUNTIME.md:
   description: 开局时一次性设置好角色属性和世界信息。
 messages:
-  World: 世界
+  World state: 世界状态
   Overview: 总览
   Character traits: 角色属性
   Character traits are not ready yet. Waiting for the world to get ready…: 角色属性还没准备好，请稍候…
