@@ -1,6 +1,6 @@
 ### Added
 
-- **Hooks that rewrite stories can hold story drafts too.** `holdsDrafts` is now accepted on `PostLLMResponse` (the story appears once every review accepts it) and `PostRuntime` (it appears only after the commit, since `replace.result` can still replace an accepted story), as well as `ReviewAgentOutput`. See [Holding story drafts](../en/reference/hooks.md#holds-drafts).
+- **Hooks that rewrite stories can hold story drafts too.** `holdsDrafts` is now accepted on `PostLLMResponse` and `PreToolUse` (the story appears once every review accepts it) and `PostRuntime` (it appears only after the commit, since `replace.result` can still replace an accepted story), as well as `ReviewAgentOutput`. See [Holding story drafts](../en/reference/hooks.md#holds-drafts).
 
 ### Fixed
 
@@ -10,4 +10,6 @@
 - **The stage reads the latest turn's draft** when an older one is still listed.
 - **A draft that reuses a retracted id is no longer lost on a slow connection.** It was written before the retraction of the same id, which then wiped it.
 - **An unapproved community review no longer holds drafts.** Its hooks do not run until the player approves them, so its `holdsDrafts` declaration now waits as well.
-- **Streaming a long story costs less on the server.** Finished draft parts are kept instead of being rebuilt and serialized for every fragment.
+- **Streaming a long story costs less on the server.** Finished draft parts are kept instead of being rebuilt and serialized for every fragment, and a stream that restarts within one attempt starts a new draft.
+- **Long sessions stay fast.** Checking which interactions are still unanswered no longer rescans the whole message log once per message. A session page's projection reads back only as far as its window instead of measuring the whole history, and the page boundary no longer re-validates a projection the host has just checked. Each auto-advance round reads only the messages since the player's last one, and reads past answers only when an interaction there needs them.
+- **A plugin that keeps faulting without being switched off no longer grows server memory.** The latch remembers only recent inputs.
