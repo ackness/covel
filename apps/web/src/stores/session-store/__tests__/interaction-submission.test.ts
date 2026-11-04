@@ -197,9 +197,12 @@ describe("interaction submission", () => {
       [started],
       [completed],
     ]);
-    expect(deps.dispatch).toHaveBeenLastCalledWith(
+    expect(deps.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "FINALIZE_HANGING_RUNTIMES" }),
     );
+    expect(deps.dispatch).toHaveBeenLastCalledWith({
+      type: "CLEAR_OUTPUT_DRAFTS",
+    });
     expect(deps.resyncSession).toHaveBeenCalledOnce();
     expect(deps.inFlight.size).toBe(0);
   });
