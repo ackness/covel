@@ -408,6 +408,24 @@ export function useBuildSessionActions({
     ],
   );
 
+  // Input the composer already cleared goes back to it when a deferred send
+  // cannot start (the session paused or ended meanwhile) or fails.
+  const restoreDraft = useCallback(
+    (actions: readonly TurnActionRequest[], error?: unknown) => {
+      dispatch({
+        type: "RESTORE_ACTION_DRAFT",
+        requestId: crypto.randomUUID(),
+        actions,
+      });
+      if (error !== undefined)
+        dispatch({
+          type: "SET_EXECUTION_ERROR",
+          error: error instanceof Error ? error.message : String(error),
+        });
+    },
+    [dispatch],
+  );
+
   // A submission waits for a character switch under way: the server acts as
   // the seat's current character, so a request sent first would act as the
   // old one while the bubble named the new one (or the reverse).
@@ -444,20 +462,14 @@ export function useBuildSessionActions({
             );
             await workspace.settle?.(sessionId);
             const seats = await settleSeatSwitches(sessionId, generation);
-            if (isCurrent() && (currentOwner?.() ?? true))
-              startActions(actions, seats, true, currentOwner);
+            if (
+              isCurrent() &&
+              (currentOwner?.() ?? true) &&
+              !startActions(actions, seats, true, currentOwner)
+            )
+              restoreDraft(actions);
           } catch (error) {
-            if (isCurrent()) {
-              dispatch({
-                type: "RESTORE_ACTION_DRAFT",
-                requestId: crypto.randomUUID(),
-                actions,
-              });
-              dispatch({
-                type: "SET_EXECUTION_ERROR",
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
+            if (isCurrent()) restoreDraft(actions, error);
           } finally {
             if (pendingAdvanceInput.current?.token === token)
               pendingAdvanceInput.current = null;
@@ -478,16 +490,23 @@ export function useBuildSessionActions({
         // The previous action's story is in; only its save is still running.
         const token = Symbol("queued-input");
         pendingAdvanceInput.current = { sessionId: sid, generation, token };
+        const isCurrent = () =>
+          sessionIdRef.current === sid &&
+          sessionGenerationRef.current === generation;
         void saving.settled
           .then(async () => {
             const seats = hasPendingSeatSwitch(sid)
               ? await settleSeatSwitches(sid, generation)
               : undefined;
             if (
-              sessionIdRef.current === sid &&
-              sessionGenerationRef.current === generation
+              isCurrent() &&
+              (currentOwner?.() ?? true) &&
+              !startActions(actions, seats, false, currentOwner)
             )
-              startActions(actions, seats, false, currentOwner);
+              restoreDraft(actions);
+          })
+          .catch((error: unknown) => {
+            if (isCurrent()) restoreDraft(actions, error);
           })
           .finally(() => {
             if (pendingAdvanceInput.current?.token === token)
@@ -499,13 +518,20 @@ export function useBuildSessionActions({
         return startActions(actions, undefined, false, currentOwner);
       const token = Symbol("seat-input");
       pendingAdvanceInput.current = { sessionId: sid, generation, token };
+      const isCurrent = () =>
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation;
       void settleSeatSwitches(sid, generation)
         .then((seats) => {
           if (
-            sessionIdRef.current === sid &&
-            sessionGenerationRef.current === generation
+            isCurrent() &&
+            (currentOwner?.() ?? true) &&
+            !startActions(actions, seats, false, currentOwner)
           )
-            startActions(actions, seats, false, currentOwner);
+            restoreDraft(actions);
+        })
+        .catch((error: unknown) => {
+          if (isCurrent()) restoreDraft(actions, error);
         })
         .finally(() => {
           if (pendingAdvanceInput.current?.token === token)
@@ -515,11 +541,11 @@ export function useBuildSessionActions({
     },
     [
       startActions,
+      restoreDraft,
       sessionIdRef,
       sessionGenerationRef,
       stateRef,
       workspace,
-      dispatch,
       settleSeatSwitches,
       hasPendingSeatSwitch,
     ],

@@ -76,6 +76,7 @@ function renderActions(
     const handleSseEvent = createSseEventHandler({ ...refs, dispatch });
     return {
       state,
+      dispatch,
       actions: useBuildSessionActions({
         state,
         dispatch,
@@ -267,6 +268,50 @@ describe("same-session action ownership", () => {
       }),
     });
     expect(result.current.state.executing).toBe(true);
+  });
+
+  it("gives queued input back when the session pauses before the save ends", async () => {
+    const pendingCommit = deferred();
+    let calls = 0;
+    const workspace: SessionWorkspace = {
+      run: async (_sid, _request, mutate) => {
+        const index = calls++;
+        const value = await mutate();
+        if (index === 0) await pendingCommit.promise;
+        return value;
+      },
+      hydrate: vi.fn(),
+      checkpoint: vi.fn(),
+    };
+    const send = vi
+      .spyOn(api, "sendAction")
+      .mockImplementation(() => new AbortController());
+    const { result } = renderActions(workspace);
+    await act(async () => {
+      result.current.actions.sendMessage("First");
+    });
+    const [, firstEvent, , firstDone] = send.mock.calls[0]!;
+    await act(async () => {
+      firstEvent(event("execution.completed", "first", { committed: true }));
+      firstDone?.();
+    });
+    let queued = false;
+    await act(async () => {
+      queued = result.current.actions.sendMessage("Second");
+    });
+    expect(queued).toBe(true);
+
+    await act(async () => {
+      result.current.dispatch({
+        type: "SET_SESSION",
+        session: { ...session, status: "paused" },
+      });
+    });
+    await act(async () => pendingCommit.resolve());
+    expect(send).toHaveBeenCalledOnce();
+    expect(result.current.state.restoredInput).toMatchObject({
+      content: "Second",
+    });
   });
 
   it("does not create an empty player turn when no failed task is selected", () => {
