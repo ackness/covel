@@ -49,4 +49,18 @@ describe("createOutputDraftDelivery", () => {
     });
     expect(flush()).toEqual(["output.retracted ", "output.accepted New."]);
   });
+
+  it("sends a draft that reuses a retracted id after the retraction", () => {
+    const { sink, flush } = setup();
+    sink(draft("a", "First try."));
+    sink({
+      type: "output.retracted",
+      payload: { ...base, draftId: "a", reason: "revising" },
+    });
+    sink(draft("a", "Second try."));
+    expect(flush()).toEqual([
+      "output.retracted ",
+      "output.draft Second try.",
+    ]);
+  });
 });
