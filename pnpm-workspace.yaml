@@ -50,17 +50,20 @@ overrides:
   # Security patches for Ajv URI parsing and desktop plist serialization.
   "ajv>fast-uri": 3.1.9
   "plist>@xmldom/xmldom": 0.8.15
-  # Brace expansion DoS fixes for the older minimatch lines kept by electron-builder.
+  # Brace expansion DoS fix for the minimatch 3 line kept by electron-builder.
   "brace-expansion@<1.1.21": 1.1.21
-  "brace-expansion@>=2.0.0 <2.1.7": 2.1.7
   # Pattern-matching DoS and glob cancellation fixes exist only in minimatch 11 /
-  # glob 14. These parents call only APIs that minimatch 11 keeps (`minimatch()`,
-  # `Minimatch#match`, `glob()`); glob 13 inspects RegExp parts, so it moves too.
-  # The minimatch 3/5/9 lines under electron-builder have no patched release
-  # and use APIs minimatch 11 removed, so they stay until upstream moves.
+  # glob 14. These parents call only APIs that minimatch 11 keeps (named
+  # `minimatch()`, `minimatch.match()`, `Minimatch#match`, `glob()`); glob 13
+  # inspects RegExp parts, so it moves too. minimatch 3 stays under
+  # @electron/asar 3, dir-compare and glob 7: they call its default export or
+  # internals that minimatch 11 removed, and 3.x has none of the
+  # optimizationLevel preprocessing that the globParts advisory concerns.
   "@electron/asar@4>minimatch": 11.0.2
   "@electron/asar@4>glob": 14.0.2
+  "@electron/universal@2>minimatch": 11.0.2
   "app-builder-lib>minimatch": 11.0.2
+  "filelist@1>minimatch": 11.0.2
   # VitePress 1.x still pins Vite 5; Vite 6.4.5 carries the dev-server and
   # launch-editor fixes and moves esbuild off the dev-server CORS bug.
   "vitepress>vite": 6.4.5
