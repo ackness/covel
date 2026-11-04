@@ -16,7 +16,23 @@ export interface NamedCharacter {
 
 const NAME_DOTS = /[·・‧•∙⋅]/g;
 const APOSTROPHES = /[‘’ʼ｀`]/g;
-const SURROUNDING = /^[\s"'“”「」『』《》〈〉]+|[\s"'“”「」『』《》〈〉]+$/g;
+const QUOTES = new Set([..."\"'“”「」『』《》〈〉"]);
+const SPACE = /\s/;
+const surrounds = (unit: string): boolean =>
+  QUOTES.has(unit) || SPACE.test(unit);
+
+/**
+ * Drops white space and quotation marks around the text. A loop, not an
+ * anchored regular expression: `[…]+$` retries from every position and takes
+ * quadratic time on a long run of spaces inside a name.
+ */
+function trimSurrounding(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && surrounds(text[start]!)) start += 1;
+  while (end > start && surrounds(text[end - 1]!)) end -= 1;
+  return text.slice(start, end);
+}
 
 /**
  * The form two spellings of one name share. Folded: letter case, full-width
@@ -29,11 +45,9 @@ const SURROUNDING = /^[\s"'“”「」『』《》〈〉]+|[\s"'“”「」『
  * people; a title that names one person is declared as an alias.
  */
 export function characterNameKey(text: string): string {
-  return text
-    .normalize("NFKC")
-    .replace(NAME_DOTS, "·")
-    .replace(APOSTROPHES, "'")
-    .replace(SURROUNDING, "")
+  return trimSurrounding(
+    text.normalize("NFKC").replace(NAME_DOTS, "·").replace(APOSTROPHES, "'"),
+  )
     .replace(/\s+/g, " ")
     .toLowerCase()
     .replace(/^the /, "");

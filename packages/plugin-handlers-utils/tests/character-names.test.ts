@@ -33,6 +33,14 @@ describe("characterNameKey", () => {
     expect(characterNameKey(written)).toBe(key);
   });
 
+  it("takes linear time on a long run of white space inside a name", () => {
+    const padding = "\t".repeat(50_000);
+    const started = performance.now();
+    expect(characterNameKey(`“Ysolde${padding}x${padding}”`)).toBe("ysolde x");
+    expect(characterNameKey(`${padding}`)).toBe("");
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("keeps titles, honorifics and particles: they can tell two people apart", () => {
     expect(characterNameKey("Dr. Park")).not.toBe(characterNameKey("Mr. Park"));
     expect(characterNameKey("陈先生")).not.toBe(characterNameKey("陈小姐"));
