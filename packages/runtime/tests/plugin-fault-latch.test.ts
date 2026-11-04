@@ -198,4 +198,16 @@ describe("foreground fault groups", () => {
     latch.forgetSession("s");
     expect(dispose()).toEqual([]);
   });
+
+  it("remembers only recent inputs of a plugin that keeps faulting", () => {
+    const latch = createPluginFaultLatch();
+    const count = (key: string) =>
+      latch.recordHookFault("s", "flaky", key, "hook", true).length;
+    for (let turn = 0; turn < 100; turn += 1)
+      expect(count(`input-${turn}`)).toBe(1);
+    // A recent input is still counted once.
+    expect(count("input-99")).toBe(0);
+    // The oldest keys were let go instead of piling up.
+    expect(count("input-0")).toBe(1);
+  });
 });
