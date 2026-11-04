@@ -174,6 +174,30 @@ describe("createDraftForwarder", () => {
     ]);
   });
 
+  it("clears a draft still marked as being revised when the runtime stops", () => {
+    const { events, forwarder } = setup();
+    forwarder.observe().fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"text":"A."},',
+    });
+    forwarder.revise();
+    // The next attempt starts but shows nothing before the runtime stops.
+    forwarder.observe().fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segm',
+    });
+    forwarder.revise();
+    forwarder.stop();
+    forwarder.stop();
+    expect(summary(events)).toEqual([
+      "draft run:1:0 A.",
+      "retracted run:1:0 revising",
+      "retracted run:1:0 stopped",
+    ]);
+  });
+
   it("retracts an accepted story that later fails", () => {
     const { events, forwarder } = setup({}, { type: "object" });
     forwarder.observe();
