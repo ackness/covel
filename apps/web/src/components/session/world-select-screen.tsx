@@ -225,7 +225,7 @@ export function WorldSelectScreen({
       title: t("world.deleteConfirmTitle", "Delete world?"),
       message: t(
         "world.deleteConfirmDesc",
-        'This will permanently delete "{{name}}" and all of its session data. This action cannot be undone.',
+        'This will permanently delete "{{name}}" and all of its save data. This action cannot be undone.',
         {
           name: world
             ? worldTextForPlayer(world, i18n.resolvedLanguage ?? i18n.language)

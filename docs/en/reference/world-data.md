@@ -1690,7 +1690,7 @@ Output when it passes:
 
 For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
 
-**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the initially selected pack and `plugins`, plus core plugins, capability providers and unique eligible receivers of actual content. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
+**The plugins a new session enables by default** are the ones the Getting readyaration screen ticks by default: the `requested` list of the initially selected pack and `plugins`, plus core plugins, capability providers and unique eligible receivers of actual content. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
 
 **The three cases of `prompt-size`.** None of them stops the world from being used:
 

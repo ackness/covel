@@ -72,7 +72,7 @@ describe("WorldPackageRestore", () => {
       "Open world details",
     );
     expect(screen.getByRole("note").textContent).toContain(
-      "saved sessions are kept",
+      "your saves are kept",
     );
     await act(async () => {
       fireEvent.click(

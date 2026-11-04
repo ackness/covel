@@ -183,7 +183,7 @@ test("personal model configuration survives reload and reaches the request witho
   );
   await dialog
     .getByRole("group", { name: "detailed-model", exact: true })
-    .getByRole("button", { name: "Ping", exact: true })
+    .getByRole("button", { name: "Test", exact: true })
     .click();
   await expect.poll(() => request).toBeDefined();
   expect(request!.body).toEqual({ modelRef: "detailed" });
@@ -239,7 +239,7 @@ test("personal model configuration survives reload and reaches the request witho
   const clearedRequest = () => request;
   await dialog
     .getByRole("group", { name: "detailed-model", exact: true })
-    .getByRole("button", { name: "Ping", exact: true })
+    .getByRole("button", { name: "Test", exact: true })
     .click();
   await expect.poll(clearedRequest).toBeDefined();
   expect(clearedRequest()!.keys).toEqual({});

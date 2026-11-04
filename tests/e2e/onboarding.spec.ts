@@ -43,7 +43,7 @@ test("first visit starts on the world list, explains preparation and can be reop
   await guide.getByRole("button", { name: "Continue" }).click();
   await guide.getByRole("button", { name: "Start the guide" }).click();
   await expect(guide.getByRole("status")).toContainText(
-    "No text model binding detected",
+    "No text model chosen yet",
   );
   await guide.getByRole("button", { name: "Learn how to play" }).click();
   const missingModel = guide.getByRole("status");
@@ -171,7 +171,7 @@ test("canonical provider configuration returns to the guide, keeps assignments, 
     .filter({ hasText: "Review and test existing models" })
     .click();
   await guide
-    .getByRole("button", { name: "Ping", exact: true })
+    .getByRole("button", { name: "Test", exact: true })
     .first()
     .click();
   await guide.getByRole("button", { name: "Show details" }).click();

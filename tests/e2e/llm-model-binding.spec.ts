@@ -138,13 +138,13 @@ test("same-named local and server models remain distinct in role selection and p
 
   await dialog.getByRole("button", { name: "Generation", exact: true }).click();
   await dialog
-    .getByRole("combobox", { name: "Select Slot" })
+    .getByRole("combobox", { name: "Select AI role" })
     .selectOption("story");
   await expect(
     dialog.getByText("server-api-model", { exact: true }),
   ).toBeVisible();
   await dialog
-    .getByRole("combobox", { name: "Select Slot" })
+    .getByRole("combobox", { name: "Select AI role" })
     .selectOption("plugin");
   await expect(
     dialog.getByText("local-api-model", { exact: true }),
@@ -162,9 +162,9 @@ test("same-named local and server models remain distinct in role selection and p
     name: "Server configuration",
     exact: true,
   });
-  await local.getByRole("button", { name: "Ping", exact: true }).click();
+  await local.getByRole("button", { name: "Test", exact: true }).click();
   await expect(local.getByText("17ms", { exact: true })).toBeVisible();
-  await server.getByRole("button", { name: "Ping", exact: true }).click();
+  await server.getByRole("button", { name: "Test", exact: true }).click();
   await expect(server.getByText("29ms", { exact: true })).toBeVisible();
   expect(probes.map((probe) => probe.target)).toEqual([
     { modelRef: id },
@@ -316,7 +316,7 @@ test("role choices respect model capabilities and show each configuration's actu
   ).toHaveCount(0);
   await dialog.getByRole("button", { name: "Generation", exact: true }).click();
   await dialog
-    .getByRole("combobox", { name: "Select Slot", exact: true })
+    .getByRole("combobox", { name: "Select AI role", exact: true })
     .selectOption("intent");
   await expect(dialog.getByRole("status")).toContainText(
     "This model does not generate text",

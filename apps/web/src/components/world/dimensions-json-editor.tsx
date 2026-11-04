@@ -33,7 +33,7 @@ export function DimensionsJsonEditor({
   return (
     <div className="space-y-3">
       <Label htmlFor="dimension-declarations">
-        {t("world.dimensionDefinitions", "Dimension definitions (JSON)")}
+        {t("world.dimensionDefinitions", "World state definitions (JSON)")}
       </Label>
       <textarea
         id="dimension-declarations"

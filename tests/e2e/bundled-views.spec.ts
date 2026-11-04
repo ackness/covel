@@ -147,7 +147,7 @@ test("host console sends admitted Direct and textless Advance while retaining dr
     const content = page.getByTestId("plugin-view-container");
     await expect(content).toContainText("Mara");
     await expect(content).toContainText("Waiting for you");
-    await expect(content).toContainText("No pending interactions.");
+    await expect(content).toContainText("No questions are waiting for you.");
     await page.getByTestId("composer-mode-direct").click();
     await composerInput(page).fill("Mara, answer the bell.");
     await back(page);
@@ -321,7 +321,7 @@ test("a real pending form retains rejected input and resolves through normal adm
       .getByRole("button", { name: "Roll the check", exact: true })
       .click();
     await waitForTurnIdle(page);
-    await expect(pending).toContainText("No pending interactions.");
+    await expect(pending).toContainText("No questions are waiting for you.");
     const messages = await page.request.get(
       `/api/sessions/${f.sessionId}/messages`,
       { headers: f.headers },

@@ -162,7 +162,7 @@ describe("execution recovery notice", () => {
         abortReason: "aborted-by-player",
       },
     });
-    expect(screen.getByText("Stopped; turn not committed")).toBeTruthy();
+    expect(screen.getByText("Stopped; this turn was not recorded")).toBeTruthy();
     expect(screen.queryByText("This turn failed")).toBeNull();
     expect(onRetry).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));

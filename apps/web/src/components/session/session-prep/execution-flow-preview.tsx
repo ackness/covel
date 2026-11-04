@@ -26,7 +26,7 @@ export function ExecutionFlowPreview({
       <div className="space-y-0.5">
         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
           <Zap className="w-3 h-3" />
-          {t("session.executionFlow", "Execution Flow")}
+          {t("session.executionFlow", "Turn steps")}
         </h4>
         <p
           className="text-xs text-muted-foreground/70 leading-snug"
@@ -37,7 +37,7 @@ export function ExecutionFlowPreview({
         >
           {t(
             "session.executionFlowHint",
-            "Tasks grouped by stage. Dependencies determine scheduling within a stage; independent tasks may run in parallel.",
+            "Steps grouped by stage. Dependencies determine the order within a stage; independent steps may run in parallel.",
           )}
         </p>
       </div>

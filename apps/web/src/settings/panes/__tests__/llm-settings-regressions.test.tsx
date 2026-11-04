@@ -254,7 +254,7 @@ describe("LLM settings regressions", () => {
     ).toBe("1");
     expect(apiMocks.setSlotConfig).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "Reset model binding" }),
+      screen.getByRole("button", { name: "Reset model choice" }),
     );
     expect(apiMocks.setSlotConfig).toHaveBeenCalledWith({
       fast: { presetId: "kept" },
@@ -590,7 +590,7 @@ describe("LLM settings regressions", () => {
       ).toBe(false),
     );
 
-    fireEvent.change(screen.getByLabelText("Select Slot"), {
+    fireEvent.change(screen.getByLabelText("Select AI role"), {
       target: { value: "fast" },
     });
 

@@ -148,7 +148,7 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t(
             "world.reviseHint",
-            "Say what to change in your own words. Only that part is rewritten; sessions you already started keep the world they began with.",
+            "Say what to change in your own words. Only that part is rewritten; games you already started keep the world they began with.",
           )}
         </p>
       </div>

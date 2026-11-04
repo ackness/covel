@@ -124,7 +124,7 @@ export function emitPluginRpcRuntimeResponse(params: {
       t("plugin.invokeRuntime.noFollowerEvents", {
         runtimeId,
         defaultValue:
-          "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
+          "{{runtimeId}} finished but produced no follow-up updates. Check that the model output valid JSON.",
       }),
     );
     return;

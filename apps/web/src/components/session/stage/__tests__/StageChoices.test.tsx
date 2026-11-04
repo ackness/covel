@@ -213,7 +213,7 @@ describe("StageChoices", () => {
       (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText("叙事生成中…")).toBeDefined();
+    expect(screen.getByText("故事生成中…")).toBeDefined();
   });
 
   it("keeps the recap collapsed while decisions and free input remain available", () => {

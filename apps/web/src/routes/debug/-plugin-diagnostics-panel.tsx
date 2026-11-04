@@ -99,7 +99,7 @@ export function PluginDiagnosticsPanel({
       <div className="p-5 text-sm text-muted-foreground">
         {t(
           "debugger.plugins.selectSession",
-          "Select a session to inspect plugins.",
+          "Select a save to inspect plugins.",
         )}
       </div>
     );
@@ -338,11 +338,11 @@ function PluginCard({
           values={[plugin.hostState]}
         />
         <Capability
-          label={t("debugger.plugins.sessionState", "Session state")}
+          label={t("debugger.plugins.sessionState", "Save state")}
           values={[plugin.sessionState]}
         />
         <Capability
-          label={t("debugger.plugins.authorization", "Session authorization")}
+          label={t("debugger.plugins.authorization", "Save authorization")}
           values={[
             plugin.serverCodeApproved
               ? t("debugger.plugins.approved", "Approved")
@@ -378,7 +378,7 @@ function PluginCard({
           />
         )}
         <Capability
-          label={t("debugger.plugins.runtimes", "Runtimes")}
+          label={t("debugger.plugins.runtimes", "Steps")}
           values={plugin.runtimeIds}
         />
         <Capability

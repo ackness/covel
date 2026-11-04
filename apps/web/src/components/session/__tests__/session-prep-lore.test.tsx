@@ -437,7 +437,7 @@ describe("session prep edition and saves", () => {
     render(<SessionPrepScreen {...props({ onStart })} />);
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "Could not load previous sessions",
+        "Could not load your earlier saves",
       ),
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);

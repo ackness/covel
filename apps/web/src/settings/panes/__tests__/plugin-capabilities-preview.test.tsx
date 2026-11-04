@@ -33,7 +33,7 @@ it.each([true, false])(
     expect(screen.getByText(/HTTP origins: https:\/\/api.test/)).toBeTruthy();
     expect(screen.getByText("Hooks: PreToolUse (pre)")).toBeTruthy();
     expect(screen.getByText("Tools: read")).toBeTruthy();
-    expect(screen.getByText("Service contracts: service@1")).toBeTruthy();
+    expect(screen.getByText("Plugin services: service@1")).toBeTruthy();
     expect(screen.getByText("Datasets: notes (set)")).toBeTruthy();
     expect(!!screen.queryByText("From a trusted source")).toBe(trustedSource);
     expect(

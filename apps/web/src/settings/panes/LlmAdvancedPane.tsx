@@ -288,7 +288,7 @@ export function LlmAdvancedPane({
               void updateSlotConfig(next);
             }}
           >
-            {t("settings.resetModelBinding", "Reset model binding")}
+            {t("settings.resetModelBinding", "Reset model choice")}
           </Button>
         </div>
       )}

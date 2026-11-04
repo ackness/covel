@@ -213,7 +213,7 @@ export function LlmSlotsPane() {
           t("settings.llm.reloadOkDetail", {
             count: result.slots.length,
             slots: result.slots.join(", "),
-            defaultValue: "{{count}} slot(s) active: {{slots}}",
+            defaultValue: "{{count}} AI role(s) active: {{slots}}",
           }),
         );
       } else {
@@ -285,7 +285,7 @@ export function LlmSlotsPane() {
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {t(
               "settings.llm.reloadHint",
-              "Edited llm.toml? Reload to apply your slots without restarting the app.",
+              "Edited llm.toml? Reload to apply your AI roles without restarting the app.",
             )}
           </p>
         </div>
@@ -348,7 +348,7 @@ export function LlmSlotsPane() {
               disabled={savingSlot || savingCapabilities || !writable}
               onClick={autoBindDiscoveredSlots}
             >
-              {t("settings.autoBindSlots", "Auto-bind")}
+              {t("settings.autoBindSlots", "Assign automatically")}
             </Button>
           </div>
           <div className="flex flex-wrap gap-1.5">

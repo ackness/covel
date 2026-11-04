@@ -474,7 +474,7 @@ export function CostPanel({
   if (model.totalCalls === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-        {t("debugger.cost.noData", "No token usage recorded for this session.")}
+        {t("debugger.cost.noData", "No token usage recorded for this game.")}
       </div>
     );
   }
@@ -486,7 +486,7 @@ export function CostPanel({
         <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
           {isPartial
             ? t("debugger.cost.windowTitle", "Loaded window")
-            : t("debugger.cost.session", "Session total")}
+            : t("debugger.cost.session", "Save total")}
         </h2>
         {isPartial && (
           <div className="flex flex-wrap items-center gap-2 border border-amber-500/40 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400">
@@ -504,7 +504,7 @@ export function CostPanel({
               >
                 {t(
                   "debugger.cost.loadAllForTotal",
-                  "Load all to include the full session",
+                  "Load all to include the full save",
                 )}
               </button>
             )}
@@ -598,7 +598,7 @@ export function CostPanel({
       {/* By runtime */}
       <section className="space-y-2">
         <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
-          {t("debugger.cost.byRuntime", "By runtime")}
+          {t("debugger.cost.byRuntime", "By step")}
         </h2>
         <div className="space-y-1.5">
           {model.byRuntime.map((r) => {

@@ -34,7 +34,7 @@ export function FrameworkDiscoveryPanel({
               defaultValue: "{{count}} outputs",
             }),
             stringArray(pluginManifest.uiSlots).join(", ") ||
-              t("debugger.discovery.noSlots", "no slots"),
+              t("debugger.discovery.noSlots", "no AI roles"),
           ]}
         />
         <DiscoveryMetric
@@ -109,7 +109,7 @@ export function PluginContractsPanel({
                 <Badge variant="secondary" className="text-xs">
                   {t("debugger.discovery.runtimeCount", {
                     count: plugin.runtimeCount,
-                    defaultValue: "{{count}} runtime",
+                    defaultValue: "{{count}} steps",
                   })}
                 </Badge>
               )}

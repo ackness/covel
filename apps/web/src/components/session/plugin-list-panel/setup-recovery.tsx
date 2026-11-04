@@ -52,7 +52,7 @@ export function SetupRecovery({
   if (isWaived) {
     return (
       <span className="w-full px-2.5 pb-2 text-xs text-muted-foreground italic">
-        {t("plugin.setupWaived", "Running in degraded mode")}
+        {t("plugin.setupWaived", "Running with limited features")}
       </span>
     );
   }

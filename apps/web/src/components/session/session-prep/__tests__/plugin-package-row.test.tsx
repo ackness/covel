@@ -271,7 +271,7 @@ it("explains model use beside a declarative package before selection", () => {
   );
   expect(
     screen.getByText(
-      "No plugin server code · no code or runtime approval needed",
+      "Settings-only plugin · no approval needed",
     ),
   ).toBeTruthy();
   expect(screen.queryByText(/Authorize plugin/)).toBeNull();

@@ -104,13 +104,13 @@ describe("MediaLibraryPane", () => {
 
     await screen.findByText("Stored items: 3 · 3 MB");
     expect(
-      screen.getByText("Not used by any session: 2 · 2 MB can be freed"),
+      screen.getByText("Not used by any save: 2 · 2 MB can be freed"),
     ).toBeTruthy();
     expect(api.deleteMediaLibrary).not.toHaveBeenCalled();
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Delete everything not used by any session…",
+        name: "Delete everything not used by any save…",
       }),
     );
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
@@ -191,7 +191,7 @@ describe("MediaLibraryPane", () => {
     expect(screen.queryByRole("checkbox", { name: "Select a.png" })).toBe(null);
     expect(
       screen.getByRole("button", {
-        name: "Delete everything not used by any session…",
+        name: "Delete everything not used by any save…",
       }),
     ).toHaveProperty("disabled", true);
     expect(screen.getByText("Use could not be determined")).toBeTruthy();
