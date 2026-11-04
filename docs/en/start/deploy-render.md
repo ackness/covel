@@ -31,7 +31,7 @@ The comment next to each variable in `render.yaml` says what it does.
    Server running at http://0.0.0.0:10000
    ```
 
-4. Open the service address (`https://<service-name>.onrender.com`). The notice "This is a public Covel trial" should appear at the top of the page.
+4. Open the service address (`https://<service-name>.onrender.com`). The notice card "This is a public Covel trial" should appear at the top right of the page.
 5. Check the health endpoint:
 
    ```bash
@@ -60,7 +60,7 @@ The comment next to each variable in `render.yaml` says what it does.
    }
    ```
 
-6. When you need to do operator work (such as writing shared worlds), copy the value of `COVEL_DESKTOP_REST_TOKEN` from **Environment** in the Render Dashboard, and enter it in the web app under **Settings → Operator Access**.
+6. When you need to do operator work (such as writing shared worlds), copy the value of `COVEL_DESKTOP_REST_TOKEN` from **Environment** in the Render Dashboard, and enter it in the web app under **Settings → Advanced → Operator Access**.
 
 ## Limits of the free instance
 
@@ -84,7 +84,7 @@ The comment next to each variable in `render.yaml` says what it does.
 | Render says "No open ports detected"                                        | Check that `COVEL_BIND_HOST=0.0.0.0` and `SERVER_PORT=10000` have not been changed                                                  |
 | After a deploy, the instance keeps restarting because it runs out of memory | Look in the log for what it was doing before each restart. If the free instance cannot hold it, move the service to a paid instance |
 | The startup log says `COVEL_ALLOWED_HOSTS has no effect`                    | Remove this variable                                                                                                                |
-| No trial notice at the top of the page                                      | Check with the `curl` above: `deployment.form` should be `browser-private`, and `storage.data.frontendMode` should be `local`       |
+| No trial notice card at the top right                                       | Check with the `curl` above: `deployment.form` should be `browser-private`, and `storage.data.frontendMode` should be `local`       |
 | The notice has no source code link                                          | Set `COVEL_SOURCE_REPOSITORY`; the value must be an `https://` address                                                              |
 | The source code link in the notice has no version                           | When Render does not provide `RENDER_GIT_COMMIT`, put the commit in `COVEL_SOURCE_COMMIT`                                           |
 | Players sometimes get `429`                                                 | The shared rate-limit quota is used up; try again in a minute                                                                       |

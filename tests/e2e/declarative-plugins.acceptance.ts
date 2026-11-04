@@ -154,7 +154,7 @@ test("a declarative community notebook commits without grants, retains content c
 
     const openView = async () => {
       await page
-        .getByRole("button", { name: "Plugin views", exact: true })
+        .getByRole("button", { name: "Plugin pages", exact: true })
         .click();
       await page.getByRole("button", { name: /Notebook page/ }).click();
     };
@@ -165,9 +165,7 @@ test("a declarative community notebook commits without grants, retains content c
     await expect(
       page.getByTestId("plugin-view-container").locator("iframe"),
     ).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "Use default view", exact: true })
-      .click();
+    await page.getByRole("button", { name: "No thanks", exact: true }).click();
     await expect(
       page.getByRole("tab", { name: "Notebook", exact: true }),
     ).toBeVisible();

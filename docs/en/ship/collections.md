@@ -71,7 +71,7 @@ When the manifest is empty, it gives this prompt:
 
 Choose one of two ways:
 
-- **Put it on GitHub.** Push `tidelamp-pack/` to a public repository. Players paste the repository link under **Settings → Install & manage**.
+- **Put it on GitHub.** Push `tidelamp-pack/` to a public repository. Players paste the repository link under **Settings → Plugins → Install & manage**.
 - **Pack it into one file.** Run the command below, and send the resulting ZIP to players. They drag it into the "Collection package" area on the same page.
 
 ```bash

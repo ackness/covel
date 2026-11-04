@@ -60,7 +60,7 @@ Quit Covel before you back up. While it runs, the database has two companion fil
 
 Restore the database and `media/` together under the new data root before opening Covel. If an earlier copy left media behind, manually copy `media/` from the old root first; files deleted from that root cannot be recovered without a backup.
 
-If you only want to back up the interface settings, use "Export settings" under **Settings → Data**. It gives you a JSON file. API keys are not included by default.
+If you only want to back up the interface settings, use "Export settings" under **Settings → Saves & data → Import, backup & reset**. It gives you a JSON file. API keys are not included by default.
 
 > [!CAUTION]
 > Do not move or delete `covel.db-wal` and `covel.db-shm` on their own while Covel is running. Doing so can damage your saves.

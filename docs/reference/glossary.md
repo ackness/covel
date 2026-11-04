@@ -1,6 +1,6 @@
 # 术语表
 
-这一页给 Covel 文档、代码和界面里用到的词下定义。同一个东西在不同地方叫法不一致时（例如界面写“模型用途”，代码写 slot），以这一页为准：改别处，不改这里。
+这一页给 Covel 文档、代码和界面里用到的词下定义。同一个东西在不同地方叫法不一致时（例如界面写“AI 分工”，代码写 slot），以这一页为准：改别处，不改这里。
 
 条目按英文字母排序。每条先用一两句话说清楚它是什么，再给出详细页面。
 
@@ -9,6 +9,8 @@
 一个英文术语只对应一个中文说法。中文文档、界面文字和中文提示词（`*.zh.md`）都用这张表里的说法。
 
 <!-- prettier-ignore -->
+| Developer mode | 开发者模式 | 设置里的开关（`ui.developerView`）。打开后才显示给作者和排错用的内容：顶栏“调试”、详情和原始视图、调试追踪、数据库页签和存储信息、原始编号、插件步骤数、“等你回答”对话框里的原始数据框。 |
+| Read / Stage | 阅读 / 舞台 | 会话界面里两种内置视图：“阅读”是一页页读的文字界面，“舞台”是带背景和立绘的画面。旧称“文本”“解析视图”“舞台视图”。 |
 | Term | 中文 | 说明 |
 | --- | --- | --- |
 | Action | 行动 | 玩家一次提交里的一项：从哪个座位、以哪个角色、做哪种事（`submit_actions`）。 |
@@ -36,7 +38,7 @@
 | Operation | 操作 | 一次成功的写服务调用暂存下来的全部写入，随调用方的提交单元一起提交或丢弃。不同于数据操作列表里的单个 `op`。见[写服务的操作](./transactions.md#写服务的操作)。 |
 | Operation record | 操作记录 | 一个操作留在调用方结果上的记录（`runtimeResults[].operations`），提交后写明它最终的状态和原因。 |
 | Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
-| Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。 |
+| Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。玩家界面里叫“玩法”。 |
 | Perspective | 视角 | 叙事从谁的角度讲：以角色为中心的第一、第二、第三人称，全知旁白，或主持人。 |
 | Plugin kind | 插件类型 | 包的 `kind` 决定默认选择；不同于 runtime 的 agent/function，也不同于发现来源。 |
 | Presence record | 在场记录 | 故事消息上记下的在场角色 ID（`presentCharacterIds`）。 |
@@ -51,18 +53,44 @@
 | Segment | 提示词段 | 组装好的提示词里的一段。故事里的段落是 **Story segment**。 |
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
 | Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
-| Slot | 槽位 | 设置界面里叫“模型用途”。 |
+| Slot | 槽位 | 设置界面里叫“AI 分工”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
 | Story-attached operation | 故事附带的操作 | 故事或 setup 所在提交单元里的操作：各自一个 savepoint，失败只丢它自己，故事照常提交。 |
 | Story draft | 故事草稿 | 故事 runtime 提交前已经写出的部分，只用来显示；不是输出，不保存。 |
 | Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
 | Sub-agent | 子 agent | 另一个 runtime 在自己的执行里运行、只交回输出的 agent runtime。 |
+| This game | 本局 | 正在玩的这局游戏。菜单里的“本局设置…”管理这局的存档、插件和高级选项。 |
 | Tool result | 工具结果 | 代码读取的内容与模型看到的反馈是两种形状；工具成功不代表已保存。 |
 | Trigger mode | 触发模式 | runtime 的触发方式，只有 `auto`、`manual`、`event`。 |
 | Trusted source | 可信来源 | 实例所有者或运营者选定的 GitHub 来源，只减少审批提示。 |
 | Turn | 回合 | “This turn” 是“本回合”。 |
+| Waiting for you | 等你回答 | 一个挂起的执行（`suspend`）在等玩家回答。工具条上的状态标记“等你回答 N”打开同名对话框。旧称“挂起的执行”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
 | Write service | 写服务 | `access: write` 的服务，替调用方改提供者自己的数据；写入暂存为一个**操作**。见[写服务](./plugin-extensions.md#写服务)。 |
+
+## Player terms
+
+玩家界面里的插件名称、设置和面板用同一套词，中文、英文和俄文一一对应。插件的玩家可见文字（`displayName`、`description`、设置、面板、按钮和通知）都按这张表写，不要换说法。内部术语见上面的表。
+
+<!-- prettier-ignore -->
+| 概念 | 中文 | English | Русский |
+| --- | --- | --- | --- |
+| 写出故事文字的插件 | 讲述者 | Storyteller | Рассказчик |
+| 替玩家掌控故事的角色身份 | 主持人 | Game master | Ведущий |
+| 世界里会随故事变化的数值 | 世界状态 | World state | Состояние мира |
+| 进入故事前的设置步骤 | 开局准备 | Get ready | Подготовка к игре |
+| 角色携带的物品 | 背包 | Bag | Сумка |
+| 人物、地点和事物的资料 | 图鉴（条目） | Almanac (entries) | Энциклопедия (записи) |
+| 保存关键剧情的记忆 | 故事记忆 | Story memory | Память истории |
+| 一次玩家提交及其回复 | 回合 | Turn | Ход |
+| 玩家或故事里的人物 | 角色 | Character | Персонаж |
+| 在回复里开口的角色 | 发言角色 | Speaker | Говорящий |
+| 一组一起启用的插件 | 玩法 | Mode | Режим |
+| 骰子判定的结果 | 判定记录 | Roll log | Журнал бросков |
+| 故事给出的目标 | 任务日志 | Quest log | Журнал заданий |
+| 角色图像 | 立绘 | Portraits | Портреты |
+| 条件满足前玩家看不到的剧情 | 隐藏剧情 | Hidden plot events | Скрытые события |
+| 玩家文字里用 AI，设置里可称模型 | AI | AI | ИИ |
 
 ## Prompt vocabulary
 
@@ -82,7 +110,7 @@
 | record | 记录 | 插件数据里存下的一项 | row, object |
 | entry | 条目 | 玩家读到的列表里的一项，例如图鉴条目 | item（item 指行囊里的物品） |
 | item | 物品 | 角色随身带的东西 |  |
-| dimension | 维度 | 由世界定义、随故事变化的一项世界状态 | attribute（attribute 是角色的） |
+| dimension | 维度（界面里写作“世界状态”） | 由世界定义、随故事变化的一项世界状态 | attribute（attribute 是角色的） |
 | attribute | 属性 | 角色的一个数字或文字字段 | stat |
 | world rule | 世界规则 | 提示词里带着的一条世界规则 | lore entry |
 | quest | 任务 | 故事交给玩家的一个目标 | mission, task |
@@ -343,7 +371,7 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 
 ## Slot
 
-选模型用的一个具名路由键（`story`、`plugin`、`memory`、`image` 等），在设置界面里叫**模型用途**。
+选模型用的一个具名路由键（`story`、`plugin`、`memory`、`image` 等），在设置界面里叫**AI 分工**。
 
 插件清单里只写槽位的名字；`llm.toml` 或保存下来的“服务商/模型”设置把它绑定到具体的模型。备用模型只在同一类输出之内选择：图像请求不会落到文本模型上。
 

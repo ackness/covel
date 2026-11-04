@@ -53,7 +53,7 @@
 ## Optional reading appearance
 
 The **Stage reading** pack adds warm light/dark story colors and the existing
-reading layout for session panels and turn notes. Enable Scene Stage, then choose
+reading layout for session panels and turn notes. Enable Stage Scene, then choose
 it explicitly in **Session theme**. It starts off and does not select a view or
 start any runtime. **Use default appearance** stays in host controls, including
 immersive stage mode, and preserves the player's base theme and overrides.

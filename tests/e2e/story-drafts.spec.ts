@@ -13,13 +13,14 @@ import {
   startGame,
   useServerWorlds,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 const opening = "The lantern lights the path.";
 const reply = "“Stay close,” the keeper says.";
 
 /**
- * Start a Narrative Only session whose next story streams its two lines and
+ * Start a Story Only session whose next story streams its two lines and
  * holds the last argument piece until `release`, then run `steps`.
  */
 async function withHeldStory(
@@ -82,10 +83,10 @@ async function withHeldStory(
   try {
     await page.goto("/session");
     await selectWorldByText(page, /Lantern Barrow|提灯古冢/);
-    await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+    await openCustomStart(page);
     await page
       .locator("button[aria-pressed]")
-      .filter({ hasText: "Narrative Only" })
+      .filter({ hasText: "Story Only" })
       .click();
     const creation = page.waitForResponse(
       (response) =>
@@ -154,7 +155,7 @@ test("the stage reads the story line by line while it is written and keeps the p
   page,
 }) => {
   await withHeldStory(page, async ({ release, saved }) => {
-    await page.getByRole("button", { name: /Stage view/i }).click();
+    await page.getByRole("button", { name: /^Stage$/ }).click();
     const input = page.getByTestId("stage-decision-input");
     await expect(input).toBeEnabled();
     await input.fill("I lift the lantern.");

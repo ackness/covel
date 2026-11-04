@@ -171,7 +171,7 @@ export function validateAllocation(values, rules, ctx) {
   if (spent !== rules.budget)
     return translate(
       ctx,
-      "Allocate exactly {budget} points; you have allocated {spent}",
+      "Spend exactly {budget} points. You have spent {spent}.",
       { budget: rules.budget, spent },
     );
 }

@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { z } from "zod";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsStore } from "@covel/settings";
 import i18n from "@/i18n";
@@ -113,6 +114,15 @@ beforeEach(async () => {
     saveSecrets: async () => undefined,
   });
   registerLlmSettings(mocks.store);
+  // Capability editing is a developer-mode feature.
+  mocks.store.register({
+    key: "ui.developerView",
+    schema: z.boolean(),
+    default: true,
+    group: "general",
+    widget: "toggle",
+    label: "Developer mode",
+  });
   await mocks.store.init();
 });
 
@@ -379,5 +389,21 @@ describe("F-037 draft input and queued saves", () => {
         story: { pricing: { inputPerMToken: 0.15, outputPerMToken: 0.6 } },
       }),
     );
+  });
+});
+
+describe("capability editing", () => {
+  it("is offered only in developer mode", async () => {
+    await mocks.store.set("ui.developerView", false);
+    const { unmount } = render(<LlmSlotsPane />);
+    expect(
+      screen.queryByRole("button", { name: "Edit Capabilities" }),
+    ).toBeNull();
+    unmount();
+    await mocks.store.set("ui.developerView", true);
+    render(<LlmSlotsPane />);
+    expect(
+      screen.getAllByRole("button", { name: "Edit Capabilities" }).length,
+    ).toBeGreaterThan(0);
   });
 });

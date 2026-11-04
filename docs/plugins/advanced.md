@@ -60,7 +60,7 @@ Extract only the facts that `runtime-inputs.narrative.value` states.
 
 按每段的 `speaker` 区分谁在说话或行动；不要把 NPC 台词中的“我”归给玩家。输入选择的规则见[故事输出](../reference/plugins.md#故事输出)。
 
-提取器要区分[渲染后的正文指针](../reference/prompt-structure.md#本回合正文)与原始输入。需要精确数据上下文时，可以在自身 `PostContextAssembly` 中从 `payload.inputSlots` 裁剪；时间插件只保留当前时钟与正文。对有限目标集合，还可像[世界事实提取](../reference/tools.md#逐目标评估)一样，在完成工具里检查逐项覆盖。
+提取器要区分[渲染后的正文指针](../reference/prompt-structure.md#本回合正文)与原始输入。需要精确数据上下文时，可以在自身 `PostContextAssembly` 中从 `payload.inputSlots` 裁剪；时间插件只保留当前时钟与正文。对有限目标集合，还可像[故事整理](../reference/tools.md#逐目标评估)一样，在完成工具里检查逐项覆盖。
 
 `runtimes/query/RUNTIME.md` 是一个手动触发的函数。它有 `function` 块，代码在同一个文件夹的 `handler.js` 里：
 
@@ -457,7 +457,7 @@ export default function register(covel) {
 - `ctx.world` 给出的是“这次运行看到的世界”：已保存的状态，加上这一回合里前面的步骤提出、但还没保存的合法修改。
 - 改角色、改角色的字段定义，都走同一套检查。
 - 不要把前面步骤的写入请求复制进自己的结果里再提交一遍。
-- 记忆块是 memory 插件的数据和服务。世界自定义的记忆块通过 `memory.blocks@1` 导入，默认的定义由 `memory.block-definitions@1` 服务提供。历史压缩通过 `history.compact@2` 扩展点处理。清单里没有 `memoryBlocks`、`summaryFocus` 这样的字段。
+- 记忆块是 memory 插件的数据和服务。世界自定义的记忆块通过 `memory.blocks@1` 导入，默认的定义由 `memory.block-definitions@1` 服务提供。长篇故事记忆通过 `history.compact@2` 扩展点处理。清单里没有 `memoryBlocks`、`summaryFocus` 这样的字段。
 
 细节见[世界模型参考](../reference/world-model.md)。
 
@@ -752,7 +752,7 @@ Keep intent private. If a policy or actor is unavailable, continue with a valid 
 
 ## 采用内置组合
 
-对话叙事采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色演员)。
+聊天式讲述采用上面的公开契约，但把只读策略调用放在 pre-turn 函数，把 delegate 保留在唯一故事 agent 的工具循环中。函数读取 ctx.world 的当前角色/座位，输出安全名字；故事消费可选的同包输入。director 只有函数调用路径能借到 gateway；模型导入不能绕过代码专用设置。演员/策略都可缺失或由社区包替换。完整玩家行为见[群像对话](../builtin/story.md#群像对话与角色扮演)。
 
 历史段落只供策略选人，不自动加入共享演员简报；运行器按角色提供亲历历史。`scene-cast@1` 的结构化名单供规划器读取，`activeCastContext` 则作为可选输入供故事 agent 使用。
 

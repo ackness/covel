@@ -80,7 +80,7 @@ export default async function (ctx) {
       value: {
         playerId,
         rules,
-        narrativeOutput: translate(ctx, "Opening point allocation applied."),
+        narrativeOutput: translate(ctx, "Starting ability points applied."),
       },
     };
   }
@@ -151,11 +151,9 @@ export default async function (ctx) {
 async function allocationForm(ctx, formId, rules, earlier) {
   const result = await ctx.tools.call("create-form", {
     formId,
-    title: translate(
-      ctx,
-      "Opening point allocation: distribute {budget} points",
-      { budget: rules.budget },
-    ),
+    title: translate(ctx, "Starting ability points: spread {budget} points", {
+      budget: rules.budget,
+    }),
     fields: rules.attributes.map((attribute) => {
       const value = earlier?.[attribute.id];
       return {
@@ -175,8 +173,8 @@ async function allocationForm(ctx, formId, rules, earlier) {
       };
     }),
     validation: { name: "point-buy", data: rules },
-    submitLabel: translate(ctx, "Finish allocation"),
-    narrativeTemplate: translate(ctx, "Opening point allocation complete."),
+    submitLabel: translate(ctx, "Confirm points"),
+    narrativeTemplate: translate(ctx, "Starting ability points chosen."),
   });
   return result.interaction;
 }

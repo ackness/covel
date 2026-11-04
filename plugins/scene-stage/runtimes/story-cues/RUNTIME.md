@@ -1,5 +1,5 @@
 ---
-description: Follows the story's scene, presence, and speaker cues on stage.
+description: Updates the stage to match where the story is and who is in it.
 schedule:
   stage: post-turn
 io:

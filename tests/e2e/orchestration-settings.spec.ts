@@ -51,20 +51,20 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
   try {
     await page.goto(`/session?sid=${fixture.id}`);
     await openStudioConfiguration(page);
-    const policy = page.getByLabel("回合策略", { exact: true });
+    const policy = page.getByLabel("发言规则", { exact: true });
     await expect(policy).toBeVisible();
     await expect(
       page.getByText("请选择策略以消除歧义", { exact: true }),
     ).toBeVisible();
     await policy.selectOption({ label: "Conversation / Invite one character" });
     await page
-      .getByRole("button", { name: "保存回合策略", exact: true })
+      .getByRole("button", { name: "保存发言规则", exact: true })
       .click();
-    const actors = page.getByLabel("不同角色数（0–16）", { exact: true });
+    const actors = page.getByLabel("同时发言人数（0–16）", { exact: true });
     await expect(actors).toBeEnabled();
     await actors.fill("0");
     await page
-      .getByRole("button", { name: "保存不同角色数（0–16）", exact: true })
+      .getByRole("button", { name: "保存同时发言人数（0–16）", exact: true })
       .click();
     await expect.poll(() => value.settings.maxActors).toBe(0);
     await page.reload();
@@ -88,7 +88,7 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
     await expect(page.getByText("已暂停", { exact: true })).toBeVisible();
     await policy.selectOption("");
     await page
-      .getByRole("button", { name: "保存回合策略", exact: true })
+      .getByRole("button", { name: "保存发言规则", exact: true })
       .click();
     await expect(
       page.getByText("请选择策略以消除歧义", { exact: true }),
@@ -96,7 +96,7 @@ test("policy choice and zero delegation caps survive reload and can be cleared",
     deny = true;
     await actors.fill("2");
     await page
-      .getByRole("button", { name: "保存不同角色数（0–16）", exact: true })
+      .getByRole("button", { name: "保存同时发言人数（0–16）", exact: true })
       .click();
     await expect(
       page.getByRole("alert").filter({ hasText: "此项未能保存" }),

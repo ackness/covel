@@ -250,7 +250,7 @@ The ESM code of a community plugin registers global capabilities inside the serv
 
 If `DEPLOYMENT_TIER=demo|commercial` starts without this token configured, the server refuses to start. All these rules come from the host profile fixed at startup; for what each route needs, see [Security boundaries](../internals/security.md#host-profile).
 
-A web-only client can enter or clear this token under **Settings → Operator Access**:
+A web-only client can enter or clear this token under **Settings → Advanced → Operator Access**:
 
 - The credential is stored only in the `localStorage` of the current browser.
 - It is sent as `Authorization: Bearer <token>` only on same-origin requests that need the operator token, as listed above.
@@ -6840,4 +6840,4 @@ Session-page `capabilities` survive in `/api/ui-specs` under `view`, with the ex
 
 ## Sandbox region declarations and host forwarding
 
-The existing `GET /api/ui-specs` `view` array preserves optional `surface` and `capabilities`; composer cannot be a main default. No discovery or write endpoint is added. The authenticated host forwards actions, answers and own manual runtimes, preserving server authorization, approvals, proposal validation and commit. Stop and own-panel navigation require their own grants. Failure restores only that region and drops late results; see [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer). Existing action/command RPC immediate-write semantics remain unchanged.
+The existing `GET /api/ui-specs` `view` array preserves optional `composer` (only `false`) and `capabilities`. No discovery or write endpoint is added. The authenticated host forwards actions, answers and own manual runtimes, preserving server authorization, approvals, proposal validation and commit. Stop and own-panel navigation require their own grants. Failure returns to the read view and drops late results; see [the input box on a page](./ui-panels.md#the-input-box-on-a-page). Existing action/command RPC immediate-write semantics remain unchanged.

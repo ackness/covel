@@ -119,21 +119,6 @@ describe("stage decision lifecycle", () => {
     expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
   });
-  it("keeps explicit story review and extensions when the host replaces stage input", () => {
-    const props: StageViewProps = {
-      ...fixture(),
-      composerReplaced: true,
-    };
-    const { rerender } = render(<StageView {...props} />);
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.getByTestId("plugin-extension")).toBeDefined();
-    expect(screen.queryByTestId("stage-decision-input")).toBeNull();
-    expect(screen.queryByRole("textbox")).toBeNull();
-    rerender(<StageView {...props} executing />);
-    expect(screen.getByTestId("stage-dialog")).toBeDefined();
-    expect(screen.queryByTestId("stage-choices")).toBeNull();
-    expect(screen.queryByRole("textbox")).toBeNull();
-  });
   it.each([undefined, { choices: [] }, { recap: "", choices: [] }] satisfies (
     StageChoicesModel | undefined
   )[])(

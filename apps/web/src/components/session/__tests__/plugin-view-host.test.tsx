@@ -62,10 +62,9 @@ it("draws the host bar outside the plugin container and gates session access", (
     fill: true,
     expanded: true,
   });
-  fireEvent.click(
-    screen.getByRole("button", { name: i18n.t("session.backToDefaultView") }),
-  );
-  expect(onFallback).toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: i18n.t("session.backToDefaultView") }),
+  ).toBeNull();
 });
 it("omits the notice and the projection for a view without a bridge", () => {
   render(
@@ -78,7 +77,7 @@ it("omits the notice and the projection for a view without a bridge", () => {
   expect(screen.queryByText(i18n.t("session.viewReadsStory"))).toBeNull();
   expect(mocks.panel.mock.lastCall?.[0]).not.toHaveProperty("sessionBridge");
 });
-it("falls back on a child error while keeping the host back button", () => {
+it("falls back on a child error", () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.throws = true;
   const fallback = vi.fn();
@@ -92,8 +91,8 @@ it("falls back on a child error while keeping the host back button", () => {
   );
   expect(fallback).toHaveBeenCalledWith("render-error");
   expect(
-    screen.getByRole("button", { name: i18n.t("session.backToDefaultView") }),
-  ).toBeTruthy();
+    screen.queryByRole("button", { name: i18n.t("session.backToDefaultView") }),
+  ).toBeNull();
 });
 it("offers consent revocation in the host view menu", () => {
   const revoke = vi.fn();
@@ -183,6 +182,6 @@ it("gates a URL page and wires Retry outside the always-present host back contro
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(retry).toHaveBeenCalledOnce();
   expect(
-    screen.getByRole("button", { name: i18n.t("session.backToDefaultView") }),
-  ).toBeTruthy();
+    screen.queryByRole("button", { name: i18n.t("session.backToDefaultView") }),
+  ).toBeNull();
 });

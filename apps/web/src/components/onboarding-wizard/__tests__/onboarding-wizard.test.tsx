@@ -159,7 +159,7 @@ describe("getting started guide", () => {
     expect(
       screen.getByRole("heading", { name: "连接故事所需的模型" }),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "检查用途分配" }));
+    fireEvent.click(screen.getByRole("button", { name: "检查AI 分工" }));
     fireEvent.click(screen.getByRole("button", { name: "llm.slots" }));
     fireEvent.click(screen.getByRole("button", { name: "了解如何游玩" }));
     expect(screen.getByRole("status").textContent).toContain(

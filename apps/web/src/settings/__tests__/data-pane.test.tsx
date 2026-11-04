@@ -84,3 +84,11 @@ it("F-199 allows import preview but disables applying it while settings are read
   fireEvent.click(apply);
   expect(mocks.save).not.toHaveBeenCalled();
 });
+it("sets reset apart from the other entries and asks before wiping", async () => {
+  render(<DataPane />);
+  const section = screen.getByTestId("settings-reset-section");
+  expect(section.className).toContain("border-destructive");
+  expect(section.textContent).toContain(i18n.t("settings.resetAll"));
+  // The other sections are not inside the reset area.
+  expect(section.textContent).not.toContain(i18n.t("settings.exportDownload"));
+});

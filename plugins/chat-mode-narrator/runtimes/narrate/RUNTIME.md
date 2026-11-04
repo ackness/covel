@@ -1,5 +1,5 @@
 ---
-description: Compose dialogue and optional character contributions into one story.
+description: Writes the characters' lines into one story reply.
 schedule:
   stage: narrative
 io:

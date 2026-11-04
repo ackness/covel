@@ -16,7 +16,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "Quest log",
+              "content": "Quest changes",
               "weight": "bold",
               "size": "sm"
             }

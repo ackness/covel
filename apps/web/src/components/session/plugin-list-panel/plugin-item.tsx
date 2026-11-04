@@ -22,7 +22,7 @@ export function PluginItem({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
-  onRuntimeModelOverrideChange,
+  onOpenModelSettings,
   setupRuntimes,
 }: PluginItemProps) {
   const { t } = useTranslation();
@@ -132,17 +132,6 @@ export function PluginItem({
         setupRuntimes={setupRuntimes}
       />
 
-      {advanced && (
-        <RuntimeModelBindings
-          runtimes={runtimes}
-          resolvedSlots={resolvedSlots}
-          sessionId={sessionId}
-          executing={executing}
-          runtimeModelOverrides={runtimeModelOverrides}
-          onChange={onRuntimeModelOverrideChange}
-        />
-      )}
-
       {expanded && (
         <div className="px-3 pb-2.5 pt-0.5 space-y-2 border-t border-border bg-muted/20">
           {description && (
@@ -150,6 +139,13 @@ export function PluginItem({
               {description}
             </p>
           )}
+
+          <RuntimeModelBindings
+            runtimes={runtimes}
+            resolvedSlots={resolvedSlots}
+            runtimeModelOverrides={runtimeModelOverrides}
+            onOpenModelSettings={onOpenModelSettings}
+          />
 
           {advanced && (
             <>
@@ -161,7 +157,7 @@ export function PluginItem({
                 <div className="space-y-1">
                   <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     <Zap className="w-3 h-3" />
-                    {t("plugin.runtimes", "Runtimes")}
+                    {t("plugin.runtimes", "Steps")}
                   </div>
                   <div className="space-y-0.5">
                     {runtimes.map((rt) => (

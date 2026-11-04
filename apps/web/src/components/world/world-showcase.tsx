@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useWorldThemeMusic } from "./world-music.js";
 import {
   ChevronLeft,
   ChevronRight,
@@ -32,9 +33,7 @@ import {
   useSlideshow,
   useWorldArt,
 } from "./world-gallery.js";
-import { MusicSwitch } from "@/components/session/session-music.js";
 import { WorldPrimaryActions, accentStyle } from "./world-list-variants.js";
-import { useWorldThemeMusic } from "./world-music.js";
 import type { WorldListViewProps } from "./world-list-view.js";
 import { mostRecentSession } from "./use-recent-sessions.js";
 
@@ -324,11 +323,12 @@ export function WorldShowcase({
     worldVisual(selected).image,
   );
   const slideshow = useSlideshow(selected?.id ?? "", slides.length);
-  const hasThemeMusic = useWorldThemeMusic(selected);
   if (!selected) return null;
   const resumable = Boolean(
     recentSessions?.get(selected.id) && onResumeSession,
   );
+  // The world list plays the world's theme music while it is shown.
+  useWorldThemeMusic(selected);
   const visual = worldVisual(selected);
   // The edition a new game would be played in, as on the cover cards.
   const shown = worldTextForPlayer(selected, interfaceLocale);
@@ -351,9 +351,6 @@ export function WorldShowcase({
 
       <div className="relative z-1 flex min-h-full flex-col">
         <div className="ui-drag-region flex flex-wrap items-center justify-end gap-2 px-5 pt-5 md:px-8">
-          {hasThemeMusic && (
-            <MusicSwitch className="ui-btn ui-world-glass size-10 p-0" t={t} />
-          )}
           <button
             type="button"
             onClick={onOpenGenerator}
@@ -362,15 +359,16 @@ export function WorldShowcase({
             <Wand2 className="h-3.5 w-3.5" />
             {t("world.aiCreate", "AI Create World")}
           </button>
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="ui-btn ui-world-glass h-10 px-3.5"
-            title={primarySlotLabel ?? undefined}
-          >
-            <Plug className="h-3.5 w-3.5" />
-            {t("session.configureKeys", "Configure Providers & Models")}
-          </button>
+          {!primarySlotLabel && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="ui-btn ui-world-glass h-10 px-3.5"
+            >
+              <Plug className="h-3.5 w-3.5" />
+              {t("session.setupAiTitle")}
+            </button>
+          )}
           {onOpenAllSettings && (
             <button
               type="button"

@@ -10,6 +10,7 @@ import {
   sendPlayerMessage,
   startGame,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 for (const mode of ["ambiguous", "disabled"] as const) {
@@ -136,7 +137,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
         .filter({ hasText: name })
         .getByRole("button", { name: "Enter", exact: true })
         .click();
-      await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+      await openCustomStart(page);
       const advanced = page.getByTestId("advanced-plugin-settings");
       await advanced.locator("summary").click();
       const receiver = advanced
@@ -251,9 +252,9 @@ for (const mode of ["ambiguous", "disabled"] as const) {
       );
       expect(saved.session.completedPlayerTurns).toBe(1);
       if (mode === "disabled")
-        await expect(page.getByTestId("world-data-notices")).toContainText(
-          "Receiving plugins are disabled.",
-        );
+        await expect(
+          page.getByTestId("notice-world-data:receiver-excluded"),
+        ).toContainText("Receiving plugins are disabled.");
     } finally {
       await page.evaluate(async (id) => {
         const servicePath = "/src/services/data-service.ts";

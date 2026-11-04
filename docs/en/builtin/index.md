@@ -10,7 +10,7 @@ The built-in plugins and worlds are only demos, and you do not have to use them.
 
 Manage session policy providers and execution limits in [orchestration settings](./features.md#session-orchestration-settings). Plugin list refreshes preserve unsaved orchestration edits.
 
-Narrators supply location and mood cues when they change, for the stage and music to read; see [Narrative and Memory](./story.md).
+Storytellers supply location and mood cues when they change, for the stage and music to read; see [Narrative and Memory](./story.md).
 
 Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
 
@@ -34,58 +34,58 @@ All four bundled worlds keep their complete dimension tables in `data/dimensions
 
 When you start a game, you do not need to choose plugins one by one. A **gameplay pack** is a ready-made set of plugins. Pick one on the session-prep screen. There are seven built in:
 
-| Gameplay pack                         | Good for                                   | Plugins it includes                                                                                             |
-| ------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Traditional Story `traditional-story` | Long exploration, reading a story          | Narrator, Action Suggestions, Codex, Relationship Graph, World Rules                                            |
-| Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel           | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants             |
-| Low Cost `low-cost`                   | Keeping model costs down                   | Narrator, World Rules                                                                                           |
-| Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator                                                                                                        |
-| DM Mode `dm-mode`                     | Game-master narration                      | Pregame, world initialization, Narrator, DM Console; no character creation                                      |
-| Ensemble Dialogue `ensemble-dialogue` | A cast performs together                   | Pregame, world initialization, character creation, Dialogue Narrator, Character Actor, Turn Policy, Scene Stage |
-| Spectator `spectator`                 | Observe advancing NPCs                     | The ensemble composition with DM Console, without player character creation                                     |
+| Gameplay pack                     | Good for                                   | Plugins it includes                                                                                                |
+| --------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Classic Story `traditional-story` | Long exploration, reading a story          | Storyteller, Action Suggestions, Almanac, Relationships, World Rules                                               |
+| Dialogue `dialogue-mode`          | Character dialogue, visual novel           | Chat Storyteller, Stage Scene, Action Suggestions, Character Profiles, World Rules, Alternative Replies            |
+| Budget `low-cost`                 | Keeping model costs down                   | Storyteller, World Rules                                                                                           |
+| Story Only `narrative-only`       | Just reading the story, at the lowest cost | Storyteller                                                                                                        |
+| Game Master `dm-mode`             | Game-master narration                      | Pregame, world initialization, Storyteller, Game Master Panel; no character creation                               |
+| Ensemble `ensemble-dialogue`      | A cast performs together                   | Pregame, world initialization, character creation, Chat Storyteller, Character Voice, Who Speaks Next, Stage Scene |
+| Spectator `spectator`             | Observe advancing NPCs                     | The ensemble composition with Game Master Panel, without player character creation                                 |
 
-The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns off the other plugins that are on by default: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
+The first three packs also include Get Ready, World State and Character Creator, and they recommend turning on Story Memory. Story Only turns off the other plugins that are on by default: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
 
 The "Back to the minimal set" button on the session-prep screen selects this combination in one click: only narrative plugins and any plugins they or the world require.
 
-A world can add plugins to a built-in pack and give that combination a name. For example, Lantern Barrow calls its Traditional Story setup with Tabletop Rules, Dice Check, Quest Log, Inventory and Affinity “Classic Tabletop”. This does not create another pack available globally. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
+A world can add plugins to a built-in pack and give that combination a name. For example, Lantern Barrow calls its Classic Story setup with Ability Checks, Dice Check, Quest Log, Bag and Affinity “Classic Tabletop”. This does not create another pack available globally. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
 
 ## All built-in plugins
 
-DM Mode and Spectator request DM Console; Ensemble Dialogue recommends it without changing default views, roles or policy. Enabled Codex and Relationship Graph also offer dedicated pages in Plugin views, keeping their original right panels. Pages themselves make no model calls; story actions retain the selected providers’ costs.
+Game Master and Spectator request Game Master Panel; Ensemble recommends it without changing default views, roles or policy. Almanac and Relationships provide only right panels, which “Expand panel” opens larger. The panels make no model calls; story actions retain the selected providers’ costs.
 
 Plugins marked "On by default" are added to every game automatically, and you can turn them off on the session-prep screen. Some plugins require capabilities from other plugins. If a provider is missing, its dependents are disabled and the interface explains what is missing; other features keep working. The others are chosen by the gameplay pack, the world, or you.
 
 ### Narrative and memory
 
-| Plugin                                                      | What it does                                                                   | On by default |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
-| [Narrator](./story.md) `narrator`                           | Writes the story text for each turn                                            | Yes           |
-| [Dialogue Narrator](./story.md) `chat-mode-narrator`        | Tells the story as character dialogue; works alone, Scene Stage is optional    |               |
-| [Character Actor](./story.md) `character-agent`             | Plays the selected character's public speech/actions                           |               |
-| [Turn Policy](./story.md) `turn-policy`                     | One service with five strategy settings                                        |               |
-| [DM Console](./story.md#dm-console-dm-console) `dm-console` | Public cast, interactions, story and current-role input                        |               |
-| [Action Suggestions](./story.md) `guide`                    | Gives a few actions you can tap below the story text                           |               |
-| [Reply Variants](./story.md) `branch-reply`                 | Writes another version of the same turn                                        |               |
-| [Story Memory](./story.md) `memory`                         | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
-| [History Compaction](./story.md) `history-compaction`       | When the conversation gets long, summarizes the older part                     | Yes           |
+| Plugin                                                             | What it does                                                                   | On by default |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------- |
+| [Storyteller](./story.md) `narrator`                               | Writes the story text for each turn                                            | Yes           |
+| [Chat Storyteller](./story.md) `chat-mode-narrator`                | Tells the story as character dialogue; works alone, Stage Scene is optional    |               |
+| [Character Voice](./story.md) `character-agent`                    | Plays the selected character's public speech/actions                           |               |
+| [Who Speaks Next](./story.md) `turn-policy`                        | One service with five strategy settings                                        |               |
+| [Game Master Panel](./story.md#dm-console-dm-console) `dm-console` | Public cast, interactions, story and current-role input                        |               |
+| [Action Suggestions](./story.md) `guide`                           | Gives a few actions you can tap below the story text                           |               |
+| [Alternative Replies](./story.md) `branch-reply`                   | Writes another version of the same turn                                        |               |
+| [Story Memory](./story.md) `memory`                                | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
+| [Long-Story Memory](./story.md) `history-compaction`               | When the conversation gets long, summarizes the older part                     | Yes           |
 
-A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Narrator · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). Story Memory, Inventory, Dice Check, Tabletop Rules, Character Creator and Character Profiles follow the action’s actor, falling back to the primary seat’s current character. Scene Stage still uses the first player character.
+A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Storyteller · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). Story Memory, Bag, Dice Check, Ability Checks, Character Creator and Character Profiles follow the action’s actor, falling back to the primary seat’s current character. Stage Scene still uses the first player character.
 
 ### RPG mechanics
 
-[Inventory](./rpg.md#inventory-inventory) checks changes already handled by tools, including batches with long descriptions, to avoid duplicate bookkeeping.
+[Bag](./rpg.md#inventory-inventory) checks changes already handled by tools, including batches with long descriptions, to avoid duplicate bookkeeping.
 
-| Plugin                                         | What it does                                                                                  | On by default |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------- |
-| [Dice Check](./rpg.md) `dice-check`            | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |
-| [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks             |               |
-| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                                   |               |
-| [Inventory](./rpg.md) `inventory`              | Looks up carried items, settles trades, and records item changes                              |               |
-| [Affinity](./rpg.md) `affinity`                | Tracks numeric player–NPC affinity and supplies current scores to narration                   |               |
-| [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
+| Plugin                                        | What it does                                                                                  | On by default |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------- |
+| [Dice Check](./rpg.md) `dice-check`           | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |
+| [Ability Checks](./rpg.md) `tabletop-rules`   | Assigns attribute points at the start, and lets the player start attribute checks             |               |
+| [Quest Log](./rpg.md) `core-quest`            | Records quests and objectives, with localized status badges                                   |               |
+| [Bag](./rpg.md) `inventory`                   | Looks up carried items, settles trades, and records item changes                              |               |
+| [Affinity](./rpg.md) `affinity`               | Tracks numeric player–NPC affinity and supplies current scores to narration                   |               |
+| [Hidden Plot Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
 
-Inventory and affinity world-seeded records pass dataset validation; sync can remove seeded records deleted from their authoritative source.
+Bag and affinity world-seeded records pass dataset validation; sync can remove seeded records deleted from their authoritative source.
 
 ### Characters and world
 
@@ -93,21 +93,21 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 | Plugin                                                 | What it does                                                               | On by default |
 | ------------------------------------------------------ | -------------------------------------------------------------------------- | ------------- |
-| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                           | Yes           |
+| [Get Ready](./world.md) `pregame`                      | Collects the player's choices when a game starts                           | Yes           |
 | [Character Creator](./world.md) `char-creator`         | Creates the protagonist from form answers and updates character state      | Yes           |
 | [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                      |               |
-| [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state  | Yes           |
+| [World State](./world.md) `world-init`                 | Prepares character attributes and dimensions, and updates dimension state  | Yes           |
 | [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                           | Yes           |
 | [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges   |               |
-| [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges          |               |
-| [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions       |               |
-| [World Fact Extraction](./world.md) `world-ir`         | Extracts current facts and reviews open quest objectives for other plugins |               |
+| [Almanac](./world.md) `codex`                          | Records people, places and things, with localized category badges          |               |
+| [Relationships](./world.md) `npc-graph`                | Records a graph of relationships between people, groups and factions       |               |
+| [Story Notes](./world.md) `world-ir`                   | Extracts current facts and reviews open quest objectives for other plugins |               |
 
 ### Stage and sound
 
 | Plugin                                  | What it does                                                                                             | On by default |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------- |
-| [Scene Stage](./stage.md) `scene-stage` | Updates scenes and cast, with optional character attributes; dialogue opts into committed segment reveal |               |
+| [Stage Scene](./stage.md) `scene-stage` | Updates scenes and cast, with optional character attributes; dialogue opts into committed segment reveal |               |
 | [Soundtrack](./stage.md) `soundtrack`   | Plays the world's own music for each scene                                                               |               |
 
 ## The four built-in worlds
@@ -133,17 +133,17 @@ The story interface also provides the host’s [advancement and Stop controls](.
 
 Parallel plans dispatch independent actors concurrently within the existing limits; accepted contributions remain in plan order, and actor model-call costs remain. Sequential plans still delegate individually. Ensemble actors respond from their own witnessed history; the shared brief does not automatically tell newcomers about private exchanges from the previous scene. See [ensemble dialogue](./story.md#ensemble-dialogue-and-character-actors).
 
-New compositions remain plugin lists plus a world-generation default view. They do not select a role, perspective or strategy. For DM Mode, set Narrator Perspective to Game master. Ensemble works with the default Player role and mention strategy. To play a human DM, turn off character creation and select Game master in preparation. For Spectator, choose that role at creation, then list, random or director and Advance. Choose Game master instead to direct/narrate the same NPC composition. World allowed-pack lists remain authoritative and saved views are not overwritten. Recommendations stay optional; missing actors/policies preserve narrator-only play.
+New compositions remain plugin lists plus a world-generation default view. They do not select a role, perspective or strategy. For Game Master, set Storyteller Perspective to Game master. Ensemble works with the default Player role and mention strategy. To play a human DM, turn off character creation and select Game master in preparation. For Spectator, choose that role at creation, then list, random or director and Advance. Choose Game master instead to direct/narrate the same NPC composition. World allowed-pack lists remain authoritative and saved views are not overwritten. Recommendations stay optional; missing actors/policies preserve narrator-only play.
 
 Ensemble sessions without an eligible sub-agent target receive no delegation tools. When a plan's required target is unavailable, the narrator completes the story alone and yields to the player.
 
 ## Story-driven presentation
 
-Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).
+Stage Scene and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).
 
-Scene Stage dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while cast and direction providers explicitly opt into host-owned departure fades; see [Stage and sound](./stage.md).
+Stage Scene dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while cast and direction providers explicitly opt into host-owned departure fades; see [Stage and sound](./stage.md).
 
-Scene Stage also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly from the session theme menu and recoverable through Use default appearance.
+Stage Scene also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly under This game's theme in the Menu and recoverable through Restore default appearance.
 
 When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.
 

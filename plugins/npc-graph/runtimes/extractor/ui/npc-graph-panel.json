@@ -1,7 +1,7 @@
 {
   "id": "npc-graph",
   "group": "npc-graph",
-  "label": "Relationship Graph",
+  "label": "Relationships",
   "icon": "network",
   "dataSource": {
     "namespace": "nodes",
@@ -17,7 +17,7 @@
       {
         "component": "Text",
         "props": {
-          "content": "Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral.",
+          "content": "How the characters, groups and factions in this story are connected. Green lines are good relationships, red are bad, gray are neutral. Click a character for details.",
           "variant": "muted",
           "size": "xs"
         }

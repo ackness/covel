@@ -655,7 +655,7 @@ describe("upsert-quests", () => {
       name: "寻回断魂钩",
       change: "new",
       // Every language the plugin ships: the block picks the UI language.
-      badge: { en: "New", zh: "新任务" },
+      badge: { en: "New", zh: "新任务", ru: "Новое" },
       color: "blue",
       detail: "1/2",
     });

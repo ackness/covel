@@ -410,9 +410,9 @@ Hooks with no extra notes:
 Inside `.ui-session-header`:
 
 - `.ui-session-title`: the title. When `backdrop: "scene"` is set and there is a scene name, it is the scene name. Otherwise it is the world name.
-- `.ui-view-switch`: the "Text / Stage" switch. The selected item has `data-state="on"`.
+- `.ui-view-switch`: the "Read / Stage" switch, with a trailing ▾ button when plugin pages exist. The selected item has `data-state="on"`.
 - `.ui-session-action`: the buttons for back, settings, more, and the panel toggle.
-- `.ui-menu-item`: an item in the "More" menu.
+- `.ui-menu-item`: an item in the session menu.
 
 Inside `.ui-panel-status`:
 
@@ -552,7 +552,7 @@ The runtime restores these records as `ThemeDefinition` objects, and sorts and r
 
 ## 9. Appearance studio (token overrides / save as theme)
 
-Players can change the look without writing any CSS. "Settings → Appearance" gives each adjustable token a control. Which tokens can change, which control each one uses, and which preset values exist are defined by `TOKEN_GROUPS` in `token-schema.ts`. This includes the font stacks `FONT_STACKS` and the ambience textures `AMBIENCE_PRESETS`.
+Players can change the look without writing any CSS. "Settings → General → Appearance" gives each adjustable token a control. Which tokens can change, which control each one uses, and which preset values exist are defined by `TOKEN_GROUPS` in `token-schema.ts`. This includes the font stacks `FONT_STACKS` and the ambience textures `AMBIENCE_PRESETS`.
 
 **Where the override values are stored.**
 
@@ -645,11 +645,11 @@ At least one of `tokens`, `layout`, or `css` must contribute; `assets` alone is 
 
 ### Selecting in a session
 
-Enable the plugin that provides the pack, open **Session theme** in the session toolbar, choose a theme with its owner name, then click **Apply**. A sole theme still needs an explicit choice. Scene Stage offers **Stage reading**; the community example is [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md).
+Enable the plugin that provides the pack, open **Menu** in the session toolbar, choose a theme under **This game’s theme** with its owner name, then click **Apply**. A sole theme still needs an explicit choice. Scene Stage offers **Stage reading**; the community example is [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md).
 
 Each device and session can use one plugin theme, initially off. The toolbar reports the active theme. Changed content, an unavailable owner, a failed read or failed bitmap check leaves it inactive with a reason, while play continues. The old choice may remain stored; updated content requires explicit reselection. Identical available content can restore its original selection.
 
-**Use default appearance** stays in a separate host recovery bar in text, immersive stage and plugin views. It closes only the plugin appearance, without changing the view, revoking page permissions or editing the base theme and player adjustments. New selections take effect after settings persistence succeeds; failed saves retain the draft and last confirmed safe appearance. Switching off takes effect immediately. If that save fails, it stays off for this visit and warns that the old choice may return after restart. A deliberate new selection can retry.
+**Restore default appearance** is under This game’s theme in the Menu and on the card shown when a theme fails to load, in the text view, the stage and plugin pages; immersive stage hides the header, so leave it first. It closes only the plugin appearance, without changing the view, revoking page permissions or editing the base theme and player adjustments. New selections take effect after settings persistence succeeds; failed saves retain the draft and last confirmed safe appearance. Switching off takes effect immediately. If that save fails, it stays off for this visit and warns that the old choice may return after restart. A deliberate new selection can retry.
 
 Retrying the theme list or changing UI language during a save still waits for that save's result. Success uses the currently available content; failure still reports the error, including the restart warning when switching off could not be saved.
 

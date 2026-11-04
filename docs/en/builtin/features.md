@@ -4,7 +4,7 @@ This page does not cover plugins. It covers the features the app itself gives pl
 
 ## Text and stage views
 
-At the top of the game screen, there are two buttons: "Text" and "Stage". "Text" is a text view you read one page at a time. "Stage" is a full-screen picture with a background and portraits. Both views show the same game, and you can switch between them at any time.
+At the top of the game screen, there are two buttons: "Read" and "Stage". "Read" is a text view you read one page at a time. "Stage" is a full-screen picture with a background and portraits. Both views show the same game, and you can switch between them at any time.
 
 ![Text mode](/text-mode.webp)
 
@@ -20,7 +20,7 @@ The settings search shows keyboard focus. Configuration sources use segmented bu
 
 ## AI Create World
 
-On the world selection page, click "AI Create World". Write a "Core Direction", under "Player Experience" choose the gameplay pack the world is made for (the choices are the app's gameplay packs, such as "Traditional Story", "Dialogue Mode" and "Low Cost"), and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
+On the world selection page, click "AI Create World". Write a "Core Direction", under "Player Experience" choose the gameplay pack the world is made for (the choices are the app's gameplay packs, such as "Classic Story", "Dialogue" and "Budget"), and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
 
 ![World package builder](/world-package-builder.webp)
 
@@ -34,7 +34,7 @@ When the world dimension editor has unsaved changes, clicking "Cancel", navigati
 
 After you choose a world and click "Enter", you reach the session-prep screen ("Session Setup"). Here you decide which plugins are on for this game.
 
-- At the top, you can choose a gameplay pack, such as "Traditional Story", "Dialogue Mode", "Low Cost" or "Narrative Only". Choosing one turns on all the plugins it includes; some packs also turn plugins off.
+- At the top, you can choose a gameplay pack, such as "Classic Story", "Dialogue", "Budget" or "Story Only". Choosing one turns on all the plugins it includes; some packs also turn plugins off.
 - "Back to the minimal set" keeps only the narrative plugins and the plugins that they and the world require, and turns everything else off.
 - Below is the plugin list. You can tick plugins one by one. The top shows "x/y plugins selected".
 - When a world has its own defaults or recommendations, the list marks them as "World default" or "Recommended by world".
@@ -46,7 +46,7 @@ After you confirm, click "Start Game". If this is your first time playing, the g
 
 Different tasks can use different models. For example, you might use a better model for writing the story, and a cheaper, faster one for organizing world material.
 
-- Global settings: in "Settings", under "LLM" → "Providers & Models", set up your providers and models, and choose a model for each model role. For first-time setup, see [Connect a model](../start/models.md).
+- Global settings: in "Settings", under "Models", set up your providers and keys in "Providers & keys", and choose a model for each role in "AI roles". For first-time setup, see [Connect a model](../start/models.md).
 - A single task: on the session-prep screen, each plugin task has a "Model" option. You can change it to another model role. The new choice is used from the next turn.
 
 For details on model roles, see [Model roles](../reference/slots.md).
@@ -67,7 +67,7 @@ Models sometimes fail. The app only redoes the part that failed, so the parts th
 
 ## Debug page
 
-In the "More" menu on the game screen, there is "Debug Traces". You can also open `/debug` directly. It lists the run record of each task in each turn, along with model calls and retries. Use it to find the cause when something goes wrong. In the same menu, you can switch between "Detailed view" and "Raw view" to see something closer to the raw data.
+Once "Developer mode" under "General" in Settings is on, the top bar shows "Debugger" and the game screen's "Menu" gains a "Developer" section with "Debug Traces". You can also open `/debug` directly. It lists the run record of each task in each turn, along with model calls and retries. Use it to find the cause when something goes wrong. In the same menu, you can switch between "Detailed view" and "Raw view" to see something closer to the raw data.
 
 ## Interface language and translated worlds
 
@@ -85,7 +85,7 @@ The packaged desktop app can restart its bundled backend. A desktop shell runnin
 
 ## Export and import settings
 
-Under "Data" in "Settings". "Export settings" saves the settings on this device as a JSON file, which you can use as a backup or move to another device. The default file does not include API keys. Tick "Include API keys (sensitive)" to include them. Keep this file safe.
+Under "Saves & data" in "Settings". "Export settings" saves the settings on this device as a JSON file, which you can use as a backup or move to another device. The default file does not include API keys. Tick "Include API keys (sensitive)" to include them. Keep this file safe.
 
 When importing, choose the file first. In the preview, tick the items you want to apply, then click "Apply". The selected items overwrite the current values, and the other settings stay the same.
 
@@ -96,16 +96,16 @@ When importing, choose the file first. In the preview, tick the items you want t
 
 ## Session orchestration settings
 
-Open “More” → “Studio Config” in the game toolbar, then find “Orchestration” under “Loaded Plugins”. A sole policy provider resolves automatically: its name and settings link appear without a provider selector or Save button. Multiple providers show the “Turn policy” selector, offering “Automatic selection” or an exact authorized service. A saved paused or unavailable selection stays visible and never switches automatically; clear the selection to resolve automatically again. “Distinct characters (0–16)” and “Child calls (0–64)” bound delegation per execution, defaulting to 4 and 16; zero disables the corresponding capability. Changes start next execution and survive reloads and forks.
+Open “Menu” → “This game's settings…” in the game toolbar, then expand “Advanced”. A sole policy provider resolves automatically: its name and settings link appear without a provider selector or Save button. Multiple providers show the “Speaking rules” selector, offering “Automatic selection” or an exact authorized service. A saved paused or unavailable selection stays visible and never switches automatically; clear the selection to resolve automatically again. “Characters speaking at once (0–16)” and “Helper calls (0–64)” bound delegation per execution, defaulting to 4 and 16; zero disables the corresponding capability. Changes start next execution and survive reloads and forks.
 
 These generic controls install no new policy, character plugin or play pack. Plugins use them only when they offer the corresponding capabilities. Authors can read the [orchestration contracts](../reference/plugin-extensions.md#orchestration-contracts).
 
 ### Creation roles and independent saves
 
-Play as defaults to Player on preparation, with Game master and Spectator choices. It applies only to new sessions and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it during preparation when choosing Game master in the ensemble recipe.
+Next to "Start Game" on the getting-ready screen, you choose who you play as. It defaults to Player, with Game master and Spectator as choices, each with a one-line hint; it is hidden when only one is valid. It applies only to new sessions and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it during preparation when choosing Game master in the ensemble recipe.
 
-Orchestration groups Turn policy, distinct characters, sub-agent calls and Automatic rounds. Save each field independently. Policy/caps use the orchestration route; Automatic rounds uses ordinary session PATCH. A failed field retains its draft/error while successful fields remain saved, followed by authoritative reloads; there is no joint rollback. The provider-settings link opens its own strategy fields. Multiple providers require an exact choice. Paused/stale selections remain visible and clearable without activation or approval.
+The Advanced block groups Speaking rules, Characters speaking at once, Helper calls and Auto-advance turns. Save each field independently. Policy/caps use the orchestration route; Automatic rounds uses ordinary session PATCH. A failed field retains its draft/error while successful fields remain saved, followed by authoritative reloads; there is no joint rollback. The provider-settings link opens its own strategy fields. Multiple providers require an exact choice. Paused/stale selections remain visible and clearable without activation or approval.
 
 Refreshing the plugin list preserves unsaved drafts, errors and saves in progress. Untouched fields update to the latest saved values; earlier reads cannot overwrite a later confirmed save.
 
-Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view retains progress and Stop advancement; new input also ends the old automatic chain.
+Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view keeps the progress chip in the header, and selecting it stops the advancement; new input also ends the old automatic chain.

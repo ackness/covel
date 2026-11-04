@@ -20,7 +20,7 @@ Dimensions come only from canonical `data/dimensions.yaml` and its adjacent loca
 
 ## Steps in the settings page
 
-1. Open **Settings → Install & manage**.
+1. Open **Settings → Plugins → Install & manage**.
 2. Enter a public GitHub repository link, or a link of the form `/tree/<ref>/<path>`.
 3. The installer looks for worlds at that location. If there is a `world.yaml` at the root, that is one world. Otherwise, it lists the worlds one level down (including those under `worlds/`), up to 20.
 4. Check the worlds you want to install, and confirm. Each one is installed separately.
@@ -47,7 +47,7 @@ Rules:
 
 ### Import SillyTavern content
 
-In **Settings → Install & manage**, choose character cards or lorebooks under **Import SillyTavern content**, preview the report, then import them as one world. This performs data conversion without executing scripts. The world is available immediately. See [the import guide](../worlds/import-sillytavern.md) for mapping, omissions and samples. Browser-private BrowserVault import is not supported.
+In **Settings → Plugins → Install & manage**, choose character cards or lorebooks under **Import SillyTavern content**, preview the report, then import them as one world. This performs data conversion without executing scripts. The world is available immediately. See [the import guide](../worlds/import-sillytavern.md) for mapping, omissions and samples. Browser-private BrowserVault import is not supported.
 
 Standalone lorebooks use a character's name for fixed token substitutions only when the same import contains exactly one card. Embedded books use their owner. With no cards or multiple cards, standalone character tokens are removed and reported; see [lorebook conversion](../worlds/import-sillytavern.md#how-lorebooks-map).
 
@@ -124,7 +124,7 @@ When files on disk change while the world record keeps its older content, the wo
 
 ## In-app validation
 
-Players without a source checkout or pnpm can open **Settings → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+Players without a source checkout or pnpm can open **Settings → Plugins → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
 
 A world ZIP without `id` takes its single package folder’s name, or the ZIP filename without `.zip` when files are at the archive root. An installed world with an unreadable or missing manifest can still be validated by its directory ID from Settings, returning `manifest-invalid`. Multiple candidate directories remain ambiguous, and containment and symlink checks still apply.
 

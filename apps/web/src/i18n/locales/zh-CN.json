@@ -8,11 +8,8 @@
     "play": "游玩",
     "world": "世界",
     "worlds": "世界观",
-    "session": "会话",
-    "plugins": "插件",
-    "images": "图像",
+    "session": "游戏",
     "settings": "设置",
-    "studio": "工作室",
     "debug": "调试",
     "primary": "主导航"
   },
@@ -29,7 +26,6 @@
     "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",
     "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
-    "config": "工作室配置",
     "status": "会话状态",
     "providers": "激活的模型",
     "plugins": "加载的插件",
@@ -73,7 +69,6 @@
     "state": "状态",
     "world": "世界观",
     "lore": "知识库",
-    "activeModels": "活跃模型",
     "noGameState": "暂无游戏状态，故事推进后将在此显示。",
     "worldState": "世界状态",
     "characters": "角色",
@@ -97,30 +92,29 @@
     "emptyCharCreate": "等待角色创建完成...",
     "emptyPlaying": "冒险等待着你，输入消息开始吧。",
     "emptyEnded": "本次会话已结束。",
-    "noModelsConfigured": "未配置模型",
-    "preparation": "会话配置",
-    "startFailed": "创建会话失败",
+    "preparation": "开局准备",
+    "startFailed": "无法开始游戏",
     "pluginPlanFailed": "无法解析世界插件方案",
     "missingPlugins": {
       "title": "这个世界需要的插件尚未安装",
-      "detail": "不安装也可以开始，但这些插件为该世界提供的玩法不会生效。可在「设置 → 安装与管理」中安装，安装后重启后端生效。"
+      "detail": "不安装也可以开始，但这些插件为该世界提供的玩法不会生效。可在“设置 → 插件 → 安装与管理”中安装，安装后需要重启 Covel 才生效。"
     },
     "worldRequirements": {
       "degradedTitle": "这个世界将缺少它依赖的一项能力",
-      "missing-provider": "没有已安装的插件提供 {{contract}}。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "missing-provider": "没有已安装的插件提供“{{contract}}”。请在“设置 → 插件 → 安装与管理”中安装一个，安装后需要重启 Covel 才生效。",
       "unavailable": "{{plugins}} 提供 {{contract}}，但在当前选择下无法启用。",
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
       "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
-      "dimensions": "已开启的插件都无法保存这个世界的维度，游戏会在没有维度的情况下开始。开启一个能保存世界维度的插件就能用上它们。"
+      "dimensions": "已开启的插件都无法保存这个世界的世界状态，游戏会在没有它的情况下开始。开启一个能保存世界状态的插件就能用上。"
     },
     "dimensionProvider": {
-      "conflictTitle": "选一个插件保存这个世界的维度",
-      "conflictDetail": "{{plugins}} 都会保存世界维度，一局游戏只用其中一个。留下一个，其余的在这局里关闭。",
+      "conflictTitle": "选一个插件保存这个世界的世界状态",
+      "conflictDetail": "{{plugins}} 都会保存世界状态，一局游戏只用其中一个。留下一个，其余的在这局里关闭。",
       "keep": "留下 {{plugin}}",
-      "paused": "世界维度暂停了：{{plugin}} 没有在运行。维度保持现在的值，剧情照常进行；{{plugin}} 回来后，维度会继续变化。"
+      "paused": "世界状态已暂停：{{plugin}} 没有运行。数值保持不变，故事照常进行；{{plugin}} 恢复后会继续变化。"
     },
-    "history": "历史会话",
+    "history": "历史存档",
     "worldLore": "世界文档",
     "worldTab": "世界",
     "worldDocumentEmpty": "暂无世界文档",
@@ -148,8 +142,7 @@
     "aiCreateTeaser": "与世界构筑 Agent 一起生成设定、角色、规则和资料库。",
     "enter": "进入",
     "worldsEmptyTitle": "还没有可用的世界",
-    "worldsEmptyDesc": "让 AI 生成一个新世界，或把世界包放入 worlds/ 目录。",
-    "worldsEmptyViewExamples": "查看示例",
+    "worldsEmptyDesc": "让 AI 生成一个新世界，或安装别人做好的世界。",
     "pluginsLoaded": "{{count}} 个插件已加载",
     "noPluginsLoaded": "未加载插件",
     "resume": "继续",
@@ -166,14 +159,10 @@
       "load-error": "无法读取已保存的草稿。请重试，或编辑文本以使用新草稿。",
       "save-error": "草稿未能保存供下次使用。现在开始游戏仍会使用此处显示的文本。"
     },
-    "switchSession": "切换会话",
-    "currentWorld": "当前会话",
     "statusActive": "进行中",
     "statusPaused": "已暂停",
     "statusEnded": "已结束",
     "turnCount": "第 {{count}} 回合",
-    "sessions": "会话",
-    "noOtherSessions": "没有其他会话",
     "startingUp": "正在启动...",
     "retryFrom": "从 {{label}} 重试",
     "executionSummary": "执行 · {{count}} 个运行任务",
@@ -205,14 +194,12 @@
     "needsConfig": "待配置",
     "allBound": "已全部绑定",
     "unboundRuntimes": "存在未绑定",
-    "noCompatibleSlot": "无兼容模型用途",
-    "selectSlot": "-- 选择模型用途 --",
+    "noCompatibleSlot": "无兼容AI 分工",
+    "selectSlot": "-- 选择AI 分工 --",
     "autoAssign": "自动分配",
-    "deleteConfirmTitle": "删除会话",
-    "deleteConfirmDesc": "此操作将永久删除该会话及其所有数据（消息、游戏状态等），无法撤销。",
-    "deleteSessionAria": "删除会话 {{id}}",
-    "slotsConfigured": "{{count}} 个模型用途已配置",
-    "slotsUnconfigured": "未配置",
+    "deleteConfirmTitle": "删除存档",
+    "deleteConfirmDesc": "这会永久删除该存档及其所有数据（消息、游戏状态等），无法撤销。",
+    "deleteSessionAria": "删除存档：{{label}}",
     "bindingsAllBound": "全部已绑定",
     "bindingsPartial": "部分未绑定",
     "historySummary": "{{count}} 个历史存档",
@@ -231,8 +218,8 @@
       "requestedByWorld": "世界默认",
       "packOptional": "组合包可选"
     },
-    "exportDimensions": "导出维度",
-    "importDimensions": "导入维度",
+    "exportDimensions": "导出世界状态",
+    "importDimensions": "导入世界状态",
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
     "reasonSessionBusy": "会话繁忙，请稍后重试",
@@ -247,7 +234,6 @@
     "viewDetailed": "详情",
     "viewRaw": "原始",
     "viewStage": "舞台",
-    "viewText": "文本",
     "expandPanel": "放大面板",
     "panelExpanded": "这个面板正在大窗口里显示。",
     "continueTurn": "继续 · 第 {{count}} 回合",
@@ -257,13 +243,10 @@
     "notebook": "手记",
     "sceneSpeaking": "正在说话",
     "playerItems": "随身",
-    "moreActions": "更多",
     "playerStatus": "状态",
     "sceneCast": "在场",
-    "viewParsedAria": "解析视图",
     "viewDetailedAria": "详情视图",
     "viewRawAria": "原始视图",
-    "viewStageAria": "舞台视图",
     "stateStreaming": "回合执行中",
     "statePlaying": "进行中",
     "toggleStoryPanel": "切换故事侧栏",
@@ -273,11 +256,10 @@
     "composerBlockedPlaceholder": "请先完成当前交互",
     "composerBlockedHint": "请先提交或移除当前插件交互，再继续发送消息。",
     "composerAwaitingBeginPlaceholder": "先点「开始冒险」，故事开始后再说话",
-    "suspensionsBadge": "{{count}} 个等待中",
-    "suspensionsTitle": "挂起的执行",
+    "suspensionsTitle": "等你回答",
     "suspensionsDescription": "故事正在等你回答，回答后才能继续。",
     "suspensionsEmpty": "没有等待中的执行。",
-    "suspensionResumeLabel": "继续执行",
+    "suspensionResumeLabel": "提交回答",
     "suspensionCancelLabel": "放弃",
     "suspensionConfirmYes": "是",
     "suspensionConfirmNo": "否",
@@ -294,21 +276,24 @@
     "suspensionOutdatedPlugin": "提出它的插件之后更新过。",
     "suspensionOutdatedDataChanged": "提出它之后，它要改的内容已经被改过了。",
     "memoryUpdateFailed": "故事记忆更新失败",
-    "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
+    "memoryUpdateFailedHint": "本轮剧情已保存。请检查AI 分工中的记忆模型和服务商配置；下一回合会再次尝试更新。",
     "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
     "worldDataNotices": {
-      "title": "这个世界的部分数据没有进入这局游戏：",
-      "hint": "插件已关闭或正在等待你批准时，分配给它的数据会在启用后导入。",
-      "hide": "隐藏",
-      "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
+      "dimensionsMissing": "世界状态（如关系、资源）：没有已启用的插件保存它们，所以本局不会记录。",
       "labeled": "{{source}}: {{message}}",
       "receiverMissing": "这些数据没有插件接收。",
       "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
       "notImported": "有一部分数据没有导入（详情）",
       "receiverAmbiguous": "这些数据没有插件接收。请选择一个接收插件。",
       "receiverExcluded": "这些数据没有插件接收。接收插件已停用。",
-      "receiverApprovalRequired": "这些数据没有插件接收。接收插件需要批准。"
+      "receiverApprovalRequired": "这些数据没有插件接收。接收插件需要批准。",
+      "titles": {
+        "ambiguous": "有些世界数据不知道该交给谁",
+        "excluded": "有些世界数据的接收插件被关掉了",
+        "missing": "有些世界数据没有插件接收",
+        "importFailed": "有些世界数据没能导入"
+      }
     },
     "pendingApproval": {
       "title": "需要批准",
@@ -372,8 +357,8 @@
     "stateSetup": "准备中",
     "recoveryChecking": "正在确认未完成回合",
     "recoveryRunning": "上一回合仍在执行",
-    "recoveryInterrupted": "此回合已中断",
-    "recoveryFailed": "此回合未能完成",
+    "recoveryInterrupted": "上一回合没有完成",
+    "recoveryFailed": "上一回合没有完成",
     "recoveryHydrating": "正在恢复存档",
     "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
     "recoveryUnavailableDetail": "服务器暂时无法确认是否有回合在执行，稍后会自动再查。确认之前不会重试，也不会发起新回合。",
@@ -438,14 +423,11 @@
     "worldsScrollBack": "向前翻",
     "worldsScrollForward": "向后翻",
     "allPanels": "全部面板",
-    "musicMute": "关闭背景音乐",
-    "musicUnmute": "播放背景音乐",
     "panelLoadFailed": "插件面板加载失败。",
     "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
     "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
     "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。",
     "outputInterrupted": "模型没写完就停下了这段正文（{{reason}}），可能停在半句。重试这一回合可以让它重新写。",
-    "canvasEyebrow": "§ 故事开场",
     "blockType": "内容块：{{type}}",
     "dbLoadErrorDetail": "加载数据库失败：{{error}}",
     "retryTaskNamed": "重试此任务：{{label}}",
@@ -496,8 +478,8 @@
       "forbidden": "{{provider}} 拒绝了访问，请检查账户权限。",
       "quota": "{{provider}} 的额度或余额已用完。",
       "rate_limited": "{{provider}} 正在限制请求，请检查用量和额度。",
-      "sharedKey": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，修好密钥对它们都生效。",
-      "sharedAccount": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，也可能受影响。请检查这个服务商的账户和限额。",
+      "sharedKey": "{{slots}}，共 {{count}} 个分工都在用 {{provider}}，修好密钥对它们都生效。",
+      "sharedAccount": "{{slots}}，共 {{count}} 个分工都在用 {{provider}}，也可能受影响。请检查这个服务商的账户和限额。",
       "missing_key": "没有填写 {{provider}} 的 API 密钥，请在模型设置中填写。"
     },
     "modelUse": {
@@ -508,14 +490,14 @@
       "memory": "记忆提取"
     },
     "missingCredentials": {
-      "title": "部分模型用途还没有密钥",
+      "title": "部分AI 分工还没有密钥",
       "detail": "可以先填写密钥，也可以仍然开始，稍后再配置。",
       "provider": "{{provider}} 还没有填写 API 密钥，{{slots}}可能会失败。",
       "configure": "填写密钥",
       "startAnyway": "仍然开始"
     },
-    "pluginViews": "插件视图",
-    "backToDefaultView": "返回默认视图",
+    "pluginPages": "插件页面",
+    "stopTurn": "停止",
     "viewReadsStory": "此视图可以读取故事",
     "pageUpdated": "此页面已更新，请重新加载。",
     "pageLoadFailed": "页面加载失败。",
@@ -525,7 +507,7 @@
     "revokeViewConsent": "撤销此页面的全部权限",
     "viewConsentTitle": "允许“{{label}}”读取此会话？",
     "viewConsentDescription": "{{plugin}} 请求为此页面启用以下能力。授权保存在本设备，页面内容变化后会重新询问。",
-    "viewConsentDecline": "使用默认视图",
+    "viewConsentDecline": "不用了",
     "viewConsentAllow": "允许所请求的能力",
     "autoAdvanceLimit": "自动推进轮数",
     "autoAdvanceOff": "关闭",
@@ -546,16 +528,9 @@
     },
     "revokeViewCapability": "撤销：{{capability}}",
     "viewOpenInteraction": "在默认界面中打开交互",
-    "surfaceComposer": "输入框",
-    "surfaceMain": "主视图",
-    "surfaceDefault": "框架默认",
-    "surfaceReturn": "切回默认界面",
-    "surfaceStop": "停止",
-    "surfaceRecovery": "交互与恢复",
-    "surfaceFailed": "“{{label}}”未能继续响应，已显示默认界面。",
     "theme": {
-      "menu": "会话主题",
-      "default": "使用默认外观",
+      "menu": "本局主题",
+      "default": "恢复默认外观",
       "readOnly": "设备设置不可用或仍在加载，暂时不能保存主题选择。",
       "loadFailed": "无法加载此主题，当前保留上次可用的外观。",
       "active": "正在使用 {{label}} · {{owner}}。",
@@ -563,12 +538,60 @@
       "offSaveFailed": "本次访问已使用默认外观，但偏好未保存；重启后可能恢复之前的选择。",
       "apply": "应用",
       "draftUnavailable": "此选择不可用，请选择当前主题。",
-      "saving": "正在保存…"
+      "saving": "正在保存…",
+      "noticeTitle": "本局主题没能加载",
+      "defaultOption": "默认外观"
     },
     "revisingResponse": "正在修改回复",
     "showAll": "显示全部",
     "draftWriting": "正在写…",
-    "draftRevising": "正在修改…"
+    "draftRevising": "正在修改…",
+    "autoAdvanceStopFailed": "没能停止自动推进",
+    "worldStateNotice": {
+      "title": "世界状态需要处理"
+    },
+    "viewRead": "阅读",
+    "waitingForYou": "等你回答 {{count}}",
+    "suspensionNoAnswerUi": "这个问题没有现成的回答界面。放弃它，或在设置里打开“开发者模式”后手动回答。",
+    "menu": "菜单",
+    "menuThisGame": "本局",
+    "menuGameSettings": "本局设置…",
+    "menuRestart": "重新开局",
+    "menuExport": "导出存档",
+    "menuPreferences": "偏好",
+    "musicAllGames": "背景音乐（所有游戏）",
+    "musicVolume": "音量",
+    "menuSettings": "设置…",
+    "menuDeveloper": "开发者",
+    "sidePanel": "侧栏",
+    "restartConfirmTitle": "重新开局？",
+    "restartConfirmMessage": "你会回到这个世界的开始页面，可以重新选择玩法和设置。当前存档不会被删除，之后仍能接着玩。",
+    "drawerTitle": "本局设置",
+    "drawerDescription": "管理这局的存档、插件和高级选项。",
+    "drawerSaves": "存档",
+    "drawerPlugins": "本局插件",
+    "drawerAdvanced": "高级",
+    "currentSave": "当前存档",
+    "switchSave": "切换存档",
+    "noOtherSaves": "没有其他存档",
+    "savesTitle": "其他存档",
+    "goToSettings": "去设置",
+    "rolePlayerHint": "你扮演故事里的主角，自己做决定。",
+    "roleHostHint": "你来主持：替 AI 决定剧情走向和角色的反应。",
+    "roleSpectatorHint": "只看不参与，AI 自己推进故事。",
+    "modelLineUsing": "使用：{{model}} ·",
+    "modelLineNoKey": "已选的 AI 还缺少密钥，现在开始会失败。",
+    "modelLineNone": "还没有设置 AI。",
+    "modelLineChange": "修改",
+    "modelLineSetUp": "去设置",
+    "recommendedSettings": "使用推荐设置。",
+    "customStartOpen": "正在自定义开局。",
+    "customStartShow": "自定义开局",
+    "customStartHide": "收起",
+    "customStart": "自定义开局",
+    "setupAiTitle": "先设置 AI",
+    "setupAiDetail": "还没有可用的 AI。添加服务商和密钥后才能开始游戏。",
+    "worldsEmptyInstall": "安装世界"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -827,15 +850,15 @@
     "backupUnreadable": "这份副本读不出来。",
     "serverKeyAvailable": "服务器默认模型已有实例 API 密钥。此处填写的个人密钥保存在当前设备。",
     "keyOverriddenByEnv": "环境变量（shell、.env 或 .env.llm）为该服务商设置了另一个 Key，优先于此处保存的 Key。取消该环境变量后才会使用保存的 Key。",
-    "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此用途。",
+    "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此分工。",
     "resetModelBinding": "重置模型绑定",
     "storageMode": "数据存储",
     "storageLocal": "本地",
     "storageRemote": "远程",
     "configuredDesc": "llm.toml 已配置。管理 API 密钥和高级参数。",
-    "unconfiguredDesc": "配置模型用途、API 密钥和高级参数。所有数据仅保存在当前浏览器中。",
-    "configuredByToml": "TOML 定义基础用途和备用策略。本地选择覆盖模型；重新加载 TOML 会保留本地选择。",
-    "slotPingMovedHint": "模型连通性测试位于“服务商与模型”页面。",
+    "unconfiguredDesc": "配置AI 分工、API 密钥和高级参数。所有数据仅保存在当前浏览器中。",
+    "configuredByToml": "TOML 定义基础分工和备用策略。本地选择覆盖模型；重新加载 TOML 会保留本地选择。",
+    "slotPingMovedHint": "模型连通性测试位于“服务商与密钥”页面。",
     "language": "界面语言",
     "langZh": "简体中文",
     "langEn": "English",
@@ -890,10 +913,10 @@
     "pingTest": "连通测试",
     "noProvidersTitle": "尚未配置任何服务商",
     "noProvidersDesktopDesc": "打开本机 llm.toml，添加至少一个 [covel.<用途名>] 配置段，再重新打开此页面。",
-    "noProvidersWebDesc": "网页版从服务端 llm.toml 读取模型用途。请联系管理员配置，或在桌面版中直接编辑本地文件。",
+    "noProvidersWebDesc": "网页版从服务端 llm.toml 读取AI 分工。请联系管理员配置，或在桌面版中直接编辑本地文件。",
     "openLlmToml": "打开 llm.toml",
-    "advancedDesc": "参数按模型用途分别生效，与原“编辑能力”入口共用配置。未设置的采样参数沿用服务商默认值；token 预算单独列出。",
-    "selectSlot": "选择模型用途",
+    "advancedDesc": "参数按AI 分工分别生效，与原“编辑能力”入口共用配置。未设置的采样参数沿用服务商默认值；token 预算单独列出。",
+    "selectSlot": "选择AI 分工",
     "hasApiKey": "有密钥",
     "noCustomPresets": "暂无本地模型",
     "addPreset": "添加模型方案",
@@ -931,11 +954,11 @@
     "noResults": "没有匹配 \"{{query}}\" 的设置",
     "noGroupSelected": "未选择分组",
     "groupEmpty": "当前分组暂无可调项",
-    "groupGeneral": "通用",
+    "groupGeneral": "常用",
     "groupLlm": "模型",
     "groupPlugins": "插件",
     "groupDesktop": "桌面",
-    "groupData": "数据",
+    "groupData": "存档与数据",
     "appearanceNavLabel": "外观",
     "operatorAccessNavLabel": "运维访问",
     "frameworkEntries": {
@@ -944,7 +967,7 @@
         "description": "选择界面风格；导入的自定义主题会自动显示在这里。"
       },
       "uiScheme": {
-        "label": "配色模式",
+        "label": "浅色或深色",
         "description": "选择浅色或深色。主题只支持一种模式时，会固定使用该模式。"
       },
       "uiThemeManager": {
@@ -956,31 +979,31 @@
         "description": "标为“实验性”的语言只翻译了界面。模型读到的指令仍是英文，故事质量取决于模型。"
       },
       "chatMessageWindow": {
-        "label": "聊天窗口消息上限",
+        "label": "聊天消息窗口大小",
         "description": "聊天里最多同时保留多少条消息。更早的消息会移出窗口，向上滚动时重新加载。"
       },
       "traceRetention": {
-        "label": "保留诊断记录",
+        "label": "调试记录保留时间",
         "description": "诊断记录是调试页面里每次模型请求和回复的存档。删除旧记录不会改变你的故事或存档，只影响调试页面能看到的内容。"
       },
       "developerView": {
-        "label": "开发者视图",
-        "description": "在侧边栏显示“数据库”页签，列出插件保存的每一行原始数据，包括只给叙述者看的内容。"
+        "label": "开发者模式",
+        "description": "显示给作者和排错用的内容：顶栏“调试”、详情和原始视图、调试追踪、侧栏的“数据库”和存储信息、原始编号、插件步骤数、等你回答对话框里的原始数据框，以及后台失败的弹出提示。"
       },
       "expandTurnUpdates": {
-        "label": "展开本回合更新",
-        "description": "在每回合下方直接展开图鉴发现、成就和状态卡片，而不是折叠成一行。"
+        "label": "默认展开本回合更新",
+        "description": "图鉴发现、成就和状态变化直接展开显示在每回合下方，而不是折叠成一行。"
       },
       "worldAuthoringIdleTimeout": {
-        "label": "世界创作：等待模型的时间（秒）",
+        "label": "世界创作：等待 AI 的时间（秒）",
         "description": "创建、修改或翻译世界时，模型一直没有输出的话最多等多久。只要模型还在持续输出就不会被中断，整段内容写多久都可以。如果你用的模型要很久才开始输出，把这个值调大。"
       },
       "onboardedVersion": {
         "label": "Onboarding 版本"
       },
       "llmSlotConfig": {
-        "label": "用途分配",
-        "description": "为每种模型用途选择服务商和模型"
+        "label": "AI 分工",
+        "description": "为每项分工选择服务商和模型"
       },
       "llmProviders": {
         "label": "服务商与模型"
@@ -1002,19 +1025,19 @@
       },
       "musicEnabled": {
         "label": "背景音乐",
-        "description": "游玩时播放世界的背景音乐。只有世界自带曲目、并且启用了负责选曲的插件时才会有音乐。"
+        "description": "游玩时播放世界自带的音乐。世界没有自带曲目时不会有声音。游戏菜单里也有同一个开关。"
       },
       "musicVolume": {
         "label": "音乐音量",
         "description": "0 到 100。播放旁白语音时音乐会自动压低。"
       },
       "instantText": {
-        "label": "立即显示文字",
-        "description": "立即显示完整故事，覆盖插件的分段显示设置。"
+        "label": "立即显示整段文字",
+        "description": "故事一出现就是完整的，不再一段一段慢慢显示。"
       },
       "liveOutput": {
-        "label": "生成中显示故事",
-        "description": "故事什么时候出现：边写边显示、每句写完后显示，或回合保存后才显示。插件只能限制得更严，不能放宽。"
+        "label": "故事出现的时机",
+        "description": "边写边看、写完一句看一句，或等这一回合保存后再看。插件可以要求更晚，但不能更早。"
       }
     },
     "operatorAccessTitle": "托管服务运维访问",
@@ -1027,9 +1050,9 @@
     "operatorTokenStorageFailed": "浏览器拒绝修改已保存的令牌，未做任何更改。",
     "operatorTokenSave": "保存并重新加载",
     "operatorTokenClear": "清除并重新加载",
-    "llmSlots": "用途分配",
+    "llmSlots": "AI 分工",
     "llmKeys": "API 密钥",
-    "llmPresets": "服务商与模型",
+    "llmPresets": "服务商与密钥",
     "llmAdvanced": "生成参数",
     "customWidgetUnavailable": "此设置使用专属页面，请在对应的模型或插件分区中编辑。",
     "show": "显示",
@@ -1106,14 +1129,10 @@
     "desktopDataData": "数据",
     "desktopDataDb": "数据库",
     "desktopDataLogs": "日志",
-    "desktopOpenConfig": "打开配置目录 (~/.covel)",
+    "desktopOpenConfig": "在文件夹中打开配置目录",
     "desktopOpenData": "打开数据目录",
     "desktopOpenLogs": "打开日志目录",
     "desktopChangeData": "更改数据位置…",
-    "desktopEditFiles": "编辑配置文件",
-    "desktopEditFilesHint": "在默认编辑器中打开。保存后请重启 Covel 使改动生效。",
-    "desktopEditLlm": "编辑 llm.toml",
-    "desktopEditKeys": "编辑 keys.env",
     "desktopServer": "后端服务器",
     "desktopServerPort": "本地 API 服务运行在端口 {{port}}。",
     "desktopRestart": "重启服务器",
@@ -1135,21 +1154,21 @@
     "desktopKeysNote": "API 密钥以明文保存在 {{path}}。请使用操作系统权限保护该文件；应用写入时会限制为仅当前用户可读写。",
     "presetProviderPlaceholder": "服务商 ID（如 openai）",
     "presetModelPlaceholder": "模型 ID（如 deepseek-v4-flash）",
-    "slotChainSummary": "插件任务 → 模型用途 → 服务商与模型 → API 密钥。",
-    "desktopLlmMissingTitle": "尚未配置任何模型用途",
-    "desktopLlmMissingHint": "点击下方按钮打开 ~/.covel/llm.toml，至少添加一个 [covel.<用途名>] 配置段。",
+    "slotChainSummary": "插件任务 → AI 分工 → 服务商与模型 → API 密钥。",
+    "desktopLlmMissingTitle": "还没有配置 AI",
+    "desktopLlmMissingHint": "到“设置 → 模型”添加服务商和密钥；也可以在配置文件夹里直接编辑文件。",
     "autoBindSlots": "按名称自动分配",
     "llm": {
       "reloadConfig": "重载配置",
-      "reloadHint": "修改了 llm.toml？重新加载即可应用新的模型用途，无需重启。",
+      "reloadHint": "修改了 llm.toml？重新加载即可应用新的AI 分工，无需重启。",
       "reloadOk": "配置已重载",
-      "reloadOkDetail": "已启用 {{count}} 个模型用途：{{slots}}",
+      "reloadOkDetail": "已启用 {{count}} 个AI 分工：{{slots}}",
       "reloadFailed": "llm.toml 解析失败",
       "activeFile": "当前配置文件：{{path}}",
       "activeBuiltin": "当前配置：内置默认",
       "parseError": "llm.toml 读取失败，当前生效的配置已保留。请修复后重新加载：{{error}}"
     },
-    "runtimeSlotsDiscovered": "插件声明的模型用途",
+    "runtimeSlotsDiscovered": "插件声明的AI 分工",
     "temperature": "温度",
     "topP": "Top P",
     "maxOutputTokens": "最大输出 Token 数",
@@ -1190,10 +1209,10 @@
     "pingTtfb": "{{ms}}ms TTFB",
     "pingErrorTooltip": "错误: {{error}}",
     "pingResolvedVia": "通过 {{resolvedVia}} 解析",
-    "pingSlotFallbackTitle": "当前模型用途尚未配置，测试已改用 {{resolvedVia}}。",
+    "pingSlotFallbackTitle": "当前AI 分工尚未配置，测试已改用 {{resolvedVia}}。",
     "pingFailed": "失败",
     "saveFailed": "设置保存失败",
-    "runtimeSlotsDiscoveredHint": "以下模型用途来自已加载插件及其保存的设置；请为它们分配合适的服务商和模型。",
+    "runtimeSlotsDiscoveredHint": "以下AI 分工来自已加载插件及其保存的设置；请为它们分配合适的服务商和模型。",
     "providerConnections": "服务商连接",
     "providerConnectionsHint": "每个服务商只需配置一次；其 API 密钥和接口地址由下方所有模型 ID 共用。",
     "customProviders": "自定义服务商与模型",
@@ -1285,11 +1304,11 @@
     "rawConfigChanged": "文件在读取之后被改动过。请重新读取，再做修改。",
     "rawConfigReloadFailed": "已保存，但重新加载失败：{{error}}",
     "slotNotesSummary": "llm.toml 与这里的选择如何配合",
-    "slotFilterPlaceholder": "筛选用途…",
-    "slotFilterEmpty": "没有匹配的用途。",
+    "slotFilterPlaceholder": "筛选分工…",
+    "slotFilterEmpty": "没有匹配的分工。",
     "llmTomlDefault": "llm.toml 默认 · {{model}}",
     "followsWorldDefault": "正在使用世界「{{world}}」的默认值。",
-    "paneGeneralDescription": "界面语言、聊天显示和世界创作的偏好，保存在这台设备上。",
+    "paneGeneralDescription": "界面语言、背景音乐和阅读方式，保存在这台设备上。",
     "panePluginDescription": "对所有世界生效，从你的下一次行动开始。没有改过的项目跟随世界或插件的默认值。",
     "providerDefault": "服务商默认",
     "modelOutputLimit": "参考模型上限：{{value}}",
@@ -1300,7 +1319,7 @@
     "modelCountShort": "{{count}} 个模型",
     "fromLlmToml": "来自 llm.toml",
     "builtinDefault": "内置默认",
-    "providerBuiltinNotice": "这是应用内置的默认模型，未找到 llm.toml 时自动启用，无法在此删除。添加自己的服务商并在「用途分配」中改选即可不再使用它；也可以创建 {{path}} 用自己的配置替换。",
+    "providerBuiltinNotice": "这是应用内置的默认模型，未找到 llm.toml 时自动启用，无法在此删除。添加自己的服务商并在「AI 分工」中改选即可不再使用它；也可以创建 {{path}} 用自己的配置替换。",
     "providerFileNotice": "此服务商由 {{path}} 定义，无法在此删除。请在文件中移除对应的 [covel.<用途名>] 配置段，然后到「用途分配」重新加载配置。",
     "createLlmToml": "创建 llm.toml",
     "llmTomlCreated": "已创建 llm.toml，内容与内置默认一致",
@@ -1308,7 +1327,7 @@
     "providerConnectionScopeBuiltin": "此处修改连接仅影响本地模型。内置默认模型继续使用内置的地址和协议。",
     "localProvider": "本地配置",
     "providerConnectionScope": "此处修改连接仅影响本地模型。标记为 llm.toml 的模型继续使用文件中的地址和协议。",
-    "modelBindingIncompatible": "所选模型不支持此用途，请选择兼容模型或重置用途。",
+    "modelBindingIncompatible": "所选模型不支持此分工，请选择兼容模型或重置分工。",
     "noTextGenerationParameters": "此模型不生成文本，温度、输出 token 和思考参数不适用。",
     "evaluationProtocol": "Evaluation（评估）",
     "evaluationApi": "评估接口",
@@ -1381,13 +1400,13 @@
     "modelConfigurationName": "配置名称",
     "duplicateModelConfiguration": "复制配置",
     "modelConfigurationCopy": "{{name}} 副本",
-    "modelReasoningReuseHint": "此设置自动保存，供选择这份配置的主叙事和所有插件共用。需要另一种强度时，复制配置后修改即可；用途中的显式覆盖仍优先。",
+    "modelReasoningReuseHint": "此设置自动保存，供选择这份配置的主叙事和所有插件共用。需要另一种强度时，复制配置后修改即可；AI 分工中的显式覆盖仍优先。",
     "modelReasoningDefault": "模型默认思考",
     "reasoningTaskDefault": "按任务决定",
     "reasoningInherit": "继承模型 / 任务设置",
     "reasoningInheritedValue": "继承设置",
     "reasoningExplicitValue": "显式覆盖",
-    "reasoningPrecedenceHint": "用途覆盖优先于模型默认；未设置时按任务决定。选择服务商默认会跳过任务的思考建议。",
+    "reasoningPrecedenceHint": "分工覆盖优先于模型默认；未设置时按任务决定。选择服务商默认会跳过任务的思考建议。",
     "reasoningCurrentValue": "当前设置",
     "reasoningUnsupported": "当前模型不支持已保存的档位，请选择可用档位或恢复默认。",
     "pluginUpdate": {
@@ -1474,9 +1493,9 @@
       }
     },
     "deleteProviderTitle": "删除服务商？",
-    "deleteProviderConfirm": "同时删除此服务商的模型配置和已保存的 API 密钥，并取消这些模型的用途分配。",
+    "deleteProviderConfirm": "同时删除此服务商的模型配置和已保存的 API 密钥，并取消这些模型的AI 分工。",
     "deleteModelTitle": "删除模型配置？",
-    "deleteModelConfirm": "同时取消此模型配置的用途分配。服务商的 API 密钥会保留。",
+    "deleteModelConfirm": "同时取消此模型配置的AI 分工。服务商的 API 密钥会保留。",
     "deleteThemeTitle": "删除主题？",
     "deleteThemeConfirm": "此自定义主题将被删除。再次使用需要重新导入。",
     "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。",
@@ -1487,7 +1506,7 @@
     "description": "调整外观、模型、扩展包和本地数据。",
     "desktopRefreshFailed": "无法刷新桌面信息，请重试。",
     "providerImportSucceeded": "已导入服务商和模型。",
-    "providerRolesAssigned": "已分配模型用途：{{roles}}",
+    "providerRolesAssigned": "已分配AI 分工：{{roles}}",
     "numberExample": "例如 {{value}}",
     "pricePerImageValue": "{{price}}/张",
     "pricePerMillionValue": "{{price}}/百万 token",
@@ -1603,7 +1622,13 @@
       "text": "边写边显示",
       "units": "每句写完后",
       "committed": "回合保存后"
-    }
+    },
+    "groupAdvanced": "高级",
+    "preferencesNavLabel": "偏好",
+    "dataNavLabel": "导入、备份与重置",
+    "advancedNavLabel": "选项",
+    "readingHeading": "阅读",
+    "paneAdvancedDescription": "给作者和排错用的选项。大多数玩家不需要改这里。"
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1957,9 +1982,9 @@
   "plugin": {
     "toggleError": {
       "generic": "无法更改本局插件，请重试。",
-      "dimensionProviderConflict": "本局只能使用一个维度提供插件，请保留当前提供插件。",
-      "dimensionProviderRequired": "此插件保存着本局的维度数据，必须保持启用。",
-      "dimensionProviderRequiredNamed": "“{{plugin}}”保存着本局的维度数据，必须保持启用。",
+      "dimensionProviderConflict": "本局只能使用一个保存世界状态的插件，请保留当前的插件。",
+      "dimensionProviderRequired": "这个插件保存着本局的世界状态，必须保持启用。",
+      "dimensionProviderRequiredNamed": "“{{plugin}}”保存着本局的世界状态，必须保持启用。",
       "pluginNotFound": "此插件已不可用，请刷新插件列表。",
       "approvalQueueFull": "待审批请求过多，请先处理后再试。",
       "approvalScopeChanged": "插件的授权已改变，请刷新并重新审批。",
@@ -1979,7 +2004,7 @@
       "sessionOwnerRequired": "会话访问授权已失效，请使用访问令牌重新打开。",
       "desktopTokenInvalid": "桌面连接授权已失效，请重启应用。"
     },
-    "runtimes": "运行任务",
+    "runtimes": "步骤",
     "tools": "工具",
     "requires": "依赖",
     "triggerAlways": "每回合",
@@ -1994,7 +2019,7 @@
     "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……",
     "useDefault": "使用默认",
     "useDefaultWith": "使用默认（{{value}}）",
-    "modelBindingAria": "选择该插件任务使用的模型用途；通常保持默认即可。",
+    "modelBindingAria": "选择该插件任务使用的AI 分工；通常保持默认即可。",
     "modelBindingSource": "当前运行单元实际使用的模型绑定",
     "modelBindingFallback": "模型绑定：前往「会话准备」查看",
     "modelBinding": "模型",
@@ -2003,7 +2028,7 @@
     "defaultSlot": "默认",
     "autoSlot": "自动（系统默认）",
     "autoWithModel": "自动 · {{model}}",
-    "noSlots": "无可用模型用途",
+    "noSlots": "无可用AI 分工",
     "config": "配置",
     "loadError": "加载失败",
     "loadWarnings": {
@@ -2017,22 +2042,22 @@
     "setupRetry": "重试",
     "setupWaive": "跳过此步",
     "setupWaived": "降级运行",
-    "slotsMissing": "请先在 llm.toml 中配置模型用途",
-    "useRuntimeDefault": "插件默认用途：{{slot}}",
-    "useRuntimeDefaultWith": "插件默认用途：{{slot}}（{{value}}）",
-    "providerSlot": "服务商用途",
+    "slotsMissing": "请先在 llm.toml 中配置AI 分工",
+    "useRuntimeDefault": "插件默认分工：{{slot}}",
+    "useRuntimeDefaultWith": "插件默认分工：{{slot}}（{{value}}）",
+    "providerSlot": "服务商分工",
     "providerSlotOverridden": "已覆盖",
-    "providerSlotOverrideAria": "覆盖该插件服务商使用的模型用途；通常保持默认即可。",
+    "providerSlotOverrideAria": "覆盖该插件服务商使用的AI 分工；通常保持默认即可。",
     "providerSlotDefaultOption": "默认 · [covel.{{slot}}]",
     "providerSlotNoDefault": "默认",
     "providerSlotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]，或在 设置 > 插件 中修改 {{plugin}}.modelPresetId。",
     "providerSlotMissingDetail": "请在 llm.toml 配置 [covel.{{slot}}]，或在 设置 > 插件 > {{plugin}} 中修改 modelPresetId。",
     "providerSlotSettingDetail": "来自插件设置 modelPresetId；可在 设置 > 插件 > {{plugin}} 修改",
-    "slotMissingTitle": "在用途分配中配置 {{slot}}，或选择其他已配置的用途。",
-    "slotMissingShort": "用途未配置：{{slot}}",
-    "runtimeDefaultSummary": "插件默认用途 · {{slot}}",
-    "runtimeDefaultSummaryWithModel": "插件默认用途 · {{slot}} · {{model}}",
-    "runtimeDefaultMissing": "插件默认用途 · {{slot}}（缺少配置）",
+    "slotMissingTitle": "在AI 分工中配置 {{slot}}，或选择其他已配置的分工。",
+    "slotMissingShort": "分工未配置：{{slot}}",
+    "runtimeDefaultSummary": "插件默认分工 · {{slot}}",
+    "runtimeDefaultSummaryWithModel": "插件默认分工 · {{slot}} · {{model}}",
+    "runtimeDefaultMissing": "插件默认分工 · {{slot}}（缺少配置）",
     "invalidPanelSpec": "面板规范无效",
     "turnCompletionDetached": "不阻塞当前回合",
     "turnCompletionAwait": "等待完成后结束回合",
@@ -2085,11 +2110,13 @@
       "submitFailed": "审批提交失败：{{error}}",
       "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端",
       "required": "已选择的社区插件需要在本次服务启动后授权，批准前暂停运行。",
-      "review": "授权“{{plugin}}”",
       "batchTitle": "授权社区插件",
       "batchMessage": "以下社区插件已在本会话中选用，授权前保持暂停。它们的代码在 Covel 后端运行，没有进程沙箱。不想运行的请取消勾选。授权在本会话内有效，后端重启后需要重新授权。",
       "allowSelected": "授权所选",
-      "notNow": "暂不授权"
+      "notNow": "暂不授权",
+      "cardTitle_other": "有 {{count}} 个插件等你同意",
+      "reviewAction": "查看",
+      "cardTitle": "有 {{count}} 个插件等你同意"
     },
     "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
@@ -2111,7 +2138,7 @@
       "badView": "view 必须是对象",
       "conversionFailed": "无法渲染 view"
     },
-    "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
+    "runtimeModelMissing": "AI 分工 {{slot}} 不可用，请选择已配置的分工或前往AI 分工补齐。",
     "runtimeModelFallback": "未配置 {{slot}}，改用 {{model}}",
     "untranslated": "未翻译",
     "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。",
@@ -2152,7 +2179,8 @@
       "start": "从第 {{count}} 回合开始。",
       "cooldown": "两次计划运行至少间隔 {{count}} 回合。",
       "limit": "每局最多计划运行 {{count}} 次。"
-    }
+    },
+    "changeInSettings": "修改"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
@@ -2228,7 +2256,7 @@
     "modelsMissingHint": "可以先了解玩法、浏览世界。开始生成剧情前，请配置支持工具调用的文本模型。",
     "providerInstruction": "打开“{{providers}}”，选择已有服务商，或添加服务商和模型 ID。",
     "connectionInstruction": "在服务商详情中填写连接地址和 API Key（需要时），然后测试所选模型。",
-    "bindingInstruction": "在“{{roles}}”中检查叙事、插件等用途的模型分配；世界准备页会检查当前玩法所需的绑定。",
+    "bindingInstruction": "在“{{roles}}”中检查叙事、插件等 AI 分工的模型分配；世界准备页会检查当前玩法所需的绑定。",
     "checkBindings": "检查{{roles}}",
     "returnFromSettings": "关闭设置后会回到这里，并显示最新绑定。连接测试只会在你点击时运行。",
     "learnToPlay": "了解如何游玩",
@@ -2240,12 +2268,12 @@
     "prepareTitle": "确认玩法，再开始游戏",
     "prepareDesc": "优先沿用世界推荐的玩法包。插件和模型细节在“{{advanced}}”中，按页面提示补齐缺失配置后开始。",
     "interactTitle": "完成开场交互，写下你的行动",
-    "interactDesc": "如有角色创建或选择表单，先完成它们。之后输入行动或选择建议推进剧情；可在解析视图和舞台视图间切换。",
+    "interactDesc": "如有角色创建或选择表单，先完成它们。之后输入行动或选择建议推进剧情；可在阅读和舞台之间切换。",
     "duringTurnTitle": "回合生成、停止与错误恢复",
     "duringTurnDesc": "故事正文出现后，插件可能仍在更新游戏状态。请等“本轮已完成”出现后再确认结果；若中途停止并显示“已停止，本轮未提交”，可以用原输入重试。部分更新失败时，只重试失败的任务即可。历史交互、建议和执行细节都可以展开查看。",
     "reopenHint": "以后可在世界选择页点击“新手引导”重看；模型和外观随时可在设置中调整。",
     "chooseWorld": "去选择世界",
-    "testBindings": "查看并测试已有模型（{{count}} 个用途）",
+    "testBindings": "查看并测试已有模型（{{count}} 个分工）",
     "languageExperimental": "实验性",
     "languageTitle": "选择语言",
     "languageDesc": "选中后界面立刻切换，以后也可以在设置里更改。故事使用世界自带的语言版本，可能和界面语言不同。",
@@ -2431,7 +2459,6 @@
     "create": "创建",
     "search": "搜索",
     "execute": "执行",
-    "newSession": "新建会话",
     "refresh": "刷新",
     "expand": "展开",
     "collapse": "收起",
@@ -2609,7 +2636,7 @@
       "manifest": "manifest",
       "triggers": "{{count}} 个触发器",
       "outputs": "{{count}} 个输出",
-      "noSlots": "无模型用途",
+      "noSlots": "无AI 分工",
       "writes": "{{count}} 个写入",
       "reads": "{{count}} 个读取",
       "sources": "{{count}} 个来源",
@@ -2743,7 +2770,6 @@
     "learnMore": "数据和密钥怎样处理",
     "source": "源代码（开源，自动部署）",
     "sourceAt": "源代码：当前版本 {{commit}}（开源，自动部署）",
-    "dismiss": "关闭提示",
     "localEndpoint": "这台公开服务器只访问公网上的 HTTPS 地址，请改用 https:// 开头的地址。你电脑或局域网上的模型可以用 127.0.0.1、localhost 或局域网地址，由你的浏览器转发。",
     "localRelay": "这个地址在你的电脑或局域网上，模型请求会由你的浏览器转发：游玩时请保持页面打开，并让模型服务允许 {{origin}} 跨域访问（例如 Ollama 设置 OLLAMA_ORIGINS={{origin}}）。浏览器可能会询问是否允许这个网站访问本机或局域网。",
     "localHttp": "浏览器不允许这个 HTTPS 页面访问局域网里的普通 http 地址。请给局域网里的模型服务配上 HTTPS，或者在这台电脑上用 127.0.0.1 / localhost 转发它。",
@@ -2751,10 +2777,10 @@
   },
   "orchestration": {
     "clearPolicy": "清除选择",
-    "title": "编排",
-    "policy": "回合策略",
+    "title": "发言与推进",
+    "policy": "发言规则",
     "automatic": "自动选择",
-    "maxActors": "不同角色数（0–16）",
+    "maxActors": "同时发言人数（0–16）",
     "maxSubagentCalls": "子调用数（0–64）",
     "selected": "已选择策略",
     "unique": "只有一个可用策略",
@@ -2768,6 +2794,52 @@
     "saveField": "保存{{field}}",
     "fieldError": "此项未能保存，请检查数值后重试。",
     "providerSettings": "{{provider}}的设置",
-    "capScope": "角色和子调用名额按单次执行计算，每个额外节拍重新获得名额；零关闭相应能力。"
+    "capScope": "发言人数和子调用数按单次执行计算，每个额外回合重新计数；0 表示关闭。",
+    "maxSubagentCallsHint": "一次执行里，插件最多可以额外调用多少次 AI 助手；0 表示不用。"
+  },
+  "notice": {
+    "collapse": "先收起",
+    "bell": {
+      "title": "通知",
+      "openCount_other": "通知，{{count}} 条等你处理",
+      "open": "等你处理",
+      "history": "之前的",
+      "hidden": "已收起，点击重新显示",
+      "updated": "已收起，但内容有变化，点击重新显示",
+      "thisGame": "本局",
+      "all": "全部",
+      "empty": "还没有通知",
+      "resolved": "已解决",
+      "openCount": "通知，{{count}} 条等你处理"
+    },
+    "quiet": {
+      "hook": {
+        "aborted": "有一个步骤被中途拦下"
+      },
+      "subagent": {
+        "writes-dropped": "有辅助步骤的改动没有保存"
+      },
+      "gateway": {
+        "failed": "后台向 AI 发出的请求失败了"
+      },
+      "utils": {
+        "fetch": {
+          "failed": "有插件发出的网络请求失败了"
+        }
+      },
+      "context": {
+        "compaction": {
+          "failed": "整理前情摘要失败了"
+        }
+      },
+      "commit": {
+        "fanout": {
+          "failed": "保存本回合后的后续处理失败了"
+        }
+      },
+      "command": {
+        "failed": "有命令执行失败"
+      }
+    }
   }
 }

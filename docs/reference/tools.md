@@ -1749,7 +1749,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 | **import** | 批准后，`activatePluginServerCode` 按需加载该插件的服务端代码，执行 `entry` 工厂（`ensurePluginEntry`；批准时和 RPC 派发时各触发一次）。 |
 | **active** | 运行期的工具调用按上表的审批规则放行或拒绝。 |
 | **revoked** | `DELETE /api/sessions/:id/approvals[?pluginId=]` 或禁用插件。两者都在会话锁内更换持久化的授权代次，并清除本进程里的会话授权、一次性授权和等待中的审批。其他进程里的旧授权因为代次对不上而一起失效。社区插件的显式授权不会随新建会话、分支或进程重启而恢复；实例来源策略按当前条件重新判断，不受会话撤销影响。 |
-| **uninstalled** | `DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录。它拒绝内置 ID，返回 `restartRequired:true`。界面上在「设置 → 安装与管理」里列出已安装的第三方插件，并提供卸载按钮。 |
+| **uninstalled** | `DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录。它拒绝内置 ID，返回 `restartRequired:true`。界面上在「设置 → 插件 → 安装与管理」里列出已安装的第三方插件，并提供卸载按钮。 |
 
 实际效果：
 

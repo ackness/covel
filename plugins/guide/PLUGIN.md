@@ -1,9 +1,9 @@
 ---
-version: 0.0.42
+version: 0.0.43
 displayName: Action Suggestions
 description: >-
-  After each story beat, recaps the relevant context, states the current
-  decision, and suggests actions you can use right away.
+  After each story reply, reminds you what just happened, what you need to
+  decide, and suggests a few actions you can pick with one click.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel

@@ -1,9 +1,9 @@
 ---
-version: 0.0.41
-displayName: Relationship Graph
+version: 0.0.42
+displayName: Relationships
 description: >-
-  Tracks relationships between characters so the story stays consistent when
-  people are mentioned again.
+  Keeps track of who is connected to whom, so the story remembers the people
+  you have met and how they relate.
 tags:
   - "data:relationship-graph"
 author:
@@ -17,8 +17,6 @@ contracts:
     schema: ./schemas/graph-rag.schema.json
 contributes:
   ui:
-    view:
-      - ./ui/relationships-view.json
     right:
       - ./runtimes/extractor/ui/npc-graph-panel.json
   tools:

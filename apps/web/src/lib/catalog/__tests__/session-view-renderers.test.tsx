@@ -28,10 +28,11 @@ import {
   applyChanges,
 } from "@/stores/plugin-data-store.js";
 import i18n from "@/i18n/index.js";
-import graphView from "../../../../../../plugins/npc-graph/ui/relationships-view.json";
 import graphPanel from "../../../../../../plugins/npc-graph/runtimes/extractor/ui/npc-graph-panel.json";
-import libraryView from "../../../../../../plugins/codex/ui/library-view.json";
 import libraryPanel from "../../../../../../plugins/codex/ui/codex-panel.json";
+// A package page would reuse a panel's spec; mount it twice to prove both read one store.
+const graphView = { ...graphPanel, alwaysRender: true };
+const libraryView = { ...libraryPanel, alwaysRender: true };
 
 vi.mock("@/settings/use-settings.js", () => ({ useSetting: () => [false] }));
 vi.mock("@/components/session/use-session-bridge.js", () => ({
@@ -179,7 +180,7 @@ it("hydrates graph and library pages and original panels from the same committed
   );
   expect(
     await within(screen.getByTestId("graph-page")).findByText(
-      graphView.emptyState.message,
+      "No graph data yet.",
     ),
   ).toBeTruthy();
   expect(
@@ -256,7 +257,7 @@ it("hydrates graph and library pages and original panels from the same committed
   expect(
     library.getByText("The complete chart of the northern islands."),
   ).toBeTruthy();
-  expect(library.getByText("1 entries collected")).toBeTruthy();
+  expect(library.getByText("1 entries")).toBeTruthy();
   fireEvent.change(library.getByPlaceholderText("Search entries…"), {
     target: { value: "no-such-tag" },
   });
@@ -290,9 +291,7 @@ it("hydrates graph and library pages and original panels from the same committed
   });
   expect(library.getByText("No matching entries")).toBeTruthy();
   expect(
-    within(screen.getByTestId("graph-page")).getByText(
-      graphView.emptyState.message,
-    ),
+    within(screen.getByTestId("graph-page")).getByText("No graph data yet."),
   ).toBeTruthy();
   act(() => setActiveSession("other"));
   view.rerender(
@@ -366,9 +365,6 @@ it("rejects multiplied live widgets again at the host render boundary", async ()
     ),
   );
   expect(fallback).toHaveBeenCalledWith("render-error");
-  expect(
-    screen.getByRole("button", { name: "Back to default view" }),
-  ).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Host input" })).toBeNull();
   error.mockRestore();
 });

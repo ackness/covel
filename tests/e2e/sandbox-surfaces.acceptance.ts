@@ -108,9 +108,7 @@ for (const delivery of ["url", "inline"] as const) {
         await page.goto(`/session?sid=${sessionId}`);
         await expectHostPolicy(page);
         await expect(page.getByTestId("session-header")).toBeVisible();
-        await page
-          .getByRole("combobox", { name: "Composer", exact: true })
-          .selectOption(`plugin:${pluginId}:input`);
+        await selectPage(page, "Bridge input");
         await page
           .getByRole("button", {
             name: "Allow requested capabilities",
@@ -118,7 +116,7 @@ for (const delivery of ["url", "inline"] as const) {
           })
           .click();
         const outer = page
-          .getByTestId("sandbox-composer")
+          .getByTestId("plugin-view-container")
           .frameLocator("iframe");
         const inner =
           delivery === "inline" ? outer.frameLocator("iframe") : outer;
@@ -145,9 +143,7 @@ for (const delivery of ["url", "inline"] as const) {
             .get(page)
             ?.filter((entry) => entry.includes(`"document":"${hostUrl}"`)),
         ).toEqual([]);
-        await expect(
-          page.getByTestId("sandbox-surface-controls"),
-        ).toBeVisible();
+        await expect(page.getByTestId("plugin-view-bar")).toBeVisible();
       } finally {
         if (!page.isClosed()) await page.goto("about:blank");
         if (delivery === "inline") {
@@ -299,9 +295,11 @@ async function approved(
   throw new Error("Approval did not settle");
 }
 
-async function selectMainView(page: Page) {
-  await page.getByRole("button", { name: "Plugin views", exact: true }).click();
-  const option = page.getByRole("button", { name: /^Bridge reader\b/ });
+async function selectPage(page: Page, label: string) {
+  await page.getByRole("button", { name: "Plugin pages", exact: true }).click();
+  const option = page.getByRole("button", {
+    name: new RegExp(`^${label}\\b`),
+  });
   await expect(option).toBeVisible();
   await expect
     .poll(
@@ -315,14 +313,12 @@ async function selectMainView(page: Page) {
             ),
           );
         }),
-      {
-        message:
-          "The host view menu must remain clickable above surface controls",
-      },
+      { message: "The host page menu must remain clickable" },
     )
     .toBe(true);
   await option.click();
 }
+const selectMainView = (page: Page) => selectPage(page, "Bridge reader");
 
 async function probeContent(request: APIRequestContext, sessionId: string) {
   const response = await request.get(
@@ -479,7 +475,7 @@ test("session pages commit actions, interactions and own runtime writes with con
       page.getByTestId("plugin-view-container").locator("iframe"),
     ).toHaveCount(0);
     await dialog
-      .getByRole("button", { name: "Use default view", exact: true })
+      .getByRole("button", { name: "No thanks", exact: true })
       .click();
     await choose();
     await page
@@ -803,9 +799,11 @@ for (const retire of [true, false]) {
       await ready;
       if (retire) {
         await openStudioConfiguration(page);
-        await page.getByTitle("Switch session", { exact: true }).click();
+        // The drawer lists every other save of this world; only the
+        // destination exists, so it is the one switch button.
         await page
-          .getByRole("button", { name: new RegExp(`^${destination}\\b`) })
+          .getByRole("dialog", { name: "This game's settings" })
+          .getByRole("button", { name: /^Switch save:/ })
           .click();
         await expect(page).toHaveURL(new RegExp(`sid=${destination}`));
         expect(
@@ -868,7 +866,7 @@ for (const retire of [true, false]) {
 }
 
 for (const width of [1280, 360]) {
-  test(`independent sandbox regions preserve host hit targets and recover at ${width}px`, async ({
+  test(`plugin pages keep the host input unless composer is false, and recover from failures at ${width}px`, async ({
     page,
     request,
   }) => {
@@ -914,7 +912,7 @@ for (const width of [1280, 360]) {
       });
       expect(await opened.text()).toContain('"committed":true');
       await page.goto(`/session?sid=${sessionId}`);
-      const main = page.getByRole("region", {
+      const reader = page.getByRole("region", {
         name: "Bridge reader",
         exact: true,
       });
@@ -922,12 +920,13 @@ for (const width of [1280, 360]) {
         name: "Bridge input",
         exact: true,
       });
-      const controls = page.getByTestId("sandbox-surface-controls");
-      const selectMain = () => selectMainView(page);
-      const selectInput = () =>
-        controls
-          .getByRole("combobox", { name: "Composer", exact: true })
-          .selectOption(`plugin:${pluginId}:input`);
+      const header = page.getByTestId("session-header");
+      const hostInput = page.getByRole("combobox", {
+        name: "Story input — press Enter to send",
+        exact: true,
+      });
+      const selectReader = () => selectPage(page, "Bridge reader");
+      const selectInput = () => selectPage(page, "Bridge input");
       const allow = async () => {
         await page
           .getByRole("dialog")
@@ -937,55 +936,12 @@ for (const width of [1280, 360]) {
           })
           .click();
       };
-      const mainPage = main.frameLocator("iframe");
+      const readerPage = reader.frameLocator("iframe");
       const inputPage = input.frameLocator("iframe");
-      await selectMain();
-      await allow();
-      await expect(main.locator("[data-page-status]")).toHaveAttribute(
-        "data-page-status",
-        "ready",
-      );
-      await expect(mainPage.locator("#draft")).toBeVisible();
-      await expect(
-        page.getByRole("combobox", {
-          name: "Story input — press Enter to send",
-          exact: true,
-        }),
-      ).toBeVisible();
-      await selectInput();
-      await allow();
-      await expect(input.locator("[data-page-status]")).toHaveAttribute(
-        "data-page-status",
-        "ready",
-      );
-      await expect(inputPage.locator("#draft")).toBeVisible();
-      await expect(
-        page.getByRole("combobox", {
-          name: "Story input — press Enter to send",
-          exact: true,
-        }),
-      ).toHaveCount(0);
-      await mainPage
-        .getByRole("button", { name: "Fill viewport", exact: true })
-        .click();
-      await inputPage
-        .getByRole("button", { name: "Fill viewport", exact: true })
-        .click();
-      const scrollsInsideFrame = await inputPage
-        .locator("body")
-        .evaluate((body) => {
-          const before = body.scrollTop;
-          body.scrollTop = before + 1;
-          const moved = body.scrollTop > before;
-          body.scrollTop = before;
-          return moved;
-        });
-      expect(
-        scrollsInsideFrame,
-        "The fixed probe body must scroll so its action controls remain reachable",
-      ).toBe(true);
-      const back = controls.getByRole("button", {
-        name: "Back to default interface",
+      // No control strip exists; the header's text toggle leaves any page.
+      await expect(page.getByTestId("sandbox-surface-controls")).toHaveCount(0);
+      const back = header.getByRole("button", {
+        name: "Read",
         exact: true,
       });
       const assertHitTarget = async (target: typeof back) => {
@@ -1005,12 +961,50 @@ for (const width of [1280, 360]) {
         ).toBe(true);
         return point;
       };
-      const mainBox = await main.locator("iframe").boundingBox();
+      // An ordinary page keeps the host input box beneath it.
+      await selectReader();
+      await allow();
+      await expect(reader.locator("[data-page-status]")).toHaveAttribute(
+        "data-page-status",
+        "ready",
+      );
+      await expect(readerPage.locator("#draft")).toBeVisible();
+      await expect(hostInput).toBeVisible();
+      await readerPage
+        .getByRole("button", { name: "Fill viewport", exact: true })
+        .click();
+      await assertHitTarget(back);
+      // composer: false hides the host input box.
+      await selectInput();
+      await allow();
+      await expect(input.locator("[data-page-status]")).toHaveAttribute(
+        "data-page-status",
+        "ready",
+      );
+      await expect(inputPage.locator("#draft")).toBeVisible();
+      await expect(hostInput).toHaveCount(0);
+      await inputPage
+        .getByRole("button", { name: "Fill viewport", exact: true })
+        .click();
+      // A tall probe body must scroll inside its own frame so controls stay reachable.
+      const reachable = await inputPage.locator("body").evaluate((body) => {
+        if (body.scrollHeight <= body.clientHeight) return true;
+        const before = body.scrollTop;
+        body.scrollTop = before + 1;
+        const moved = body.scrollTop > before;
+        body.scrollTop = before;
+        return moved;
+      });
+      expect(
+        reachable,
+        "An overflowing probe body must scroll so its action controls remain reachable",
+      ).toBe(true);
+      const headerBox = await header.boundingBox();
       const inputBox = await input.locator("iframe").boundingBox();
-      const stripBox = await controls.boundingBox();
-      expect(mainBox && inputBox && stripBox).toBeTruthy();
-      expect(mainBox!.y).toBeGreaterThanOrEqual(stripBox!.y + stripBox!.height);
-      expect(inputBox!.y).toBeGreaterThanOrEqual(mainBox!.y + mainBox!.height);
+      expect(headerBox && inputBox).toBeTruthy();
+      expect(inputBox!.y).toBeGreaterThanOrEqual(
+        headerBox!.y + headerBox!.height,
+      );
       await assertHitTarget(back);
       await expect(input.locator("iframe")).toHaveAttribute(
         "sandbox",
@@ -1023,7 +1017,7 @@ for (const width of [1280, 360]) {
           .evaluate((element: HTMLImageElement) => element.naturalWidth),
       ).toBeGreaterThan(0);
 
-      // Gate a normal player request so host Stop/return are exercised during execution.
+      // Gate a normal player request so the header Stop is exercised during execution.
       const actionGate = new Promise<void>((resolve) => {
         releaseAction = resolve;
       });
@@ -1036,7 +1030,7 @@ for (const width of [1280, 360]) {
       await inputPage
         .getByRole("button", { name: "Submit action", exact: true })
         .click();
-      const stop = controls.getByRole("button", { name: "Stop", exact: true });
+      const stop = header.getByRole("button", { name: "Stop", exact: true });
       await expect(stop).toBeVisible();
       const stopPoint = await assertHitTarget(stop);
       const aborted = page.waitForResponse(
@@ -1050,65 +1044,50 @@ for (const width of [1280, 360]) {
       releaseAction();
       await page.unroute("**/api/actions");
       await expect(stop).toHaveCount(0);
-      await controls
-        .getByRole("combobox", { name: "Composer", exact: true })
-        .focus();
-      await page.keyboard.press("Tab");
-      await expect(back).toBeFocused();
+      await back.focus();
       await page.keyboard.press("Enter");
-      await expect(main).toHaveCount(0);
+      await expect(reader).toHaveCount(0);
       await expect(input).toHaveCount(0);
+      await expect(hostInput).toBeVisible();
 
-      await selectMain();
-      await expect(
-        page.getByRole("dialog", { name: /Allow.*Bridge reader/ }),
-      ).toHaveCount(0);
-      await selectInput();
-      await expect(input.locator("[data-page-status]")).toHaveAttribute(
-        "data-page-status",
-        "ready",
-      );
-      await expect(inputPage.locator("#draft")).toBeVisible();
+      // A failed page returns to the read view with a plain notice; choosing it again retries.
+      const expectFellBack = async () => {
+        await expect(input).toHaveCount(0);
+        await expect(
+          page.getByText(/“Bridge input” could not be rendered/).last(),
+        ).toBeVisible();
+        await expect(hostInput).toBeVisible();
+      };
+      const reopenInput = async () => {
+        await selectInput();
+        await expect(
+          page.getByRole("dialog", { name: /Allow.*Bridge input/ }),
+        ).toHaveCount(0);
+        await expect(input.locator("[data-page-status]")).toHaveAttribute(
+          "data-page-status",
+          "ready",
+        );
+        await expect(inputPage.locator("#draft")).toBeVisible();
+      };
+      await reopenInput();
       await inputPage
         .getByRole("button", { name: "Page error", exact: true })
         .click();
-      await expect(input).toHaveCount(0);
-      await expect(mainPage.locator("#draft")).toBeVisible();
-      expect(
-        (await main.locator("iframe").boundingBox())!.height,
-      ).toBeGreaterThan(160);
-      await expect(controls.getByRole("status")).toContainText("Bridge input");
-      await controls
-        .getByRole("button", { name: "Retry", exact: true })
-        .click();
-      await expect(input.locator("[data-page-status]")).toHaveAttribute(
-        "data-page-status",
-        "ready",
-      );
-      await expect(inputPage.locator("#draft")).toBeVisible();
+      await expectFellBack();
+      await reopenInput();
       await inputPage
         .getByRole("button", { name: "Ignore heartbeat", exact: true })
         .click();
       // Keep the running clock that owns the ready page's heartbeat timer.
       await expect(input).toHaveCount(0, { timeout: 25_000 });
-      await expect(controls.getByRole("status")).toContainText("Bridge input");
-      await expect(mainPage.locator("#draft")).toBeVisible();
-      await controls
-        .getByRole("button", { name: "Retry", exact: true })
-        .click();
-      await expect(input.locator("[data-page-status]")).toHaveAttribute(
-        "data-page-status",
-        "ready",
-      );
-      await expect(inputPage.locator("#draft")).toBeVisible();
+      await expectFellBack();
+      await reopenInput();
       await inputPage
         .getByRole("button", { name: "Navigate", exact: true })
         .click();
-      await expect(input).toHaveCount(0);
-      await expect(mainPage.locator("#draft")).toBeVisible();
+      await expectFellBack();
 
       // HTML and the injected bridge load, but the required application script fails.
-      await mainPage.locator("#draft").fill("Keep the healthy main draft");
       const failedScript = "**/plugin-assets/**/app.js";
       await page.route(failedScript, (route) =>
         route.fulfill({
@@ -1131,9 +1110,7 @@ for (const width of [1280, 360]) {
             response.url().includes("/plugin-assets/") &&
             response.url().endsWith("/app.js"),
         );
-        await controls
-          .getByRole("button", { name: "Retry", exact: true })
-          .click();
+        await selectInput();
         const [htmlResponse, bridgeResponse, appResponse] = await Promise.all([
           html,
           bridge,
@@ -1144,17 +1121,7 @@ for (const width of [1280, 360]) {
         expect(bridgeResponse.status()).toBe(200);
         expect(await bridgeResponse.text()).toContain("window.covel");
         expect(appResponse.status()).toBe(404);
-        await expect(input).toHaveCount(0);
-        await expect(controls.getByRole("status")).toContainText(
-          "Bridge input",
-        );
-        await expect(main.locator("[data-page-status]")).toHaveAttribute(
-          "data-page-status",
-          "ready",
-        );
-        await expect(mainPage.locator("#draft")).toHaveValue(
-          "Keep the healthy main draft",
-        );
+        await expectFellBack();
       } finally {
         await page.unroute(failedScript);
       }
@@ -1168,43 +1135,24 @@ for (const width of [1280, 360]) {
         await route.abort().catch(() => {});
       });
       try {
-        await controls
-          .getByRole("button", { name: "Retry", exact: true })
-          .click();
+        await selectInput();
         await expect(input).toBeVisible();
         await expect(input.locator("[data-page-status]")).toHaveAttribute(
           "data-page-status",
           "loading",
         );
         await expect(input).toHaveCount(0, { timeout: 12_000 });
-        await expect(controls.getByRole("status")).toContainText(
-          "Bridge input",
-        );
-        await expect(mainPage.locator("#draft")).toBeVisible();
+        await expectFellBack();
       } finally {
         releasePage();
         await page.unroute("**/plugin-assets/**/index.html");
       }
-      await back.click();
-      await page
-        .getByRole("button", { name: "Stage view", exact: true })
-        .click();
-      await selectInput();
-      await expect(input.locator("[data-page-status]")).toHaveAttribute(
-        "data-page-status",
-        "ready",
-      );
-      await expect(inputPage.locator("#draft")).toBeVisible();
-      await expect(page.getByTestId("stage-decision-input")).toHaveCount(0);
-      // The stage's immersion toggle leaves the protected global strip visible.
-      await page.getByTestId("stage-immersive-toggle").click();
-      await expect(page.getByTestId("stage-immersive-toggle")).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-      const point = await assertHitTarget(back);
-      await page.mouse.click(point.x, point.y);
+
+      // Choosing Stage leaves a plugin page; the page never takes over the stage input.
+      await reopenInput();
+      await page.getByRole("button", { name: "Stage", exact: true }).click();
       await expect(input).toHaveCount(0);
+      await expect(page.getByTestId("stage-decision-input")).toBeVisible();
     } finally {
       releaseAction();
       if (!page.isClosed()) {
@@ -1216,7 +1164,7 @@ for (const width of [1280, 360]) {
 }
 
 for (const delivery of ["url", "inline"] as const) {
-  test(`${delivery} composer uses the same ready, error and opaque-origin recovery contract`, async ({
+  test(`${delivery} page uses the same ready, error and opaque-origin recovery contract`, async ({
     page,
     request,
   }, info) => {
@@ -1294,10 +1242,14 @@ for (const delivery of ["url", "inline"] as const) {
         await gate;
         await route.abort().catch(() => {});
       });
-      const controls = page.getByTestId("sandbox-surface-controls");
-      await controls
-        .getByRole("combobox", { name: "Composer", exact: true })
-        .selectOption(`plugin:${pluginId}:input`);
+      const container = page.getByTestId("plugin-view-container");
+      const fellBack = async () => {
+        await expect(container).toHaveCount(0);
+        await expect(
+          page.getByText(/“Bridge input” could not be rendered/).last(),
+        ).toBeVisible();
+      };
+      await selectPage(page, "Bridge input");
       await page
         .getByRole("dialog")
         .getByRole("button", {
@@ -1305,26 +1257,25 @@ for (const delivery of ["url", "inline"] as const) {
           exact: true,
         })
         .click();
-      await expect(controls.getByRole("status")).toContainText("Bridge input", {
-        timeout: 12_000,
-      });
-      await expect(page.getByTestId("sandbox-composer")).toHaveCount(0);
+      await expect(
+        page.getByText(/“Bridge input” could not be rendered/).last(),
+      ).toBeVisible({ timeout: 12_000 });
+      await fellBack();
       releasePage();
       await page.unroute(pageRoute);
-      await controls
-        .getByRole("button", { name: "Retry", exact: true })
-        .click();
-      const outer = page.getByTestId("sandbox-composer").locator("iframe");
-      const frame = page.getByTestId("sandbox-composer").frameLocator("iframe");
+      await selectPage(page, "Bridge input");
+      const outer = container.locator("iframe");
+      const frame = container.frameLocator("iframe");
       const inner =
         delivery === "inline" ? frame.frameLocator("iframe") : frame;
       const expectReady = async () => {
         // Only URL pages have a status wrapper; session input proves either
         // delivery connected and received its projection after each remount.
         if (delivery === "url")
-          await expect(
-            page.getByTestId("sandbox-composer").locator("[data-page-status]"),
-          ).toHaveAttribute("data-page-status", "ready");
+          await expect(container.locator("[data-page-status]")).toHaveAttribute(
+            "data-page-status",
+            "ready",
+          );
         await expect(inner.locator("#draft")).toBeVisible();
         await expect(inner.locator("#input")).toContainText('"seats"');
       };
@@ -1339,20 +1290,16 @@ for (const delivery of ["url", "inline"] as const) {
       ]) {
         // Real clicks execute callbacks from the authored script.
         await inner.getByRole("button", { name, exact: true }).click();
-        await expect(page.getByTestId("sandbox-composer")).toHaveCount(0);
-        await expect(controls.getByRole("status")).toContainText(
-          "Bridge input",
-        );
-        // Recovery exercises the host and the new frame after each rejection.
-        await controls
-          .getByRole("button", { name: "Retry", exact: true })
-          .click();
+        await fellBack();
+        // Choosing the page again exercises the host and a new frame.
+        await selectPage(page, "Bridge input");
         await expectReady();
       }
-      await controls
-        .getByRole("button", { name: "Back to default interface", exact: true })
+      await page
+        .getByTestId("session-header")
+        .getByRole("button", { name: "Read", exact: true })
         .click();
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(container).toHaveCount(0);
     } finally {
       releasePage();
       if (!page.isClosed()) {

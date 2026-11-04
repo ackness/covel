@@ -1,9 +1,9 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Character Profiles
 description: >-
-  Saves the world's preset character profiles along with their portraits,
-  sprites, and voices.
+  Keeps the world's character profiles, with each character's portrait and
+  voice.
 tags:
   - "data:world-data"
   - "data:characters"
@@ -29,7 +29,7 @@ contributes:
       accepts:
         - character.blueprints@1
       authoring:
-        title: Roleplay notes
+        title: Character profiles
         hint: >-
           Write the notes in the record of the character they are for, under
           `blueprint`. The record already gives the character's name,
@@ -51,7 +51,7 @@ contributes:
       accepts:
         - character.portraits@1
       authoring:
-        title: Character portrait mapping
+        title: Character portraits list
         hint: >-
           Do not write this file by hand. It maps characters to portrait files
           by content hash. Generate the portraits first, then generate this
@@ -65,7 +65,7 @@ contributes:
       accepts:
         - character.portrait-assets@1
       authoring:
-        title: Character portrait images
+        title: Portrait images
         hint: >-
           A directory of portrait image files. The world supplies only the
           files; the index records are produced at import.

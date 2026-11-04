@@ -16,7 +16,6 @@ import { pluginPanelViewToSpec } from "@/lib/plugin-panel-spec.js";
 import { ChatMessageRenderer } from "../chat-messages/chat-message-renderer.js";
 import { StageDialog } from "../stage/StageDialog.js";
 import { StageView, type StageViewProps } from "../stage/StageView.js";
-import { SessionRecoveryControls } from "../session-recovery-controls.js";
 import {
   themeStore,
   openTheme,
@@ -207,7 +206,6 @@ it("keeps stage narration and its sibling advance control separate and retains h
         autoPlay={false}
         reducedMotion
       />
-      <SessionRecoveryControls theme={theme} />
     </>,
   );
   const prose = screen.getByText(/First paragraph/);
@@ -226,9 +224,7 @@ it("keeps stage narration and its sibling advance control separate and retains h
       .closest("[data-covel-theme-part]")
       ?.getAttribute("data-covel-theme-part"),
   ).toBe("dialogue");
-  const reset = screen.getByRole("button", { name: "使用默认外观" });
-  expect(reset.closest("[data-covel-theme-part]")).toBeNull();
-  await act(async () => fireEvent.click(reset));
+  await act(async () => theme.select(null));
   expect(document.querySelector("[data-covel-theme-part]")).toBeNull();
 });
 it.each([false, true])(
@@ -295,7 +291,6 @@ it.each([false, true])(
     const stage = (immersive: boolean) => (
       <>
         <StageView {...stageProps} immersive={immersive} />
-        <SessionRecoveryControls theme={theme} />
       </>
     );
     const view = render(stage(false));
@@ -331,9 +326,7 @@ it.each([false, true])(
     const advance = screen.getByTestId("stage-decision-input");
     expect(advance.closest("[data-covel-theme-part]")).toBeNull();
     if (selected) {
-      const reset = screen.getByRole("button", { name: "使用默认外观" });
-      expect(reset.closest("[data-covel-theme-part]")).toBeNull();
-      await act(async () => fireEvent.click(reset));
+      await act(async () => theme.select(null));
       expectHostNotice();
       expect(document.querySelector("[data-covel-theme-part]")).toBeNull();
       expect(

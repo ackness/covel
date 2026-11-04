@@ -3,31 +3,31 @@
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 任务日志
-  description: 自动从叙事中登记和推进任务，随时回看目标、进度和报酬。
+  description: 记录你的任务。故事里出现的新任务和进展会自动记下，目标和报酬随时可查。
   contributes:
     data:
       quests:
         authoring:
           title: 初始任务
 runtimes/log/RUNTIME.md:
-  description: 每回合从共享的事实抽取中登记、推进或完结任务。
+  description: 每回合根据故事内容记录新任务、任务进展和任务结果。
 runtimes/vocabulary/RUNTIME.md:
-  description: 在事实抽取前公布进行中的任务与未完成目标，便于沿用同一名称。
+  description: 记录进行中的任务和未完成的目标，让后续记录沿用同一个叫法。
 messages:
-  Quest log: 任务日志
-  No quest changes this turn.: 本回合没有任务变更。
+  Quest changes: 任务变化
+  No quest changes this turn.: 这一回合任务没有变化。
   Quest Log: 任务日志
   Quests: 任务
-  No quests yet. They will appear when the narrative introduces explicit commissions or goals…: 暂无任务。当叙事中出现明确的委托或目标时会自动登记……
+  No quests yet. They will appear when the story gives you a task or goal.: 还没有任务。故事里出现任务或目标时，会自动记在这里。
   Search quests…: 搜索任务…
   All: 全部
   Active: 进行中
   label|Completed: 已完成
   label|Failed: 已失败
-  "{{count}} quests tracked": 共 {{count}} 个任务
+  "{{count}} quests": 共 {{count}} 个任务
   No matching quests: 没有匹配的任务
   New: 新任务
-  Progress: 推进
-  Completed: 完成
-  Failed: 失败
+  Updated: 有进展
+  Completed: 已完成
+  Failed: 已失败
   Objective: 当前目标

@@ -79,7 +79,7 @@ it("names the plugin that holds the session's dimensions", async () => {
       enableSessionPlugin("session", "qa-dims"),
     ).rejects.toBeInstanceOf(ApiError);
     expect(toasts[0]?.message).toBe(
-      '"Rival Dimensions" holds this session\'s dimensions and must stay enabled.',
+      '"Rival Dimensions" keeps this game\'s world state and must stay enabled.',
     );
   } finally {
     unsubscribe();

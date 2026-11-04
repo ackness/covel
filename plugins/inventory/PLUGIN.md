@@ -1,9 +1,9 @@
 ---
-version: 0.0.43
-displayName: Inventory
+version: 0.0.44
+displayName: Bag
 description: >-
-  Records explicit item gains, losses, and equipment changes from each turn's
-  narrative, with an always-available bag panel.
+  Keeps track of what you carry. Items you gain, lose or equip in the story are
+  added to your bag automatically.
 tags:
   - "data:world-data"
 author:
@@ -23,7 +23,7 @@ contributes:
     - name: bag
       aliases:
         - inventory
-      description: View the current bag and open the inventory panel.
+      description: Show what you are carrying and open the Bag tab.
       action: open-bag
   datasets:
     items:
@@ -34,12 +34,11 @@ contributes:
     items:
       schema: ./schemas/items.schema.json
       description: >-
-        Importable inventory items — world packages can seed the player's
-        opening gear.
+        Items the player carries when the story begins.
       accepts:
         - inventory.items@1
       authoring:
-        title: Opening inventory
+        title: Starting items
         hint: >-
           List what the player carries when the story opens. `quantity` is a
           number. Players see the tags, so write them in the world's language

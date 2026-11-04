@@ -1,12 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
+import {
+  seedBrowserSettings,
+  ONBOARDING_VERSION,
+  openAppSettings,
+} from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
 async function openSettings(page: Page) {
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
+  await openAppSettings(page);
   return page.getByRole("dialog");
 }
 
@@ -60,6 +62,9 @@ test("provider import accepts current exports and rejects obsolete files without
   });
   await page.goto("/session");
   let dialog = await openSettings(page);
+  await dialog
+    .getByRole("button", { name: "Providers & keys", exact: true })
+    .click();
   const current = {
     id: "current",
     name: "Current",
@@ -100,6 +105,9 @@ test("provider import accepts current exports and rejects obsolete files without
 
   await page.reload();
   dialog = await openSettings(page);
+  await dialog
+    .getByRole("button", { name: "Providers & keys", exact: true })
+    .click();
   expect(await savedProfiles()).toEqual([updated]);
   await expect(
     dialog.getByText("current", { exact: true }).first(),

@@ -26,7 +26,6 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageChoicesProps {
-  readonly hideInput?: boolean;
   readonly storyReview?: ReactNode;
   readonly extensions?: (
     choices: readonly StageChoiceItem[],
@@ -62,7 +61,6 @@ const TWO_COLUMN_GROUP_SIZE = 4;
 const CATEGORY_TONES = ["info", "success", "warning", "primary"] as const;
 
 export function StageChoices({
-  hideInput = false,
   storyReview,
   extensions,
   composerDraft,
@@ -81,7 +79,7 @@ export function StageChoices({
   const draft = composerDraft?.value ?? localDraft;
   const setDraft = composerDraft?.onChange ?? setLocalDraft;
   const [optionsEl, setOptionsEl] = useState<HTMLElement | null>(null);
-  useChoiceHotkeys(optionsEl, visible && !executing && !hideInput);
+  useChoiceHotkeys(optionsEl, visible && !executing);
   const { items, groups, context } = mergeChoices(
     interactionChoices,
     suggestions,
@@ -202,7 +200,7 @@ export function StageChoices({
             </div>
           </div>
 
-          {!hideInput && groups.length > 0 && (
+          {groups.length > 0 && (
             // One numbering for the whole panel, matching the number keys.
             <div
               ref={setOptionsEl}
@@ -274,7 +272,7 @@ export function StageChoices({
           {extensions?.(items, setDraft)}
         </div>
 
-        {!hideInput && composerModes && (
+        {composerModes && (
           <div className="shrink-0 border-t border-border/50 px-3 pt-2.5">
             <ComposerModeBar
               t={t}
@@ -284,7 +282,7 @@ export function StageChoices({
             <ComposerFields composerModes={composerModes} />
           </div>
         )}
-        {!hideInput && (
+        {
           <div
             className={clsx(
               "flex shrink-0 items-end gap-2 px-3 py-2.5",
@@ -328,7 +326,7 @@ export function StageChoices({
               )}
             </button>
           </div>
-        )}
+        }
       </section>
     </div>
   );

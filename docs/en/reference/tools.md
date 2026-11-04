@@ -1749,7 +1749,7 @@ A community plugin goes through these stages:
 | **import** | After approval, `activatePluginServerCode` loads that plugin's server code on demand and runs its `entry` factory (`ensurePluginEntry`, triggered once at approval and once at RPC dispatch). |
 | **active** | Tool calls at run time are allowed or refused by the approval rules in the table above. |
 | **revoked** | `DELETE /api/sessions/:id/approvals[?pluginId=]` or disabling the plugin. Both replace the persisted grant generation inside the session lock, and clear the session grants, one-time grants, and pending approvals in this process. Old grants in other processes become invalid too, because their generation no longer matches. Explicit community grants are not restored by new sessions, branching or restart; instance source policy is evaluated again and is unaffected by session revocation. |
-| **uninstalled** | `DELETE /api/plugins/:id` deletes the `~/.covel/plugins/<id>` directory. It refuses built-in IDs and returns `restartRequired:true`. In the UI, under "Settings → Install & manage," installed third-party plugins are listed, and an uninstall button is provided. |
+| **uninstalled** | `DELETE /api/plugins/:id` deletes the `~/.covel/plugins/<id>` directory. It refuses built-in IDs and returns `restartRequired:true`. In the UI, under "Settings → Plugins → Install & manage," installed third-party plugins are listed, and an uninstall button is provided. |
 
 What this means in practice:
 

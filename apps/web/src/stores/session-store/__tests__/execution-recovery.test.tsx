@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NoticeHost } from "@/components/ui/notice-host.js";
 import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
 import i18n from "@/i18n/index.js";
 import { runActionStream } from "../runtime-rpc.js";
@@ -704,14 +705,17 @@ it("offers Continue for a live stopped opening with no runtime steps, using the 
         { sessionIdRef: refs.sessionIdRef },
       );
     return (
-      <ExecutionRecoveryNotice
-        recovery={state.executionRecovery}
-        steps={state.executionSteps}
-        onOpenSettings={vi.fn()}
-        onRetry={retryInterruptedTurn}
-        onRefresh={vi.fn()}
-        onStop={vi.fn()}
-      />
+      <>
+        <ExecutionRecoveryNotice
+          recovery={state.executionRecovery}
+          steps={state.executionSteps}
+          onOpenSettings={vi.fn()}
+          onRetry={retryInterruptedTurn}
+          onRefresh={vi.fn()}
+          onStop={vi.fn()}
+        />
+        <NoticeHost />
+      </>
     );
   }
   render(<LiveOpening />);

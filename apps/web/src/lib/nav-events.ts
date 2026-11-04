@@ -54,3 +54,36 @@ export function onWorldListRequest(listener: () => void): () => void {
     worldListListeners.delete(listener);
   };
 }
+
+/** Returns true when it opened the dialog. */
+export type SettingsRequestListener = (key?: string) => boolean;
+const settingsListeners = new Set<SettingsRequestListener>();
+let pendingSettingsRequest: { readonly key?: string } | null = null;
+
+/**
+ * The topbar's Settings item. The dialog lives with whichever screen is shown,
+ * so a request nobody handled yet waits for the next screen to mount (the
+ * debugger has no dialog of its own).
+ */
+export function emitSettingsRequest(key?: string): void {
+  let handled = false;
+  for (const listener of settingsListeners) handled = listener(key) || handled;
+  const pending = handled ? null : { key };
+  pendingSettingsRequest = pending;
+  // A request nobody picks up soon is stale; do not open settings much later.
+  if (pending)
+    setTimeout(() => {
+      if (pendingSettingsRequest === pending) pendingSettingsRequest = null;
+    }, 3000);
+}
+
+export function onSettingsRequest(
+  listener: SettingsRequestListener,
+): () => void {
+  settingsListeners.add(listener);
+  const pending = pendingSettingsRequest;
+  if (pending && listener(pending.key)) pendingSettingsRequest = null;
+  return () => {
+    settingsListeners.delete(listener);
+  };
+}

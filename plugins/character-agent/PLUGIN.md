@@ -1,7 +1,7 @@
 ---
-version: 0.0.2
-displayName: Character Actor
-description: Plays one assigned character using their profile and witnessed stories.
+version: 0.0.3
+displayName: Character Voice
+description: Lets one character speak in their own voice, based on their profile and what they have seen and heard.
 tags:
   - "mode:dialogue"
 runtime:

@@ -1,13 +1,15 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
-import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
+import {
+  seedBrowserSettings,
+  ONBOARDING_VERSION,
+  openAppSettings,
+} from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
 async function openModelRoles(page: Page) {
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
-  await page.getByRole("button", { name: "Model Roles", exact: true }).click();
+  await openAppSettings(page);
+  await page.getByRole("button", { name: "AI roles", exact: true }).click();
   return page.getByRole("dialog");
 }
 
@@ -17,6 +19,7 @@ test("text protocol support limits survive manual capability overrides", async (
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
+    "ui.developerView": true,
     "llm.providers": [
       {
         id: "fixture",
@@ -87,6 +90,7 @@ test("model reasoning defaults and role overrides persist independently", async 
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
+    "ui.developerView": true,
     "llm.providers": [
       {
         id: "fixture",
@@ -190,6 +194,7 @@ test("frontend plugin models expose persistent generation settings independently
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
+    "ui.developerView": true,
     "llm.providers": [
       {
         id: "fixture",
@@ -287,6 +292,7 @@ test("partial capability overrides survive reopening and a failed lookup", async
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
+    "ui.developerView": true,
   });
   const capability = {
     input: ["text"],

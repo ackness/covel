@@ -61,7 +61,7 @@ describe("inventory open-bag command", () => {
     expect(ctx.store.listPluginData).toHaveBeenCalledWith("items");
     expect(result).toEqual({
       ok: true,
-      message: "行囊中有 2 项物品。",
+      message: "背包里有 2 件物品。",
       data: { itemCount: 2 },
       clientAction: {
         type: "open-plugin-panel",
@@ -73,17 +73,20 @@ describe("inventory open-bag command", () => {
   it("localizes the empty bag message", async () => {
     const result = await openBag({}, await makeCtx([], "en-US"));
 
-    expect(result.message).toBe("Your bag contains 0 item entries.");
+    expect(result.message).toBe("You have 0 items in your bag.");
     expect(result.data.itemCount).toBe(0);
   });
 
   it("uses English fallback outside the explicit Simplified Chinese aliases", async () => {
-    for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
+    for (const locale of ["ja-JP", "zh-Hant-TW", "zh-TW"]) {
       const result = await openBag({}, await makeCtx([], locale));
-      expect(result.message).toBe("Your bag contains 0 item entries.");
+      expect(result.message).toBe("You have 0 items in your bag.");
     }
 
+    const russian = await openBag({}, await makeCtx([], "ru-RU"));
+    expect(russian.message).toBe("В сумке предметов: 0.");
+
     const simplified = await openBag({}, await makeCtx([], "zh-Hans"));
-    expect(simplified.message).toBe("行囊中有 0 项物品。");
+    expect(simplified.message).toBe("背包里有 0 件物品。");
   });
 });

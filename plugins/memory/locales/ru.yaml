@@ -1,0 +1,18 @@
+# Russian text of the memory plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Память истории
+  description: "Показывает, что история помнит: ход сюжета, текущую сцену, ваши отношения и состояние вашего персонажа. Обновляется после каждого хода."
+  contributes:
+    data:
+      definitions:
+        authoring:
+          title: Темы памяти истории
+          summary: Позволяет истории помнить то, что подходит жанру, например улики, обещания и обратные отсчёты.
+messages:
+  Story Memory: Память истории
+  Nothing remembered yet. Notes appear after the first turn.: Пока ничего не запомнено. Записи появятся после первого хода.
+  Updates after every turn with the key plot, scene and character details.: После каждого хода обновляется ключевыми событиями, сценой и сведениями о персонажах.
+runtimes/extract/RUNTIME.md:
+  description: После каждого хода обновляет память истории по тому, что только что произошло.

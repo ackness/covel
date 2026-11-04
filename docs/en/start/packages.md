@@ -11,7 +11,7 @@ You can also use the link of an author's repository directly.
 
 ## Install
 
-Open **Settings → Install & manage**.
+Open **Settings → Plugins → Install & manage**.
 
 1. Browse the community catalog, or paste a public GitHub repository link. The link can point to a subfolder of the repository.
 2. Parse the link. The plugins and world packages in that folder are listed together.

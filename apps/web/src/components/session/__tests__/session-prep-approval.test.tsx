@@ -32,7 +32,6 @@ vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
 vi.mock("../session-prep/dimension-actions.js", () => ({
   DimensionActions: () => null,
 }));
-vi.mock("../session-prep/models-card.js", () => ({ ModelsCard: () => null }));
 
 const world = {
   id: "community-world",
@@ -123,7 +122,9 @@ describe("session prep approval preflight", () => {
         onSettingsOpenChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Loaded Plugins/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Customize the start" }),
+    );
     const toggle = screen.getByRole("switch", { name: "Notes", hidden: true });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(toggle.matches(":disabled")).toBe(true);
@@ -169,7 +170,7 @@ describe("session prep approval preflight", () => {
     },
   ])(
     "keeps pending requests separate and lets the game start ($locale, $role)",
-    async ({ locale, role, title, hint, summary }) => {
+    async ({ locale, role, title, hint }) => {
       await i18n.changeLanguage(locale);
       const onStart = vi
         .fn()
@@ -188,19 +189,25 @@ describe("session prep approval preflight", () => {
         />,
       );
 
-      expect(
-        (screen.getByLabelText(i18n.t("session.playAs")) as HTMLSelectElement)
-          .value,
-      ).toBe("player");
-      fireEvent.change(screen.getByLabelText(i18n.t("session.playAs")), {
-        target: { value: role },
-      });
+      const seat = (name: string) =>
+        screen.getByRole("radio", { name }) as HTMLInputElement;
+      expect(seat(i18n.t("session.rolePlayer")).checked).toBe(true);
+      fireEvent.click(
+        seat(
+          i18n.t(
+            role === "host" ? "session.roleHost" : "session.roleSpectator",
+          ),
+        ),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: i18n.t("session.customStartShow") }),
+      );
       const pending = await screen.findByTestId("pending-approval-plugins");
       expect(pending.textContent).toContain(title);
       expect(pending.textContent).toContain("Community Story");
       expect(pending.textContent).toContain(hint);
       expect(pending.textContent).not.toContain("Notes");
-      expect(screen.getByText(summary)).toBeTruthy();
+      expect(screen.getByText("1/2")).toBeTruthy();
       expect(screen.getByTestId("no-story-plugin").textContent).toContain(
         i18n.t("plugin.noStory.approvalRequired"),
       );
@@ -222,11 +229,6 @@ describe("session prep approval preflight", () => {
           .mock.lastCall?.[1].map((plugin) => plugin.id),
       ).toEqual(["builtin"]);
 
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: new RegExp(i18n.t("session.plugins")),
-        }),
-      );
       expect(
         screen
           .getByRole("switch", { name: "Community Story", hidden: true })
@@ -246,9 +248,14 @@ describe("session prep approval preflight", () => {
         ),
       );
       expect(
-        (screen.getByLabelText(i18n.t("session.playAs")) as HTMLSelectElement)
-          .value,
-      ).toBe(role);
+        (
+          screen.getByRole("radio", {
+            name: i18n.t(
+              role === "host" ? "session.roleHost" : "session.roleSpectator",
+            ),
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(true);
     },
   );
 });

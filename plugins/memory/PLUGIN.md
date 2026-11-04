@@ -1,10 +1,10 @@
 ---
 kind: core
-version: 0.0.43
+version: 0.0.44
 displayName: Story Memory
 description: >-
-  Shows what the story remembers, including plot, scene, relationships, and hero
-  status.
+  Shows what the story remembers: the plot so far, the current scene, your
+  relationships and your character's status. Updates after every turn.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -22,10 +22,10 @@ contributes:
       accepts:
         - memory.blocks@1
       schema: ./schemas/block-definitions.schema.json
-      description: World-defined memory blocks that replace the default set.
+      description: What the story should remember, chosen by the world instead of the default list.
       authoring:
-        title: Memory blocks
-        summary: Tracks genre state such as clues, promises and countdowns.
+        title: Story memory topics
+        summary: Lets the story remember things that fit the genre, such as clues, promises and countdowns.
         hint: >-
           Write one object with `id: world` and a `blocks` list. Each block has
           a `label` (a snake_case key), a `displayName` and an `extractionHint`

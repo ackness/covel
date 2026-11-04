@@ -1,0 +1,20 @@
+# Russian text of the living-world-rules plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Правила мира
+  description: Показывает постоянные правила этого мира, например запреты и обычаи, и следит, чтобы история их соблюдала.
+  contributes:
+    data:
+      rules:
+        authoring:
+          title: Правила мира
+messages:
+  World state: Состояние мира
+  Rules: Правила
+  This world has no special rules.: У этого мира нет особых правил.
+  Lasting rules and taboos of this world. You can read them but not change them.: Постоянные правила и запреты этого мира. Их можно читать, но нельзя менять.
+  No rules: Правил нет
+  Always: Всегда
+  When triggered: При условии
+  Changes with the story: Меняется по ходу истории

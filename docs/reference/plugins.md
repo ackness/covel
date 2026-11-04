@@ -292,7 +292,7 @@ guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件�
 
 ### 隐藏内容的 runtime（`io.concealed`）
 
-`io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏事件的 agent。
+`io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏剧情的 agent。
 
 - 框架在写入 trace 和推送实时流之前，去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime 名、工具名、状态、耗时和用量。
 - `/turns` 和手动 RPC 返回的执行结果也会清空它的输出和工具内容。`/turns` 里它调用[写服务](./plugin-extensions.md#写服务)留下的操作记录去掉 `request` 和 `result`，`summary` 换成固定文字，只留契约和提交结果；它作为子 agent 发起、记在可见调用方结果上的操作也一样。
@@ -476,7 +476,7 @@ agent:
 
 内置叙事器与群像叙事器保持 `narrative-engine@2` 的 `segments/cues/yield` 形状，通过最终提交交付。`createNarrativeReview` 注册到 `ReviewAgentOutput`，直接检查已校验的段落或默认 `narrativeOutput`，只返回 correction；不会改写回复或添加 effects。工具的准备说明不会进入故事。
 
-建议、事实抽取、隐藏事件规划、时间推进和世界初始化先成功完成必需的业务工具，再提交工具的规范结果。它们声明业务工具为输出来源，由宿主校验和审核规范结果；只纠正最终提交，不重复成功的写入。好感、图鉴和关系图谱无变化时可直接提交 `{}`；角色追踪仍先同步空批次，维度追踪仍先结算 `updates: []`。世界初始化的规范结果必须包含 `preGameDone: true`，角色表单准备提交 `preGameDone: false`，等待玩家完成表单。
+建议、事实抽取、隐藏剧情规划、时间推进和世界初始化先成功完成必需的业务工具，再提交工具的规范结果。它们声明业务工具为输出来源，由宿主校验和审核规范结果；只纠正最终提交，不重复成功的写入。好感、图鉴和人物关系无变化时可直接提交 `{}`；角色追踪仍先同步空批次，维度追踪仍先结算 `updates: []`。世界初始化的规范结果必须包含 `preGameDone: true`，角色表单准备提交 `preGameDone: false`，等待玩家完成表单。
 
 ### 工具选择和思考（`agent.toolChoice`、`agent.reasoning`）
 
@@ -1063,7 +1063,7 @@ homepage: https://example.com/tidefall
 完整状态和接口见 [World Model](./world-model.md#回合时序与结算回执)和 [API](./api.md#维度编辑与待结算恢复)。
 
 > [!IMPORTANT]
-> **BREAKING CHANGE**：旧的九类 raw dimension 格式和旧副本读取已经移除。世界作者使用[统一 definition](./world-data.md#动态世界维度dimensions)；开发期的世界、会话和快照需要重建。维度不提供隐藏事件的触发层，也不改变角色、背包、好感或时间由谁负责。
+> **BREAKING CHANGE**：旧的九类 raw dimension 格式和旧副本读取已经移除。世界作者使用[统一 definition](./world-data.md#动态世界状态dimensions)；开发期的世界、会话和快照需要重建。维度不提供隐藏剧情的触发层，也不改变角色、背包、好感或时间由谁负责。
 
 ### 世界数据导入
 
@@ -1160,7 +1160,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 ## 提示词与记忆扩展
 
 - **静态段**放在 `contributes.prompt`。每项包含 `id/content/position`，可选 `role`。位置是 `system`、`pre-history`、`post-history` 或 `{depth: number}`。宿主自动注册静态段，不需要再声明扩展。`static-prompt` 是保留的注册 ID。
-- **动态内容**用扩展点：动态提示词用 `prompt.segment@1`，世界上下文用 `session.world-context@1`，历史变换用 `prompt.history-transform@1`，历史压缩用 `history.compact@2`。详见[插件扩展点](./plugin-extensions.md)。这些扩展使用同一次执行的快照，不在每次调用时重读清单。
+- **动态内容**用扩展点：动态提示词用 `prompt.segment@1`，世界上下文用 `session.world-context@1`，历史变换用 `prompt.history-transform@1`，长篇故事记忆用 `history.compact@2`。详见[插件扩展点](./plugin-extensions.md)。这些扩展使用同一次执行的快照，不在每次调用时重读清单。
 - **记忆块**属于 memory 插件。默认定义经 `memory.block-definitions@1` 服务提供，世界自定义的定义经 `memory.blocks@1` 数据契约导入。框架不聚合 `memoryBlocks` 或 `summaryFocus` 字段，也没有单独的 working_memory 表。
 
 ## 会话插件选择
@@ -1174,7 +1174,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。这类拒绝的 `code` 是 `missing-provider` 或 `ambiguous-provider`，`contract` 写出等的是哪个契约。
 - 被依赖的插件缺了，依赖它的插件自动停用，不挡开局。创建会话和启用、停用插件时，玩家要的（`requested`）和 `kind: core` 的插件里因此停用的那些，仍写进 `activePlugins`：它们暂时不运行，列在 `unavailable` 里，依赖回来后自动恢复。只有玩家要的插件因冲突等别的原因被拒，创建才返回 `400 plugin_rejected`，正文写出插件 ID 和原因。
 - 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
-- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
+- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 插件 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
 - 世界的 `contract:` 引用 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
@@ -1247,7 +1247,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 ### 历史窗口里的摘要
 
-`agent.history.includeSummaries: true` 让有限的 `maxTurns` 窗口继续读取持久摘要；默认不带摘要。带窗口的 runtime 不触发共享历史压缩。内置的 guide 使用最近两个回合加摘要；其余内置记账 agent 的窗口是 0 或 1 个回合，取法见 [Prompt 结构](./prompt-structure.md#记账-runtime-的布局)。
+`agent.history.includeSummaries: true` 让有限的 `maxTurns` 窗口继续读取持久摘要；默认不带摘要。带窗口的 runtime 不触发共享长篇故事记忆。内置的 guide 使用最近两个回合加摘要；其余内置记账 agent 的窗口是 0 或 1 个回合，取法见 [Prompt 结构](./prompt-structure.md#记账-runtime-的布局)。
 
 ### 提示词正文的语言
 
@@ -1306,27 +1306,27 @@ pnpm lint
 | ID | 名称 | `kind` | 提供的契约 | runtime | 做什么 |
 | --- | --- | --- | --- | --- | --- |
 | [affinity](../../plugins/affinity/README.md) | 好感度 | `plugin` | 无 | 内联 | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化；通过 `prompt.segment@1` 只读投影当前分数 |
-| [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
+| [branch-reply](../../plugins/branch-reply/README.md) | 备选回复 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
 | [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角并逐项回填表单答案，记录故事中的角色变化 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
-| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@2` | `plan` / `narrate` | 让故事更像角色对话；舞台在场输入同时供规划和叙事使用 |
-| [codex](../../plugins/codex/README.md) | 设定图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
+| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 聊天式讲述 | `plugin` | `narrative-engine@2` | `plan` / `narrate` | 让故事更像角色对话；舞台在场输入同时供规划和叙事使用 |
+| [codex](../../plugins/codex/README.md) | 图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
 | [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary` | 从叙事中登记和推进任务 |
 | [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定 |
 | [guide](../../plugins/guide/README.md) | 行动建议 | `plugin` | `scene-prompts@1` | 内联 | 每轮故事后回顾前情，给出可直接采用的行动短句 |
-| [history-compaction](../../plugins/history-compaction/README.md) | 历史压缩 | `core` | `history.compact@2`（默认提供者） | 无 | 把较早的对话整理成分段摘要 |
-| [inventory](../../plugins/inventory/README.md) | 行囊 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary` | 记录物品得失和装备变化 |
+| [history-compaction](../../plugins/history-compaction/README.md) | 长篇故事记忆 | `core` | `history.compact@2`（默认提供者） | 无 | 把较早的对话整理成分段摘要 |
+| [inventory](../../plugins/inventory/README.md) | 背包 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary` | 记录物品得失和装备变化 |
 | [living-world-rules](../../plugins/living-world-rules/README.md) | 世界规则 | `plugin` | `living-world-rules@1`、`world-info@1` | 无 | 展示世界包里长期生效的规则，并让叙事遵守 |
 | [memory](../../plugins/memory/README.md) | 故事记忆 | `core` | 无 | `extract` | 记住剧情、场景、人物关系和主角状态 |
 | [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
-| [npc-graph](../../plugins/npc-graph/README.md) | 关系图谱 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
+| [npc-graph](../../plugins/npc-graph/README.md) | 人物关系 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
 | [pregame](../../plugins/pregame/README.md) | 开局准备 | `core` | `session.opening@1` | 内联 | 开局时读取世界资料，准备第一段冒险 |
-| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast`、`story-cues` | 可选读取故事的场景与在场角色提示，随故事提交舞台变化，允许角色属性缺省；事件仍可覆盖场景、昼夜和演员演出；对白模板使用说话人头像、本地预览与可选分段显示 |
-| [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue`、`story-cues` | 可选读取故事的场景与情绪提示，播放世界自带的音乐；场景不依赖场景舞台，事件仍可覆盖 |
-| [story-events](../../plugins/story-events/README.md) | 隐藏事件 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
-| [tabletop-rules](../../plugins/tabletop-rules/README.md) | 跑团规则 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
-| [world-init](../../plugins/world-init/README.md) | 世界维度 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界维度，并持续维护 |
-| [world-ir](../../plugins/world-ir/README.md) | 世界事实提取 | `plugin` | `world-ir-provider@1` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
+| [scene-stage](../../plugins/scene-stage/README.md) | 舞台画面 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast`、`story-cues` | 可选读取故事的场景与在场角色提示，随故事提交舞台变化，允许角色属性缺省；事件仍可覆盖场景、昼夜和演员演出；对白模板使用说话人头像、本地预览与可选分段显示 |
+| [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue`、`story-cues` | 可选读取故事的场景与情绪提示，播放世界自带的音乐；场景不依赖舞台画面，事件仍可覆盖 |
+| [story-events](../../plugins/story-events/README.md) | 隐藏剧情 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
+| [tabletop-rules](../../plugins/tabletop-rules/README.md) | 属性判定 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
+| [world-init](../../plugins/world-init/README.md) | 世界状态 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界状态，并持续维护 |
+| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir-provider@1` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
 | [world-time](../../plugins/world-time/README.md) | 世界时间 | `core` | `world-time-evolution@1`、`world-time-context@1` | `context`、`advance` | 维护日期、时段和时间流向，按本轮故事结算时间变化 |
 
 每个插件的细节以它自己的 `PLUGIN.md` 和 README 为准。
@@ -1347,7 +1347,7 @@ pnpm lint
 | 历史变换扩展 | [branch-reply](../../plugins/branch-reply/PLUGIN.md) |
 | 状态摘要槽位 | [core-quest](../../plugins/core-quest/PLUGIN.md) |
 | 记忆定义与提取 | [memory](../../plugins/memory/PLUGIN.md) |
-| 历史压缩扩展 | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
+| 长篇故事记忆扩展 | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
 | 舞台与媒体记录 | [scene-stage](../../plugins/scene-stage/PLUGIN.md) |
 | 背景音乐调度 | [soundtrack](../../plugins/soundtrack/PLUGIN.md) |
 | 世界数据进入叙事提示 | [character-blueprint](../../plugins/character-blueprint/PLUGIN.md) |
@@ -1488,7 +1488,7 @@ agent 的 `yield: continue` 必须来自已接受且已提交的输出。拒绝�
 
 ## 可选规划器与故事导出
 
-内置对话叙事示范同包组合：`plan` 是 pre-turn 函数，选取安全名字并调用策略一次；`narrate` 是唯一 story agent，读取可选的同包 plan 输入并拥有所有角色委托。故事以 `recordAs: latest-story` 导出完整公开输出，规划器通过同包 `scope: committed` 输入读取上一份，不对本次 narrative 阶段建立反向依赖。策略与角色均可替换或缺失，不放进故事的 requires 或契约 needs。角色声明使用上文的框架规范 schema，不在包内复制一份。
+内置聊天式讲述示范同包组合：`plan` 是 pre-turn 函数，选取安全名字并调用策略一次；`narrate` 是唯一 story agent，读取可选的同包 plan 输入并拥有所有角色委托。故事以 `recordAs: latest-story` 导出完整公开输出，规划器通过同包 `scope: committed` 输入读取上一份，不对本次 narrative 阶段建立反向依赖。策略与角色均可替换或缺失，不放进故事的 requires 或契约 needs。角色声明使用上文的框架规范 schema，不在包内复制一份。
 
 <a id="presentation-runtimes"></a>
 
@@ -1556,7 +1556,7 @@ runtime:
 
 ## 仅提供会话视图的包
 
-包可以只有 `contributes.ui.view`，不声明 `entry` 或 runtime。这样的声明式包不调用模型，也不因提供视图而增加权限。内置 `dm-console` 就是这种包；社区包可组合相同的 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。图鉴和关系图谱也可同时声明右侧面板与独立页面，两者读取同一份自有已提交数据。普通声明式加载诊断只移除无效 spec，不影响其他面板和运行时。示例见[插件界面](../plugins/ui.md#声明式会话控制台)。
+包可以只有 `contributes.ui.view`，不声明 `entry` 或 runtime。这样的声明式包不调用模型，也不因提供视图而增加权限。内置 `dm-console` 就是这种包；社区包可组合相同的 [SessionMessages / SessionComposer](./ui-components.md#实时会话视图组件)。图鉴和人物关系也可同时声明右侧面板与独立页面，两者读取同一份自有已提交数据。普通声明式加载诊断只移除无效 spec，不影响其他面板和运行时。示例见[插件界面](../plugins/ui.md#声明式会话控制台)。
 
 ## 静态主题声明
 
@@ -1564,8 +1564,8 @@ runtime:
 
 ### 会话中的可选主题
 
-场景舞台通过公共 `contributes.ui.theme` 声明“舞台阅读”，不自动启用或切换视图。无 entry/runtime 的社区 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md) 通过同一清单、静态验证、资源路由和会话选择路径工作。玩家操作、严格语法与限制统一见[插件主题](./theme-packages.md#插件提供的受限主题)。
+舞台画面通过公共 `contributes.ui.theme` 声明“舞台阅读”，不自动启用或切换视图。无 entry/runtime 的社区 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md) 通过同一清单、静态验证、资源路由和会话选择路径工作。玩家操作、严格语法与限制统一见[插件主题](./theme-packages.md#插件提供的受限主题)。
 
-## 沙箱系统区域
+## 页面中的输入框
 
-沙箱区域继续使用 `contributes.ui.view` 的 spec 路径，单数 surface 选择主视图或输入框；不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。
+插件页面使用 `contributes.ui.view` 的 spec 路径。宿主输入框默认显示在页面下方；页面用可选的 `composer: false` 或嵌入 `SessionComposer` 来隐藏它。不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[页面中的输入框](./ui-panels.md#页面中的输入框)。

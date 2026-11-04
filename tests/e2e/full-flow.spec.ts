@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { seedAppSettings, selectWorldByText } from "./helpers/player.js";
+import {
+  chooseColorScheme,
+  seedAppSettings,
+  selectWorldByText,
+} from "./helpers/player.js";
 
 // Run serially to avoid rate-limiting from the server
 test.describe.configure({ mode: "serial" });
@@ -57,10 +61,26 @@ test.describe("Covel Full Flow", () => {
     await page.goto("/session");
 
     // The primary nav is the top bar or, in rail layouts, the nav rail.
+    // Debugger is for developers: it appears once Developer mode is on.
     const debugLink = page
-      .getByRole("button", { name: /^(debug|调试)$/i })
+      .getByRole("button", { name: /^(debugger|调试)$/i })
       .filter({ visible: true })
       .first();
+    await expect(debugLink).toHaveCount(0);
+    await page
+      .getByRole("navigation", { name: /primary|主导航/i })
+      .getByRole("button", { name: /^(设置|Settings)$/ })
+      .click();
+    // Developer mode lives under Advanced → Options.
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^(选项|Options)$/ })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("switch", { name: /开发者模式|developer mode/i })
+      .click();
+    await page.keyboard.press("Escape");
     await expect(debugLink).toBeVisible();
 
     // Debug link → /debug
@@ -107,33 +127,32 @@ test.describe("Covel Full Flow", () => {
     ).toBeVisible();
   });
 
-  test("theme toggle works", async ({ page }) => {
+  test("color scheme setting works", async ({ page }) => {
     await page.goto("/session");
 
     const html = page.locator("html");
     const initialClass = await html.getAttribute("class");
 
-    // The toggle sits in the top bar or, in rail layouts, the nav rail.
-    const themeToggle = page
-      .getByRole("button", { name: /dark mode|深色模式/i })
-      .filter({ visible: true })
-      .first();
-    await expect(themeToggle).toBeVisible();
-    await themeToggle.click();
+    // The color scheme is a setting, opened from the top bar.
+    await chooseColorScheme(
+      page,
+      initialClass?.includes("dark") ? "light" : "dark",
+    );
 
     await expect.poll(() => html.getAttribute("class")).not.toBe(initialClass);
   });
 
   test("language selector switches locale", async ({ page }) => {
-    // Inside the app the language is a setting; on a phone the menu dialog
-    // also carries the select.
-    await page.setViewportSize({ width: 390, height: 844 });
+    // The language is a setting, opened from the top bar.
     await page.goto("/session");
 
-    await page.getByRole("button", { name: /primary|主导航/i }).click();
-    const localeSelect = page.getByRole("combobox", {
-      name: /language|语言/i,
-    });
+    await page
+      .getByRole("navigation", { name: /primary|主导航/i })
+      .getByRole("button", { name: /^(设置|Settings)$/ })
+      .click();
+    const localeSelect = page
+      .getByRole("dialog")
+      .getByRole("combobox", { name: /界面语言|interface language/i });
     await expect(localeSelect).toBeVisible();
     await expect(localeSelect).toHaveValue("zh-CN");
     await localeSelect.selectOption("en-US");

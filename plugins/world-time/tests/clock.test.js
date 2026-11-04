@@ -197,7 +197,7 @@ describe("world-owned time", () => {
       "深夜",
       "早晨",
       "下午",
-      "夜晚",
+      "傍晚",
     ]);
     expect(chinese.display).toBe("世界历 1 · 1月 1 · 08:00 · 早晨");
     expect(JSON.stringify(DEFAULT_TIME)).not.toMatch(/[\u4e00-\u9fff]/);

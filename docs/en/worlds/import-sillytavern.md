@@ -6,7 +6,7 @@ This feature is for desktop and self-hosted Web. It writes to the server's user 
 
 ## Import in the app
 
-1. Open **Settings → Install & manage** and find **Import SillyTavern content**.
+1. Open **Settings → Plugins → Install & manage** and find **Import SillyTavern content**.
 2. Select character cards and lorebook files. The selected files become one world.
 3. Choose the content language and optionally enter a world name. The language defaults to your interface language; card text is neither detected nor translated.
 4. Click **Preview**. Review the world ID, character count, lore entry count, cover and report grouped by severity. Preview writes no files and creates no world record.

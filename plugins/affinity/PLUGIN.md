@@ -1,9 +1,9 @@
 ---
-version: 0.0.44
+version: 0.0.45
 displayName: Affinity
 description: >-
-  Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
-  in the right panel.
+  Tracks how much each character likes you, with scores, levels and recent
+  changes in the side panel.
 tags:
   - "data:characters"
 author:

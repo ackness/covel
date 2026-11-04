@@ -203,8 +203,8 @@ The config has four layers. Each layer has a place in the settings screen:
 
 | Layer                            | Place in the front end                   | Saved where and scope                                                                                                                   |
 | -------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Connections and models           | Providers & Models                       | The TOML file gives the base models. `llm.providers` saves local connections and models. A model can override the connection's protocol |
-| Role and model binding           | Model Roles                              | `[covel.<name>]` defines the base roles. A local choice in `llm.slotConfig` takes priority                                              |
+| Connections and models           | Providers & keys                         | The TOML file gives the base models. `llm.providers` saves local connections and models. A model can override the connection's protocol |
+| Role and model binding           | AI roles                                 | `[covel.<name>]` defines the base roles. A local choice in `llm.slotConfig` takes priority                                              |
 | Role parameters and capabilities | Generation, Edit Capabilities            | `llm.paramOverrides` / `llm.capabilityOverrides` override values per request                                                            |
 | Task role choice                 | Session-prep screen, session plugin list | `runtimeModelOverrides` saves only the "task to role" mapping                                                                           |
 
@@ -430,8 +430,8 @@ The settings screen stores connection info and model IDs separately:
 
 **Interface behavior**
 
-- On the "Providers & Models" page, you can copy a config and edit its name. The thinking setting saves automatically.
-- Model Roles, plugin bindings, and the session summary show the config name and the thinking setting.
+- On the "Providers & keys" page, you can copy a config and edit its name. The thinking setting saves automatically.
+- AI roles, plugin bindings, and the session summary show the config name and the thinking setting.
 - The main narrative, agent plugins, function plugins, and memory tasks all inherit the chosen model's defaults through the same request config chain. You do not have to set them for each role. An explicit override on a role still takes priority over the model default.
 - At the moment, the `automatic` level is used for Qwen. The interface shows "Thinking on", and it sends `enable_thinking: true`. It does not mean "decide on or off for each task".
 
@@ -463,7 +463,7 @@ When Covel looks up model capabilities, it tries these matches in order. A match
 
 - When a model is matched to upstream model data through an aggregator provider, its price is marked "reference price". The real cost is what the current provider bills.
 - Each provider's price multiplier is `1` by default. It accepts positive decimals such as `0.1` and `2.5`. The cost panel for debugging calculates the estimated settlement price as "model reference price × provider multiplier".
-- A model that is not identified exactly is never guessed to accept image input. You can override its capabilities by hand in "Model Roles".
+- A model that is not identified exactly is never guessed to accept image input. You can override its capabilities by hand in "AI roles" (developer mode).
 
 <a id="tool-submission-capabilities"></a>
 
@@ -509,7 +509,7 @@ reasoningEffort = "disabled"
 - You write one general level, and the adapter translates it into each vendor's own field. This works like the top-level [`reasoning`](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) option in the AI SDK.
 - If a model does not support a level, a warning is logged, and the provider's default behavior is used.
 - When nothing is chosen and the model's default level is its highest and a slow one (`xhigh` or `max`), the level below it is sent. For example, Kimi K3.1 Pro defaults to `max`; with no level chosen, Covel sends `high`, or every call would think at the slowest level. The interface says so. To use the model's own default, choose "Provider default".
-- This is the same default value as the thinking level you set for the model on the "Providers & Models" page.
+- This is the same default value as the thinking level you set for the model on the "Providers & keys" page.
 - If you need to write a native field directly, use `providerOptions` below instead.
 
 **Order of effect**
@@ -1007,7 +1007,7 @@ An embedding call can pass `expectedModelId` (`provider/model`) and `expectedCon
 - The request-level model and key apply to embedding too, including the asynchronous ingestion that the request starts. They are not written to the session or to the shared credential config.
 - Memory's `EmbedFn(texts, { sessionId, modelId })` must use the model identity locked to the session.
 - Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, ingestion does not advance, and the server log notes it once per session. After the original model config is restored, backfilling can continue.
-- After the vector model changes, the session shows "Memory search is matching keywords only" with a "Rebuild index" button ("Clear index" when no vector model is configured). A rebuild first sends one request to the new model to measure its dimension and changes nothing when that fails. When it succeeds, one transaction deletes the old model's vectors and progress and locks the session to the new model, and the index is then built again in the background. See [`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild).
+- After the vector model changes, the session shows a notice card "Memory search is matching keywords only" with a "Rebuild index" button. When no vector model is configured, "Clear index" appears only with "Developer view" turned on in Settings. A rebuild first sends one request to the new model to measure its dimension and changes nothing when that fails. When it succeeds, one transaction deletes the old model's vectors and progress and locks the session to the new model, and the index is then built again in the background. See [`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild).
 - When the index is written, the store checks the model the session is locked to now. Vectors computed with the old model before a rebuild are never written into the new index.
 
 > [!NOTE]

@@ -1,32 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 import { prepareEnsemble, ensembleReply } from "./helpers/ensemble.js";
-import {
-  closeStudioConfiguration,
-  composerInput,
-  openStudioConfiguration,
-  waitForTurnIdle,
-} from "./helpers/player.js";
+import { composerInput, waitForTurnIdle } from "./helpers/player.js";
 
 async function openView(page: Page, label: string) {
   await page
     .getByTestId("center-panel")
-    .getByRole("button", { name: "Plugin views", exact: true })
+    .getByRole("button", { name: "Plugin pages", exact: true })
     .click();
   await page
-    .getByRole("group", { name: "Plugin views", exact: true })
+    .getByRole("group", { name: "Plugin pages", exact: true })
     .getByRole("button", { name: new RegExp(`^${label}`) })
     .click();
   await expect(page.getByTestId("plugin-view-bar")).toContainText(label);
 }
 async function back(page: Page) {
   await page
-    .getByTestId("plugin-view-bar")
-    .getByRole("button", { name: "Back to default view", exact: true })
+    .getByTestId("session-header")
+    .getByRole("button", { name: "Read", exact: true })
     .click();
 }
 
 test.use({ viewport: { width: 1440, height: 1000 } });
-test("real bundled graph and codex pages share committed data with their panels", async ({
+test("bundled graph and codex keep their right panels on committed data, and only the console is a page", async ({
   page,
 }) => {
   const f = await prepareEnsemble(page, "host", false, ["npc-graph", "codex"]);
@@ -45,10 +40,22 @@ test("real bundled graph and codex pages share committed data with their panels"
     expect(response.ok(), await response.text()).toBe(true);
   };
   try {
-    await openView(page, "Relationship Graph");
-    await expect(page.getByTestId("plugin-view-container")).toContainText(
-      "No character or faction relationships yet.",
-    );
+    await page
+      .getByTestId("center-panel")
+      .getByRole("button", { name: "Plugin pages", exact: true })
+      .click();
+    const pages = page.getByRole("group", {
+      name: "Plugin pages",
+      exact: true,
+    });
+    await expect(
+      pages.getByRole("button", { name: /^Game Master Panel/ }),
+    ).toBeVisible();
+    await expect(
+      pages.getByRole("button", { name: /^Relationships/ }),
+    ).toHaveCount(0);
+    await expect(pages.getByRole("button", { name: /^Almanac/ })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await put("npc-graph", "nodes", "mara", {
       id: "mara",
       name: "Mara",
@@ -69,16 +76,8 @@ test("real bundled graph and codex pages share committed data with their panels"
       strength: 1,
       validAt: 1,
     });
-    const graph = page.getByTestId("plugin-view-container");
-    await graph
-      .getByRole("button", { name: "Mara", exact: true })
-      .first()
-      .click();
-    await expect(graph).toContainText("Public navigator");
-    await expect(graph).toContainText("They sail together.");
-    await back(page);
     await page
-      .getByRole("tab", { name: "Relationship Graph", exact: true })
+      .getByRole("tab", { name: "Relationships", exact: true })
       .click();
     await page
       .getByRole("tabpanel")
@@ -86,10 +85,6 @@ test("real bundled graph and codex pages share committed data with their panels"
       .first()
       .click();
     await expect(page.getByRole("tabpanel")).toContainText("Public navigator");
-    await openView(page, "Codex");
-    await expect(page.getByTestId("plugin-view-container")).toContainText(
-      "No matching entries",
-    );
     await put("codex", "entries", "map", {
       title: "Moon map",
       category: "item",
@@ -97,54 +92,13 @@ test("real bundled graph and codex pages share committed data with their panels"
       tags: ["silver-sigil"],
       rarity: "rare",
     });
-    const library = page.getByTestId("plugin-view-container");
-    await library.getByPlaceholder("Search entries…").fill("silver-sigil");
-    await library.getByText("Moon map", { exact: true }).click();
-    await expect(library).toContainText("The complete northern chart.");
-    await expect(library).toContainText("1 entries collected");
-    await put("codex", "entries", "map", {
-      title: "Moon map",
-      category: "item",
-      content: "The committed chart changed.",
-      tags: ["silver-sigil"],
-      rarity: "rare",
-    });
-    await expect(library).toContainText("The committed chart changed.");
-    await page.getByRole("tab", { name: "Codex", exact: true }).click();
+    await page.getByRole("tab", { name: "Almanac", exact: true }).click();
     await page
       .getByRole("tabpanel")
       .getByText("Moon map", { exact: true })
       .click();
     await expect(page.getByRole("tabpanel")).toContainText(
-      "The committed chart changed.",
-    );
-    await page.setViewportSize({ width: 390, height: 844 });
-    await library.getByPlaceholder("Search entries…").fill("unmatched");
-    await expect(library).toContainText("No matching entries");
-    await expect(
-      page
-        .getByTestId("plugin-view-bar")
-        .getByRole("button", { name: "Back to default view" }),
-    ).toBeInViewport();
-    await back(page);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await openView(page, "Codex");
-    await openStudioConfiguration(page);
-    await page.getByRole("switch", { name: /^Codex:/ }).click();
-    await closeStudioConfiguration(page);
-    await expect(page.getByTestId("plugin-view-bar")).toHaveCount(0);
-    // Disabled data remains durable; re-enable before reading through its normal API.
-    await openStudioConfiguration(page);
-    await page.getByRole("switch", { name: /^Codex:/ }).click();
-    await closeStudioConfiguration(page);
-    await openView(page, "Codex");
-    await expect(library).toContainText("Moon map");
-    const data = await page.request.get(
-      `/api/sessions/${f.sessionId}/plugin-data/codex/entries/map`,
-      { headers: f.headers },
-    );
-    expect(JSON.stringify(await data.json())).toContain(
-      "The committed chart changed.",
+      "The complete northern chart.",
     );
     const callsBeforeNavigation = f.provider.requests.length;
     await page.setViewportSize({ width: 390, height: 844 });
@@ -152,23 +106,28 @@ test("real bundled graph and codex pages share committed data with their panels"
       .getByRole("button", { name: /primary|主导航|основное/i })
       .click();
     await page
-      .getByRole("combobox", { name: /language|语言|язык/i })
+      .getByRole("dialog")
+      .getByRole("button", { name: /^(设置|Settings|Настройки)$/ })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("combobox", { name: /界面语言|interface language|язык/i })
       .selectOption("zh-CN");
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await page.keyboard.press("Escape");
-    for (const label of ["知识图鉴", "关系图谱", "主持人控制台"]) {
-      await page
-        .getByTestId("center-panel")
-        .getByRole("button", { name: "插件视图", exact: true })
-        .click();
-      await page
-        .getByRole("group", { name: "插件视图", exact: true })
-        .getByRole("button", { name: new RegExp(`^${label}`) })
-        .click();
-      await expect(page.getByTestId("plugin-view-bar")).toContainText(label);
-    }
+    await page
+      .getByTestId("center-panel")
+      .getByRole("button", { name: "插件页面", exact: true })
+      .click();
+    await page
+      .getByRole("group", { name: "插件页面", exact: true })
+      .getByRole("button", { name: /^主持人面板/ })
+      .click();
+    await expect(page.getByTestId("plugin-view-bar")).toContainText(
+      "主持人面板",
+    );
     await expect(page.getByTestId("plugin-view-container")).toContainText(
-      "待处理交互",
+      "待你处理",
     );
     expect(f.provider.requests).toHaveLength(callsBeforeNavigation);
     await expect(page.locator("iframe")).toHaveCount(0);
@@ -184,16 +143,16 @@ test("host console sends admitted Direct and textless Advance while retaining dr
   const f = await prepareEnsemble(page);
   try {
     await f.strategy("manual");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     const content = page.getByTestId("plugin-view-container");
     await expect(content).toContainText("Mara");
-    await expect(content).toContainText("Pending interactions");
+    await expect(content).toContainText("Waiting for you");
     await expect(content).toContainText("No pending interactions.");
     await page.getByTestId("composer-mode-direct").click();
     await composerInput(page).fill("Mara, answer the bell.");
     await back(page);
     await expect(composerInput(page)).toHaveValue("Mara, answer the bell.");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     const request = page.waitForRequest(
       (request) =>
         request.url().endsWith("/api/actions") && request.method() === "POST",
@@ -238,8 +197,8 @@ test("host console sends admitted Direct and textless Advance while retaining dr
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(
       page
-        .getByTestId("plugin-view-bar")
-        .getByRole("button", { name: "Back to default view" }),
+        .getByTestId("session-header")
+        .getByRole("button", { name: "Read", exact: true }),
     ).toBeInViewport();
   } finally {
     await f.close();
@@ -250,7 +209,7 @@ test("spectator console exposes only Advance", async ({ page }) => {
   const f = await prepareEnsemble(page, "spectator");
   try {
     await f.strategy("list");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     await expect(page.getByTestId("plugin-view-container")).toContainText(
       "Mara and Ivo wait by the bell.",
     );
@@ -314,16 +273,16 @@ test("a real pending form retains rejected input and resolves through normal adm
     );
     expect(opened.ok(), await opened.text()).toBe(true);
     await page.reload();
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     const pending = page.getByTestId("plugin-view-container");
     await expect(
-      pending.getByText("Attribute check", { exact: true }),
+      pending.getByText("Ability check", { exact: true }),
     ).toHaveCount(1);
     await pending
       .getByLabel("Attempted action", { exact: false })
       .fill("Inspect the bell");
     const attribute = pending.getByRole("combobox", {
-      name: "Attribute",
+      name: "Ability",
       exact: true,
     });
     await expect(attribute.locator('option[value="focus"]')).toHaveText(
@@ -351,7 +310,7 @@ test("a real pending form retains rejected input and resolves through normal adm
       } else await route.fallback();
     });
     await pending
-      .getByRole("button", { name: "Resolve check", exact: true })
+      .getByRole("button", { name: "Roll the check", exact: true })
       .click();
     await expect(pending.getByRole("alert").first()).toBeVisible();
     await expect(
@@ -359,7 +318,7 @@ test("a real pending form retains rejected input and resolves through normal adm
     ).toHaveValue("Inspect the bell");
     await attribute.selectOption("focus");
     await pending
-      .getByRole("button", { name: "Resolve check", exact: true })
+      .getByRole("button", { name: "Roll the check", exact: true })
       .click();
     await waitForTurnIdle(page);
     await expect(pending).toContainText("No pending interactions.");
@@ -376,7 +335,7 @@ test("a real pending form retains rejected input and resolves through normal adm
 test("changing views during deferred interruption keeps the second draft and admits one new request", async ({
   page,
 }) => {
-  const f = await prepareEnsemble(page, "host", false, ["codex"]);
+  const f = await prepareEnsemble(page);
   let releaseActor: () => void = () => {};
   let releaseAbort: () => void = () => {};
   const actorGate = new Promise<void>((resolve) => {
@@ -397,7 +356,7 @@ test("changing views during deferred interruption keeps the second draft and adm
       if (request.url().endsWith("/api/actions") && request.method() === "POST")
         sent.push(request.postDataJSON());
     });
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     await page.getByTestId("composer-mode-direct").click();
     await composerInput(page).fill("Mara and Ivo, begin the exchange.");
     await composerInput(page).press("Enter");
@@ -415,7 +374,6 @@ test("changing views during deferred interruption keeps the second draft and adm
     await composerInput(page).fill("Keep this second direction");
     await composerInput(page).press("Enter");
     await expect(composerInput(page)).toHaveValue("Keep this second direction");
-    await openView(page, "Codex");
     await expect(
       page
         .getByTestId("plugin-view-bar")
@@ -428,7 +386,7 @@ test("changing views during deferred interruption keeps the second draft and adm
     await waitForTurnIdle(page);
     await expect.poll(() => sent.length).toBe(2);
     await expect(composerInput(page)).toHaveValue("Keep this second direction");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     await expect(composerInput(page)).toHaveValue("Keep this second direction");
     const messages = await page.request.get(
       `/api/sessions/${f.sessionId}/messages`,

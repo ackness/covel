@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyRound, ShieldCheck, X } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { getSharedServerInfo } from "@/services/api/health.js";
 import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
+import { useNotice } from "@/lib/notice-center.js";
 
 const DISMISSED_KEY = "covel:sharedServerNoticeDismissed";
 
@@ -36,77 +37,66 @@ function sourceHref(repository: string, commit: string | undefined): string {
 
 /**
  * Tells players on a shared server that keeps saves in their browser where
- * their saves and API keys go, and which open-source build serves them. The
- * settings page's key list links to the same documentation page, so the
- * explanation stays reachable after the notice is dismissed.
+ * their saves and API keys go, and which open-source build serves them, as a
+ * global card until it is closed. The settings page's key list links to the
+ * same documentation page, so the explanation stays reachable afterwards.
+ * Closing the card hides it for good, not just into the bell.
  */
-export function SharedServerNotice() {
+export function useSharedServerNotice(): void {
   const { t, i18n } = useTranslation();
   const [info] = useState(getSharedServerInfo);
   const [dismissed, setDismissed] = useState(readDismissed);
-  if (!info || dismissed) return null;
-
   const linkClass =
     "text-primary underline underline-offset-2 hover:text-primary/80";
-  return (
-    <aside
-      aria-label={t("sharedServer.title")}
-      className="relative z-10 shrink-0 border-b border-primary/20 bg-primary/5 px-4 py-2.5 text-foreground"
-    >
-      <div className="mx-auto flex max-w-5xl items-start gap-3">
-        <ShieldCheck
-          aria-hidden="true"
-          className="mt-0.5 h-4 w-4 shrink-0 text-primary"
-        />
-        <div className="min-w-0 flex-1 text-xs leading-relaxed">
-          <p className="text-sm font-medium">{t("sharedServer.title")}</p>
-          <p className="mt-0.5 text-muted-foreground">
-            {t("sharedServer.body")}
-          </p>
-          <p className="mt-1 flex items-start gap-1.5 font-medium">
-            <KeyRound
-              aria-hidden="true"
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
-            />
-            <span>{t("sharedServer.keyAdvice")}</span>
-          </p>
-          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            <a
-              href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={linkClass}
-            >
-              {t("sharedServer.learnMore")}
-            </a>
-            {info.repository && (
-              <a
-                href={sourceHref(info.repository, info.commit)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={linkClass}
-              >
-                {info.commit
-                  ? t("sharedServer.sourceAt", {
-                      commit: info.commit.slice(0, 7),
-                    })
-                  : t("sharedServer.source")}
-              </a>
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          aria-label={t("sharedServer.dismiss")}
-          onClick={() => {
+  useNotice(
+    !info || dismissed
+      ? null
+      : {
+          key: "shared-server",
+          kind: "card",
+          tone: "info",
+          scope: "global",
+          title: t("sharedServer.title"),
+          body: t("sharedServer.body"),
+          onDismiss: () => {
             rememberDismissed();
             setDismissed(true);
-          }}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        >
-          <X aria-hidden="true" className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </aside>
+          },
+          render: () => (
+            <div className="flex flex-col gap-1 text-xs">
+              <p className="flex items-start gap-1.5 font-medium">
+                <KeyRound
+                  aria-hidden="true"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+                />
+                <span>{t("sharedServer.keyAdvice")}</span>
+              </p>
+              <p className="flex flex-wrap gap-x-4 gap-y-1">
+                <a
+                  href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  {t("sharedServer.learnMore")}
+                </a>
+                {info.repository && (
+                  <a
+                    href={sourceHref(info.repository, info.commit)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    {info.commit
+                      ? t("sharedServer.sourceAt", {
+                          commit: info.commit.slice(0, 7),
+                        })
+                      : t("sharedServer.source")}
+                  </a>
+                )}
+              </p>
+            </div>
+          ),
+        },
   );
 }

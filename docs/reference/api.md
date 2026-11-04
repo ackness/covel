@@ -250,7 +250,7 @@ community 插件的 ESM 代码会在服务器进程里注册全局能力，所�
 
 `DEPLOYMENT_TIER=demo|commercial` 启动时如果没有配置这个 token，服务端会直接拒绝启动。这些规则都来自启动时定下的宿主配置，每条路由要什么见 [安全边界](../internals/security.md#host-profile)。
 
-纯 Web 客户端可以在 **设置 → 运维访问** 里输入或清除这个 token：
+纯 Web 客户端可以在 **设置 → 高级 → 运维访问** 里输入或清除这个 token：
 
 - 凭据只保存在当前浏览器的 `localStorage`。
 - 只在上面这些需要运维 token 的同源请求里，以 `Authorization: Bearer <token>` 发送。
@@ -6838,4 +6838,4 @@ Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮
 
 ## 沙箱区域声明与宿主转发
 
-既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `surface` 和 `capabilities`；composer 不作为主视图默认值。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该区域，晚到结果丢弃；见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。现有 action/command RPC 的即时写入契约不变。
+既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `composer`（只有 `false`）和 `capabilities`。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该页面，晚到结果丢弃；见[页面中的输入框](./ui-panels.md#页面中的输入框)。现有 action/command RPC 的即时写入契约不变。

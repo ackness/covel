@@ -1,9 +1,9 @@
 ---
-version: 0.0.42
-displayName: Codex
+version: 0.0.43
+displayName: Almanac
 description: >-
-  Automatically collects newly discovered places, people, items, and rumors for
-  later review.
+  Collects the places, people, items and rumors you discover into an almanac you
+  can browse any time.
 tags:
   - "data:lorebook"
 author:
@@ -14,8 +14,6 @@ requires:
   - world-ir-provider@1
 contributes:
   ui:
-    view:
-      - ./ui/library-view.json
     right:
       - ./ui/codex-panel.json
   prompt:

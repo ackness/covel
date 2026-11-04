@@ -36,7 +36,7 @@ describe("player name validator", () => {
   ])("refuses %s of a character of the world", (_case, characterName) => {
     expect(validatePlayerName({ characterName }, data, en)).toEqual({
       field: "characterName",
-      message: `The name "${characterName.trim()}" already belongs to a character of this world. Choose another name.`,
+      message: `The name "${characterName.trim()}" is already taken by another character in this world. Choose another name.`,
     });
   });
 
@@ -49,7 +49,7 @@ describe("player name validator", () => {
 
   it("answers in the session's language", () => {
     const text =
-      'The name "{name}" already belongs to a character of this world. Choose another name.';
+      'The name "{name}" is already taken by another character in this world. Choose another name.';
     expect(
       validatePlayerName({ characterName: "Tomas" }, data, {
         locale: "zh-CN",

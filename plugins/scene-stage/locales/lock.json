@@ -1,17 +1,31 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#contributes.data.assets.authoring.title": "a19c8b7f0a69fb02",
+      "PLUGIN.md#contributes.data.scenes.authoring.title": "54ff7701d5870c38",
+      "PLUGIN.md#contributes.settings[key=activeSpeakerCount].description": "a54e7080be3fcef0",
+      "PLUGIN.md#contributes.settings[key=activeSpeakerCount].label": "5fec25944040a28b",
+      "PLUGIN.md#description": "33b0de87cdcd95e9",
+      "PLUGIN.md#displayName": "e4147e25c0352890",
+      "runtimes/cast/RUNTIME.md#description": "223ac660223940c5",
+      "runtimes/direction/RUNTIME.md#description": "a4c69109cc3fc33a",
+      "runtimes/resolver/RUNTIME.md#description": "254a6c29f81ea719",
+      "runtimes/seed/RUNTIME.md#description": "142cbb9ae8a427b0",
+      "runtimes/story-cues/RUNTIME.md#description": "09371c95f73528ad"
+    },
     "zh": {
       "PLUGIN.md#contributes.data.assets.authoring.title": "a19c8b7f0a69fb02",
-      "PLUGIN.md#contributes.data.scenes.authoring.title": "a24ed590530ed94d",
-      "PLUGIN.md#contributes.settings[key=activeSpeakerCount].label": "a613674299f56491",
-      "PLUGIN.md#description": "f465b6cee014e03c",
-      "PLUGIN.md#displayName": "f4be2acdd1a92dd3",
-      "runtimes/cast/RUNTIME.md#description": "78d0552b12ebb6d5",
-      "runtimes/direction/RUNTIME.md#description": "b68888215bf50d8e",
-      "runtimes/resolver/RUNTIME.md#description": "9c67b26969306887",
-      "runtimes/seed/RUNTIME.md#description": "25cfc3f8bebed131",
-      "runtimes/story-cues/RUNTIME.md#description": "6f50bf584748a397"
+      "PLUGIN.md#contributes.data.scenes.authoring.title": "54ff7701d5870c38",
+      "PLUGIN.md#contributes.settings[key=activeSpeakerCount].description": "a54e7080be3fcef0",
+      "PLUGIN.md#contributes.settings[key=activeSpeakerCount].label": "5fec25944040a28b",
+      "PLUGIN.md#description": "33b0de87cdcd95e9",
+      "PLUGIN.md#displayName": "e4147e25c0352890",
+      "runtimes/cast/RUNTIME.md#description": "223ac660223940c5",
+      "runtimes/direction/RUNTIME.md#description": "a4c69109cc3fc33a",
+      "runtimes/resolver/RUNTIME.md#description": "254a6c29f81ea719",
+      "runtimes/seed/RUNTIME.md#description": "142cbb9ae8a427b0",
+      "runtimes/story-cues/RUNTIME.md#description": "09371c95f73528ad"
     }
   }
 }

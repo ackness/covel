@@ -1,0 +1,33 @@
+# Russian text of the dice-check plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Проверка кубиками
+  description: Бросает кубики, когда действие рискованно, и показывает результат в чате.
+  contributes:
+    commands:
+      - name: roll
+        description: "Бросить кубики, например /roll 2d6. По умолчанию бросает один 20-гранный кубик."
+        arguments:
+          - name: notation
+            description: Что бросить, например 2d6 (два шестигранных кубика).
+runtimes/recorder/RUNTIME.md:
+  description: Записывает каждый результат броска из истории и показывает его в чате и в журнале бросков.
+runtimes/roller/RUNTIME.md:
+  description: В начале каждого хода заранее бросает кубики, поэтому успех решают кубики, а не ИИ.
+messages:
+  "Some results were left out because they did not match this turn's dice and rules.": "Часть результатов скрыта: они не совпали с кубиками и правилами этого хода."
+  Roll log: Журнал бросков
+  No rolls yet. Results appear here when you try a risky action.: Бросков пока не было. Результаты появятся здесь, когда вы попробуете рискованное действие.
+  You can also type /roll in the chat, for example /roll 2d6.: Можно также ввести в чате /roll, например /roll 2d6.
+  Roll d20: Бросить d20
+  Roll 2d6: Бросить 2d6
+  Dice count must be between 1 and 100.: Количество кубиков должно быть от 1 до 100.
+  Die sides must be between 2 and 1000.: Число граней должно быть от 2 до 1000.
+  "Enter dice like 2d6: number of dice, then d, then number of sides.": "Введите кубики в виде 2d6: сколько кубиков, затем буква d, затем сколько граней."
+  "{notation}: {rolls} (total {total})": "{notation}: {rolls} (сумма {total})"
+  Success: Успех
+  Failure: Неудача
+  Critical success: Критический успех
+  Critical failure: Критическая неудача
+  "Turn {turn}": "Ход {turn}"

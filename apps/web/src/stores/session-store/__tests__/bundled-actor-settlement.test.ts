@@ -210,14 +210,8 @@ describe("bundled dialogue actor settlement notices", () => {
           }),
         );
         for (const event of events) handle(event);
-        if (mode === "commit-rejection")
-          expect(toast).toHaveBeenCalledExactlyOnceWith(
-            expect.objectContaining({
-              kind: "info",
-              message: "1 action from this turn did not take effect.",
-            }),
-          );
-        else expect(toast).not.toHaveBeenCalled();
+        // The story footer carries the failed-operation line; no toast.
+        expect(toast).not.toHaveBeenCalled();
         expect(
           stateRef.current.messages.find((message) => message.id === "story")
             ?.operationFailures,

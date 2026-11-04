@@ -2,29 +2,30 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 对话叙事
-  description: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
+  displayName: 聊天式讲述
+  description: 像聊天一样讲故事，角色之间、角色和你都在对话。
   contributes:
     settings:
       - key: perspective
-        label: 视角
-        description: 由谁讲述故事、旁白如何称呼玩家角色；人物对白保持各自的人称。
+        label: 叙述视角
+        description: 选择故事怎样称呼你的角色。其他角色仍按自己的口吻说话。
         options:
-          - label: 玩家角色·第一人称（我）
-          - label: 玩家角色·第二人称（你）
-          - label: 玩家角色·第三人称（角色名）
-          - label: 全知旁白
-          - label: 主持人（DM）
+          - label: 我（“我推开了门。”）
+          - label: 你（“你推开了门。”）
+          - label: 角色名（“阿明推开了门。”）
+          - label: 无所不知的旁观者
+          - label: 主持人，像跑团主持人那样讲
       - key: dialogueRatio
-        label: 对话占比
-        description: 回复中人物对白和内心反应的大致占比。
+        label: 对话比例（%）
+        description: 每次回复里有多少是角色在说话，范围 30% 到 90%。数字越大，对话越多、描写越少。
       - key: proseLength
         label: 回复长度
+        description: 每次回复写多长。越长花费越多。
         options:
-          - label: 短
-          - label: 中
-          - label: 长
+          - label: 短，几句话
+          - label: 中，一小段
+          - label: 长，更完整的一幕
 runtimes/plan/RUNTIME.md:
-  description: 准备可选的角色名单和回合策略计划，名单只包含姓名。
+  description: 挑选这次回复里谁来发言。
 runtimes/narrate/RUNTIME.md:
-  description: 把对白和可选角色贡献组成一条故事。
+  description: 把角色的台词写成一段完整的故事回复。

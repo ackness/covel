@@ -1,10 +1,10 @@
 ---
 kind: core
-version: 0.0.12
+version: 0.0.13
 displayName: World Time
 description: >-
-  Tracks world-defined calendars, phases and time direction, settling each story
-  turn's elapsed time.
+  Keeps the date and time of the world and moves the clock forward as the story
+  goes on.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -30,7 +30,7 @@ contributes:
       accepts:
         - world.time-definition@1
       authoring:
-        title: World time definition
+        title: Time rules
         summary: Defines how this world counts time and how long actions take.
         hint: >-
           Write one object with `id: world` and a `definition`. `kind: phases`
@@ -44,7 +44,7 @@ contributes:
           path: data/time.yaml
   commands:
     - name: time
-      description: Show recorded world time without advancing the turn.
+      description: Show the current time in the world. The story does not move forward.
       action: time
   ui:
     right:

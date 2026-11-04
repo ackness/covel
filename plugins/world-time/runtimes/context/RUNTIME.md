@@ -1,5 +1,5 @@
 ---
-description: Provides the current time and the world's time rules to narration.
+description: Tells the story what time it is and how time works in this world.
 schedule:
   stage: pre-turn
 io:

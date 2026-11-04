@@ -37,7 +37,7 @@ Data this build cannot use is not migrated. The app keeps a copy, makes the sett
 - A copy never replaces an existing copy. A timestamp is added to the name; a counter follows when the same millisecond still collides.
 - When the copy cannot be written, or the backend has no `backupBundle`, nothing is dropped and SettingsStore stays read-only.
 - The notice comes through `subscribeRepairs` and `SettingsBackendAdapter.takeArchivedBundle()`.
-- The copies can be viewed and downloaded in Settings → Data (`listBackups` / `readBackup`; desktop IPC `covel:settings:backup`, `covel:settings:backups`, `covel:settings:read-backup`).
+- The copies can be viewed and downloaded in Settings → Saves & data → Import, backup & reset (`listBackups` / `readBackup`; desktop IPC `covel:settings:backup`, `covel:settings:backups`, `covel:settings:read-backup`).
 - The secrets channel is not affected, and a copy holds no API keys.
 
 The settings import/export format `SettingsExportBundle.schemaVersion: 1` is a separate, current format and is not affected by these limits.
@@ -53,7 +53,7 @@ Every setting has a scope:
 
 A `server` setting is declared in two places: the registry entry has `SettingEntry.scope: "server"`, and the same key has a definition in `SERVER_SETTINGS` (`packages/shared/src/env/server-settings.ts`: schema, default, and the environment variable that overrides it). A test fails when the two differ.
 
-The keys are `diagnostics.traceRetention` (Settings → General → "Keep diagnostic traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (Settings → Install & manage → "Trusted sources": an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for syntax and approval conditions.
+The keys are `diagnostics.traceRetention` (Settings → Advanced → "Keep debug traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (Settings → Plugins → Install & manage → "Trusted sources": an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for syntax and approval conditions.
 
 - **Where it is stored.** In the server's database, in the `server_settings` table of the DataStore (`listServerSettings` / `setServerSetting` / `deleteServerSetting`, covered by the store contract suite).
   - The desktop app and a self-hosted web deployment use the same mechanism.
@@ -114,11 +114,34 @@ What a setting schema must do: accept its own persisted output, and give the sam
 - A failed token edit or reset shows an error and reverts that failed draft and preview only, not edits made later.
 - The fire-and-forget error handling of the global `useSetting` is unchanged.
 
+## Settings groups
+
+The settings dialog has five groups. Each setting has one editor; everywhere else only links to it.
+
+| Group | Pages | Contents |
+|---|---|---|
+| **General** | Preferences, Appearance | Interface language, background music and volume, a "Reading" section (show text all at once, when the story appears, open turn updates by default); interface style, light or dark, theme library |
+| **Models** | AI roles, Providers & keys, Generation | The only editor for models. Capability overrides (`llm.capabilityOverrides`) and the per-step model choices on the start screen appear only in developer mode |
+| **Plugins** | Install & manage, and one page per plugin | Trusted sources (`trust.sources`) live here only. A plugin's model role (a `type: slot` setting) is changed only on its own page; other places show the current value and link here |
+| **Saves & data** | Import, backup & reset; Stored media | Reset sits apart at the bottom of its page and asks for confirmation |
+| **Advanced** | Options, Configuration file, Operator Access | Developer mode (`ui.developerView`), how long debug traces are kept, chat message window, the wait for the AI while authoring a world; the configuration JSON editor; operator access |
+
+The desktop app adds a "Desktop" page. It no longer has editors for `llm.toml` and `keys.env`, only "Open the config folder".
+
+Setting keys and stored values do not change with the grouping. A setting belongs to one page and has an editor only there. A plugin's page is titled with its display name, never its ID.
+
+Where other screens point:
+
+- The "Set up an AI first" card on the world list shows only while no model can run (a text role that is available and has a key). It opens Providers & keys.
+- The start screen shows the model in one line, "Using: xxx · Change". Change opens AI roles. If something is missing, the line says what and carries the same link.
+- A plugin row on the start screen shows the plugin's model role as text, with a Change link to that plugin's page.
+- The music switch lives in Settings and the game menu only, not on the world detail or showcase pages.
+
 ## Generic setting controls
 
-`widget: custom` is edited in a dedicated interface and does not create a placeholder on the General page. Desktop maintenance, provider imports, and package actions use a common result notice. A new notice cancels the old dismissal timer; refresh failures and empty installation results are also reported.
+`widget: custom` is edited in a dedicated interface and does not create a placeholder on a generic page. Desktop maintenance, provider imports, and package actions use a common result notice. A new notice cancels the old dismissal timer; refresh failures and empty installation results are also reported.
 
-A registered setting without a purpose-built pane renders through the generic widgets (`apps/web/src/settings/widgets/`). General and each plugin's settings page work this way.
+A registered setting without a purpose-built pane renders through the generic widgets (`apps/web/src/settings/widgets/`). Preferences, Advanced options and each plugin's settings page work this way.
 
 - **When a value is written.** Text, number, slider and secret controls keep a local draft and write on blur or Enter. A draft that is still open when the dialog closes is written too. They do not write on every key press, because that would validate every half-typed value and a number could not be retyped.
 - **Numbers.** A number outside the declared `min` / `max` becomes the nearest allowed value. A value the schema rejects for being fractional is rounded. An empty or non-numeric draft restores the stored value. When both bounds are declared, the range is shown beside the description.
@@ -130,7 +153,7 @@ A registered setting without a purpose-built pane renders through the generic wi
 - **Destructive actions.** Deleting a provider or model configuration, uninstalling a plugin, deleting a theme and resetting all settings require `requestConfirm`. Provider deletion clears its key and model role bindings; model configuration deletion clears only its bindings, keeping the key.
 - **Read-only mode.** When settings have not loaded successfully, only controls that write settings are disabled. Viewing, exporting and downloading backups remain available; other maintenance operations keep their own permission checks. Exports contain currently readable settings and may be incomplete; they are not the original backups. Including keys still requires explicit opt-in.
 
-**Toasts.** Toasts render under `document.body`, above every dialog. A click on a toast does not close the dialog under it.
+**Toasts.** Toasts and cards come from the notice host (see [Notice center](./ui-panels.md#notice-center)), which renders under `document.body`, above every dialog. A click on one does not close the dialog under it.
 
 **The Configuration files page.** It edits the raw configuration as text: the settings of this device (JSON, without secrets), and the files the server offers — `llm.toml`, and `config.toml` in desktop mode (see `/api/config/raw` in the [API reference](./api.md)). When the settings JSON is saved:
 
@@ -214,10 +237,10 @@ This section covers what the model settings pages show and when they save.
 
 - When model-catalog metadata first arrives or is refreshed manually, only the capability data is queried again; the model settings cards are not rebuilt. Uncommitted input and the expanded state of generation parameters stay as they are. After the catalogue updates, capability displays and generation parameters use the refreshed lookup results.
 - The model role list keeps the `default` role when it is configured, saved, or part of the default catalogue used when nothing is configured. When the role catalogue is empty, generation parameter inputs are disabled, and no empty role key is created.
-- The model configuration entry on the world list opens the Providers & Models page directly. Narrow screens show the provider list first, then the full details after a selection, with a way back. In provider details, each model has only one connectivity-test entry.
-- Current provider links and `keys.*` settings point to the Providers & Models page; other composite setting keys map to their own pages. The onboarding version number is internal state and is not shown as a regular setting.
+- The model configuration entry on the world list (shown only while no model can run) opens the Providers & keys page directly. Narrow screens show the provider list first, then the full details after a selection, with a way back. In provider details, each model has only one connectivity-test entry.
+- Current provider links and `keys.*` settings point to the Providers & keys page; other composite setting keys map to their own pages. The onboarding version number is internal state and is not shown as a regular setting.
 
-**The role catalogue.** Model Roles and Generation share one live role catalogue. It combines four sources: server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles therefore remain editable on both pages. The role options in plugin settings also follow the current model configuration.
+**The role catalogue.** AI roles and Generation share one live role catalogue. It combines four sources: server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles therefore remain editable on both pages. The role options in plugin settings also follow the current model configuration.
 
 **The onboarding guide.** It closes only after its completion flag has persisted. While the save is pending, closing it again is disabled. When the save fails, the guide stays open, shows an error, and allows a retry. Resetting the guide on desktop likewise reports completion only after the reset has persisted.
 
@@ -225,9 +248,9 @@ This section covers what the model settings pages show and when they save.
 
 - World preparation shows all run stages of the selected plugins, and offers a separate text-model binding for each agent runtime.
 - The provider roles of function runtimes are shown one by one for every `type: slot` setting. The precedence of the default is: the user's explicit override, the world's `pluginSettings`, the plugin's declaration. Clearing the user override restores the current world's default.
-- The session's left sidebar reads the current session's plugin metadata and edits the session's model override for each runtime. A missing or incompatible binding is indicated explicitly.
+- The "This game's settings" drawer reads the current session's plugin metadata and shows, as read-only text, the model each runtime actually uses, with a link to the model page of Settings. A missing or incompatible binding is indicated explicitly.
 
-**Where model limits come from.** Model Roles and Generation target the currently bound provider, model, and protocol. After the binding changes, the token limits of the previous server slot no longer limit the new model. Provider details also include the connection's protocol in capability lookups.
+**Where model limits come from.** AI roles and Generation target the currently bound provider, model, and protocol. After the binding changes, the token limits of the previous server slot no longer limit the new model. Provider details also include the connection's protocol in capability lookups.
 
 - **What may be taken as a model limit.** A lookup result with source `known` or `model-database` and `found: true`. A server target that is currently not overridden can keep its configured limits. An explicit user capability override takes precedence.
 - **What may not be taken as a model limit.** `protocol-default` only estimates what the protocol supports; its numbers do not establish a model limit. The page then shows "Model limits unknown" and does not present the protocol's default context / output numbers as hard model limits.
@@ -330,15 +353,15 @@ Ordinary device-settings export/import can carry the identity; session exports, 
 
 ## Sandbox selection and consent
 
-Main/composer selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Both reuse the content/capability consent keys above; `surface` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer).
+Page selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Pages reuse the content/capability consent keys above; `composer` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [the input box on a page](./ui-panels.md#the-input-box-on-a-page).
 
 ### Instant text
 
-Settings → General → **Instant text** stores the device-local boolean `ui.instantText`, default `false`. Turning it on overrides any plugin segment-reveal policy and immediately finishes an active reveal. Turning it off permits future opted-in content; it does not replay existing text. Ordinary SettingsStore validation, persistence, export and revision handling apply. This preference does not enter session metadata, snapshots or proposals; individual reveal timers and visibility never enter settings. Without an authored reveal policy, rendering is instant regardless of the preference.
+Settings → General → Preferences → Reading → **Show text all at once** stores the device-local boolean `ui.instantText`, default `false`. Turning it on overrides any plugin segment-reveal policy and immediately finishes an active reveal. Turning it off permits future opted-in content; it does not replay existing text. Ordinary SettingsStore validation, persistence, export and revision handling apply. This preference does not enter session metadata, snapshots or proposals; individual reveal timers and visibility never enter settings. Without an authored reveal policy, rendering is instant regardless of the preference.
 
 ### Show the story as it is written
 
-Settings → General → **Show the story as it is written** stores the device-local key `ui.liveOutput`, default `units`:
+Settings → General → Preferences → Reading → **When the story appears** stores the device-local key `ui.liveOutput`, default `units`:
 
 | Value       | Option                 | What the player sees                            |
 | ----------- | ---------------------- | ----------------------------------------------- |

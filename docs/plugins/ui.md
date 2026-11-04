@@ -22,7 +22,7 @@
 | 故事段落换一种画法（对白名牌、角色头像）     | 段落模板 `ui.segment`                               | 正文里，替换匹配段落的默认画法   | 一份 JSON            |
 | 给玩家选的选项                               | `ChoiceList` / `Choice` 组件                        | 正文里；舞台视图的决策区         | JSON，或一次工具调用 |
 | 必须回答才能继续的表单                       | `create-form` 工具                                  | 正文里，回答之前输入框是锁住的   | 一次工具调用         |
-| 一眼就该看到的状态（目标、时间、行囊）       | 状态摘要 `session.summary@1`                        | 面板页签下方，或场景图上的状态条 | 十几行代码           |
+| 一眼就该看到的状态（目标、时间、背包）       | 状态摘要 `session.summary@1`                        | 面板页签下方，或场景图上的状态条 | 十几行代码           |
 | 场景图、立绘、背景音乐                       | 框架预留的画面位置                                  | 舞台视图、场景背景、头像         | 一段提供数据的代码   |
 | 现成组件画不出来的界面（地图、棋盘、小游戏） | 自己的 HTML 文件 `webview`                          | 右侧面板；也可以挂到舞台的决策区 | 一个 HTML 文件       |
 | 玩家要读的故事                               | 不是界面。由 `io.visibility: story` 的 runtime 输出 | 正文                             | 提示词               |
@@ -577,14 +577,14 @@ HTML 文件在一个隔离的框里运行。框架给它一个 `window.covel` �
 
 ## 让界面跟着风格走
 
-玩家可以在 **设置 → 外观** 里换界面风格。每套风格的配色、字体、圆角不同，有的连结构都不同：页签是图标还是文字、有没有场景背景。你不需要为每套风格各写一份界面，只要遵守下面几条：
+玩家可以在 **设置 → 常用 → 外观** 里换界面风格。每套风格的配色、字体、圆角不同，有的连结构都不同：页签是图标还是文字、有没有场景背景。你不需要为每套风格各写一份界面，只要遵守下面几条：
 
 - **说意思，不说样子。** 用组件的 `tone`、`variant` 这类参数表达“警告”“成功”“次要”。不要在界面文件里写具体的颜色、字体或圆角。
 - **说内容，不说位置。** 面板放在哪、页签长什么样由风格决定。你只需要给好 `label`、`shortLabel` 和 `icon`。
 - **不要假设面板有多宽，也不要假设是深色还是浅色。** 玩家可以拖动面板的宽度。内容要能换行、能滚动；图片和图表不要依赖深色的底。
 - **自己画的界面用 `--covel-*` 变量上色**，不要写死颜色。
 
-自查的办法：在 **设置 → 外观 → 风格方案** 里依次选“面板”“书卷”“舞台”，每换一次就看一眼自己的面板和正文内容块。
+自查的办法：在 **设置 → 常用 → 外观 → 风格方案** 里依次选“面板”“书卷”“舞台”，每换一次就看一眼自己的面板和正文内容块。
 
 ## 现在的限制
 
@@ -628,14 +628,14 @@ HTML 文件在一个隔离的框里运行。框架给它一个 `window.covel` �
 
 1. 复制 [session-view-probe](../../tests/third-party/session-view-probe/README.md) 到用户插件目录。它不含 runtime 和服务端入口。
 2. 打开根 `PLUGIN.md` 的 `contributes.ui.view`，查看 `story-view.json` 和 `notes-view.json`。前者用单文件 HTML 读取故事，后者用 `Stack` 和 `Text` 画一个无需会话数据的页面。修改英文标签时，同步修改 `locales/zh.yaml`。
-3. 在会话启用插件，从顶部“插件视图”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。通过“返回默认视图”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
+3. 在会话启用插件，从顶部“插件页面”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。点击头部的“阅读”或“舞台”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
 
-桥接读取范围、视图字段和当前限制见[插件视图参考](../reference/ui-panels.md#插件视图)。此示例不提交行动或表单，没有输入框，也不显示图片。
+桥接读取范围、视图字段和当前限制见[插件视图参考](../reference/ui-panels.md#插件视图)。此示例不提交行动或表单，也不显示图片；宿主输入框仍在页面下方，要隐藏它见[页面中的输入框](../reference/ui-panels.md#页面中的输入框)。
 
 | 遇到的问题             | 处理                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------- |
 | 菜单里没有视图         | 确认插件在当前会话启用，检查 `/api/ui-specs` 的 `diagnostics`                 |
-| 读取授权后页面仍为空白 | 检查 HTML 使用 classic script 和 `window.covel.subscribe`；用宿主返回按钮离开 |
+| 读取授权后页面仍为空白 | 检查 HTML 使用 classic script 和 `window.covel.subscribe`；点头部的“文本”离开 |
 | 页面在数据为空时不显示 | 无数据源的 json-render 页面添加 `alwaysRender: true`                          |
 
 ## 多文件页面
@@ -703,7 +703,7 @@ messages:
 
 ## 从会话页面请求玩家行动
 
-查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个独立区域和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变；显式主视图保留宿主输入框，独立输入框可用于舞台。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个页面：一个保留宿主输入框，一个声明 `composer: false`。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。页面默认保留宿主输入框；声明 `composer: false` 的页面自己处理输入，停止入口移到头部。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
 
 ## 声明式会话控制台
 
@@ -732,21 +732,21 @@ contributes:
 }
 ```
 
-启用此社区包后，从“插件视图”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。
+启用此社区包后，从“插件页面”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。
 
 ## 发布静态主题
 
-配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。可静态验证、通过 API 发现，并由玩家在“会话主题”明确选择。可运行的社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)：压缩包内容后通过安装入口安装，启用插件，再选择主题。场景舞台的可选“舞台阅读”也只使用这条公共声明。
+配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。可静态验证、通过 API 发现，并由玩家在“会话主题”明确选择。可运行的社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)：压缩包内容后通过安装入口安装，启用插件，再选择主题。舞台画面的可选“舞台阅读”也只使用这条公共声明。
 
 ## 创建独立输入页面
 
-社区示例 `sandbox-surface-probe` 把 `ui/reader.json` 声明为 main，把下面的 `ui/input.json` 声明为 composer。两份路径仍放在 `contributes.ui.view`。共享根目录的 `index.html` 载入经典 `app.js`；服务端 handler 与 schema 留在根目录之外。
+社区示例 `sandbox-surface-probe` 的 `ui/reader.json` 是保留宿主输入框的普通页面，下面的 `ui/input.json` 声明 `composer: false`。两份路径都放在 `contributes.ui.view`。共享根目录的 `index.html` 载入经典 `app.js`；服务端 handler 与 schema 留在根目录之外。
 
 ```json
 {
   "id": "input",
   "label": "Bridge input",
-  "surface": "composer",
+  "composer": false,
   "bridge": "session",
   "capabilities": [
     "submitAction",
@@ -796,4 +796,4 @@ document.getElementById("submit").onclick = async () => {
 };
 ```
 
-完整示例还用当前句柄回答交互、调用所属手动 runtime、停止和打开自己的面板；不要把原始结果写进页面。结果与方法见[页面请求](../reference/ui-panels.md#页面请求与安全结果)，授权与超时见[沙箱区域](../reference/ui-panels.md#沙箱主视图与输入框)。内容或能力变化后重新授权；玩家可从宿主撤销、返回或显式重试。错误/失联模式用于验收，不会自动重放修改，也不能用页面重载恢复草稿。
+完整示例还用当前句柄回答交互、调用所属手动 runtime、停止和打开自己的面板；不要把原始结果写进页面。结果与方法见[页面请求](../reference/ui-panels.md#页面请求与安全结果)，授权与超时见[页面中的输入框](../reference/ui-panels.md#页面中的输入框)。内容或能力变化后重新授权；玩家可从宿主撤销、离开页面或再次选择以重试。错误/失联模式用于验收，不会自动重放修改，也不能用页面重载恢复草稿。

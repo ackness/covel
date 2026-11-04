@@ -23,8 +23,9 @@ describe("world-ir plugin contract", () => {
     const loaded = await loadRuntime(discovery!, "world-ir");
     expect(parsed?.manifest.outputContract).toBe("world-ir-provider@1");
     expect(packageManifest.displayName).toEqual({
-      zh: "世界事实提取",
-      en: "World Fact Extraction",
+      zh: "故事整理",
+      en: "Story Notes",
+      ru: "Заметки к истории",
     });
     expect(packageManifest.entry).toBe("./server/index.js");
     expect(parsed?.manifest.tools?.plugin).toEqual(["submit-world-facts"]);

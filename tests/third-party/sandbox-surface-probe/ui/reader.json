@@ -12,6 +12,5 @@
   "webview": {
     "root": "./ui/app",
     "entry": "index.html"
-  },
-  "surface": "main"
+  }
 }

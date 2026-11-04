@@ -1,10 +1,10 @@
 ---
 kind: core
-version: 0.0.43
-displayName: Narrator
+version: 0.0.44
+displayName: Storyteller
 description: >-
-  Continues the story from your actions, describing scenes, reactions, and
-  outcomes.
+  Continues the story after each of your actions, with scenes, reactions and
+  what happens next.
 tags:
   - "mode:traditional-story"
   - "data:relationship-graph"
@@ -29,19 +29,19 @@ contributes:
       default: character-second
       label: Perspective
       description: >-
-        Who tells the story and how narration refers to the player character;
-        dialogue keeps each speaker's perspective.
+        How the story refers to your character. Other characters still speak
+        in their own words.
       options:
         - value: character-first
-          label: Player character, first person (I)
+          label: I ("I open the door.")
         - value: character-second
-          label: Player character, second person (you)
+          label: You ("You open the door.")
         - value: character-third
-          label: Player character, third person (name)
+          label: Your character's name ("Ming opens the door.")
         - value: omniscient
-          label: Omniscient narrator
+          label: Observer who knows everything
         - value: dm
-          label: Game master
+          label: Game master, like a tabletop host
   prompt:
     - id: post-history
       content: >

@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import {
   act,
   cleanup,
@@ -13,6 +14,16 @@ import {
   SetupProgressNotice,
   setupProgress,
 } from "../setup-progress-notice.js";
+import { NoticeHost } from "@/components/ui/notice-host.js";
+
+function SetupNotice(props: ComponentProps<typeof SetupProgressNotice>) {
+  return (
+    <>
+      <SetupProgressNotice {...props} />
+      <NoticeHost />
+    </>
+  );
+}
 
 const done = {
   state: "done",
@@ -200,7 +211,7 @@ describe("SetupProgressNotice", () => {
 
   it("renders an explanation after a setup attempt produced no messages", () => {
     render(
-      <SetupProgressNotice
+      <SetupNotice
         progress={setupProgress({
           ...idle,
           messages: [],
@@ -231,7 +242,7 @@ describe("SetupProgressNotice", () => {
       expect.stringContaining("A setup step is still waiting"),
     );
     expect(screen.getByRole("button", { name: "Continue setup" })).toBeTruthy();
-    expect(screen.getByText("Waiting on: Optional Rules")).toBeTruthy();
+    expect(screen.getByText(/Waiting on: Optional Rules/)).toBeTruthy();
   });
 
   it("re-arms every blocked step, then runs setup again", async () => {
@@ -241,7 +252,7 @@ describe("SetupProgressNotice", () => {
     });
     const onRun = vi.fn(() => calls.push("run"));
     render(
-      <SetupProgressNotice
+      <SetupNotice
         progress={{ kind: "failed", blocked: ["a/setup", "b/setup"] }}
         onRearm={onRearm}
         onRun={onRun}
@@ -249,7 +260,7 @@ describe("SetupProgressNotice", () => {
       />,
     );
     // The session record trails the end of a run; nothing shows before it settles.
-    expect(screen.queryByTestId("setup-progress-notice")).toBeNull();
+    expect(screen.queryByTestId("notice-setup-progress")).toBeNull();
     act(() => vi.advanceTimersByTime(1500));
     fireEvent.click(screen.getByRole("button", { name: "Retry setup" }));
     await act(async () => {});
@@ -259,7 +270,7 @@ describe("SetupProgressNotice", () => {
   it("does not run setup when a step could not be re-armed", async () => {
     const onRun = vi.fn();
     render(
-      <SetupProgressNotice
+      <SetupNotice
         progress={{ kind: "failed", blocked: ["a/setup"] }}
         onRearm={async () => {
           throw new Error("offline");
@@ -289,7 +300,7 @@ describe("SetupProgressNotice", () => {
     const onRun = vi.fn();
     const onRearm = vi.fn();
     render(
-      <SetupProgressNotice
+      <SetupNotice
         progress={{ kind: "failed", blocked: ["world/setup"], error }}
         onRearm={onRearm}
         onRun={onRun}
@@ -297,7 +308,9 @@ describe("SetupProgressNotice", () => {
       />,
     );
     act(() => vi.advanceTimersByTime(1500));
-    expect(screen.getByRole("alert").getAttribute("data-kind")).toBe("failed");
+    expect(screen.getByRole("alert").getAttribute("data-notice-tone")).toBe(
+      "error",
+    );
     expect(screen.getByText(i18n.t(`error.actionable.${kind}`))).toBeTruthy();
     expect(screen.queryByText(i18n.t("session.setupFailedDetail"))).toBeNull();
     expect(screen.queryByText(error)).toBeNull();
@@ -320,7 +333,7 @@ describe("SetupProgressNotice", () => {
     "keeps retry primary for a failure without a settings fix: %s",
     (error) => {
       render(
-        <SetupProgressNotice
+        <SetupNotice
           progress={{ kind: "failed", blocked: [], error }}
           onRearm={vi.fn()}
           onRun={vi.fn()}
@@ -342,7 +355,7 @@ describe("SetupProgressNotice", () => {
   it("offers a primary continue action for unfinished setup", () => {
     const onRun = vi.fn();
     render(
-      <SetupProgressNotice
+      <SetupNotice
         progress={{ kind: "unfinished", blocked: [] }}
         onRearm={vi.fn()}
         onRun={onRun}
@@ -350,8 +363,8 @@ describe("SetupProgressNotice", () => {
       />,
     );
     act(() => vi.advanceTimersByTime(1500));
-    expect(screen.getByRole("status").getAttribute("data-kind")).toBe(
-      "unfinished",
+    expect(screen.getByRole("status").getAttribute("data-notice-tone")).toBe(
+      "info",
     );
     const button = screen.getByRole("button", { name: "Continue setup" });
     expect(button.getAttribute("data-variant")).toBe("default");

@@ -1,9 +1,9 @@
 ---
 kind: core
-version: 0.0.49
+version: 0.0.50
 displayName: Character Creator
 description: >-
-  Helps create your hero and keeps important character details up to date during
+  Helps you create your hero and keeps track of the characters you meet in
   the story.
 tags:
   - "data:characters"

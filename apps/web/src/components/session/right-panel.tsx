@@ -557,10 +557,9 @@ function SessionRightPanel({
         </div>
       </Tabs>
       {storageStatus &&
-        // The backend name is operator detail. The labelled-tab layouts keep
-        // the footer only for the one case a player must know: nothing is
-        // being saved.
-        (!barTabs ||
+        // The backend name is developer detail. Everyone keeps the footer for
+        // the one case a player must know: nothing is being saved.
+        (developerView ||
           (!storageStatus.browserAuthority &&
             storageStatus.backend === "memory")) && (
           <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">

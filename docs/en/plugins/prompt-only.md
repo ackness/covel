@@ -418,7 +418,7 @@ Validation reports `execution: declarative`. This means no plugin server code ex
 
 `contributes.data.notes.accepts` accepts world data addressed to `notebook.notes@1`; imports still obey the dataset's schema, key and allowed operations. Declarative runtimes write only their own datasets and validated character records; other plugins' data changes only through their write services. Character writes use the built-in `sync-characters` and normal proposal validation.
 
-Select “Notebook page” from the toolbar's plugin view menu. Denying session access leaves the default game usable; after consent the classic external script mounts and receives the public session projection. Return to the default view or revoke access in the view menu. Changing JSON or page assets changes the content identity and requires consent again. Package enable, source trust and code approval cannot substitute for read consent. See [Plugin views](../reference/ui-panels.md#plugin-views).
+Select “Notebook page” from the toolbar's Plugin pages menu. Denying session access leaves the default game usable; after consent the classic external script mounts and receives the public session projection. Click Text in the header to leave, or revoke access in the view menu. Changing JSON or page assets changes the content identity and requires consent again. Package enable, source trust and code approval cannot substitute for read consent. See [Plugin views](../reference/ui-panels.md#plugin-views).
 
 `review-note` optionally imports `notebook.review@1`. It appears only with one independently enabled, authorized provider; the notebook remains usable without it. Write services stage and commit under the provider's identity. The caller's exemption cannot authorize provider code. See [Communication](../reference/plugin-extensions.md).
 
@@ -496,7 +496,7 @@ This section belongs to the whole plugin. When a plugin has several runtimes, a 
 | Validation reports `id must match plugin directory`  | The written `id` differs from the folder name. Delete `id` (without it, the ID is the folder name), or change it to the folder name |
 | It is not in the plugin list                         | It is not in the user plugins directory, or validation did not pass. Restart the backend after validating                           |
 | Selected but did not run                             | Check stage, inputs and model configuration; only code / unknown packages need code approval                                        |
-| The `plugin` role is reported as unavailable         | In **Settings → LLM → Model Roles**, choose a model for it                                                                          |
+| The `plugin` role is reported as unavailable         | In **Settings → Models → AI roles**, choose a model for it                                                                          |
 | The model says "Saved", but there is no record       | It did not call a tool. List the dataset in `agent.tools.datasets`, and state in the prompt when to call `<dataset>-upsert`         |
 | In a Chinese game, changing the prompt has no effect | You changed `PLUGIN.md`, but a Chinese game reads `PLUGIN.zh.md`                                                                    |
 | A setting shows in English in the interface          | There is no entry for it in `locales/zh.yaml`, or its `key` does not match                                                          |

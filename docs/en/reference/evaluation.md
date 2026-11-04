@@ -17,7 +17,7 @@ Key points:
 
 ### Add it in Settings
 
-Open **Settings → LLM → Providers & Models**. Fill in the provider, API URL, API key, and model ID the same way you would for any other model.
+Open **Settings → Models → Providers & keys**. Fill in the provider, API URL, API key, and model ID the same way you would for any other model.
 
 - The provider's protocol is the default. When you add a model, or on the model's row, you can choose a protocol for that model alone. So one connection can have both a chat model and an evaluation model.
 - A model's own protocol is kept when you save, copy, import, export, and send requests. Choosing "Use provider protocol" removes this override and goes back to inheriting.

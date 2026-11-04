@@ -1,0 +1,9 @@
+PLUGIN.md:
+  displayName: Подготовка к игре
+  description: Приветствует вас в мире и готовит начало приключения.
+messages:
+  Unknown World: Неизвестный мир
+  Welcome to {world}: Добро пожаловать в {world}
+  Welcome to {world}.: Добро пожаловать в {world}.
+  Welcome to {world}. {summary}: Добро пожаловать в {world}. {summary}
+  Your adventure is about to begin…: Ваше приключение скоро начнётся…

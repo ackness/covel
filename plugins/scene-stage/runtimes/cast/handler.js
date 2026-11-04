@@ -65,7 +65,7 @@ export default async function handler(ctx) {
       reason: "No named NPC has enough current scene salience yet.",
       reasonLabel: labelText(
         ctx,
-        "No NPC currently has enough scene salience.",
+        "No character stands out in the scene right now.",
       ),
       turnId,
       updatedAt: new Date().toISOString(),
@@ -116,11 +116,11 @@ export default async function handler(ctx) {
 function signalView(ctx, signal) {
   // Each text is a literal: the validator reads them from the source.
   const labels = {
-    "mentioned by player": labelText(ctx, "Mentioned"),
-    "present in recent messages": labelText(ctx, "In scene"),
-    "has character profile": labelText(ctx, "Profile"),
-    "has tracked state": labelText(ctx, "State"),
-    "recently active": labelText(ctx, "Recent"),
+    "mentioned by player": labelText(ctx, "Mentioned by you"),
+    "present in recent messages": labelText(ctx, "In the scene"),
+    "has character profile": labelText(ctx, "Has a profile"),
+    "has tracked state": labelText(ctx, "Has status notes"),
+    "recently active": labelText(ctx, "Recently active"),
   };
   return {
     id: signal,

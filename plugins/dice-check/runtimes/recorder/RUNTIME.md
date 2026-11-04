@@ -1,7 +1,7 @@
 ---
 description: >-
-  Records dice-check receipts emitted by the narrative, keeping an audit log and
-  powering the in-message result block.
+  Records each dice result the story reports and shows it in the chat and the
+  roll log.
 schedule:
   trigger:
     type: event

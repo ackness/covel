@@ -15,6 +15,7 @@ import {
   startGame,
   useServerWorlds,
   waitForTurnIdle,
+  openCustomStart,
 } from "./player.js";
 
 export function ensembleReply(
@@ -168,6 +169,7 @@ export async function prepareEnsemble(
   await selectWorldByText(page, new RegExp(name));
   // Creation waits for the full world record and its IndexedDB lore draft.
   // Concurrent browser starts can finish these after the summary has painted.
+  await openCustomStart(page);
   const loreCard = page.getByRole("button", { name: /^World Document/ });
   await loreCard.click();
   await expect(
@@ -177,11 +179,18 @@ export async function prepareEnsemble(
     page.getByRole("status").filter({ hasText: "Loading saved draft..." }),
   ).toHaveCount(0, { timeout: 30_000 });
   await loreCard.click();
-  await page.getByLabel("Play as", { exact: true }).selectOption(role);
-  await expect(page.getByLabel("Play as", { exact: true })).toHaveValue(role);
+  const roleLabel = {
+    player: "Player",
+    host: "Game master",
+    spectator: "Spectator",
+  }[role];
+  await page.getByRole("radio", { name: roleLabel, exact: true }).check();
+  await expect(
+    page.getByRole("radio", { name: roleLabel, exact: true }),
+  ).toBeChecked();
   const start = page.getByRole("button", { name: "Start Game", exact: true });
   await expect(start).toBeEnabled();
-  await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+  await openCustomStart(page);
   const advanced = page.getByTestId("advanced-plugin-settings");
   await advanced.locator("summary").click();
   const excluded = [
@@ -283,16 +292,16 @@ export async function prepareEnsemble(
     page.getByRole("button", { name: "Begin Adventure", exact: true }),
   ).toHaveCount(0);
   await waitForTurnIdle(page);
-  await page.getByRole("button", { name: "Parsed view", exact: true }).click();
+  await page.getByRole("button", { name: "Read", exact: true }).click();
   await openStudioConfiguration(page);
   const orchestration = page.getByRole("group", {
-    name: "Orchestration",
+    name: "Speaking and advancing",
     exact: true,
   });
-  await expect(orchestration.getByText(/^Turn Policy \/ /)).toBeVisible();
+  await expect(orchestration.getByText(/^Who Speaks Next \/ /)).toBeVisible();
   await expect(orchestration.getByRole("combobox")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Save Turn policy", exact: true }),
+    page.getByRole("button", { name: "Save Speaking rules", exact: true }),
   ).toHaveCount(0);
   const resolved = await page.request.get(
     `/api/sessions/${session.id}/orchestration`,
@@ -303,9 +312,9 @@ export async function prepareEnsemble(
     settings: { maxActors: 4, maxSubagentCalls: 16 },
   });
   expect((await resolved.json()).settings.turnPolicy).toBeUndefined();
-  await page.getByLabel("Automatic rounds", { exact: true }).fill("2");
+  await page.getByLabel("Auto-advance turns", { exact: true }).fill("2");
   const saveAdvance = page.getByRole("button", {
-    name: "Save Automatic rounds",
+    name: "Save Auto-advance turns",
     exact: true,
   });
   await saveAdvance.click();
@@ -317,14 +326,14 @@ export async function prepareEnsemble(
     await page.getByRole("button", { name: /^Settings for / }).click();
     const control = page
       .getByRole("dialog")
-      .getByLabel("Strategy", { exact: true });
+      .getByLabel("Who speaks", { exact: true });
     await control.selectOption(value);
     await expect(control).toHaveValue(value);
     if (value === "list") {
       // An empty order preserves the incoming cast order, which follows salience.
       const order = page
         .getByRole("dialog")
-        .getByLabel("Actor order", { exact: true });
+        .getByLabel("Speaking order", { exact: true });
       await order.fill("Mara\nIvo");
       await order.blur();
       await expect(order).toHaveValue("Mara\nIvo");

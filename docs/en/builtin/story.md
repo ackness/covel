@@ -1,42 +1,42 @@
 # Narrative and Memory
 
-This page explains how the story is written, how you get suggestions after it, and how a long game remembers what happened earlier. "Narrator" and "Dialogue Narrator" are two ways to tell the story that replace each other, so a game uses only one of them.
+This page explains how the story is written, how you get suggestions after it, and how a long game remembers what happened earlier. "Storyteller" and "Chat Storyteller" are two ways to tell the story that replace each other, so a game uses only one of them.
 
-| Plugin                                    | In short                                                                                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Narrator (`narrator`)                     | Tells the story like a novel, one scene per turn.                                                                              |
-| Dialogue Narrator (`chat-mode-narrator`)  | Tells the story mostly through character dialogue, for chat-style play.                                                        |
-| Action Suggestions (`guide`)              | After each part of the story, recaps what came before, points out the choice in front of you, and offers actions to pick from. |
-| Reply Variants (`branch-reply`)           | Writes several other versions of the same turn, and you pick one.                                                              |
-| Story Memory (`memory`)                   | Remembers the plot, the scene, character relationships and the player character's state.                                       |
-| History Compaction (`history-compaction`) | Shortens very old messages into a summary, so a long game stays within the model's length limit.                               |
+| Plugin                                   | In short                                                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Storyteller (`narrator`)                 | Tells the story like a novel, one scene per turn.                                                                              |
+| Chat Storyteller (`chat-mode-narrator`)  | Tells the story mostly through character dialogue, for chat-style play.                                                        |
+| Action Suggestions (`guide`)             | After each part of the story, recaps what came before, points out the choice in front of you, and offers actions to pick from. |
+| Alternative Replies (`branch-reply`)     | Writes several other versions of the same turn, and you pick one.                                                              |
+| Story Memory (`memory`)                  | Remembers the plot, the scene, character relationships and the player character's state.                                       |
+| Long-Story Memory (`history-compaction`) | Shortens very old messages into a summary, so a long game stays within the model's length limit.                               |
 
 ## Pick a way to tell the story
 
 `narrator` and `chat-mode-narrator` do the same job: they write the next part of the story based on your action. They cannot be on at the same time. Pick one.
 
-|                 | Narrator (`narrator`)                                         | Dialogue Narrator (`chat-mode-narrator`)                                 |
+|                 | Storyteller (`narrator`)                                      | Chat Storyteller (`chat-mode-narrator`)                                  |
 | --------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Reads like      | A 200 to 400 character novel passage                          | A conversation, with characters taking turns to speak                    |
 | Good for        | Exploration, investigation, adventure, and other long stories | Romance, everyday life, roleplay, and other play that relies on chatting |
-| Matching packs  | Traditional Story, Low Cost                                   | Dialogue Mode                                                            |
-| Works best with | Nothing else                                                  | Scene Stage (`scene-stage`) and Action Suggestions (`guide`)             |
+| Matching packs  | Classic Story, Budget                                         | Dialogue                                                                 |
+| Works best with | Nothing else                                                  | Stage Scene (`scene-stage`) and Action Suggestions (`guide`)             |
 
 How to choose:
 
 - If you are not sure, use the gameplay pack the world recommends. The world has already chosen one for you.
-- If you want to read a story and value description and reasoning, choose "Narrator".
-- If you want characters to talk back and forth with you, and you want to see portraits and a stage, choose "Dialogue Narrator".
-- If you want to keep model costs down, choose the "Low Cost" pack. It uses "Narrator" and has no extra model calls for things like action suggestions.
+- If you want to read a story and value description and reasoning, choose "Storyteller".
+- If you want characters to talk back and forth with you, and you want to see portraits and a stage, choose "Chat Storyteller".
+- If you want to keep model costs down, choose the "Budget" pack. It uses "Storyteller" and has no extra model calls for things like action suggestions.
 
 > [!NOTE]
 > Both narrators write `cues.scene` when the location changes and `cues.mood` when the mood changes, following any mood list supplied in context. Unchanged cues are omitted. A character lookup with no match returns a not-found error and the closest names; the model can retry a listed name or leave the fact unknown. A tool's `staged` notice means the change commits at turn end and may still be rejected. The narrator should continue without repeating the notice or calling again for the same change.
 >
-> Either narrator can run on its own. Scene Stage adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
+> Either narrator can run on its own. Stage Scene adds the stage presentation and Action Suggestions adds suggested actions; the story still works without them.
 
-When [Inventory](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items. `change-inventory` stages purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Inventory, the tools are absent and narration continues as usual.
+When [Bag](./rpg.md#inventory-inventory) is active, both narrators can use `check-bag` to look up carried items. `change-inventory` stages purchases, trades, gifts or consumption before writing prose, with payment first. A refused call means the exchange does not happen. Without Bag, the tools are absent and narration continues as usual.
 
-## Narrator (`narrator`)
+## Storyteller (`narrator`)
 
 Continues the story from your latest action, describing the scene, how characters react, and the results. It writes one passage per turn, and usually ends on a cliffhanger, a question, or an action that is not finished yet. It writes only story text and does not list options. Action choices are handled by "Action Suggestions".
 
@@ -46,7 +46,7 @@ The story text in the chat area.
 
 ### When it is on
 
-It is a core plugin (`kind: core`) and the default way to tell the story. The "Traditional Story" and "Low Cost" gameplay packs both include it.
+It is a core plugin (`kind: core`) and the default way to tell the story. The "Classic Story" and "Budget" gameplay packs both include it.
 
 ### What you can change
 
@@ -66,25 +66,25 @@ The story is written in segments: each one is narration, dialogue or action, and
 
 ### The character you play
 
-The character sheet the Narrator gives the model is the character **you are currently playing**, and the person check is anchored on it too (the omniscient and game-master perspectives do not centre on the player character). When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. When a seat binds two or more characters, a current-character selector appears above the composer, or above free input in stage mode. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats).
+The character sheet the Storyteller gives the model is the character **you are currently playing**, and the person check is anchored on it too (the omniscient and game-master perspectives do not centre on the player character). When a session has several player characters (you play more than one), the other player characters are listed with the supporting cast in the character profiles, tagged `[player]`. With one player character nothing changes. When a seat binds two or more characters, a current-character selector appears above the composer, or above free input in stage mode. For how the current character is chosen and switched, see [Seats](../reference/world-model.md#seats).
 
-## Dialogue Narrator (`chat-mode-narrator`)
+## Chat Storyteller (`chat-mode-narrator`)
 
 Makes the story feel more like a conversation between characters. Each paragraph shows who is speaking, and the stage's name tags and "Speaking" marker follow the speaker.
 
 ### What you will see
 
-The story text in the chat area, split by speaker. Portraits and the stage are shown by "Scene Stage". See [Stage](./stage.md).
+The story text in the chat area, split by speaker. Portraits and the stage are shown by "Stage Scene". See [Stage](./stage.md).
 
 ### When it is on
 
-Optional. The "Dialogue Mode" gameplay pack includes it.
+Optional. The "Dialogue" gameplay pack includes it.
 
 ### What you can change
 
 | Setting        | What it does                                                                           | Default                               |
 | -------------- | -------------------------------------------------------------------------------------- | ------------------------------------- |
-| Perspective    | Same as "Narrator".                                                                    | Player character, second person (you) |
+| Perspective    | Same as "Storyteller".                                                                 | Player character, second person (you) |
 | Dialogue ratio | Roughly how much of a reply is character dialogue and inner reactions. Range 30 to 90. | 70                                    |
 | Reply length   | Short, medium or long.                                                                 | Medium                                |
 
@@ -92,12 +92,12 @@ A world can preset these settings. For example, "Harukaze Academy · Spring Mint
 
 ### Works with
 
-- It works best with "Scene Stage" to supply the characters on stage, and "Action Suggestions" to supply scene hints. Without them it still tells the story, as plain dialogue narration with no stage.
-- It cannot be on at the same time as "Narrator".
+- It works best with "Stage Scene" to supply the characters on stage, and "Action Suggestions" to supply scene hints. Without them it still tells the story, as plain dialogue narration with no stage.
+- It cannot be on at the same time as "Storyteller".
 
 ### The character you play
 
-As with "Narrator": the character sheet and the person check follow the character you are currently playing, and the other player characters are listed in the character profiles, tagged `[player]`. See [Narrator · The character you play](#the-character-you-play).
+As with "Storyteller": the character sheet and the person check follow the character you are currently playing, and the other player characters are listed in the character profiles, tagged `[player]`. See [Storyteller · The character you play](#the-character-you-play).
 
 ## Action Suggestions (`guide`)
 
@@ -107,20 +107,20 @@ After each part of the story, recaps the relevant earlier events, explains the c
 
 ### What you will see
 
-- Traditional Story: below the story in the chat area, a suggestion block appears with a recap, the current choice, and a few action buttons.
-- Dialogue Mode: the actions also appear in the choice bar on the stage.
+- Classic Story: below the story in the chat area, a suggestion block appears with a recap, the current choice, and a few action buttons.
+- Dialogue: the actions also appear in the choice bar on the stage.
 
 When you tap an action, it is only filled into the input box at the bottom. It is not sent. You can edit it, or write your own action and send it yourself.
 
 ### When it is on
 
-Optional. The "Traditional Story" and "Dialogue Mode" gameplay packs include it. "Low Cost" does not. It adds one model call per turn, using the model of the `plugin` role. See [Connect a model](../start/models.md).
+Optional. The "Classic Story" and "Dialogue" gameplay packs include it. "Budget" does not. It adds one model call per turn, using the model of the `plugin` role. See [Connect a model](../start/models.md).
 
 ### Works with
 
-It needs a storytelling plugin ("Narrator" or "Dialogue Narrator").
+It needs a storytelling plugin ("Storyteller" or "Chat Storyteller").
 
-## Reply Variants (`branch-reply`)
+## Alternative Replies (`branch-reply`)
 
 The same turn can be generated again, giving you several different versions. You pick the one you want. The version you pick replaces the original wording of that turn in the rest of the story.
 
@@ -132,11 +132,11 @@ Regenerating uses the model of the `fast` role. If no model is available, the or
 
 ### When it is on
 
-Optional. The "Dialogue Mode" gameplay pack includes it. Worlds such as "Emberback Relay" and "Lantern Barrow: The First Delve" list it as recommended or required.
+Optional. The "Dialogue" gameplay pack includes it. Worlds such as "Emberback Relay" and "Lantern Barrow: The First Delve" list it as recommended or required.
 
 ### Works with
 
-It does not depend on a particular storytelling plugin. You can use it with either "Narrator" or "Dialogue Narrator".
+It does not depend on a particular storytelling plugin. You can use it with either "Storyteller" or "Chat Storyteller".
 
 ## Story Memory (`memory`)
 
@@ -152,7 +152,7 @@ Each block is rewritten in full every turn, so it stores the "current state". Se
 
 ### When it is on
 
-It is a core plugin (`kind: core`). The "Traditional Story", "Dialogue Mode" and "Low Cost" gameplay packs all recommend it.
+It is a core plugin (`kind: core`). The "Classic Story", "Dialogue" and "Budget" gameplay packs all recommend it.
 
 Updating the memory takes one more model call. It runs in the background, so you do not have to wait for it. It uses the model of the `memory` role. See [Connect a model](../start/models.md). If an update fails, the story of that turn is still saved, and the update is tried again on the next turn.
 
@@ -165,7 +165,7 @@ A world can replace the four default blocks with its own memory blocks, so memor
 
 "Mistport: The Riftide Chronicle" (雾港・裂潮纪) includes such a file. For field details, see [World data reference](../reference/world-data.md).
 
-## History Compaction (`history-compaction`)
+## Long-Story Memory (`history-compaction`)
 
 When a story gets longer, the early conversation can fill the length the model can read. This plugin condenses the older conversation into summaries in sections, and keeps the most recent turns exactly as they are.
 
@@ -193,9 +193,9 @@ The story interface also provides the host’s [advancement and Stop controls](.
 
 Without an eligible sub-agent target, the narrator receives no delegation tools. If the tools omit the actor target required by a plan, it also narrates alone and yields to the player.
 
-Dialogue Narrator remains playable alone. With optional Character Actor (`character-agent`) and Turn Policy (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. Parallel plans use one bounded `delegate-batch`; sequential plans retain single `delegate` calls. Successful contributions stay in plan order. Concurrent dispatch does not reduce actor model calls or token costs; director adds another model call. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
+Chat Storyteller remains playable alone. With optional Character Voice (`character-agent`) and Who Speaks Next (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. Parallel plans use one bounded `delegate-batch`; sequential plans retain single `delegate` calls. Successful contributions stay in plan order. Concurrent dispatch does not reduce actor model calls or token costs; director adds another model call. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
 
-Turn Policy offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).
+Who Speaks Next offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).
 
 | Strategy | Behaviour                                                                                                                                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -211,7 +211,7 @@ Actors receive only the selected public profile, bounded witnessed stories and d
 
 The shared brief contains only current speech/actions and deliberately established scene narration. It does not replay a previous scene's private exchanges or omniscient narration. Policy selection keeps history; the runner supplies each actor's witnessed history separately. Stage presence informs both the planner's selection and the narrator's descriptions without being copied into actor briefs.
 
-The existing Narrator already supports the game-master perspective. In a world file:
+The existing Storyteller already supports the game-master perspective. In a world file:
 
 ```yaml
 pluginSettings:
@@ -219,16 +219,16 @@ pluginSettings:
     perspective: dm
 ```
 
-The player's Perspective setting overrides this world default for subsequent narration while preserving player agency. Narrator perspective and the human seat's role are independent choices.
+The player's Perspective setting overrides this world default for subsequent narration while preserving player agency. Storyteller perspective and the human seat's role are independent choices.
 
-## DM Console (`dm-console`)
+## Game Master Panel (`dm-console`)
 
-Choose DM Console from the header's Plugin views menu to see scene cast, pending interactions, story and input in the full story column. Host Back, Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
+Choose Game Master Panel from the header's Plugin pages menu to see scene cast, pending interactions, story and input in the full story column; the page has its own input box, so the host shows no second one. Click Read or Stage in the header to leave; Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
 
 Cast shows public scene actors only, with an empty state without a provider. It is not all known characters or actor eligibility. Pending interactions are already public unanswered, non-stale forms, choices and confirmations, without unrevealed plot or hidden event counts. Story omits tools, reasoning and execution detail.
 
 Select an action permitted for the current role: Game masters can use Direct, Narrate and Advance; spectators can only Advance; players retain ordinary modes. Advance takes no text. Changing views preserves drafts, modes, fields and queued choices; refusal does not clear them. Opening the page changes no role, narrator perspective or policy.
 
-DM Mode and Spectator include the console; Ensemble Dialogue recommends it. Defaults remain text and stage respectively. Ordinary DM Mode still uses Narrator and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.
+Game Master and Spectator include the console; Ensemble recommends it. Defaults remain Read and Stage respectively. Ordinary Game Master still uses Storyteller and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.
 
 When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.

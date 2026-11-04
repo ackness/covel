@@ -38,14 +38,14 @@ test("host creation, fixed-order beats, manual names and settings survive reload
     await openStudioConfiguration(page);
     await expect(
       page
-        .getByRole("group", { name: "Orchestration", exact: true })
-        .getByText(/^Turn Policy \/ /),
+        .getByRole("group", { name: "Speaking and advancing", exact: true })
+        .getByText(/^Who Speaks Next \/ /),
     ).toBeVisible();
-    await expect(page.getByLabel("Turn policy", { exact: true })).toHaveCount(
-      0,
-    );
     await expect(
-      page.getByLabel("Automatic rounds", { exact: true }),
+      page.getByLabel("Speaking rules", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByLabel("Auto-advance turns", { exact: true }),
     ).toHaveValue("2");
     await closeStudioConfiguration(page);
     await expect(page.getByTestId("composer-mode-direct")).toBeVisible();
@@ -127,10 +127,7 @@ for (const mode of ["Stop", "new input"])
           response.request().method() === "POST",
       );
       if (mode === "Stop")
-        await page
-          .getByTestId("auto-advance-control")
-          .getByRole("button", { name: "Stop advancement", exact: true })
-          .click();
+        await page.getByTestId("notice-status-auto-advance").click();
       else {
         await composerInput(page).fill("Mara and Ivo, begin a new exchange.");
         await composerInput(page).press("Enter");

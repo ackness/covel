@@ -290,8 +290,11 @@ export function DataPane() {
 
       <SettingsBackups />
 
-      <section className="space-y-2">
-        <h3 className="text-[13px] font-medium leading-snug text-foreground">
+      <section
+        data-testid="settings-reset-section"
+        className="mt-10 space-y-2 border-t border-destructive/40 pt-6"
+      >
+        <h3 className="text-[13px] font-medium leading-snug text-destructive">
           {t("settings.resetHeader")}
         </h3>
         <p className="text-xs leading-relaxed text-muted-foreground">

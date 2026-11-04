@@ -2,10 +2,11 @@ import type { SessionBridgeGrant } from "@covel/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldOff } from "lucide-react";
+import { useNoticeAnchor } from "@/components/ui/notice-host.js";
 import { Button } from "@/components/ui/button.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { HeaderMenu, MenuItem } from "./game-view/game-view-header.js";
+import { HeaderMenu, MenuItem } from "./game-view/header-menu.js";
 import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { useSessionBridgeActions } from "./use-session-bridge-actions.js";
@@ -46,6 +47,8 @@ export function PluginViewHost({
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const retire = useRef<(() => void) | undefined>(undefined);
+  const barRef = useRef<HTMLDivElement>(null);
+  useNoticeAnchor(barRef);
   const fallback = () => {
     retire.current?.();
     onFallback();
@@ -62,6 +65,7 @@ export function PluginViewHost({
       aria-label={entry.label}
     >
       <div
+        ref={barRef}
         className="relative z-10 flex shrink-0 flex-wrap items-center gap-2 border-b bg-background px-3 py-2 text-xs"
         data-testid="plugin-view-bar"
         data-covel-host-controls=""
@@ -81,39 +85,32 @@ export function PluginViewHost({
             {t("session.abortTurn")}
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={fallback}
-          aria-label={t("session.backToDefaultView")}
-        >
-          {t("session.backToDefaultView")}
-        </Button>
         {readsSession && onRevoke && (
-          <HeaderMenu label={t("session.viewPermissions")} active={false}>
-            <MenuItem
-              icon={ShieldOff}
-              label={t("session.revokeViewConsent")}
-              onSelect={() => {
-                retire.current?.();
-                onRevoke();
-              }}
-            />
-            {requestedViewGrants(entry).map((capability) => (
+          <div className="ml-auto">
+            <HeaderMenu label={t("session.viewPermissions")} active={false}>
               <MenuItem
-                key={capability}
                 icon={ShieldOff}
-                label={t("session.revokeViewCapability", {
-                  capability: t(`session.viewCapability.${capability}`),
-                })}
+                label={t("session.revokeViewConsent")}
                 onSelect={() => {
                   retire.current?.();
-                  onRevoke(capability);
+                  onRevoke();
                 }}
               />
-            ))}
-          </HeaderMenu>
+              {requestedViewGrants(entry).map((capability) => (
+                <MenuItem
+                  key={capability}
+                  icon={ShieldOff}
+                  label={t("session.revokeViewCapability", {
+                    capability: t(`session.viewCapability.${capability}`),
+                  })}
+                  onSelect={() => {
+                    retire.current?.();
+                    onRevoke(capability);
+                  }}
+                />
+              ))}
+            </HeaderMenu>
+          </div>
         )}
       </div>
       <div

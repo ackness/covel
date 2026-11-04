@@ -1,10 +1,10 @@
 PLUGIN.md:
-  displayName: 主持人控制台
-  description: 在一个公开会话视图中查看在场角色、待处理交互、故事和当前身份可用的输入模式。
+  displayName: 主持人面板
+  description: 在一处看到在场角色、等你处理的事项和故事进展。
 messages:
-  DM Console: 主持人控制台
-  Scene cast: 在场角色
-  Pending interactions: 待处理交互
+  Game Master Panel: 主持人面板
+  Characters in the scene: 在场角色
+  Waiting for you: 待你处理
   Story: 故事
-  Input: 输入
-  Use the current role’s modes for director instructions or Advance. Opening this view does not change your role or turn policy.: 使用当前身份的输入模式发送导演指示或推进。打开此视图不会改变身份或回合策略。
+  Your input: 你的输入
+  Use the input for your current role to guide the story or move it forward. Opening this panel does not change your role or who speaks next.: 用你当前身份的输入来引导故事或让故事继续。打开这个面板不会改变你的身份，也不会改变谁来发言。

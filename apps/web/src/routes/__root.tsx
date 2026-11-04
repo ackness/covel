@@ -8,22 +8,19 @@ import {
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Blocks,
   Bug,
   Globe2,
-  Image as ImageIcon,
   Menu,
   MessageSquare,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
-import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { emitWorldListRequest } from "@/lib/nav-events.js";
+import { emitSettingsRequest, emitWorldListRequest } from "@/lib/nav-events.js";
 import {
   receiveSettingsBackupNotices,
   settingLabels,
 } from "@/settings/store.js";
-import { localeOptionLabel } from "@/i18n/locale-option-label.js";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,16 +28,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { ToastHost } from "@/components/ui/toast-host";
+import { NoticeHost, useNoticeAnchor } from "@/components/ui/notice-host";
+import { NoticeBell } from "@/components/notice-bell";
 import { ConfirmHost } from "@/components/ui/confirm-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
-import { SharedServerNotice } from "@/components/shared-server-notice";
-import { useLocalePreference } from "@/hooks/useLocalePreference";
+import { useSharedServerNotice } from "@/components/shared-server-notice";
 import { useWindowControlsColors } from "@/hooks/use-window-controls-colors.js";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { useSession } from "@/stores/session-store";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
+import { useSetting } from "@/settings/use-settings.js";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -54,7 +51,7 @@ const noDragStyle: CSSProperties = {
 function RootLayout() {
   const { t } = useTranslation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  // Runs after the toast host below has subscribed. Most of these notices
+  // Runs after the notice host below has subscribed. Most of these notices
   // arise during boot, before anything could show a message.
   useEffect(
     () =>
@@ -77,7 +74,8 @@ function RootLayout() {
       }),
     [t],
   );
-  const { locale, setLocale } = useLocalePreference();
+  useSharedServerNotice();
+  const [developerMode] = useSetting<boolean>("ui.developerView");
   const layoutNav = useThemeLayout().nav;
   const location = useLocation();
   const navigate = useNavigate();
@@ -85,6 +83,7 @@ function RootLayout() {
   const isDebugRoute = location.pathname.startsWith("/debug");
   const railNav = layoutNav === "rail";
   const headerRef = useRef<HTMLElement>(null);
+  useNoticeAnchor(headerRef);
   useWindowControlsColors(headerRef, railNav);
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
@@ -113,10 +112,8 @@ function RootLayout() {
   const hasSession = !!activeSid;
   const sessionSearch = activeSid ? { sid: activeSid } : {};
 
-  // Active state for the primary nav. The 5 tabs map to either real routes
-  // (世界 / 会话 / 调试) or in-page panel toggles (插件 / 图像) so the active
-  // computation has to merge URL state with sub-views.
-  type NavId = "world" | "session" | "plugins" | "images" | "debug";
+  // Active state for the primary nav: real routes only. Settings is a dialog.
+  type NavId = "world" | "session" | "settings" | "debug";
   const activeNav: NavId | null = (() => {
     if (isDebugRoute) return "debug";
     if (isSessionRoute) {
@@ -133,14 +130,10 @@ function RootLayout() {
     emitWorldListRequest();
   };
   const goSession = () => navigate({ to: "/session", search: sessionSearch });
-  const goPlugins = () => {
-    navigate({
-      to: "/session",
-      search: { ...sessionSearch, panel: "plugins" },
-    });
-  };
-  const goImages = () => {
-    navigate({ to: "/session", search: { ...sessionSearch, panel: "images" } });
+  const goSettings = () => {
+    emitSettingsRequest();
+    // The debugger has no dialog; the session screen picks the request up.
+    if (isDebugRoute) navigate({ to: "/session", search: sessionSearch });
   };
   const goDebug = () => navigate({ to: "/debug", search: navSearch });
 
@@ -149,31 +142,35 @@ function RootLayout() {
     label: string;
     icon: LucideIcon;
     onClick: () => void;
-    disabled?: boolean;
   }> = [
     { id: "world", label: t("nav.world"), icon: Globe2, onClick: goWorld },
+    // Nothing greyed out: Games exists only while a game is open.
+    ...(hasSession
+      ? [
+          {
+            id: "session" as const,
+            label: t("nav.session"),
+            icon: MessageSquare,
+            onClick: goSession,
+          },
+        ]
+      : []),
     {
-      id: "session",
-      label: t("nav.session"),
-      icon: MessageSquare,
-      onClick: goSession,
-      disabled: !hasSession,
+      id: "settings",
+      label: t("nav.settings"),
+      icon: Settings,
+      onClick: goSettings,
     },
-    {
-      id: "plugins",
-      label: t("nav.plugins"),
-      icon: Blocks,
-      onClick: goPlugins,
-      disabled: !hasSession,
-    },
-    {
-      id: "images",
-      label: t("nav.images"),
-      icon: ImageIcon,
-      onClick: goImages,
-      disabled: !hasSession,
-    },
-    { id: "debug", label: t("nav.debug"), icon: Bug, onClick: goDebug },
+    ...(developerMode
+      ? [
+          {
+            id: "debug" as const,
+            label: t("nav.debug"),
+            icon: Bug,
+            onClick: goDebug,
+          },
+        ]
+      : []),
   ];
 
   // Electron hides the native title bar so the in-app header can follow the
@@ -199,30 +196,9 @@ function RootLayout() {
     </Link>
   );
 
-  const languageSelect = (className: string, onPicked?: () => void) => (
-    <select
-      value={locale}
-      onChange={(event) => {
-        setLocale(event.target.value);
-        onPicked?.();
-      }}
-      aria-label={t("onboarding.language", "Language")}
-      className={className}
-    >
-      {localeDefinitions.map((definition) => (
-        <option key={definition.code} value={definition.code}>
-          {localeOptionLabel(
-            definition,
-            t("onboarding.languageExperimental", "experimental"),
-          )}
-        </option>
-      ))}
-    </select>
-  );
-
   return (
     <>
-      <ToastHost />
+      <NoticeHost />
       <ConfirmHost />
       <div className="ui-app-shell h-dvh w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex overflow-hidden">
         {/* Icon rail — the `nav: "rail"` layout. Desktop widths only; phones
@@ -259,18 +235,11 @@ function RootLayout() {
                     key={item.id}
                     type="button"
                     onClick={item.onClick}
-                    disabled={item.disabled}
                     aria-current={isActive ? "page" : undefined}
                     className={`ui-nav-item flex h-13 w-14 flex-col items-center justify-center gap-1 rounded-(--radius-control) text-[11px] leading-none transition-colors ${
-                      item.id === "debug" ? "mt-auto" : ""
-                    } ${
                       isActive
                         ? "bg-accent text-accent-foreground font-medium"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    } ${
-                      item.disabled
-                        ? "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground"
-                        : ""
                     }`}
                   >
                     <Icon
@@ -285,17 +254,7 @@ function RootLayout() {
               className="flex flex-col items-center gap-1"
               style={isElectron ? noDragStyle : undefined}
             >
-              <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("onboarding.language", "Language")}
-                aria-haspopup="dialog"
-                className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
-                onClick={() => setMobileNavOpen(true)}
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
+              <NoticeBell {...(activeSid ? { sessionId: activeSid } : {})} />
             </div>
           </aside>
         )}
@@ -329,16 +288,11 @@ function RootLayout() {
                       key={item.id}
                       type="button"
                       onClick={item.onClick}
-                      disabled={item.disabled}
                       aria-current={isActive ? "page" : undefined}
                       className={`ui-nav-item relative h-8 px-3 transition-colors rounded-(--radius-control) ${
                         isActive
                           ? "bg-primary/10 text-foreground"
                           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                      } ${
-                        item.disabled
-                          ? "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground"
-                          : ""
                       }`}
                     >
                       <span>{item.label}</span>
@@ -356,10 +310,9 @@ function RootLayout() {
                 className="ui-window-controls-clear flex items-center gap-1 md:gap-1.5 ml-auto"
                 style={isElectron ? noDragStyle : undefined}
               >
-                <ThemeToggle />
+                <NoticeBell {...(activeSid ? { sessionId: activeSid } : {})} />
                 {/* The desktop nav is `lg:` only, so on a phone this dialog
-                    is the ONLY way to reach worlds / session / plugins /
-                    debug or switch language (elsewhere it is a setting). */}
+                    is the ONLY way to reach worlds / games / settings. */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -374,7 +327,6 @@ function RootLayout() {
             </div>
           </header>
 
-          <SharedServerNotice />
           <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
             <AppErrorBoundary>
               <Outlet />
@@ -395,7 +347,6 @@ function RootLayout() {
               <button
                 key={item.id}
                 type="button"
-                disabled={item.disabled}
                 aria-current={activeNav === item.id ? "page" : undefined}
                 onClick={() => {
                   setMobileNavOpen(false);
@@ -405,18 +356,11 @@ function RootLayout() {
                   activeNav === item.id
                     ? "text-foreground font-medium"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                } ${item.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground" : ""}`}
+                }`}
               >
                 {item.label}
               </button>
             ))}
-            <label className="mt-1 flex min-h-11 items-center gap-3 border-t border-border px-2 text-sm text-muted-foreground">
-              <span>{t("onboarding.language", "Language")}</span>
-              {languageSelect(
-                "ml-auto max-w-48 rounded-(--radius-control) border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary",
-                () => setMobileNavOpen(false),
-              )}
-            </label>
           </nav>
         </DialogContent>
       </Dialog>

@@ -50,24 +50,25 @@ test.describe("Locale preference", () => {
     await context.close();
   });
 
-  test("menu selector supports a third locale and persists across reload", async ({
+  test("settings selector supports a third locale and persists across reload", async ({
     page,
   }) => {
     await seedBrowserSettings(page, {
       "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "zh-CN",
     });
-    // The language select sits in the menu dialog on a phone; inside the app
-    // it is otherwise a setting.
-    await page.setViewportSize({ width: 390, height: 844 });
+    // The language is a setting: Settings opens from the top bar.
     await page.goto("/session");
-    const openMenu = () =>
-      page.getByRole("button", { name: /primary|主导航|основное/i }).click();
-    await openMenu();
+    const openSettings = () =>
+      page
+        .getByRole("navigation", { name: /primary|主导航|основное/i })
+        .getByRole("button", { name: /^(设置|Settings|Настройки)$/ })
+        .click();
+    await openSettings();
 
-    const localeSelect = page.getByRole("combobox", {
-      name: /language|语言|язык/i,
-    });
+    const localeSelect = page
+      .getByRole("dialog")
+      .getByRole("combobox", { name: /界面语言|interface language|язык/i });
     await expect(localeSelect).toBeVisible();
     await expect(localeSelect.locator("option")).toHaveCount(3);
     await localeSelect.selectOption("ru-RU");
@@ -77,7 +78,7 @@ test.describe("Locale preference", () => {
     // Force a fresh document — the stored locale should survive
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "ru-RU");
-    await openMenu();
+    await openSettings();
     await expect(localeSelect).toHaveValue("ru-RU");
   });
 });

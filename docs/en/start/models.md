@@ -26,7 +26,7 @@ First you add providers and models. Then you tell Covel which model each role us
 
 ## 1. Add a provider and models
 
-Open **Settings → LLM → Providers & Models**.
+Open **Settings → Models → Providers & keys**.
 
 1. Pick a built-in provider from the list, or add a custom provider. A built-in provider already has its official address filled in. For a custom provider, enter the API address.
 2. Enter the API key. For a local service that needs no key, you can leave it empty.
@@ -51,7 +51,7 @@ When a test fails, first look at what kind of problem it reports:
 
 ## 3. Check the role assignments
 
-Open **Settings → LLM → Model Roles**. This lists the provider and model that each role uses now.
+Open **Settings → Models → AI roles**. This lists the provider and model that each role uses now.
 
 - Make sure both the story-text role and the plugin role use the model you just tested successfully.
 - Later, to save money or get faster replies, you can switch the plugin role to a cheaper, faster model and keep a stronger model for the story role.
@@ -63,7 +63,7 @@ Changes take effect right away. You do not need to restart.
 Go back to the world selection page, and click "Enter" on any world card. The session-prep screen checks which roles this world's gameplay needs:
 
 - No warning appears: the models are ready, and you can start your [first game](./first-session.md).
-- A warning says a role is not available: go back to "Model Roles" and choose a model for it. Or, in "Customize plugins and advanced settings" on the session-prep screen, change that task to use a role that is already set up.
+- A warning says a role is not available: go back to "AI roles" and choose a model for it. Or, in "Customize the start" on the getting-ready screen, turn on developer mode and change that step to use a role that is already set up.
 
 When you click “Start Game”, any text roles used by this session without credentials appear in a confirmation, grouped by provider. Choose “Add API key” to open provider settings, enter the key, close settings, and click start again. Or choose “Start anyway” and configure it later. Each start checks again; skipping is not remembered. Local services that need no key do not show this confirmation.
 

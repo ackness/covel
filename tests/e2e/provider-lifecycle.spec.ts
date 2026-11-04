@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  ONBOARDING_VERSION,
+  seedBrowserSettings,
+  openAppSettings,
+} from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -9,10 +13,12 @@ async function openProviderSettings(page: Page) {
     "ui.locale": "en-US",
   });
   await page.goto("/session");
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/ })
+  await openAppSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: "Providers & keys", exact: true })
     .click();
-  return page.getByRole("dialog");
+  return dialog;
 }
 
 async function savedEntries(page: Page) {

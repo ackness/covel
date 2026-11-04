@@ -1,6 +1,6 @@
 # Glossary
 
-This page defines the words used in the Covel docs, the code, and the UI. When the same thing is named differently in different places (for example, the UI says "model role" while the code says slot), this page is the reference: change the other places, not this one.
+This page defines the words used in the Covel docs, the code, and the UI. When the same thing is named differently in different places (for example, the UI says "AI role" while the code says slot), this page is the reference: change the other places, not this one.
 
 Entries are in English alphabetical order. Each entry first says what the term is in one or two sentences, and then gives a detailed page.
 
@@ -9,6 +9,8 @@ Entries are in English alphabetical order. Each entry first says what the term i
 Each English term has only one Chinese term. The Chinese docs, the UI text, and the Chinese prompts (`*.zh.md`) all use the terms in this table.
 
 <!-- prettier-ignore -->
+| Developer mode | Developer mode | The Settings switch (`ui.developerView`). Only when it is on does the app show what authors and troubleshooting need: the Debugger entry, the detailed and raw views, debug traces, the Database tab and storage line, raw IDs, plugin step counts and the raw-data box in the Waiting for you dialog. |
+| Read / Stage | Read / Stage | The two built-in views of the session screen: Read is the page-by-page text view, Stage is the picture with background and portraits. Formerly Text, Parsed view and Stage view. |
 | Term | Chinese | Notes |
 | --- | --- | --- |
 | Action | 行动 | One item of a player's submission: from which seat, as which character, what kind of thing (`submit_actions`). |
@@ -36,7 +38,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Operation | 操作 | All the writes one successful write-service call staged, which commit or drop with the caller's commit unit. Not a single `op` of a data operation list. See [Write-service operations](./transactions.md#write-service-operations). |
 | Operation record | 操作记录 | The record an operation leaves on its caller's result (`runtimeResults[].operations`), which says after the commit how it ended and why. |
 | Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
-| Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. |
+| Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. Players see it as a "Mode". |
 | Perspective | 视角 | Whose point of view the narration takes: character-centred first, second or third person, an omniscient narrator, or a game master. |
 | Plugin kind | 插件类型 | The package's `kind` controls default selection; distinct from runtime type and discovery source. |
 | Presence record | 在场记录 | The IDs of the characters present, recorded on a story message (`presentCharacterIds`). |
@@ -51,18 +53,44 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Segment | 提示词段 | One section of an assembled prompt. A part of a story is a **Story segment**. |
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
 | Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
-| Slot | 槽位 | In the settings UI it is called "model role". |
+| Slot | 槽位 | In the settings UI it is called "AI role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
 | Story-attached operation | 故事附带的操作 | An operation in the commit unit of the story or setup: each gets its own savepoint, and when it fails only it is dropped while the story commits. |
 | Story draft | 故事草稿 | The part of a story runtime's output written before the commit, shown for display only; not output and never stored. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
+| This game | This game | The game being played. The menu's This game's settings… manages its saves, plugins and advanced options. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
 | Trigger mode | 触发模式 | How a runtime is triggered: `auto`, `manual` or `event`. |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
+| Waiting for you | Waiting for you | A suspended execution (`suspend`) waiting for the player's answer. The toolbar chip Waiting for you · N opens the dialog of the same name. Formerly Suspended executions. |
 | World | 世界 | A world's installation package is called a "world package". |
 | Write service | 写服务 | A service with `access: write` that changes its provider's own data for the caller; its writes are staged as one **operation**. See [Write services](./plugin-extensions.md#write-services). |
+
+## Player terms
+
+Plugin names, settings and panels shown to players use one set of words, matched across Chinese, English and Russian. Write every player-visible plugin text (`displayName`, `description`, settings, panels, buttons and notices) with this table and do not vary the wording. The internal terms are in the tables above.
+
+<!-- prettier-ignore -->
+| Concept | 中文 | English | Русский |
+| --- | --- | --- | --- |
+| Storyteller (the plugin that tells the story) | 讲述者 | Storyteller | Рассказчик |
+| Game master | 主持人 | Game master | Ведущий |
+| World state | 世界状态 | World state | Состояние мира |
+| The step before play | 开局准备 | Get ready | Подготовка к игре |
+| Bag | 背包 | Bag | Сумка |
+| Lore book (entries) | 图鉴（条目） | Almanac (entries) | Энциклопедия (записи) |
+| Story memory | 故事记忆 | Story memory | Память истории |
+| Turn | 回合 | Turn | Ход |
+| Character | 角色 | Character | Персонаж |
+| Speaker (a character who talks in a reply) | 发言角色 | Speaker | Говорящий |
+| Mode (a pack of plugins) | 玩法 | Mode | Режим |
+| Roll log | 判定记录 | Roll log | Журнал бросков |
+| Quest log | 任务日志 | Quest log | Журнал заданий |
+| Portraits | 立绘 | Portraits | Портреты |
+| Hidden plot events | 隐藏剧情 | Hidden plot events | Скрытые события |
+| AI (not model or LLM in player text) | AI | AI | ИИ |
 
 ## Prompt vocabulary
 
@@ -82,7 +110,7 @@ These are the words used in prompt bodies to describe what a runtime reads and w
 | record | 记录 | One item stored in plugin data | row, object |
 | entry | 条目 | An item in a list that the player reads, for example a codex entry | item (item means an object in the inventory) |
 | item | 物品 | Something a character carries |  |
-| dimension | 维度 | A piece of world state that the world defines and that changes with the story | attribute (attribute is for characters) |
+| dimension | 维度 (shown as "World state" in the interface) | A piece of world state that the world defines and that changes with the story | attribute (attribute is for characters) |
 | attribute | 属性 | A numeric or text field of a character | stat |
 | world rule | 世界规则 | A world rule included in the prompt | lore entry |
 | quest | 任务 | A goal that the story gives the player | mission, task |
@@ -345,11 +373,11 @@ See: [HTTP API](./api.md), [transactions](./transactions.md).
 
 ## Slot
 
-A named routing key used to choose a model (`story`, `plugin`, `memory`, `image`, and so on). In the settings UI it is called **model role**.
+A named routing key used to choose a model (`story`, `plugin`, `memory`, `image`, and so on). In the settings UI it is called **AI role**.
 
 A plugin manifest writes only the slot's name. `llm.toml`, or the "provider/model" setting that was saved, binds it to a specific model. Fallback models are chosen only within the same kind of output: an image request never falls back to a text model.
 
-See: [model roles](./slots.md), `llm.toml.example`.
+See: [AI roles](./slots.md), `llm.toml.example`.
 
 ## Stop reason
 

@@ -2,34 +2,32 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 行囊
-  description: 每回合从叙事中记录明确的物品得失与装备变化，右栏随时可查背包。
+  displayName: 背包
+  description: 记录你随身携带的东西。故事里获得、失去或装备的物品会自动记进背包。
   contributes:
     commands:
       - name: bag
-        description: 查看当前背包并打开行囊面板。
+        description: 查看你带着什么，并打开背包页。
     data:
       items:
         authoring:
-          title: 开局物品
+          title: 初始物品
 runtimes/ledger/RUNTIME.md:
-  description: 每回合从共享的事实抽取中记录主角的物品得失与装备变化。
+  description: 每回合根据故事内容记录你获得、失去或装备的物品。
 runtimes/vocabulary/RUNTIME.md:
-  description: 在事实抽取前公布背包里的物品名，便于沿用同一名称。
+  description: 记录背包里已有的物品名，让后续记录沿用同一个叫法。
 messages:
-  Inventory changes: 行囊变化
-  Inventory: 行囊
-  Bag: 行囊
-  Your bag is empty. Items you explicitly obtain in the story will appear here…: 行囊空空如也，故事里明确拿到的东西会自动记进来……
+  Bag changes: 背包变化
+  Bag: 背包
+  Your bag is empty. Items you pick up in the story will appear here.: 背包是空的。故事里拿到的东西会自动出现在这里。
   title|Equipped: 已装备
   Unequip: 卸下
   Drop: 丢弃
-  Backpack: 背包
+  Carried: 随身物品
   Equip: 装备
-  Your bag contains {count} item entry.: 行囊中有 {count} 项物品。
-  Your bag contains {count} item entries.: 行囊中有 {count} 项物品。
+  You have {count} item in your bag.: 背包里有 {count} 件物品。
+  You have {count} items in your bag.: 背包里有 {count} 件物品。
   Gained: 获得
   Lost: 失去
-  Equipped: 装备
-  Unequipped: 卸下
-  Pack: 行囊
+  Equipped: 已装备
+  Unequipped: 已卸下

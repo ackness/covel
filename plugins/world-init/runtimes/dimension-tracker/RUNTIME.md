@@ -1,6 +1,7 @@
 ---
-description: Settles authored dimension rules against this narrative, including
-  explicit no-change.
+description:
+  Updates the world state after each turn from what happened in the story,
+  following the world's rules.
 schedule:
   stage: post-turn
 io:

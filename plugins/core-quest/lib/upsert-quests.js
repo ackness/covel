@@ -47,7 +47,7 @@ function changeBadge(context, change) {
   // Each text is a literal: the validator reads them from the source.
   const badges = {
     new: labelText(context, "New"),
-    progress: labelText(context, "Progress"),
+    progress: labelText(context, "Updated"),
     completed: labelText(context, "Completed"),
     failed: labelText(context, "Failed"),
   };

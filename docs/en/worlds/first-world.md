@@ -15,7 +15,7 @@ Write structured dimensions only in `data/dimensions.yaml`, without copying them
 - A text editor.
 
 > [!NOTE]
-> You can make a world with the desktop app without a source checkout: put them in the desktop user-worlds directory (default `~/.covel/data/worlds/`), and reopen Covel. The `~/.covel/worlds/` paths below are the source-run default; for desktop, use the worlds directory shown in Settings. Players without source can click **Validate** in **Settings → Install & manage** to check an installed package or ZIP.
+> You can make a world with the desktop app without a source checkout: put them in the desktop user-worlds directory (default `~/.covel/data/worlds/`), and reopen Covel. The `~/.covel/worlds/` paths below are the source-run default; for desktop, use the worlds directory shown in Settings. Players without source can click **Validate** in **Settings → Plugins → Install & manage** to check an installed package or ZIP.
 
 ## What you will make
 
@@ -148,7 +148,7 @@ characterSchema:
 
 `category` decides where an attribute is used: `abilities` are what checks and point buy use, `stats` are bars in the status bar (health, stress), `social` holds relationships (trust), `bio` identity, and `equipment` what the character carries. Nerve is rolled against, so it goes in `abilities`.
 
-There are four built-in gameplay packs: `traditional-story` (Traditional Story), `dialogue-mode` (Dialogue Mode), `low-cost` (Low Cost, which saves tokens), and `narrative-only` (Narrative Only).
+There are four built-in gameplay packs: `traditional-story` (Classic Story), `dialogue-mode` (Dialogue), `low-cost` (Budget, which saves tokens), and `narrative-only` (Story Only).
 
 ## 6. Add a lorebook
 
@@ -204,7 +204,7 @@ The validator checks the manifest fields, the main world text, the plugin IDs, a
 
 Fix what it points to, and run it again until it passes.
 
-Restart Covel and enter "潮灯镇" again. This time the session-prep screen has the "Traditional Story" gameplay pack selected; click "Start Game". Try these things to confirm that each file is working:
+Restart Covel and enter "潮灯镇" again. This time the session-prep screen has the "Classic Story" gameplay pack selected; click "Start Game". Try these things to confirm that each file is working:
 
 | What you do                                   | What you should see                                                              | Which file it comes from               |
 | --------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------- |

@@ -147,7 +147,7 @@ describe("provider configuration flow", () => {
       plugin: { modelRef },
     });
     expect(screen.getByRole("status").textContent).toBe(
-      "Model roles assigned: Story, Plugin tasks",
+      "AI roles assigned: Story, Plugin tasks",
     );
     const fetchMock = vi
       .fn<typeof fetch>()

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { startAdvancementBrowserHost } from "../../apps/server/tests/helpers/auto-advance-browser.js";
 import {
   composer,
+  closeStudioConfiguration,
   composerInput,
   openStudioConfiguration,
   seedAppSettings,
@@ -36,8 +37,8 @@ for (const mode of ["chat", "stage"] as const) {
         });
       });
       await page.goto(`/session?sid=${host.sessionId}`);
-      const controls = page.getByTestId("auto-advance-control");
-      // Idle auto-advance leaves no empty bar across the session backdrop.
+      const controls = page.getByTestId("notice-status-auto-advance");
+      // Idle auto-advance shows no chip.
       await expect(controls).toHaveCount(0);
       await composerInput(page).fill("Begin");
       await composerInput(page).press("Enter");
@@ -50,15 +51,11 @@ for (const mode of ["chat", "stage"] as const) {
       host.holdNextAuto();
       await composerInput(page).fill("Again");
       await composerInput(page).press("Enter");
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       if (mode === "stage")
-        await page
-          .getByRole("button", { name: "舞台视图", exact: true })
-          .click();
-      await expect(
-        controls.getByRole("button", { name: "停止推进" }),
-      ).toBeVisible();
-      await controls.getByRole("button", { name: "停止推进" }).click();
+        await page.getByRole("button", { name: "舞台", exact: true }).click();
+      await expect(controls).toBeVisible();
+      await controls.click();
       await expect(controls).toHaveCount(0);
       expect(
         (await host.store.listMessages(host.sessionId)).filter(
@@ -68,7 +65,7 @@ for (const mode of ["chat", "stage"] as const) {
       await page.reload();
       await expect(composer(page)).toHaveAttribute("data-executing", "false");
       await expect(controls).toHaveCount(0);
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
       await openStudioConfiguration(page);
       await page.getByLabel("自动推进轮数", { exact: true }).fill("0");
       await page
@@ -84,10 +81,12 @@ for (const mode of ["chat", "stage"] as const) {
       await expect(
         page.getByLabel("自动推进轮数", { exact: true }),
       ).toHaveValue("0");
+      await closeStudioConfiguration(page);
 
       // A fresh input interrupts automatic work, and refresh only recovers
       // its live controls. Neither operation replays a saved continue flag.
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
+      await openStudioConfiguration(page);
       await page.getByLabel("自动推进轮数", { exact: true }).fill("2");
       await page
         .getByRole("button", { name: "保存自动推进轮数", exact: true })
@@ -95,16 +94,15 @@ for (const mode of ["chat", "stage"] as const) {
       await expect(
         page.getByLabel("自动推进轮数", { exact: true }),
       ).toBeEnabled();
+      await closeStudioConfiguration(page);
       host.holdNextAuto();
       await composerInput(page).fill("Keep going");
       await composerInput(page).press("Enter");
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       await page.reload();
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       if (mode === "stage")
-        await page
-          .getByRole("button", { name: "舞台视图", exact: true })
-          .click();
+        await page.getByRole("button", { name: "舞台", exact: true }).click();
       const freshInput =
         mode === "stage"
           ? page.getByTestId("stage-decision-input")
@@ -112,7 +110,7 @@ for (const mode of ["chat", "stage"] as const) {
       await freshInput.fill("Change course");
       await freshInput.press("Enter");
       await expect.poll(() => host.calls()).toBe(10);
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(controls).toHaveCount(0);
       const messages = await host.store.listMessages(host.sessionId);
       expect(
         messages.filter((message) => message.role === "assistant"),
@@ -129,11 +127,11 @@ for (const mode of ["chat", "stage"] as const) {
 
       // Leave a live chain and verify that its later completion cannot fill
       // the newly selected session's view.
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
       host.holdNextAuto();
       await composerInput(page).fill("Continue after I leave");
       await composerInput(page).press("Enter");
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       const response = await page.request.post(`${host.baseUrl}/api/sessions`, {
         data: {
           worldId: "advance-world",
@@ -160,7 +158,7 @@ for (const mode of ["chat", "stage"] as const) {
           return ((await response.json()) as { state: string }).state;
         })
         .toBe("completed");
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(controls).toHaveCount(0);
       await expect(page.locator(".ui-narrative")).toHaveCount(0);
     } finally {
       host.release();

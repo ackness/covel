@@ -120,9 +120,9 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     default: false,
     group: "general",
     widget: "toggle",
-    label: "Developer view",
+    label: "Developer mode",
     description:
-      "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
+      "Show things meant for authors and troubleshooting: the Debugger entry in the top bar, the detailed and raw views, debug traces, the Database tab and storage line in the side panel, raw IDs, plugin step counts, the raw-data box in the Waiting for you dialog, and pop-ups for background failures.",
   });
 
   store.register({

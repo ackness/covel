@@ -24,11 +24,7 @@ async function load(id: string) {
 }
 
 describe("bundled session view declarations", () => {
-  it.each([
-    ["dm-console", "dm-console", "DM Console", "主持人控制台"],
-    ["npc-graph", "relationships", "Relationship Graph", "关系图谱"],
-    ["codex", "library", "Codex", "知识图鉴"],
-  ])(
+  it.each([["dm-console", "dm-console", "Game Master Panel", "主持人面板"]])(
     "loads the real %s view with English and Chinese labels",
     async (id, viewId, en, zh) => {
       const { ui } = await load(id);
@@ -61,30 +57,17 @@ describe("bundled session view declarations", () => {
       ])
         expect(spec).not.toHaveProperty(field);
       expect(spec.alwaysRender).toBe(true);
-      if (id !== "dm-console") expect(ui.slots.right).toHaveLength(1);
     },
   );
-  it("keeps graph mappings and both owner namespaces, increasing only graph height", async () => {
-    const { ui } = await load("npc-graph");
-    const page = ui.slots.view![0]!;
-    const panel = ui.slots.right![0]!;
-    expect(page.dataSource).toEqual(panel.dataSource);
-    const pageView = page.view as {
-      children: { props: Record<string, unknown> }[];
-    };
-    const panelView = panel.view as typeof pageView;
-    expect(pageView.children[1]!.props).toEqual({
-      ...panelView.children[1]!.props,
-      height: 640,
-      emptyText:
-        page.emptyState && (page.emptyState as Record<string, unknown>).message,
-    });
-  });
-  it("preserves the entire codex filter/card subtree and owner data", async () => {
-    const { ui } = await load("codex");
-    expect(ui.slots.view![0]!.view).toEqual(ui.slots.right![0]!.view);
-    expect(ui.slots.view![0]!.dataSource).toEqual({ namespace: "entries" });
-  });
+  it.each(["npc-graph", "codex"])(
+    "%s keeps its right panel and declares no duplicate page",
+    async (id) => {
+      const { ui } = await load(id);
+      expect(ui.diagnostics).toEqual([]);
+      expect(ui.slots.view).toBeUndefined();
+      expect(ui.slots.right).toHaveLength(1);
+    },
+  );
   it("is a zero-runtime package with no hard dependency or entry", async () => {
     const { definition, ui } = await load("dm-console");
     expect(definition.manifests).toEqual([]);

@@ -1,0 +1,22 @@
+# Russian text of the character-blueprint plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Досье персонажей
+  description: Хранит досье персонажей мира, а также портрет и голос каждого из них.
+  contributes:
+    data:
+      blueprints:
+        authoring:
+          title: Досье персонажей
+      presence:
+        authoring:
+          title: Список портретов персонажей
+      assets:
+        authoring:
+          title: Изображения портретов
+runtimes/presence/RUNTIME.md:
+  description: Сохраняет портрет и голос персонажа.
+messages:
+  Character Portraits: Портреты персонажей
+  Portraits: Портреты

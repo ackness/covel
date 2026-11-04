@@ -1,6 +1,5 @@
 ---
-description: Accepts follow-up hidden events planned by other runtimes during
-  play, validating them before they join the hidden event table.
+description: Adds new hidden events planned during play, after checking them.
 schedule:
   stage: post-turn
 io:

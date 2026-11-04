@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
-import { AlertCircle, Info } from "lucide-react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText, type PluginSummary } from "@covel/shared";
-import { ProviderFailureNotice } from "./provider-failure-notice.js";
+import { useNotice } from "@/lib/notice-center.js";
+import {
+  ProviderFailureNotice,
+  SessionModelUsesContext,
+} from "./provider-failure-notice.js";
 import type { SessionRecord, SetupRuntimeState } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type {
@@ -114,6 +117,11 @@ export function setupProgress(input: {
 /** The session record trails the end of a run by one request; wait it out. */
 const SETTLE_MS = 1200;
 
+/**
+ * A game stuck in its preparation with nothing on screen to act on, as a card
+ * with the way to continue. While preparation runs, the session header's
+ * status chip says so.
+ */
 export function SetupProgressNotice({
   progress,
   onRearm,
@@ -126,11 +134,13 @@ export function SetupProgressNotice({
   /** Run setup again without a player message. */
   onRun: () => void;
   onOpenSettings: (key: "llm.providers" | "llm.slots") => void;
-}) {
+}): null {
   const { t } = useTranslation();
   const [settled, setSettled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rearmFailed, setRearmFailed] = useState(false);
+  // The card body renders in the notice host, outside the game view.
+  const modelUses = useContext(SessionModelUsesContext);
   const visible = progress !== null;
   useEffect(() => {
     setSettled(false);
@@ -139,9 +149,9 @@ export function SetupProgressNotice({
     const timer = window.setTimeout(() => setSettled(true), SETTLE_MS);
     return () => window.clearTimeout(timer);
   }, [visible]);
-  if (!progress || !settled) return null;
-  const failed = progress.kind === "failed";
+  const failed = progress?.kind === "failed";
   const run = async () => {
+    if (!progress) return;
     setBusy(true);
     setRearmFailed(false);
     try {
@@ -152,71 +162,66 @@ export function SetupProgressNotice({
       setBusy(false);
     }
   };
-  return (
-    <div
-      role={failed ? "alert" : "status"}
-      className="relative z-10 shrink-0 border-b border-border bg-background/95 px-4 py-3 text-foreground"
-      data-testid="setup-progress-notice"
-      data-kind={progress.kind}
-    >
-      <div className="mx-auto flex max-w-3xl flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1 basis-48">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            {failed ? (
-              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
-            ) : (
-              <Info className="h-4 w-4 shrink-0 text-primary" />
-            )}
-            {t(
-              failed
-                ? "session.setupFailedTitle"
-                : "session.setupUnfinishedTitle",
-            )}
-          </p>
-          {progress.error ? (
-            <div className="mt-1.5">
-              <ProviderFailureNotice
-                error={progress.error}
-                errorKind={progress.errorKind}
-                failureTarget={progress.failureTarget}
-                layout="panel"
-              />
-            </div>
-          ) : (
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {t(
-                failed
-                  ? "session.setupFailedDetail"
-                  : "session.setupUnfinishedDetail",
+  useNotice(
+    !progress || !settled
+      ? null
+      : {
+          key: "setup-progress",
+          kind: "card",
+          tone: failed ? "error" : "info",
+          title: t(
+            failed
+              ? "session.setupFailedTitle"
+              : "session.setupUnfinishedTitle",
+          ),
+          ...(progress.error
+            ? {}
+            : {
+                body: [
+                  t(
+                    failed
+                      ? "session.setupFailedDetail"
+                      : "session.setupUnfinishedDetail",
+                  ),
+                  ...(!failed && progress.waitingOn
+                    ? [
+                        t("session.setupWaitingOn", {
+                          plugins: progress.waitingOn.join(", "),
+                        }),
+                      ]
+                    : []),
+                ].join("\n"),
+              }),
+          render: () => (
+            <SessionModelUsesContext.Provider value={modelUses}>
+              {progress.error && (
+                <ProviderFailureNotice
+                  error={progress.error}
+                  errorKind={progress.errorKind}
+                  failureTarget={progress.failureTarget}
+                  layout="panel"
+                />
               )}
-            </p>
-          )}
-          {rearmFailed && (
-            <p className="mt-1 text-xs text-destructive">
-              {t("session.setupRetryFailed")}
-            </p>
-          )}
-          {!failed && progress.waitingOn && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("session.setupWaitingOn", {
-                plugins: progress.waitingOn.join(", "),
-              })}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FailureRecoveryActions
-            error={failed ? progress.error : undefined}
-            errorKind={failed ? progress.errorKind : undefined}
-            retryLabel={t(
-              failed ? "session.setupRetry" : "session.setupContinue",
-            )}
-            disabled={busy}
-            onRetry={() => void run()}
-            onOpenSettings={onOpenSettings}
-          />
-        </div>
-      </div>
-    </div>
+              {rearmFailed && (
+                <p className="text-xs text-destructive">
+                  {t("session.setupRetryFailed")}
+                </p>
+              )}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <FailureRecoveryActions
+                  error={failed ? progress.error : undefined}
+                  errorKind={failed ? progress.errorKind : undefined}
+                  retryLabel={t(
+                    failed ? "session.setupRetry" : "session.setupContinue",
+                  )}
+                  disabled={busy}
+                  onRetry={() => void run()}
+                  onOpenSettings={onOpenSettings}
+                />
+              </div>
+            </SessionModelUsesContext.Provider>
+          ),
+        },
   );
+  return null;
 }

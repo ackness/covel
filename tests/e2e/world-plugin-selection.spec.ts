@@ -11,6 +11,7 @@ import {
   sendPlayerMessage,
   startGame,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 test("local world selection survives preparation, hydration, the opening, the first turn and reload", async ({
@@ -197,7 +198,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
       .filter({ hasText: name })
       .getByRole("button", { name: "Enter", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+    await openCustomStart(page);
     const initial = page
       .locator("button[aria-pressed]")
       .filter({ hasText: name });
@@ -206,7 +207,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
     await expect(initial).toContainText("World tags: frontier");
     const alternative = page
       .locator("button[aria-pressed]")
-      .filter({ hasText: "Narrative Only" });
+      .filter({ hasText: "Story Only" });
     await alternative.click();
     const advanced = page.getByTestId("advanced-plugin-settings");
     await advanced.locator("summary").click();
@@ -224,7 +225,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
     await expect(dice).toHaveAttribute("aria-checked", "false");
     const openingPack = page
       .locator("button[aria-pressed]")
-      .filter({ hasText: "DM Mode" });
+      .filter({ hasText: /^Game Master/ });
     await openingPack.click();
     await expect(openingPack).toHaveAttribute("aria-pressed", "true");
     await expect(dice).toHaveAttribute("aria-checked", "false");

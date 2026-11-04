@@ -43,7 +43,9 @@ describe("operator access settings navigation", () => {
   it("is discoverable through settings search", () => {
     const nodes = buildNavTree(emptyStore, { locale: "en-US" });
 
+    // The pane and the Advanced group that holds it.
     expect(filterNav(nodes, "operator", "en-US")).toEqual([
+      expect.objectContaining({ id: "group.advanced", kind: "header" }),
       expect.objectContaining({ id: OPERATOR_ACCESS_NODE_ID }),
     ]);
   });

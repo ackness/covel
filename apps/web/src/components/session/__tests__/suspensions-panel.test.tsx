@@ -3,6 +3,11 @@ import { beforeAll, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { SuspensionsPanel } from "../suspensions-panel.js";
 
+const developer = vi.hoisted(() => ({ on: false }));
+vi.mock("@/settings/use-settings.js", () => ({
+  useSetting: () => [developer.on, vi.fn()],
+}));
+
 beforeAll(async () => {
   await i18n.changeLanguage("en-US");
 });
@@ -52,7 +57,7 @@ it("builds a form from an object schema and resumes with the typed values", () =
   fireEvent.change(screen.getByRole("textbox", { name: "name" }), {
     target: { value: "Ada" },
   });
-  fireEvent.click(screen.getByRole("button", { name: /resume/i }));
+  fireEvent.click(screen.getByRole("button", { name: /send answer/i }));
   expect(onResume).toHaveBeenCalledWith("s1", { name: "Ada" });
 });
 
@@ -97,7 +102,7 @@ it("labels form-derived controls with titles and submits answers by field name",
   });
   fireEvent.click(screen.getByRole("checkbox", { name: "I agree" }));
   expect(screen.getByRole("combobox", { name: "Your route" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /resume/i }));
+  fireEvent.click(screen.getByRole("button", { name: /send answer/i }));
   expect(onResume).toHaveBeenCalledWith("s1", {
     name: "Alex",
     age: 21,
@@ -172,7 +177,29 @@ it.each([true, false])(
       "",
     );
     expect(screen.queryByRole("textbox", { name: "omitted" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /resume/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send answer/i }));
     expect(onResume).toHaveBeenCalledWith("s1", defaults);
   },
 );
+
+it("hides the raw-data box unless developer mode is on", () => {
+  const onResume = vi.fn().mockResolvedValue(undefined);
+  const ui = () => (
+    <SuspensionsPanel
+      suspensions={[{ ...base }]}
+      onResume={onResume}
+      onCancel={vi.fn()}
+    />
+  );
+  developer.on = false;
+  const view = render(ui());
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.queryByRole("button", { name: /send answer/i })).toBeNull();
+  expect(screen.getByText(/no answer form/i)).toBeTruthy();
+  expect(screen.getByRole("button", { name: /abandon/i })).toBeTruthy();
+  developer.on = true;
+  view.rerender(ui());
+  expect(screen.getByRole("textbox")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /send answer/i })).toBeTruthy();
+  developer.on = false;
+});

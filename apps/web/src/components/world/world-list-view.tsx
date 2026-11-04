@@ -40,6 +40,8 @@ export interface WorldListViewProps {
   onOpenGenerator: () => void;
   /** Opens Settings at the providers and models page. */
   onOpenSettings: () => void;
+  /** Opens Settings at Install & manage, where world packages are added. */
+  onOpenInstall?: () => void;
   /** Opens Settings at its first page. */
   onOpenAllSettings?: () => void;
   onOpenOnboarding?: () => void;
@@ -121,6 +123,7 @@ export function WorldListView(props: WorldListViewProps) {
     onOpenGenerator,
     onOpenSettings,
     onOpenAllSettings,
+    onOpenInstall,
     onOpenOnboarding,
     onEnterWorld,
     recentSessions,
@@ -218,16 +221,17 @@ export function WorldListView(props: WorldListViewProps) {
               )}
               onClick={onOpenGenerator}
             />
-            <HeaderAction
-              icon={Plug}
-              title={t("session.configureKeys", "Configure Providers & Models")}
-              detail={
-                primarySlotLabel ??
-                t("session.noModelsConfigured", "No models configured")
-              }
-              warn={!primarySlotLabel}
-              onClick={onOpenSettings}
-            />
+            {/* Only while no model can run: after that, Settings → Models is
+                the one place to change it. */}
+            {!primarySlotLabel && (
+              <HeaderAction
+                icon={Plug}
+                title={t("session.setupAiTitle")}
+                detail={t("session.setupAiDetail")}
+                warn
+                onClick={onOpenSettings}
+              />
+            )}
           </aside>
         </header>
 
@@ -295,10 +299,7 @@ export function WorldListView(props: WorldListViewProps) {
               {t("session.worldsEmptyTitle", "No worlds yet")}
             </h2>
             <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light">
-              {t(
-                "session.worldsEmptyDesc",
-                "Generate a new world with AI, or add a world package under the worlds/ folder.",
-              )}
+              {t("session.worldsEmptyDesc")}
             </p>
             <div className="flex items-center justify-center gap-3 mt-7">
               <Button
@@ -309,20 +310,16 @@ export function WorldListView(props: WorldListViewProps) {
                 <Wand2 className="w-3.5 h-3.5 mr-1.5" />
                 {t("world.aiCreate", "AI Create World")}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs uppercase tracking-widest"
-                onClick={() =>
-                  window.open(
-                    "https://github.com/ackness/covel/tree/main/worlds",
-                    "_blank",
-                    "noopener,noreferrer",
-                  )
-                }
-              >
-                {t("session.worldsEmptyViewExamples", "View examples")}
-              </Button>
+              {onOpenInstall && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs uppercase tracking-widest"
+                  onClick={onOpenInstall}
+                >
+                  {t("session.worldsEmptyInstall")}
+                </Button>
+              )}
             </div>
           </div>
         )}

@@ -3,19 +3,18 @@
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 世界规则
-  description: 展示世界包里长期生效的规则（禁忌、风俗和特殊设定），并让叙事始终遵守。
+  description: 展示这个世界长期有效的规则，如禁忌和风俗，并让故事始终遵守。
   contributes:
     data:
       rules:
         authoring:
           title: 世界规则
 messages:
-  World Details: 世界资料
-  World Rules: 世界规则
+  World state: 世界状态
   Rules: 规则
-  This world declares no lasting rules. Rules are authored in the world package (imported via world-data).: 本世界没有声明长期规则。规则由世界作者写在世界包里（world-data 导入）。
-  Lasting setting rules and taboos in effect for this world (read-only).: 本世界生效中的长期设定与禁忌（只读）。
+  This world has no special rules.: 这个世界没有特别的规则。
+  Lasting rules and taboos of this world. You can read them but not change them.: 这个世界长期有效的规则和禁忌，只能查看，不能修改。
   No rules: 暂无规则
-  Constant: 恒常规则
-  Triggered: 触发规则
-  Evolving: 演变规则
+  Always: 一直生效
+  When triggered: 条件满足时
+  Changes with the story: 随剧情变化

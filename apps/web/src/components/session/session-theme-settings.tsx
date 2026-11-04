@@ -1,11 +1,15 @@
 import { usePluginThemeSessionState } from "@/theme-system/use-plugin-theme.js";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Palette } from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import type { PluginThemeSession } from "@/theme-system/plugin-themes.js";
-import { HeaderMenu } from "./game-view/game-view-header.js";
+import { Button } from "@/components/ui/button.js";
 
+/**
+ * This game's theme choice, for the session menu. It appears only when a
+ * plugin offers themes (or one is still selected, so the default look can be
+ * restored).
+ */
 export function SessionThemeSettings({
   source,
   onReload,
@@ -29,12 +33,12 @@ export function SessionThemeSettings({
     ({ theme }) =>
       JSON.stringify([theme.pluginId, theme.id, theme.contentHash]) === value,
   );
+  const offered =
+    (state?.packs.length ?? 0) > 0 ||
+    Boolean(effective || state?.selected || state?.error);
+  if (!offered) return null;
   return (
-    <HeaderMenu
-      label={t("session.theme.menu")}
-      active={Boolean(effective)}
-      icon={Palette}
-    >
+    <section aria-label={t("session.theme.menu")}>
       <div
         className="max-w-72 space-y-2 p-2"
         onClick={(event) => event.stopPropagation()}
@@ -50,7 +54,7 @@ export function SessionThemeSettings({
             value={value}
             onChange={(event) => setDraft(event.target.value)}
           >
-            <option value="">{t("session.theme.default")}</option>
+            <option value="">{t("session.theme.defaultOption")}</option>
             {value && !candidate && (
               <option value={value} disabled>
                 {t("session.theme.draftUnavailable")}
@@ -118,7 +122,7 @@ export function SessionThemeSettings({
                         owner: state.selected.pluginId,
                         label: state.selected.themeId,
                       })
-                    : t("session.theme.default")}
+                    : t("session.theme.defaultOption")}
         </p>
         {state?.error && (
           <p role="alert" className="text-xs">
@@ -131,10 +135,23 @@ export function SessionThemeSettings({
             )}
           </p>
         )}
+        {(effective || state?.selected || state?.error || state?.saving) && (
+          // Always enabled: going back to the default look must stay possible
+          // while a theme is loading, saving or failing.
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => void source?.select(null)}
+          >
+            {t("session.theme.default")}
+          </Button>
+        )}
         <button type="button" className="text-xs underline" onClick={onReload}>
           {t("common.retry")}
         </button>
       </div>
-    </HeaderMenu>
+    </section>
   );
 }

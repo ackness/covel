@@ -4,19 +4,71 @@ import { toStreamMessages } from "../restore-session.js";
 import { describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { subscribeToast } from "@/lib/toast-channel.js";
+import { getNoticeSnapshot } from "@/lib/notice-center.js";
 import type { SseEnvelope } from "@/services/api.js";
 import { initialState, reducer } from "../reducer.js";
 import type { SessionAction } from "../types.js";
 import { createSseEventHandler } from "../sse-handler.js";
 
+describe("background failures", () => {
+  const envelope = (type: string): SseEnvelope =>
+    ({
+      type,
+      payload: { reason: "raw payload" },
+      sessionId: "session",
+      turnId: "turn",
+      requestId: "request",
+      traceId: "trace",
+      flowId: "flow",
+      seq: 0,
+      timestamp: "2026-10-31T00:00:00Z",
+    }) as SseEnvelope;
+  const handler = () =>
+    createSseEventHandler({
+      dispatch: vi.fn(),
+      stateRef: { current: { ...initialState } },
+      sessionIdRef: { current: "session" },
+      lastBackfilledTurnIdRef: { current: null },
+    });
+
+  it.each([
+    "hook.aborted",
+    "subagent.writes-dropped",
+    "gateway.failed",
+    "utils.fetch.failed",
+    "context.compaction.failed",
+    "commit.fanout.failed",
+    "command.failed",
+  ])("remembers %s in the history without a toast", async (type) => {
+    await i18n.changeLanguage("en-US");
+    const toast = vi.fn();
+    const unsubscribe = subscribeToast(toast);
+    try {
+      handler()(envelope(type));
+      expect(toast).not.toHaveBeenCalled();
+      const { history, toasts } = getNoticeSnapshot();
+      expect(toasts).toEqual([]);
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatchObject({
+        state: "quiet",
+        scope: "session",
+        title: expect.not.stringContaining("notice.quiet"),
+      });
+      expect(history[0]?.detail).toContain("raw payload");
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
 describe("operation failure notice", () => {
   it.each([
-    ["en-US", 1, "1 action from this turn did not take effect."],
-    ["en-US", 2, "2 actions from this turn did not take effect."],
-    ["zh-CN", 2, "本回合有 2 个操作没有生效。"],
+    ["en-US", 1],
+    ["en-US", 2],
+    ["zh-CN", 2],
   ] as const)(
-    "shows one fixed toast in %s for %i operations",
-    async (locale, count, message) => {
+    "keeps the failed-operation line out of the toasts in %s for %i operations",
+    async (locale, count) => {
       await i18n.changeLanguage(locale);
       const dispatch = vi.fn();
       const handler = createSseEventHandler({
@@ -46,8 +98,10 @@ describe("operation failure notice", () => {
           seq: 0,
           timestamp: "2026-10-31T00:00:00Z",
         });
-        expect(toast).toHaveBeenCalledExactlyOnceWith(
-          expect.objectContaining({ kind: "info", message }),
+        // The persistent line under the story carries the message.
+        expect(toast).not.toHaveBeenCalled();
+        expect(dispatch).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "SET_OPERATION_FAILURES" }),
         );
         expect(dispatch).not.toHaveBeenCalledWith(
           expect.objectContaining({ type: "SET_EXECUTION_ERROR" }),
@@ -131,12 +185,7 @@ describe("operation failure notice", () => {
           timestamp: "2026-10-31T00:00:00Z",
         } as SseEnvelope),
       );
-      expect(toast).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({
-          kind: "info",
-          message: "1 action from this turn did not take effect.",
-        }),
-      );
+      expect(toast).not.toHaveBeenCalled();
       expect(state.executionError).toBeNull();
       expect(state.executing).toBe(false);
       expect(

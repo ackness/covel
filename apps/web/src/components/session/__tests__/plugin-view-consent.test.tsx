@@ -425,59 +425,41 @@ it("observes external SettingsStore refresh and fails closed on revocation", asy
   expect(hook.result.current.isAllowed(viewEntry)).toBe(false);
 });
 
-it("binds consent to the surface and keeps independently granted pages separate", async () => {
-  const main = {
-    ...viewEntry,
-    spec: { ...viewEntry.spec, surface: "main" as const },
-  };
-  const composer = {
+it("binds consent to the page content and keeps independently granted pages separate", async () => {
+  const main = viewEntry;
+  const input = {
     ...viewEntry,
     mode: "plugin:p:input" as const,
     viewId: "input",
     spec: {
       ...viewEntry.spec,
       id: "input",
-      surface: "composer" as const,
+      composer: false as const,
       capabilities: ["submitAction" as const],
     },
   };
   const { result, rerender } = renderHook(
     ({ entries }) => usePluginViewConsent(entries, "visit"),
     {
-      initialProps: { entries: [main, composer] as readonly PluginViewEntry[] },
+      initialProps: { entries: [main, input] as readonly PluginViewEntry[] },
     },
   );
-  await waitFor(() => expect(result.current.ready(composer)).toBe(true));
+  await waitFor(() => expect(result.current.ready(input)).toBe(true));
   await act(() => result.current.grant(main));
   expect(result.current.isAllowed(main)).toBe(true);
-  expect(result.current.isAllowed(composer)).toBe(false);
-  await act(() => result.current.grant(composer));
-  await act(() => result.current.revoke(composer, "submitAction"));
+  expect(result.current.isAllowed(input)).toBe(false);
+  await act(() => result.current.grant(input));
+  await act(() => result.current.revoke(input, "submitAction"));
   expect(result.current.isAllowed(main)).toBe(true);
-  expect(result.current.isAllowed(composer)).toBe(false);
+  expect(result.current.isAllowed(input)).toBe(false);
   const changed = {
     ...main,
-    spec: { ...main.spec, surface: "composer" as const },
+    spec: { ...main.spec, composer: false as const },
   };
-  rerender({ entries: [changed, composer] });
+  rerender({ entries: [changed, input] });
   expect(result.current.isAllowed(changed)).toBe(false);
   await waitFor(() => expect(result.current.ready(changed)).toBe(true));
   expect(result.current.isAllowed(changed)).toBe(false);
-});
-it("does not resolve a composer declaration as a world default main view", () => {
-  const entry = {
-    ...viewEntry,
-    spec: { ...viewEntry.spec, surface: "composer" as const },
-  };
-  const { result } = renderHook(() =>
-    useGameViewMode(
-      { metadata: { defaultViewMode: entry.mode } },
-      { views: [entry], reload: () => {}, status: "ready" },
-      () => true,
-    ),
-  );
-  expect(result.current[0]).toBe("parsed");
-  expect(result.current[2].consentView).toBeUndefined();
 });
 
 it("waits for the new visit's world default after dropping a previous selection", () => {

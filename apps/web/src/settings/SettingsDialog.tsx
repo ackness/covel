@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Workflow,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -31,16 +32,21 @@ import {
   buildNavTree,
   filterNav,
   resolveSettingsNode,
+  ADVANCED_NODE_ID,
   APPEARANCE_NODE_ID,
+  DATA_NODE_ID,
+  DEVELOPER_MODE_KEY,
+  GENERAL_NODE_ID,
   MEDIA_LIBRARY_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
   RAW_CONFIG_NODE_ID,
+  READING_KEYS,
   type NavNode,
 } from "./navigation.js";
 import { SettingWidget } from "./widgets/index.js";
 import { SettingFieldList, SettingsPaneHeader } from "./pane-layout.js";
-import { useSettingsStore } from "./use-settings.js";
+import { useSetting, useSettingsStore } from "./use-settings.js";
 import { useSettingsWritable } from "./use-settings-save.js";
 import { DataPane } from "./DataPane.js";
 import { DesktopPane } from "./DesktopPane.js";
@@ -75,6 +81,8 @@ export function SettingsDialog({
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
   const [storeRevision, setStoreRevision] = useState(0);
+  const [developerMode] = useSetting<boolean>(DEVELOPER_MODE_KEY);
+  // A plugin's pane is titled with its display name, never its id.
   const pluginDisplayNames = useMemo(
     () =>
       Object.fromEntries(
@@ -107,12 +115,21 @@ export function SettingsDialog({
         // A server that checks the operator token is shared, and a shared
         // server has no media library.
         includeMediaLibrary: isOperatorTokenRequired() !== true,
+        developerMode: developerMode === true,
         locale: i18n.language,
         pluginDisplayNames,
       }),
     // `open` included so the tree rebuilds when dialog opens and plugins
     // registered new entries since last render.
-    [store, desktop, i18n.language, open, storeRevision, pluginDisplayNames],
+    [
+      store,
+      desktop,
+      i18n.language,
+      open,
+      storeRevision,
+      pluginDisplayNames,
+      developerMode,
+    ],
   );
   const filtered = useMemo(
     () => filterNav(tree, query, i18n.language),
@@ -215,8 +232,7 @@ export function SettingsDialog({
               className="hidden sm:block flex-1 overflow-y-auto py-2 ui-scroll"
             >
               {filtered.map((node) => {
-                const selectable = isSelectable(node);
-                const isHeader = node.kind === "group" && !selectable;
+                const isHeader = node.kind === "header";
                 const isSelected = selected === node.id;
                 if (isHeader) {
                   return (
@@ -278,14 +294,15 @@ export function SettingsDialog({
 }
 
 const NAV_ICONS: Readonly<Record<string, LucideIcon>> = {
-  general: SlidersHorizontal,
+  [GENERAL_NODE_ID]: SlidersHorizontal,
+  [ADVANCED_NODE_ID]: Wrench,
   [APPEARANCE_NODE_ID]: Palette,
   "llm.slots": Workflow,
   "llm.providers": Plug,
   "llm.advanced": Gauge,
   [PACKAGES_NODE_ID]: PackagePlus,
   desktop: Monitor,
-  data: Database,
+  [DATA_NODE_ID]: Database,
   [RAW_CONFIG_NODE_ID]: FileCode,
   [MEDIA_LIBRARY_NODE_ID]: Images,
   [OPERATOR_ACCESS_NODE_ID]: ShieldCheck,
@@ -295,11 +312,9 @@ function navIcon(node: NavNode): LucideIcon {
   return NAV_ICONS[node.id] ?? (node.kind === "plugin" ? Puzzle : Settings2);
 }
 
-/** Group headers ("llm", "plugin") are not directly selectable. */
+/** Group headers title a group of panes and are not directly selectable. */
 function isSelectable(node: NavNode): boolean {
-  if (node.id === "llm") return false;
-  if (node.id === "plugin") return false;
-  return true;
+  return node.kind !== "header";
 }
 
 function renderPane(
@@ -316,7 +331,7 @@ function renderPane(
   if (node.id === "llm.slots") return <LlmSlotsPane />;
   if (node.id === "llm.providers") return <LlmPresetsPane />;
   if (node.id === "llm.advanced") return <LlmAdvancedPane />;
-  if (node.id === "data")
+  if (node.id === DATA_NODE_ID)
     return (
       <>
         <SettingsPaneHeader
@@ -361,6 +376,9 @@ function renderPane(
       </>
     );
 
+  if (node.id === GENERAL_NODE_ID || node.id === ADVANCED_NODE_ID) {
+    return <EntryPane node={node} t={t} />;
+  }
   if (node.children.length === 0) {
     return (
       <div className="text-xs text-muted-foreground">
@@ -370,19 +388,56 @@ function renderPane(
   }
   return (
     <>
-      <SettingsPaneHeader
-        title={node.label}
-        description={
-          node.id === "general"
-            ? t("settings.paneGeneralDescription")
-            : undefined
-        }
-      />
+      <SettingsPaneHeader title={node.label} />
       <SettingFieldList>
         {node.children.map((entry) => (
           <SettingWidget key={entry.key} entry={entry} />
         ))}
       </SettingFieldList>
+    </>
+  );
+}
+
+/**
+ * Preferences and Advanced list their registered entries. Preferences ends
+ * with a Reading section; Advanced keeps the developer-mode switch first.
+ */
+function EntryPane({
+  node,
+  t,
+}: {
+  node: NavNode;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const reading = node.children.filter((entry) => READING_KEYS.has(entry.key));
+  const rest = node.children.filter((entry) => !READING_KEYS.has(entry.key));
+  return (
+    <>
+      <SettingsPaneHeader
+        title={node.label}
+        description={t(
+          node.id === GENERAL_NODE_ID
+            ? "settings.paneGeneralDescription"
+            : "settings.paneAdvancedDescription",
+        )}
+      />
+      <SettingFieldList>
+        {rest.map((entry) => (
+          <SettingWidget key={entry.key} entry={entry} />
+        ))}
+      </SettingFieldList>
+      {reading.length > 0 && (
+        <section className="mt-8 max-w-2xl space-y-3">
+          <h3 className="ui-meta border-t border-(--rule-color) pt-4 text-[10px] text-muted-foreground">
+            {t("settings.readingHeading")}
+          </h3>
+          <SettingFieldList>
+            {reading.map((entry) => (
+              <SettingWidget key={entry.key} entry={entry} />
+            ))}
+          </SettingFieldList>
+        </section>
+      )}
     </>
   );
 }

@@ -1,12 +1,12 @@
 {
   "id": "memory",
-  "label": "Core Memory",
-  "shortLabel": "Memory",
+  "label": "Story Memory",
+  "shortLabel": "Story Memory",
   "icon": "brain",
   "groupOrder": 800,
   "dataSource": { "namespace": "blocks" },
   "emptyState": {
-    "message": "Memory blocks not yet initialized, waiting for first turn to complete…"
+    "message": "Nothing remembered yet. Notes appear after the first turn."
   },
   "view": {
     "component": "Stack",
@@ -15,7 +15,7 @@
       {
         "component": "Text",
         "props": {
-          "content": "Updates after each turn to keep key plot, scene, and character details.",
+          "content": "Updates after every turn with the key plot, scene and character details.",
           "size": "xs",
           "variant": "muted"
         }

@@ -1,5 +1,5 @@
 ---
-description: Publishes this turn's frozen dimension snapshot without a model call.
+description: Gives the story this turn's world state. Makes no AI call.
 schedule:
   stage: pre-turn
 io:

@@ -199,7 +199,7 @@ test("smoke and acceptance run independently and stress repeats only nightly or 
   );
   assert.match(
     stress.run,
-    /--grep 'a delayed runtime approval\|independent sandbox regions'/,
+    /--grep 'a delayed runtime approval\|plugin pages keep the host input'/,
   );
   assert.match(stress.run, /--repeat-each=3 --workers=1 --retries=0/);
   assert.match(stress.run, /--output=tests\/e2e\/artifacts\/extensions-stress/);

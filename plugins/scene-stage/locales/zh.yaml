@@ -2,48 +2,49 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 场景舞台
-  description: 跟踪当前场景、昼夜和在场角色，为舞台背景与立绘提供数据。
+  displayName: 舞台画面
+  description: 显示当前场景、白天或夜晚，以及在场角色的立绘。
   contributes:
     events:
       - description: 演员有变化的回合在正文前发射一次：cues 合并本轮全部登退场、站位、焦点、视觉变体变化。actor.focus 只控制画面焦点；名牌来自故事段落的说话者。actor.leave 与 stage.clear 应指定离场 transition。
       - description: 发射条件：第一回合开场确立场景时、场景/地点切换时、昼夜变化时——满足任一即须发射（每回合最多一次）。location 用叙事中的地点名；无把握沿用上次值。
     settings:
       - key: activeSpeakerCount
-        label: 活跃说话人数
+        label: 同时发言的角色数
+        description: 每次回复里最多有几位角色发言，范围 1 到 4。
     data:
       assets:
         authoring:
           title: 场景背景图片
       scenes:
         authoring:
-          title: 场景注册表
+          title: 场景背景清单
 runtimes/cast/RUNTIME.md:
-  description: 记录当前场景里谁在场、谁正在说话。
+  description: 记录谁在场景里、谁来发言。
 runtimes/direction/RUNTIME.md:
-  description: 接收结构化舞台演出指令，跟踪角色登退场、站位、焦点及服装/表情/姿势。
+  description: 执行舞台指令：谁上场或离场、站在哪里、谁是焦点，以及他们的服装、表情和姿势。
 runtimes/resolver/RUNTIME.md:
-  description: 跟踪叙事当前所在的场景与昼夜，为舞台背景提供数据。
+  description: 记录当前所在的场景，以及现在是白天还是夜晚。
 runtimes/seed/RUNTIME.md:
-  description: 开局时为舞台种下世界注册表里的第一个场景，避免叙事未发 scene.set 时舞台空白。
+  description: 游戏开始时先在舞台上显示世界的第一个场景，不让舞台空着。
 runtimes/story-cues/RUNTIME.md:
-  description: 跟随故事的场景、在场角色与说话人提示更新舞台。
+  description: 让舞台跟上故事：故事发生在哪里、有谁在场。
 messages:
   Scene: 场景
-  groupLabel|Scene: 当前场景
-  Cast: 在场角色
-  No characters are on stage in this scene yet.: 这一幕还没有角色登场。
-  Characters in this scene: 这一幕在场的角色
-  No scene established yet, waiting for the narrative to progress…: 还没有确立场景，等待叙事推进……
-  World art: 世界背景
-  No backdrop: 无背景
+  groupLabel|Scene: 场景
+  Characters: 角色
+  No characters in this scene yet.: 这个场景里还没有角色。
+  Characters in this scene: 这个场景里的角色
+  The scene will appear once the story gets going…: 故事开始后，这里会显示场景…
+  World background: 世界背景
+  No background: 无背景
   Day: 白天
   Night: 夜晚
-  No NPC currently has enough scene salience.: 当前暂无足够突出的 NPC。
-  Mentioned: 玩家提到
-  In scene: 在场景中
-  Profile: 有角色档案
-  State: 有状态记录
-  Recent: 刚刚活跃
-  Stage reading: 舞台阅读
-  Warm story colors and quiet dialogue typography.: 温暖的正文配色与简洁的对话排版。
+  No character stands out in the scene right now.: 现在场景里没有特别活跃的角色。
+  Mentioned by you: 你提到过
+  In the scene: 在场
+  Has a profile: 有档案
+  Has status notes: 有记录
+  Recently active: 刚活跃
+  Reading style: 阅读样式
+  Warm reading colors and a clean dialogue layout.: 暖色的阅读配色和清爽的对话排版。
