@@ -11,7 +11,7 @@ Both routes produce the same kind of thing, called a **theme package**: a file t
 
 ## Get to Know a Few Terms
 
-Open **Settings → Appearance**, and you will see these items:
+Open **Settings → General → Appearance**, and you will see these items:
 
 | Name on screen | What it is                                                                                                                                                     |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -27,7 +27,7 @@ Every color set is a complete theme package. A theme you make will also end up a
 
 ### 1. Pick the Closest Style
 
-Click a card under **Settings → Appearance → Style**. It takes effect right away. For a style that has several color sets, pick one under "Colours" below the card.
+Click a card under **Settings → General → Appearance → Style**. It takes effect right away. For a style that has several color sets, pick one under "Colours" below the card.
 
 Picking the right style matters, because the layout of the interface follows the style:
 
@@ -87,7 +87,7 @@ For how the other person imports it, see [Import a theme](#import-a-theme) below
 
 ## Import a Theme
 
-1. Open **Settings → Appearance**, and expand "Theme Library".
+1. Open **Settings → General → Appearance**, and expand "Theme Library".
 2. Click "Import theme", and choose a `.css`, `.json`, `.theme` or `.theme.json` file.
 3. After a successful import, a message "Imported ……" appears, and the app switches to this theme right away.
 

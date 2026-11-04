@@ -265,10 +265,10 @@ export function LlmSlotsPane() {
       {/* The title line states the chain the three LLM pages form: a player
           otherwise sees roles, providers and keys as unrelated pages. */}
       <SettingsPaneHeader
-        title={t("settings.llmSlots", "Model Roles")}
+        title={t("settings.llmSlots", "AI roles")}
         description={t(
           "settings.slotChainSummary",
-          "Plugin tasks → model roles → providers and models → API keys.",
+          "Plugin tasks → AI roles → providers and models → API keys.",
         )}
       />
       {/* Manual hot-reload: re-read llm.toml on the server and apply it to the
@@ -331,13 +331,13 @@ export function LlmSlotsPane() {
               <div className="text-xs font-medium">
                 {t(
                   "settings.runtimeSlotsDiscovered",
-                  "Plugin-declared model roles",
+                  "Plugin-declared AI roles",
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 {t(
                   "settings.runtimeSlotsDiscoveredHint",
-                  "These model roles come from loaded plugins and their saved settings. Assign an appropriate provider and model to each one.",
+                  "These AI roles come from loaded plugins and their saved settings. Assign an appropriate provider and model to each one.",
                 )}
               </p>
             </div>

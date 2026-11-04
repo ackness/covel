@@ -3,7 +3,11 @@ import {
   packageCapabilities,
   verifiedInstallation,
 } from "./helpers/package-fixtures.js";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  ONBOARDING_VERSION,
+  seedBrowserSettings,
+  openAppSettings,
+} from "./helpers/player.js";
 
 for (const width of [1280, 390]) {
   test(`Multi-world GitHub installation requires consent for each selection at ${width}px`, async ({
@@ -85,9 +89,7 @@ for (const width of [1280, 390]) {
       });
     });
     await page.goto("/session");
-    await page
-      .getByRole("button", { name: /Configure Providers & Models/ })
-      .click();
+    await openAppSettings(page);
     const dialog = page.getByRole("dialog");
     if (width < 640)
       await dialog

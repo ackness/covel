@@ -577,14 +577,14 @@ Puzzles follow the same idea. The clues and progress are stored in a data namesp
 
 ## Let the interface follow the style
 
-The player can change the interface style in **Settings → Appearance**. Each style has different colors, fonts, and corner radii. Some styles even have a different structure: whether tabs are icons or text, and whether there is a scene background. You do not need to write a separate interface for each style. Just follow these rules:
+The player can change the interface style in **Settings → General → Appearance**. Each style has different colors, fonts, and corner radii. Some styles even have a different structure: whether tabs are icons or text, and whether there is a scene background. You do not need to write a separate interface for each style. Just follow these rules:
 
 - **Say what it means, not what it looks like.** Use component parameters such as `tone` and `variant` to express "warning", "success", or "secondary". Do not write specific colors, fonts, or corner radii into the interface file.
 - **Say what the content is, not where it goes.** The style decides where the panel sits and what its tab looks like. You only need to provide good `label`, `shortLabel`, and `icon` values.
 - **Do not assume how wide the panel is, or whether the theme is dark or light.** The player can drag the panel's width. Content must be able to wrap and scroll. Images and charts should not depend on a dark background.
 - **Color your own interface with `--covel-*` variables.** Do not hard-code colors.
 
-To check this yourself: in **Settings → Appearance → Style**, choose "Panel", "Book", and "Stage" in turn. Each time you switch, look at your panel and the story-text block.
+To check this yourself: in **Settings → General → Appearance → Style**, choose "Panel", "Book", and "Stage" in turn. Each time you switch, look at your panel and the story-text block.
 
 ## Current limits
 

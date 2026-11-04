@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  ONBOARDING_VERSION,
+  seedBrowserSettings,
+  openAppSettings,
+} from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -60,12 +64,10 @@ test("same API model configurations can be copied, named, shared, and imported i
     }),
   );
   await page.goto("/session");
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
+  await openAppSettings(page);
   const dialog = page.getByRole("dialog");
   await dialog
-    .getByRole("button", { name: "Providers & Models", exact: true })
+    .getByRole("button", { name: "Providers & keys", exact: true })
     .click();
   await dialog.getByRole("button", { name: /fixture.*1 model\b/ }).click();
   await dialog
@@ -122,9 +124,7 @@ test("same API model configurations can be copied, named, shared, and imported i
     renamed.getByRole("combobox", { name: "Reasoning effort" }),
   ).toHaveValue("xhigh");
 
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   const story = dialog.getByRole("group", { name: "story", exact: true });
   const plugin = dialog.getByRole("group", { name: "plugin", exact: true });
   await story
@@ -138,12 +138,8 @@ test("same API model configurations can be copied, named, shared, and imported i
   ).toHaveValue("model:quick");
   await page.keyboard.press("Escape");
   await page.reload();
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await openAppSettings(page);
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   await expect(
     story.getByRole("combobox", { name: "Model configuration", exact: true }),
   ).toHaveValue(`model:${detailedRef}`);

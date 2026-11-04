@@ -35,7 +35,7 @@ Proof binds content to the current registered definition and is refreshed for en
 
 ## Trusted sources
 
-No source is trusted by default, including the official repository. Add a GitHub owner or `owner/repo` in **Settings → Install & manage → Trusted sources**. The suggestion button only fills the official repository; press Add to save it. Entries are trimmed, lowercased, deduplicated and sorted: at most 100 entries, 100 characters each, and 39 characters per owner. Only GitHub names are accepted, not URLs.
+No source is trusted by default, including the official repository. Add a GitHub owner or `owner/repo` in **Settings → Plugins → Install & manage → Trusted sources**. The suggestion button only fills the official repository; press Add to save it. Entries are trimmed, lowercased, deduplicated and sorted: at most 100 entries, 100 characters each, and 39 characters per owner. Only GitHub names are accepted, not URLs.
 
 `owner` matches all repositories of that owner; `owner/repo` matches only that repository. Matching is case-insensitive and compares complete names: `owner-evil` and `repo-evil` do not match. Non-GitHub HTTPS addresses, `.git` suffixes, trailing slashes, extra paths, queries and fragments do not match. Each plugin in a collection is judged by its own receipt's `source.repository`, including members pinned to another repository.
 
@@ -78,7 +78,7 @@ Trusted sources preserve `builtin | community`, add no API or privilege, and do 
 
 ## User flow
 
-Open **Settings → Install & manage**:
+Open **Settings → Plugins → Install & manage**:
 
 1. Browse the community catalogue, or paste a public GitHub repository link, or a `/tree/<ref>/<path>` link.
 2. The link is resolved. The plugins and world packs in that directory are listed together. When the directory has a `covel-collection.yaml`, only the members named in the [collection](../ship/collections.md) manifest are listed, including packages pinned in other repositories.
@@ -388,7 +388,7 @@ Authorization is not kept across a backend restart. In particular, an old author
 
 ## In-app validation
 
-Players without a source checkout or pnpm can open **Settings → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+Players without a source checkout or pnpm can open **Settings → Plugins → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
 
 ZIP validation uses the [installation rules for plugin IDs](#what-the-installer-does-and-does-not-do), preserving identities derived from the package directory or `package.json.name` instead of using the temporary directory name. When no valid ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`. The static validator reports manifest parsing errors separately.
 

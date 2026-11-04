@@ -250,7 +250,7 @@ describe("world showcase", () => {
     expect(dialog.textContent).toContain("每到冬天，港口都会燃烧一次。");
   });
 
-  it("plays the theme music of the world it shows, with the player's switch", async () => {
+  it("plays the theme music of the world it shows without a switch of its own", async () => {
     const played: string[] = [];
     vi.stubGlobal(
       "Audio",
@@ -304,16 +304,11 @@ describe("world showcase", () => {
       expect.anything(),
     );
     expect(played).toEqual(["blob:theme"]);
+    // The music setting lives in Settings and the game menu, not on this page.
+    expect(screen.queryByRole("switch", { name: /音乐|music/i })).toBeNull();
     expect(
-      screen.getByRole("button", { name: i18n.t("session.musicMute") }),
-    ).toBeTruthy();
-
-    // A world without a theme has no switch.
-    fireEvent.click(screen.getByRole("button", { name: "Still Fen" }));
-    await settle();
-    expect(
-      screen.queryByRole("button", { name: i18n.t("session.musicMute") }),
-    ).toBe(null);
+      screen.queryByRole("button", { name: /关闭背景音乐|Mute the music/i }),
+    ).toBeNull();
   });
 
   it("shows no gallery for a world without pictures", async () => {

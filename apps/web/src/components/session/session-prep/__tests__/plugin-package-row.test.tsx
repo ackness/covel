@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { SettingsStore } from "@covel/settings";
 import type { PluginSummary } from "@covel/shared";
@@ -70,6 +70,7 @@ function rowProps(binding = "story") {
     isMissingDeclaredSlot: (id: string) =>
       !slots.some((slot) => slot.slotId === id),
     onTogglePlugin: vi.fn(),
+    onOpenPluginSettings: vi.fn(),
     worldPluginSettings: { fixture: { imageRole: "image" } },
     bindingState: {
       entries: plugin.runtimes.map((runtime) => ({
@@ -102,25 +103,44 @@ it("shows all stages and provider settings, respecting world defaults and player
   render(<PluginPackageRow {...rowProps()} />);
   expect(screen.getByText("Narrative")).toBeTruthy();
   expect(screen.getByText("Post-Turn")).toBeTruthy();
-  expect(screen.getByRole("combobox", { name: "Image role" })).toBeTruthy();
-  expect(screen.getByRole("combobox", { name: "Voice role" })).toBeTruthy();
+  // The slot of each role is shown as text; Settings holds the one editor.
+  expect(screen.queryByRole("combobox", { name: "Image role" })).toBeNull();
+  expect(screen.getByText("Image role")).toBeTruthy();
+  expect(screen.getByText("image")).toBeTruthy();
   expect(screen.queryByRole("status")).toBeNull();
   await act(async () => {
     await mocks.store.set("plugin.fixture.imageRole", "voice");
   });
+  expect(screen.getAllByText("voice").length).toBeGreaterThan(0);
+  const props = rowProps();
+  const view = render(<PluginPackageRow {...props} />);
+  fireEvent.click(
+    within(view.container).getByRole("button", {
+      name: "Change · Image role",
+    }),
+  );
+  expect(props.onOpenPluginSettings).toHaveBeenCalledWith("fixture");
+});
+
+it("shows the per-step model choices of this game only in developer mode", () => {
+  const plain = render(<PluginPackageRow {...rowProps()} />);
   expect(
-    (screen.getByRole("combobox", { name: "Image role" }) as HTMLSelectElement)
-      .value,
-  ).toBe("voice");
+    screen.queryByRole("combobox", { name: "Model · fixture/agent-0" }),
+  ).toBeNull();
+  plain.unmount();
+  render(<PluginPackageRow {...rowProps()} developerMode />);
+  expect(
+    screen.getByRole("combobox", { name: "Model · fixture/agent-0" }),
+  ).toBeTruthy();
 });
 it("shows the slot a role that is not set up falls back to, and the chosen slot after an override", () => {
-  const view = render(<PluginPackageRow {...rowProps("")} />);
+  const view = render(<PluginPackageRow {...rowProps("")} developerMode />);
   // The server runs a role that is not set up on the first text slot.
   expect(screen.queryByRole("status")).toBeNull();
   expect(
     screen.getAllByText("removed-role is not set up; uses story · story-model"),
   ).toHaveLength(2);
-  view.rerender(<PluginPackageRow {...rowProps()} />);
+  view.rerender(<PluginPackageRow {...rowProps()} developerMode />);
   expect(screen.queryByRole("status")).toBeNull();
   const runtime = screen.getByRole("combobox", {
     name: "Model · fixture/agent-0",

@@ -71,7 +71,7 @@ pnpm validate:collection ~/tidelamp-pack
 
 两种方式，选一种：
 
-- **放到 GitHub。** 把 `tidelamp-pack/` 推到一个公开仓库。玩家在 **设置 → 安装与管理** 粘贴仓库链接。
+- **放到 GitHub。** 把 `tidelamp-pack/` 推到一个公开仓库。玩家在 **设置 → 插件 → 安装与管理** 粘贴仓库链接。
 - **打成一个文件。** 运行下面的命令，把得到的 ZIP 发给玩家。他在同一个页面把它拖到“合集包”区域。
 
 ```bash

@@ -46,7 +46,7 @@ After you confirm, click "Start Game". If this is your first time playing, the g
 
 Different tasks can use different models. For example, you might use a better model for writing the story, and a cheaper, faster one for organizing world material.
 
-- Global settings: in "Settings", under "LLM" → "Providers & Models", set up your providers and models, and choose a model for each model role. For first-time setup, see [Connect a model](../start/models.md).
+- Global settings: in "Settings", under "Models", set up your providers and keys in "Providers & keys", and choose a model for each role in "AI roles". For first-time setup, see [Connect a model](../start/models.md).
 - A single task: on the session-prep screen, each plugin task has a "Model" option. You can change it to another model role. The new choice is used from the next turn.
 
 For details on model roles, see [Model roles](../reference/slots.md).
@@ -85,7 +85,7 @@ The packaged desktop app can restart its bundled backend. A desktop shell runnin
 
 ## Export and import settings
 
-Under "Data" in "Settings". "Export settings" saves the settings on this device as a JSON file, which you can use as a backup or move to another device. The default file does not include API keys. Tick "Include API keys (sensitive)" to include them. Keep this file safe.
+Under "Saves & data" in "Settings". "Export settings" saves the settings on this device as a JSON file, which you can use as a backup or move to another device. The default file does not include API keys. Tick "Include API keys (sensitive)" to include them. Keep this file safe.
 
 When importing, choose the file first. In the preview, tick the items you want to apply, then click "Apply". The selected items overwrite the current values, and the other settings stay the same.
 
@@ -102,7 +102,7 @@ These generic controls install no new policy, character plugin or play pack. Plu
 
 ### Creation roles and independent saves
 
-Play as defaults to Player on preparation, with Game master and Spectator choices. It applies only to new sessions and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it during preparation when choosing Game master in the ensemble recipe.
+Next to "Start Game" on the getting-ready screen, you choose who you play as. It defaults to Player, with Game master and Spectator as choices, each with a one-line hint; it is hidden when only one is valid. It applies only to new sessions and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it during preparation when choosing Game master in the ensemble recipe.
 
 The Advanced block groups Speaking rules, Characters speaking at once, Helper calls and Auto-advance turns. Save each field independently. Policy/caps use the orchestration route; Automatic rounds uses ordinary session PATCH. A failed field retains its draft/error while successful fields remain saved, followed by authoritative reloads; there is no joint rollback. The provider-settings link opens its own strategy fields. Multiple providers require an exact choice. Paused/stale selections remain visible and clearable without activation or approval.
 

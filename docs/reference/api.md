@@ -250,7 +250,7 @@ community 插件的 ESM 代码会在服务器进程里注册全局能力，所�
 
 `DEPLOYMENT_TIER=demo|commercial` 启动时如果没有配置这个 token，服务端会直接拒绝启动。这些规则都来自启动时定下的宿主配置，每条路由要什么见 [安全边界](../internals/security.md#host-profile)。
 
-纯 Web 客户端可以在 **设置 → 运维访问** 里输入或清除这个 token：
+纯 Web 客户端可以在 **设置 → 高级 → 运维访问** 里输入或清除这个 token：
 
 - 凭据只保存在当前浏览器的 `localStorage`。
 - 只在上面这些需要运维 token 的同源请求里，以 `Authorization: Bearer <token>` 发送。

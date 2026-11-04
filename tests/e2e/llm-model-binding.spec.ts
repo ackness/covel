@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  ONBOARDING_VERSION,
+  seedBrowserSettings,
+  openAppSettings,
+} from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -101,13 +105,9 @@ test("same-named local and server models remain distinct in role selection and p
     });
   });
   await page.goto("/session");
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
+  await openAppSettings(page);
   const dialog = page.getByRole("dialog");
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   const story = dialog.getByRole("group", { name: "story", exact: true });
   const plugin = dialog.getByRole("group", { name: "plugin", exact: true });
   const storyModel = story.getByRole("combobox", {
@@ -151,7 +151,7 @@ test("same-named local and server models remain distinct in role selection and p
   ).toBeVisible();
 
   await dialog
-    .getByRole("button", { name: "Providers & Models", exact: true })
+    .getByRole("button", { name: "Providers & keys", exact: true })
     .click();
   await dialog.getByRole("button", { name: /fixture.*2 models/ }).click();
   const local = dialog.getByRole("group", {
@@ -181,12 +181,8 @@ test("same-named local and server models remain distinct in role selection and p
   }
   await page.keyboard.press("Escape");
   await page.reload();
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await openAppSettings(page);
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   await expect(storyModel).toHaveValue(`preset:${id}`);
   await expect(pluginModel).toHaveValue(`model:${id}`);
 });
@@ -288,13 +284,9 @@ test("role choices respect model capabilities and show each configuration's actu
     });
   });
   await page.goto("/session");
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
+  await openAppSettings(page);
   const dialog = page.getByRole("dialog");
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   const story = dialog.getByRole("group", { name: "story", exact: true });
   await expect(story.getByRole("alert")).toContainText(
     "does not support this role",
@@ -331,7 +323,7 @@ test("role choices respect model capabilities and show each configuration's actu
   );
   await expect(dialog.getByRole("slider")).toHaveCount(0);
   await dialog
-    .getByRole("button", { name: "Providers & Models", exact: true })
+    .getByRole("button", { name: "Providers & keys", exact: true })
     .click();
   await dialog.getByRole("button", { name: /fixture.*4 models/ }).click();
   await expect(

@@ -11,6 +11,7 @@ import {
   sendPlayerMessage,
   startGame,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 test("local world selection survives preparation, hydration, the opening, the first turn and reload", async ({
@@ -197,7 +198,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
       .filter({ hasText: name })
       .getByRole("button", { name: "Enter", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+    await openCustomStart(page);
     const initial = page
       .locator("button[aria-pressed]")
       .filter({ hasText: name });

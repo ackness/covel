@@ -1,12 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
+import {
+  seedBrowserSettings,
+  ONBOARDING_VERSION,
+  openAppSettings,
+} from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
 async function openAppearance(page: Page) {
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/i })
-    .click();
+  await openAppSettings(page);
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(page.getByRole("dialog").locator(".prose strong")).toBeVisible();
   return page.getByRole("dialog");

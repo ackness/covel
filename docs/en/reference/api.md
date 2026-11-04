@@ -250,7 +250,7 @@ The ESM code of a community plugin registers global capabilities inside the serv
 
 If `DEPLOYMENT_TIER=demo|commercial` starts without this token configured, the server refuses to start. All these rules come from the host profile fixed at startup; for what each route needs, see [Security boundaries](../internals/security.md#host-profile).
 
-A web-only client can enter or clear this token under **Settings → Operator Access**:
+A web-only client can enter or clear this token under **Settings → Advanced → Operator Access**:
 
 - The credential is stored only in the `localStorage` of the current browser.
 - It is sent as `Authorization: Bearer <token>` only on same-origin requests that need the operator token, as listed above.

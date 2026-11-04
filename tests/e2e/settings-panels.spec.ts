@@ -5,6 +5,7 @@ import {
   ONBOARDING_VERSION,
   openStudioConfiguration,
   seedBrowserSettings,
+  openAppSettings,
 } from "./helpers/player.js";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
 
@@ -35,9 +36,7 @@ test("saved custom roles remain editable in generation, assignment and import pa
     page.evaluate(
       () => JSON.parse(localStorage.getItem("covel:settings") ?? "{}").entries,
     );
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/ })
-    .click();
+  await openAppSettings(page);
   const settings = page.getByRole("dialog");
   await settings
     .getByRole("button", { name: "Generation", exact: true })
@@ -74,17 +73,19 @@ test("saved custom roles remain editable in generation, assignment and import pa
           ?.temperature,
     )
     .toBe(0.4);
-  await settings
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await settings.getByRole("button", { name: "AI roles", exact: true }).click();
   await expect(
     settings.getByText("custom-analysis", { exact: true }).first(),
   ).toBeVisible();
-  await settings.getByRole("button", { name: "General", exact: true }).click();
+  await settings
+    .getByRole("button", { name: "Preferences", exact: true })
+    .click();
   await expect(
     settings.getByText("Onboarding version", { exact: true }),
   ).toHaveCount(0);
-  await settings.getByRole("button", { name: "Data", exact: true }).click();
+  await settings
+    .getByRole("button", { name: "Import, backup & reset", exact: true })
+    .click();
   await settings.getByLabel("Choose file...").setInputFiles({
     name: "settings-compatibility.json",
     mimeType: "application/json",

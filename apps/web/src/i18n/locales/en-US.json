@@ -69,7 +69,6 @@
     "state": "State",
     "world": "World",
     "lore": "Lore",
-    "activeModels": "Active Models",
     "noGameState": "No game state yet. State will appear as the story progresses.",
     "worldState": "World State",
     "characters": "Characters",
@@ -91,30 +90,29 @@
     "emptyCharCreate": "Waiting for character creation...",
     "emptyPlaying": "Adventure awaits. Send a message to begin.",
     "emptyEnded": "This session has ended.",
-    "noModelsConfigured": "No models configured",
-    "preparation": "Session Setup",
-    "startFailed": "Could not create session",
+    "preparation": "Getting ready",
+    "startFailed": "Could not start the game",
     "pluginPlanFailed": "Could not resolve the world plugin plan",
     "missingPlugins": {
       "title": "This world asks for plugins that are not installed",
-      "detail": "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend."
+      "detail": "You can start without them, but what they add to this world will be missing. Install them under Settings → Plugins → Install & manage; Covel must restart to load them."
     },
     "worldRequirements": {
       "degradedTitle": "This world will run without something it relies on",
-      "missing-provider": "No installed plugin provides {{contract}}. Install one under Settings → Install & manage, then restart the backend.",
+      "missing-provider": "No installed plugin provides {{contract}}. Install one under Settings → Plugins → Install & manage; Covel must restart to load it.",
       "unavailable": "{{plugins}} provides {{contract}} but cannot be enabled with the current selection.",
       "ambiguous-provider": "Several plugins provide {{contract}}: {{plugins}}. Enable one of them in the plugin list below.",
       "excluded": "You turned off {{plugins}}, which provides {{contract}}. The game can start, but that part of the world will not work.",
       "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts.",
-      "dimensions": "No plugin you turned on keeps this world's dimensions, so the game starts without them. Turn on a plugin that keeps world dimensions to use them."
+      "dimensions": "No plugin you turned on keeps this world's world state, so the game starts without it. Turn on a plugin that keeps world state to use it."
     },
     "dimensionProvider": {
-      "conflictTitle": "Choose the plugin that keeps this world's dimensions",
-      "conflictDetail": "{{plugins}} all keep world dimensions, and a game uses one of them. Keep one; the others are turned off for this game.",
+      "conflictTitle": "Choose the plugin that keeps this world's world state",
+      "conflictDetail": "{{plugins}} all keep the world state, and a game uses one of them. Keep one; the others are turned off for this game.",
       "keep": "Keep {{plugin}}",
       "paused": "World state is paused because {{plugin}} is not running. The values stay as they are and the story goes on; they change again once {{plugin}} is back."
     },
-    "history": "Previous Sessions",
+    "history": "Saved games",
     "worldLore": "World Document",
     "worldTab": "World",
     "worldDocumentEmpty": "No world document",
@@ -144,8 +142,7 @@
     "aiCreateTeaser": "Build setting, cast, rules, and lore with a worldsmith agent.",
     "enter": "Enter",
     "worldsEmptyTitle": "No worlds yet",
-    "worldsEmptyDesc": "Generate a new world with AI, or add a world package under the worlds/ folder.",
-    "worldsEmptyViewExamples": "View examples",
+    "worldsEmptyDesc": "Have the AI create a new world, or install one someone else made.",
     "pluginsLoaded": "{{count}} plugins loaded",
     "noPluginsLoaded": "No plugins loaded",
     "resume": "Resume",
@@ -203,8 +200,6 @@
     "deleteConfirmTitle": "Delete save",
     "deleteConfirmDesc": "This permanently deletes the save and all its data (messages, game state and so on). It cannot be undone.",
     "deleteSessionAria": "Delete save: {{label}}",
-    "slotsConfigured": "{{count}} slot(s) configured",
-    "slotsUnconfigured": "Not configured",
     "bindingsAllBound": "All bound",
     "bindingsPartial": "Some unbound",
     "historySummary": "{{count}} session(s)",
@@ -223,8 +218,8 @@
       "requestedByWorld": "World default",
       "packOptional": "Pack optional"
     },
-    "exportDimensions": "Export Dimensions",
-    "importDimensions": "Import Dimensions",
+    "exportDimensions": "Export world state",
+    "importDimensions": "Import world state",
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
     "reasonSessionBusy": "Session is busy, please retry",
@@ -444,8 +439,6 @@
     "worldsScrollBack": "Earlier worlds",
     "worldsScrollForward": "More worlds",
     "allPanels": "All panels",
-    "musicMute": "Mute the music",
-    "musicUnmute": "Play the music",
     "panelLoadFailed": "Plugin panels could not be loaded.",
     "modelCredentialsMissing": "Add an API key in provider settings before starting.",
     "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next.",
@@ -481,8 +474,6 @@
     "loreOriginal_other": "Original ({{count}} chars)",
     "executionSummary_one": "Execution · {{count}} runtime",
     "executionSummary_other": "Execution · {{count}} runtimes",
-    "slotsConfigured_one": "{{count}} slot configured",
-    "slotsConfigured_other": "{{count}} slots configured",
     "historySummary_one": "{{count}} session",
     "historySummary_other": "{{count}} sessions",
     "loreSummary_one": "{{count}} char",
@@ -628,7 +619,23 @@
     "switchSave": "Switch save",
     "noOtherSaves": "No other saves",
     "savesTitle": "Other saves",
-    "goToSettings": "Go to settings"
+    "goToSettings": "Go to settings",
+    "rolePlayerHint": "You play the main character and make the choices.",
+    "roleHostHint": "You run the game: you decide how the story and its characters respond.",
+    "roleSpectatorHint": "Watch only. The AI moves the story along by itself.",
+    "modelLineUsing": "Using: {{model}} ·",
+    "modelLineNoKey": "The chosen AI has no key yet, so the game would fail to start.",
+    "modelLineNone": "No AI is set up yet.",
+    "modelLineChange": "Change",
+    "modelLineSetUp": "Set up",
+    "recommendedSettings": "Using the recommended settings.",
+    "customStartOpen": "Customizing the start.",
+    "customStartShow": "Customize the start",
+    "customStartHide": "Hide",
+    "customStart": "Custom start",
+    "setupAiTitle": "Set up an AI first",
+    "setupAiDetail": "No AI is ready yet. Add a provider and key to start a game.",
+    "worldsEmptyInstall": "Install a world"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -893,9 +900,9 @@
     "storageLocal": "Local",
     "storageRemote": "Remote",
     "configuredDesc": "llm.toml configured. Manage API keys and advanced parameters.",
-    "unconfiguredDesc": "Configure model roles, API keys, and advanced parameters. All data is stored locally in your browser.",
+    "unconfiguredDesc": "Configure AI roles, API keys, and advanced parameters. All data is stored locally in your browser.",
     "configuredByToml": "TOML defines base roles and fallback policy. Local selections override the model; reloading TOML keeps your selections.",
-    "slotPingMovedHint": "Model connectivity tests are available on the Providers & Models page.",
+    "slotPingMovedHint": "Model connectivity tests are available on the Providers & keys page.",
     "language": "Interface Language",
     "langZh": "简体中文",
     "langEn": "English",
@@ -952,7 +959,7 @@
     "noProvidersDesktopDesc": "Open your local llm.toml and add at least one [covel.<slot>] section, then reload this dialog.",
     "noProvidersWebDesc": "This web build reads slot definitions from the server's llm.toml. Ask your operator to configure a slot, or run a desktop build where you can edit the file locally.",
     "openLlmToml": "Open llm.toml",
-    "advancedDesc": "Settings apply per model role and are shared with the existing capability editor. Sampling parameters use provider defaults when unset; token budgets are shown separately.",
+    "advancedDesc": "Settings apply per AI role and are shared with the existing capability editor. Sampling parameters use provider defaults when unset; token budgets are shown separately.",
     "selectSlot": "Select Slot",
     "hasApiKey": "Has Key",
     "noCustomPresets": "No custom presets",
@@ -992,10 +999,10 @@
     "noGroupSelected": "No group selected.",
     "groupEmpty": "This group has no adjustable settings yet.",
     "groupGeneral": "General",
-    "groupLlm": "LLM",
+    "groupLlm": "Models",
     "groupPlugins": "Plugins",
     "groupDesktop": "Desktop",
-    "groupData": "Data",
+    "groupData": "Saves & data",
     "appearanceNavLabel": "Appearance",
     "operatorAccessNavLabel": "Operator Access",
     "frameworkEntries": {
@@ -1004,7 +1011,7 @@
         "description": "Choose the active interface style. Imported custom themes appear here automatically."
       },
       "uiScheme": {
-        "label": "Color scheme",
+        "label": "Light or dark",
         "description": "Choose light or dark. Single-scheme themes automatically lock to the supported mode."
       },
       "uiThemeManager": {
@@ -1016,11 +1023,11 @@
         "description": "A language marked experimental has a translated interface. The instructions the models read stay in English, so the quality of the story depends on the model."
       },
       "chatMessageWindow": {
-        "label": "Chat window message limit",
+        "label": "Chat message window",
         "description": "How many messages stay loaded in the chat. Older messages leave the window and load again when you scroll up."
       },
       "traceRetention": {
-        "label": "Keep diagnostic traces",
+        "label": "Keep debug traces",
         "description": "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show."
       },
       "developerView": {
@@ -1028,19 +1035,19 @@
         "description": "Show things meant for authors and troubleshooting: the Debugger entry in the top bar, the detailed and raw views, debug traces, the Database tab and storage line in the side panel, raw IDs, plugin step counts, the raw-data box in the Waiting for you dialog, and pop-ups for background failures."
       },
       "expandTurnUpdates": {
-        "label": "Expand turn updates",
-        "description": "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line."
+        "label": "Open turn updates by default",
+        "description": "Discoveries, achievements and status changes show open under each turn instead of folded into one line."
       },
       "worldAuthoringIdleTimeout": {
-        "label": "World authoring: wait for the model (seconds)",
+        "label": "World authoring: wait for the AI (seconds)",
         "description": "How long creating, revising or translating a world waits when the model sends nothing. A model that keeps writing is never cut off, however long the whole answer takes. Raise this when a slow model needs a long time before its first words."
       },
       "onboardedVersion": {
         "label": "Onboarding version"
       },
       "llmSlotConfig": {
-        "label": "Model role assignments",
-        "description": "Choose a provider and model for each model role"
+        "label": "AI roles",
+        "description": "Choose a provider and model for each role"
       },
       "llmProviders": {
         "label": "Providers and models"
@@ -1062,19 +1069,19 @@
       },
       "musicEnabled": {
         "label": "Background music",
-        "description": "Play the music of a world during a session. A world plays music only when it ships tracks and a plugin that chooses them is on."
+        "description": "Play the world's own music while you play. Nothing plays if the world has no tracks. The game menu has the same switch."
       },
       "musicVolume": {
         "label": "Music volume",
         "description": "From 0 to 100. The music lowers itself while a narrated line plays."
       },
       "instantText": {
-        "label": "Instant text",
-        "description": "Show complete stories immediately, even when a plugin requests segment reveal."
+        "label": "Show text all at once",
+        "description": "The story appears complete instead of being revealed piece by piece."
       },
       "liveOutput": {
-        "label": "Show the story as it is written",
-        "description": "How early to read the story: as it is written, one finished line at a time, or only once the turn is saved. A plugin may allow less, never more."
+        "label": "When the story appears",
+        "description": "Read it as it is written, one finished line at a time, or only once the turn is saved. A plugin may ask for later, never earlier."
       }
     },
     "operatorAccessTitle": "Hosted operator access",
@@ -1087,9 +1094,9 @@
     "operatorTokenStorageFailed": "The browser refused to change the stored token. Nothing was changed.",
     "operatorTokenSave": "Save and reload",
     "operatorTokenClear": "Clear and reload",
-    "llmSlots": "Model Roles",
+    "llmSlots": "AI roles",
     "llmKeys": "API Keys",
-    "llmPresets": "Providers & Models",
+    "llmPresets": "Providers & keys",
     "llmAdvanced": "Generation",
     "customWidgetUnavailable": "This setting uses a dedicated panel — edit it in the matching LLM / Plugin section.",
     "show": "Show",
@@ -1166,14 +1173,10 @@
     "desktopDataData": "Data",
     "desktopDataDb": "Database",
     "desktopDataLogs": "Logs",
-    "desktopOpenConfig": "Open config (~/.covel)",
+    "desktopOpenConfig": "Open the config folder",
     "desktopOpenData": "Open data folder",
     "desktopOpenLogs": "Open logs folder",
     "desktopChangeData": "Change data location…",
-    "desktopEditFiles": "Edit config files",
-    "desktopEditFilesHint": "Opens in your default editor. Restart Covel after saving for changes to take effect.",
-    "desktopEditLlm": "Edit llm.toml",
-    "desktopEditKeys": "Edit keys.env",
     "desktopServer": "Backend Server",
     "desktopServerPort": "Local API server running on port {{port}}.",
     "desktopRestart": "Restart server",
@@ -1195,9 +1198,9 @@
     "desktopKeysNote": "API keys live in {{path}} as plain text. Protect the file with OS permissions; the app sets mode 600 when writing.",
     "presetProviderPlaceholder": "Provider (e.g. openai)",
     "presetModelPlaceholder": "Model ID (e.g. deepseek-chat)",
-    "slotChainSummary": "Plugin tasks → model roles → providers and models → API keys.",
-    "desktopLlmMissingTitle": "No LLM slots configured yet",
-    "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
+    "slotChainSummary": "Plugin tasks → AI roles → providers and models → API keys.",
+    "desktopLlmMissingTitle": "No AI is set up yet",
+    "desktopLlmMissingHint": "Add a provider and key under Settings → Models, or edit the files in the config folder.",
     "autoBindSlots": "Auto-bind",
     "llm": {
       "reloadConfig": "Reload config",
@@ -1211,7 +1214,7 @@
       "reloadOkDetail_one": "{{count}} slot active: {{slots}}",
       "reloadOkDetail_other": "{{count}} slots active: {{slots}}"
     },
-    "runtimeSlotsDiscovered": "Plugin-declared model roles",
+    "runtimeSlotsDiscovered": "Plugin-declared AI roles",
     "temperature": "Temperature",
     "topP": "Top P",
     "maxOutputTokens": "Max Output Tokens",
@@ -1255,7 +1258,7 @@
     "pingSlotFallbackTitle": "Slot fell through to {{resolvedVia}}; the slot you requested is not configured.",
     "pingFailed": "Failed",
     "saveFailed": "Could not save setting",
-    "runtimeSlotsDiscoveredHint": "These model roles come from loaded plugins and their saved settings. Assign an appropriate provider and model to each one.",
+    "runtimeSlotsDiscoveredHint": "These AI roles come from loaded plugins and their saved settings. Assign an appropriate provider and model to each one.",
     "providerConnections": "Provider connections",
     "providerConnectionsHint": "Configure each provider once. Its API key and endpoint are shared by all model IDs below.",
     "customProviders": "Custom providers and models",
@@ -1328,7 +1331,7 @@
       "shared": "Saved on the server: every browser that uses it gets the same value."
     },
     "valueRange": "Range: {{min}}–{{max}}.",
-    "rawConfigNavLabel": "Configuration files",
+    "rawConfigNavLabel": "Configuration file",
     "mediaLibraryNavLabel": "Stored media",
     "paneRawConfigDescription": "View and edit the raw configuration. The content is checked before saving, and a copy of the previous version is kept.",
     "rawConfigSettingsTab": "Settings (JSON)",
@@ -1353,7 +1356,7 @@
     "slotFilterEmpty": "No role matches.",
     "llmTomlDefault": "llm.toml default · {{model}}",
     "followsWorldDefault": "Using the default of the world “{{world}}”.",
-    "paneGeneralDescription": "Interface language, chat display and world authoring preferences, saved on this device.",
+    "paneGeneralDescription": "Interface language, background music and how you read the story. Saved on this device.",
     "panePluginDescription": "Applies to every world, from your next action. A setting you have not changed follows the default of the world or the plugin.",
     "providerDefault": "Provider default",
     "modelOutputLimit": "Reference model limit: {{value}}",
@@ -1364,8 +1367,8 @@
     "modelCountShort": "{{count}} models",
     "fromLlmToml": "From llm.toml",
     "builtinDefault": "Built-in default",
-    "providerBuiltinNotice": "This is the built-in default model, used while no llm.toml exists. It cannot be deleted here. Add your own provider and pick it under Model Roles to stop using it, or create {{path}} to replace it with your own configuration.",
-    "providerFileNotice": "This provider is defined in {{path}} and cannot be deleted here. Remove its [covel.<slot>] sections from the file, then reload the configuration under Model Roles.",
+    "providerBuiltinNotice": "This is the built-in default model, used while no llm.toml exists. It cannot be deleted here. Add your own provider and pick it under AI roles to stop using it, or create {{path}} to replace it with your own configuration.",
+    "providerFileNotice": "This provider is defined in {{path}} and cannot be deleted here. Remove its [covel.<slot>] sections from the file, then reload the configuration under AI roles.",
     "createLlmToml": "Create llm.toml",
     "llmTomlCreated": "Created llm.toml with the built-in default",
     "llmTomlOpenFailed": "Could not open llm.toml",
@@ -1551,7 +1554,7 @@
     "description": "Adjust appearance, models, packages, and local data.",
     "desktopRefreshFailed": "Could not refresh desktop information. Try again.",
     "providerImportSucceeded": "Providers and models imported.",
-    "providerRolesAssigned": "Model roles assigned: {{roles}}",
+    "providerRolesAssigned": "AI roles assigned: {{roles}}",
     "numberExample": "e.g. {{value}}",
     "pricePerImageValue": "{{price}}/img",
     "pricePerMillionValue": "{{price}}/M",
@@ -1682,7 +1685,12 @@
       "units": "Line by line",
       "committed": "Once the turn is saved"
     },
-    "advancedHeading": "Advanced"
+    "groupAdvanced": "Advanced",
+    "preferencesNavLabel": "Preferences",
+    "dataNavLabel": "Import, backup & reset",
+    "advancedNavLabel": "Options",
+    "readingHeading": "Reading",
+    "paneAdvancedDescription": "Options for authors and troubleshooting. Most players never need to change these."
   },
   "appearance": {
     "styleTitle": "Style",
@@ -2036,9 +2044,9 @@
   "plugin": {
     "toggleError": {
       "generic": "Could not change this session's plugins. Please try again.",
-      "dimensionProviderConflict": "This session can use only one dimension provider. Keep the current provider enabled.",
-      "dimensionProviderRequired": "This plugin holds the session's dimensions and must stay enabled.",
-      "dimensionProviderRequiredNamed": "\"{{plugin}}\" holds this session's dimensions and must stay enabled.",
+      "dimensionProviderConflict": "This game can use only one plugin that keeps the world state. Keep the current one enabled.",
+      "dimensionProviderRequired": "This plugin keeps this game's world state and must stay enabled.",
+      "dimensionProviderRequiredNamed": "\"{{plugin}}\" keeps this game's world state and must stay enabled.",
       "pluginNotFound": "This plugin is no longer available. Refresh the plugin list.",
       "approvalQueueFull": "Too many approvals are pending. Resolve them before trying again.",
       "approvalScopeChanged": "The plugin's approval changed. Refresh and approve it again.",
@@ -2107,7 +2115,7 @@
     "providerSlotMissingTitle": "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
     "providerSlotMissingDetail": "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
     "providerSlotSettingDetail": "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
-    "slotMissingTitle": "Configure {{slot}} in Model Roles, or choose another configured role.",
+    "slotMissingTitle": "Configure {{slot}} in AI roles, or choose another configured role.",
     "slotMissingShort": "Unconfigured role: {{slot}}",
     "runtimeDefaultSummary": "runtime default · {{slot}}",
     "runtimeDefaultSummaryWithModel": "runtime default · {{slot}} · {{model}}",
@@ -2195,7 +2203,7 @@
       "badView": "`view` must be an object",
       "conversionFailed": "could not render `view`"
     },
-    "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles.",
+    "runtimeModelMissing": "AI role {{slot}} is unavailable. Choose a configured role or update AI roles.",
     "runtimeModelFallback": "{{slot}} is not set up; uses {{model}}",
     "untranslated": "Not translated",
     "untranslatedHint": "This plugin has no text in your language. Its panels show English.",
@@ -2236,7 +2244,8 @@
       "start": "Starts at turn {{count}}.",
       "cooldown": "Waits at least {{count}} turns between scheduled runs.",
       "limit": "At most {{count}} scheduled runs per session."
-    }
+    },
+    "changeInSettings": "Change"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

@@ -26,7 +26,8 @@ import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { confirmDeleteSession } from "./confirm-delete-session.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { formatSlotLabel, useSlotConfig } from "@/hooks/use-slot-config.js";
+import { isUsableTextSlot } from "@/lib/usable-text-slot.js";
 import { isDeclaredSlotMissing } from "./session-prep/model-slot-helpers.js";
 import {
   activeSessionRecords,
@@ -42,7 +43,8 @@ import {
 } from "./session-prep/use-world-lore.js";
 import { useWorldRecord } from "@/services/world-records.js";
 import { DimensionActions } from "./session-prep/dimension-actions.js";
-import { ModelsCard } from "./session-prep/models-card.js";
+import { StartPanel, type ModelLine } from "./session-prep/start-panel.js";
+import { useSetting } from "@/settings/use-settings.js";
 import { MissingCredentialsDialog } from "./session-prep/missing-credentials-dialog.js";
 import { sessionModelUses } from "./provider-failure-notice.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
@@ -62,6 +64,8 @@ import { getDataService } from "@/services/data-service.js";
 import { isDefaultPackage } from "./session-prep/plugin-selection-helpers.js";
 
 export { isDefaultPackage };
+
+const SEAT_ROLES = ["player", "host", "spectator"] as const;
 
 const worldPluginSettingsSchema = z.record(
   z.string(),
@@ -231,10 +235,13 @@ export function SessionPrepScreen({
   }, []);
 
   const [worldInfoExpanded, setWorldInfoExpanded] = useState(false);
-  const [sessionsExpanded, setSessionsExpanded] = useState(true);
+  const [sessionsExpanded, setSessionsExpanded] = useState(false);
   const [loreExpanded, setLoreExpanded] = useState(false);
-  const [modelsExpanded, setModelsExpanded] = useState(false);
-  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(false);
+  // The recommended settings are enough to play; the custom start stays shut
+  // until the player asks for it, and its plugin list opens with it.
+  const [customOpen, setCustomOpen] = useState(false);
+  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(true);
+  const [developerMode] = useSetting<boolean>("ui.developerView");
   const {
     sessions: existingSessions,
     setSessions: setExistingSessions,
@@ -315,6 +322,14 @@ export function SessionPrepScreen({
   const retryLore = recordReady ? lore.retry : record.retry;
   const loreUnavailable =
     loreStatus === "loading" || loreStatus === "load-error";
+
+  const openSettingsAt = useCallback(
+    (key: string) => {
+      setSettingsFocusKey(key);
+      onSettingsOpenChange(true);
+    },
+    [onSettingsOpenChange],
+  );
 
   const handleSettingsOpenChange = useCallback(
     (open: boolean) => {
@@ -435,6 +450,18 @@ export function SessionPrepScreen({
     [resumingId, onResume],
   );
 
+  const usableTextSlot = resolvedSlots.find(isUsableTextSlot);
+  const modelLine: ModelLine = usableTextSlot
+    ? { kind: "ready", model: formatSlotLabel(usableTextSlot) ?? "" }
+    : resolvedSlots.some((slot) => slot.tag === "text")
+      ? { kind: "no-key" }
+      : { kind: "none" };
+  const canStart =
+    !isStarting &&
+    !pluginPlanUnavailable &&
+    !loreUnavailable &&
+    !providerConflict;
+
   return (
     <div className="relative flex h-full w-full overflow-hidden">
       <SettingsDialog
@@ -449,8 +476,7 @@ export function SessionPrepScreen({
         uses={missingModelUses}
         onConfigure={() => {
           setCredentialConfirmOpen(false);
-          setSettingsFocusKey("llm.providers");
-          onSettingsOpenChange(true);
+          openSettingsAt("llm.providers");
         }}
         onStart={() => void handleStart(true)}
       />
@@ -495,53 +521,9 @@ export function SessionPrepScreen({
                   <ArrowLeft className="w-4 h-4" />
                   {t("session.breadcrumbWorldSelect", "Select World")}
                 </Button>
-                <Button
-                  size="sm"
-                  className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
-                  disabled={
-                    isStarting ||
-                    pluginPlanUnavailable ||
-                    loreUnavailable ||
-                    providerConflict
-                  }
-                  onClick={() => void handleStart()}
-                >
-                  {isStarting ? (
-                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Play className="w-4 h-4 mr-1.5" />
-                  )}
-                  {isStarting
-                    ? t("session.startingGame", "Creating…")
-                    : t("session.startGame", "Start Game")}
-                </Button>
               </div>
 
               <div className="max-w-2xl space-y-4">
-                <label className="flex items-center gap-3">
-                  {t("session.playAs")}
-                  <select
-                    aria-label={t("session.playAs")}
-                    value={seatRole}
-                    disabled={isStarting}
-                    onChange={(event) => {
-                      const role = event.target.value;
-                      if (
-                        role === "player" ||
-                        role === "host" ||
-                        role === "spectator"
-                      )
-                        setSeatRole(role);
-                    }}
-                    className="rounded border border-(--rule-color) bg-(--surface-page) px-3 py-2"
-                  >
-                    <option value="player">{t("session.rolePlayer")}</option>
-                    <option value="host">{t("session.roleHost")}</option>
-                    <option value="spectator">
-                      {t("session.roleSpectator")}
-                    </option>
-                  </select>
-                </label>
                 <SessionBreadcrumb
                   step="prep"
                   worldName={displayText.name ?? ""}
@@ -549,7 +531,7 @@ export function SessionPrepScreen({
                 />
                 <div>
                   <p className="ui-eyebrow mb-3 text-white/58">
-                    {t("session.preparation", "Session Setup")}
+                    {t("session.preparation", "Getting ready")}
                   </p>
                   <h1 className="ui-title text-3xl sm:text-4xl md:text-6xl leading-[.98] text-white">
                     {displayText.name ?? ""}
@@ -562,6 +544,43 @@ export function SessionPrepScreen({
             </div>
           </header>
 
+          <StartPanel
+            isStarting={isStarting}
+            canStart={canStart}
+            onStart={() => void handleStart()}
+            roles={SEAT_ROLES}
+            seatRole={seatRole}
+            onSeatRoleChange={setSeatRole}
+            model={modelLine}
+            onChangeModel={() =>
+              openSettingsAt(
+                modelLine.kind === "ready" ? "llm.slots" : "llm.providers",
+              )
+            }
+            customOpen={customOpen}
+            onToggleCustom={() => setCustomOpen((open) => !open)}
+          />
+
+          {!customOpen && loreStatus !== "ready" && (
+            // The saved draft of the world document is read before a game can
+            // start; say so here while the editor is folded away.
+            <div
+              className="mb-5 text-xs text-muted-foreground"
+              role={loreStatus.endsWith("error") ? "alert" : "status"}
+            >
+              {t(`session.loreDraft.${loreStatus}`)}
+              {loreStatus.endsWith("error") && (
+                <button
+                  type="button"
+                  className="ml-2 underline hover:text-primary"
+                  onClick={retryLore}
+                >
+                  {t("common.retry", "Retry")}
+                </button>
+              )}
+            </div>
+          )}
+
           {startError && (
             <div
               className="mb-5 flex items-start gap-2 rounded-(--radius-card) border border-destructive/50 bg-destructive/5 px-4 py-3 text-sm"
@@ -570,7 +589,7 @@ export function SessionPrepScreen({
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div className="min-w-0">
                 <p className="font-medium text-destructive">
-                  {t("session.startFailed", "Could not create session")}
+                  {t("session.startFailed", "Could not start the game")}
                 </p>
                 <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
                   {startError}
@@ -641,7 +660,7 @@ export function SessionPrepScreen({
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t(
                     "session.missingPlugins.detail",
-                    "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend.",
+                    "You can start without them, but what they add to this world will be missing. Install them under Settings → Plugins → Install & manage; Covel must restart to load them.",
                   )}
                 </p>
               </div>
@@ -753,112 +772,116 @@ export function SessionPrepScreen({
             />
           )}
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
-            <section className="order-2 min-w-0 space-y-4 lg:order-1">
-              <WorldInfoCard
-                world={world}
-                playLocale={playLocale}
-                expanded={worldInfoExpanded}
-                onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
-              />
+          <WorldInfoCard
+            world={world}
+            playLocale={playLocale}
+            expanded={worldInfoExpanded}
+            onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
+          />
 
-              <SessionHistoryCard
-                activeSessions={activeSessions}
-                status={sessionHistoryStatus}
-                onRetry={retrySessionHistory}
-                expanded={sessionsExpanded}
-                onToggle={() => setSessionsExpanded(!sessionsExpanded)}
-                onResume={handleResume}
-                resumingId={resumingId}
-                deletingId={deletingId}
-                onRequestDelete={(session) =>
-                  void handleRequestDelete(session).catch(
-                    // The transport has already reported why it failed.
-                    ignoreError("delete session"),
-                  )
-                }
-              />
+          {customOpen && (
+            <section
+              id="custom-start-content"
+              data-testid="custom-start"
+              aria-label={t("session.customStart")}
+              className="mt-5 space-y-4"
+            >
+              <h2 className="ui-title text-lg">{t("session.customStart")}</h2>
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
+                <div className="min-w-0 space-y-4">
+                  <WorldLoreCard
+                    expanded={loreExpanded}
+                    onToggle={() => setLoreExpanded(!loreExpanded)}
+                    loreValue={visibleLore}
+                    originalLore={visibleOriginalLore}
+                    isModified={recordReady && lore.value !== originalLore}
+                    locked={!recordReady}
+                    onLoreChange={changeVisibleLore}
+                    onResetLore={lore.reset}
+                    draftStatus={loreStatus}
+                    onRetry={retryLore}
+                  />
 
-              <WorldLoreCard
-                expanded={loreExpanded}
-                onToggle={() => setLoreExpanded(!loreExpanded)}
-                loreValue={visibleLore}
-                originalLore={visibleOriginalLore}
-                isModified={recordReady && lore.value !== originalLore}
-                locked={!recordReady}
-                onLoreChange={changeVisibleLore}
-                onResetLore={lore.reset}
-                draftStatus={loreStatus}
-                onRetry={retryLore}
-              />
+                  <DimensionActions
+                    worldId={world.id}
+                    enabled={Boolean(record.world?.dimensions)}
+                  />
+                </div>
 
-              <DimensionActions
-                worldId={world.id}
-                enabled={Boolean(record.world?.dimensions)}
-              />
+                <div className="min-w-0 space-y-4">
+                  <PluginSelectionCard
+                    worldPluginSettings={
+                      worldPluginSettings.success
+                        ? worldPluginSettings.data
+                        : undefined
+                    }
+                    pluginPlan={pluginPlan}
+                    pluginPlanLoading={pluginPlanLoading}
+                    plugins={plugins}
+                    enabledPluginIds={enabledPluginIds}
+                    selectedPluginIdSet={selectedPluginIdSet}
+                    enabledPluginSummaries={enabledPluginSummaries}
+                    expanded={pluginSectionExpanded}
+                    onToggleExpanded={() =>
+                      setPluginSectionExpanded(!pluginSectionExpanded)
+                    }
+                    pluginPacks={pluginPacks}
+                    activePluginPack={activePluginPack}
+                    activePluginTags={activePluginTags}
+                    availablePluginTags={availablePluginTags}
+                    pluginSearch={pluginSearch}
+                    onPluginSearchChange={setPluginSearch}
+                    onTogglePluginTag={togglePluginTag}
+                    onApplyPack={applyPack}
+                    onResetToMinimal={resetToMinimal}
+                    pluginGroups={pluginGroups}
+                    corePluginIds={corePluginIds}
+                    lockedPluginIds={lockedPluginIds}
+                    bindingState={bindingState}
+                    resolvedSlots={resolvedSlots}
+                    isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
+                    onTogglePlugin={togglePlugin}
+                    onOpenPluginSettings={(pluginId) =>
+                      openSettingsAt(`plugin.${pluginId}`)
+                    }
+                    developerMode={developerMode === true}
+                    worldDataPreflight={worldDataPreflight}
+                    worldDataPreflightStatus={worldDataPreflightStatus}
+                    worldDataPreflightError={worldDataPreflightError}
+                    onRetryWorldDataPreflight={runWorldDataPreflight}
+                    flowData={flowData}
+                    selectedFlowSteps={selectedFlowSteps}
+                  />
+                </div>
+              </div>
             </section>
+          )}
 
-            <section className="order-1 min-w-0 space-y-4 lg:order-2">
-              <ModelsCard
-                resolvedSlots={resolvedSlots}
-                expanded={modelsExpanded}
-                onToggle={() => setModelsExpanded(!modelsExpanded)}
-                onOpenSettings={() => onSettingsOpenChange(true)}
-              />
-
-              <PluginSelectionCard
-                worldPluginSettings={
-                  worldPluginSettings.success
-                    ? worldPluginSettings.data
-                    : undefined
-                }
-                pluginPlan={pluginPlan}
-                pluginPlanLoading={pluginPlanLoading}
-                plugins={plugins}
-                enabledPluginIds={enabledPluginIds}
-                selectedPluginIdSet={selectedPluginIdSet}
-                enabledPluginSummaries={enabledPluginSummaries}
-                expanded={pluginSectionExpanded}
-                onToggleExpanded={() =>
-                  setPluginSectionExpanded(!pluginSectionExpanded)
-                }
-                pluginPacks={pluginPacks}
-                activePluginPack={activePluginPack}
-                activePluginTags={activePluginTags}
-                availablePluginTags={availablePluginTags}
-                pluginSearch={pluginSearch}
-                onPluginSearchChange={setPluginSearch}
-                onTogglePluginTag={togglePluginTag}
-                onApplyPack={applyPack}
-                onResetToMinimal={resetToMinimal}
-                pluginGroups={pluginGroups}
-                corePluginIds={corePluginIds}
-                lockedPluginIds={lockedPluginIds}
-                bindingState={bindingState}
-                resolvedSlots={resolvedSlots}
-                isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
-                onTogglePlugin={togglePlugin}
-                worldDataPreflight={worldDataPreflight}
-                worldDataPreflightStatus={worldDataPreflightStatus}
-                worldDataPreflightError={worldDataPreflightError}
-                onRetryWorldDataPreflight={runWorldDataPreflight}
-                flowData={flowData}
-                selectedFlowSteps={selectedFlowSteps}
-              />
-            </section>
+          <div className="mt-5">
+            <SessionHistoryCard
+              activeSessions={activeSessions}
+              status={sessionHistoryStatus}
+              onRetry={retrySessionHistory}
+              expanded={sessionsExpanded}
+              onToggle={() => setSessionsExpanded(!sessionsExpanded)}
+              onResume={handleResume}
+              resumingId={resumingId}
+              deletingId={deletingId}
+              onRequestDelete={(session) =>
+                void handleRequestDelete(session).catch(
+                  // The transport has already reported why it failed.
+                  ignoreError("delete session"),
+                )
+              }
+            />
           </div>
         </div>
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
         <Button
-          className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
-          disabled={
-            isStarting ||
-            pluginPlanUnavailable ||
-            loreUnavailable ||
-            providerConflict
-          }
+          className="h-12 w-full font-semibold shadow-(--shadow-pop)"
+          disabled={!canStart}
           onClick={() => void handleStart()}
         >
           {isStarting ? (

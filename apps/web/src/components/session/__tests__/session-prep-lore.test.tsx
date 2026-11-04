@@ -60,7 +60,6 @@ vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
 vi.mock("../session-prep/dimension-actions.js", () => ({
   DimensionActions: () => null,
 }));
-vi.mock("../session-prep/models-card.js", () => ({ ModelsCard: () => null }));
 vi.mock("../session-prep/plugin-selection-card.js", () => ({
   PluginSelectionCard: () => null,
 }));
@@ -101,7 +100,21 @@ function props(
     ...overrides,
   };
 }
+const ROLE_LABELS = {
+  host: "Game master",
+  spectator: "Spectator",
+  player: "Player",
+} as const;
+
+function openCustomStart() {
+  if (!screen.queryByTestId("custom-start"))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Customize the start" }),
+    );
+}
+
 function openLore() {
+  openCustomStart();
   fireEvent.click(screen.getByRole("button", { name: /World Document/ }));
   return screen.getByRole("textbox", { name: "World Document" });
 }
@@ -191,9 +204,7 @@ describe("session prep full record", () => {
       vi.mocked(api.getWorldOverlay).mockReturnValueOnce(read.promise);
       const onStart = vi.fn();
       render(<SessionPrepScreen {...props({ onStart })} />);
-      fireEvent.change(screen.getByLabelText("Play as"), {
-        target: { value: role },
-      });
+      fireEvent.click(screen.getByRole("radio", { name: ROLE_LABELS[role] }));
       const start = screen.getAllByRole("button", { name: "Start Game" })[0]!;
       expect(screen.getByText("Loading saved draft...")).toBeTruthy();
       expect((start as HTMLButtonElement).disabled).toBe(true);

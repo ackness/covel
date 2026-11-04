@@ -15,7 +15,7 @@ Write structured dimensions only in `data/dimensions.yaml`, without copying them
 - A text editor.
 
 > [!NOTE]
-> You can make a world with the desktop app without a source checkout: put them in the desktop user-worlds directory (default `~/.covel/data/worlds/`), and reopen Covel. The `~/.covel/worlds/` paths below are the source-run default; for desktop, use the worlds directory shown in Settings. Players without source can click **Validate** in **Settings → Install & manage** to check an installed package or ZIP.
+> You can make a world with the desktop app without a source checkout: put them in the desktop user-worlds directory (default `~/.covel/data/worlds/`), and reopen Covel. The `~/.covel/worlds/` paths below are the source-run default; for desktop, use the worlds directory shown in Settings. Players without source can click **Validate** in **Settings → Plugins → Install & manage** to check an installed package or ZIP.
 
 ## What you will make
 

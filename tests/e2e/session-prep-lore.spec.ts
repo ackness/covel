@@ -4,6 +4,7 @@ import {
   seedBrowserSettings,
   useServerWorlds,
   startGame,
+  openCustomStart,
 } from "./helpers/player.js";
 
 for (const mode of ["local", "remote"] as const) {
@@ -46,6 +47,7 @@ for (const mode of ["local", "remote"] as const) {
         .filter({ hasText: name })
         .getByRole("button", { name: "Enter", exact: true })
         .click();
+      await openCustomStart(page);
       await page.getByRole("button", { name: /World Document/ }).click();
       const input = page.getByRole("textbox", { name: "World Document" });
       await expect(input).toHaveValue("");

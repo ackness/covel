@@ -37,6 +37,10 @@ export interface PluginPackageRowProps {
   resolvedSlots: ResolvedSlot[];
   isMissingDeclaredSlot: (slotId: string) => boolean;
   onTogglePlugin: (name: string) => void;
+  /** Opens this plugin's page in Settings. */
+  onOpenPluginSettings: (pluginId: string) => void;
+  /** Developer mode shows the per-step model choices of this game. */
+  developerMode?: boolean;
 }
 
 export function PluginPackageRow({
@@ -50,6 +54,8 @@ export function PluginPackageRow({
   resolvedSlots,
   isMissingDeclaredSlot,
   onTogglePlugin,
+  onOpenPluginSettings,
+  developerMode = false,
 }: PluginPackageRowProps) {
   const { t, i18n } = useTranslation();
   const displayName = text(pkg.displayName) || pkg.id;
@@ -194,11 +200,11 @@ export function PluginPackageRow({
             pluginId={pkg.id}
             setting={setting}
             worldDefault={worldPluginSettings?.[pkg.id]?.[setting.key]}
-            resolvedSlots={resolvedSlots}
             isMissingDeclaredSlot={isMissingDeclaredSlot}
+            onOpenSettings={() => onOpenPluginSettings(pkg.id)}
           />
         ))}
-      {isSelected && pluginBindings.length > 0 && (
+      {isSelected && developerMode && pluginBindings.length > 0 && (
         <div className="mt-2.5 ml-9 space-y-2">
           {pluginBindings.map((binding) => {
             const declared = binding.defaultSlot;

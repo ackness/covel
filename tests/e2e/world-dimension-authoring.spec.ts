@@ -17,6 +17,7 @@ import {
   seedBrowserSettings,
   startGame,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 test("portable dimensions survive editor save, hydration and opening, and an explicit clear stays empty", async ({
@@ -196,7 +197,7 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
         exact: true,
       });
       await expect(startButton).toBeEnabled();
-      await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+      await openCustomStart(page);
       const advanced = page.getByTestId("advanced-plugin-settings");
       await advanced.locator("summary").click();
       const dimensionProvider = advanced

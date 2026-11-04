@@ -94,6 +94,7 @@ describe.each(["session", "prep"] as const)(
           resolvedSlots={resolvedSlots}
           isMissingDeclaredSlot={() => false}
           onTogglePlugin={vi.fn()}
+          onOpenPluginSettings={vi.fn()}
           bindingState={{
             entries: [],
             bindings: {},
@@ -132,7 +133,7 @@ describe.each(["session", "prep"] as const)(
         { ...storySlot, slotId: "fast", isAvailable: false },
       ]);
       expect(screen.getByRole("status").textContent).toContain(
-        "Model role fast is unavailable.",
+        "AI role fast is unavailable.",
       );
       expect(screen.queryByText(/is not set up/)).toBeNull();
       expect(screen.queryByRole("combobox")).toBeNull();

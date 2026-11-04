@@ -1,6 +1,6 @@
 # Glossary
 
-This page defines the words used in the Covel docs, the code, and the UI. When the same thing is named differently in different places (for example, the UI says "model role" while the code says slot), this page is the reference: change the other places, not this one.
+This page defines the words used in the Covel docs, the code, and the UI. When the same thing is named differently in different places (for example, the UI says "AI role" while the code says slot), this page is the reference: change the other places, not this one.
 
 Entries are in English alphabetical order. Each entry first says what the term is in one or two sentences, and then gives a detailed page.
 
@@ -53,7 +53,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Segment | 提示词段 | One section of an assembled prompt. A part of a story is a **Story segment**. |
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
 | Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
-| Slot | 槽位 | In the settings UI it is called "model role". |
+| Slot | 槽位 | In the settings UI it is called "AI role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
 | Story-attached operation | 故事附带的操作 | An operation in the commit unit of the story or setup: each gets its own savepoint, and when it fails only it is dropped while the story commits. |
 | Story draft | 故事草稿 | The part of a story runtime's output written before the commit, shown for display only; not output and never stored. |
@@ -110,7 +110,7 @@ These are the words used in prompt bodies to describe what a runtime reads and w
 | record | 记录 | One item stored in plugin data | row, object |
 | entry | 条目 | An item in a list that the player reads, for example a codex entry | item (item means an object in the inventory) |
 | item | 物品 | Something a character carries |  |
-| dimension | 维度 | A piece of world state that the world defines and that changes with the story | attribute (attribute is for characters) |
+| dimension | 维度 (shown as "World state" in the interface) | A piece of world state that the world defines and that changes with the story | attribute (attribute is for characters) |
 | attribute | 属性 | A numeric or text field of a character | stat |
 | world rule | 世界规则 | A world rule included in the prompt | lore entry |
 | quest | 任务 | A goal that the story gives the player | mission, task |
@@ -373,11 +373,11 @@ See: [HTTP API](./api.md), [transactions](./transactions.md).
 
 ## Slot
 
-A named routing key used to choose a model (`story`, `plugin`, `memory`, `image`, and so on). In the settings UI it is called **model role**.
+A named routing key used to choose a model (`story`, `plugin`, `memory`, `image`, and so on). In the settings UI it is called **AI role**.
 
 A plugin manifest writes only the slot's name. `llm.toml`, or the "provider/model" setting that was saved, binds it to a specific model. Fallback models are chosen only within the same kind of output: an image request never falls back to a text model.
 
-See: [model roles](./slots.md), `llm.toml.example`.
+See: [AI roles](./slots.md), `llm.toml.example`.
 
 ## Stop reason
 

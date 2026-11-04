@@ -8,7 +8,7 @@ If you use the desktop app, or a web app you deployed for your own use, your dat
 
 A trial opens with a notice card at the top right of the page: "This is a public Covel trial". The card has two links: one, "How your data and keys are handled", leads to this page; the other leads to the version of the source code the site is running (present only when the operator configured the source address).
 
-After you dismiss the notice, it no longer appears in this browser. In **Settings → LLM → Providers & Models**, the place where you enter each provider's key still links to this page.
+After you dismiss the notice, it no longer appears in this browser. In **Settings → Models → Providers & keys**, the place where you enter each provider's key still links to this page.
 
 ## Where your data lives
 
@@ -62,7 +62,7 @@ The trial's server cannot reach your computer or your local network. So when a m
 
 ### How to set it up
 
-1. In **Settings → LLM → Providers & Models**, add a provider and enter the address on your computer, for example `http://127.0.0.1:3425/v1` or `http://localhost:11434/v1`. A service on your local network needs an HTTPS address, for example `https://192.168.1.20/v1`. A note under the address says that your browser relays it.
+1. In **Settings → Models → Providers & keys**, add a provider and enter the address on your computer, for example `http://127.0.0.1:3425/v1` or `http://localhost:11434/v1`. A service on your local network needs an HTTPS address, for example `https://192.168.1.20/v1`. A note under the address says that your browser relays it.
 2. Let the model server accept cross-origin requests from the trial. The browser requests your model server directly, so the model server must allow the trial's address as an origin in its answers (CORS); otherwise the browser blocks the answer. On demo.covel.cc that is `https://demo.covel.cc`, and the note under the address names the current trial's address too. For Ollama, for example, set the environment variable `OLLAMA_ORIGINS` to that address and restart Ollama. For other servers, look for CORS or "allowed origins" in their settings.
 3. Start a game as usual, and keep the page open while you play. The first time the browser reaches your device or local network, it may ask whether this site may access it; allow it.
 
@@ -113,7 +113,7 @@ For the full rules, see [Security boundaries](../internals/security.md#local-mod
 | Images generated earlier are gone                                                      | The server restarted, and the images were only in server memory. The save itself is not lost                                                                                                                             |
 | Saves are gone after switching browser or device                                       | Saves exist only in the browser you used before                                                                                                                                                                          |
 | A warning says the save is near the browser's size limit                               | A session's save is at most 64 MiB. Carry on in a new session                                                                                                                                                            |
-| No trial notice card at the top right                                                  | You dismissed it, or this is not a trial. Where you enter keys in **Settings → LLM → Providers & Models**, there is still a link to this page                                                                            |
+| No trial notice card at the top right                                                  | You dismissed it, or this is not a trial. Where you enter keys in **Settings → Models → Providers & keys**, there is still a link to this page                                                                            |
 | An admin action asks for the operator token                                            | The trial keeps the shared world catalog, community plugins, diagnostics and server settings for the operator                                                                                                            |
 | A local model reports "no relay was connected for this request"                        | The page has just opened and is not connected yet, or the network dropped. Keep the page open, wait a few seconds and try again                                                                                          |
 | A local model reports "your browser could not reach …"                                 | The model server is not running, or it does not accept cross-origin requests from the trial (see step 2 of [How to set it up](#how-to-set-it-up)), or the browser was not allowed to access your device or local network |

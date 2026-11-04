@@ -57,7 +57,7 @@ test("first visit starts on the world list, explains preparation and can be reop
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(guide).toHaveCount(0);
   await expect(
-    settings.getByRole("button", { name: "Providers & Models", exact: true }),
+    settings.getByRole("button", { name: "Providers & keys", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await settings.getByRole("button", { name: "Close", exact: true }).click();
   await expect(missingModel).toBeVisible();
@@ -177,9 +177,9 @@ test("canonical provider configuration returns to the guide, keeps assignments, 
   await guide.getByRole("button", { name: "Show details" }).click();
   await expect(guide).toContainText("Synthetic connection unavailable");
   expect(pings).toHaveLength(1);
-  await guide.getByRole("button", { name: "Check Model Roles" }).click();
+  await guide.getByRole("button", { name: "Check AI roles" }).click();
   await expect(
-    page.getByRole("button", { name: "Model Roles", exact: true }),
+    page.getByRole("button", { name: "AI roles", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await page
     .getByRole("dialog", { name: "Settings" })

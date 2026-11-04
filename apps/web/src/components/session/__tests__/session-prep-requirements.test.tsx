@@ -45,6 +45,7 @@ vi.mock("@/services/data-service.js", () => ({
 }));
 vi.mock("@/hooks/use-slot-config.js", () => ({
   useSlotConfig: () => ({ resolvedSlots: prep.slots, refresh: prep.refresh }),
+  formatSlotLabel: (slot: { slotId: string }) => slot.slotId,
 }));
 vi.mock("../session-prep/use-plugin-selection.js", () => ({
   usePluginSelection: (worldId: string) => {
@@ -108,7 +109,6 @@ vi.mock("@/settings/SettingsDialog.js", () => ({
 vi.mock("../session-prep/dimension-actions.js", () => ({
   DimensionActions: () => null,
 }));
-vi.mock("../session-prep/models-card.js", () => ({ ModelsCard: () => null }));
 vi.mock("../session-prep/plugin-selection-card.js", () => ({
   PluginSelectionCard: () => null,
 }));
@@ -363,7 +363,7 @@ describe("session prep when the world relies on something missing", () => {
 
     expect(
       screen.getByTestId("unmet-world-requirements").textContent,
-    ).toContain("so the game starts without them");
+    ).toContain("so the game starts without it");
   });
 
   it("asks the player to keep one of several dimension providers before starting", async () => {
@@ -378,7 +378,7 @@ describe("session prep when the world relies on something missing", () => {
     rerender(<SessionPrepScreen {...props()} />);
     const notice = screen.getByTestId("dimension-provider-conflict");
     expect(notice.textContent).toContain(
-      "Choose the plugin that keeps this world's dimensions",
+      "Choose the plugin that keeps this world's world state",
     );
     expect(notice.textContent).toContain("world-init and rival-dimensions");
     // The server would refuse the start until one is kept.

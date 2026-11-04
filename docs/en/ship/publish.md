@@ -25,7 +25,7 @@ A few limits:
 
 ## 2. How others install it
 
-The other person opens **Settings → Install & manage** and pastes the link. The link you give decides what they get:
+The other person opens **Settings → Plugins → Install & manage** and pastes the link. The link you give decides what they get:
 
 | The link you give           | What they get                     | Can they check for updates later?  |
 | --------------------------- | --------------------------------- | ---------------------------------- |

@@ -26,6 +26,7 @@ const settingsMocks = vi.hoisted(() => ({
 
 vi.mock("../use-settings.js", () => ({
   useSettingsStore: () => settingsMocks.store,
+  useSetting: () => [false, vi.fn()],
 }));
 
 vi.mock("@/lib/desktop-bridge.js", () => ({
@@ -108,6 +109,7 @@ describe("SettingsDialog navigation", () => {
     const sidebar = screen.getByRole("complementary");
     const sectionPicker = screen.getByRole("combobox", { name: "Settings" });
     const desktopNav = screen.getByRole("navigation", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
     const content = (await screen.findByText("Appearance pane")).closest(
       "section",
     );
@@ -124,14 +126,39 @@ describe("SettingsDialog navigation", () => {
   it("renders group labels as headings and marks the selected page", async () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} />);
 
-    expect(screen.getByRole("heading", { name: "LLM" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "LLM" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Models" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Models" })).toBeNull();
 
-    const modelRoles = screen.getByRole("button", { name: "Model Roles" });
+    const modelRoles = screen.getByRole("button", { name: "AI roles" });
     fireEvent.click(modelRoles);
 
     await waitFor(() =>
       expect(modelRoles.getAttribute("aria-current")).toBe("page"),
+    );
+  });
+
+  it("offers the five groups in order, each with its panes", () => {
+    render(<SettingsDialog open onOpenChange={vi.fn()} />);
+    const nav = screen.getByRole("navigation", { name: "Settings" });
+    expect(
+      Array.from(nav.querySelectorAll("h3")).map((h) => h.textContent),
+    ).toEqual(["General", "Models", "Plugins", "Saves & data", "Advanced"]);
+    const buttons = Array.from(nav.querySelectorAll("button")).map(
+      (button) => button.textContent,
+    );
+    expect(buttons).toEqual(
+      expect.arrayContaining([
+        "Preferences",
+        "Appearance",
+        "AI roles",
+        "Providers & keys",
+        "Install & manage",
+        "Import, backup & reset",
+        "Stored media",
+        "Options",
+        "Configuration file",
+        "Operator Access",
+      ]),
     );
   });
 
@@ -140,7 +167,7 @@ describe("SettingsDialog navigation", () => {
       <SettingsDialog open initialKey="llm.providers" onOpenChange={vi.fn()} />,
     );
     expect(await screen.findByText("Presets pane")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Model Roles" }));
+    fireEvent.click(screen.getByRole("button", { name: "AI roles" }));
     expect(await screen.findByText("Slots pane")).toBeTruthy();
     view.rerender(
       <SettingsDialog
@@ -164,7 +191,7 @@ describe("SettingsDialog navigation", () => {
     expect(await screen.findByText("Slots pane")).toBeTruthy();
     expect(
       screen
-        .getByRole("button", { name: "Model Roles" })
+        .getByRole("button", { name: "AI roles" })
         .getAttribute("aria-current"),
     ).toBe("page");
   });

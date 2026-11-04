@@ -148,16 +148,16 @@ The desktop shell always passes this path to the backend, even before the file e
 - See [`llm.toml.example`](../../../llm.toml.example) at the repository root. Each model slot pairs one provider with one model.
 - The built-in default `story` slot uses `deepseek-v4-flash`. Filling `DEEPSEEK_API_KEY` in `keys.env` is enough to run.
 
-**Settings UI.** The model settings have three pages: **Model Roles**, **Providers & Models**, and **Generation**.
+**Settings UI.** The model settings have three pages: **AI roles**, **Providers & keys**, and **Generation**.
 
-- **Providers & Models** is a provider list with a detail view. Configure a provider's endpoint, protocol, key and price multiplier once, then add any number of model IDs in bulk.
+- **Providers & keys** is a provider list with a detail view. Configure a provider's endpoint, protocol, key and price multiplier once, then add any number of model IDs in bulk.
 - A model ID containing `/`, such as `openai/gpt-5.6-sol`, is sent unchanged.
-- Then pick the provider and model for each slot under **Model Roles**. No custom preset is needed.
+- Then pick the provider and model for each slot under **AI roles**. No custom preset is needed.
 - The price multiplier defaults to `1`. The cost panel on the debug page multiplies the model's reference price by it.
 
 Model settings made in the UI are stored only in `llm.providers`. Startup and reads neither migrate nor fall back to `llm.customPresets`. Recreate affected model configurations and credentials in the current provider UI; obsolete entries are not deleted automatically.
 
-**Hot reload.** Editing `llm.toml` needs no restart. Go to **Settings → LLM → Model Roles** and click **Reload config**: the backend re-reads the file and applies it to the running gateway (`POST /api/llm-config/reload`), and added or removed slots take effect at once. This endpoint requires `host.config` access. On a personal instance, the UI supplies the launch token when configured; without one, the local network boundary still applies. Browser-private and hosted instances always require an operator Bearer token. See the [host profile](../internals/security.md#host-profile).
+**Hot reload.** Editing `llm.toml` needs no restart. Go to **Settings → Models → AI roles** and click **Reload config**: the backend re-reads the file and applies it to the running gateway (`POST /api/llm-config/reload`), and added or removed slots take effect at once. This endpoint requires `host.config` access. On a personal instance, the UI supplies the launch token when configured; without one, the local network boundary still applies. Browser-private and hosted instances always require an operator Bearer token. See the [host profile](../internals/security.md#host-profile).
 
 **Parse failures are visible.** When `llm.toml` has a syntax error (a key with `=` and no value, say):
 
@@ -167,7 +167,7 @@ Model settings made in the UI are stored only in `llm.providers`. Startup and re
 
 ### Choose a plugin runtime model for one world or session
 
-**Model Roles** maps each slot to the provider and model used on this device. For example, the `plugin` slot may point to `ali-coding-plan / qwen3.8-flash`. A plugin manifest declares only a slot name, such as `model: memory` (an agent that leaves it out uses `plugin`); it does not pin a concrete model like `deepseek-v4-flash` inside the world.
+**AI roles** maps each slot to the provider and model used on this device. For example, the `plugin` slot may point to `ali-coding-plan / qwen3.8-flash`. A plugin manifest declares only a slot name, such as `model: memory` (an agent that leaves it out uses `plugin`); it does not pin a concrete model like `deepseek-v4-flash` inside the world.
 
 On the configuration page shown before a session starts, each agent runtime in the plugin list can pick a slot:
 
@@ -203,7 +203,7 @@ Switching through REST from a browser (`PUT /api/config/data-root`) only rewrite
 - The first **Edit llm.toml** click creates the file from that built-in default and then opens it. The active models do not change.
 - Any other missing target returns `open_target_unavailable`.
 
-Tags under **Settings → LLM → Providers & Models**:
+Tags under **Settings → Models → Providers & keys**:
 
 - Models from the file are tagged "From llm.toml"; when no file exists they are tagged "Built-in default". Both kinds are removed only by editing the file.
 - Providers added in the UI are stored in `settings.json` and can be deleted there.
@@ -225,7 +225,7 @@ On startup failure, the main process waits for the splash page to finish loading
 - After installing a plugin or world package, click **Restart now** in the prompt. The main process waits for the new backend and reloads the window with the current page path and query. Backend crash, restart and recovery states are shown in the app.
 - **Install & manage** first checks desktop restart information; **Restart now** is unavailable during the check. A failed read shows an explanation and a **Retry** action; a successful retry restores the operation. Development mode still requires restarting `pnpm dev` in the terminal.
 - Session data survives the restart. Community plugin grants live only in the process and may need approval again.
-- The native Import Plugin and Import World menus open **Settings → Install & manage**, where you choose the ZIP, preview it, authorize it and see the result.
+- The native Import Plugin and Import World menus open **Settings → Plugins → Install & manage**, where you choose the ZIP, preview it, authorize it and see the result.
 
 ## Desktop REST authentication
 
@@ -255,7 +255,7 @@ An endpoint that requires the token checks the `Authorization: Bearer <token>` h
 - A write uses a temporary file in the same directory plus rename. The current format is `schemaVersion: 2` with a `revision` that only increases.
 - A file this version cannot use is not converted. At startup the desktop shell renames a v1, unversioned or damaged `settings.json` to `settings.<v1|unversioned|damaged>.bak.json`, and the settings start from their defaults.
 - When only single values are no longer accepted, the file is first copied to `settings.conflict.bak.json` and those values are removed.
-- The app says so once in both cases, and the copies can be viewed under **Settings → Data**. `keys.env` is not affected.
+- The app says so once in both cases, and the copies can be viewed under **Settings → Saves & data → Import, backup & reset**. `keys.env` is not affected.
 - The separate settings import/export file still uses `schemaVersion: 1`.
 - Read the [v0.0.42 upgrade guide](../internals/upgrade-0.0.42.md) before upgrading.
 

@@ -21,7 +21,7 @@ function frameworkSettingText(
       ),
     },
     "ui.scheme": {
-      label: t("settings.frameworkEntries.uiScheme.label", "Color scheme"),
+      label: t("settings.frameworkEntries.uiScheme.label", "Light or dark"),
       description: t(
         "settings.frameworkEntries.uiScheme.description",
         "Choose light or dark. Single-scheme themes automatically lock to the supported mode.",
@@ -58,7 +58,7 @@ function frameworkSettingText(
     "ui.chatMessageWindow": {
       label: t(
         "settings.frameworkEntries.chatMessageWindow.label",
-        "Chat window message limit",
+        "Chat message window",
       ),
       description: t(
         "settings.frameworkEntries.chatMessageWindow.description",
@@ -68,11 +68,11 @@ function frameworkSettingText(
     "ui.expandTurnUpdates": {
       label: t(
         "settings.frameworkEntries.expandTurnUpdates.label",
-        "Expand turn updates",
+        "Open turn updates by default",
       ),
       description: t(
         "settings.frameworkEntries.expandTurnUpdates.description",
-        "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
+        "Discoveries, achievements and status changes show open under each turn instead of folded into one line.",
       ),
     },
     "ui.developerView": {
@@ -92,7 +92,7 @@ function frameworkSettingText(
     "diagnostics.traceRetention": {
       label: t(
         "settings.frameworkEntries.traceRetention.label",
-        "Keep diagnostic traces",
+        "Keep debug traces",
       ),
       description: t(
         "settings.frameworkEntries.traceRetention.description",
@@ -106,7 +106,7 @@ function frameworkSettingText(
       ),
       description: t(
         "settings.frameworkEntries.musicEnabled.description",
-        "Play the music of a world during a session. A world plays music only when it ships tracks and a plugin that chooses them is on.",
+        "Play the world's own music while you play. Nothing plays if the world has no tracks. The game menu has the same switch.",
       ),
     },
     "audio.musicVolume": {
@@ -119,7 +119,7 @@ function frameworkSettingText(
     "world.authoringIdleTimeoutSeconds": {
       label: t(
         "settings.frameworkEntries.worldAuthoringIdleTimeout.label",
-        "World authoring: wait for the model (seconds)",
+        "World authoring: wait for the AI (seconds)",
       ),
       description: t(
         "settings.frameworkEntries.worldAuthoringIdleTimeout.description",
@@ -133,13 +133,10 @@ function frameworkSettingText(
       ),
     },
     "llm.slotConfig": {
-      label: t(
-        "settings.frameworkEntries.llmSlotConfig.label",
-        "Model role assignments",
-      ),
+      label: t("settings.frameworkEntries.llmSlotConfig.label", "AI roles"),
       description: t(
         "settings.frameworkEntries.llmSlotConfig.description",
-        "Choose a provider and model for each model role",
+        "Choose a provider and model for each role",
       ),
     },
     "llm.providers": {

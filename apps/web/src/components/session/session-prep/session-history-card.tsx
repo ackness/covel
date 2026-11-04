@@ -54,7 +54,7 @@ export function SessionHistoryCard({
         }
       >
         <History className="w-4 h-4" />
-        {t("session.history", "Previous Sessions")}
+        {t("session.history", "Saved games")}
         {status === "success" && (
           <Badge variant="secondary" className="text-xs ml-1">
             {activeSessions.length}

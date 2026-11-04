@@ -60,7 +60,7 @@ The comment next to each variable in `render.yaml` says what it does.
    }
    ```
 
-6. When you need to do operator work (such as writing shared worlds), copy the value of `COVEL_DESKTOP_REST_TOKEN` from **Environment** in the Render Dashboard, and enter it in the web app under **Settings → Operator Access**.
+6. When you need to do operator work (such as writing shared worlds), copy the value of `COVEL_DESKTOP_REST_TOKEN` from **Environment** in the Render Dashboard, and enter it in the web app under **Settings → Advanced → Operator Access**.
 
 ## Limits of the free instance
 

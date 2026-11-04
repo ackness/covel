@@ -43,6 +43,8 @@ interface PluginSelectionCardProps {
   resolvedSlots: ResolvedSlot[];
   isMissingDeclaredSlot: (slotId: string) => boolean;
   onTogglePlugin: (name: string) => void;
+  onOpenPluginSettings: (pluginId: string) => void;
+  developerMode?: boolean;
   worldDataPreflight: api.WorldDataPreflightResponse | null;
   worldDataPreflightStatus: PrepSectionStatus;
   worldDataPreflightError: string | null;
@@ -139,6 +141,8 @@ export function PluginSelectionCard({
   resolvedSlots,
   isMissingDeclaredSlot,
   onTogglePlugin,
+  onOpenPluginSettings,
+  developerMode,
   worldDataPreflight,
   worldDataPreflightStatus,
   worldDataPreflightError,
@@ -235,6 +239,8 @@ export function PluginSelectionCard({
                       resolvedSlots={resolvedSlots}
                       isMissingDeclaredSlot={isMissingDeclaredSlot}
                       onTogglePlugin={onTogglePlugin}
+                      onOpenPluginSettings={onOpenPluginSettings}
+                      developerMode={developerMode}
                     />
                   ))}
                 </div>
