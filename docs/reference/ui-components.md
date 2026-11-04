@@ -243,7 +243,7 @@
 | `SessionMessages` | 仅可选的字面量 `content: "story" \| "pending"`，默认 `"story"` | 完整已提交的公开故事/玩家消息，或待处理的公开交互；没有待处理交互时显示空状态 |
 | `SessionComposer` | 空对象 `{}`，也可省略 `props` | 当前会话共享的模式栏、字段、输入、排队草稿和反馈 |
 
-这些组件只用于实时声明式 `contributes.ui.view`。每份视图最多一个故事区域、一个待处理区域和一个输入框；不能直接带 `repeat`、放在重复祖先下或 `FilterContainer.props.itemTemplate` 中。`component` 和 `type` 写法都校验，具名 slots 和行模板内的错误带精确路径。其他 props（包括会话、座位、角色、来源和行动参数）会被拒绝，不能用表达式选择 `content`。这里的 `content` 是控制值，不做翻译；区域标题用普通文本组件翻译。
+这些组件只用于实时声明式 `contributes.ui.view`。每份视图最多一个故事区域、一个待处理区域和一个输入框；不能直接带 `repeat`、放在重复祖先下或 `FilterContainer.props.itemTemplate` 中。`component` 和 `type` 写法都校验，具名 slots 和行模板内的错误带精确路径。其他 props（包括会话、座位、角色、来源和行动参数）会被拒绝，不能用表达式选择 `content`。这里的 `content` 是控制值，不做翻译；区域标题用普通文本组件翻译。页面嵌入 `SessionComposer` 时，宿主不会在页面下方再显示自己的输入框，见[页面中的输入框](./ui-panels.md#页面中的输入框)。
 
 右侧、消息和段落模板不允许这些组件，webview、快照、调试或嵌套消息渲染没有实时宿主上下文；运行时也拒绝非法 props，只显示有界的不可用提示。`pending` 是玩家已经看到且尚未回答/未过期的表单、选择和确认，依据完整历史判断；它不重复出现在故事区域，建议不锁输入。未公开的剧情队列、条件和数量都不在其中。详细宿主与行动规则见[实时会话组件](./ui-panels.md#实时会话组件)。
 

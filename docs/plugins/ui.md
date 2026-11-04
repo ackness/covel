@@ -628,14 +628,14 @@ HTML 文件在一个隔离的框里运行。框架给它一个 `window.covel` �
 
 1. 复制 [session-view-probe](../../tests/third-party/session-view-probe/README.md) 到用户插件目录。它不含 runtime 和服务端入口。
 2. 打开根 `PLUGIN.md` 的 `contributes.ui.view`，查看 `story-view.json` 和 `notes-view.json`。前者用单文件 HTML 读取故事，后者用 `Stack` 和 `Text` 画一个无需会话数据的页面。修改英文标签时，同步修改 `locales/zh.yaml`。
-3. 在会话启用插件，从顶部“插件视图”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。通过“返回默认视图”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
+3. 在会话启用插件，从顶部“插件页面”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。点击头部的“文本”或“舞台”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
 
-桥接读取范围、视图字段和当前限制见[插件视图参考](../reference/ui-panels.md#插件视图)。此示例不提交行动或表单，没有输入框，也不显示图片。
+桥接读取范围、视图字段和当前限制见[插件视图参考](../reference/ui-panels.md#插件视图)。此示例不提交行动或表单，也不显示图片；宿主输入框仍在页面下方，要隐藏它见[页面中的输入框](../reference/ui-panels.md#页面中的输入框)。
 
 | 遇到的问题             | 处理                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------- |
 | 菜单里没有视图         | 确认插件在当前会话启用，检查 `/api/ui-specs` 的 `diagnostics`                 |
-| 读取授权后页面仍为空白 | 检查 HTML 使用 classic script 和 `window.covel.subscribe`；用宿主返回按钮离开 |
+| 读取授权后页面仍为空白 | 检查 HTML 使用 classic script 和 `window.covel.subscribe`；点头部的“文本”离开 |
 | 页面在数据为空时不显示 | 无数据源的 json-render 页面添加 `alwaysRender: true`                          |
 
 ## 多文件页面
@@ -703,7 +703,7 @@ messages:
 
 ## 从会话页面请求玩家行动
 
-查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个独立区域和共享页面。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。普通视图布局不变；显式主视图保留宿主输入框，独立输入框可用于舞台。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
+查看 [sandbox-surface-probe](../../tests/third-party/sandbox-surface-probe/README.md) 的两个页面：一个保留宿主输入框，一个声明 `composer: false`。它读取公开故事和输入信息，用句柄回答交互，用所属插件的手动函数 runtime 保存数据集记录。为 spec 添加 `capabilities` 后，玩家会看到每项能力的单独说明；服务端代码审批与页面授权互不替代。页面只在结果为 `accepted` 时清除行动草稿，拒绝时保留。页面默认保留宿主输入框；声明 `composer: false` 的页面自己处理输入，停止入口移到头部。完整字段与限制见[页面请求](../reference/ui-panels.md#页面请求与安全结果)。
 
 ## 声明式会话控制台
 
@@ -732,7 +732,7 @@ contributes:
 }
 ```
 
-启用此社区包后，从“插件视图”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。
+启用此社区包后，从“插件页面”选择 Session desk。它使用宿主当前身份的真实输入框和公开渲染；没有在场角色提供方也可以继续行动。组件属性、唯一性、重复节点诊断和不可用位置见[组件契约](../reference/ui-components.md#实时会话视图组件)。验证用 `pnpm validate:plugin <plugin-dir>`；不要把这些组件放进 `ui.message` 或行模板。
 
 ## 发布静态主题
 
@@ -740,13 +740,13 @@ contributes:
 
 ## 创建独立输入页面
 
-社区示例 `sandbox-surface-probe` 把 `ui/reader.json` 声明为 main，把下面的 `ui/input.json` 声明为 composer。两份路径仍放在 `contributes.ui.view`。共享根目录的 `index.html` 载入经典 `app.js`；服务端 handler 与 schema 留在根目录之外。
+社区示例 `sandbox-surface-probe` 的 `ui/reader.json` 是保留宿主输入框的普通页面，下面的 `ui/input.json` 声明 `composer: false`。两份路径都放在 `contributes.ui.view`。共享根目录的 `index.html` 载入经典 `app.js`；服务端 handler 与 schema 留在根目录之外。
 
 ```json
 {
   "id": "input",
   "label": "Bridge input",
-  "surface": "composer",
+  "composer": false,
   "bridge": "session",
   "capabilities": [
     "submitAction",
@@ -796,4 +796,4 @@ document.getElementById("submit").onclick = async () => {
 };
 ```
 
-完整示例还用当前句柄回答交互、调用所属手动 runtime、停止和打开自己的面板；不要把原始结果写进页面。结果与方法见[页面请求](../reference/ui-panels.md#页面请求与安全结果)，授权与超时见[沙箱区域](../reference/ui-panels.md#沙箱主视图与输入框)。内容或能力变化后重新授权；玩家可从宿主撤销、返回或显式重试。错误/失联模式用于验收，不会自动重放修改，也不能用页面重载恢复草稿。
+完整示例还用当前句柄回答交互、调用所属手动 runtime、停止和打开自己的面板；不要把原始结果写进页面。结果与方法见[页面请求](../reference/ui-panels.md#页面请求与安全结果)，授权与超时见[页面中的输入框](../reference/ui-panels.md#页面中的输入框)。内容或能力变化后重新授权；玩家可从宿主撤销、离开页面或再次选择以重试。错误/失联模式用于验收，不会自动重放修改，也不能用页面重载恢复草稿。

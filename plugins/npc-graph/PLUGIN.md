@@ -17,8 +17,6 @@ contracts:
     schema: ./schemas/graph-rag.schema.json
 contributes:
   ui:
-    view:
-      - ./ui/relationships-view.json
     right:
       - ./runtimes/extractor/ui/npc-graph-panel.json
   tools:

@@ -628,9 +628,9 @@ To see what data a panel actually receives: in development mode, press `Cmd/Ctrl
 
 1. Copy [session-view-probe](../../../tests/third-party/session-view-probe/README.md) to your user plugin directory. It contains no runtime or server entry.
 2. Open `contributes.ui.view` in the root `PLUGIN.md` and inspect `story-view.json` and `notes-view.json`. The former reads the story in single-file HTML; the latter uses `Stack` and `Text` without session data. When editing English labels, update `locales/zh.yaml` too.
-3. Enable the plugin in a session and choose “Story reader” from the header’s “Plugin views” menu. A reading consent prompt appears first. The story is shown only after consent. Use “Back to default view” to return, or revoke access from the view bar menu. Editing the spec or HTML requires consent again.
+3. Enable the plugin in a session and choose “Story reader” from the header’s “Plugin pages” menu. A reading consent prompt appears first. The story is shown only after consent. Click Text or Stage in the header to leave, or revoke access from the view bar menu. Editing the spec or HTML requires consent again.
 
-See the [plugin view reference](../reference/ui-panels.md#plugin-views) for projection scope, fields and limits. This sample submits no actions or forms and has no composer or images.
+See the [plugin view reference](../reference/ui-panels.md#plugin-views) for projection scope, fields and limits. This sample submits no actions or forms and shows no images; the host input box stays below it (see [the input box on a page](../reference/ui-panels.md#the-input-box-on-a-page) to hide it).
 
 | Problem                          | What to do                                                                                          |
 | -------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -703,7 +703,7 @@ For story-driven backdrops or music, use a [presentation selector](./advanced.md
 
 ## Request player actions from a session page
 
-See the two independent regions and shared page in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Ordinary view layout is unchanged; explicit main retains host input, while independent composers also work in stage. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
+See the two pages in [sandbox-surface-probe](../../../tests/third-party/sandbox-surface-probe/README.md). It reads public story and input context, answers interactions using handles, and saves dataset records through its own manual function runtime. Adding `capabilities` to the spec gives the player individual capability descriptions; server-code approval and page consent do not replace each other. Clear the action draft only for an accepted outcome, preserving it on refusal. Pages keep the host input box by default; a page that declares `composer: false` handles input itself and Stop moves to the header. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for the full contract.
 
 ## Declarative session console
 
@@ -732,7 +732,7 @@ contributes:
 }
 ```
 
-Enable this community package and choose Session desk from Plugin views. It uses the host's real current-role input and public rendering; actions remain available without a cast provider. See the [component contract](../reference/ui-components.md#live-session-view-components) for props, singleton limits, repeat diagnostics and unavailable placements. Validate with `pnpm validate:plugin <plugin-dir>`; do not place these widgets in `ui.message` or row templates.
+Enable this community package and choose Session desk from Plugin pages. It uses the host's real current-role input and public rendering; actions remain available without a cast provider. See the [component contract](../reference/ui-components.md#live-session-view-components) for props, singleton limits, repeat diagnostics and unavailable placements. Validate with `pnpm validate:plugin <plugin-dir>`; do not place these widgets in `ui.message` or row templates.
 
 ## Publishing static themes
 
@@ -740,13 +740,13 @@ Put palettes and restricted styles in separate JSON files under `contributes.ui.
 
 ## Build an independent input page
 
-The community `sandbox-surface-probe` example declares `ui/reader.json` as main and the following `ui/input.json` as composer. Both paths remain under `contributes.ui.view`. The shared root's `index.html` loads classic `app.js`; server handlers and schemas stay outside the published root.
+The community `sandbox-surface-probe` example has `ui/reader.json`, an ordinary page that keeps the host input box, and the following `ui/input.json`, which declares `composer: false`. Both paths are under `contributes.ui.view`. The shared root's `index.html` loads classic `app.js`; server handlers and schemas stay outside the published root.
 
 ```json
 {
   "id": "input",
   "label": "Bridge input",
-  "surface": "composer",
+  "composer": false,
   "bridge": "session",
   "capabilities": [
     "submitAction",
@@ -796,4 +796,4 @@ document.getElementById("submit").onclick = async () => {
 };
 ```
 
-The complete fixture also answers current interaction handles, invokes its own manual runtime, stops execution and opens its own panel; never render raw execution results. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for methods/outcomes and [sandbox regions](../reference/ui-panels.md#sandbox-main-view-and-composer) for consent and timeouts. Changed content or capabilities require consent again. Players revoke, return or explicitly retry from the host. Error/unresponsive modes support acceptance; they never replay mutations or recover drafts through reload.
+The complete fixture also answers current interaction handles, invokes its own manual runtime, stops execution and opens its own panel; never render raw execution results. See [page requests](../reference/ui-panels.md#page-requests-and-safe-outcomes) for methods/outcomes and [the input box on a page](../reference/ui-panels.md#the-input-box-on-a-page) for consent and timeouts. Changed content or capabilities require consent again. Players revoke, leave the page or choose it again to retry. Error/unresponsive modes support acceptance; they never replay mutations or recover drafts through reload.

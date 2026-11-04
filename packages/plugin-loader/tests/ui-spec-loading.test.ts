@@ -469,39 +469,39 @@ it("preserves valid bridge capabilities while reporting only the invalid sibling
   }
 });
 
-it("loads both session surfaces with the same static rules and isolates invalid siblings", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "covel-ui-surfaces-"));
+it("loads composer: false with the same static rules and isolates invalid siblings", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "covel-ui-composer-"));
   try {
-    await fs.writeFile(path.join(root, "page.html"), "<p>Surface</p>");
+    await fs.writeFile(path.join(root, "page.html"), "<p>Page</p>");
     const paths = [];
-    for (const surface of ["main", "composer", "sidebar"]) {
-      const file = surface + ".json";
+    for (const composer of [undefined, false, true]) {
+      const file = `composer-${String(composer)}.json`;
       paths.push(file);
       await fs.writeFile(
         path.join(root, file),
         JSON.stringify({
-          id: surface,
-          label: surface,
-          surface,
+          id: `composer-${String(composer)}`,
+          label: String(composer),
+          composer,
           bridge: "session",
           webview: { entry: "./page.html" },
         }),
       );
     }
     const loaded = await loadPluginUiSpecs(root, "owner", { view: paths });
-    expect(loaded.slots.view?.map((spec) => spec.surface)).toEqual([
-      "main",
-      "composer",
+    expect(loaded.slots.view?.map((spec) => spec.composer)).toEqual([
+      undefined,
+      false,
     ]);
     expect(loaded.diagnostics).toHaveLength(1);
-    expect(loaded.diagnostics[0]?.issues[0]?.path).toBe("surface");
+    expect(loaded.diagnostics[0]?.issues[0]?.path).toBe("composer");
     const wrongSlot = await loadPluginUiSpecs(root, "owner", {
-      right: ["main.json"],
+      right: ["composer-false.json"],
     });
     expect(wrongSlot.slots.right).toBeUndefined();
     expect(
       wrongSlot.diagnostics[0]?.issues.some(
-        (issue) => issue.path === "surface",
+        (issue) => issue.path === "composer",
       ),
     ).toBe(true);
   } finally {

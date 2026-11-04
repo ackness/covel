@@ -62,7 +62,11 @@ interface GameViewHeaderProps {
   recoveryNoticeVisible?: boolean;
   viewMode: GameViewMode;
   pluginViews: readonly PluginViewEntry[];
-  hostDefaultMode: GameViewMode;
+  /** A plugin page replaced the host input box, so Stop must live here. */
+  composerHidden?: boolean;
+  /** A turn or auto-advance run is actually in progress. */
+  stoppable?: boolean;
+  onStop?: () => void;
   isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
   onViewModeChange: (mode: GameViewMode) => void;
@@ -95,7 +99,9 @@ export function GameViewHeader({
   recoveryNoticeVisible = false,
   viewMode,
   pluginViews,
-  hostDefaultMode,
+  composerHidden = false,
+  stoppable = false,
+  onStop,
   isLeftCollapsed,
   isRightCollapsed,
   onViewModeChange,
@@ -210,6 +216,16 @@ export function GameViewHeader({
           </span>
         )}
         <NoticeStatusChips scope={sessionId} />
+        {stoppable && composerHidden && onStop && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 px-2 text-xs"
+            onClick={onStop}
+          >
+            {t("session.stopTurn")}
+          </Button>
+        )}
         <ConnectionStatus />
       </div>
       <div className="ml-auto flex max-w-full flex-wrap items-center gap-1 shrink-0 sm:flex-nowrap">
@@ -238,7 +254,7 @@ export function GameViewHeader({
 
         {pluginViews.length > 0 && (
           <HeaderMenu
-            label={t("session.pluginViews")}
+            label={t("session.pluginPages")}
             active={Boolean(parsePluginViewMode(viewMode))}
             icon={PanelsTopLeft}
           >
@@ -254,19 +270,6 @@ export function GameViewHeader({
             ))}
           </HeaderMenu>
         )}
-        {parsePluginViewMode(viewMode) && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0 md:h-8 md:w-8"
-            aria-label={t("session.backToDefaultView")}
-            title={t("session.backToDefaultView")}
-            onClick={() => onViewModeChange(hostDefaultMode)}
-          >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-        )}
-
         {suspensionsCount > 0 && (
           <Button
             variant="ghost"

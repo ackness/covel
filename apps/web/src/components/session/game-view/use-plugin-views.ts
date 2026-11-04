@@ -22,7 +22,6 @@ export interface PluginViewEntry {
 export interface PluginViews {
   reload(): void | Promise<void>;
   views: readonly PluginViewEntry[];
-  composers?: readonly PluginViewEntry[];
   status: "loading" | "ready" | "error";
 }
 export function usePluginViews(
@@ -110,8 +109,7 @@ export function usePluginViews(
     [loaded.entries, loaded.sessionId, sessionId, sessionPlugins, language],
   );
   return {
-    views: views.filter((entry) => entry.spec.surface !== "composer"),
-    composers: views.filter((entry) => entry.spec.surface === "composer"),
+    views,
     reload,
     status: loaded.key === key ? loaded.status : "loading",
   };

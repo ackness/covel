@@ -34,8 +34,17 @@ import {
 } from "@/stores/plugin-data-store.js";
 import { applyUiSlotEvent, clearUiSlots } from "@/stores/ui-slot-store.js";
 import consoleSpec from "../../../../../../plugins/dm-console/ui/dm-console.json";
-import librarySpec from "../../../../../../plugins/codex/ui/library-view.json";
+import codexPanel from "../../../../../../plugins/codex/ui/codex-panel.json";
 import { sessionPlugin } from "./plugin-view-fixtures.js";
+// The codex panel's filter and cards, offered as a page by a test package.
+const librarySpec = {
+  ...codexPanel,
+  id: "library",
+  group: undefined,
+  groupOrder: undefined,
+  shortLabel: undefined,
+  alwaysRender: true,
+};
 const mocks = vi.hoisted(() => ({
   entries: [] as PluginViewEntry[],
   realDiscovery: false,
@@ -202,7 +211,7 @@ function setRole(role: SeatRole) {
 }
 function choose(label: string) {
   fireEvent.click(
-    screen.getByRole("button", { name: i18n.t("session.pluginViews") }),
+    screen.getByRole("button", { name: i18n.t("session.pluginPages") }),
   );
   fireEvent.click(
     screen.getByRole("button", { name: new RegExp("^" + label) }),
@@ -210,8 +219,8 @@ function choose(label: string) {
 }
 function back() {
   fireEvent.click(
-    within(screen.getByTestId("plugin-view-bar")).getByRole("button", {
-      name: i18n.t("session.backToDefaultView"),
+    within(screen.getByTestId("session-header")).getByRole("button", {
+      name: i18n.t("session.viewParsedAria"),
     }),
   );
 }
@@ -270,7 +279,7 @@ it("keeps a bundled page, its filter and the view menu through deferred discover
     },
   });
   const view = render(shell(<GameView session={state.session!} />));
-  await screen.findByRole("button", { name: "Plugin views" });
+  await screen.findByRole("button", { name: "Plugin pages" });
   choose("Codex");
   const filter = screen.getByPlaceholderText("Search entries…");
   fireEvent.change(filter, { target: { value: "Gate" } });
@@ -288,12 +297,12 @@ it("keeps a bundled page, its filter and the view menu through deferred discover
   });
   expect(screen.getByPlaceholderText("Search entries…")).toBe(filter);
   expect(
-    screen.getByRole("button", { name: i18n.t("session.pluginViews") }),
+    screen.getByRole("button", { name: i18n.t("session.pluginPages") }),
   ).toBeTruthy();
   await act(async () => reject(new Error("Temporarily offline")));
   expect(screen.getByPlaceholderText("Search entries…")).toBe(filter);
   expect(
-    screen.getByRole("button", { name: i18n.t("session.pluginViews") }),
+    screen.getByRole("button", { name: i18n.t("session.pluginPages") }),
   ).toBeTruthy();
   let resolve!: (value: typeof response) => void;
   mocks.fetch.mockImplementationOnce(
@@ -517,7 +526,6 @@ it("renders public cast, a separate pending interaction and committed story upda
   view.rerender(shell(<GameView session={state.session!} />));
   expect(screen.getByText("PUBLIC-STORY")).toBeTruthy();
   expect(screen.queryByText("Rejected draft")).toBeNull();
-  expect(screen.getByText("Revising response")).toBeTruthy();
   expect(screen.getByRole("button", { name: /^Stop$/ })).toBeTruthy();
   state = {
     ...state,

@@ -276,7 +276,7 @@ for shard in 1 2 3 4 5 6 7 8; do
 done
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:smoke
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions
-CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|independent sandbox regions' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
+CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|plugin pages keep the host input' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
 ```
 
 Compare the unsharded collection with the union of all eight `--shard=<n>/8 --list` test IDs: both projects must appear exactly once, with no omissions. Check that extension collection includes every acceptance file. Do not freeze historical test totals; record paid-model opt-ins and existing conditional skips separately.
