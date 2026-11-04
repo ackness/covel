@@ -317,14 +317,14 @@ export async function prepareEnsemble(
     await page.getByRole("button", { name: /^Settings for / }).click();
     const control = page
       .getByRole("dialog")
-      .getByLabel("Strategy", { exact: true });
+      .getByLabel("Who speaks", { exact: true });
     await control.selectOption(value);
     await expect(control).toHaveValue(value);
     if (value === "list") {
       // An empty order preserves the incoming cast order, which follows salience.
       const order = page
         .getByRole("dialog")
-        .getByLabel("Actor order", { exact: true });
+        .getByLabel("Speaking order", { exact: true });
       await order.fill("Mara\nIvo");
       await order.blur();
       await expect(order).toHaveValue("Mara\nIvo");

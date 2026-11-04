@@ -122,7 +122,7 @@ test("bundled graph and codex keep their right panels on committed data, and onl
       "主持人面板",
     );
     await expect(page.getByTestId("plugin-view-container")).toContainText(
-      "待处理交互",
+      "待你处理",
     );
     expect(f.provider.requests).toHaveLength(callsBeforeNavigation);
     await expect(page.locator("iframe")).toHaveCount(0);
@@ -141,7 +141,7 @@ test("host console sends admitted Direct and textless Advance while retaining dr
     await openView(page, "Game Master Panel");
     const content = page.getByTestId("plugin-view-container");
     await expect(content).toContainText("Mara");
-    await expect(content).toContainText("Pending interactions");
+    await expect(content).toContainText("Waiting for you");
     await expect(content).toContainText("No pending interactions.");
     await page.getByTestId("composer-mode-direct").click();
     await composerInput(page).fill("Mara, answer the bell.");
@@ -271,13 +271,13 @@ test("a real pending form retains rejected input and resolves through normal adm
     await openView(page, "Game Master Panel");
     const pending = page.getByTestId("plugin-view-container");
     await expect(
-      pending.getByText("Attribute check", { exact: true }),
+      pending.getByText("Ability check", { exact: true }),
     ).toHaveCount(1);
     await pending
       .getByLabel("Attempted action", { exact: false })
       .fill("Inspect the bell");
     const attribute = pending.getByRole("combobox", {
-      name: "Attribute",
+      name: "Ability",
       exact: true,
     });
     await expect(attribute.locator('option[value="focus"]')).toHaveText(
