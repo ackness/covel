@@ -35,8 +35,14 @@ interface UseMessageGroupingArgs {
   readonly expandUpdates?: boolean;
   /** Open the latest turn's results even when older ones stay folded. */
   readonly expandLatestUpdates?: boolean;
-  /** Story drafts of a turn, shown after its committed messages. */
-  readonly renderDrafts?: (turnId: string) => ReactNode;
+  /**
+   * Story drafts of a turn, shown after its committed messages. `sourceOf`
+   * folds a retry's own turn into the turn it retries, as messages are.
+   */
+  readonly renderDrafts?: (
+    turnId: string,
+    sourceOf: (turnId: string) => string | undefined,
+  ) => ReactNode;
 }
 
 /**
@@ -66,14 +72,18 @@ export function useMessageGrouping({
     [messages, executionSteps],
   );
 
-  const reasoningByTurn = useMemo(() => {
-    const sources = new Map(
-      executionSteps.flatMap((step) =>
-        step.turnId && step.sourceTurnId
-          ? [[step.turnId, step.sourceTurnId] as const]
-          : [],
+  const sources = useMemo(
+    () =>
+      new Map(
+        executionSteps.flatMap((step) =>
+          step.turnId && step.sourceTurnId
+            ? [[step.turnId, step.sourceTurnId] as const]
+            : [],
+        ),
       ),
-    );
+    [executionSteps],
+  );
+  const reasoningByTurn = useMemo(() => {
     const grouped = new Map<
       string | undefined,
       Array<{
@@ -109,7 +119,7 @@ export function useMessageGrouping({
           (a.sequence ?? 0) - (b.sequence ?? 0),
       );
     return grouped;
-  }, [executionSteps, plugins, i18n.language, messagesOnly]);
+  }, [executionSteps, sources, plugins, i18n.language, messagesOnly]);
   const pendingMessage = messages.at(-1);
   const awaitingTurnIdentity =
     executing && pendingMessage?.role === "user" && !pendingMessage.turnId;
@@ -153,7 +163,7 @@ export function useMessageGrouping({
     if (group.turnId && renderDrafts)
       addRow(
         `draft-${group.turnId}`,
-        renderDrafts(group.turnId),
+        renderDrafts(group.turnId, (id) => getSourceTurnId(id, sources)),
         group,
         "draft",
       );

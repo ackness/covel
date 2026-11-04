@@ -53,7 +53,10 @@ const draft: OutputDraft = {
   revising: false,
 };
 
-function show(outputDrafts: readonly OutputDraft[]) {
+function show(
+  outputDrafts: readonly OutputDraft[],
+  executionSteps: ChatMessagesProps["executionSteps"] = [],
+) {
   const props: ChatMessagesProps = {
     messages: [
       {
@@ -64,7 +67,7 @@ function show(outputDrafts: readonly OutputDraft[]) {
         turnId: "turn-1",
       },
     ],
-    executionSteps: [],
+    executionSteps,
     showExecutionTimeline: false,
     executionError: null,
     executing: true,
@@ -132,4 +135,23 @@ it("keeps a revised draft's place with a note", () => {
   const row = screen.getByTestId("output-draft");
   expect(row.getAttribute("data-draft-state")).toBe("revising");
   expect(row.textContent).toBe("Revising…");
+});
+
+it("shows a retried story's draft under the turn it retries", () => {
+  show(
+    [{ ...draft, turnId: "retry-1" }],
+    [
+      {
+        runtimeId: "narrator",
+        pluginId: "narrator",
+        status: "running",
+        turnId: "retry-1",
+        sourceTurnId: "turn-1",
+      },
+    ],
+  );
+  const row = screen.getByTestId("output-draft");
+  expect(row.closest("[data-turn-id]")?.getAttribute("data-turn-id")).toBe(
+    "turn-1",
+  );
 });

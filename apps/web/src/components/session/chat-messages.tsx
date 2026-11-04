@@ -282,11 +282,14 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     return renderMessage(msg, index);
   };
 
-  const renderDrafts = (turnId: string) => {
+  const renderDrafts = (
+    turnId: string,
+    sourceOf: (turnId: string) => string | undefined,
+  ) => {
     if (preference === "committed") return null;
     const drafts = outputDrafts.filter(
       (draft) =>
-        draft.turnId === turnId &&
+        sourceOf(draft.turnId) === turnId &&
         (draft.revising || visibleDraftUnits(draft, preference)),
     );
     if (drafts.length === 0) return null;
