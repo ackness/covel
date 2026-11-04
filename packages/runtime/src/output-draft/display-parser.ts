@@ -34,6 +34,8 @@ interface UnitState {
   text: string;
   meta: Record<string, DisplayMetaValue>;
   complete: boolean;
+  /** Whether the element has displayed text; others are skipped, as in displayUnitsOf. */
+  hasText: boolean;
 }
 
 /** Split a JSON pointer into its reference tokens. */
@@ -108,19 +110,23 @@ export class DisplayStreamParser {
     this.push(document);
   }
 
-  /** Units whose text is final, in order, stopping at the first gap. */
+  /**
+   * Units whose text is final, in order, stopping at the first element still
+   * being written. Elements without displayed text are skipped.
+   */
   completeUnits(): readonly DisplayUnit[] {
     const done: DisplayUnit[] = [];
     for (let index = 0; ; index++) {
       const unit = this.units.get(index);
       if (!unit?.complete) return done;
-      done.push(toUnit(unit));
+      if (unit.hasText) done.push(toUnit(unit));
     }
   }
 
   /** The unit being written after the complete ones, with its text so far. */
   partialUnit(): DisplayUnit | undefined {
-    const index = this.completeUnits().length;
+    let index = 0;
+    while (this.units.get(index)?.complete) index++;
     const unit = this.units.get(index);
     if (!unit || unit.complete) return undefined;
     // A pending high surrogate is half a character.
@@ -167,7 +173,7 @@ export class DisplayStreamParser {
   private unit(index: number): UnitState {
     let unit = this.units.get(index);
     if (!unit) {
-      unit = { text: "", meta: {}, complete: false };
+      unit = { text: "", meta: {}, complete: false, hasText: false };
       this.units.set(index, unit);
     }
     return unit;
@@ -179,7 +185,12 @@ export class DisplayStreamParser {
   ): void {
     const unit = this.unit(target.unit);
     if (target.field === "text") {
-      if (typeof value === "string") unit.text = value;
+      if (typeof value === "string") {
+        unit.text = value;
+        // A lone string unit shows nothing when empty, as in displayUnitsOf.
+        const lone = this.path().length === this.unitsPath.length;
+        unit.hasText = !lone || value !== "";
+      }
     } else unit.meta[target.field] = value;
   }
 
@@ -209,9 +220,7 @@ export class DisplayStreamParser {
       typeof path[base.length] === "number" &&
       base.every((part, index) => path[index] === part)
     ) {
-      const index = path[base.length] as number;
-      if (this.units.has(index) || this.spec.text !== undefined)
-        this.unit(index).complete = true;
+      this.unit(path[base.length] as number).complete = true;
     }
   }
 

@@ -87,6 +87,8 @@ class Forwarder implements DraftForwarder {
   private draftId: string | undefined;
   /** The draft the client holds, if any: shown, accepted, or neither. */
   private shown: string | undefined;
+  /** A draft the client still shows as being revised, until the next one. */
+  private revising: string | undefined;
   private calls = new Map<number, Call>();
   private submission: number | undefined;
   private lastSent = "";
@@ -140,6 +142,7 @@ class Forwarder implements DraftForwarder {
       this.draftId ?? `${this.identity.runId}:${this.request}:accepted`;
     this.draftId = draftId;
     this.shown = draftId;
+    this.revising = undefined;
     this.emit({
       type: "output.accepted",
       payload: {
@@ -169,7 +172,10 @@ class Forwarder implements DraftForwarder {
 
   private retract(reason: OutputRetractedPayload["reason"]): void {
     this.cancelTimer();
-    const shown = this.shown;
+    // A stop also clears a draft that is still marked as being revised.
+    const shown =
+      this.shown ?? (reason === "stopped" ? this.revising : undefined);
+    this.revising = reason === "revising" ? (shown ?? this.revising) : undefined;
     this.shown = undefined;
     this.draftId = undefined;
     this.calls = new Map();
@@ -221,6 +227,7 @@ class Forwarder implements DraftForwarder {
       this.lastUnitsKey = unitsKey;
       this.lastSentAt = Date.now();
       this.shown = draftId;
+      this.revising = undefined;
       this.emit({
         type: "output.draft",
         payload: {

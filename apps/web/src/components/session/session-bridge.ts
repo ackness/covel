@@ -254,7 +254,10 @@ export function buildSessionProjection(
   }
   const pending: ProjectionShape["pending"] = [];
   const allMessages = [...input.messages];
-  for (const message of input.messages) {
+  // A player message voids every interaction before it.
+  let offered = allMessages.length;
+  while (offered > 0 && allMessages[offered - 1]!.role !== "user") offered -= 1;
+  for (const message of allMessages.slice(offered)) {
     if (pending.length >= SESSION_BRIDGE_MAX_PENDING) break;
     if (
       !isPendingInteractionMessage(
@@ -306,7 +309,7 @@ export function buildSessionProjection(
     turn: input.session.completedPlayerTurns,
     executing: input.executing,
     messages,
-    drafts: publicDrafts(input),
+    drafts: sessionProjectionDrafts(input.drafts, input.liveOutput),
     pending,
     input: publicActionInput(input, characters),
     characters,
@@ -363,13 +366,18 @@ const messageBytes = (text: string, lines: PublicLines | undefined) =>
  * Story text before its commit, never its turn, runtime or plugin. A player
  * who waits for the commit sees none, so neither does their page.
  */
-function publicDrafts(
-  input: SessionProjectionInput,
+/**
+ * The projection's `drafts`. Built apart from the rest so a page can follow a
+ * story being written without the host re-walking the whole message log.
+ */
+export function sessionProjectionDrafts(
+  source: readonly OutputDraft[] | undefined,
+  liveOutput: LiveOutputPreference | undefined,
 ): ProjectionShape["drafts"] {
-  const preference = input.liveOutput ?? "units";
+  const preference = liveOutput ?? "units";
   const drafts: ProjectionShape["drafts"] = [];
   if (preference === "committed") return drafts;
-  for (const draft of input.drafts ?? []) {
+  for (const draft of source ?? []) {
     if (drafts.length >= SESSION_BRIDGE_MAX_DRAFTS) break;
     const units = visibleDraftUnits(draft, preference);
     if (!units && !draft.revising) continue;

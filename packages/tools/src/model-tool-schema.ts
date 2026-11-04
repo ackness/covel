@@ -114,9 +114,16 @@ function inlineLocalReferences(root: Record<string, unknown>): unknown {
     const node: Record<string, unknown> = { ...base };
     for (const [key, child] of Object.entries(rest)) {
       if (key === "$defs" || key === "definitions") continue;
-      node[key] = dataKeywords.has(key)
-        ? child
-        : visit(child, `${path}.${key}`, active);
+      if (dataKeywords.has(key)) node[key] = child;
+      // Names in a schema map are field names, not keywords.
+      else if (schemaMaps.has(key) && isObject(child))
+        node[key] = Object.fromEntries(
+          Object.entries(child).map(([name, schema]) => [
+            name,
+            visit(schema, `${path}.${key}.${name}`, active),
+          ]),
+        );
+      else node[key] = visit(child, `${path}.${key}`, active);
     }
     return node;
   };

@@ -6,10 +6,19 @@ import { readLiveOutputPreference } from "@/stores/session-store/output-drafts.j
 import {
   buildSessionProjection,
   createSessionMessageOrdinals,
+  sessionProjectionDrafts,
   sessionProjectionSchema,
 } from "./session-bridge.js";
 
 const EMPTY_CHARACTERS: readonly unknown[] = [];
+
+function warnOnce(warned: { current: boolean }): void {
+  if (warned.current) return;
+  warned.current = true;
+  console.warn(
+    "[session-bridge] Invalid session projection; withholding state",
+  );
+}
 export function useSessionBridge(
   sessionId: string,
   interactionHandle?: (
@@ -34,7 +43,9 @@ export function useSessionBridge(
     () => assignOrdinals(messages),
     [assignOrdinals, messages],
   );
-  const projection = useMemo(() => {
+  // Drafts change many times a second while a story is written; the rest of
+  // the projection is rebuilt only when its own inputs change.
+  const base = useMemo(() => {
     if (!session || session.id !== sessionId) return undefined;
     const result = sessionProjectionSchema.safeParse(
       buildSessionProjection({
@@ -44,8 +55,6 @@ export function useSessionBridge(
         interactionHandle,
         executing,
         messages,
-        drafts: outputDrafts,
-        liveOutput,
         messageSeqs,
         submittedBlockIds,
         characters,
@@ -53,12 +62,7 @@ export function useSessionBridge(
       }),
     );
     if (result.success) return result.data;
-    if (!warned.current) {
-      warned.current = true;
-      console.warn(
-        "[session-bridge] Invalid session projection; withholding state",
-      );
-    }
+    warnOnce(warned);
     return undefined;
   }, [
     session,
@@ -67,12 +71,19 @@ export function useSessionBridge(
     sessionId,
     executing,
     messages,
-    outputDrafts,
-    liveOutput,
     messageSeqs,
     submittedBlockIds,
     characters,
     slots,
   ]);
+  const projection = useMemo(() => {
+    if (!base) return undefined;
+    const drafts = sessionProjectionSchema.shape.drafts.safeParse(
+      sessionProjectionDrafts(outputDrafts, liveOutput),
+    );
+    if (drafts.success) return { ...base, drafts: drafts.data };
+    warnOnce(warned);
+    return undefined;
+  }, [base, outputDrafts, liveOutput]);
   return { projection };
 }

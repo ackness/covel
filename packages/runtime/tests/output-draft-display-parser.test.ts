@@ -95,14 +95,42 @@ describe("DisplayStreamParser", () => {
     expect(parser.completeUnits()).toEqual([{ text: "Line one.\nLine two." }]);
   });
 
-  it("reads an array of strings", () => {
+  it("reads an array of strings, skipping other elements", () => {
     const spec = { units: "/lines" };
     const { parser } = streamed('{"lines":["a",{"x":1},"b"]}', 1, spec);
-    expect(parser.completeUnits()).toEqual([{ text: "a" }]);
+    expect(parser.completeUnits()).toEqual([{ text: "a" }, { text: "b" }]);
     expect(displayUnitsOf({ lines: ["a", { x: 1 }, "b"] }, spec)).toEqual([
       { text: "a" },
       { text: "b" },
     ]);
+  });
+
+  it("skips elements without text the way the accepted story does", () => {
+    const value = {
+      segments: [
+        { kind: "narration", text: "One." },
+        { kind: "pause" },
+        "loose",
+        7,
+        { kind: "narration", text: "" },
+        { kind: "action", text: "Two." },
+      ],
+    };
+    const { parser } = streamed(JSON.stringify(value), 3, segmentsSpec);
+    expect(parser.completeUnits()).toEqual(
+      displayUnitsOf(value, segmentsSpec),
+    );
+    const lone = { units: "/story" };
+    expect(streamed('{"story":""}', 1, lone).parser.completeUnits()).toEqual(
+      displayUnitsOf({ story: "" }, lone),
+    );
+  });
+
+  it("shows the element being written after skipped ones", () => {
+    const parser = new DisplayStreamParser(segmentsSpec);
+    parser.push('{"segments":[{"kind":"pause"},{"text":"Wri');
+    expect(parser.completeUnits()).toEqual([]);
+    expect(parser.partialUnit()).toEqual({ text: "Wri" });
   });
 
   it("ignores same-named fields outside the declared place", () => {
