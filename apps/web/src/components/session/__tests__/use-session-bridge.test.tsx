@@ -185,10 +185,13 @@ it("shows a story being written as far as the player reads it, without its ident
     ...mocks.state,
     outputDrafts: [{ ...draft, units: [], partial: undefined, revising: true }],
   };
+  const before = result.current.projection?.messages;
   rerender();
   expect(result.current.projection?.drafts).toEqual([
     { state: "revising", text: "" },
   ]);
+  // A draft update leaves the projected message log as it was.
+  expect(result.current.projection?.messages).toBe(before);
 
   mocks.state = {
     ...mocks.state,

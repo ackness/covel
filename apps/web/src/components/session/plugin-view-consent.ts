@@ -24,8 +24,16 @@ function canonical(value: unknown): unknown {
     );
   return value;
 }
+// Specs are immutable state: a changed view arrives as a new object, so the
+// content of one object never changes. Renders and store reads reuse it.
+const contents = new WeakMap<UISlotSpec, string>();
 export function pluginViewContent(spec: UISlotSpec): string {
-  return JSON.stringify(canonical(spec));
+  let content = contents.get(spec);
+  if (content === undefined) {
+    content = JSON.stringify(canonical(spec));
+    contents.set(spec, content);
+  }
+  return content;
 }
 export async function hashPluginViewContent(content: string): Promise<string> {
   const hash = await crypto.subtle.digest(

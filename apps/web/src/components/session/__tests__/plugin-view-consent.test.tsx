@@ -203,6 +203,24 @@ it.each([viewEntry, pageViewEntry])(
     ]);
   },
 );
+it("reads a view's content once per spec object", () => {
+  let reads = 0;
+  const spec = {
+    ...viewEntry.spec,
+    get webview() {
+      reads += 1;
+      return { html: "<p>page</p>" };
+    },
+  } as PluginViewEntry["spec"];
+  const content = pluginViewContent(spec);
+  expect(pluginViewContent(spec)).toBe(content);
+  expect(reads).toBe(1);
+  // A changed view is a new object and gets its own content.
+  expect(
+    pluginViewContent({ ...viewEntry.spec, webview: { html: "<p>new</p>" } }),
+  ).not.toBe(content);
+});
+
 it("binds page consent to every published file through the URL digest", async () => {
   const entry = {
     ...viewEntry,
