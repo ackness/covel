@@ -1,3 +1,0 @@
-### Breaking
-
-- **Session pages read story drafts through bridge version 4.** The session projection adds `drafts[]` (`{state, text, truncated?}`), following the player's "Show the story as it is written" setting, and pages must accept version 4; version 3 state is rejected. Update session pages that check `session.version` together with the host. Drafts are unreviewed story text without turn, runtime or plugin identity, and leave `drafts` once the story commits. Messages and drafts also carry `lines[]` (`{kind, text, speaker?, speakerId?}`), the display lines the host stage reads, so a page can build the same line-by-line reader. See [session projection](../en/reference/ui-panels.md#sessionprojection-version-4).

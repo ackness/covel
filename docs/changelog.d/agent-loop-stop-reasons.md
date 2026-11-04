@@ -1,5 +1,0 @@
-### Added
-
-- **A `PreStep` hook shapes each step of an agent's tool loop.** It fires before every model call of the loop, after the player's interjections and before `PreLLMCall`, and can narrow that step's tools, change its tool choice, lower the steps left, or end the loop as `tool-finished` or `cancelled`. Rules: `docs/reference/hooks.md`.
-- **Agent steps are traced.** Each step of the tool loop sends `step.started` and `step.completed` to the trace and the actions stream, with the step number, usage, finish reason, a tool-call summary, retries and notes on corrections, perturbations and activated tools. A concealed runtime keeps only the content-free fields. Payloads: `docs/reference/protocol.md`.
-- **Every agent run records how its loop ended.** `RuntimeResult.stop` and the `stopReason` of `runtime.completed` / `runtime.failed` carry one of ten stop reasons (`completed`, `tool-finished`, `max-steps`, `deadline`, `context-overflow`, `cancelled`, `model-error`, `invalid-output`, `loop-detected`, `suspended`). Table: `docs/reference/protocol.md`.

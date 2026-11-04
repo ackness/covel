@@ -1,3 +1,0 @@
-### Fixed
-
-- **Community plugins get the same automatic dimension recovery and default selection as bundled ones once they are authorized.** Before the next action, the host retries a pending dimension settlement for any tracker that can run without a new approval: bundled, freshly verified declarative, or holding this session's grants, including those a trusted source covers. A `kind: core` package now starts selected on the session preparation screen whenever the player could add it without an approval, not only when it is bundled. Rules: [dynamic dimensions](../reference/dynamic-dimensions.md) and [plugin installation](../reference/plugin-installation.md).

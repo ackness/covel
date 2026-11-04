@@ -1,3 +1,0 @@
-### Security
-
-- **Build and documentation tools move to patched dependency releases.** The documentation site builds on Vite 6.4.5 instead of Vite 5, which also replaces its old esbuild. The web router's serializer (seroval 1.6.12), the Mermaid sanitizer (DOMPurify 3.4.17), Ajv's URI parser (fast-uri 3.1.9), the Tailwind selector parser and source-map reader, and brace expansion all move to their patched releases. Desktop packaging and ASAR checks use minimatch 11 and glob 14, the only releases that fix their pattern-matching and cancellation advisories. Older minimatch copies inside electron-builder have no patched release yet and only ever see the project's own packaging patterns.

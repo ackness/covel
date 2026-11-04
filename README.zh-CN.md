@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.53-8b5cf6)](./docs/CHANGELOG.md#0053---2026-10-28)
+[![Version](https://img.shields.io/badge/version-v0.0.54-8b5cf6)](./docs/CHANGELOG.md#0054---2026-11-04)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
@@ -15,7 +15,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、背包、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前源码版本：v0.0.53**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.53 的桌面版后端改用随包的 Electron 运行时，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)。从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)：**v0.0.51 及更早版本创建的 SQLite 或 PostgreSQL 数据库，v0.0.52 及以后的版本启动时会拒绝使用，必须重建**（会话不会迁移；浏览器私有存档不受影响）。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。跟随 `main` 源码时还需检查未发布的结构变更，见[数据、备份与升级](./docs/start/data-and-upgrade.md)。
+> **当前源码版本：v0.0.54**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。桌面版后端运行在随包的 Electron 运行时上，要求 macOS 13.5 及以上；源码和 Docker 部署需要 Node 26.12.1。升级前请阅读[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0054)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0054)：**v0.0.53 及更早版本创建的 SQLite 或 PostgreSQL 数据库（包括桌面版的数据库），v0.0.54 启动时会拒绝使用；此前的浏览器私有存档也无法打开。请重建**（会话不会迁移），并把社区插件和会话页面更新到新的 agent、故事和会话桥契约。从 v0.0.52 及更早版本升级，还需遵循 v0.0.53 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0053)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0053)；从 v0.0.51 及更早版本升级，还需遵循 v0.0.52 的[破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0052)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0052)。更早版本还需遵循 [v0.0.51 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)、[v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。跟随 `main` 源码时还需检查未发布的结构变更，见[数据、备份与升级](./docs/start/data-and-upgrade.md)。
 
 ## 亮点
 
