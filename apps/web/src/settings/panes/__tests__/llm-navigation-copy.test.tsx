@@ -49,11 +49,11 @@ describe("LlmSlotsPane connectivity navigation copy", () => {
   it.each([
     [
       "en-US",
-      "Model connectivity tests are available on the Providers & Models page.",
+      "Model connectivity tests are available on the Providers & keys page.",
     ],
     [
       "ru-RU",
-      "Проверить подключение к модели можно на странице «Провайдеры и модели».",
+      "Проверить подключение к модели можно на странице «Провайдеры и ключи».",
     ],
   ])(
     "directs %s readers to the current providers navigation, not a retired API keys pane",

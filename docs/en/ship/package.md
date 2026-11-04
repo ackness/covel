@@ -57,7 +57,7 @@ Then restart Covel.
 
 ## 4. Install it, use it once, then uninstall it
 
-Open **Settings → Install & manage**, and import the ZIP you just made. Follow the table below step by step. Each step should show the result on the right:
+Open **Settings → Plugins → Install & manage**, and import the ZIP you just made. Follow the table below step by step. Each step should show the result on the right:
 
 | What to do                                           | What you should see                                                                           |
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |

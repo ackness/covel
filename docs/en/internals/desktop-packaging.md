@@ -61,7 +61,7 @@ Things that the packager needs to know:
 - The page's local storage uses the default session that Electron persists. The server process prefers the last port it used, so the page's origin address stays the same.
 - When the server process restarts, the current page stays on screen, and the app shows the status. Windows backend launches hide the extra console window.
 - Desktop health checks read only the response status and release unused response bodies within the request deadline, so polling does not retain connections.
-- The native menu items "Import plugin" and "Import world" open **Settings → Install & manage**. Choosing a ZIP, validation, authorization, and the success or failure messages all go through the shared install flow. Copying a folder by hand is not an install method.
+- The native menu items "Import plugin" and "Import world" open **Settings → Plugins → Install & manage**. Choosing a ZIP, validation, authorization, and the success or failure messages all go through the shared install flow. Copying a folder by hand is not an install method.
 
 ### How the packaged server starts
 

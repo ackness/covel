@@ -80,11 +80,35 @@ export async function seedAppSettings(page: Page) {
 
 /** Open Settings from the top bar, as a player does. */
 export async function openAppSettings(page: Page) {
-  await page
+  const settings = page
     .getByRole("navigation", { name: /^(主导航|Primary)$/ })
-    .getByRole("button", { name: /^(设置|Settings)$/ })
-    .click();
+    .getByRole("button", { name: /^(设置|Settings)$/ });
+  // Narrow screens fold the top bar behind its menu button.
+  const fold = page.getByRole("button", {
+    name: /^(主导航|Primary)$/,
+    exact: true,
+  });
+  await expect(fold.or(settings)).toBeVisible();
+  if (await fold.isVisible()) {
+    await fold.click();
+    await page
+      .getByRole("dialog", { name: /^(主导航|Primary)$/ })
+      .getByRole("button", { name: /^(设置|Settings)$/ })
+      .click();
+  } else await settings.click();
   await expect(page.getByRole("dialog")).toBeVisible();
+}
+
+/**
+ * Unfold "Customize the start" on the start screen, where the world document,
+ * the plugin list and the checks live. A no-op when it is already open.
+ */
+export async function openCustomStart(page: Page) {
+  const toggle = page.getByRole("button", {
+    name: /^(自定义开局|Customize the start)$/,
+  });
+  if ((await toggle.count()) > 0) await toggle.click();
+  await expect(page.getByTestId("custom-start")).toBeVisible();
 }
 
 /** Switch the color scheme in Settings → Appearance and close the dialog. */

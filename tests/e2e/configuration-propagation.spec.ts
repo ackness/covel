@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  ONBOARDING_VERSION,
+  openAppSettings,
+  seedBrowserSettings,
+} from "./helpers/player.js";
 
 test("personal model configuration survives reload and reaches the request without display pricing", async ({
   page,
@@ -88,11 +92,10 @@ test("personal model configuration survives reload and reaches the request witho
   });
   await page.goto("/session");
   const dialog = page.getByRole("dialog");
-  const openSettings = () =>
-    page.getByRole("button", { name: /Configure Providers & Models/i }).click();
+  const openSettings = () => openAppSettings(page);
   const openProvider = async () => {
     await dialog
-      .getByRole("button", { name: "Providers & Models", exact: true })
+      .getByRole("button", { name: "Providers & keys", exact: true })
       .click();
     await dialog.getByRole("button", { name: /fixture.*2 models/ }).click();
   };
@@ -113,9 +116,7 @@ test("personal model configuration survives reload and reaches the request witho
   await dialog
     .getByRole("spinbutton", { name: "fixture Price multiplier" })
     .press("Enter");
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   const story = dialog.getByRole("group", { name: "story", exact: true });
   await story
     .getByRole("combobox", { name: "Model configuration", exact: true })
@@ -152,9 +153,7 @@ test("personal model configuration survives reload and reaches the request witho
   await page.keyboard.press("Escape");
   await page.reload();
   await openSettings();
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   await expect(
     story.getByRole("combobox", { name: "Model configuration", exact: true }),
   ).toHaveValue("model:detailed");
@@ -221,9 +220,7 @@ test("personal model configuration survives reload and reaches the request witho
     "placeholder",
     "sk-...",
   );
-  await dialog
-    .getByRole("button", { name: "Model Roles", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "AI roles", exact: true }).click();
   const reloadConfig = dialog.getByRole("button", {
     name: "Reload config",
     exact: true,

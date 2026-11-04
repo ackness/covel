@@ -71,6 +71,11 @@ test.describe("Covel Full Flow", () => {
       .getByRole("navigation", { name: /primary|主导航/i })
       .getByRole("button", { name: /^(设置|Settings)$/ })
       .click();
+    // Developer mode lives under Advanced → Options.
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^(选项|Options)$/ })
+      .click();
     await page
       .getByRole("dialog")
       .getByRole("switch", { name: /开发者模式|developer mode/i })

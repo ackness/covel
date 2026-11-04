@@ -1262,7 +1262,7 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 - `loop` 默认是 true。`volume`（0–1）是作者给这首曲子定的音量；玩家自己的音量和静音开关在它之上再起作用。
 - 没有话要说的提供者返回 `previous`。这样几个插件可以按声明顺序共用这个槽位：一个播放世界自带的曲目，另一个在世界没有曲目的地方补一首生成的。
 - 播放由客户端负责。页面上有别的声音在播（例如一句旁白）时，它把音乐压低；页面隐藏时暂停；浏览器不允许自动出声时，等到第一次点击或按键再开始。
-- 玩家的开关在会话头部和“设置 → 通用”里（`audio.musicEnabled`、`audio.musicVolume`）。
+- 玩家的开关在会话头部和“设置 → 常用 → 偏好”里（`audio.musicEnabled`、`audio.musicVolume`）。
 
 内置的 `soundtrack` 插件用世界自带的曲目提供这个槽位。它记录情绪（`music.cue`）和场景（`scene.set`），在槽位被投影时选出曲目。见 [world-data.md](./world-data.md#background-music)。
 

@@ -20,13 +20,14 @@ For a first game, these are good choices:
 > [!NOTE]
 > The interface language and the language of the world content are two different things. The interface language only decides the buttons and labels. The content language of a game is set when the game is created, and it must be a language version that the world already has.
 
-## 2. Check the play style on the session-prep screen
+## 2. Start from the getting-ready screen
 
-After you click "Enter", you reach the session-prep screen. Here you decide which plugins this game uses.
+After you click "Enter", you reach the getting-ready screen. "Start Game" is at the top, with the choice of who you play as beside it (Player, Game master or Spectator, each with a one-line hint). Below it, a line reads "Using: xxx · Change", which says which AI this game will use, and "Using the recommended settings".
 
-- The world suggests a **gameplay pack**, which is a set of plugins that work well together. On your first game, keep the suggestion.
-- To add or remove plugins, or to give a task a different model role, expand "Customize plugins and advanced settings".
-- If the page says a setting is missing, fill it in as the page asks. Usually, a model role has no model yet.
+- The world suggests a **mode**, which is a set of plugins that work well together. On your first game, keep the suggestion and click "Start Game".
+- To add or remove plugins, edit the world document, or import and export the world state, open "Customize the start". It is folded by default.
+- If the page says something is missing, fix it as the page asks. Usually the AI has no key yet; "Change" or "Set up" opens Settings → Models.
+- Earlier saves are at the bottom of the page under "Saved games", folded by default.
 
 When you are ready, click "Start Game".
 
@@ -56,9 +57,9 @@ To change how the story is displayed, switch between Read and Stage.
 
 ## 5. Check that you can continue
 
-Close Covel and open it again, then go back to the same world. The world lists your saved games. Click "Continue your last adventure" to pick up from the last turn.
+Close Covel and open it again, then go back to the same world. The world list offers "Continue your last adventure"; click it to pick up from the last turn. The "Saved games" section at the bottom of the getting-ready screen also lists them.
 
-If previous sessions fail to load, the preparation page shows an error and a Retry button. Click Retry to load your saves again; you can still start a new game.
+If previous sessions fail to load, the getting-ready screen shows an error and a Retry button. Click Retry to load your saves again; you can still start a new game.
 
 You have now been through a whole game: choose a world, check the play style, finish the opening, act, save, and continue.
 
@@ -89,9 +90,9 @@ Set “Automatic rounds” to 0 in Orchestration and save to turn it off. “App
 
 When the world allows it, choose Ensemble or Spectator during preparation. Configure story and plugin text [model roles](./models.md) first.
 
-1. Ensemble can keep Play as: Player. For a human DM, disable character creation and choose Game master. Choose Spectator for observation. Roles are creation-only.
+1. Ensemble can keep the Player role. For a human DM, disable character creation and choose Game master. Choose Spectator for observation. Roles are creation-only.
 2. For DM narration, select Game master in the narrator's Perspective setting. This changes voice rather than seat role.
-3. After starting, open Orchestration under Loaded Plugins. The sole bundled provider resolves automatically; no initial provider-selection step is needed. Open its settings to choose mention, list, random, manual or director. Explicitly choose a service only when several providers are active.
+3. After starting, open "This game's settings…" from Menu and expand "Advanced" to see "Speaking rules". The sole bundled provider resolves automatically; no initial provider-selection step is needed. Open its settings to choose mention, list, random, manual or director. Explicitly choose a service only when several providers are active.
 4. Save actor, call and automatic-round limits independently. Failed drafts remain editable while successful fields stay saved.
 5. As host, submit a Direct action naming two present NPCs; list/random can request further beats. With manual strategy, select Choose actors and enter names or aliases in “Actors, one name per line”, then send. Spectators use Advance.
 6. Use Stop advancement or fresh input to end the old chain. Earlier committed stories remain. Reload preserves role and saved limits without replaying old continuation advice.

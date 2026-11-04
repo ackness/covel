@@ -1,4 +1,5 @@
 import { useSettingsWritable } from "../use-settings-save.js";
+import { useSetting } from "../use-settings.js";
 import { defaultModelRoleTag } from "@covel/shared";
 import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
@@ -66,6 +67,8 @@ export function LlmSlotCard({
 }: LlmSlotCardProps) {
   const { t } = useTranslation();
   const writable = useSettingsWritable();
+  // Overriding what a model can do is for authors and troubleshooting.
+  const [developerMode] = useSetting<boolean>("ui.developerView");
   const [editingParameters, setEditingParameters] = useState(false);
   const selectedKey = slotBindingKey(slotConfig[slotId]) ?? "";
   const candidateKey = (preset: (typeof allPresets)[number]) =>
@@ -358,18 +361,20 @@ export function LlmSlotCard({
 
       {effectiveModel && !incompatibleBinding && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2 text-[11px]"
-            aria-expanded={isEditing}
-            onClick={onToggleEditing}
-          >
-            <Pencil className="mr-1 h-3 w-3" />
-            {isEditing
-              ? t("settings.collapseCapability")
-              : t("settings.editCapability")}
-          </Button>
+          {developerMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              aria-expanded={isEditing}
+              onClick={onToggleEditing}
+            >
+              <Pencil className="mr-1 h-3 w-3" />
+              {isEditing
+                ? t("settings.collapseCapability")
+                : t("settings.editCapability")}
+            </Button>
+          )}
           {roleTag === "text" && (
             <Button
               variant="outline"
@@ -385,7 +390,7 @@ export function LlmSlotCard({
               )}
             </Button>
           )}
-          {hasCapOverride && (
+          {developerMode && hasCapOverride && (
             <Button
               variant="ghost"
               size="sm"
@@ -400,7 +405,7 @@ export function LlmSlotCard({
         </div>
       )}
 
-      {effectiveModel && isEditing && (
+      {developerMode && effectiveModel && isEditing && (
         <fieldset disabled={!writable} className="min-w-0">
           <CapabilityEditor
             busy={savingCapabilities}

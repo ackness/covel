@@ -33,7 +33,7 @@ Write one short observation grounded in the latest narrative.
 
 Validate it:
 
-Players without a source checkout can click **Validate** in **Settings → Install & manage**.
+Players without a source checkout can click **Validate** in **Settings → Plugins → Install & manage**.
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/observer
@@ -240,7 +240,7 @@ At this point, your plugin has read the story, called a tool, written data, and 
 | It is not in the plugin list                 | It is not in the user plugin directory, or its manifest has an error. Run the validation from step 4, then restart the backend once                                                              |
 | Selected, but it does not run                | It is not authorized. Handle the "Authorize plugin action" prompt in the game                                                                                                                    |
 | The panel stays empty                        | There was no rumor in this turn's story, or the model did not call the tool. Check the request and reply for the `tavern-rumors/analyst` step on the debug page at <http://localhost:5173/debug> |
-| The `plugin` role is reported as unavailable | Under **Settings → LLM → Model Roles**, choose a model for it, or change this task to use a different role on the session-prep screen                                                            |
+| The `plugin` role is reported as unavailable | Under **Settings → Models → AI roles**, choose a model for it, or change this task to use a different role on the session-prep screen                                                            |
 | Offline run reports a failed case            | You changed the shape of the data but did not update the expectations in `tests/runtime-cases.json`                                                                                              |
 
 ## What you just used

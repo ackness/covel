@@ -18,8 +18,6 @@ import {
   Loader2,
   RefreshCcw,
   HardDrive,
-  FileCode,
-  KeyRound,
   Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -31,7 +29,6 @@ import {
   openLogsDir,
   openConfigDir,
   openDataDir,
-  openKeysEnv,
   pickDataDir,
   reloadServerAndWait,
   setDesktopProxyConfig,
@@ -40,7 +37,6 @@ import {
 } from "@/lib/desktop-bridge.js";
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
 import { useSession } from "@/stores/session-store.js";
-import { useOpenLlmToml } from "./use-open-llm-toml.js";
 import { PaneNotice, usePaneNotice } from "./pane-notice.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 
@@ -61,7 +57,6 @@ interface DesktopInfo {
 export function DesktopPane() {
   const { t } = useTranslation();
   const { state } = useSession();
-  const openLlmTomlFile = useOpenLlmToml();
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const { notice, show, clear } = usePaneNotice();
@@ -256,16 +251,10 @@ export function DesktopPane() {
             <AlertTriangle className="w-4 h-4 text-(--accent-warning) shrink-0 mt-0.5" />
             <div className="space-y-1 flex-1">
               <p className="text-xs font-medium text-(--accent-warning)">
-                {t(
-                  "settings.desktopLlmMissingTitle",
-                  "No LLM slots configured yet",
-                )}
+                {t("settings.desktopLlmMissingTitle")}
               </p>
               <p className="text-[11px] text-(--accent-warning)/80 leading-relaxed">
-                {t(
-                  "settings.desktopLlmMissingHint",
-                  "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
-                )}
+                {t("settings.desktopLlmMissingHint")}
               </p>
             </div>
           </div>
@@ -273,10 +262,10 @@ export function DesktopPane() {
             size="sm"
             variant="outline"
             className="h-7 text-xs"
-            onClick={() => void openLlmTomlFile()}
+            onClick={() => openConfigDir()}
           >
-            <FileCode className="w-3 h-3 mr-1.5" />
-            {t("settings.desktopEditLlm")}
+            <FolderOpen className="w-3 h-3 mr-1.5" />
+            {t("settings.desktopOpenConfig")}
           </Button>
         </div>
       )}
@@ -328,37 +317,6 @@ export function DesktopPane() {
           >
             <HardDrive className="w-3 h-3 mr-1.5" />
             {t("settings.desktopChangeData")}
-          </Button>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {t("settings.desktopEditFiles")}
-        </h3>
-        <div className="text-xs text-muted-foreground">
-          {t("settings.desktopEditFilesHint")}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void openLlmTomlFile()}
-          >
-            <FileCode className="w-3 h-3 mr-1.5" />
-            {t("settings.desktopEditLlm")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              openKeysEnv().catch((err) => {
-                show({ tone: "error", message: String(err) });
-              })
-            }
-          >
-            <KeyRound className="w-3 h-3 mr-1.5" />
-            {t("settings.desktopEditKeys")}
           </Button>
         </div>
       </section>

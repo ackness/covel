@@ -368,7 +368,7 @@ SQLite 媒体工厂在构造成功之前，自己持有共享连接的引用。�
 
 ## Media library
 
-玩家在 **设置 → 已存储的媒体** 里查看和删除保存的媒体。它由 `GET /api/media/library` 和 `POST /api/media/library/delete` 提供（见 [api.md](./api.md)）。不在那里确认，就不会删除任何东西。`POST /api/media/cleanup` 仍然是运维用的工具。
+玩家在 **设置 → 存档与数据 → 已存储的媒体** 里查看和删除保存的媒体。它由 `GET /api/media/library` 和 `POST /api/media/library/delete` 提供（见 [api.md](./api.md)）。不在那里确认，就不会删除任何东西。`POST /api/media/cleanup` 仍然是运维用的工具。
 
 **什么算“在用”。** 一次扫描（`apps/server/src/routes/api/media-reference-scan.ts`，和清理接口共用）为每个媒体 ID 算出“当前有哪些会话在用它”。下面任意一条成立，就算这个会话在用这个文件：
 

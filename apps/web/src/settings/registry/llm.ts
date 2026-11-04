@@ -93,7 +93,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: "Model role assignments",
+    label: "AI roles",
     description: "Choose a provider and model for each model role",
   });
 

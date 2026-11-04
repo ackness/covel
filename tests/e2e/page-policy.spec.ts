@@ -1,7 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PAGE_CSP } from "../../apps/web/src/lib/page-csp.js";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  ONBOARDING_VERSION,
+  seedBrowserSettings,
+  openAppSettings,
+} from "./helpers/player.js";
 import { watchPolicyViolations } from "./helpers/page-policy.js";
 
 // The built app is under its production page policy. A screen
@@ -58,9 +62,7 @@ test("main screens load without a policy violation", async ({ page }) => {
   await expectPagePolicy(page);
 
   await open(page, "/session");
-  await page
-    .getByRole("button", { name: /Configure Providers & Models/ })
-    .click();
+  await openAppSettings(page);
   const settings = page.getByRole("dialog");
   await expect(settings).toBeVisible();
   await settings

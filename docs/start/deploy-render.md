@@ -60,7 +60,7 @@
    }
    ```
 
-6. 需要做运维操作（例如写共享世界）时，在 Render Dashboard 的 **Environment** 里复制 `COVEL_DESKTOP_REST_TOKEN` 的值，填进网页 **设置 → 运维访问**。
+6. 需要做运维操作（例如写共享世界）时，在 Render Dashboard 的 **Environment** 里复制 `COVEL_DESKTOP_REST_TOKEN` 的值，填进网页 **设置 → 高级 → 运维访问**。
 
 ## 免费实例的限制
 

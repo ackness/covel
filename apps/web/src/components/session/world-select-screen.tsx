@@ -26,6 +26,7 @@ import type {
 } from "@/services/api.js";
 import { useRecentSessions } from "@/components/world/use-recent-sessions.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { isUsableTextSlot } from "@/lib/usable-text-slot.js";
 import {
   isWorldLocaleMismatch,
   prioritizeWorldsByLocale,
@@ -104,9 +105,8 @@ export function WorldSelectScreen({
   onWorldDeleted,
 }: WorldSelectScreenProps) {
   const { t, i18n: translation } = useTranslation();
-  const primarySlotLabel = resolvedSlots[0]?.hasCredentials
-    ? formatSlotLabel(resolvedSlots[0])
-    : null;
+  const usableSlot = resolvedSlots.find(isUsableTextSlot);
+  const primarySlotLabel = usableSlot ? formatSlotLabel(usableSlot) : null;
   const enabledPluginCount = plugins.length;
   const prioritizedWorlds = useMemo(
     () =>
@@ -404,6 +404,10 @@ export function WorldSelectScreen({
         onOpenGenerator={() => setGeneratorOpen(true)}
         onOpenSettings={() => {
           setSettingsTarget("llm.providers");
+          onSettingsOpenChange(true);
+        }}
+        onOpenInstall={() => {
+          setSettingsTarget("packages");
           onSettingsOpenChange(true);
         }}
         onOpenAllSettings={() => {

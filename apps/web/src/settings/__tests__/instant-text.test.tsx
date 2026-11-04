@@ -52,7 +52,9 @@ it("persists the Instant text override through the real generic widget and finis
   view.rerender(content("new"));
   expect(document.querySelector('[data-reveal-hidden="true"]')).not.toBeNull();
   await act(async () =>
-    fireEvent.click(screen.getByRole("switch", { name: "Instant text" })),
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Show text all at once" }),
+    ),
   );
   expect(saved["ui.instantText"]).toBe(true);
   expect(document.querySelector('[data-reveal-hidden="true"]')).toBeNull();

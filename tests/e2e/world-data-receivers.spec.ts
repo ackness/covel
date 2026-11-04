@@ -10,6 +10,7 @@ import {
   sendPlayerMessage,
   startGame,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 for (const mode of ["ambiguous", "disabled"] as const) {
@@ -136,7 +137,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
         .filter({ hasText: name })
         .getByRole("button", { name: "Enter", exact: true })
         .click();
-      await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+      await openCustomStart(page);
       const advanced = page.getByTestId("advanced-plugin-settings");
       await advanced.locator("summary").click();
       const receiver = advanced

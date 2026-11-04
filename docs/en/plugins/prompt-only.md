@@ -496,7 +496,7 @@ This section belongs to the whole plugin. When a plugin has several runtimes, a 
 | Validation reports `id must match plugin directory`  | The written `id` differs from the folder name. Delete `id` (without it, the ID is the folder name), or change it to the folder name |
 | It is not in the plugin list                         | It is not in the user plugins directory, or validation did not pass. Restart the backend after validating                           |
 | Selected but did not run                             | Check stage, inputs and model configuration; only code / unknown packages need code approval                                        |
-| The `plugin` role is reported as unavailable         | In **Settings → LLM → Model Roles**, choose a model for it                                                                          |
+| The `plugin` role is reported as unavailable         | In **Settings → Models → AI roles**, choose a model for it                                                                          |
 | The model says "Saved", but there is no record       | It did not call a tool. List the dataset in `agent.tools.datasets`, and state in the prompt when to call `<dataset>-upsert`         |
 | In a Chinese game, changing the prompt has no effect | You changed `PLUGIN.md`, but a Chinese game reads `PLUGIN.zh.md`                                                                    |
 | A setting shows in English in the interface          | There is no entry for it in `locales/zh.yaml`, or its `key` does not match                                                          |

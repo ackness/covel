@@ -147,16 +147,16 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 - 示例见仓库根目录的 [`llm.toml.example`](../../llm.toml.example)。每个模型用途对应一个服务商和一个模型。
 - 内置默认的 `story` 用途指向 `deepseek-v4-flash`。在 `keys.env` 里填好 `DEEPSEEK_API_KEY` 就能运行。
 
-**设置界面。** 模型部分分成“用途分配”“服务商与模型”“生成参数”三页。
+**设置界面。** 模型部分分成“AI 分工”“服务商与密钥”“生成参数”三页。
 
-- “服务商与模型”是一个服务商列表加详情。一个服务商只配置一次 API 地址、协议、密钥和价格倍率，可以批量添加多个模型 ID。
+- “服务商与密钥”是一个服务商列表加详情。一个服务商只配置一次 API 地址、协议、密钥和价格倍率，可以批量添加多个模型 ID。
 - 带 `/` 的模型 ID（例如 `openai/gpt-5.6-sol`）按原样发送。
-- 然后在“用途分配”里分别选服务商和模型，不需要创建自定义预设。
+- 然后在“AI 分工”里分别选服务商和模型，不需要创建自定义预设。
 - 价格倍率默认 `1`。调试页的成本面板用模型参考价乘以这个倍率估算金额。
 
 界面里的模型设置只保存在 `llm.providers`。启动和读取都不会迁移或退回到 `llm.customPresets`。受影响的模型配置和密钥需要在当前的服务商界面里重新建立；旧条目不会自动删除。
 
-**热重载。** 改完 `llm.toml` 不用重启应用。到 **设置 → 模型 → 用途分配** 点“重载配置”：后端重读文件并应用到运行中的模型网关（`POST /api/llm-config/reload`），新增或删除的用途立即生效。这个接口使用 `host.config` 权限：personal 实例配置了启动令牌时，界面自动附带它；未配置时仍受本机网络边界保护。browser-private 和托管实例始终要求运维 Bearer 令牌，见[宿主配置](../internals/security.md#host-profile)。
+**热重载。** 改完 `llm.toml` 不用重启应用。到 **设置 → 模型 → AI 分工** 点“重载配置”：后端重读文件并应用到运行中的模型网关（`POST /api/llm-config/reload`），新增或删除的用途立即生效。这个接口使用 `host.config` 权限：personal 实例配置了启动令牌时，界面自动附带它；未配置时仍受本机网络边界保护。browser-private 和托管实例始终要求运维 Bearer 令牌，见[宿主配置](../internals/security.md#host-profile)。
 
 **解析失败看得见。** `llm.toml` 有语法错误时（例如某个 key 写了 `=` 却没有值）：
 
@@ -166,7 +166,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 ### 给单个世界或会话调整插件 runtime 模型
 
-“用途分配”决定每个用途（slot）在这台设备上实际使用的服务商和模型，例如把 `plugin` 指向 `ali-coding-plan / qwen3.8-flash`。插件的清单只声明用途名（如 `model: memory`；agent 不写时用 `plugin`），不会把 `deepseek-v4-flash` 这样的具体模型写死到世界里。
+“AI 分工”决定每个用途（slot）在这台设备上实际使用的服务商和模型，例如把 `plugin` 指向 `ali-coding-plan / qwen3.8-flash`。插件的清单只声明用途名（如 `model: memory`；agent 不写时用 `plugin`），不会把 `deepseek-v4-flash` 这样的具体模型写死到世界里。
 
 开始会话前的配置页里，插件列表中的每个 agent runtime 都可以再选一个用途：
 
@@ -202,7 +202,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 - 第一次点“编辑 llm.toml”时，应用按这份内置默认生成文件再打开。生效的模型不变。
 - 其他要打开的目标不存在时返回 `open_target_unavailable`。
 
-**设置 → 模型 → 服务商与模型** 里的标记：
+**设置 → 模型 → 服务商与密钥** 里的标记：
 
 - 来自文件的模型标为“来自 llm.toml”；文件不存在时标为“内置默认”。这两类只能通过编辑文件移除。
 - 在界面里添加的服务商保存在 `settings.json`，可以直接删除。
@@ -224,7 +224,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 - 安装插件或世界包后，按提示点“立即重启”。主进程等新后端就绪，再带着当前页面的路径和查询参数重新加载。后端崩溃、重启和恢复的状态会在应用内提示。
 - **安装与管理** 页会先检查桌面重启信息；检查期间“立即重启”不可用。读取失败时显示原因并提供“重试”，成功后恢复操作。开发模式仍需在终端重启 `pnpm dev`。
 - 重启后会话数据保留。社区插件的授权只存在进程内，可能需要重新批准。
-- 系统菜单的“导入插件”和“导入世界”打开 **设置 → 安装与管理**，在那里选择 ZIP、预览、授权和查看结果。
+- 系统菜单的“导入插件”和“导入世界”打开 **设置 → 插件 → 安装与管理**，在那里选择 ZIP、预览、授权和查看结果。
 
 ## 桌面 REST 写接口的 token 门
 
@@ -254,7 +254,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 - 写入用同目录临时文件加改名替换。当前格式是 `schemaVersion: 2`，带一个只增不减的 `revision`。
 - 这个版本用不了的文件不会被转换。v1、没有版本号或损坏的 `settings.json` 在桌面版启动时被改名为 `settings.<v1|unversioned|damaged>.bak.json`，设置从默认值开始。
 - 只是个别值不再被接受时，先把文件复制为 `settings.conflict.bak.json`，再去掉这些值。
-- 这两种情况都在应用内提示一次，副本可以在 **设置 → 数据** 里查看。`keys.env` 不受影响。
+- 这两种情况都在应用内提示一次，副本可以在 **设置 → 存档与数据 → 导入、备份与重置** 里查看。`keys.env` 不受影响。
 - 单独的设置导入/导出文件仍然使用 `schemaVersion: 1`。
 - 升级前请读 [v0.0.42 升级指南](../internals/upgrade-0.0.42.md)。
 

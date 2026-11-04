@@ -551,7 +551,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 
 ## 9. 外观工作室（token 覆盖 / 另存为主题）
 
-玩家不写 CSS 也能改外观。“设置 → 外观”为每个可调的 token 提供一个控件。哪些 token 可以改、用什么控件、有哪些预设值，由 `token-schema.ts` 的 `TOKEN_GROUPS` 定义，其中包括字体栈 `FONT_STACKS` 和氛围底纹 `AMBIENCE_PRESETS`。
+玩家不写 CSS 也能改外观。“设置 → 常用 → 外观”为每个可调的 token 提供一个控件。哪些 token 可以改、用什么控件、有哪些预设值，由 `token-schema.ts` 的 `TOKEN_GROUPS` 定义，其中包括字体栈 `FONT_STACKS` 和氛围底纹 `AMBIENCE_PRESETS`。
 
 **覆盖值存在哪。**
 

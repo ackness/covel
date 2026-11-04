@@ -552,7 +552,7 @@ The runtime restores these records as `ThemeDefinition` objects, and sorts and r
 
 ## 9. Appearance studio (token overrides / save as theme)
 
-Players can change the look without writing any CSS. "Settings → Appearance" gives each adjustable token a control. Which tokens can change, which control each one uses, and which preset values exist are defined by `TOKEN_GROUPS` in `token-schema.ts`. This includes the font stacks `FONT_STACKS` and the ambience textures `AMBIENCE_PRESETS`.
+Players can change the look without writing any CSS. "Settings → General → Appearance" gives each adjustable token a control. Which tokens can change, which control each one uses, and which preset values exist are defined by `TOKEN_GROUPS` in `token-schema.ts`. This includes the font stacks `FONT_STACKS` and the ambience textures `AMBIENCE_PRESETS`.
 
 **Where the override values are stored.**
 

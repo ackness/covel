@@ -29,7 +29,7 @@ Saved games are written to the SQLite database on your computer. To stop, press 
 
 ## 3. Connect a model
 
-The simplest way is the same as in the desktop app. In the interface, go to **Settings → LLM → Providers & Models**, add a provider, and enter your key. See [Connect a model](./models.md). These settings are saved in the current browser.
+The simplest way is the same as in the desktop app. In the interface, go to **Settings → Models → Providers & keys**, add a provider, and enter your key. See [Connect a model](./models.md). These settings are saved in the current browser.
 
 If you want to keep the model setup in files (for example, one shared by a team), copy three example files:
 

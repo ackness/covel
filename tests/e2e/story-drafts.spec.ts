@@ -13,6 +13,7 @@ import {
   startGame,
   useServerWorlds,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 const opening = "The lantern lights the path.";
@@ -82,7 +83,7 @@ async function withHeldStory(
   try {
     await page.goto("/session");
     await selectWorldByText(page, /Lantern Barrow|提灯古冢/);
-    await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+    await openCustomStart(page);
     await page
       .locator("button[aria-pressed]")
       .filter({ hasText: "Story Only" })

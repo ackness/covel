@@ -15,7 +15,7 @@
 | 世界包        | 提供预制背景、角色图和画风描述           | `worldData` 中的 `stage.scene-assets@1`、`stage.scenes@1`、`character.portrait-assets@1` 等数据契约 |
 | `scene-stage` | 展示世界预制背景，缺图的地点回退世界头图 | 无生成设置                                                                                          |
 | 社区插画插件  | 从剧情生成提示词，提供手动生成入口和画廊 | 会话启用插件，选择其 `modelPresetId`；主仓不内置这些业务流程                                        |
-| 模型用途      | 把任务需要的角色绑定到服务商与模型       | 设置中的用途分配，或当前生效的 `llm.toml`                                                           |
+| 模型用途      | 把任务需要的角色绑定到服务商与模型       | 设置中的 AI 分工，或当前生效的 `llm.toml`                                                           |
 | 图像 wire     | 编码请求、解析图片响应、处理供应商协议   | 模型用途的 `providerRequestMetadata.imageWire`                                                      |
 | `ctx.images`  | 解析模型、调用 wire、去重并保存媒体      | function runtime 调用 `ctx.images.generate()`                                                       |
 

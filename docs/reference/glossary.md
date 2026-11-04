@@ -1,6 +1,6 @@
 # 术语表
 
-这一页给 Covel 文档、代码和界面里用到的词下定义。同一个东西在不同地方叫法不一致时（例如界面写“模型用途”，代码写 slot），以这一页为准：改别处，不改这里。
+这一页给 Covel 文档、代码和界面里用到的词下定义。同一个东西在不同地方叫法不一致时（例如界面写“AI 分工”，代码写 slot），以这一页为准：改别处，不改这里。
 
 条目按英文字母排序。每条先用一两句话说清楚它是什么，再给出详细页面。
 
@@ -53,7 +53,7 @@
 | Segment | 提示词段 | 组装好的提示词里的一段。故事里的段落是 **Story segment**。 |
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
 | Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
-| Slot | 槽位 | 设置界面里叫“模型用途”。 |
+| Slot | 槽位 | 设置界面里叫“AI 分工”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
 | Story-attached operation | 故事附带的操作 | 故事或 setup 所在提交单元里的操作：各自一个 savepoint，失败只丢它自己，故事照常提交。 |
 | Story draft | 故事草稿 | 故事 runtime 提交前已经写出的部分，只用来显示；不是输出，不保存。 |
@@ -110,7 +110,7 @@
 | record | 记录 | 插件数据里存下的一项 | row, object |
 | entry | 条目 | 玩家读到的列表里的一项，例如图鉴条目 | item（item 指行囊里的物品） |
 | item | 物品 | 角色随身带的东西 |  |
-| dimension | 维度 | 由世界定义、随故事变化的一项世界状态 | attribute（attribute 是角色的） |
+| dimension | 维度（界面里写作“世界状态”） | 由世界定义、随故事变化的一项世界状态 | attribute（attribute 是角色的） |
 | attribute | 属性 | 角色的一个数字或文字字段 | stat |
 | world rule | 世界规则 | 提示词里带着的一条世界规则 | lore entry |
 | quest | 任务 | 故事交给玩家的一个目标 | mission, task |
@@ -371,7 +371,7 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 
 ## Slot
 
-选模型用的一个具名路由键（`story`、`plugin`、`memory`、`image` 等），在设置界面里叫**模型用途**。
+选模型用的一个具名路由键（`story`、`plugin`、`memory`、`image` 等），在设置界面里叫**AI 分工**。
 
 插件清单里只写槽位的名字；`llm.toml` 或保存下来的“服务商/模型”设置把它绑定到具体的模型。备用模型只在同一类输出之内选择：图像请求不会落到文本模型上。
 

@@ -163,9 +163,7 @@ describe("SettingWidget accessible labels", () => {
     ).toBeTruthy();
     expect(screen.getByRole("option", { name: "Светлая" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Тёмная" })).toBeTruthy();
-    expect(
-      screen.getByLabelText("Ограничение сообщений в окне чата"),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Размер окна сообщений")).toBeTruthy();
     expect(screen.getByLabelText("Метка плагина")).toBeTruthy();
     expect(screen.getByRole("option", { name: "История" })).toBeTruthy();
   });

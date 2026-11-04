@@ -13,6 +13,7 @@ import {
   startGame,
   useServerWorlds,
   waitForTurnIdle,
+  openCustomStart,
 } from "./helpers/player.js";
 
 for (const explicitSetup of [false, true]) {
@@ -72,7 +73,7 @@ for (const explicitSetup of [false, true]) {
       try {
         await page.goto("/session");
         await selectWorldByText(page, /Lantern Barrow|提灯古冢/);
-        await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+        await openCustomStart(page);
         await page
           .locator("button[aria-pressed]")
           .filter({ hasText: "Story Only" })

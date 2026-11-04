@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useSetting } from "@/settings/use-settings.js";
 import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
 import { Card, CardContent } from "@/components/ui/card.js";
@@ -34,6 +35,7 @@ export function WorldLoreCard({
   onRetry,
 }: WorldLoreCardProps) {
   const { t } = useTranslation();
+  const [developerMode] = useSetting<boolean>("ui.developerView");
   // The story prompt carries only the first part of the lore: say so while the
   // player edits, with the measure the world page and `validate:world` use.
   const fitted = useMemo(() => fitWorldLore(loreValue), [loreValue]);
@@ -91,7 +93,7 @@ export function WorldLoreCard({
             placeholder={t("session.lorePlaceholder")}
             aria-label={t("session.worldLore", "World Document")}
           />
-          {fitted.truncated && (
+          {developerMode && fitted.truncated && (
             <p
               role="note"
               className="rounded border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"

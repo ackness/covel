@@ -4,7 +4,9 @@ import {
   localizedWorldText,
   playerVisibleLore,
 } from "@covel/shared";
+import { useWorldThemeMusic } from "./world-music.js";
 import { useTranslation } from "react-i18next";
+import { useSetting } from "@/settings/use-settings.js";
 import type { CSSProperties } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import type { WorldRecord, WorldSummary } from "@/services/api.js";
@@ -23,9 +25,7 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { worldPackageInfo } from "@/lib/package-info.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
 import { DimensionValueView } from "@/components/session/dimension-value-view.js";
-import { MusicSwitch } from "@/components/session/session-music.js";
 import { WorldGallerySection } from "./world-gallery.js";
-import { useWorldThemeMusic } from "./world-music.js";
 import { WorldRevisePanel, isWorldRevisable } from "./world-revise-panel.js";
 import {
   WorldTranslatePanel,
@@ -62,6 +62,9 @@ export function WorldDetailView({
   const playLocale = worldPlayLocale(world, interfaceLocale);
   const languageBadge = worldLanguageBadge(playLocale);
   const languageName = worldLanguageName(playLocale, interfaceLocale);
+  const [developerMode] = useSetting<boolean>("ui.developerView");
+  // The world list plays the world's theme music while it is shown.
+  useWorldThemeMusic(world);
   // The name and summary of that edition, not always the world's own language.
   const shown = localizedWorldText(
     {
@@ -78,7 +81,6 @@ export function WorldDetailView({
   const lore = playerVisibleLore(shown.lore ?? "").trim();
   // The model reads the narrator-only parts too, so the whole text counts.
   const fitted = fitWorldLore(shown.lore ?? "");
-  const hasThemeMusic = useWorldThemeMusic(world);
 
   const hasDimensions =
     dims &&
@@ -117,12 +119,6 @@ export function WorldDetailView({
                 <span>{t("world.backToList")}</span>
               </Button>
               <div className="flex-1" />
-              {hasThemeMusic && (
-                <MusicSwitch
-                  className="ui-btn h-10 w-10 border border-white/25 bg-black/24 p-0 text-white hover:bg-white/12"
-                  t={t}
-                />
-              )}
               {languageBadge && languageName && (
                 <Badge
                   variant="outline"
@@ -191,7 +187,7 @@ export function WorldDetailView({
           className="max-w-3xl text-sm"
         />
 
-        {fitted.truncated && (
+        {developerMode && fitted.truncated && (
           <p
             role="note"
             className="max-w-3xl rounded border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"

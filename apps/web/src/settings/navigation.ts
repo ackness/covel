@@ -1,17 +1,14 @@
-import type {
-  SettingEntry,
-  SettingGroup,
-  SettingsStoreApi,
-} from "@covel/settings";
+import type { SettingEntry, SettingsStoreApi } from "@covel/settings";
 import { DEFAULT_LOCALE, resolveI18nText, type I18nText } from "@covel/shared";
 import i18n from "@/i18n";
 import { resolveSettingEntryText } from "./framework-i18n.js";
 
-export type NavNodeKind = "group" | "plugin" | "subgroup";
+export type NavNodeKind = "header" | "group" | "plugin" | "subgroup";
 
 export interface NavNode {
   id: string;
   label: string;
+  /** `header` nodes only title a group of panes and cannot be selected. */
   kind: NavNodeKind;
   /** Registered entries owned by this pane, also used for search and deep links. */
   children: SettingEntry[];
@@ -19,16 +16,13 @@ export interface NavNode {
   parentId?: string;
 }
 
-const GROUP_ORDER: SettingGroup[] = [
-  "general",
-  "llm",
-  "plugin",
-  "desktop",
-  "data",
-];
-
 const PACKAGES_NODE_ID = "packages";
 const APPEARANCE_NODE_ID = "appearance";
+const GENERAL_NODE_ID = "general";
+const ADVANCED_NODE_ID = "advanced";
+const GENERAL_HEADER_ID = "group.general";
+const SAVES_HEADER_ID = "group.saves";
+const ADVANCED_HEADER_ID = "group.advanced";
 
 /**
  * Theme keys are registered under `general` so the store owns their values,
@@ -41,34 +35,65 @@ const APPEARANCE_KEYS = new Set([
   "ui.scheme",
   "ui.themeManager",
 ]);
+
+/** Language and music, then the reading section. */
+const PREFERENCE_KEYS = [
+  "ui.locale",
+  "audio.musicEnabled",
+  "audio.musicVolume",
+  "ui.instantText",
+  "ui.liveOutput",
+  "ui.expandTurnUpdates",
+] as const;
+/** The part of the preferences pane that is about reading the story. */
+export const READING_KEYS: ReadonlySet<string> = new Set([
+  "ui.instantText",
+  "ui.liveOutput",
+  "ui.expandTurnUpdates",
+]);
+export const DEVELOPER_MODE_KEY = "ui.developerView";
+/** Operator and author options, in the order the Advanced pane shows them. */
+const ADVANCED_KEYS = [
+  DEVELOPER_MODE_KEY,
+  "diagnostics.traceRetention",
+  "ui.chatMessageWindow",
+  "world.authoringIdleTimeoutSeconds",
+] as const;
+const INTERNAL_KEYS = new Set(["ui.onboardedVersion"]);
+
 const OPERATOR_ACCESS_NODE_ID = "operator-access";
 const RAW_CONFIG_NODE_ID = "raw-config";
 const MEDIA_LIBRARY_NODE_ID = "media-library";
+const DATA_NODE_ID = "data";
 function navigationLabels(locale: string) {
   const t = i18n.getFixedT(locale);
   return {
-    groups: {
+    headers: {
       general: t("settings.groupGeneral", "General"),
-      llm: t("settings.groupLlm", "LLM"),
+      llm: t("settings.groupLlm", "Models"),
       plugin: t("settings.groupPlugins", "Plugins"),
+      saves: t("settings.groupData", "Saves & data"),
+      advanced: t("settings.groupAdvanced", "Advanced"),
       desktop: t("settings.groupDesktop", "Desktop"),
-      data: t("settings.groupData", "Data"),
-    } satisfies Record<SettingGroup, string>,
+    },
     llmSubnodes: [
-      { id: "llm.slots", label: t("settings.llmSlots", "Model Roles") },
+      { id: "llm.slots", label: t("settings.llmSlots", "AI roles") },
       {
         id: "llm.providers",
-        label: t("settings.llmPresets", "Providers & Models"),
+        label: t("settings.llmPresets", "Providers & keys"),
       },
       {
         id: "llm.advanced",
         label: t("settings.llmAdvanced", "Generation"),
       },
     ],
+    preferences: t("settings.preferencesNavLabel", "Preferences"),
     appearance: t("settings.appearanceNavLabel", "Appearance"),
-    rawConfig: t("settings.rawConfigNavLabel", "Configuration files"),
+    data: t("settings.dataNavLabel", "Import, backup & reset"),
+    rawConfig: t("settings.rawConfigNavLabel", "Configuration file"),
     mediaLibrary: t("settings.mediaLibraryNavLabel", "Stored media"),
-    operatorAccess: t("settings.operatorAccessNavLabel", "Operator Access"),
+    operatorAccess: t("settings.operatorAccessNavLabel", "Operator access"),
+    advancedOptions: t("settings.advancedNavLabel", "Options"),
     packages: t("settings.packages.navLabel", "Install & manage"),
   };
 }
@@ -79,6 +104,8 @@ interface BuildNavOptions {
   readonly includeOperatorAccess?: boolean;
   /** False on a hosted server, which offers no media library. Defaults to true. */
   readonly includeMediaLibrary?: boolean;
+  /** Shows the settings that only authors and troubleshooting need. */
+  readonly developerMode?: boolean;
   readonly locale?: string;
   readonly pluginDisplayNames?: Readonly<Record<string, I18nText | undefined>>;
 }
@@ -86,10 +113,11 @@ interface BuildNavOptions {
 /**
  * Build the left-nav tree.
  *
- * Nodes are a flat list rather than a tree to keep the renderer simple;
- * sub-nodes carry `parentId` and render indented. LLM always expands into
- * 3 fixed sub-nodes (model roles / providers and models / generation) backed by
- * purpose-built panes, not widget dispatch.
+ * Five groups: General, Models, Plugins, Saves & data and Advanced, plus
+ * Desktop in the desktop app. Nodes are a flat list rather than a tree to keep
+ * the renderer simple; sub-nodes carry `parentId`. The pane for most nodes is
+ * purpose-built; a node's `children` are the registered entries it owns, used
+ * for search and deep links.
  */
 export function buildNavTree(
   store: SettingsStoreApi,
@@ -98,155 +126,184 @@ export function buildNavTree(
   const locale = opts.locale ?? DEFAULT_LOCALE;
   const labels = navigationLabels(locale);
   const all = store.listEntries();
-  const byGroup = new Map<SettingGroup, SettingEntry[]>();
-  for (const e of all) {
-    const bucket = byGroup.get(e.group) ?? [];
-    bucket.push(e);
-    byGroup.set(e.group, bucket);
-  }
+  const byKey = new Map(all.map((entry) => [entry.key, entry] as const));
+  const pick = (keys: readonly string[]) =>
+    keys.flatMap((key) => {
+      const entry = byKey.get(key);
+      return entry ? [entry] : [];
+    });
+  const plain = (entry: SettingEntry) =>
+    entry.group === "general" &&
+    entry.widget !== "custom" &&
+    !APPEARANCE_KEYS.has(entry.key) &&
+    !INTERNAL_KEYS.has(entry.key);
+  // Anything else registered as a plain general setting still shows up, under
+  // Advanced, so a new entry is never unreachable.
+  const knownKeys = new Set<string>([...PREFERENCE_KEYS, ...ADVANCED_KEYS]);
+  const extraAdvanced = all.filter(
+    (entry) => plain(entry) && !knownKeys.has(entry.key),
+  );
   const nodes: NavNode[] = [];
-  for (const group of GROUP_ORDER) {
-    const entries = byGroup.get(group) ?? [];
-    if (group === "llm") {
-      nodes.push({
-        id: "llm",
-        label: labels.groups.llm,
-        kind: "group",
-        children: [],
-      });
-      for (const sub of labels.llmSubnodes) {
-        nodes.push({
-          id: sub.id,
-          label: sub.label,
-          kind: "subgroup",
-          parentId: "llm",
-          children: all.filter((entry) => {
-            if (sub.id === "llm.providers") {
-              return (
-                entry.key.startsWith("keys.") ||
-                ["llm.providers", "llm.providerPriceMultipliers"].includes(
-                  entry.key,
-                )
-              );
-            }
-            if (sub.id === "llm.advanced")
-              return entry.key === "llm.paramOverrides";
-            return ["llm.slotConfig", "llm.capabilityOverrides"].includes(
+
+  nodes.push({
+    id: GENERAL_HEADER_ID,
+    label: labels.headers.general,
+    kind: "header",
+    children: [],
+  });
+  nodes.push({
+    id: GENERAL_NODE_ID,
+    label: labels.preferences,
+    kind: "subgroup",
+    parentId: GENERAL_HEADER_ID,
+    children: pick(PREFERENCE_KEYS),
+  });
+  nodes.push({
+    id: APPEARANCE_NODE_ID,
+    label: labels.appearance,
+    kind: "subgroup",
+    parentId: GENERAL_HEADER_ID,
+    children: all.filter((entry) => APPEARANCE_KEYS.has(entry.key)),
+  });
+
+  nodes.push({
+    id: "llm",
+    label: labels.headers.llm,
+    kind: "header",
+    children: [],
+  });
+  for (const sub of labels.llmSubnodes) {
+    nodes.push({
+      id: sub.id,
+      label: sub.label,
+      kind: "subgroup",
+      parentId: "llm",
+      children: all.filter((entry) => {
+        if (sub.id === "llm.providers") {
+          return (
+            entry.key.startsWith("keys.") ||
+            ["llm.providers", "llm.providerPriceMultipliers"].includes(
               entry.key,
-            );
-          }),
-        });
-      }
-    } else if (group === "plugin") {
-      const byPlugin = new Map<string, SettingEntry[]>();
-      for (const e of entries) {
-        if (!e.pluginId) continue;
-        const bucket = byPlugin.get(e.pluginId) ?? [];
-        bucket.push(e);
-        byPlugin.set(e.pluginId, bucket);
-      }
-      nodes.push({
-        id: "plugin",
-        label: labels.groups.plugin,
-        kind: "group",
-        children: [],
-      });
-      nodes.push({
-        id: PACKAGES_NODE_ID,
-        label: labels.packages,
-        kind: "subgroup",
-        parentId: "plugin",
-        children: [],
-      });
-      for (const [pluginId, pluginEntries] of byPlugin) {
-        nodes.push({
-          id: `plugin.${pluginId}`,
-          label:
-            resolveI18nText(opts.pluginDisplayNames?.[pluginId], locale) ??
-            pluginId,
-          kind: "plugin",
-          parentId: "plugin",
-          children: pluginEntries,
-        });
-      }
-    } else if (group === "desktop") {
-      if (opts.includeDesktop) {
-        nodes.push({
-          id: "desktop",
-          label: labels.groups.desktop,
-          kind: "group",
-          children: entries,
-        });
-      }
-    } else if (group === "data") {
-      nodes.push({
-        id: "data",
-        label: labels.groups.data,
-        kind: "group",
-        children: entries,
-      });
-      if (opts.includeMediaLibrary !== false) {
-        nodes.push({
-          id: MEDIA_LIBRARY_NODE_ID,
-          label: labels.mediaLibrary,
-          kind: "group",
-          children: [],
-        });
-      }
-      nodes.push({
-        id: RAW_CONFIG_NODE_ID,
-        label: labels.rawConfig,
-        kind: "group",
-        children: [],
-      });
-    } else if (group === "general") {
-      const generalEntries = entries.filter(
-        (e) =>
-          e.widget !== "custom" &&
-          !APPEARANCE_KEYS.has(e.key) &&
-          e.key !== "ui.onboardedVersion",
-      );
-      if (generalEntries.length > 0) {
-        nodes.push({
-          id: group,
-          label: labels.groups.general,
-          kind: "group",
-          children: generalEntries,
-        });
-      }
-      nodes.push({
-        id: APPEARANCE_NODE_ID,
-        label: labels.appearance,
-        kind: "group",
-        children: entries.filter((entry) => APPEARANCE_KEYS.has(entry.key)),
-      });
-    } else if (entries.length > 0) {
-      nodes.push({
-        id: group,
-        label: labels.groups[group],
-        kind: "group",
-        children: entries,
-      });
-    }
+            )
+          );
+        }
+        if (sub.id === "llm.advanced")
+          return entry.key === "llm.paramOverrides";
+        // Capability overrides are for authors and troubleshooting.
+        return (
+          entry.key === "llm.slotConfig" ||
+          (opts.developerMode === true &&
+            entry.key === "llm.capabilityOverrides")
+        );
+      }),
+    });
   }
+
+  const byPlugin = new Map<string, SettingEntry[]>();
+  for (const entry of all) {
+    if (entry.group !== "plugin" || !entry.pluginId) continue;
+    const bucket = byPlugin.get(entry.pluginId) ?? [];
+    bucket.push(entry);
+    byPlugin.set(entry.pluginId, bucket);
+  }
+  nodes.push({
+    id: "plugin",
+    label: labels.headers.plugin,
+    kind: "header",
+    children: [],
+  });
+  nodes.push({
+    id: PACKAGES_NODE_ID,
+    label: labels.packages,
+    kind: "subgroup",
+    parentId: "plugin",
+    children: all.filter((entry) => entry.key === "trust.sources"),
+  });
+  for (const [pluginId, pluginEntries] of byPlugin) {
+    nodes.push({
+      id: `plugin.${pluginId}`,
+      label:
+        resolveI18nText(opts.pluginDisplayNames?.[pluginId], locale) ??
+        pluginId,
+      kind: "plugin",
+      parentId: "plugin",
+      children: pluginEntries,
+    });
+  }
+
+  nodes.push({
+    id: SAVES_HEADER_ID,
+    label: labels.headers.saves,
+    kind: "header",
+    children: [],
+  });
+  nodes.push({
+    id: DATA_NODE_ID,
+    label: labels.data,
+    kind: "subgroup",
+    parentId: SAVES_HEADER_ID,
+    children: all.filter((entry) => entry.group === "data"),
+  });
+  if (opts.includeMediaLibrary !== false) {
+    nodes.push({
+      id: MEDIA_LIBRARY_NODE_ID,
+      label: labels.mediaLibrary,
+      kind: "subgroup",
+      parentId: SAVES_HEADER_ID,
+      children: [],
+    });
+  }
+
+  nodes.push({
+    id: ADVANCED_HEADER_ID,
+    label: labels.headers.advanced,
+    kind: "header",
+    children: [],
+  });
+  nodes.push({
+    id: ADVANCED_NODE_ID,
+    label: labels.advancedOptions,
+    kind: "subgroup",
+    parentId: ADVANCED_HEADER_ID,
+    children: [...pick(ADVANCED_KEYS), ...extraAdvanced],
+  });
+  nodes.push({
+    id: RAW_CONFIG_NODE_ID,
+    label: labels.rawConfig,
+    kind: "subgroup",
+    parentId: ADVANCED_HEADER_ID,
+    children: [],
+  });
   // Pure-web hosted deployments need an explicit browser-local credential
-  // entry point before any operator-gated management request can succeed.
-  // It comes after the normal groups so the default pane stays the same. A
+  // entry point before any operator-gated management request can succeed. A
   // self-tier server ignores the header, so the caller leaves the pane out
   // once that server has said so.
   if (opts.includeOperatorAccess !== false) {
     nodes.push({
       id: OPERATOR_ACCESS_NODE_ID,
       label: labels.operatorAccess,
-      kind: "group",
+      kind: "subgroup",
+      parentId: ADVANCED_HEADER_ID,
       children: [],
+    });
+  }
+
+  if (opts.includeDesktop) {
+    nodes.push({
+      id: "desktop",
+      label: labels.headers.desktop,
+      kind: "group",
+      children: all.filter((entry) => entry.group === "desktop"),
     });
   }
   return nodes;
 }
 
 export {
+  ADVANCED_NODE_ID,
   APPEARANCE_NODE_ID,
+  DATA_NODE_ID,
+  GENERAL_NODE_ID,
   MEDIA_LIBRARY_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
@@ -261,7 +318,7 @@ export function resolveSettingsNode(
   const target = key.startsWith("keys.") ? "llm.providers" : key;
   const exact = nodes.find((node) => node.id === target);
   if (exact) {
-    return exact.id === "llm" || exact.id === "plugin"
+    return exact.kind === "header"
       ? nodes.find((node) => node.parentId === exact.id)
       : exact;
   }

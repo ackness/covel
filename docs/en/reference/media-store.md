@@ -368,7 +368,7 @@ The desktop app and the web app read media using the same authoritative store me
 
 ## Media library
 
-The player views and deletes saved media in **Settings → Stored media**. It is served by `GET /api/media/library` and `POST /api/media/library/delete` (see [api.md](./api.md)). Nothing is deleted without confirming there. `POST /api/media/cleanup` is still an operator tool.
+The player views and deletes saved media in **Settings → Saves & data → Stored media**. It is served by `GET /api/media/library` and `POST /api/media/library/delete` (see [api.md](./api.md)). Nothing is deleted without confirming there. `POST /api/media/cleanup` is still an operator tool.
 
 **What counts as "in use".** One scan (`apps/server/src/routes/api/media-reference-scan.ts`, shared with the cleanup endpoint) works out, for each media ID, which sessions are using it right now. A session counts as using a file when any of the following is true:
 

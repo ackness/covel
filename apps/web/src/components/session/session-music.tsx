@@ -1,8 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { TFunction } from "i18next";
-import { Volume2, VolumeX } from "lucide-react";
 import type { StageMusicModel } from "@covel/shared";
-import { Button } from "@/components/ui/button.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { useBgmPlayer } from "@/hooks/use-bgm-player.js";
 import { DEFAULT_FADE_MS } from "@/lib/bgm-player.js";
@@ -71,45 +69,6 @@ export function SessionMusic({ sessionId }: { readonly sessionId: string }) {
   }, [sessionId, key, ref?.id, loop, trackVolume, fadeMs]);
 
   return null;
-}
-
-/** The player's music switch, where a surface has music to switch. */
-export function MusicSwitch({
-  title,
-  className,
-  ghost = false,
-  t,
-}: {
-  /** What is playing, added to the tooltip. */
-  readonly title?: string;
-  readonly className: string;
-  /** Drawn as the quiet icon buttons of a toolbar. */
-  readonly ghost?: boolean;
-  readonly t: TFunction;
-}) {
-  const [enabled, setEnabled] = useSetting<boolean>(MUSIC_ENABLED_SETTING);
-  const label = t(enabled ? "session.musicMute" : "session.musicUnmute");
-  const props = {
-    className,
-    onClick: () => void setEnabled(!enabled),
-    "aria-label": label,
-    "aria-pressed": enabled,
-    title: title ? `${label} — ${title}` : label,
-  };
-  const icon = enabled ? (
-    <Volume2 className="h-4 w-4" />
-  ) : (
-    <VolumeX className="h-4 w-4" />
-  );
-  return ghost ? (
-    <Button variant="ghost" size="icon" {...props}>
-      {icon}
-    </Button>
-  ) : (
-    <button type="button" {...props}>
-      {icon}
-    </button>
-  );
 }
 
 /**

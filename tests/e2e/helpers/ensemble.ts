@@ -15,6 +15,7 @@ import {
   startGame,
   useServerWorlds,
   waitForTurnIdle,
+  openCustomStart,
 } from "./player.js";
 
 export function ensembleReply(
@@ -168,6 +169,7 @@ export async function prepareEnsemble(
   await selectWorldByText(page, new RegExp(name));
   // Creation waits for the full world record and its IndexedDB lore draft.
   // Concurrent browser starts can finish these after the summary has painted.
+  await openCustomStart(page);
   const loreCard = page.getByRole("button", { name: /^World Document/ });
   await loreCard.click();
   await expect(
@@ -177,11 +179,18 @@ export async function prepareEnsemble(
     page.getByRole("status").filter({ hasText: "Loading saved draft..." }),
   ).toHaveCount(0, { timeout: 30_000 });
   await loreCard.click();
-  await page.getByLabel("Play as", { exact: true }).selectOption(role);
-  await expect(page.getByLabel("Play as", { exact: true })).toHaveValue(role);
+  const roleLabel = {
+    player: "Player",
+    host: "Game master",
+    spectator: "Spectator",
+  }[role];
+  await page.getByRole("radio", { name: roleLabel, exact: true }).check();
+  await expect(
+    page.getByRole("radio", { name: roleLabel, exact: true }),
+  ).toBeChecked();
   const start = page.getByRole("button", { name: "Start Game", exact: true });
   await expect(start).toBeEnabled();
-  await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
+  await openCustomStart(page);
   const advanced = page.getByTestId("advanced-plugin-settings");
   await advanced.locator("summary").click();
   const excluded = [

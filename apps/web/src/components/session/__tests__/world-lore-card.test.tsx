@@ -4,6 +4,11 @@ import "@/i18n/index.js";
 import { WORLD_LORE_TOKEN_BUDGET } from "@covel/shared";
 import { WorldLoreCard } from "../session-prep/world-lore-card.js";
 
+const dev = vi.hoisted(() => ({ on: true }));
+vi.mock("@/settings/use-settings.js", () => ({
+  useSetting: () => [dev.on, vi.fn()],
+}));
+
 function card(lore: string) {
   return render(
     <WorldLoreCard
@@ -26,6 +31,13 @@ describe("WorldLoreCard", () => {
     expect(screen.getByRole("note").textContent).toContain(
       String(WORLD_LORE_TOKEN_BUDGET),
     );
+  });
+
+  it("keeps the warning to developer mode", () => {
+    dev.on = false;
+    card("A long line of lore.\n".repeat(WORLD_LORE_TOKEN_BUDGET));
+    expect(screen.queryByRole("note")).toBeNull();
+    dev.on = true;
   });
 
   it("says nothing for lore that fits", () => {
