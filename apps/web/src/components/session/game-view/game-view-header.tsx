@@ -25,7 +25,7 @@ import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
 import { ConnectionStatus } from "./connection-status.js";
 import { NoticeStatusChips } from "./notice-status-chips.js";
-import { HeaderMenu, MenuItem } from "./header-menu.js";
+import { HEADER_TEXT_BUTTON, HeaderMenu, MenuItem } from "./header-menu.js";
 import {
   executionTone,
   type ExecutionPresentation,
@@ -248,6 +248,7 @@ export function GameViewHeader({
               label={t("session.pluginPages")}
               active={Boolean(parsePluginViewMode(viewMode))}
               icon={ChevronDown}
+              inGroup
               triggerClassName="h-10 w-7 rounded-none rounded-r-[calc(var(--radius-control)-1px)] border-l border-(--rule-color) md:h-8"
             >
               {pluginViews.map((entry) => (
@@ -269,7 +270,7 @@ export function GameViewHeader({
         <Button
           variant="ghost"
           size="sm"
-          className={`ui-session-action h-10 shrink-0 gap-1.5 px-2 md:h-8 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
+          className={`ui-session-action shrink-0 ${HEADER_TEXT_BUTTON} ${isRightCollapsed ? "" : "bg-accent text-accent-foreground"}`}
           onClick={onToggleRightPanel}
           aria-label={t("session.sidePanel")}
           aria-pressed={!isRightCollapsed}

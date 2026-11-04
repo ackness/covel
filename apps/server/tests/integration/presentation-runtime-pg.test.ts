@@ -138,11 +138,7 @@ describe.skipIf(!database)("PostgreSQL presentation transactions", () => {
           )
         )?.value,
       ).toEqual({ title: "New override" });
-      expect(
-        (await store.listTraceEvents(f.sessionId)).find(
-          (trace) => trace.type === "presentation.completed",
-        )?.payload,
-      ).toMatchObject({ reason: "superseded" });
+      expect(await f.completion()).toMatchObject({ reason: "superseded" });
       expect(
         await store.queryTurnResults(f.sessionId, { commitStatus: "pending" }),
       ).toHaveLength(0);

@@ -1,3 +1,4 @@
+import { expect, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import type {
@@ -284,6 +285,21 @@ export async function presentationFixture(
       worker.wake();
     },
     jobs: () => listRuntimeJobs(store, { sessionId }),
+    /**
+     * Waits for the presentation's terminal trace. The job turns `succeeded`
+     * inside the commit transaction, and the trace is written after it, so a
+     * finished job can be seen a moment before its trace exists.
+     */
+    completion: async () => {
+      let payload: unknown;
+      await vi.waitFor(async () => {
+        payload = (await store.listTraceEvents(sessionId)).find(
+          (trace) => trace.type === "presentation.completed",
+        )?.payload;
+        expect(payload).toBeDefined();
+      });
+      return payload;
+    },
     close: async () => {
       release();
       await worker.close();

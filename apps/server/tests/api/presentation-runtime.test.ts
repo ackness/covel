@@ -576,11 +576,7 @@ describe("durable public presentation", () => {
           "display",
         ),
       ).toEqual([]);
-      expect(
-        (await f.store.listTraceEvents(f.sessionId)).find(
-          (trace) => trace.type === "presentation.completed",
-        )?.payload,
-      ).toMatchObject({
+      expect(await f.completion()).toMatchObject({
         status: "no-op",
         reason: "budget-exhausted",
         budget: { calls: { used: 2 } },
@@ -930,11 +926,7 @@ describe("durable public presentation", () => {
           expect((await f.jobs())[0]?.status).toBe("stale"),
         );
         expect(f.calls).toHaveLength(0);
-        expect(
-          (await f.store.listTraceEvents(f.sessionId)).find(
-            (row) => row.type === "presentation.completed",
-          )?.payload,
-        ).toMatchObject({ reason: "unavailable" });
+        expect(await f.completion()).toMatchObject({ reason: "unavailable" });
       } finally {
         await f.close();
       }
