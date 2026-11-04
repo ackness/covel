@@ -799,9 +799,11 @@ for (const retire of [true, false]) {
       await ready;
       if (retire) {
         await openStudioConfiguration(page);
-        await page.getByTitle("Switch session", { exact: true }).click();
+        // The drawer lists every other save of this world; only the
+        // destination exists, so it is the one switch button.
         await page
-          .getByRole("button", { name: new RegExp(`^${destination}\\b`) })
+          .getByRole("dialog", { name: "This game's settings" })
+          .getByRole("button", { name: /^Switch save:/ })
           .click();
         await expect(page).toHaveURL(new RegExp(`sid=${destination}`));
         expect(

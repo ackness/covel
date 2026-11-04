@@ -40,7 +40,10 @@ vi.mock("@/lib/nav-events.js", () => ({
   emitSettingsRequest: mocks.emitSettings,
   emitWorldListRequest: vi.fn(),
 }));
-vi.mock("@/components/ui/notice-host", () => ({ NoticeHost: () => null }));
+vi.mock("@/components/ui/notice-host", () => ({
+  NoticeHost: () => null,
+  useNoticeAnchor: () => undefined,
+}));
 vi.mock("@/components/notice-bell", () => ({
   NoticeBell: () => <button>bell</button>,
 }));

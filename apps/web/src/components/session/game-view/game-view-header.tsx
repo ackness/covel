@@ -117,6 +117,9 @@ export function GameViewHeader({
       ) &&
       (sessionPhase !== "setup" ||
         ["generating", "updating"].includes(executionState)));
+  // Stop owns a row of its own on a phone: the view switch and menu leave no
+  // room beside it, and a control hidden under them cannot be pressed.
+  const showStop = Boolean(stoppable && composerHidden && onStop);
   const headerRef = useRef<HTMLDivElement>(null);
   useNoticeAnchor(headerRef);
 
@@ -125,7 +128,9 @@ export function GameViewHeader({
       ref={headerRef}
       className="ui-session-header ui-panel-header ui-drag-region relative h-auto min-h-(--panel-header-height) py-1 px-2 md:px-3 flex justify-between items-center gap-3 z-10 flex-wrap sm:flex-nowrap"
     >
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      <div
+        className={`flex items-center gap-2 min-w-0 flex-1 ${showStop ? "max-sm:basis-full" : ""}`}
+      >
         <Button
           variant="ghost"
           size="sm"
@@ -204,7 +209,7 @@ export function GameViewHeader({
           </button>
         )}
         <NoticeStatusChips scope={sessionId} />
-        {stoppable && composerHidden && onStop && (
+        {showStop && (
           <Button
             variant="outline"
             size="sm"
