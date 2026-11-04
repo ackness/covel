@@ -3,17 +3,16 @@
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 故事记忆
-  description: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
+  description: 展示故事记住的内容：目前的剧情、当前场景、你的人物关系和你的角色状态。每回合结束后自动更新。
   contributes:
     data:
       definitions:
         authoring:
-          title: 题材记忆块
-          summary: 让记忆系统按这个题材追踪线索、承诺、倒计时等状态。
+          title: 故事记忆主题
+          summary: 让故事记住符合题材的内容，比如线索、承诺和倒计时。
 messages:
-  Core Memory: 核心记忆
-  Memory: 记忆
-  Memory blocks not yet initialized, waiting for first turn to complete…: 记忆块尚未初始化，等待首轮游戏结束后自动填充……
-  Updates after each turn to keep key plot, scene, and character details.: 每轮结束后自动更新，保存关键剧情、场景和角色信息。
+  Story Memory: 故事记忆
+  Nothing remembered yet. Notes appear after the first turn.: 还没有记住任何内容。第一回合结束后会出现记录。
+  Updates after every turn with the key plot, scene and character details.: 每回合结束后自动更新，记下关键剧情、场景和角色信息。
 runtimes/extract/RUNTIME.md:
-  description: 根据刚完成的回合更新记忆块。
+  description: 每回合结束后，根据刚发生的剧情更新故事记忆。

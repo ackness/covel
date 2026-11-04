@@ -157,7 +157,7 @@ test("story remains legible in both themes and failed updates stay visible", asy
       name: /执行.*失败|Execution.*Failed/i,
     });
     await expect(summary).toHaveAttribute("aria-expanded", "false");
-    const failure = page.getByRole("alert").filter({ hasText: /世界|World/ });
+    const failure = page.getByRole("alert").filter({ hasText: /故事整理|Story Notes/ });
     await expect(failure).not.toBeVisible();
     await summary.click();
     await expect(summary).toHaveAttribute("aria-expanded", "true");

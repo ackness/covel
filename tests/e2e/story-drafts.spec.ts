@@ -19,7 +19,7 @@ const opening = "The lantern lights the path.";
 const reply = "“Stay close,” the keeper says.";
 
 /**
- * Start a Narrative Only session whose next story streams its two lines and
+ * Start a Story Only session whose next story streams its two lines and
  * holds the last argument piece until `release`, then run `steps`.
  */
 async function withHeldStory(
@@ -85,7 +85,7 @@ async function withHeldStory(
     await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
     await page
       .locator("button[aria-pressed]")
-      .filter({ hasText: "Narrative Only" })
+      .filter({ hasText: "Story Only" })
       .click();
     const creation = page.waitForResponse(
       (response) =>

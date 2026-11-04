@@ -1,7 +1,7 @@
 export const DEFAULT_CORE_MEMORY_BLOCKS = [
   {
     label: "story_state",
-    displayName: { zh: "剧情状态", en: "Story State" },
+    displayName: { zh: "剧情进展", en: "Plot so far", ru: "Ход сюжета" },
     icon: "BookOpen",
     extractionHint: {
       zh: "主线剧情摘要、已揭示的秘密、未解决的悬念、已完成的关键事件。",
@@ -10,7 +10,11 @@ export const DEFAULT_CORE_MEMORY_BLOCKS = [
   },
   {
     label: "character_relationships",
-    displayName: { zh: "角色关系", en: "Character Relationships" },
+    displayName: {
+      zh: "与你的关系",
+      en: "Your relationships",
+      ru: "Ваши отношения",
+    },
     icon: "Users",
     // Player-centric by design: this block tracks the player's bonds with
     // NPCs. NPC↔NPC structural relationships are owned by the `npc-graph`
@@ -23,7 +27,7 @@ export const DEFAULT_CORE_MEMORY_BLOCKS = [
   },
   {
     label: "scene",
-    displayName: { zh: "当前场景", en: "Current Scene" },
+    displayName: { zh: "当前场景", en: "Current scene", ru: "Текущая сцена" },
     icon: "MapPin",
     extractionHint: {
       zh: "当前所在位置、氛围与环境描写要点。可记录晨昏氛围，不维护当前日期或时刻；以世界时间插件的结构化状态为准。",
@@ -32,7 +36,7 @@ export const DEFAULT_CORE_MEMORY_BLOCKS = [
   },
   {
     label: "player_profile",
-    displayName: { zh: "玩家状态", en: "Player Profile" },
+    displayName: { zh: "你的角色", en: "Your character", ru: "Ваш персонаж" },
     icon: "User",
     extractionHint: {
       zh: "玩家角色的当前状态摘要：能力、所持之物、处境与当前目标。",

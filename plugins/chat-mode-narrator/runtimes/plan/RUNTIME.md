@@ -1,5 +1,5 @@
 ---
-description: Prepare an optional name-only cast and turn policy plan.
+description: Picks which characters speak in this reply.
 schedule:
   stage: pre-turn
 io:

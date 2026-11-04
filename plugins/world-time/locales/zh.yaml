@@ -3,26 +3,26 @@
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 世界时间
-  description: 按世界定义维护日期、时段和时间流向，并根据本轮故事结算时间变化。
+  description: 记录世界里的日期和时间，并随剧情推进时钟。
   contributes:
     data:
       definitions:
         authoring:
-          title: 世界时间定义
+          title: 时间规则
           summary: 定义这个世界怎样计时，以及各种行动耗时多久。
     commands:
       - name: time
-        description: 查看当前已记录的世界时间，不推进回合。
+        description: 查看世界里现在的时间，故事不会因此推进。
 runtimes/advance/RUNTIME.md:
-  description: 根据本轮叙事和世界规则提出时间变化，由工具确定性结算。
+  description: 算出本回合过去了多少时间，并推进世界时钟。
 runtimes/context/RUNTIME.md:
-  description: 向叙事提供当前时间及世界的时间规则。
+  description: 告诉故事现在是什么时间，以及这个世界怎样计时。
 messages:
-  World Time: 世界时间
-  Time appears when the story starts.: 时间将在故事开始后显示。
+  Time: 时间
+  Time appears when the story starts.: 故事开始后会显示时间。
   Time rules: 时间规则
-  "Uses the default world calendar: 12 months of 30 days, 24-hour days; starts at year 1, month 1, day 1, 08:00.": 使用通用世界历：每年12个月，每月30天，24小时制；起点为第1年1月1日08:00。
-  World time has not been recorded yet. Complete the first narrative turn to view it.: 世界时间尚未记录；完成首个叙事回合后可查看。
+  "This world has no custom calendar. It uses a standard one: 12 months of 30 days, 24-hour days, starting at year 1, month 1, day 1, 08:00.": 这个世界没有自定义历法，使用通用历法：每年 12 个月，每月 30 天，一天 24 小时，从第 1 年 1 月 1 日 08:00 开始。
+  There is no time yet. Play your first turn to see it.: 还没有时间记录。玩完第一个回合后就能看到。
   "World time: {display}": 世界时间：{display}
   World time: 世界时间
   World era: 世界历
@@ -30,23 +30,23 @@ messages:
   Night: 深夜
   Morning: 早晨
   Afternoon: 下午
-  Evening: 夜晚
-  Time: 时间
+  Evening: 傍晚
   Phases: 时段
   Cycle: 周期
-  Starts at: 起点
+  Starting phase: 起始时段
+  Starting date: 起始日期
   Era: 纪年
   Months in a year: 每年月数
   Hours in a day: 每天小时数
   Days of the week: 星期
-  Time moves: 时间流向
+  How time moves: 时间怎样流逝
   Forward: 向前
   Backward: 倒流
-  Forward or backward, as the story goes: 随叙事向前或倒流
+  Forward or backward, as the story needs: 按剧情需要向前或倒流
   Jumps at random: 随机跳转
-  Default per turn, in phases: 每回合默认推进的时段数
-  Default per turn, in minutes: 每回合默认推进的分钟数
-  Most per turn, in phases: 每回合最多推进的时段数
-  Most per turn, in minutes: 每回合最多推进的分钟数
+  Time passing each turn, in phases: 每回合推进的时段数
+  Time passing each turn, in minutes: 每回合推进的分钟数
+  Longest jump per turn, in phases: 每回合最多推进的时段数
+  Longest jump per turn, in minutes: 每回合最多推进的分钟数
   Random range: 随机范围
   to: 至

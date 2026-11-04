@@ -1,6 +1,6 @@
 ---
 description: >-
-  Guides you through creating your hero at the start and brings them into the
+  Walks you through creating your hero at the start and adds them to the
   story.
 schedule:
   stage: setup

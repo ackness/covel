@@ -53,9 +53,9 @@ it("summarizes authored phase rules before any clock has been committed", async 
   // The starting phase is named once in the tag list and once at the start.
   expect(screen.getAllByText("High tide")).toHaveLength(2);
   expect(screen.getByText("Forward")).toBeTruthy();
-  expect(screen.getByText("Default per turn, in phases")).toBeTruthy();
+  expect(screen.getByText("Time passing each turn, in phases")).toBeTruthy();
   expect(screen.getByText("16")).toBeTruthy();
-  expect(screen.queryByText("Default per turn, in minutes")).toBeNull();
+  expect(screen.queryByText("Time passing each turn, in minutes")).toBeNull();
   expect(screen.queryByText("Months in a year")).toBeNull();
   expect(screen.queryByText("Random range")).toBeNull();
   for (const key of ["kind", "initial", "defaultStep", "maxStep", "evolution"])
@@ -86,7 +86,7 @@ it("summarizes authored calendar rules with the start and step limits", async ()
   expect(screen.getByText("Months in a year")).toBeTruthy();
   expect(screen.getByText("1 · 1/1 06:04")).toBeTruthy();
   expect(screen.getByText("Jumps at random")).toBeTruthy();
-  expect(screen.getByText("Most per turn, in minutes")).toBeTruthy();
+  expect(screen.getByText("Longest jump per turn, in minutes")).toBeTruthy();
   expect(screen.getByText("240")).toBeTruthy();
   expect(screen.getByText("-30")).toBeTruthy();
   expect(screen.getByText("90")).toBeTruthy();

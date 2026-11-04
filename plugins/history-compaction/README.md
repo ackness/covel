@@ -1,4 +1,4 @@
-# History Compaction
+# Long-Story Memory
 
 This core plugin supplies the default `history.compact@2` extension. It protects recent dialogue and summarizes consecutive older prefixes independently using the host's completion adapter. Existing segments stay unchanged until the aggregate token budget or eight-segment limit requires merging only the oldest consecutive segments.
 

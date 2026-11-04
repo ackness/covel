@@ -1,5 +1,5 @@
 ---
-description: Records the mood of the story for the background music.
+description: Remembers the story's mood so the music can match it.
 schedule:
   trigger:
     type: event

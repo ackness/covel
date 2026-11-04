@@ -19,7 +19,7 @@ for (const explicitSetup of [false, true]) {
   test(
     explicitSetup
       ? "unfinished setup with no messages shows a recovery notice"
-      : "Narrative Only begins Lantern Barrow and accepts the first player turn",
+      : "Story Only begins Lantern Barrow and accepts the first player turn",
     async ({ page }) => {
       const provider = await startFakeLlmProvider();
       let release = () => {};
@@ -75,7 +75,7 @@ for (const explicitSetup of [false, true]) {
         await page.getByRole("button", { name: /^Loaded Plugins/ }).click();
         await page
           .locator("button[aria-pressed]")
-          .filter({ hasText: "Narrative Only" })
+          .filter({ hasText: "Story Only" })
           .click();
         const advanced = page.getByTestId("advanced-plugin-settings");
         await advanced.locator("summary").click();
@@ -132,7 +132,7 @@ for (const explicitSetup of [false, true]) {
             "A setup step is still waiting",
           );
           await expect(page.getByTestId("notice-setup-progress")).toContainText(
-            "Tabletop Rules",
+            "Ability Checks",
           );
           await expect(
             page.getByRole("button", { name: "Continue setup", exact: true }),

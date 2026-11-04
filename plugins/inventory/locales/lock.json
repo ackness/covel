@@ -1,11 +1,19 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#contributes.commands[name=bag].description": "6f4b06829bb2cbfb",
+      "PLUGIN.md#contributes.data.items.authoring.title": "4e9df68592cd3572",
+      "PLUGIN.md#description": "929e0850640055a5",
+      "PLUGIN.md#displayName": "b053c961f2acb0b9",
+      "runtimes/ledger/RUNTIME.md#description": "d70481ff3983b8be",
+      "runtimes/vocabulary/RUNTIME.md#description": "45f26f4694da8bfb"
+    },
     "zh": {
-      "PLUGIN.md#contributes.commands[name=bag].description": "394180cac415b33b",
-      "PLUGIN.md#contributes.data.items.authoring.title": "7e52bbf8fe8d2879",
-      "PLUGIN.md#description": "dada70c736a45e68",
-      "PLUGIN.md#displayName": "758f487fe8e9fcc5",
+      "PLUGIN.md#contributes.commands[name=bag].description": "6f4b06829bb2cbfb",
+      "PLUGIN.md#contributes.data.items.authoring.title": "4e9df68592cd3572",
+      "PLUGIN.md#description": "929e0850640055a5",
+      "PLUGIN.md#displayName": "b053c961f2acb0b9",
       "runtimes/ledger/RUNTIME.md#description": "d70481ff3983b8be",
       "runtimes/vocabulary/RUNTIME.md#description": "45f26f4694da8bfb"
     }

@@ -1,0 +1,12 @@
+# Russian text of the branch-reply plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Варианты ответа
+  description: Позволяет попросить другие варианты ответа истории и выбрать тот, что нравится больше всего.
+messages:
+  Alternative replies: Варианты ответа
+  Edit first: Сначала изменить
+  Send: Отправить
+  Use this reply: Взять этот ответ
+  Try again: Ещё раз

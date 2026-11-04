@@ -690,11 +690,11 @@ for (const width of [360, 1440])
       await page.getByRole("button", { name: "插件页面", exact: true }).click();
       const consoleView = page
         .getByRole("group", { name: "插件页面", exact: true })
-        .getByRole("button", { name: /^主持人控制台/ });
+        .getByRole("button", { name: /^主持人面板/ });
       await hit(consoleView);
       await consoleView.click();
       await expect(page.getByTestId("plugin-view-bar")).toContainText(
-        "主持人控制台",
+        "主持人面板",
       );
       await hit(await themeReset(page));
       await page.keyboard.press("Escape");

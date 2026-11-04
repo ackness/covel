@@ -39,7 +39,7 @@ test("host creation, fixed-order beats, manual names and settings survive reload
     await expect(
       page
         .getByRole("group", { name: "Speaking and advancing", exact: true })
-        .getByText(/^Turn Policy \/ /),
+        .getByText(/^Who Speaks Next \/ /),
     ).toBeVisible();
     await expect(
       page.getByLabel("Speaking rules", { exact: true }),

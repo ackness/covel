@@ -1,7 +1,6 @@
 ---
 description: >-
-  Proposes elapsed time from this turn's narrative and world rules for
-  deterministic settlement.
+  Works out how much time passed this turn and moves the world clock.
 schedule:
   stage: post-turn
 io:

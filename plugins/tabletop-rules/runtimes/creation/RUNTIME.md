@@ -1,5 +1,5 @@
 ---
-description: Opening point allocation
+description: Spend starting points on abilities
 schedule:
   stage: setup
   after:

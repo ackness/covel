@@ -2,22 +2,21 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 角色资料
-  description: 保存世界预设的人物资料，以及他们的头像、立绘和声音。
+  displayName: 人物档案
+  description: 保存世界里的角色档案，以及每个角色的立绘和声音。
   contributes:
     data:
       blueprints:
         authoring:
-          title: 角色扮演说明
+          title: 人物档案
       presence:
         authoring:
-          title: 角色立绘映射
+          title: 角色立绘清单
       assets:
         authoring:
-          title: 角色立绘图片
+          title: 立绘图片
 runtimes/presence/RUNTIME.md:
-  description: 保存角色头像、立绘和声音。
+  description: 保存角色的立绘和声音。
 messages:
   Character Portraits: 角色立绘
-  Art: 立绘
-  Portraits: 角色立绘
+  Portraits: 立绘

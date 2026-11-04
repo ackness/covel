@@ -723,7 +723,7 @@ describe("FilterContainer row scopes", () => {
       rulesPanel.view,
       { title: "Quiet nights", kind: "constant", content: "Details" },
       "Quiet nights",
-      "Constant",
+      "Always",
     ],
   ])("renders migrated %s rows", (_name, view, value, title, badge) => {
     render(

@@ -1,15 +1,12 @@
 - id: traditional-story
   label:
-    zh-CN: 传统故事模式
-    en-US: Traditional Story
-    ru-RU: Традиционная история
+    zh-CN: 经典故事
+    en-US: Classic Story
+    ru-RU: Классическая история
   description:
-    zh-CN: 主叙事器、行动建议、图鉴和关系图，适合长篇探索。
-    en-US: Narrator, suggestions, codex, and relationship memory for long-form
-      exploration.
-    ru-RU:
-      Рассказчик, предложения, кодекс и память взаимоотношений для подробного
-      исследования.
+    zh-CN: 边读边选行动，附带图鉴和人物关系图，适合长篇冒险。
+    en-US: Read the story and pick your actions, with an almanac and a relationship map for long adventures.
+    ru-RU: Читайте историю и выбирайте действия; энциклопедия и карта отношений помогают в долгих приключениях.
   tags:
     - mode:traditional-story
   source: builtin
@@ -26,16 +23,13 @@
     - memory
 - id: dialogue-mode
   label:
-    zh-CN: 对话模式
-    en-US: Dialogue Mode
-    ru-RU: Диалоговый режим
+    zh-CN: 对话
+    en-US: Dialogue
+    ru-RU: Диалог
   description:
-    zh-CN: 对话优先叙事、场景演员、快速短句和角色资料。
-    en-US:
-      Dialogue-first narration, scene cast state, quick replies, and character
-      profiles.
-    ru-RU: Повествование через диалоги, состав текущей сцены, быстрые ответы и
-      профили персонажей.
+    zh-CN: 像聊天一样推进故事，有舞台画面、人物立绘和快捷回复。
+    en-US: Play the story like a chat, with a stage, character portraits and quick replies.
+    ru-RU: "Ведите историю как чат: со сценой, портретами персонажей и быстрыми ответами."
   tags:
     - mode:dialogue
   source: builtin
@@ -56,15 +50,13 @@
     - npc-graph
 - id: low-cost
   label:
-    zh-CN: 低成本
-    en-US: Low Cost
-    ru-RU: Бюджетный
+    zh-CN: 省钱
+    en-US: Budget
+    ru-RU: Экономный
   description:
-    zh-CN: 保留核心流程和函数型插件，减少下游 LLM 调用。
-    en-US: Keeps the core loop and function plugins while reducing downstream LLM calls.
-    ru-RU:
-      Сохраняет основной цикл и функциональные плагины, сокращая последующие
-      вызовы LLM.
+    zh-CN: 只保留基本玩法，少调用 AI，花费更低。
+    en-US: Basic play only, with fewer AI calls to keep the cost down.
+    ru-RU: "Только основа игры и меньше запросов к ИИ: так дешевле."
   tags:
     - cost:function
   source: builtin
@@ -78,17 +70,13 @@
     - memory
 - id: narrative-only
   label:
-    zh-CN: 只要叙事
-    en-US: Narrative Only
-    ru-RU: Только повествование
+    zh-CN: 纯故事
+    en-US: Story Only
+    ru-RU: Только история
   description:
-    zh-CN: 只启用主叙事器。没有开局表单、角色创建、世界维度、世界时间和长期记忆，模型调用最少。
-    en-US: Only the narrator. No opening form, character creation, world
-      dimensions, world time or long-term memory, and the
-      fewest model calls.
-    ru-RU: Только рассказчик. Без вступительной формы, создания персонажа,
-      измерений мира, мирового времени и долгой
-      памяти, с наименьшим числом вызовов модели.
+    zh-CN: 只有故事本身：没有建角、没有额外面板和长期记忆，AI 调用最少。
+    en-US: "Just the story: no character creation, no extra panels and no long-term memory, so the fewest AI calls."
+    ru-RU: "Только сама история: без создания персонажа, лишних панелей и долгой памяти, запросов к ИИ меньше всего."
   tags:
     - mode:traditional-story
   source: builtin
@@ -103,65 +91,81 @@
     - history-compaction
   recommended: []
 - id: dm-mode
-  tags: [mode:traditional-story]
   label:
-    zh-CN: 主持人模式
-    en-US: DM Mode
-    ru-RU: Режим ведущего
+    zh-CN: 主持人
+    en-US: Game Master
+    ru-RU: Ведущий
   description:
-    zh-CN: 使用现有叙事器的主持人口吻。在准备页自行选择玩家或主持人身份，再将叙事器的视角设为主持人；此组合不委托 NPC。
-    en-US: Use the narrator's game-master perspective. Choose Player or Game master at creation, then set narrator Perspective to Game master. This composition does not delegate NPCs.
-    ru-RU: Рассказчик в роли ведущего. Выберите роль при создании, затем перспективу ведущего в настройках рассказчика. Без делегирования NPC.
+    zh-CN: 你来当主持人，掌控故事走向。开局时选择「主持人」，再把讲述者的「视角」设为主持人。
+    en-US: You run the game. Pick Game master when you get ready, then set the Storyteller's Perspective to Game master.
+    ru-RU: Вы ведёте игру. При подготовке выберите роль ведущего, затем в настройках рассказчика поставьте перспективу «Ведущий».
+  tags:
+    - mode:traditional-story
   source: builtin
-  requested: [pregame, world-init, narrator, dm-console]
-  excluded: [char-creator, chat-mode-narrator]
-  recommended: [guide, memory, codex]
   defaultViewMode: parsed
+  requested:
+    - pregame
+    - world-init
+    - narrator
+    - dm-console
+  excluded:
+    - char-creator
+    - chat-mode-narrator
+  recommended:
+    - guide
+    - memory
+    - codex
 - id: ensemble-dialogue
-  tags: [mode:dialogue]
   label:
     zh-CN: 群像对话
-    en-US: Ensemble Dialogue
-    ru-RU: Ансамблевый диалог
+    en-US: Ensemble
+    ru-RU: Ансамбль
   description:
-    zh-CN: 角色演员共同演出，默认点名策略即可游玩。可在回合策略的设置中改策略；作为主持人游玩时，准备页关闭建角并选择主持人身份。
-    en-US: Character actors contribute together using the default mention strategy. Change strategy in Turn Policy settings. To play as Game master, disable character creation and choose that role during preparation.
-    ru-RU: Актёры играют вместе со стратегией упоминаний. Стратегия меняется в настройках политики. Для роли ведущего отключите создание персонажа и выберите роль при подготовке.
+    zh-CN: 多个角色一起演出，你提到谁，谁就开口。可在「轮流发言」设置里换成别的发言方式。
+    en-US: Several characters take part together, and whoever you mention speaks. Change how they take turns in the Who Speaks Next settings.
+    ru-RU: В сцене участвуют сразу несколько персонажей, и отвечает тот, кого вы упомянули. Порядок реплик можно изменить в настройках «Кто говорит».
+  tags:
+    - mode:dialogue
   source: builtin
-  requested:
-    [
-      pregame,
-      world-init,
-      char-creator,
-      chat-mode-narrator,
-      character-agent,
-      turn-policy,
-      scene-stage,
-    ]
-  excluded: [narrator]
-  recommended: [guide, memory, character-blueprint, dm-console]
   defaultViewMode: stage
+  requested:
+    - pregame
+    - world-init
+    - char-creator
+    - chat-mode-narrator
+    - character-agent
+    - turn-policy
+    - scene-stage
+  excluded:
+    - narrator
+  recommended:
+    - guide
+    - memory
+    - character-blueprint
+    - dm-console
 - id: spectator
-  tags: [mode:dialogue]
   label:
     zh-CN: 旁观
     en-US: Spectator
     ru-RU: Наблюдатель
   description:
-    zh-CN: 准备页选择旁观者身份；在回合策略设置中选固定顺序、随机或导演，然后推进。选择主持人身份可用导演指示和旁白控制同一组 NPC。
-    en-US: Choose Spectator at creation, then list, random or director in Turn Policy settings and Advance. Choose Game master instead to direct or narrate the same NPC cast.
-    ru-RU: Выберите роль наблюдателя, затем список, случайный выбор или режиссёра в настройках политики и продвигайте историю. Роль ведущего позволяет давать указания и писать повествование.
+    zh-CN: 只看不演：角色们自己推进故事，你随时可以插话。开局时选择「旁观者」。
+    en-US: "Watch instead of play: the characters move the story on their own, and you can step in any time. Pick Spectator when you get ready."
+    ru-RU: "Смотрите, а не играйте: персонажи сами двигают историю, а вы можете вмешаться в любой момент. При подготовке выберите роль наблюдателя."
+  tags:
+    - mode:dialogue
   source: builtin
-  requested:
-    [
-      pregame,
-      world-init,
-      chat-mode-narrator,
-      character-agent,
-      turn-policy,
-      scene-stage,
-      dm-console,
-    ]
-  excluded: [narrator, char-creator]
-  recommended: [memory]
   defaultViewMode: stage
+  requested:
+    - pregame
+    - world-init
+    - chat-mode-narrator
+    - character-agent
+    - turn-policy
+    - scene-stage
+    - dm-console
+  excluded:
+    - narrator
+    - char-creator
+  recommended:
+    - memory

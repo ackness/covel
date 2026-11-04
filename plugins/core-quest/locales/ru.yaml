@@ -1,0 +1,33 @@
+# Russian text of the core-quest plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Журнал заданий
+  description: Ведёт список ваших заданий. Новые задания и успехи записываются по ходу истории, а цели и награды всегда под рукой.
+  contributes:
+    data:
+      quests:
+        authoring:
+          title: Начальные задания
+runtimes/log/RUNTIME.md:
+  description: После каждого хода записывает новые задания, успехи и итоги по тексту истории.
+runtimes/vocabulary/RUNTIME.md:
+  description: Запоминает текущие задания и невыполненные цели, чтобы дальше они назывались одинаково.
+messages:
+  Quest changes: Изменения в заданиях
+  No quest changes this turn.: В этом ходу задания не менялись.
+  Quest Log: Журнал заданий
+  Quests: Задания
+  No quests yet. They will appear when the story gives you a task or goal.: Заданий пока нет. Они появятся, когда в истории вам дадут поручение или цель.
+  Search quests…: Поиск по заданиям…
+  All: Все
+  Active: Текущие
+  label|Completed: Выполнены
+  label|Failed: Провалены
+  "{{count}} quests": "Заданий: {{count}}"
+  No matching quests: Ничего не найдено
+  New: Новое
+  Updated: Есть успехи
+  Completed: Выполнено
+  Failed: Провалено
+  Objective: Текущая цель

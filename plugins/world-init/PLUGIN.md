@@ -1,9 +1,9 @@
 ---
 kind: core
-version: 0.0.48
-displayName: World Dimensions
-description: Initializes character attributes and authored dimensions,
-  maintaining evolving state.
+version: 0.0.49
+displayName: World State
+description: Keeps track of the world's numbers and states, such as factions,
+  weather and reputation, and updates them as the story goes on.
 tags:
   - "data:world-data"
   - "data:characters"

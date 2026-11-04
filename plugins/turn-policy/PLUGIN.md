@@ -1,7 +1,9 @@
 ---
-version: 0.0.1
-displayName: Turn Policy
-description: Chooses present characters by mention, list, random, manual selection or a director.
+version: 0.0.2
+displayName: Who Speaks Next
+description: >-
+  Decides which characters speak each turn: whoever you mention, a set order,
+  at random, your pick or an AI director.
 tags:
   - "mode:dialogue"
 contributes:
@@ -14,30 +16,31 @@ contributes:
       text: optional
       schema: ./schemas/choose-actors.schema.json
       display:
-        label: Choose actors
-        placeholder: Optional direction for the selected characters
+        label: Choose who speaks
+        placeholder: Optional hint for the chosen characters
   settings:
     - key: strategy
       type: select
       default: mention
-      label: Strategy
-      description: How present characters are chosen for each story beat.
+      label: Who speaks
+      description: How the characters who speak each turn are chosen.
       options:
         - value: mention
-          label: Mentioned characters
+          label: Whoever you mention
         - value: list
-          label: Fixed order
+          label: Take turns in a set order
         - value: random
-          label: Random batch
+          label: A random few each turn
         - value: manual
-          label: Manual selection
+          label: You pick each turn
         - value: director
-          label: Model director
+          label: "AI director (uses an extra AI call every turn, costs more)"
     - key: actorOrder
       type: textarea
       default: ""
-      label: Actor order
-      description: For fixed order, one exact character name or alias per line; at most 32 names.
+      label: Speaking order
+      description: >-
+        For a set order, write one character name per line, up to 32 names.
 ---
 
 One optional read service selects a bounded batch of present characters. Its own strategy setting chooses the algorithm; it does not schedule executions or write state.

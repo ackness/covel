@@ -49,12 +49,12 @@ test("bundled graph and codex keep their right panels on committed data, and onl
       exact: true,
     });
     await expect(
-      pages.getByRole("button", { name: /^DM Console/ }),
+      pages.getByRole("button", { name: /^Game Master Panel/ }),
     ).toBeVisible();
     await expect(
-      pages.getByRole("button", { name: /^Relationship Graph/ }),
+      pages.getByRole("button", { name: /^Relationships/ }),
     ).toHaveCount(0);
-    await expect(pages.getByRole("button", { name: /^Codex/ })).toHaveCount(0);
+    await expect(pages.getByRole("button", { name: /^Almanac/ })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await put("npc-graph", "nodes", "mara", {
       id: "mara",
@@ -77,7 +77,7 @@ test("bundled graph and codex keep their right panels on committed data, and onl
       validAt: 1,
     });
     await page
-      .getByRole("tab", { name: "Relationship Graph", exact: true })
+      .getByRole("tab", { name: "Relationships", exact: true })
       .click();
     await page
       .getByRole("tabpanel")
@@ -92,7 +92,7 @@ test("bundled graph and codex keep their right panels on committed data, and onl
       tags: ["silver-sigil"],
       rarity: "rare",
     });
-    await page.getByRole("tab", { name: "Codex", exact: true }).click();
+    await page.getByRole("tab", { name: "Almanac", exact: true }).click();
     await page
       .getByRole("tabpanel")
       .getByText("Moon map", { exact: true })
@@ -121,13 +121,13 @@ test("bundled graph and codex keep their right panels on committed data, and onl
       .click();
     await page
       .getByRole("group", { name: "插件页面", exact: true })
-      .getByRole("button", { name: /^主持人控制台/ })
+      .getByRole("button", { name: /^主持人面板/ })
       .click();
     await expect(page.getByTestId("plugin-view-bar")).toContainText(
-      "主持人控制台",
+      "主持人面板",
     );
     await expect(page.getByTestId("plugin-view-container")).toContainText(
-      "待处理交互",
+      "待你处理",
     );
     expect(f.provider.requests).toHaveLength(callsBeforeNavigation);
     await expect(page.locator("iframe")).toHaveCount(0);
@@ -143,16 +143,16 @@ test("host console sends admitted Direct and textless Advance while retaining dr
   const f = await prepareEnsemble(page);
   try {
     await f.strategy("manual");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     const content = page.getByTestId("plugin-view-container");
     await expect(content).toContainText("Mara");
-    await expect(content).toContainText("Pending interactions");
+    await expect(content).toContainText("Waiting for you");
     await expect(content).toContainText("No pending interactions.");
     await page.getByTestId("composer-mode-direct").click();
     await composerInput(page).fill("Mara, answer the bell.");
     await back(page);
     await expect(composerInput(page)).toHaveValue("Mara, answer the bell.");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     const request = page.waitForRequest(
       (request) =>
         request.url().endsWith("/api/actions") && request.method() === "POST",
@@ -209,7 +209,7 @@ test("spectator console exposes only Advance", async ({ page }) => {
   const f = await prepareEnsemble(page, "spectator");
   try {
     await f.strategy("list");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     await expect(page.getByTestId("plugin-view-container")).toContainText(
       "Mara and Ivo wait by the bell.",
     );
@@ -273,16 +273,16 @@ test("a real pending form retains rejected input and resolves through normal adm
     );
     expect(opened.ok(), await opened.text()).toBe(true);
     await page.reload();
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     const pending = page.getByTestId("plugin-view-container");
     await expect(
-      pending.getByText("Attribute check", { exact: true }),
+      pending.getByText("Ability check", { exact: true }),
     ).toHaveCount(1);
     await pending
       .getByLabel("Attempted action", { exact: false })
       .fill("Inspect the bell");
     const attribute = pending.getByRole("combobox", {
-      name: "Attribute",
+      name: "Ability",
       exact: true,
     });
     await expect(attribute.locator('option[value="focus"]')).toHaveText(
@@ -310,7 +310,7 @@ test("a real pending form retains rejected input and resolves through normal adm
       } else await route.fallback();
     });
     await pending
-      .getByRole("button", { name: "Resolve check", exact: true })
+      .getByRole("button", { name: "Roll the check", exact: true })
       .click();
     await expect(pending.getByRole("alert").first()).toBeVisible();
     await expect(
@@ -318,7 +318,7 @@ test("a real pending form retains rejected input and resolves through normal adm
     ).toHaveValue("Inspect the bell");
     await attribute.selectOption("focus");
     await pending
-      .getByRole("button", { name: "Resolve check", exact: true })
+      .getByRole("button", { name: "Roll the check", exact: true })
       .click();
     await waitForTurnIdle(page);
     await expect(pending).toContainText("No pending interactions.");
@@ -356,7 +356,7 @@ test("changing views during deferred interruption keeps the second draft and adm
       if (request.url().endsWith("/api/actions") && request.method() === "POST")
         sent.push(request.postDataJSON());
     });
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     await page.getByTestId("composer-mode-direct").click();
     await composerInput(page).fill("Mara and Ivo, begin the exchange.");
     await composerInput(page).press("Enter");
@@ -386,7 +386,7 @@ test("changing views during deferred interruption keeps the second draft and adm
     await waitForTurnIdle(page);
     await expect.poll(() => sent.length).toBe(2);
     await expect(composerInput(page)).toHaveValue("Keep this second direction");
-    await openView(page, "DM Console");
+    await openView(page, "Game Master Panel");
     await expect(composerInput(page)).toHaveValue("Keep this second direction");
     const messages = await page.request.get(
       `/api/sessions/${f.sessionId}/messages`,

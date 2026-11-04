@@ -2,7 +2,7 @@
   "id": "scene-cast",
   "group": "scene-stage",
   "groupLabel": "Scene",
-  "label": "Cast",
+  "label": "Characters",
   "shortLabel": "Scene",
   "icon": "users-round",
   "groupOrder": 450,
@@ -10,7 +10,7 @@
     "namespace": "active-cast"
   },
   "emptyState": {
-    "message": "No characters are on stage in this scene yet."
+    "message": "No characters in this scene yet."
   },
   "view": {
     "component": "Stack",

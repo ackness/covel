@@ -1,11 +1,17 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#description": "7313bdd58f87248e",
+      "PLUGIN.md#displayName": "85752a46aa46dc5e",
+      "runtimes/extractor/RUNTIME.md#description": "33df78c2f7a7c69a",
+      "runtimes/rag-retriever/RUNTIME.md#description": "33af2529fddca675"
+    },
     "zh": {
-      "PLUGIN.md#description": "86896268814df875",
-      "PLUGIN.md#displayName": "b4493492ed7a1c7f",
-      "runtimes/extractor/RUNTIME.md#description": "e4ee67c1b8ec9f9a",
-      "runtimes/rag-retriever/RUNTIME.md#description": "c4699a044fc9c3da"
+      "PLUGIN.md#description": "7313bdd58f87248e",
+      "PLUGIN.md#displayName": "85752a46aa46dc5e",
+      "runtimes/extractor/RUNTIME.md#description": "33df78c2f7a7c69a",
+      "runtimes/rag-retriever/RUNTIME.md#description": "33af2529fddca675"
     }
   }
 }

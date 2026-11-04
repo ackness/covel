@@ -6,7 +6,10 @@ function invalidMessage(code, ctx) {
     return translate(ctx, "Dice count must be between 1 and 100.");
   if (code === "invalid-sides")
     return translate(ctx, "Die sides must be between 2 and 1000.");
-  return translate(ctx, "Use NdM dice notation, for example 2d6.");
+  return translate(
+    ctx,
+    "Enter dice like 2d6: number of dice, then d, then number of sides.",
+  );
 }
 
 /**

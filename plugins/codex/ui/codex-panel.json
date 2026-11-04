@@ -1,15 +1,15 @@
 {
   "id": "codex",
   "group": "codex",
-  "label": "Codex",
-  "shortLabel": "Codex",
+  "label": "Almanac",
+  "shortLabel": "Almanac",
   "icon": "book-open",
   "groupOrder": 700,
   "dataSource": {
     "namespace": "entries"
   },
   "emptyState": {
-    "message": "No codex entries yet. They will appear as the story continues…"
+    "message": "Nothing in the almanac yet. Entries appear as you discover things in the story."
   },
   "view": {
     "component": "FilterContainer",
@@ -64,7 +64,7 @@
         }
       ],
       "itemKeyField": "key",
-      "footer": "{{count}} entries collected",
+      "footer": "{{count}} entries",
       "emptyMessage": "No matching entries",
       "itemTemplate": {
         "component": "EntryCard",

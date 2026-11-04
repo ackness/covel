@@ -2,20 +2,20 @@
 
 This page covers six built-in plugins that make the story feel more like a game: Dice Check, point buy at the start, quests, inventory, affinity, and hidden story events. Each plugin section explains what you will see, when it is on, what you can change, and what world authors can preset.
 
-| Plugin                               | In short                                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Dice Check (`dice-check`)            | Risky actions roll dice first, and the story is then written to match the result.                |
-| Tabletop Rules (`tabletop-rules`)    | Assigns attribute points to the player character at the start, and lets the player start checks. |
-| Quest Log (`core-quest`)             | Records quests, objectives and rewards automatically.                                            |
-| Inventory (`inventory`)              | Records items gained, lost and equipped automatically.                                           |
-| Affinity (`affinity`)                | Records how close you are with each NPC.                                                         |
-| Hidden Story Events (`story-events`) | Story plots set up by the world author. They happen when their conditions are met.               |
+| Plugin                              | In short                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Dice Check (`dice-check`)           | Risky actions roll dice first, and the story is then written to match the result.                |
+| Ability Checks (`tabletop-rules`)   | Assigns attribute points to the player character at the start, and lets the player start checks. |
+| Quest Log (`core-quest`)            | Records quests, objectives and rewards automatically.                                            |
+| Bag (`inventory`)                   | Records items gained, lost and equipped automatically.                                           |
+| Affinity (`affinity`)               | Records how close you are with each NPC.                                                         |
+| Hidden Plot Events (`story-events`) | Story plots set up by the world author. They happen when their conditions are met.               |
 
 All six are optional. Gameplay requests select checks; matching seed data infers receivers under the [receiver rules](../reference/world-data.md#data-receivers). Players can still turn them off during preparation. For which worlds include them by default, see [the overview at the end of this page](#overview-of-when-they-are-on).
 
 If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
 
-## Dice Check and Tabletop Rules: what is different
+## Dice Check and Ability Checks: what is different
 
 Both plugins involve dice, but they do different jobs. You can use one, or both together.
 
@@ -86,7 +86,7 @@ It takes no world data. What a world can do is define the player character's num
 - To use a different check system, such as d100, you can replace this plugin with another plugin that provides the same kind of function. Most players do not need to think about this.
 - The narrative plugin in the gameplay pack (such as `narrator`) reads the check results. Without a narrative plugin, the checks have no effect.
 
-## Tabletop Rules (`tabletop-rules`)
+## Ability Checks (`tabletop-rules`)
 
 Adds one step after character creation: assigning points to the player character's attributes. During play, you can also start a check yourself, choosing the action, the attribute and the difficulty.
 
@@ -154,7 +154,7 @@ It has no settings you can change.
 
 Quests are matched by name, so quest names and the names of people who give them must match what the setting says. For how to write them, see [Starting content](../recipes/starting-content.md).
 
-## Inventory (`inventory`)
+## Bag (`inventory`)
 
 Items that the story clearly gives you, takes from you, or equips are recorded in your bag automatically. You can check it on the right at any time.
 
@@ -162,14 +162,14 @@ Bookkeeping applies only item changes held by the action’s actor, falling back
 
 ### What you will see
 
-- An "Inventory" panel on the right, with two sections: "Equipped" and "Backpack". Items have "Equip", "Unequip" and "Drop" buttons.
-- In a turn where items change, an "Inventory changes" block appears in the story text, marked "Gained", "Lost", "Equipped" or "Unequipped".
+- An "Bag" panel on the right, with two sections: "Equipped" and "Backpack". Items have "Equip", "Unequip" and "Drop" buttons.
+- In a turn where items change, an "Bag changes" block appears in the story text, marked "Gained", "Lost", "Equipped" or "Unequipped".
 - Type `/bag` (or `/inventory`) to see your current bag and open the panel.
 - The session summary says "Your bag contains N item entries."
 
 During a purchase, trade or gift, the narrator can change the bag before writing the story. An unaffordable purchase is refused. If a staged change cannot be applied when the turn is saved, you see a notice and the story is still saved. If a purchase fails, other bag changes from that turn may be skipped. Changes made through the bag tool are not counted again from the story; batches with long item descriptions are also checked against the retained settlement results.
 
-Only item changes that clearly happen in the story are recorded. Inventory dataset records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
+Only item changes that clearly happen in the story are recorded. Bag dataset records are checked when the turn is saved. An invalid record skips that bookkeeping step for this turn; the story is still saved.
 
 ### When it is on
 
@@ -194,7 +194,7 @@ Keep the list short. Items gained during play are recorded automatically. For ho
 
 ### Works with
 
-Both Narrator (`narrator`) and Dialogue Narrator (`chat-mode-narrator`) use the bag lookup and change tools when Inventory is active. Without Inventory, they continue telling the story as usual.
+Both Storyteller (`narrator`) and Chat Storyteller (`chat-mode-narrator`) use the bag lookup and change tools when Bag is active. Without Bag, they continue telling the story as usual.
 
 ## Affinity (`affinity`)
 
@@ -247,7 +247,7 @@ Seeded affinity records must pass the dataset’s `set` and record-schema checks
 
 The `id` and `name` must match the NPC's character setting. Later updates are matched by name. For how to write them, see [Starting content](../recipes/starting-content.md).
 
-## Hidden Story Events (`story-events`)
+## Hidden Plot Events (`story-events`)
 
 Event planning retains the validated tool result. Retrying final confirmation does not plan successful events again.
 
@@ -301,7 +301,7 @@ A misspelled dimension ID, an invalid path inside a dimension, or a candidate in
 | `affinity`       | Yes              | Yes         |            | Yes              |
 | `story-events`   | Yes              | Yes         | Yes        | Yes              |
 
-The three general gameplay packs (Traditional Story, Dialogue Mode, Low Cost) do not themselves request these six plugins. Actual data can infer receivers; gameplay without seed data uses explicit world `plugins` requests or preparation choices.
+The three general gameplay packs (Classic Story, Dialogue, Budget) do not themselves request these six plugins. Actual data can infer receivers; gameplay without seed data uses explicit world `plugins` requests or preparation choices.
 
 ## Next
 

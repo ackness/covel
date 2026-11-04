@@ -44,7 +44,7 @@ export function isNameTaken(keys, name) {
 export function nameTakenMessage(context, name) {
   return translate(
     context,
-    'The name "{name}" already belongs to a character of this world. Choose another name.',
+    'The name "{name}" is already taken by another character in this world. Choose another name.',
     { name: name.trim() },
   );
 }

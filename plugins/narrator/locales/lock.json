@@ -1,11 +1,17 @@
 {
   "version": 1,
   "labels": {
-    "zh": {
-      "PLUGIN.md#contributes.settings[key=perspective].description": "7f44234bc3c5fc65",
+    "ru": {
+      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
-      "PLUGIN.md#description": "5f1ec63a2015f76a",
-      "PLUGIN.md#displayName": "6cb7dad53219a64f"
+      "PLUGIN.md#description": "3f70ce0a05b35cd2",
+      "PLUGIN.md#displayName": "5447064655a33e83"
+    },
+    "zh": {
+      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
+      "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
+      "PLUGIN.md#description": "3f70ce0a05b35cd2",
+      "PLUGIN.md#displayName": "5447064655a33e83"
     }
   }
 }

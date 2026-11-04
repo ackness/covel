@@ -1,10 +1,10 @@
 # Stage and Sound
 
-This page covers stage mode, a full-screen view like a visual novel. It also covers the two built-in plugins that make the view more complete: Scene Stage and Soundtrack.
+This page covers stage mode, a full-screen view like a visual novel. It also covers the two built-in plugins that make the view more complete: Stage Scene and Soundtrack.
 
 | Plugin                      | In short                                                                                   |
 | --------------------------- | ------------------------------------------------------------------------------------------ |
-| Scene Stage (`scene-stage`) | Records the current scene, day or night, and the characters on stage, for the stage to use |
+| Stage Scene (`scene-stage`) | Records the current scene, day or night, and the characters on stage, for the stage to use |
 | Soundtrack (`soundtrack`)   | Plays the world's background music to match the scene and mood                             |
 
 ## Stage mode
@@ -40,9 +40,9 @@ Stage mode needs no extra setup on its own, but how complete the picture is depe
 | Character portraits     | Characters stand in front of the scene                                                                | [Add portraits to characters](../worlds/portraits.md) |
 | Neither                 | The stage still works, but the background falls back to the world's cover, and there are no portraits | -                                                     |
 
-The scene picture and on-stage character data come from Scene Stage below. Enable it on the session-prep screen for scene backdrops and on-stage characters. You can still read the story in stage mode without it.
+The scene picture and on-stage character data come from Stage Scene below. Enable it on the session-prep screen for scene backdrops and on-stage characters. You can still read the story in stage mode without it.
 
-## Scene Stage (`scene-stage`)
+## Stage Scene (`scene-stage`)
 
 Lets the stage know where things are, whether it is day or night, and who is present.
 
@@ -59,7 +59,7 @@ Characters without stored attributes can still be selected; they do not need att
 
 ### When it is on
 
-Optional. The built-in "Dialogue Mode" gameplay pack includes it. The "Campus Romance · Visual Novel" pack for Harukaze Academy also includes it.
+Optional. The built-in "Dialogue" gameplay pack includes it. The "Campus Romance · Visual Novel" pack for Harukaze Academy also includes it.
 
 ### What you can change
 
@@ -139,7 +139,7 @@ A mood written as `silence` stops the music. If no track has a mood, the music f
 
 ### Works with
 
-Soundtrack reads the story's `cues.scene` and `cues.mood` directly and keeps the current location or mood when its cue is omitted, so it can follow locations without Scene Stage. Updates commit with the story. Without a story, relevant cues, a state change, or a world track list, it succeeds with a recorded skip reason.
+Soundtrack reads the story's `cues.scene` and `cues.mood` directly and keeps the current location or mood when its cue is omitted, so it can follow locations without Stage Scene. Updates commit with the story. Without a story, relevant cues, a state change, or a world track list, it succeeds with a recorded skip reason.
 
 Stories that do not answer in segments can still emit `music.cue`; worlds and plugins can still use `scene.set` to set the music scene. Explicit events from the same turn run after story cues and override the corresponding mood or scene. Story cues have no pre-commit preview; existing event previews remain available.
 
@@ -155,10 +155,10 @@ The story attaches canonical names to actor speech/actions; the stage still cons
 
 ## Restricted story-cue selectors
 
-Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, reading public story and declared own assets / display state without model charges or new settings. Ordinary pre-turn cast and explicit scene / direction / music events retain their existing contexts and overrides. Fixed trace codes explain no change, missing assets or no story without per-turn notifications. Both cast and direction providers explicitly select the host’s `exitTransition: "fade"`; departures leave the current cast immediately, with brief fading only in the renderer. Other providers that omit this option cut immediately. Explicit exits retain their transition; `none` and reduced motion cut immediately. Session switches and missing slots discard the old lineup. Template `CharacterAvatar` displays only the resolved speaker’s public portrait with local enlargement. See [UI slots](../reference/ui-panels.md#stagecast1). See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
+Stage Scene and Soundtrack `story-cues` use zero-budget presentation functions, reading public story and declared own assets / display state without model charges or new settings. Ordinary pre-turn cast and explicit scene / direction / music events retain their existing contexts and overrides. Fixed trace codes explain no change, missing assets or no story without per-turn notifications. Both cast and direction providers explicitly select the host’s `exitTransition: "fade"`; departures leave the current cast immediately, with brief fading only in the renderer. Other providers that omit this option cut immediately. Explicit exits retain their transition; `none` and reduced motion cut immediately. Session switches and missing slots discard the old lineup. Template `CharacterAvatar` displays only the resolved speaker’s public portrait with local enlargement. See [UI slots](../reference/ui-panels.md#stagecast1). See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
 
 ### Optional reading appearance
 
-Scene Stage offers **Stage reading**. Enable the plugin, open **Menu** in the session toolbar, choose it under **This game's theme** and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. **Restore default appearance** under This game's theme turns it off at any time; immersive stage hides the header, so leave it first to open the menu. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).
+Stage Scene offers **Stage reading**. Enable the plugin, open **Menu** in the session toolbar, choose it under **This game's theme** and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. **Restore default appearance** under This game's theme turns it off at any time; immersive stage hides the header, so leave it first to open the menu. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).
 
-Scene Stage opts its dialogue template into the shared [segment reveal](../reference/ui-components.md#complete-content-reveal). Only newly committed live stories use it. History, reload and reduced motion are instant; **Show all** and the **Instant text** setting finish immediately. This changes presentation after commit and does not speed generation.
+Stage Scene opts its dialogue template into the shared [segment reveal](../reference/ui-components.md#complete-content-reveal). Only newly committed live stories use it. History, reload and reduced motion are instant; **Show all** and the **Instant text** setting finish immediately. This changes presentation after commit and does not speed generation.

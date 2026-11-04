@@ -49,7 +49,7 @@ describe("inventory session summary", () => {
           id: "inventory.items",
           kind: "list",
           // Every language the plugin has: the client picks the UI language.
-          label: { en: "Pack", zh: "行囊" },
+          label: { en: "Bag", zh: "背包", ru: "Сумка" },
           items: ["Fog lamp", "Coin ×12", "Rope"],
           total: 3,
         },

@@ -1,10 +1,8 @@
 ---
 kind: core
-version: 0.0.37
-displayName: Pre-Game Setup
-description: >-
-  Reads the world details at the start and prepares the first step of the
-  adventure.
+version: 0.0.38
+displayName: Get Ready
+description: Welcomes you to the world and prepares the start of your adventure.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel

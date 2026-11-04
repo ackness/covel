@@ -1,0 +1,24 @@
+# Russian text of the affinity plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Расположение
+  description: Показывает, как к вам относится каждый персонаж. Оценки, уровни и последние изменения видны на боковой панели.
+  contributes:
+    data:
+      affinity:
+        authoring:
+          title: Начальное расположение
+messages:
+  Affinity: Расположение
+  shortLabel|Affinity: Расположение
+  "No affinity records yet. They will appear as you interact with characters…": Записей пока нет. Они появятся, когда вы начнёте общаться с персонажами…
+  "Scores run from -100 (Hostile) to 100 (Devoted). The middle of the bar is Neutral.": Оценка идёт от -100 (враждебное) до 100 (преданное). Середина полосы — нейтральное.
+  Affinity changes: Изменения расположения
+  No affinity changes this turn.: В этом ходу расположение не изменилось.
+  Hostile: Враждебное
+  Cold: Холодное
+  Neutral: Нейтральное
+  Friendly: Дружеское
+  Close: Близкое
+  Devoted: Преданное

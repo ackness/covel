@@ -12,15 +12,15 @@ Character tracking, fact extraction, and dimension updates read the attribution 
 
 | Plugin                                     | In short                                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Pre-Game Setup (`pregame`)                 | Reads the world material at the start and prepares the first part of the adventure   |
+| Get Ready (`pregame`)                      | Reads the world material at the start and prepares the first part of the adventure   |
 | Character Creator (`char-creator`)         | Asks you to fill in your character at the start, and records the people in the story |
 | Character Profiles (`character-blueprint`) | Keeps the character profiles and portraits the world sets up                         |
-| World Dimensions (`world-init`)            | Prepares the character attributes and world dimensions, and keeps them updated       |
+| World State (`world-init`)                 | Prepares the character attributes and world dimensions, and keeps them updated       |
 | World Time (`world-time`)                  | Records the date and time of day in the world                                        |
 | World Rules (`living-world-rules`)         | Shows the rules and taboos that hold for the whole world                             |
-| Codex (`codex`)                            | Automatically organizes newly found places, people and items                         |
-| Relationship Graph (`npc-graph`)           | Records relationships between people                                                 |
-| World Fact Extraction (`world-ir`)         | Sorts out the facts of each turn in the background, for other plugins to use         |
+| Almanac (`codex`)                          | Automatically organizes newly found places, people and items                         |
+| Relationships (`npc-graph`)                | Records relationships between people                                                 |
+| Story Notes (`world-ir`)                   | Sorts out the facts of each turn in the background, for other plugins to use         |
 
 > [!NOTE]
 > None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the session-prep screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
@@ -29,7 +29,7 @@ If a concurrent change makes an affinity or clock calculation stale, that derive
 
 A world package has one authored dimension file, `data/dimensions.yaml`. The world editor saves resolved records without directly changing installed packages; an empty table clears definitions. See [dimension sources](../reference/world-data.md#dimension-sources).
 
-## Pre-Game Setup (`pregame`)
+## Get Ready (`pregame`)
 
 Reads the world material before the game starts, prepares the first part of the adventure, and shows a welcome notice. It does not call a model, so it finishes almost at once.
 
@@ -50,7 +50,7 @@ At the start, it guides you through creating the player character. It gives you 
 - The character form at the start. The first field is the character's name. Up to three more fields follow, taken from the text or choice attributes the world defines for characters. Numeric attributes are not filled in on the form. They use the world's default values.
 - A list of characters in the "Characters" tab on the right. Each character is an expandable card with a portrait. The alias is shown under the name. The cards are read-only. The type badge shows "Player", "NPC" or "Companion" in the UI language; a type the world defines itself is shown as the world writes it.
 
-**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Traditional Story, Dialogue Mode and Low Cost all include it.
+**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Classic Story, Dialogue and Budget all include it.
 
 **Notes**
 
@@ -72,7 +72,7 @@ The narrator leaves out only the primary seat’s current character’s notes. O
 - The "Character Portraits" tab: each character's avatar and portrait. You can upload an image to replace one.
 - The roleplay notes have no tab of their own: the characters are in the character list of the "Characters" tab. During play you cannot add or change roleplay notes.
 
-**When it is on**: optional. The Dialogue Mode pack includes it, and worlds with their own characters, such as Mistport, add it to their own packs. Traditional Story and Low Cost do not include it.
+**When it is on**: optional. The Dialogue pack includes it, and worlds with their own characters, such as Mistport, add it to their own packs. Classic Story and Budget do not include it.
 
 > [!NOTE]
 > The "secrets" and rules of the roleplay notes are stored in public plugin data. The character panel does not show them, but the "Database" tab on the right shows all of the public plugin data as it is. If you do not want to spoil the story for yourself, do not open that page.
@@ -89,7 +89,7 @@ Do not write the portrait mapping by hand. It is produced when you generate port
 
 **Works with**: roleplay notes are included only for characters with a record in the session. They do not have to be on stage. Each card can have up to 300 characters per line, and the total length is limited. If it does not fit, first delete the sample lines, then delete rules.
 
-## World Dimensions (`world-init`)
+## World State (`world-init`)
 
 Dimension tools report schema-invalid values as correctable input errors; see [update-dimensions](../reference/tools.md#update-dimensions).
 
@@ -147,23 +147,23 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 **What world authors can preset**: `.yaml` files under `data/rules/`, one set of rules per file, imported in file-name order. Each rule states one thing the narrative must not break, in plain sentences that explain the rule and its consequences. Do not repeat numbers that dimensions already record. For fields, see [World data](../reference/world-data.md). You can also run `pnpm describe:authoring`.
 
-## Codex (`codex`)
+## Almanac (`codex`)
 
 The right panel shows committed entries, and “Expand panel” opens it in the large view. Search covers titles, content and tags, retaining category counts, expandable full content, tags/rarity, empty and no-match states. Ordinary hydration updates the panel; opening or enlarging it makes no model calls.
 
 When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
-**What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
+**What you will see**: the "Almanac" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
 
-**When it is on**: optional. The Traditional Story pack includes it. It needs "World Fact Extraction", which is turned on together with it.
+**When it is on**: optional. The Classic Story pack includes it. It needs "Story Notes", which is turned on together with it.
 
 **Notes**
 
 - It is strict. It would rather miss an entry than record one wrongly. It records at most 3 entries per turn, and most turns record nothing.
-- Character status and relationships are not recorded here. Those belong to Character Creator and Relationship Graph. People in the codex are recorded only for background: passersby, people from legends, or their origins and references.
+- Character status and relationships are not recorded here. Those belong to Character Creator and Relationships. People in the codex are recorded only for background: passersby, people from legends, or their origins and references.
 - Each time it sorts entries, it makes one more model call.
 
-## Relationship Graph (`npc-graph`)
+## Relationships (`npc-graph`)
 
 The right panel reads the nodes and edges, and “Expand panel” shows a larger graph in a dialog. The graph supports pan, zoom, fit, accessible character lists and node details; superseded relationships stay hidden. Narrow screens can scroll through controls and details. Hydration updates the panel; opening or enlarging it does not trigger extraction. Disabling the provider removes only its entries without deleting graph data.
 
@@ -171,9 +171,9 @@ A development save with duplicate open versions of one relation is refused inste
 
 Records relationships between people, groups and factions. It checks existing nodes and relationships when recording new ones. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
 
-**What you will see**: the "Relationship Graph" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.
+**What you will see**: the "Relationships" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.
 
-**When it is on**: optional. The Traditional Story pack includes it, and Dialogue Mode recommends it. It needs "World Fact Extraction", which is turned on together with it.
+**When it is on**: optional. The Classic Story pack includes it, and Dialogue recommends it. It needs "Story Notes", which is turned on together with it.
 
 **Notes**
 
@@ -181,17 +181,17 @@ Records relationships between people, groups and factions. It checks existing no
 - The graph only includes people, groups and factions. Places and items are not in the graph.
 - It updates after each new passage of the narrative, which adds one model call.
 
-## World Fact Extraction (`world-ir`)
+## Story Notes (`world-ir`)
 
 World initialization, time advancement and fact extraction use validated tool results directly, retaining completed work when final confirmation is retried.
 
 You cannot see this plugin, and it has no panel. After each turn ends, it sorts out the people, relationships, events and clues from that turn into a list. It passes the list to the codex, relationship graph, quest log, inventory and similar plugins. This way, each plugin does not have to read the story again on its own.
 
-If you use any of these plugins, keep this one on. If you turn it off, the plugins that depend on it get no facts, and they cannot be turned on. It adds one model call per turn. If you want to save money, remove it together with the plugins that depend on it. The "Low Cost" pack is the simplest choice.
+If you use any of these plugins, keep this one on. If you turn it off, the plugins that depend on it get no facts, and they cannot be turned on. It adds one model call per turn. If you want to save money, remove it together with the plugins that depend on it. The "Budget" pack is the simplest choice.
 
 **When it is on**: optional. When you turn on a plugin that depends on it, it is turned on automatically. You do not need to select it separately.
 
-Extraction also sees changes already made through tools this turn. When the story shows one, it records the event. The item name and quantity match the tool request exactly. It does not invent events for changes absent from the story. Inventory skips changes its tool already handled, while other plugins can still read those events.
+Extraction also sees changes already made through tools this turn. When the story shows one, it records the event. The item name and quantity match the tool request exactly. It does not invent events for changes absent from the story. Bag skips changes its tool already handled, while other plugins can still read those events.
 
 World fact extraction assesses each open objective of tracked quests and checks that achievement judgments agree with quest events. Plans, partial work, failures and unverified claims do not count as completion. Semantic judgments can still be wrong; see [per-objective assessment](../reference/tools.md#per-objective-assessment).
 

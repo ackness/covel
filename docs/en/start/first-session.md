@@ -87,7 +87,7 @@ Set “Automatic rounds” to 0 in Orchestration and save to turn it off. “App
 
 ## Try an ensemble or spectator session
 
-When the world allows it, choose Ensemble Dialogue or Spectator during preparation. Configure story and plugin text [model roles](./models.md) first.
+When the world allows it, choose Ensemble or Spectator during preparation. Configure story and plugin text [model roles](./models.md) first.
 
 1. Ensemble can keep Play as: Player. For a human DM, disable character creation and choose Game master. Choose Spectator for observation. Roles are creation-only.
 2. For DM narration, select Game master in the narrator's Perspective setting. This changes voice rather than seat role.

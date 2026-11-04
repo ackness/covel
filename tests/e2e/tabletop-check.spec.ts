@@ -266,11 +266,11 @@ for (const width of [1512, 390]) {
       const input = page.getByTestId("game-composer-input");
       await expect(input).toBeEnabled();
       const request = page.getByRole("button", {
-        name: /发起属性检定|Request an attribute check/,
+        name: /做一次属性判定|Make an ability check/,
       });
       if (width < 1024)
         await page.getByRole("button", { name: "侧栏" }).click();
-      await page.getByRole("tab", { name: "属性检定", exact: true }).click();
+      await page.getByRole("tab", { name: "属性判定", exact: true }).click();
       await request.click({ timeout: 5_000 });
       await expect.poll(() => opened).toBe(true);
       if (width < 1024)
@@ -291,7 +291,7 @@ for (const width of [1512, 390]) {
       await page
         .getByRole("combobox", { name: "属性", exact: true })
         .selectOption("combat");
-      await page.getByRole("button", { name: "进行检定", exact: true }).click();
+      await page.getByRole("button", { name: "掷骰判定", exact: true }).click();
       await expect.poll(() => answered).toBe(1);
       expect(fixture.actions).toHaveLength(0);
       const settled = await check({ ...context, turnId: "settled" });

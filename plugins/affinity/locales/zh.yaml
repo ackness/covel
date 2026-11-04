@@ -3,7 +3,7 @@
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 好感度
-  description: 追踪玩家与 NPC 之间的数值好感度，右栏展示分数、档位与最近变化。
+  description: 记录各角色对你的好感，分数、等级和最近变化会显示在侧栏。
   contributes:
     data:
       affinity:
@@ -12,12 +12,10 @@ PLUGIN.md:
 messages:
   Affinity: 好感度
   shortLabel|Affinity: 好感
-  No affinity records yet. They will appear as you interact with characters…: 还没有好感记录，与角色互动后会自动出现……
-  Scores range -100..100; the bar's midpoint is neutral.: 分数范围 -100..100，进度条中点为中立。
+  "No affinity records yet. They will appear as you interact with characters…": 还没有好感记录，与角色互动后会自动出现…
+  "Scores run from -100 (Hostile) to 100 (Devoted). The middle of the bar is Neutral.": 分数从 -100（敌视）到 100（挚爱），进度条中间为中立。
   Affinity changes: 好感变化
   No affinity changes this turn.: 本回合没有好感变化。
-  # A section mark, the same in every language.
-  § AFFINITY: § AFFINITY
   Hostile: 敌视
   Cold: 冷淡
   Neutral: 中立

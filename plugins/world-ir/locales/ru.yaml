@@ -1,0 +1,6 @@
+# Russian text of the world-ir plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Заметки к истории
+  description: Выбирает из каждого хода людей, отношения, события и улики, чтобы их могли использовать Энциклопедия, Журнал заданий и другие функции.

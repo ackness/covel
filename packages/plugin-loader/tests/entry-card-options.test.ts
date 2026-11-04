@@ -21,8 +21,8 @@ it.each([
     "living-world-rules",
     "living-world-rules-panel.json",
     "constant",
-    "Constant",
-    "恒常规则",
+    "Always",
+    "一直生效",
   ],
 ])(
   "loads %s badge labels from the plugin's own locale catalog",
@@ -38,7 +38,10 @@ it.each([
     const props = itemProps(spec);
     expect(props?.categoryOptions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ value, label: { en, zh } }),
+        expect.objectContaining({
+          value,
+          label: expect.objectContaining({ en, zh }),
+        }),
       ]),
     );
     if (pluginId === "codex")

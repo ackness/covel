@@ -1,9 +1,13 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#description": "e011cce7a4be89f5",
+      "PLUGIN.md#displayName": "4099d8f35c2f2cfa"
+    },
     "zh": {
-      "PLUGIN.md#description": "2a4acdb450cff653",
-      "PLUGIN.md#displayName": "82f8b36f7d008cbb"
+      "PLUGIN.md#description": "e011cce7a4be89f5",
+      "PLUGIN.md#displayName": "4099d8f35c2f2cfa"
     }
   }
 }

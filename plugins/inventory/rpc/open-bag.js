@@ -16,10 +16,10 @@ export default async function openBag(_payload, ctx) {
   }).length;
   const message =
     itemCount === 1
-      ? translate(ctx, "Your bag contains {count} item entry.", {
+      ? translate(ctx, "You have {count} item in your bag.", {
           count: itemCount,
         })
-      : translate(ctx, "Your bag contains {count} item entries.", {
+      : translate(ctx, "You have {count} items in your bag.", {
           count: itemCount,
         });
 

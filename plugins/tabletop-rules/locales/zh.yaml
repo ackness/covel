@@ -2,29 +2,33 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 跑团规则
-  description: 在角色创建后追加开局配点，以程序结算属性检定，并保留可复核的骰子记录。
+  displayName: 属性判定
+  description: 开局时让你把初始点数分配到主角的属性上，之后遇到判定就掷骰子并保存结果。
   contributes:
     data:
       rules:
         authoring:
-          title: 开局配点规则
+          title: 初始属性点
 runtimes/check/RUNTIME.md:
-  description: 提交属性检定，结果不会因重试而重掷
+  description: 掷一次属性判定骰子，回合重试时也不会重掷
 runtimes/creation/RUNTIME.md:
-  description: 开局配点
+  description: 把初始点数分配到属性上
 messages:
-  Attribute checks: 属性检定
-  Request an attribute check: 发起属性检定
-  This world has no point-buy attributes; checks are unavailable.: 本世界没有可配点属性，无法发起检定。
-  Attribute check: 属性检定
+  Ability checks: 属性判定
+  Make an ability check: 做一次属性判定
+  This world has no abilities to check, so ability checks are unavailable.: 这个世界没有可判定的属性，无法进行属性判定。
+  Ability check: 属性判定
   Attempted action: 尝试的行动
-  Attribute: 属性
+  Ability: 属性
   Difficulty: 难度
-  Resolve check: 进行检定
-  Opening point allocation applied.: 开局配点已应用。
-  "Opening point allocation: distribute {budget} points": 开局配点：分配 {budget} 点
-  Finish allocation: 完成配点
-  Opening point allocation complete.: 完成了开局配点。
+  Easy: 简单
+  Normal: 普通
+  Hard: 困难
+  Very hard: 极难
+  Roll the check: 掷骰判定
+  Starting ability points applied.: 初始属性点已生效。
+  "Starting ability points: spread {budget} points": 初始属性点：请分配 {budget} 点
+  Confirm points: 确认分配
+  Starting ability points chosen.: 已选好初始属性点。
   "{label}: enter a whole number from {min} to {max}": "{label}：请填写 {min} 到 {max} 之间的整数"
-  Allocate exactly {budget} points; you have allocated {spent}: 需要正好分配 {budget} 点，你已分配 {spent} 点
+  Spend exactly {budget} points. You have spent {spent}.: 需要正好分配 {budget} 点，你已分配 {spent} 点。
