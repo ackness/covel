@@ -13,6 +13,7 @@ import {
 import i18n from "i18next";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { emitToast } from "@/lib/toast-channel";
+import { setDeveloperModeReader } from "@/lib/notice-center";
 import { synchronizeSettings } from "./synchronize-settings.js";
 import { createServerSettingsChannel } from "./server-settings-channel.js";
 import { resolveSettingEntryText } from "./framework-i18n.js";
@@ -80,6 +81,8 @@ function createStore(): SettingsStore {
   });
   registerCoreSettings(store);
   registerLlmSettings(store);
+  // Quiet background failures show as toasts only in developer mode.
+  setDeveloperModeReader(() => store.get<boolean>("ui.developerView") === true);
   // Store observes rejected persistence promises itself so existing `void
   // store.set()` calls cannot leak unhandled rejections. Surface only CAS
   // conflicts here; other validation/read-only errors are already represented

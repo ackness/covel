@@ -116,7 +116,7 @@
       "conflictTitle": "Choose the plugin that keeps this world's dimensions",
       "conflictDetail": "{{plugins}} all keep world dimensions, and a game uses one of them. Keep one; the others are turned off for this game.",
       "keep": "Keep {{plugin}}",
-      "paused": "World dimensions are paused: {{plugin}} is not running. They keep their current values and the story goes on; they change again once {{plugin}} is back."
+      "paused": "World state is paused because {{plugin}} is not running. The values stay as they are and the story goes on; they change again once {{plugin}} is back."
     },
     "history": "Previous Sessions",
     "worldLore": "World Document",
@@ -298,17 +298,20 @@
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
     "worldDataNotices": {
-      "title": "Some of this world's data is not in this game:",
-      "hint": "Data for a plugin that is off or waiting for approval is imported when you turn it on.",
-      "hide": "Hide",
-      "dimensionsMissing": "World dimensions (such as relationships and resources): no enabled plugin keeps them, so this game does not track them.",
+      "dimensionsMissing": "World state (such as relationships and resources): no plugin that is turned on keeps it, so this game does not track it.",
       "labeled": "{{source}}: {{message}}",
       "receiverMissing": "This data has no plugin to receive it.",
       "sourceNotImported": "The data in \"{{source}}\" was not imported (details)",
       "notImported": "Some data was not imported (details)",
       "receiverAmbiguous": "This data has no plugin to receive it. Choose a receiving plugin.",
       "receiverExcluded": "This data has no plugin to receive it. Receiving plugins are disabled.",
-      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval."
+      "receiverApprovalRequired": "This data has no plugin to receive it. A receiver needs approval.",
+      "titles": {
+        "ambiguous": "Some world data does not know where to go",
+        "excluded": "Some world data has no plugin turned on to take it",
+        "missing": "Some world data has no plugin to take it",
+        "importFailed": "Some world data could not be imported"
+      }
     },
     "pendingApproval": {
       "title": "Needs approval",
@@ -388,8 +391,8 @@
     "stateSetup": "Preparing",
     "recoveryChecking": "Checking the unfinished turn",
     "recoveryRunning": "Your turn is still running",
-    "recoveryInterrupted": "This turn was interrupted",
-    "recoveryFailed": "This turn did not complete",
+    "recoveryInterrupted": "The last turn did not finish",
+    "recoveryFailed": "The last turn did not finish",
     "recoveryHydrating": "Restoring your session",
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
     "recoveryUnavailableDetail": "The server cannot tell right now whether a turn is running. It will check again shortly. Nothing is retried or started until it knows.",
@@ -533,7 +536,7 @@
       "turnedOffNeeds": "Also turned off {{plugins}}: they need \"{{plugin}}\"."
     },
     "recoveryModelSettings": "Model settings",
-    "setupRunning": "Preparing the opening",
+    "setupRunning": "Getting ready",
     "setupExecutionSummary": "Opening setup · {{count}} tasks",
     "setupExecutionSummary_one": "Opening setup · {{count}} task",
     "setupExecutionSummary_other": "Opening setup · {{count}} tasks",
@@ -609,12 +612,17 @@
       "offSaveFailed": "Default appearance is active for this visit. Could not save the preference; the previous choice may return after restart.",
       "apply": "Apply",
       "draftUnavailable": "Selection unavailable. Choose a current theme.",
-      "saving": "Saving…"
+      "saving": "Saving…",
+      "noticeTitle": "This game's theme could not be loaded"
     },
     "revisingResponse": "Revising response",
     "showAll": "Show all",
     "draftWriting": "Writing…",
-    "draftRevising": "Revising…"
+    "draftRevising": "Revising…",
+    "autoAdvanceStopFailed": "Could not stop auto-advance",
+    "worldStateNotice": {
+      "title": "World state needs attention"
+    }
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -2149,11 +2157,14 @@
       "submitFailed": "Approval submission failed: {{error}}",
       "unexpectedRequired": "Still got approval-required after grant — please check the approval backend",
       "required": "Your selected community plugins need authorization for this server session. They remain paused until approved.",
-      "review": "Authorize \"{{plugin}}\"",
       "batchTitle": "Authorize community plugins",
       "batchMessage": "These community plugins are selected for this session and stay paused until you authorize them. Their code runs in the Covel backend without a process sandbox. Untick any you do not want to run. Authorization lasts for this session until the backend restarts.",
       "allowSelected": "Authorize selected",
-      "notNow": "Not now"
+      "notNow": "Not now",
+      "cardTitle_one": "{{count}} plugin is waiting for your approval",
+      "cardTitle_other": "{{count}} plugins are waiting for your approval",
+      "reviewAction": "Review",
+      "cardTitle": "{{count}} plugins are waiting for your approval"
     },
     "unavailable": "Some plugins in this session are off. The game continues without them:",
     "invokeRuntime": {
@@ -2850,7 +2861,6 @@
     "learnMore": "How your data and keys are handled",
     "source": "Source code (open source, deployed automatically)",
     "sourceAt": "Source code: running {{commit}} (open source, deployed automatically)",
-    "dismiss": "Dismiss",
     "localEndpoint": "This public server only calls public HTTPS addresses; use an address that starts with https://. A model on your computer or local network can use 127.0.0.1, localhost or a LAN address, which your browser relays.",
     "localRelay": "This address is on your computer or local network, so your browser relays the model requests: keep the page open while you play, and let the model server accept {{origin}} through CORS (for Ollama, set OLLAMA_ORIGINS={{origin}}). Your browser may ask whether this site may access your device or local network.",
     "localHttp": "Browsers do not let this HTTPS page reach a plain-http address on your local network. Serve the model over HTTPS on your network, or forward it on this computer through 127.0.0.1 or localhost.",
@@ -2876,5 +2886,51 @@
     "fieldError": "Could not save this field. Check its value and try again.",
     "providerSettings": "Settings for {{provider}}",
     "capScope": "Actor and sub-agent call caps apply per execution. Each additional round gets fresh caps; zero disables that capability."
+  },
+  "notice": {
+    "collapse": "Hide for now",
+    "bell": {
+      "title": "Notifications",
+      "openCount_one": "Notifications, {{count}} needs you",
+      "openCount_other": "Notifications, {{count}} need you",
+      "open": "Needs you",
+      "history": "Earlier",
+      "hidden": "Hidden. Select to show again.",
+      "updated": "Hidden, but it changed. Select to show again.",
+      "thisGame": "This game",
+      "all": "All",
+      "empty": "Nothing yet.",
+      "resolved": "resolved",
+      "openCount": "Notifications, {{count}} need you"
+    },
+    "quiet": {
+      "hook": {
+        "aborted": "A step was stopped before it finished"
+      },
+      "subagent": {
+        "writes-dropped": "A helper's changes were not saved"
+      },
+      "gateway": {
+        "failed": "A request to the AI failed in the background"
+      },
+      "utils": {
+        "fetch": {
+          "failed": "A web request made by a plugin failed"
+        }
+      },
+      "context": {
+        "compaction": {
+          "failed": "Summarising the earlier story failed"
+        }
+      },
+      "commit": {
+        "fanout": {
+          "failed": "A follow-up after saving the turn failed"
+        }
+      },
+      "command": {
+        "failed": "A command failed"
+      }
+    }
   }
 }

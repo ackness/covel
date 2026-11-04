@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SessionMemoryIndexStatus } from "@covel/shared";
 import {
@@ -7,6 +6,8 @@ import {
   rebuildSessionMemoryIndex,
 } from "@/services/api";
 import { ApiError } from "@/services/api/request.js";
+import { useNotice } from "@/lib/notice-center.js";
+import { useSetting } from "@/settings/use-settings.js";
 
 function modelLabel(model: {
   readonly provider: string;
@@ -37,11 +38,12 @@ export function MemoryIndexNotice({
   sessionId: string;
   /** Changing it checks again, e.g. after the model settings were closed. */
   refreshKey?: unknown;
-}) {
+}): null {
   const { t } = useTranslation();
   const [status, setStatus] = useState<SessionMemoryIndexStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [developerView] = useSetting<boolean>("ui.developerView");
 
   useEffect(() => {
     let current = true;
@@ -61,9 +63,9 @@ export function MemoryIndexNotice({
     };
   }, [sessionId, refreshKey]);
 
-  if (!status?.stale || !status.locked) return null;
-  const locked = modelLabel(status.locked);
-  const configured = status.configured ? modelLabel(status.configured) : null;
+  const locked =
+    status?.stale && status.locked ? modelLabel(status.locked) : null;
+  const configured = status?.configured ? modelLabel(status.configured) : null;
 
   const rebuild = () => {
     setBusy(true);
@@ -73,43 +75,44 @@ export function MemoryIndexNotice({
       .finally(() => setBusy(false));
   };
 
-  return (
-    <div
-      role="status"
-      className="relative z-10 shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-foreground"
-      data-testid="memory-index-notice"
-    >
-      <div className="mx-auto flex max-w-3xl flex-wrap items-start gap-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-        <div className="min-w-0 flex-1 basis-48">
-          <p className="text-sm font-medium">
-            {t("session.memoryIndex.staleTitle")}
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {configured
-              ? t("session.memoryIndex.staleDetail", { locked, configured })
-              : t("session.memoryIndex.noModelDetail", { locked })}
-          </p>
-          {error && (
-            <p className="mt-1 text-xs text-destructive">
-              {t("session.memoryIndex.failed", { reason: error })}
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={rebuild}
-          className="inline-flex items-center gap-1.5 rounded-(--radius-control) bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
-        >
-          {busy && <Loader2 className="h-3 w-3 animate-spin" />}
-          {busy
+  // Clearing the index is a developer tool; players only rebuild.
+  const action = configured
+    ? {
+        label: busy
+          ? t("session.memoryIndex.rebuilding")
+          : t("session.memoryIndex.rebuild"),
+        onClick: rebuild,
+        disabled: busy,
+      }
+    : developerView
+      ? {
+          label: busy
             ? t("session.memoryIndex.rebuilding")
-            : configured
-              ? t("session.memoryIndex.rebuild")
-              : t("session.memoryIndex.clear")}
-        </button>
-      </div>
-    </div>
+            : t("session.memoryIndex.clear"),
+          onClick: rebuild,
+          disabled: busy,
+        }
+      : null;
+
+  useNotice(
+    locked === null
+      ? null
+      : {
+          key: "memory-index",
+          kind: "card",
+          tone: "warning",
+          scope: sessionId,
+          title: t("session.memoryIndex.staleTitle"),
+          body: [
+            configured
+              ? t("session.memoryIndex.staleDetail", { locked, configured })
+              : t("session.memoryIndex.noModelDetail", { locked }),
+            ...(error
+              ? [t("session.memoryIndex.failed", { reason: error })]
+              : []),
+          ].join("\n"),
+          ...(action ? { actions: [action] } : {}),
+        },
   );
+  return null;
 }

@@ -5,7 +5,6 @@ import {
   fireEvent,
   render,
   screen,
-  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
@@ -21,7 +20,7 @@ const actions = vi.hoisted(() => ({
   setAutoAdvanceLimit: vi.fn<(limit: number) => Promise<void>>(),
   loadSessionPlugins: vi.fn(async () => {}),
 }));
-// Keep GameView, its view switcher and AutoAdvanceControl mounted together;
+// Keep GameView, its view switcher and auto-advance chip mounted together;
 // scene content and unrelated data loading do not affect this regression.
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({ state: useContext(SessionStateContext), ...actions }),
@@ -153,18 +152,14 @@ it.each(["chat", "stage", "immersive stage"])(
         );
       }
     }
-    const controls = () => within(screen.getByTestId("auto-advance-control"));
-    expect(controls().getByRole("status").textContent).toContain("1 / 2");
+    const chip = () => screen.getByTestId("notice-status-auto-advance");
+    expect(chip().textContent).toContain("1 / 2");
     await act(async () => {
-      fireEvent.click(
-        controls().getByRole("button", {
-          name: i18n.t("session.autoAdvanceStop"),
-        }),
-      );
+      fireEvent.click(chip());
     });
     expect(actions.abortActiveTurn).toHaveBeenCalledTimes(1);
-    // A stopped run leaves no empty bar across the session backdrop.
-    expect(screen.queryByTestId("auto-advance-control")).toBeNull();
+    // A stopped run leaves no chip behind.
+    expect(screen.queryByTestId("notice-status-auto-advance")).toBeNull();
     expect(
       screen.queryByRole("button", {
         name: i18n.t("session.autoAdvanceStop"),
@@ -174,7 +169,7 @@ it.each(["chat", "stage", "immersive stage"])(
     state = reducer(state, { type: "SET_EXECUTING", value: false });
     state = reducer(state, { type: "SET_ADVANCE", advance: null });
     rerender(view());
-    expect(screen.queryByTestId("auto-advance-control")).toBeNull();
+    expect(screen.queryByTestId("notice-status-auto-advance")).toBeNull();
     expect(actions.setAutoAdvanceLimit).not.toHaveBeenCalled();
   },
 );

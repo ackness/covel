@@ -118,7 +118,7 @@
       "conflictTitle": "选一个插件保存这个世界的维度",
       "conflictDetail": "{{plugins}} 都会保存世界维度，一局游戏只用其中一个。留下一个，其余的在这局里关闭。",
       "keep": "留下 {{plugin}}",
-      "paused": "世界维度暂停了：{{plugin}} 没有在运行。维度保持现在的值，剧情照常进行；{{plugin}} 回来后，维度会继续变化。"
+      "paused": "世界状态已暂停：{{plugin}} 没有运行。数值保持不变，故事照常进行；{{plugin}} 恢复后会继续变化。"
     },
     "history": "历史会话",
     "worldLore": "世界文档",
@@ -298,17 +298,20 @@
     "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
     "worldDataNotices": {
-      "title": "这个世界的部分数据没有进入这局游戏：",
-      "hint": "插件已关闭或正在等待你批准时，分配给它的数据会在启用后导入。",
-      "hide": "隐藏",
-      "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
+      "dimensionsMissing": "世界状态（如关系、资源）：没有已启用的插件保存它们，所以本局不会记录。",
       "labeled": "{{source}}: {{message}}",
       "receiverMissing": "这些数据没有插件接收。",
       "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
       "notImported": "有一部分数据没有导入（详情）",
       "receiverAmbiguous": "这些数据没有插件接收。请选择一个接收插件。",
       "receiverExcluded": "这些数据没有插件接收。接收插件已停用。",
-      "receiverApprovalRequired": "这些数据没有插件接收。接收插件需要批准。"
+      "receiverApprovalRequired": "这些数据没有插件接收。接收插件需要批准。",
+      "titles": {
+        "ambiguous": "有些世界数据不知道该交给谁",
+        "excluded": "有些世界数据的接收插件被关掉了",
+        "missing": "有些世界数据没有插件接收",
+        "importFailed": "有些世界数据没能导入"
+      }
     },
     "pendingApproval": {
       "title": "需要批准",
@@ -372,8 +375,8 @@
     "stateSetup": "准备中",
     "recoveryChecking": "正在确认未完成回合",
     "recoveryRunning": "上一回合仍在执行",
-    "recoveryInterrupted": "此回合已中断",
-    "recoveryFailed": "此回合未能完成",
+    "recoveryInterrupted": "上一回合没有完成",
+    "recoveryFailed": "上一回合没有完成",
     "recoveryHydrating": "正在恢复存档",
     "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
     "recoveryUnavailableDetail": "服务器暂时无法确认是否有回合在执行，稍后会自动再查。确认之前不会重试，也不会发起新回合。",
@@ -563,12 +566,17 @@
       "offSaveFailed": "本次访问已使用默认外观，但偏好未保存；重启后可能恢复之前的选择。",
       "apply": "应用",
       "draftUnavailable": "此选择不可用，请选择当前主题。",
-      "saving": "正在保存…"
+      "saving": "正在保存…",
+      "noticeTitle": "本局主题没能加载"
     },
     "revisingResponse": "正在修改回复",
     "showAll": "显示全部",
     "draftWriting": "正在写…",
-    "draftRevising": "正在修改…"
+    "draftRevising": "正在修改…",
+    "autoAdvanceStopFailed": "没能停止自动推进",
+    "worldStateNotice": {
+      "title": "世界状态需要处理"
+    }
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -2085,11 +2093,13 @@
       "submitFailed": "审批提交失败：{{error}}",
       "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端",
       "required": "已选择的社区插件需要在本次服务启动后授权，批准前暂停运行。",
-      "review": "授权“{{plugin}}”",
       "batchTitle": "授权社区插件",
       "batchMessage": "以下社区插件已在本会话中选用，授权前保持暂停。它们的代码在 Covel 后端运行，没有进程沙箱。不想运行的请取消勾选。授权在本会话内有效，后端重启后需要重新授权。",
       "allowSelected": "授权所选",
-      "notNow": "暂不授权"
+      "notNow": "暂不授权",
+      "cardTitle_other": "有 {{count}} 个插件等你同意",
+      "reviewAction": "查看",
+      "cardTitle": "有 {{count}} 个插件等你同意"
     },
     "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
@@ -2743,7 +2753,6 @@
     "learnMore": "数据和密钥怎样处理",
     "source": "源代码（开源，自动部署）",
     "sourceAt": "源代码：当前版本 {{commit}}（开源，自动部署）",
-    "dismiss": "关闭提示",
     "localEndpoint": "这台公开服务器只访问公网上的 HTTPS 地址，请改用 https:// 开头的地址。你电脑或局域网上的模型可以用 127.0.0.1、localhost 或局域网地址，由你的浏览器转发。",
     "localRelay": "这个地址在你的电脑或局域网上，模型请求会由你的浏览器转发：游玩时请保持页面打开，并让模型服务允许 {{origin}} 跨域访问（例如 Ollama 设置 OLLAMA_ORIGINS={{origin}}）。浏览器可能会询问是否允许这个网站访问本机或局域网。",
     "localHttp": "浏览器不允许这个 HTTPS 页面访问局域网里的普通 http 地址。请给局域网里的模型服务配上 HTTPS，或者在这台电脑上用 127.0.0.1 / localhost 转发它。",
@@ -2769,5 +2778,50 @@
     "fieldError": "此项未能保存，请检查数值后重试。",
     "providerSettings": "{{provider}}的设置",
     "capScope": "角色和子调用名额按单次执行计算，每个额外节拍重新获得名额；零关闭相应能力。"
+  },
+  "notice": {
+    "collapse": "先收起",
+    "bell": {
+      "title": "通知",
+      "openCount_other": "通知，{{count}} 条等你处理",
+      "open": "等你处理",
+      "history": "之前的",
+      "hidden": "已收起，点击重新显示",
+      "updated": "已收起，但内容有变化，点击重新显示",
+      "thisGame": "本局",
+      "all": "全部",
+      "empty": "还没有通知",
+      "resolved": "已解决",
+      "openCount": "通知，{{count}} 条等你处理"
+    },
+    "quiet": {
+      "hook": {
+        "aborted": "有一个步骤被中途拦下"
+      },
+      "subagent": {
+        "writes-dropped": "有辅助步骤的改动没有保存"
+      },
+      "gateway": {
+        "failed": "后台向 AI 发出的请求失败了"
+      },
+      "utils": {
+        "fetch": {
+          "failed": "有插件发出的网络请求失败了"
+        }
+      },
+      "context": {
+        "compaction": {
+          "failed": "整理前情摘要失败了"
+        }
+      },
+      "commit": {
+        "fanout": {
+          "failed": "保存本回合后的后续处理失败了"
+        }
+      },
+      "command": {
+        "failed": "有命令执行失败"
+      }
+    }
   }
 }

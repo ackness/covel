@@ -11,6 +11,7 @@ import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import i18n from "@/i18n";
 import { buildSnapshotExecutionSteps } from "@/stores/session-store/snapshot-execution-steps.js";
 import { ExecutionRecoveryNotice } from "../execution-recovery-notice.js";
+import { NoticeHost } from "@/components/ui/notice-host.js";
 import {
   SetupProgressNotice,
   setupProgress,
@@ -103,18 +104,21 @@ describe("provider failure scope", () => {
     const onOpenSettings = vi.fn();
     const steps = history();
     render(
-      <SessionModelUsesContext.Provider
-        value={sessionModelUses([plugin], [slot("story")])}
-      >
-        <ExecutionRecoveryNotice
-          recovery={recovery}
-          steps={steps}
-          onOpenSettings={onOpenSettings}
-          onRetry={vi.fn()}
-          onRefresh={vi.fn()}
-          onStop={vi.fn()}
-        />
-      </SessionModelUsesContext.Provider>,
+      <>
+        <NoticeHost />
+        <SessionModelUsesContext.Provider
+          value={sessionModelUses([plugin], [slot("story")])}
+        >
+          <ExecutionRecoveryNotice
+            recovery={recovery}
+            steps={steps}
+            onOpenSettings={onOpenSettings}
+            onRetry={vi.fn()}
+            onRefresh={vi.fn()}
+            onStop={vi.fn()}
+          />
+        </SessionModelUsesContext.Provider>
+      </>,
     );
     expect(steps[0]?.failureTarget).toEqual(failureTarget);
     expect(screen.getByText(/DeepSeek rejected the API key/)).toBeTruthy();
@@ -174,16 +178,19 @@ describe("provider failure scope", () => {
     });
     expect(progress?.failureTarget).toEqual(failureTarget);
     render(
-      <SessionModelUsesContext.Provider
-        value={sessionModelUses([plugin], [slot("story")])}
-      >
-        <SetupProgressNotice
-          progress={progress}
-          onRearm={vi.fn()}
-          onRun={vi.fn()}
-          onOpenSettings={vi.fn()}
-        />
-      </SessionModelUsesContext.Provider>,
+      <>
+        <NoticeHost />
+        <SessionModelUsesContext.Provider
+          value={sessionModelUses([plugin], [slot("story")])}
+        >
+          <SetupProgressNotice
+            progress={progress}
+            onRearm={vi.fn()}
+            onRun={vi.fn()}
+            onOpenSettings={vi.fn()}
+          />
+        </SessionModelUsesContext.Provider>
+      </>,
     );
     act(() => vi.advanceTimersByTime(1500));
     expect(
@@ -195,18 +202,21 @@ describe("provider failure scope", () => {
     await i18n.changeLanguage("zh-CN");
     const onOpenSettings = vi.fn();
     render(
-      <SessionModelUsesContext.Provider
-        value={sessionModelUses([plugin], [slot("story")])}
-      >
-        <ExecutionRecoveryNotice
-          recovery={recovery}
-          steps={history("missing_key", "No API key for DeepSeek")}
-          onOpenSettings={onOpenSettings}
-          onRetry={vi.fn()}
-          onRefresh={vi.fn()}
-          onStop={vi.fn()}
-        />
-      </SessionModelUsesContext.Provider>,
+      <>
+        <NoticeHost />
+        <SessionModelUsesContext.Provider
+          value={sessionModelUses([plugin], [slot("story")])}
+        >
+          <ExecutionRecoveryNotice
+            recovery={recovery}
+            steps={history("missing_key", "No API key for DeepSeek")}
+            onOpenSettings={onOpenSettings}
+            onRetry={vi.fn()}
+            onRefresh={vi.fn()}
+            onStop={vi.fn()}
+          />
+        </SessionModelUsesContext.Provider>
+      </>,
     );
     expect(
       screen.getByText("没有填写 DeepSeek 的 API 密钥，请在模型设置中填写。"),
@@ -237,21 +247,24 @@ describe("provider failure scope", () => {
     "names the provider for %s without a shared list when only one use routes there",
     (kind, error, message) => {
       render(
-        <SessionModelUsesContext.Provider
-          value={sessionModelUses(
-            [plugin],
-            [slot("story"), slot("plugin", "local")],
-          )}
-        >
-          <ExecutionRecoveryNotice
-            recovery={recovery}
-            steps={history(kind, error)}
-            onOpenSettings={vi.fn()}
-            onRetry={vi.fn()}
-            onRefresh={vi.fn()}
-            onStop={vi.fn()}
-          />
-        </SessionModelUsesContext.Provider>,
+        <>
+          <NoticeHost />
+          <SessionModelUsesContext.Provider
+            value={sessionModelUses(
+              [plugin],
+              [slot("story"), slot("plugin", "local")],
+            )}
+          >
+            <ExecutionRecoveryNotice
+              recovery={recovery}
+              steps={history(kind, error)}
+              onOpenSettings={vi.fn()}
+              onRetry={vi.fn()}
+              onRefresh={vi.fn()}
+              onStop={vi.fn()}
+            />
+          </SessionModelUsesContext.Provider>
+        </>,
       );
       expect(screen.getByText(message).textContent).toContain("DeepSeek");
       expect(screen.queryByText(/model uses in this session/)).toBeNull();
@@ -260,18 +273,21 @@ describe("provider failure scope", () => {
 
   it("keeps non-account errors unchanged and never infers a provider from text", () => {
     const renderNotice = (steps: ReturnType<typeof history>) => (
-      <SessionModelUsesContext.Provider
-        value={sessionModelUses([plugin], [slot("story")])}
-      >
-        <ExecutionRecoveryNotice
-          recovery={recovery}
-          steps={steps}
-          onOpenSettings={vi.fn()}
-          onRetry={vi.fn()}
-          onRefresh={vi.fn()}
-          onStop={vi.fn()}
-        />
-      </SessionModelUsesContext.Provider>
+      <>
+        <NoticeHost />
+        <SessionModelUsesContext.Provider
+          value={sessionModelUses([plugin], [slot("story")])}
+        >
+          <ExecutionRecoveryNotice
+            recovery={recovery}
+            steps={steps}
+            onOpenSettings={vi.fn()}
+            onRetry={vi.fn()}
+            onRefresh={vi.fn()}
+            onStop={vi.fn()}
+          />
+        </SessionModelUsesContext.Provider>
+      </>
     );
     const view = render(renderNotice(history("timeout", "Request timed out")));
     expect(screen.getByText(i18n.t("error.actionable.timeout"))).toBeTruthy();

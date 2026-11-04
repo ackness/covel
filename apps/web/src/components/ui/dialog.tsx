@@ -41,7 +41,7 @@ function DialogContent({
           // A toast shows above the dialog. Reading or copying it is not a
           // click outside the dialog and must not close it.
           const target = event.target;
-          if (target instanceof Element && target.closest("[data-toast-host]"))
+          if (target instanceof Element && target.closest("[data-notice-host]"))
             event.preventDefault();
           onPointerDownOutside?.(event);
         }}

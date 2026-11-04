@@ -37,6 +37,7 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
 import { ConnectionStatus } from "./connection-status.js";
+import { NoticeStatusChips } from "./notice-status-chips.js";
 import { MusicToggle } from "../session-music.js";
 import {
   executionTone,
@@ -202,6 +203,7 @@ export function GameViewHeader({
                 : t("session.stateStreaming")}
           </span>
         )}
+        <NoticeStatusChips scope={sessionId} />
         <ConnectionStatus />
       </div>
       <div className="ml-auto flex max-w-full flex-wrap items-center gap-1 shrink-0 sm:flex-nowrap">

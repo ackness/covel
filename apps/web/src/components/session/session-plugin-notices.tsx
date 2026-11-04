@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   isDependencyRejection,
@@ -11,6 +12,7 @@ import {
   storyPlugins,
 } from "@/lib/plugin-notices.js";
 import { formatList } from "@/lib/i18n-text.js";
+import { useNotice } from "@/lib/notice-center.js";
 
 interface SessionPluginNoticesProps {
   /** Every installed plugin, with `active` for the session's running ones. */
@@ -23,29 +25,19 @@ interface SessionPluginNoticesProps {
   readonly offTitle: string;
   readonly busy: boolean;
   readonly onTurnOn: (pluginId: string) => void;
-  /** A bar across the game view, or a card on the session prep screen. */
-  readonly variant: "bar" | "card";
 }
 
-const boxClass = {
-  bar: "relative z-10 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs",
-  card: "mb-5 rounded-(--radius-card) border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm",
-} as const;
+const boxClass =
+  "mb-5 rounded-(--radius-card) border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm";
 
-/**
- * Tells the player which plugins of the session are off and why, with a
- * button for each installed plugin that would bring one back, and explains
- * what to do when no plugin tells the story.
- */
-export function SessionPluginNotices({
+/** What is wrong with the session's plugin set, shared by both presentations. */
+function usePluginNoticeModel({
   plugins,
   unavailable,
   pendingApproval = [],
-  offTitle,
   busy,
   onTurnOn,
-  variant,
-}: SessionPluginNoticesProps) {
+}: Omit<SessionPluginNoticesProps, "offTitle">) {
   const { t } = useTranslation();
   const pendingIds = new Set(pendingApproval.map((item) => item.pluginId));
   const inactive = (ids: Iterable<string>) =>
@@ -83,33 +75,68 @@ export function SessionPluginNotices({
         {t("plugin.off.turnOn", { plugin: pluginName(plugins, id) })}
       </button>
     ));
+  const reasons = unavailable.map((item) => pluginOffReason(t, item, plugins));
+  const noStoryHint =
+    storyCandidates.length > 0
+      ? t("plugin.noStory.enable", {
+          plugins: formatList(
+            storyCandidates.map((id) => pluginName(plugins, id)),
+            "or",
+          ),
+        })
+      : storyPending
+        ? t("plugin.noStory.approvalRequired")
+        : t("plugin.noStory.install");
+  return {
+    t,
+    fixes,
+    noStory,
+    storyCandidates,
+    turnOn,
+    reasons,
+    noStoryHint,
+    pendingReasons: pendingApproval.map((item) =>
+      pluginOffReason(t, item, plugins),
+    ),
+  };
+}
+
+/**
+ * The session prep screen's card: which plugins of the selection are off and
+ * why, with a button for each installed plugin that would bring one back, and
+ * what to do when no plugin tells the story.
+ */
+export function SessionPluginNotices(props: SessionPluginNoticesProps) {
+  const { offTitle } = props;
+  const model = usePluginNoticeModel(props);
+  const { t, fixes, noStory, storyCandidates, turnOn, reasons } = model;
   return (
     <>
-      {pendingApproval.length > 0 && (
+      {model.pendingReasons.length > 0 && (
         <div
           role="status"
           data-testid="pending-approval-plugins"
-          className={boxClass[variant]}
+          className={boxClass}
         >
           <p className="font-medium">{t("session.pendingApproval.title")}</p>
           <ul className="mt-1 list-disc pl-4">
-            {pendingApproval.map((item) => (
-              <li key={item.pluginId}>{pluginOffReason(t, item, plugins)}</li>
+            {model.pendingReasons.map((reason, index) => (
+              <li key={index}>{reason}</li>
             ))}
           </ul>
           <p className="mt-1">{t("session.pendingApproval.detail")}</p>
         </div>
       )}
-      {unavailable.length > 0 && (
+      {reasons.length > 0 && (
         <div
           role="status"
           data-testid="unavailable-session-plugins"
-          className={boxClass[variant]}
+          className={boxClass}
         >
           <p>{offTitle}</p>
           <ul className="mt-1 list-disc pl-4">
-            {unavailable.map((item) => (
-              <li key={item.pluginId}>{pluginOffReason(t, item, plugins)}</li>
+            {reasons.map((reason, index) => (
+              <li key={index}>{reason}</li>
             ))}
           </ul>
           {fixes.length > 0 && (
@@ -118,32 +145,67 @@ export function SessionPluginNotices({
         </div>
       )}
       {noStory && (
-        <div
-          role="status"
-          data-testid="no-story-plugin"
-          className={boxClass[variant]}
-        >
+        <div role="status" data-testid="no-story-plugin" className={boxClass}>
           <p className="font-medium">{t("plugin.noStory.title")}</p>
           <p>{t("plugin.noStory.detail")}</p>
           {storyCandidates.length > 0 ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span>
-                {t("plugin.noStory.enable", {
-                  plugins: formatList(
-                    storyCandidates.map((id) => pluginName(plugins, id)),
-                    "or",
-                  ),
-                })}
-              </span>
+              <span>{model.noStoryHint}</span>
               {turnOn(storyCandidates)}
             </div>
-          ) : storyPending ? (
-            <p>{t("plugin.noStory.approvalRequired")}</p>
           ) : (
-            <p>{t("plugin.noStory.install")}</p>
+            <p>{model.noStoryHint}</p>
           )}
         </div>
       )}
     </>
   );
+}
+
+/**
+ * The same facts inside a running game, as cards: plugins that are off, and
+ * the missing story plugin (an error, since turns then tell no story).
+ */
+export function SessionPluginNoticeCards({
+  sessionId,
+  ...props
+}: Omit<SessionPluginNoticesProps, "pendingApproval"> & {
+  readonly sessionId: string;
+}): null {
+  const { offTitle } = props;
+  const model = usePluginNoticeModel(props);
+  const { t, fixes, noStory, storyCandidates, turnOn, reasons } = model;
+  const buttons = (ids: readonly string[]): (() => ReactNode) | undefined =>
+    ids.length > 0
+      ? () => <div className="flex flex-wrap gap-2">{turnOn(ids)}</div>
+      : undefined;
+  const offRender = buttons(fixes);
+  useNotice(
+    reasons.length > 0
+      ? {
+          key: "plugins-unavailable",
+          kind: "card",
+          tone: "warning",
+          scope: sessionId,
+          title: offTitle,
+          body: reasons.join("\n"),
+          ...(offRender ? { render: offRender } : {}),
+        }
+      : null,
+  );
+  const storyRender = buttons(storyCandidates);
+  useNotice(
+    noStory
+      ? {
+          key: "no-story-plugin",
+          kind: "card",
+          tone: "error",
+          scope: sessionId,
+          title: t("plugin.noStory.title"),
+          body: [t("plugin.noStory.detail"), model.noStoryHint].join("\n"),
+          ...(storyRender ? { render: storyRender } : {}),
+        }
+      : null,
+  );
+  return null;
 }

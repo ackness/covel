@@ -750,7 +750,6 @@ export function SessionPrepScreen({
               offTitle={t("plugin.dependentsOff")}
               busy={isStarting}
               onTurnOn={togglePlugin}
-              variant="card"
             />
           )}
 

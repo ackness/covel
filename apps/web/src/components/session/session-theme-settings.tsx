@@ -131,6 +131,17 @@ export function SessionThemeSettings({
             )}
           </p>
         )}
+        {(effective || state?.selected || state?.error || state?.saving) && (
+          // Always enabled: going back to the default look must stay possible
+          // while a theme is loading, saving or failing.
+          <button
+            type="button"
+            className="ui-menu-item w-full rounded border p-2 text-sm"
+            onClick={() => void source?.select(null)}
+          >
+            {t("session.theme.default")}
+          </button>
+        )}
         <button type="button" className="text-xs underline" onClick={onReload}>
           {t("common.retry")}
         </button>

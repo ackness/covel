@@ -11,7 +11,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { SettingsStoreApi } from "@covel/settings";
 import type { SessionPlugin, UISpecsResponse } from "@/services/api.js";
 import { SessionThemeSettings } from "../session-theme-settings.js";
-import { SessionRecoveryControls } from "../session-recovery-controls.js";
 import { usePluginThemes } from "../game-view/use-plugin-themes.js";
 import {
   PluginThemeSession,
@@ -86,7 +85,6 @@ function show(source: PluginThemeSession, onReload = () => {}) {
   render(
     <>
       <SessionThemeSettings source={source} onReload={onReload} />
-      <SessionRecoveryControls theme={source} />
     </>,
   );
   fireEvent.click(screen.getByRole("button", { name: "会话主题" }));
@@ -119,7 +117,7 @@ it("leaves a sole pack off and lists its label and owner before saving and clear
   );
   expect(
     screen
-      .getByTestId("session-recovery-controls")
+      .getByRole("button", { name: "使用默认外观" })
       .closest("[data-covel-theme-part]"),
   ).toBeNull();
   await act(async () =>

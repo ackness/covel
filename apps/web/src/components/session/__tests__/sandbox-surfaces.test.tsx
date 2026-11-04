@@ -1,3 +1,4 @@
+import { NoticeHost } from "@/components/ui/notice-host.js";
 import { useContext, type ComponentProps, type ReactNode } from "react";
 import {
   act,
@@ -205,6 +206,7 @@ function mount() {
   const tree = () => (
     <SessionStateContext.Provider value={state}>
       <GameView session={state.session!} />
+      <NoticeHost />
     </SessionStateContext.Provider>
   );
   const view = render(tree());
@@ -341,8 +343,8 @@ it.each([false, true])(
     fireEvent.change(draft, { target: { value: "Keep the main draft" } });
     fireEvent.click(screen.getByRole("button", { name: "Fail Input page" }));
 
-    expect(screen.getByTestId("execution-recovery-notice")).toBeTruthy();
-    expect(screen.getByTestId("no-story-plugin")).toBeTruthy();
+    expect(screen.getByTestId("notice-execution-recovery")).toBeTruthy();
+    expect(screen.getByTestId("notice-no-story-plugin")).toBeTruthy();
     expect(
       within(screen.getByTestId("sandbox-surface-controls")).getByRole("status")
         .textContent,

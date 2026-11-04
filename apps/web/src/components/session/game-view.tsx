@@ -2,9 +2,10 @@ import { StoryRevealProvider } from "@/lib/reveal/story-reveal-context.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import { usePluginThemes } from "./game-view/use-plugin-themes.js";
 import { SessionThemeSettings } from "./session-theme-settings.js";
-import { SessionRecoveryControls } from "./session-recovery-controls.js";
+import { SessionThemeNotice } from "./session-theme-notice.js";
 import { usePluginThemePart } from "@/theme-system/use-plugin-theme.js";
-import { AutoAdvanceControl } from "./auto-advance-control.js";
+import { AutoAdvanceNotice } from "./auto-advance-notice.js";
+import { PluginApprovalNotice } from "./plugin-approval-notice.js";
 import { parsePluginViewMode } from "@covel/shared";
 import { usePluginViews } from "./game-view/use-plugin-views.js";
 import { PluginViewHost } from "./plugin-view-host.js";
@@ -19,7 +20,6 @@ import {
 } from "./plugin-view-consent.js";
 import { Button } from "@/components/ui/button.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { SessionDimensionsPanel } from "./session-dimensions-panel.js";
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -36,9 +36,9 @@ import { SuspensionsPanel } from "./suspensions-panel.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { MemoryIndexNotice } from "./memory-index-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
-import { WorldDataNotices } from "./world-data-notices.js";
-import { SessionPluginNotices } from "./session-plugin-notices.js";
-import { DimensionProviderNotice } from "./dimension-provider-notice.js";
+import { WorldDataNoticeCards } from "./world-data-notices.js";
+import { SessionPluginNoticeCards } from "./session-plugin-notices.js";
+import { WorldStateNotice } from "./world-state-notice.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -63,6 +63,7 @@ import {
   GameViewHeader,
   type GameViewMode,
 } from "./game-view/game-view-header.js";
+import { NoticeStatusChips } from "./game-view/notice-status-chips.js";
 import { MessageComposer } from "./game-view/message-composer.js";
 import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
@@ -636,8 +637,6 @@ export function GameView({
         onRemoveDraft={removeInteractionDraft}
       />
 
-      <SessionDimensionsPanel recoveryOnly />
-
       {/* Input — always fixed at bottom */}
       {!activeComposer && hostComposer}
     </>
@@ -818,6 +817,16 @@ export function GameView({
           )}
           {/* Header — hidden while the stage is immersive so it fills the
               viewport. Fades back in on exit (rails snap; chrome fades). */}
+          {immersive && viewMode === "stage" && (
+            // The header is gone, so its status chips (such as stopping
+            // auto-advance) float over the stage instead.
+            <div
+              data-covel-host-controls=""
+              className="absolute left-3 top-3 z-40 flex gap-1 empty:hidden"
+            >
+              <NoticeStatusChips scope={session.id} />
+            </div>
+          )}
           {!(immersive && viewMode === "stage") && (
             // Host menus must open above both surface controls and notices.
             <div
@@ -894,52 +903,41 @@ export function GameView({
               />
             </div>
           )}
-          <SessionRecoveryControls theme={pluginThemes.source} />
-          <AutoAdvanceControl key={`auto-advance:${session.id}`} />
-
-          {sessionPlugins.some((plugin) => plugin.approvalRequired) && (
-            <div
-              role="status"
-              className="relative z-10 flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs"
-            >
-              <span>{t("plugin.approval.required")}</span>
-              {sessionPlugins
-                .filter((plugin) => plugin.approvalRequired)
-                .map((plugin) => (
-                  <button
-                    key={plugin.id}
-                    type="button"
-                    className="underline"
-                    disabled={executing}
-                    onClick={() => void onTogglePlugin(plugin.id, true)}
-                  >
-                    {t("plugin.approval.review", {
-                      plugin:
-                        resolveDisplayText(plugin.displayName) || plugin.id,
-                    })}
-                  </button>
-                ))}
-            </div>
-          )}
-
-          <SessionPluginNotices
+          {/* Notices: each is a card or header chip owned by the notice
+              center; none takes space in the column. */}
+          <SessionThemeNotice
+            theme={pluginThemes.source}
+            sessionId={session.id}
+          />
+          <AutoAdvanceNotice
+            key={`auto-advance:${session.id}`}
+            sessionId={session.id}
+          />
+          <PluginApprovalNotice
+            plugins={sessionPlugins}
+            sessionId={session.id}
+            busy={executing}
+            onReview={(pluginId) => void onTogglePlugin(pluginId, true)}
+          />
+          <SessionPluginNoticeCards
+            sessionId={session.id}
             plugins={sessionPlugins}
             unavailable={unavailableSessionPlugins}
             offTitle={t("plugin.unavailable")}
-            variant="bar"
             busy={executing}
             onTurnOn={(pluginId) => void onTogglePlugin(pluginId, true)}
           />
-
-          <WorldDataNotices notices={worldDataNotices} />
-
-          <DimensionProviderNotice
+          <WorldDataNoticeCards
+            notices={worldDataNotices}
+            sessionId={session.id}
+          />
+          <WorldStateNotice
             providerPluginId={state.gameState.dimensionProviderPluginId}
             plugins={sessionPlugins}
+            notices={worldDataNotices}
+            sessionId={session.id}
           />
 
-          {/* Messages */}
-          {stageActive && <SessionDimensionsPanel recoveryOnly />}
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             steps={executionSteps}
