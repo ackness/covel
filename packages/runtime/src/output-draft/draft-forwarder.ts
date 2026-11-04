@@ -114,11 +114,17 @@ class Forwarder implements DraftForwarder {
     const request = ++this.request;
     if (this.hold) return { fragment: () => {}, reset: () => {} };
     let attempt: number | undefined;
+    // A stream that restarts within one attempt is still a new draft.
+    const begun = new Map<number, number>();
     return {
       fragment: (at, fragment) => {
         if (attempt !== at) {
           attempt = at;
-          this.begin(`${this.identity.runId}:${request}:${at}`);
+          const times = begun.get(at) ?? 0;
+          begun.set(at, times + 1);
+          this.begin(
+            `${this.identity.runId}:${request}:${at}${times ? `.${times}` : ""}`,
+          );
         }
         this.fragment(fragment);
       },

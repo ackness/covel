@@ -210,6 +210,27 @@ describe("createDraftForwarder", () => {
     ]);
   });
 
+  it("gives a stream that restarts within an attempt a new draft", () => {
+    const { events, forwarder } = setup();
+    const stream = forwarder.observe();
+    stream.fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"text":"A."},',
+    });
+    stream.reset(0);
+    stream.fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"text":"B."},',
+    });
+    expect(summary(events)).toEqual([
+      "draft run:1:0 A.",
+      "retracted run:1:0 revising",
+      "draft run:1:0.1 B.",
+    ]);
+  });
+
   it("retracts an accepted story that later fails", () => {
     const { events, forwarder } = setup({}, { type: "object" });
     forwarder.observe();
