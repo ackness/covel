@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   startFakeLlmProvider,
   submitOutputReply,
@@ -18,9 +18,18 @@ import {
 const opening = "The lantern lights the path.";
 const reply = "“Stay close,” the keeper says.";
 
-test("the story shows line by line while it is written, then becomes the turn's story", async ({
-  page,
-}) => {
+/**
+ * Start a Narrative Only session whose next story streams its two lines and
+ * holds the last argument piece until `release`, then run `steps`.
+ */
+async function withHeldStory(
+  page: Page,
+  steps: (held: {
+    release: () => void;
+    /** The saved messages' text, read from the server. */
+    saved: () => Promise<string[]>;
+  }) => Promise<void>,
+) {
   const provider = await startFakeLlmProvider();
   let release = () => {};
   const gate = new Promise<void>((resolve) => {
@@ -99,6 +108,29 @@ test("the story shows line by line while it is written, then becomes the turn's 
     await waitForTurnIdle(page);
     await expectPlayerCanAct(page);
 
+    await steps({
+      release,
+      saved: async () => {
+        const body = (await (
+          await page.request.get(`/api/sessions/${sessionId}/messages`, {
+            headers,
+          })
+        ).json()) as { items: { content: string }[] };
+        return body.items.map((item) => item.content);
+      },
+    });
+  } finally {
+    release();
+    if (sessionId)
+      await page.request.delete(`/api/sessions/${sessionId}`, { headers });
+    await provider.close();
+  }
+}
+
+test("the story shows line by line while it is written, then becomes the turn's story", async ({
+  page,
+}) => {
+  await withHeldStory(page, async ({ release, saved }) => {
     await sendPlayerMessage(page, "I lift the lantern.");
     // Both lines are finished before the held last piece; the turn is not.
     const draft = page.getByTestId("output-draft");
@@ -106,14 +138,7 @@ test("the story shows line by line while it is written, then becomes the turn's 
     await expect(draft).toContainText(reply);
     await expect(draft).toHaveAttribute("data-draft-state", "writing");
     await expect(draft.getByRole("status")).toHaveText("Writing…");
-    const saved = (await (
-      await page.request.get(`/api/sessions/${sessionId}/messages`, {
-        headers,
-      })
-    ).json()) as { items: { content: string }[] };
-    expect(saved.items.some((item) => item.content.includes(opening))).toBe(
-      false,
-    );
+    expect((await saved()).some((text) => text.includes(opening))).toBe(false);
 
     release();
     await waitForTurnIdle(page);
@@ -122,10 +147,43 @@ test("the story shows line by line while it is written, then becomes the turn's 
     await expect(page.getByText(opening, { exact: true })).toHaveCount(1);
     await expect(page.getByText(reply, { exact: true })).toHaveCount(1);
     await expectPlayerCanAct(page);
-  } finally {
+  });
+});
+
+test("the stage reads the story line by line while it is written and keeps the page", async ({
+  page,
+}) => {
+  await withHeldStory(page, async ({ release, saved }) => {
+    await page.getByRole("button", { name: /Stage view/i }).click();
+    const input = page.getByTestId("stage-decision-input");
+    await expect(input).toBeEnabled();
+    await input.fill("I lift the lantern.");
+    await input.press("Enter");
+
+    // The reader takes the panel's place while the turn runs.
+    const panel = page.getByTestId("stage-draft-panel");
+    const line = page.getByTestId("stage-reader-line");
+    await expect(panel).toBeVisible();
+    await expect(line).toHaveText(opening);
+    await expect(page.getByTestId("stage-reader-status")).toHaveText(
+      "Writing…",
+    );
+    await line.click();
+    await expect(line).toHaveText(reply);
+    await expect(page.getByTestId("stage-reader-speaker")).toHaveText("Keeper");
+    // The last line written so far waits for the next one.
+    await line.click();
+    await expect(line).toHaveText(reply);
+    expect((await saved()).some((text) => text.includes(opening))).toBe(false);
+
     release();
-    if (sessionId)
-      await page.request.delete(`/api/sessions/${sessionId}`, { headers });
-    await provider.close();
-  }
+    // The committed story keeps the page instead of replaying it.
+    await expect(panel).toHaveCount(0);
+    await expect(input).toBeEnabled({ timeout: 30_000 });
+    await expect(line).toHaveText(reply);
+    await expect(page.getByTestId("stage-reader-status")).toHaveCount(0);
+    await line.click();
+    await expect(page.getByTestId("stage-reader")).toHaveCount(0);
+    expect((await saved()).some((text) => text.includes(opening))).toBe(true);
+  });
 });

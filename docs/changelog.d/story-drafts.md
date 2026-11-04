@@ -6,4 +6,4 @@
 
 ### Changed
 
-- **A story is no longer hidden until its commit.** Before the commit it appears as an unreviewed draft on the stream of the action that started the turn; review and commit hooks still decide what becomes a message, and the stage view still shows the story after the commit. See [security](../internals/security.md).
+- **A story is no longer hidden until its commit.** Before the commit it appears as an unreviewed draft on the stream of the action that started the turn; review and commit hooks still decide what becomes a message. See [security](../internals/security.md).

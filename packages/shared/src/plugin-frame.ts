@@ -112,7 +112,7 @@ export const PLUGIN_BRIDGE_SCRIPT = `
         for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error("Plugin UI is not connected")); }
         pending.clear(); port.close();
       } else if (data?.type === "state") {
-        if (data.value?.session && data.value.session.version !== 3) return;
+        if (data.value?.session && data.value.session.version !== 4) return;
         state = data.value;
         applyTheme(state.theme);
         for (const fn of listeners) fn(state);

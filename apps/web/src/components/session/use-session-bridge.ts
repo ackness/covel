@@ -1,6 +1,8 @@
 import { useMemo, useRef } from "react";
 import { useSession } from "@/stores/session-store.js";
 import { useUiSlots } from "@/stores/ui-slot-store.js";
+import { useSetting } from "@/settings/use-settings.js";
+import { readLiveOutputPreference } from "@/stores/session-store/output-drafts.js";
 import {
   buildSessionProjection,
   createSessionMessageOrdinals,
@@ -15,7 +17,10 @@ export function useSessionBridge(
   ) => string | undefined,
 ) {
   const { state } = useSession();
-  const { session, messages, executing, submittedBlockIds } = state;
+  const { session, messages, executing, submittedBlockIds, outputDrafts } =
+    state;
+  const [liveOutputSetting] = useSetting<string>("ui.liveOutput");
+  const liveOutput = readLiveOutputPreference(liveOutputSetting);
   const characters = Array.isArray(state.gameState.characters)
     ? state.gameState.characters
     : EMPTY_CHARACTERS;
@@ -39,6 +44,8 @@ export function useSessionBridge(
         interactionHandle,
         executing,
         messages,
+        drafts: outputDrafts,
+        liveOutput,
         messageSeqs,
         submittedBlockIds,
         characters,
@@ -60,6 +67,8 @@ export function useSessionBridge(
     sessionId,
     executing,
     messages,
+    outputDrafts,
+    liveOutput,
     messageSeqs,
     submittedBlockIds,
     characters,

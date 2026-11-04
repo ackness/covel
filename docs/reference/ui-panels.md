@@ -939,7 +939,9 @@ contributes:
 
 <a id="sessionprojection版本-2"></a>
 
-### SessionProjection（版本 3）
+<a id="sessionprojection版本-3"></a>
+
+### SessionProjection（版本 4）
 
 页面读取 `window.covel` 暴露的状态对象的 `session` 字段，或通过 `window.covel.subscribe` 订阅投影。顶层只提供 `session`、`locale` 和宿主 `theme`；不再提供普通面板的 `data`、`sources`、`jobs`、`context` 或自己的 KV。
 
@@ -948,14 +950,17 @@ contributes:
 <!-- prettier-ignore -->
 | 字段 | 内容 |
 | --- | --- |
-| `version` | 固定为 `3`；拒绝版本 2 |
+| `version` | 固定为 `4`；拒绝更早的版本 |
 | `phase` / `turn` / `executing` | `setup` 或 `playing`、已提交玩家回合数、执行状态 |
-| `messages[]` | `{seq, role, text, truncated?}`，仅公开 story 和无 block 的玩家消息 |
+| `messages[]` | `{seq, role, text, lines?, truncated?}`，仅公开 story 和无 block 的玩家消息 |
+| `drafts[]` | `{state, text, lines?, truncated?}`，还没提交的故事草稿；`state` 为 `writing`、`revising`（作废重写，`text` 为空）或 `accepted`（只差提交）。按玩家的“生成中显示故事”设置给出，选“回合保存后”时为空数组 |
 | `pending[]` | `{seq, interaction, handle?}`，公开交互和当前 frame 的不透明回答句柄 |
 | `input.seats[]` | 人类座位的 `{id, role, characterIds, currentCharacterId?, allowed}`；只有公开关联标识，不含用户或账户身份 |
 | `input.kinds[]` | 当前座位可用行动的 `{kind, label, text, actor, fields?}`；字段只含公开 JSON Schema 显示词汇，不发送可执行验证器 |
 | `characters[]` | `id`、`name`、`type`，可选 `aliases`、`description`；不包含任意 `fields` 或私人知识 |
 | `slots[]` | `{slot, key?, value}`，经过内核槽位 schema 校验；媒体只保留 `{id,mime,size}` 的不透明引用 |
+
+`lines[]` 是故事的显示行 `{kind, text, speaker?, speakerId?}`，和宿主舞台逐句读的行相同：`kind` 为 `narration`、`dialogue` 或 `action`，`speakerId` 是解析出的说话角色 `id`，可与 `characters[]` 对照。只有故事带分段、且各行用空行连接后正好等于 `text` 时才给出；其他故事由页面自己按空行分段。
 
 `interaction` 的类型为 `form`、`choice`、`confirmation` 或 `unavailable`。表单公开标题、提交标签和字段的名称、类型、标签、占位符、必填、默认值、数值限制与选项。选项公开 `choices[].{id,label,description?}`；确认公开提示和确认/取消标签。内部 block/turn/interaction 引用、`meta`、动作映射和服务端验证器均留在宿主。句柄只在当前页面尝试和当前交互有效；回答、替换、淘汰或离开后失效。自定义 JSON UI 和不支持/过大的交互只显示 `unavailable`，没有句柄，宿主提供打开默认交互界面的按钮。可选建议仍由宿主管理。
 
@@ -964,11 +969,13 @@ contributes:
 <!-- prettier-ignore -->
 | 内容 | 上限与处理 |
 | --- | --- |
-| 消息 | 最近 200 条，文本合计 256 KiB；单条 32 KiB，截断带 `truncated: true` |
+| 消息 | 最近 200 条，文本和显示行合计 256 KiB；单条 32 KiB，截断带 `truncated: true` |
 | 角色 | 最多 100 个，每个序列化后 8 KiB；超过时跳过 |
 | 待答交互 | 最多 8 个，每个 16 KiB；超过时改为 `unavailable` 且没有句柄 |
+| 草稿 | 最多 4 份，每份 32 KiB，截断带 `truncated: true` |
+| 显示行 | 每条消息或草稿序列化后 64 KiB；超过或正文被截断时省略，消息的显示行计入 256 KiB 合计 |
 
-KiB 按 UTF-8 计算。桥接只发送包含完整已提交消息的状态快照。版本 3 删除 `streaming` 和 `type: "stream"` 追加通道，宿主与页面必须同步升级。行动受理后立即显示执行状态。沉浸式插件视图外仍保留上一条故事、进度、停止和失败重试控件。安全的拒绝码显示“正在修改回复”；候选正文、工具参数和审核反馈不会进入页面投影。
+KiB 按 UTF-8 计算。桥接只发送完整的状态快照，没有追加通道：`messages` 只含已提交消息，草稿每次更新都随新快照整体替换。版本 4 新增 `drafts`，宿主与页面必须同步升级。草稿和聊天里的草稿相同，是未经审核的故事正文（见[故事草稿](./plugins.md#story-drafts)），不含回合、runtime 或插件身份；故事提交后它从 `drafts` 移除，正文出现在 `messages`。行动受理后立即显示执行状态。沉浸式插件视图外仍保留上一条故事、进度、停止和失败重试控件。安全的拒绝码显示“正在修改回复”；工具参数和审核反馈不会进入页面投影。
 
 ### 页面失效与恢复
 

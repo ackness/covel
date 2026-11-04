@@ -11,7 +11,21 @@ import { projectStoryOperationFailures, stageCastSchema } from "@covel/shared";
  * the components). UI slots supply committed values and turn previews.
  */
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
+import { useSetting } from "@/settings/use-settings.js";
+import { SessionStateContext } from "@/stores/session-store/context.js";
+import {
+  draftStoryMessage,
+  readLiveOutputPreference,
+  visibleDraftUnits,
+} from "@/stores/session-store/output-drafts.js";
 import { useTranslation } from "react-i18next";
 import type {
   StageBackdropModel,
@@ -110,6 +124,18 @@ function findLatestStory(
   return undefined;
 }
 
+/**
+ * One story per turn and runtime, whether still a draft or committed, so the
+ * reader keeps its page when the draft becomes the story.
+ */
+function readerKey(
+  message: Pick<StreamMessage, "id" | "turnId" | "runtimeId">,
+): string {
+  return message.turnId && message.runtimeId
+    ? `${message.turnId}:${message.runtimeId}`
+    : message.id;
+}
+
 export function StageView(props: StageViewProps): ReactElement {
   const {
     session,
@@ -172,16 +198,46 @@ export function StageView(props: StageViewProps): ReactElement {
   const storyMsg = findLatestStory(messages);
   const storyTurnId = storyMsg?.turnId;
 
+  // A story still being written, as far as this player wants to see it.
+  const outputDrafts = useContext(SessionStateContext)?.outputDrafts;
+  const [liveOutput] = useSetting<string>("ui.liveOutput");
+  const preference = readLiveOutputPreference(liveOutput);
+  const draft = useMemo(() => {
+    if (preference === "committed") return undefined;
+    for (const entry of outputDrafts ?? []) {
+      const units = visibleDraftUnits(entry, preference);
+      if (units || entry.revising)
+        return { entry, message: draftStoryMessage(entry, units ?? []) };
+    }
+    return undefined;
+  }, [outputDrafts, preference]);
+
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
   // A story already on screen when the stage opens counts as read; each story
-  // committed after that opens line by line at the top of the decision panel.
-  const [readStoryId, setReadStoryId] = useState(storyMsg?.id);
-  const [speakingId, setSpeakingId] = useState<string | undefined>();
-  const finishReading = useCallback(
-    () => setReadStoryId(storyMsg?.id),
-    [storyMsg?.id],
+  // after that opens line by line at the top of the decision panel, from its
+  // first draft on.
+  const target = draft?.message ?? storyMsg;
+  const targetKey = target ? readerKey(target) : undefined;
+  const [readKey, setReadKey] = useState(() =>
+    storyMsg ? readerKey(storyMsg) : undefined,
   );
+  const draftKey = draft ? readerKey(draft.message) : undefined;
+  // A story read as a draft stays open while its turn finishes.
+  const [liveKey, setLiveKey] = useState<string>();
+  useEffect(() => {
+    if (draftKey) setLiveKey(draftKey);
+  }, [draftKey]);
+  const [page, setPage] = useState<{ key?: string; index: number }>({
+    index: 0,
+  });
+  const revising = draft?.entry.revising ?? false;
+  // A revision voids what was read; it starts again at the first line.
+  useEffect(() => {
+    if (revising) setPage((current) => ({ ...current, index: 0 }));
+  }, [revising]);
+  const [speakingId, setSpeakingId] = useState<string | undefined>();
+  const finishReading = useCallback(() => setReadKey(targetKey), [targetKey]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -225,8 +281,26 @@ export function StageView(props: StageViewProps): ReactElement {
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
   // Only execution controls action availability; reading never gates input.
   const reading =
-    !!storyMsg && storyMsg.id !== readStoryId && !executing && !advancing;
+    !!target &&
+    targetKey !== readKey &&
+    (!!draft || targetKey === liveKey || (!executing && !advancing));
   const choicesVisible = advancing || !executing;
+  const reader =
+    reading && target ? (
+      <StageReader
+        key={targetKey}
+        sessionId={session.id}
+        message={target}
+        autoPlay={autoPlay}
+        reducedMotion={reducedMotion}
+        onSpeakerChange={setSpeakingId}
+        onFinish={finishReading}
+        index={page.key === targetKey ? page.index : 0}
+        onIndexChange={(index) => setPage({ key: targetKey, index })}
+        writing={!!draft && !draft.entry.accepted}
+        revising={revising}
+      />
+    ) : undefined;
 
   return (
     <div
@@ -261,7 +335,20 @@ export function StageView(props: StageViewProps): ReactElement {
           onToggleImmersive={onToggleImmersive}
           onExit={() => onViewModeChange("parsed")}
         />
-        {executing && storyMsg && (
+        {/* While the turn runs, a story being read gets the panel alone. */}
+        {reader && !choicesVisible && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-[40%] bottom-0 z-40 flex items-end justify-center px-3 pb-3 md:top-[35%] md:px-8 md:pb-8"
+            data-testid="stage-draft-panel"
+          >
+            <section className="ui-stage-panel pointer-events-auto flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-(--radius-card)">
+              <div className="min-h-0 overflow-y-auto overscroll-contain">
+                {reader}
+              </div>
+            </section>
+          </div>
+        )}
+        {executing && storyMsg && !reading && (
           <StageDialog
             key={storyMsg.id}
             sessionId={session.id}
@@ -273,16 +360,8 @@ export function StageView(props: StageViewProps): ReactElement {
         <StageChoices
           hideInput={props.composerReplaced}
           storyReview={
-            reading && storyMsg ? (
-              <StageReader
-                key={storyMsg.id}
-                sessionId={session.id}
-                message={storyMsg}
-                autoPlay={autoPlay}
-                reducedMotion={reducedMotion}
-                onSpeakerChange={setSpeakingId}
-                onFinish={finishReading}
-              />
+            reader ? (
+              reader
             ) : storyMsg ? (
               <StageDialog
                 key={storyMsg.id}
