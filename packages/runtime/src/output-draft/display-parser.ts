@@ -63,6 +63,10 @@ export class DisplayStreamParser {
   private readonly unitsPath: readonly string[];
   private frames: Frame[] = [];
   private units = new Map<number, UnitState>();
+  // Finished units never change, so the list of them only grows.
+  private done: DisplayUnit[] = [];
+  private scanned = 0;
+  private generation = 0;
   private rootDone = false;
   private failedAt: number | undefined;
   private consumed = 0;
@@ -79,6 +83,15 @@ export class DisplayStreamParser {
 
   constructor(private readonly spec: OutputDisplaySpec) {
     this.unitsPath = parseJsonPointer(spec.units);
+  }
+
+  /**
+   * Changes exactly when {@link completeUnits} does, so a caller can tell
+   * without comparing the units themselves.
+   */
+  get completeRevision(): string {
+    this.completeUnits();
+    return `${this.generation}:${this.done.length}`;
   }
 
   /** True once the text stopped being readable JSON. */
@@ -98,6 +111,9 @@ export class DisplayStreamParser {
   replace(document: string): void {
     this.frames = [];
     this.units = new Map();
+    this.done = [];
+    this.scanned = 0;
+    this.generation++;
     this.rootDone = false;
     this.failedAt = undefined;
     this.consumed = 0;
@@ -115,18 +131,18 @@ export class DisplayStreamParser {
    * being written. Elements without displayed text are skipped.
    */
   completeUnits(): readonly DisplayUnit[] {
-    const done: DisplayUnit[] = [];
-    for (let index = 0; ; index++) {
-      const unit = this.units.get(index);
-      if (!unit?.complete) return done;
-      if (unit.hasText) done.push(toUnit(unit));
+    for (;;) {
+      const unit = this.units.get(this.scanned);
+      if (!unit?.complete) return this.done;
+      if (unit.hasText) this.done.push(toUnit(unit));
+      this.scanned++;
     }
   }
 
   /** The unit being written after the complete ones, with its text so far. */
   partialUnit(): DisplayUnit | undefined {
-    let index = 0;
-    while (this.units.get(index)?.complete) index++;
+    this.completeUnits();
+    const index = this.scanned;
     const unit = this.units.get(index);
     if (!unit || unit.complete) return undefined;
     // A pending high surrogate is half a character.

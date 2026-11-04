@@ -59,16 +59,17 @@ export function createDraftForwarder(options: {
   readonly runId: string;
   readonly toolName: string;
   /**
-   * A review holds drafts: nothing shows while the model writes, and the
-   * story appears once, when its submission is accepted.
+   * A hook holds drafts: nothing shows while the model writes. With
+   * `"review"` the story appears once, when its submission is accepted; with
+   * `"commit"` it appears only with the committed story.
    */
-  readonly held?: boolean;
+  readonly hold?: "review" | "commit";
 }): DraftForwarder | undefined {
   const { sink, manifest } = options;
   if (!sink) return undefined;
   const plan = liveOutputPlan(manifest, options.schema);
   if (!plan) return undefined;
-  return new Forwarder(sink, plan, options.held === true, {
+  return new Forwarder(sink, plan, options.hold, {
     turnId: options.turnId,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
@@ -92,14 +93,14 @@ class Forwarder implements DraftForwarder {
   private calls = new Map<number, Call>();
   private submission: number | undefined;
   private lastSent = "";
-  private lastUnitsKey = "[]";
+  private lastUnitsKey = "";
   private lastSentAt = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly sink: OutputDraftSink,
     private readonly plan: LiveOutputPlan,
-    private readonly held: boolean,
+    private readonly hold: "review" | "commit" | undefined,
     private readonly identity: {
       readonly turnId: string;
       readonly runtimeId: string;
@@ -111,7 +112,7 @@ class Forwarder implements DraftForwarder {
 
   observe(): ArgumentStreamObserver {
     const request = ++this.request;
-    if (this.held) return { fragment: () => {}, reset: () => {} };
+    if (this.hold) return { fragment: () => {}, reset: () => {} };
     let attempt: number | undefined;
     return {
       fragment: (at, fragment) => {
@@ -138,6 +139,8 @@ class Forwarder implements DraftForwarder {
 
   accept(output: Readonly<Record<string, unknown>>): void {
     this.cancelTimer();
+    // A later hook may still replace the story; the commit shows it.
+    if (this.hold === "commit") return;
     const draftId =
       this.draftId ?? `${this.identity.runId}:${this.request}:accepted`;
     this.draftId = draftId;
@@ -167,7 +170,7 @@ class Forwarder implements DraftForwarder {
     this.calls = new Map();
     this.submission = undefined;
     this.lastSent = "";
-    this.lastUnitsKey = "[]";
+    this.lastUnitsKey = "";
   }
 
   private retract(reason: OutputRetractedPayload["reason"]): void {
@@ -175,13 +178,14 @@ class Forwarder implements DraftForwarder {
     // A stop also clears a draft that is still marked as being revised.
     const shown =
       this.shown ?? (reason === "stopped" ? this.revising : undefined);
-    this.revising = reason === "revising" ? (shown ?? this.revising) : undefined;
+    this.revising =
+      reason === "revising" ? (shown ?? this.revising) : undefined;
     this.shown = undefined;
     this.draftId = undefined;
     this.calls = new Map();
     this.submission = undefined;
     this.lastSent = "";
-    this.lastUnitsKey = "[]";
+    this.lastUnitsKey = "";
     if (shown)
       this.emit({
         type: "output.retracted",
@@ -214,11 +218,14 @@ class Forwarder implements DraftForwarder {
     const units = parser.completeUnits();
     const partial =
       this.plan.mode === "text" ? parser.partialUnit() : undefined;
-    const unitsKey = JSON.stringify(units);
+    // Finished units only grow, so their revision stands in for them.
+    const unitsKey = parser.completeRevision;
     const key = JSON.stringify([unitsKey, partial]);
     if (key === this.lastSent) return;
     // Nothing to show yet, and nothing shown that would need clearing.
     if (units.length === 0 && !partial && this.shown !== this.draftId) return;
+    // The parser keeps adding to its list; send the units this key names.
+    const sent = [...units];
     const send = () => {
       this.timer = undefined;
       const draftId = this.draftId;
@@ -233,7 +240,7 @@ class Forwarder implements DraftForwarder {
         payload: {
           ...this.base(draftId),
           mode: this.plan.mode,
-          units: [...units],
+          units: sent,
           ...(partial ? { partial } : {}),
         },
       });
