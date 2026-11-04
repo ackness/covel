@@ -268,7 +268,7 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
   );
   expect(seeded.status).toBe("ok");
   await page.goto(`/session?sid=${sessionId}`);
-  const portraits = page.getByRole("tab", { name: "角色立绘", exact: true });
+  const portraits = page.getByRole("tab", { name: "立绘", exact: true });
   await portraits.click();
   await expect(page.getByText("Review hero", { exact: true })).toBeVisible();
   const rpc = page.waitForResponse(
