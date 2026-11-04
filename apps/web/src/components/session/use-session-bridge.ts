@@ -6,8 +6,9 @@ import { readLiveOutputPreference } from "@/stores/session-store/output-drafts.j
 import {
   buildSessionProjection,
   createSessionMessageOrdinals,
+  checkedSessionProjection,
   sessionProjectionDrafts,
-  sessionProjectionSchema,
+  withCheckedDrafts,
 } from "./session-bridge.js";
 
 const EMPTY_CHARACTERS: readonly unknown[] = [];
@@ -47,7 +48,7 @@ export function useSessionBridge(
   // the projection is rebuilt only when its own inputs change.
   const base = useMemo(() => {
     if (!session || session.id !== sessionId) return undefined;
-    const result = sessionProjectionSchema.safeParse(
+    const result = checkedSessionProjection(
       buildSessionProjection({
         session,
         actionKinds: state.sessionActionKinds,
@@ -61,7 +62,7 @@ export function useSessionBridge(
         slots,
       }),
     );
-    if (result.success) return result.data;
+    if (result) return result;
     warnOnce(warned);
     return undefined;
   }, [
@@ -78,10 +79,11 @@ export function useSessionBridge(
   ]);
   const projection = useMemo(() => {
     if (!base) return undefined;
-    const drafts = sessionProjectionSchema.shape.drafts.safeParse(
+    const projection = withCheckedDrafts(
+      base,
       sessionProjectionDrafts(outputDrafts, liveOutput),
     );
-    if (drafts.success) return { ...base, drafts: drafts.data };
+    if (projection) return projection;
     warnOnce(warned);
     return undefined;
   }, [base, outputDrafts, liveOutput]);

@@ -2,7 +2,7 @@ import type { StreamMessage } from "@/stores/session-store.js";
 
 export function isPendingInteractionMessage(
   msg: StreamMessage,
-  allMessages: StreamMessage[],
+  allMessages: readonly StreamMessage[],
   submittedBlockIds: ReadonlySet<string>,
 ): boolean {
   if (!msg.block || submittedBlockIds.has(msg.id)) return false;
@@ -10,13 +10,31 @@ export function isPendingInteractionMessage(
   return isInteractiveBlock(msg.block);
 }
 
+interface MessagePositions {
+  readonly index: ReadonlyMap<string, number>;
+  readonly lastUser: number;
+}
+
+// Callers check every message of one list; work out its positions once.
+const positions = new WeakMap<readonly StreamMessage[], MessagePositions>();
+
 function hasLaterUserMessage(
   msg: StreamMessage,
-  allMessages: StreamMessage[],
+  allMessages: readonly StreamMessage[],
 ): boolean {
-  const idx = allMessages.findIndex((m) => m.id === msg.id);
-  if (idx < 0) return false;
-  return allMessages.slice(idx + 1).some((m) => m.role === "user");
+  let known = positions.get(allMessages);
+  if (!known) {
+    const index = new Map<string, number>();
+    let lastUser = -1;
+    allMessages.forEach((m, at) => {
+      if (!index.has(m.id)) index.set(m.id, at);
+      if (m.role === "user") lastUser = at;
+    });
+    known = { index, lastUser };
+    positions.set(allMessages, known);
+  }
+  const idx = known.index.get(msg.id);
+  return idx !== undefined && idx < known.lastUser;
 }
 
 function isInteractiveBlock(block: Record<string, unknown>): boolean {
