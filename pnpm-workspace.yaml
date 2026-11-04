@@ -48,10 +48,28 @@ overrides:
   "@tailwindcss/language-service>postcss": 8.5.30
   "@esbuild-kit/core-utils>esbuild": 0.28.2
   # Security patches for Ajv URI parsing and desktop plist serialization.
-  "ajv>fast-uri": 3.1.8
+  "ajv>fast-uri": 3.1.9
   "plist>@xmldom/xmldom": 0.8.15
-  # ASAR verification's minimatch 10 graph must not retain vulnerable 5.x expansion.
-  "minimatch@10>brace-expansion": 5.0.12
+  # Brace expansion DoS fixes for the older minimatch lines kept by electron-builder.
+  "brace-expansion@<1.1.21": 1.1.21
+  "brace-expansion@>=2.0.0 <2.1.7": 2.1.7
+  # Pattern-matching DoS and glob cancellation fixes exist only in minimatch 11 /
+  # glob 14. These parents call only APIs that minimatch 11 keeps (`minimatch()`,
+  # `Minimatch#match`, `glob()`); glob 13 inspects RegExp parts, so it moves too.
+  # The minimatch 3/5/9 lines under electron-builder have no patched release
+  # and use APIs minimatch 11 removed, so they stay until upstream moves.
+  "@electron/asar@4>minimatch": 11.0.2
+  "@electron/asar@4>glob": 14.0.2
+  "app-builder-lib>minimatch": 11.0.2
+  # VitePress 1.x still pins Vite 5; Vite 6.4.5 carries the dev-server and
+  # launch-editor fixes and moves esbuild off the dev-server CORS bug.
+  "vitepress>vite": 6.4.5
+  # Router serialization, Tailwind parser and source-map, and Mermaid
+  # sanitizer fixes within their current majors.
+  "seroval@<1.6.11": 1.6.12
+  "postcss-selector-parser@<6.1.5": 6.1.5
+  "source-map-js@<1.2.2": 1.2.2
+  "dompurify@<3.4.17": 3.4.17
   # October 2026 HTTP-client security fixes, without crossing major versions.
   "undici@>=6.0.0 <6.29.1": 6.29.1
   "undici@>=7.0.0 <7.30.1": 7.30.1
