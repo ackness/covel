@@ -143,9 +143,16 @@ export function createAdvanceRoot(requestId: string) {
   };
 }
 
-/** An unanswered interaction or suspension hands control back to the player. */
+/**
+ * An unanswered interaction or suspension hands control back to the player.
+ * Only interactions after the player's last message count: a choice the
+ * player answered by typing instead is no longer offered, as in the client.
+ */
 export async function hasPendingAdvanceInput(
-  store: DataStore,
+  store: Pick<
+    DataStore,
+    "listSuspensions" | "listTurnMessages" | "listPlayerInputs"
+  >,
   sessionId: string,
 ): Promise<boolean> {
   const [suspensions, messages, answers] = await Promise.all([
@@ -158,7 +165,9 @@ export async function hasPendingAdvanceInput(
   const answered = new Set(
     answers.map((answer) => JSON.stringify([answer.turnId, answer.formId])),
   );
-  return messages.some(
+  let offered = messages.length;
+  while (offered > 0 && messages[offered - 1]!.role !== "user") offered -= 1;
+  return messages.slice(offered).some(
     (message) =>
       Array.isArray(message.pendingInput) &&
       message.pendingInput.some((input: unknown) => {

@@ -1570,7 +1570,7 @@ runtime 的终态：
 
 根执行和 setup/开场也各发出一条 round 完成事件，自动轮从 `round: 1` 开始。顺序为：根执行 started → round completed → advance waiting → 下一轮 started → advance running → runtime/故事事件 → round completed；可重复下一轮，最后 advance stopped → 唯一一条请求终态 `execution.completed`。开场接力仍保留原来的未开始即停止标记。基础设施错误保留 `error.occurred` 路径；已开始请求仍收尾。没有开始执行的拒绝不产生 round 事件。
 
-停止原因是有限枚举：`yielded-to-player`、`no-eligible-story`、`ambiguous-story`、`limit`、`disabled`、`player-stop`、`new-input`、`pending-input`、`session-unavailable`、`execution-failed`、`prerequisite-unavailable`。原因不携带模型内容。到达上限或交还玩家是正常结束。后续失败只丢弃该轮未提交内容；终态 `resync: true` 汇总任意一轮的提交后发布失败。
+停止原因是有限枚举：`yielded-to-player`、`no-eligible-story`、`ambiguous-story`、`limit`、`disabled`、`player-stop`、`new-input`、`pending-input`、`session-unavailable`、`execution-failed`、`prerequisite-unavailable`。`pending-input` 表示有未解决的挂起，或玩家最后一条消息之后还有未回答的表单、选择或确认；玩家用输入代替回答的旧交互不再挡住推进，和界面的判断一致。原因不携带模型内容。到达上限或交还玩家是正常结束。后续失败只丢弃该轮未提交内容；终态 `resync: true` 汇总任意一轮的提交后发布失败。
 
 setup 执行后的 `no-eligible-story` 不证明准备完成。客户端仍检查会话时钟；已尝试但未完成且没有待答交互时，即使消息列表为空，也显示[准备提示](./api.md#setup-runtime-控制重试--跳过)。
 
