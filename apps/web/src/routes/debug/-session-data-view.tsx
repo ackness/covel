@@ -50,7 +50,7 @@ export function SessionDataView({
           <p role="alert" className="text-sm text-destructive">
             {t("debugger.snapshotRefreshFailed", {
               defaultValue:
-                "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
+                "Could not refresh save data. Displayed data may be outdated; use Refresh to retry.",
             })}
           </p>
         )}

@@ -62,7 +62,7 @@ export const previewEn = {
   },
   languages: {
     title: "One tide. Many voices.",
-    body: "Every way to play can speak your language. Covel’s interface supports Chinese, English and Russian; worlds can offer their own language editions, and the story follows your session language.",
+    body: "Every way to play can speak your language. Covel’s interface supports Chinese, English and Russian; worlds can offer their own language editions, and the story follows your game language.",
     edition: "World editions",
     voices: [
       { tag: "zh-CN", name: "简体中文", text: "潮声带来了一封没有署名的信。" },
@@ -138,7 +138,7 @@ export const previewZh: typeof previewEn = {
   },
   languages: {
     title: "同一片潮声，不同的回响。",
-    body: "无论选择哪种玩法，都可以用熟悉的语言走入故事。Covel 的界面支持中、英、俄；世界可提供不同语言版本，叙事始终跟随会话语言。",
+    body: "无论选择哪种玩法，都可以用熟悉的语言走入故事。Covel 的界面支持中、英、俄；世界可提供不同语言版本，故事始终跟随游戏语言。",
     edition: "世界语言版本",
     voices: [
       { tag: "zh-CN", name: "简体中文", text: "潮声带来了一封没有署名的信。" },

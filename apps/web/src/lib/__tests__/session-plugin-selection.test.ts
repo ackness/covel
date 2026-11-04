@@ -155,7 +155,7 @@ describe("session plugin selection helpers", () => {
     locale: "zh-CN",
     requiredByWorld: "世界必需",
     requestedByWorld: "世界默认",
-    packOptional: "组合包可选",
+    packOptional: "该玩法可选",
   };
 
   it("explains recommendations from the resolved policy and pack", () => {

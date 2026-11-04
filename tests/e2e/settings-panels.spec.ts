@@ -42,7 +42,7 @@ test("saved custom roles remain editable in generation, assignment and import pa
     .getByRole("button", { name: "Generation", exact: true })
     .click();
   await settings
-    .getByRole("combobox", { name: "Select Slot" })
+    .getByRole("combobox", { name: "Select AI role" })
     .selectOption("default");
   await expect(
     settings.getByRole("spinbutton", { name: "Temperature" }),
@@ -58,7 +58,7 @@ test("saved custom roles remain editable in generation, assignment and import pa
     )
     .toBe(0.2);
   await settings
-    .getByRole("combobox", { name: "Select Slot" })
+    .getByRole("combobox", { name: "Select AI role" })
     .selectOption("custom-analysis");
   await expect(
     settings.getByText("fixture-text", { exact: true }),

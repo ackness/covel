@@ -139,11 +139,11 @@ export function LlmKeysPane({
               {desktop
                 ? t(
                     "settings.noProvidersDesktopDesc",
-                    "Open your local llm.toml and add at least one [covel.<slot>] section, then reload this dialog.",
+                    "Open your local llm.toml and add at least one [covel.<role>] section, then reload this dialog.",
                   )
                 : t(
                     "settings.noProvidersWebDesc",
-                    "This web build reads slot definitions from the server's llm.toml. Ask your operator to configure a slot, or run a desktop build where you can edit the file locally.",
+                    "This web build reads AI role definitions from the server's llm.toml. Ask your operator to configure a role, or run a desktop build where you can edit the file locally.",
                   )}
             </p>
           </div>

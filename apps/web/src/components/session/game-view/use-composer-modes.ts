@@ -200,7 +200,7 @@ export function useComposerModes({
         if (result !== false) return true;
         emitToast(
           "info",
-          t("session.reasonSessionBusy", "Session is busy, please retry"),
+          t("session.reasonSessionBusy", "This game is busy, please retry"),
         );
         return false;
       };

@@ -84,7 +84,7 @@ describe("SessionPluginNotices", () => {
       />,
     );
     const notice = screen.getByTestId("no-story-plugin");
-    expect(notice.textContent).toContain("No narrative plugin is on");
+    expect(notice.textContent).toContain("No Storyteller plugin is on");
     fireEvent.click(
       screen.getByRole("button", { name: "Turn on narrator name" }),
     );
@@ -107,7 +107,7 @@ describe("SessionPluginNotices", () => {
     );
     const card = screen.getByTestId("notice-no-story-plugin");
     expect(card.getAttribute("role")).toBe("alert");
-    expect(card.textContent).toContain("Install a narrative plugin");
+    expect(card.textContent).toContain("Install a Storyteller plugin");
   });
 
   it("tells the prep screen to install one when no narrative plugin is installed", () => {
@@ -121,7 +121,7 @@ describe("SessionPluginNotices", () => {
       />,
     );
     expect(screen.getByTestId("no-story-plugin").textContent).toContain(
-      "Install a narrative plugin",
+      "Install a Storyteller plugin",
     );
   });
 });

@@ -172,7 +172,7 @@ function frameworkSettingText(
     "llm.prepRuntimeBindings": {
       label: t(
         "settings.frameworkEntries.llmPrepRuntimeBindings.label",
-        "Prep-phase runtime bindings",
+        "Models for getting-ready steps",
       ),
     },
   };

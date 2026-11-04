@@ -101,7 +101,7 @@ export function MessageComposer({
     >
       {isEnded ? (
         <p className="ui-empty-copy mx-auto text-center text-sm">
-          {t("session.ended", "This session has ended.")}
+          {t("session.ended", "This game has ended.")}
         </p>
       ) : (
         <div className="ui-composer-frame relative mx-auto">
@@ -158,7 +158,7 @@ export function MessageComposer({
                 >
                   {t(
                     "session.commandNoMatch",
-                    "No matching command. Enter sends it to the story pipeline.",
+                    "No matching command. Enter sends it as a normal message.",
                   )}
                 </p>
               )}

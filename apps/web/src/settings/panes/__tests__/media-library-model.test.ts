@@ -89,6 +89,6 @@ describe("media library texts", () => {
         itemDeleteConfirmation(t, item("a", usage), ["S"], "en-US").message,
     );
     expect(new Set(messages).size).toBe(4);
-    expect(messages[0]).toContain("No session uses them");
+    expect(messages[0]).toContain("No save uses them");
   });
 });

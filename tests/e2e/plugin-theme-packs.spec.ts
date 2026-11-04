@@ -754,7 +754,7 @@ for (const width of [360, 1440])
 
       await chooseSandboxReader(page);
       const consent = page.getByRole("dialog");
-      await expect(consent).toContainText("读取公开故事与输入信息");
+      await expect(consent).toContainText("查看故事和你的输入");
       await expect(
         page.getByTestId("plugin-view-container").locator("iframe"),
       ).toHaveCount(0);

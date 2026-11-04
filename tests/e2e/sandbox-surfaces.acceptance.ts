@@ -464,10 +464,10 @@ test("session pages commit actions, interactions and own runtime writes with con
     const dialog = page.getByRole("dialog", { name: /Allow.*Bridge reader/ });
     await expect(dialog).toBeVisible();
     for (const label of [
-      "Submit player actions",
-      "Answer pending interactions",
-      "Run this plugin’s manual runtimes",
-      "Stop the current execution",
+      "Send actions for you",
+      "Answer questions waiting for you",
+      "Run this plugin’s manual features",
+      "Stop the current turn",
       "Open this plugin’s panels",
     ])
       await expect(dialog.getByText(label, { exact: true })).toBeVisible();

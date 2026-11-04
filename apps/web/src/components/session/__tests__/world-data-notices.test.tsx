@@ -41,7 +41,7 @@ describe("WorldDataNoticeCards", () => {
     ]);
     expect(
       screen.getByTestId("notice-world-data:receiver-missing").textContent,
-    ).toContain("This data has no plugin to receive it.");
+    ).toContain("Some world data was not used because no plugin takes it.");
     expect(
       screen.getByTestId("notice-world-data:receiver-ambiguous"),
     ).toBeTruthy();
@@ -98,7 +98,7 @@ describe("WorldDataNoticeCards", () => {
         },
       ]);
       expect(document.body.textContent).toContain(
-        "This data has no plugin to receive it.",
+        "Some world data was not used because no plugin takes it.",
       );
       expect(document.body.textContent).not.toContain("SECRET");
     },

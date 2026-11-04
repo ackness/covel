@@ -31,7 +31,7 @@ test("a stopped turn stays uncommitted after reload and retries only on request"
     await page.goto(`/session?sid=${fixture.id}`);
     await page.reload();
     const notice = page.getByTestId("notice-execution-recovery");
-    await expect(notice).toContainText("已停止，本轮未提交");
+    await expect(notice).toContainText("已停止，这一回合没有被记录");
     await expect(notice).not.toContainText("执行失败");
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
     expect(fixture.actions).toEqual([]);

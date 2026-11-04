@@ -152,7 +152,7 @@ describe("getting started guide", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "继续" }));
     fireEvent.click(screen.getByRole("button", { name: "开始引导" }));
-    expect(screen.getByRole("status").textContent).toContain("尚未检测到");
+    expect(screen.getByRole("status").textContent).toContain("还没有选好文本模型");
     fireEvent.click(screen.getByRole("button", { name: "配置服务商与模型" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "llm.providers" }));

@@ -32,7 +32,7 @@ describe("PingButton cache invalidation", () => {
         <PingButton target={{ kind: "slot", slotId: "plugin" }} />
       </>,
     );
-    const buttons = screen.getAllByRole("button", { name: "Ping" });
+    const buttons = screen.getAllByRole("button", { name: "Test" });
     fireEvent.click(buttons[0]!);
     await waitFor(() =>
       expect(apiMocks.pingPreset).toHaveBeenCalledWith({
@@ -55,7 +55,7 @@ describe("PingButton cache invalidation", () => {
     } satisfies PingResult);
     render(<PingButton target={{ kind: "preset", presetId: "story" }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Ping" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
     await screen.findByText("Authentication failed. Check the API key.");
 
     act(() => invalidateAllPingResults());
@@ -73,7 +73,7 @@ describe("PingButton cache invalidation", () => {
     );
     render(<PingButton target={{ kind: "preset", presetId: "story" }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Ping" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
     act(() => invalidateAllPingResults());
     await act(async () => {
       resolvePing?.({ ok: true, latencyMs: 42 });
@@ -81,7 +81,7 @@ describe("PingButton cache invalidation", () => {
 
     await waitFor(() =>
       expect(
-        (screen.getByRole("button", { name: "Ping" }) as HTMLButtonElement)
+        (screen.getByRole("button", { name: "Test" }) as HTMLButtonElement)
           .disabled,
       ).toBe(false),
     );
@@ -103,7 +103,7 @@ describe("PingButton cache invalidation", () => {
       </>,
     );
 
-    for (const button of screen.getAllByRole("button", { name: "Ping" })) {
+    for (const button of screen.getAllByRole("button", { name: "Test" })) {
       fireEvent.click(button);
     }
     await act(async () => {
@@ -132,7 +132,7 @@ describe("PingButton cache invalidation", () => {
       </>
     );
     const first = render(renderButtons());
-    const buttons = screen.getAllByRole("button", { name: "Ping" });
+    const buttons = screen.getAllByRole("button", { name: "Test" });
     fireEvent.click(buttons[0]!);
     await screen.findByText("13ms");
     expect(screen.queryByText("29ms")).toBeNull();
@@ -146,7 +146,7 @@ describe("PingButton cache invalidation", () => {
     render(renderButtons());
     expect(await screen.findByText("13ms")).not.toBeNull();
     expect(await screen.findByText("29ms")).not.toBeNull();
-    for (const button of screen.getAllByRole("button", { name: "Ping" }))
+    for (const button of screen.getAllByRole("button", { name: "Test" }))
       fireEvent.click(button);
     expect(apiMocks.pingPreset).toHaveBeenCalledTimes(2);
   });

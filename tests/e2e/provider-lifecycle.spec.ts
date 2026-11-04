@@ -339,7 +339,7 @@ for (const { provider, model, protocol, baseUrl } of [
       route.fulfill({ json: { ok: true, latencyMs: 1 } }),
     );
     const request = page.waitForRequest("**/api/ai/ping");
-    await row.getByRole("button", { name: /Ping/ }).click();
+    await row.getByRole("button", { name: /Test/ }).click();
     const overlay = JSON.parse(
       Buffer.from(
         (await request).headers()["x-slot-config"]!,

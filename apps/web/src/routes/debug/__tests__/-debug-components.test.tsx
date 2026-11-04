@@ -69,7 +69,7 @@ describe("debug route components", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "会话数据" }));
+    fireEvent.click(screen.getByRole("button", { name: "存档数据" }));
     expect(onDebugViewChange).toHaveBeenCalledWith("data");
     expect(
       screen.getByRole("button", { name: "追踪" }).getAttribute("aria-pressed"),
@@ -225,7 +225,7 @@ describe("debug route components", () => {
     );
 
     for (const section of [
-      /插件契约/,
+      /插件依赖的功能/,
       /插件数据索引/,
       /角色/,
       /消息/,

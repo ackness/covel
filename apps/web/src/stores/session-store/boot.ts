@@ -65,7 +65,7 @@ export async function bootSessionStore({
     emitToast(
       "error",
       i18n.t("toast.bootFailed", {
-        defaultValue: "Failed to initialise session",
+        defaultValue: "Could not start this game",
       }) as string,
       message,
     );

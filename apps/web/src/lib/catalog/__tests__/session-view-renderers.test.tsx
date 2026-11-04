@@ -116,7 +116,7 @@ it("renders community widgets only with a matching current live host and strict 
   expect(screen.queryByRole("button", { name: "Host input" })).toBeNull();
   view.rerender(shell(widget("SessionComposer")));
   expect(screen.getByRole("status").textContent).toContain(
-    "only in the current live plugin view",
+    "only on the current plugin page",
   );
   expect(segmentTemplateRegistry.SessionMessages).toBeUndefined();
   expect(segmentTemplateRegistry.SessionComposer).toBeUndefined();

@@ -109,7 +109,7 @@ describe.each(["session", "prep"] as const)(
 
     it("shows the declared slot and fallback provider/model without an override control", () => {
       show();
-      expect(screen.getByText("Runtime default: fast")).toBeTruthy();
+      expect(screen.getByText("Plugin default: fast")).toBeTruthy();
       expect(
         screen.getByText(
           "fast is not set up; uses fixture-provider · fixture-model",
@@ -121,7 +121,7 @@ describe.each(["session", "prep"] as const)(
 
     it("shows the configured provider/model without a fallback warning or select", () => {
       show(plugin, [{ ...storySlot, slotId: "fast" }]);
-      expect(screen.getByText("Runtime default: fast")).toBeTruthy();
+      expect(screen.getByText("Plugin default: fast")).toBeTruthy();
       expect(screen.getByText("fixture-provider · fixture-model")).toBeTruthy();
       expect(screen.queryByText(/is not set up/)).toBeNull();
       expect(screen.queryByRole("combobox")).toBeNull();
