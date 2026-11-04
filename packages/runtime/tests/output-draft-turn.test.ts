@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { LLMAdapter, LLMStreamEvent, TurnInput } from "@covel/shared";
-import { createHookPipeline, executeTurn } from "../src/index.js";
+import {
+  createHookPipeline,
+  executeTurn,
+  type HookPipeline,
+} from "../src/index.js";
 import type { OutputDraftEvent } from "../src/output-draft/draft-forwarder.js";
 import {
   makeExecutor,
@@ -20,6 +24,7 @@ const input: TurnInput = {
 async function run(
   responses: readonly (readonly (LLMStreamEvent | Error)[])[],
   overrides: Parameters<typeof manifest>[0] = {},
+  hooks: (pipeline: HookPipeline) => void = () => {},
 ) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
@@ -57,10 +62,12 @@ async function run(
     }),
   };
   const events: OutputDraftEvent[] = [];
+  const hookPipeline = createHookPipeline();
+  hooks(hookPipeline);
   const execution = await executeTurn(input, [runtime], {
     store,
     llm,
-    hookPipeline: createHookPipeline(),
+    hookPipeline,
     toolExecutor: makeExecutor([markTool]),
     outputDrafts: (event) => events.push(event),
     loadRuntime: async () => ({
@@ -165,5 +172,74 @@ describe("story drafts in a turn", () => {
       { output: { live: "off" } },
     );
     expect(events).toEqual([]);
+  });
+});
+
+describe("a review that holds story drafts", () => {
+  /** Asks once for a correction, then accepts. */
+  function guard(pluginId: string, holdsDrafts: boolean) {
+    return (pipeline: HookPipeline) => {
+      let reviews = 0;
+      pipeline.register({
+        id: `${pluginId}:ReviewAgentOutput:1`,
+        event: "ReviewAgentOutput",
+        pluginId,
+        ...(holdsDrafts ? { holdsDrafts: true } : {}),
+        handler: async () =>
+          reviews++ === 0
+            ? {
+                action: "continue",
+                replace: { correction: "Do not name the culprit yet." },
+              }
+            : { action: "continue" },
+      });
+    };
+  }
+  const story = (text: string, id: string) =>
+    submission(JSON.stringify({ narrativeOutput: text }), id);
+
+  it("shows the story only once the review accepts it", async () => {
+    const { execution, events } = await run(
+      [
+        story("The butler did it.", "first"),
+        story("The butler hides his cuff.", "second"),
+      ],
+      {},
+      guard("plug", true),
+    );
+    expect(execution.result.runtimeResults[0]?.status).toBe("success");
+    // The rejected version never reaches the player.
+    expect(shape(events)).toEqual([
+      "output.accepted The butler hides his cuff.",
+    ]);
+  });
+
+  it("lets drafts through for a review that does not hold them", async () => {
+    const { events } = await run(
+      [
+        story("The butler did it.", "first"),
+        story("The butler hides his cuff.", "second"),
+      ],
+      {},
+      guard("plug", false),
+    );
+    expect(shape(events)).toEqual([
+      "output.draft The butler did it.",
+      "output.retracted revising",
+      "output.draft The butler hides his cuff.",
+      "output.accepted The butler hides his cuff.",
+    ]);
+  });
+
+  it("ignores a holding review from a plugin the session does not enable", async () => {
+    const { events } = await run(
+      [story("The rain stopped.", "only")],
+      {},
+      guard("elsewhere", true),
+    );
+    expect(shape(events)).toEqual([
+      "output.draft The rain stopped.",
+      "output.accepted The rain stopped.",
+    ]);
   });
 });

@@ -717,6 +717,24 @@ describe("createBootstrapPluginEntries", () => {
     expect(getMusicWire("entry-music")).toBeNull();
   });
 
+  it("marks a review that holds story drafts only as its manifest declares", async () => {
+    const source = `export default function (covel) {
+  covel.on("ReviewAgentOutput", async () => ({ action: "continue" }));
+}`;
+    const plain = writePlugin("review-plain", source);
+    const holding = writePlugin("review-holding", source);
+    holding.parsed.plugin.contributes = {
+      hooks: [{ event: "ReviewAgentOutput", holdsDrafts: true }],
+    };
+    const plainOnly = makeParams([plain]);
+    await createBootstrapPluginEntries(plainOnly);
+    expect(plainOnly.hookPipeline.holdsOutputDrafts("s1")).toBe(false);
+
+    const both = makeParams([plain, holding]);
+    await createBootstrapPluginEntries(both);
+    expect(both.hookPipeline.holdsOutputDrafts("s1")).toBe(true);
+  });
+
   it("runs a MULTI-runtime plugin's entry declared on the metadata-only root PLUGIN.md", async () => {
     // Regression: discover.ts lists only runtime PLUGIN.mds for a multi-runtime
     // plugin, so an `entry` on the metadata-only root PLUGIN.md is absent from

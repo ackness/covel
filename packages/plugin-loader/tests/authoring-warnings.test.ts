@@ -211,7 +211,10 @@ describe("validate:plugin warnings for a field written with its default", () => 
       version: "1.0.0",
       entry: "./server.js",
       contributes: {
-        hooks: [{ event: "TurnStart", enforce: "normal" }],
+        hooks: [
+          { event: "TurnStart", enforce: "normal" },
+          { event: "ReviewAgentOutput", holdsDrafts: false },
+        ],
         data: { notes: { schema: "./notes.json", version: 1 } },
         prompt: [
           {
@@ -233,6 +236,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
     expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
     const text = warnings.join("\n");
     expect(text).toContain("PLUGIN.md: contributes.hooks[0].enforce");
+    expect(text).toContain("PLUGIN.md: contributes.hooks[1].holdsDrafts");
     expect(text).toContain("PLUGIN.md: contributes.data.notes.version");
     expect(text).toContain("PLUGIN.md: contributes.prompt[0].role");
     expect(text).toContain("PLUGIN.md: runtime.io.visibility");

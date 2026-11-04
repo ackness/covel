@@ -37,7 +37,13 @@ export interface ExtractedDeclarations {
   readonly forms: readonly string[];
   readonly wires: readonly string[];
   readonly hooks: readonly (
-    string | { readonly event: string; readonly enforce: "pre" | "post" }
+    | string
+    | {
+        readonly event: string;
+        readonly enforce?: "pre" | "post";
+        /** Declaration-only: kept from the authored manifest. */
+        readonly holdsDrafts?: true;
+      }
   )[];
   /** Recorded registrations; declaration-only extension metadata is never rewritten. */
   readonly extensions: readonly string[];

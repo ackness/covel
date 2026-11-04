@@ -295,6 +295,7 @@ export async function createBootstrapPluginEntries(
         batch,
         registration.provideExtension,
         definition.httpPermissions,
+        definition.contributions,
       ),
       definition.contributions,
       (message) => new PluginRegistrationError("declarations", message),

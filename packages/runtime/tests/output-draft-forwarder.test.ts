@@ -24,6 +24,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 function setup(
   overrides: Partial<RuntimeManifest> = {},
   schema: Readonly<Record<string, unknown>> = segmentsSchema,
+  held = false,
 ) {
   const events: OutputDraftEvent[] = [];
   const forwarder = createDraftForwarder({
@@ -33,6 +34,7 @@ function setup(
     turnId: "turn-1",
     runId: "run",
     toolName: "submit-output",
+    held,
   });
   return { events, forwarder: forwarder! };
 }
@@ -73,6 +75,25 @@ describe("createDraftForwarder", () => {
           manifest: manifest(overrides),
         }),
       ).toBeUndefined();
+  });
+
+  it("shows nothing while held and the accepted story once", () => {
+    const { events, forwarder } = setup({}, segmentsSchema, true);
+    const first = forwarder.observe();
+    first.fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"kind":"narration","text":"Rejected."}]}',
+    });
+    forwarder.revise();
+    const second = forwarder.observe();
+    second.fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"kind":"narration","text":"Kept."}]}',
+    });
+    forwarder.accept({ segments: [{ kind: "narration", text: "Kept." }] });
+    expect(summary(events)).toEqual(["accepted run:2:accepted Kept."]);
   });
 
   it("shows each complete unit of the submission, then the accepted story", () => {

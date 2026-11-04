@@ -62,6 +62,21 @@ export async function extractDeclarations(
     )
       localizedContributes.push(file);
   }
+  const heldPhases = new Set(
+    z
+      .array(z.unknown())
+      .optional()
+      .parse(authored?.hooks)
+      ?.flatMap((value) => {
+        const hook =
+          value && typeof value === "object"
+            ? (value as Record<string, unknown>)
+            : undefined;
+        return hook?.event === "ReviewAgentOutput" && hook.holdsDrafts === true
+          ? [typeof hook.enforce === "string" ? hook.enforce : "normal"]
+          : [];
+      }) ?? [],
+  );
   const tools: string[] = [];
   const actions: string[] = [];
   const services: ServiceContribution[] = [];
@@ -149,17 +164,21 @@ export async function extractDeclarations(
     },
     on(event, _handler, options) {
       const phase = options?.enforce ?? "normal";
-      const hook = phase === "normal" ? event : { event, enforce: phase };
-      if (
-        !hooks.some((old) =>
-          typeof old === "string"
-            ? old === hook
-            : typeof hook !== "string" &&
-              old.event === hook.event &&
-              old.enforce === hook.enforce,
-        )
-      )
-        hooks.push(hook);
+      // Holding drafts is declared, not registered: keep what the author wrote.
+      const held = event === "ReviewAgentOutput" && heldPhases.has(phase);
+      const hook =
+        phase === "normal" && !held
+          ? event
+          : {
+              event,
+              ...(phase === "normal" ? {} : { enforce: phase }),
+              ...(held ? { holdsDrafts: true as const } : {}),
+            };
+      const key = (value: (typeof hooks)[number]) =>
+        typeof value === "string"
+          ? `${value}:normal`
+          : `${value.event}:${value.enforce ?? "normal"}`;
+      if (!hooks.some((old) => key(old) === key(hook))) hooks.push(hook);
     },
     provideExtension(point, id) {
       record(extensions, `${point}/${id}`);

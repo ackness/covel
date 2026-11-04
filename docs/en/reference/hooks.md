@@ -40,6 +40,8 @@ The `options` for `covel.on(event, handler, options?)` have three items:
 | `timeoutMs` | The time limit for one call of the handler. The default is 5000 milliseconds.                                                                        |
 | `enforce`   | The ordering group: `pre`, `normal` (the default), or `post`. It must match the group declared in `contributes.hooks`. The ordering rules are below. |
 
+An entry in `contributes.hooks` is either an event name or an object `{ event, enforce?, holdsDrafts? }`. `enforce` names a group other than `normal`. `holdsDrafts` applies only to `ReviewAgentOutput`; see [Holding story drafts](#holds-drafts). `holdsDrafts` is written only in the declaration; `covel.on()` has no matching option.
+
 The handlers for one event run group by group: `pre`, then `normal`, then `post`. Inside one group, the framework's own hooks run first, followed by plugin handlers, in registration order. The order between two plugins is not something you can rely on.
 
 When a hook runs:
@@ -250,6 +252,37 @@ Final output is reviewed in `ReviewAgentOutput`. Here, `response` always represe
 Runs after the complete `submit-output` object passes its schema, story invariants and required-work checks. The SDK exports `ReviewAgentOutputPayload`: `{ output, toolCall: { id, name }, toolResults, correction? }`. `toolCall` preserves the original provider identity. `toolResults` contains only public `toolCallId`, `toolName` and `output` from this runtime's completed calls, excluding submissions, without hidden commit metadata or private child-agent values.
 
 Return `continue` to accept, or `replace.correction` to request revision. Corrections are capped at 2000 characters and share the review budget with `PostLLMResponse`. Later reviewers cannot clear an earlier correction. Other replacement fields have no effect: reviewers cannot replace the candidate, tool evidence, effects or completion. Direct payload mutation also has no effect. Throws, timeouts and invalid results fail closed as guard failures, rather than model-correctable errors; `abort` ends the run. `ctx.pluginId` / `runtimeId` identify the subject runtime, while `getOwnSettings()` still reads the handler owner's settings.
+
+<a id="holds-drafts"></a>
+
+#### Holding story drafts
+
+While a story agent writes `submit-output`, players read a [draft](./plugins.md#story-drafts) before the commit by default. A draft is not reviewed: a submission you reject may already have been read. For most reviews this does not matter. A review of format, length or missing speakers can let a rejected version flash by.
+
+Some reviews exist to keep certain text from players. Such a review declares `holdsDrafts: true`:
+
+```yaml
+contributes:
+  hooks:
+    - { event: ReviewAgentOutput, holdsDrafts: true }
+```
+
+Two examples:
+
+- **Spoiler guard**: in a mystery world, the review checks that the narration does not name the culprit early. Without `holdsDrafts`, "There is blood on the butler's cuff; he is the killer" shows as a draft and is retracted only after the review rejects it, so the player has already read it. With the declaration, the player never sees the rejected version.
+- **Content rating**: an all-ages plugin stops graphic descriptions. A stopped passage that flashes up even briefly has still been shown.
+
+Why the review declares it: the narrator and the review are often written by different authors and combined by the player. The narrator's author does not know who reviews it and cannot write `io.output.live: off` on the review's behalf; the player does not know which worlds need "Once the turn is saved". Only the review knows that what it checks must not be read early.
+
+Once declared:
+
+- In a session that enables the plugin, no story runtime of that session shows drafts part by part. A review chooses which runtimes it checks by `ctx.runtimeId`, which the kernel cannot know in advance, so the declaration applies to the session.
+- Each submission appears at once when every review has accepted it. It still does not wait for later plugins or the turn's commit, so it appears earlier than after the commit.
+- The declaration stops applying when the plugin is disabled in the session or switched off after failures.
+- It only makes drafts more cautious: it grants no permission and is not part of the plugin's capabilities, so changing it does not ask the player again.
+- It is valid only on `ReviewAgentOutput`; on any other event it is rejected. `pnpm plugin:extract` keeps it when it syncs declarations.
+
+Do not declare it on a review that checks only format or quality; players would lose the part-by-part story.
 
 ### `PostRuntime`
 

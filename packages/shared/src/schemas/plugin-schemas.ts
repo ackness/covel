@@ -617,6 +617,12 @@ export const hookDeclarationSchema = z
       .enum(["pre", "normal", "post"])
       .describe("Phase the hook runs in. Defaults to `normal`.")
       .optional(),
+    holdsDrafts: z
+      .boolean()
+      .describe(
+        "`ReviewAgentOutput` only: players must not read a story before this review passes, so story drafts in sessions where the package is enabled appear only once every review accepted them. Defaults to `false`.",
+      )
+      .optional(),
   })
   .strict();
 
@@ -667,16 +673,26 @@ function shorthandOrObject<
 
 const hookEventSchema = hookDeclarationSchema.shape.event;
 
-/** `contributes.hooks[]`: an event name, or `{ event, enforce }`. */
+/** `contributes.hooks[]`: an event name, or `{ event, enforce?, holdsDrafts? }`. */
 export const pluginHookContributionSchema = shorthandOrObject(
   hookEventSchema.describe(
     "Lifecycle event the entry registers a handler for, in the default `normal` phase.",
   ),
   hookDeclarationSchema
-    .pick({ event: true, enforce: true })
-    .describe("A hook in another phase: `{ event, enforce }`."),
+    .pick({ event: true, enforce: true, holdsDrafts: true })
+    .superRefine((hook, ctx) => {
+      if (hook.holdsDrafts !== undefined && hook.event !== "ReviewAgentOutput")
+        ctx.addIssue({
+          code: "custom",
+          path: ["holdsDrafts"],
+          message: "holdsDrafts applies only to ReviewAgentOutput",
+        });
+    })
+    .describe(
+      "A hook in another phase, or a review that holds story drafts: `{ event, enforce?, holdsDrafts? }`.",
+    ),
   (event) => ({ event }),
-  "expected a hook event name, such as PreToolUse, or { event, enforce }",
+  "expected a hook event name, such as PreToolUse, or { event, enforce?, holdsDrafts? }",
 );
 
 /** `contributes.extensions[]`: `<point>/<id>`, or the object form. */

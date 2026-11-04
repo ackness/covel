@@ -405,41 +405,42 @@ export async function executeAgentRuntime({
     turnId: input.turnId,
     runId,
     toolName: agentOutput.toolName,
+    held: hookPipeline?.holdsOutputDrafts(input.sessionId) ?? false,
   });
   let toolLoop: Awaited<ReturnType<typeof runAgentToolLoop>>;
   try {
     toolLoop = await runAgentToolLoop({
-    worldBase,
-    upstreamProposals,
-    pluginDataVisibility,
-    manifest,
-    input,
-    ...(sessionMeta?.turnNumber !== undefined
-      ? { turnNumber: sessionMeta.turnNumber }
-      : {}),
-    ...(sessionMeta?.logicalTurn !== undefined
-      ? { logicalTurn: sessionMeta.logicalTurn }
-      : {}),
-    loaded,
-    inputSlots: resolvedInputSlots,
-    promptSegments: includedSegments,
-    deps: loopDeps,
-    maxSteps,
-    timeoutMs,
-    messages,
-    ...(budgetEligible
-      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
-      : {}),
-    // The cue after this turn's story is one more user message of the
-    // current turn; the budget must keep the whole turn.
-    currentTurnUserMessages: assembled.currentTurnUserMessages,
-    hookPipeline,
-    startTime,
-    runId,
-    executionContext,
-    ...(progressScopeId !== undefined ? { progressScopeId } : {}),
-    ...(drafts ? { drafts } : {}),
-  });
+      worldBase,
+      upstreamProposals,
+      pluginDataVisibility,
+      manifest,
+      input,
+      ...(sessionMeta?.turnNumber !== undefined
+        ? { turnNumber: sessionMeta.turnNumber }
+        : {}),
+      ...(sessionMeta?.logicalTurn !== undefined
+        ? { logicalTurn: sessionMeta.logicalTurn }
+        : {}),
+      loaded,
+      inputSlots: resolvedInputSlots,
+      promptSegments: includedSegments,
+      deps: loopDeps,
+      maxSteps,
+      timeoutMs,
+      messages,
+      ...(budgetEligible
+        ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+        : {}),
+      // The cue after this turn's story is one more user message of the
+      // current turn; the budget must keep the whole turn.
+      currentTurnUserMessages: assembled.currentTurnUserMessages,
+      hookPipeline,
+      startTime,
+      runId,
+      executionContext,
+      ...(progressScopeId !== undefined ? { progressScopeId } : {}),
+      ...(drafts ? { drafts } : {}),
+    });
   } catch (error) {
     drafts?.stop();
     throw error;
