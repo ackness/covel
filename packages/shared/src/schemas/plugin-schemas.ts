@@ -620,7 +620,7 @@ export const hookDeclarationSchema = z
     holdsDrafts: z
       .boolean()
       .describe(
-        "`PostLLMResponse`, `ReviewAgentOutput` or `PostRuntime` only: players must not read a story before this hook has seen it. In sessions where the package is enabled, story drafts appear only once every review accepted them, or, for `PostRuntime`, only after the commit. Defaults to `false`.",
+        "`PostLLMResponse`, `PreToolUse`, `ReviewAgentOutput` or `PostRuntime` only: players must not read a story before this hook has seen it. In sessions where the package is enabled, story drafts appear only once every review accepted them, or, for `PostRuntime`, only after the commit. Defaults to `false`.",
       )
       .optional(),
   })

@@ -40,7 +40,7 @@ export default function (covel) {
 | `timeoutMs` | handler 一次调用的时间上限，默认 5000 毫秒。                                                            |
 | `enforce`   | 排序分组：`pre`、`normal`（默认）或 `post`。必须和 `contributes.hooks` 里声明的分组相同。顺序规则见下。 |
 
-`contributes.hooks` 的一项可以只写事件名，也可以写成对象 `{ event, enforce?, holdsDrafts? }`：`enforce` 写 `normal` 以外的分组；`holdsDrafts` 只用于 `PostLLMResponse`、`ReviewAgentOutput` 和 `PostRuntime`，见[压住故事草稿](#holds-drafts)。`holdsDrafts` 只写在声明里，`covel.on()` 没有对应的选项。
+`contributes.hooks` 的一项可以只写事件名，也可以写成对象 `{ event, enforce?, holdsDrafts? }`：`enforce` 写 `normal` 以外的分组；`holdsDrafts` 只用于 `PostLLMResponse`、`PreToolUse`、`ReviewAgentOutput` 和 `PostRuntime`，见[压住故事草稿](#holds-drafts)。`holdsDrafts` 只写在声明里，`covel.on()` 没有对应的选项。
 
 同一个事件的 handler 按分组依次运行：`pre` → `normal` → `post`。同一组内，框架自己的 Hook 先运行，然后是插件的 handler，按注册顺序。两个插件之间谁先谁后不是可以依赖的约定。
 
@@ -288,6 +288,7 @@ contributes:
 | 事件                | 故事什么时候出现                                                |
 | ------------------- | --------------------------------------------------------------- |
 | `PostLLMResponse`   | 改写或退回发生在提交前，故事在全部审核通过后一次出现            |
+| `PreToolUse`        | 改写 `submit-output` 调用发生在提交前，同上                     |
 | `ReviewAgentOutput` | 全部审核通过后一次出现                                          |
 | `PostRuntime`       | `replace.result` 在接受之后还能换掉故事，所以等回合提交后才出现 |
 

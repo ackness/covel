@@ -566,6 +566,7 @@ describe("hook declarations that hold story drafts", () => {
       { event: "ReviewAgentOutput", holdsDrafts: true },
       { event: "ReviewAgentOutput", enforce: "post", holdsDrafts: true },
       { event: "PostLLMResponse", holdsDrafts: true },
+      { event: "PreToolUse", holdsDrafts: true },
       { event: "PostRuntime", holdsDrafts: true },
       "PreToolUse",
     ]);
@@ -577,10 +578,10 @@ describe("hook declarations that hold story drafts", () => {
   });
 
   it("rejects holdsDrafts on any other event", () => {
-    const parsed = hooks([{ event: "PreToolUse", holdsDrafts: true }]);
+    const parsed = hooks([{ event: "PostToolUse", holdsDrafts: true }]);
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues[0]?.message).toContain(
-      "holdsDrafts applies only to PostLLMResponse, ReviewAgentOutput, PostRuntime",
+      "holdsDrafts applies only to PostLLMResponse, PreToolUse, ReviewAgentOutput, PostRuntime",
     );
   });
 });

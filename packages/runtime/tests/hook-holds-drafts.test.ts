@@ -50,6 +50,8 @@ describe("outputDraftHold", () => {
     const pipeline = new HookPipeline();
     pipeline.register(hook("filter", true, "PostLLMResponse"));
     await expect(inSession(pipeline, ["filter"])).resolves.toBe("review");
+    pipeline.register(hook("rewriter", true, "PreToolUse"));
+    await expect(inSession(pipeline, ["rewriter"])).resolves.toBe("review");
     pipeline.register(hook("redactor", true, "PostRuntime"));
     await expect(inSession(pipeline, ["filter", "redactor"])).resolves.toBe(
       "commit",
@@ -58,7 +60,7 @@ describe("outputDraftHold", () => {
 
   it("ignores the flag on events that cannot change the story", async () => {
     const pipeline = new HookPipeline();
-    pipeline.register(hook("guard", true, "PreToolUse"));
+    pipeline.register(hook("guard", true, "PostToolUse"));
     await expect(pipeline.outputDraftHold("s")).resolves.toBeUndefined();
   });
 

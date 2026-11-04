@@ -40,7 +40,7 @@ The `options` for `covel.on(event, handler, options?)` have three items:
 | `timeoutMs` | The time limit for one call of the handler. The default is 5000 milliseconds.                                                                        |
 | `enforce`   | The ordering group: `pre`, `normal` (the default), or `post`. It must match the group declared in `contributes.hooks`. The ordering rules are below. |
 
-An entry in `contributes.hooks` is either an event name or an object `{ event, enforce?, holdsDrafts? }`. `enforce` names a group other than `normal`. `holdsDrafts` applies only to `PostLLMResponse`, `ReviewAgentOutput` and `PostRuntime`; see [Holding story drafts](#holds-drafts). `holdsDrafts` is written only in the declaration; `covel.on()` has no matching option.
+An entry in `contributes.hooks` is either an event name or an object `{ event, enforce?, holdsDrafts? }`. `enforce` names a group other than `normal`. `holdsDrafts` applies only to `PostLLMResponse`, `PreToolUse`, `ReviewAgentOutput` and `PostRuntime`; see [Holding story drafts](#holds-drafts). `holdsDrafts` is written only in the declaration; `covel.on()` has no matching option.
 
 The handlers for one event run group by group: `pre`, then `normal`, then `post`. Inside one group, the framework's own hooks run first, followed by plugin handlers, in registration order. The order between two plugins is not something you can rely on.
 
@@ -288,6 +288,7 @@ Any hook that can change or stop a story may declare it; they hold it for differ
 | Event               | When the story appears                                                                       |
 | ------------------- | -------------------------------------------------------------------------------------------- |
 | `PostLLMResponse`   | Its rewrites and corrections come before submission, so at once when every review accepts it |
+| `PreToolUse`        | Rewriting the `submit-output` call also comes before submission; the same                    |
 | `ReviewAgentOutput` | At once when every review accepts it                                                         |
 | `PostRuntime`       | `replace.result` can still replace an accepted story, so only after the turn's commit        |
 

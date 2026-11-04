@@ -170,7 +170,7 @@ export class HookPipeline {
 
   /**
    * How long story drafts wait in the current session scope: until the story
-   * is accepted (a holding `PostLLMResponse` or `ReviewAgentOutput` hook), until
+   * is accepted (a holding `PostLLMResponse`, `PreToolUse` or `ReviewAgentOutput` hook), until
    * the commit (a holding `PostRuntime` hook), or not at all. Only hooks that
    * would run count: from an active plugin, not latched off, and approved.
    */
@@ -193,8 +193,12 @@ export class HookPipeline {
       return false;
     };
     if (await holds("PostRuntime")) return "commit";
-    if ((await holds("ReviewAgentOutput")) || (await holds("PostLLMResponse")))
-      return "review";
+    for (const event of [
+      "PostLLMResponse",
+      "PreToolUse",
+      "ReviewAgentOutput",
+    ] as const)
+      if (await holds(event)) return "review";
     return undefined;
   }
 
