@@ -277,6 +277,9 @@ export function SettingsDialog({
   );
 }
 
+/** Shown last in General, under its own heading. */
+const DEVELOPER_MODE_KEY = "ui.developerView";
+
 const NAV_ICONS: Readonly<Record<string, LucideIcon>> = {
   general: SlidersHorizontal,
   [APPEARANCE_NODE_ID]: Palette,
@@ -368,6 +371,9 @@ function renderPane(
       </div>
     );
   }
+  const developerEntry = node.children.find(
+    (entry) => entry.key === DEVELOPER_MODE_KEY,
+  );
   return (
     <>
       <SettingsPaneHeader
@@ -379,10 +385,20 @@ function renderPane(
         }
       />
       <SettingFieldList>
-        {node.children.map((entry) => (
-          <SettingWidget key={entry.key} entry={entry} />
-        ))}
+        {node.children
+          .filter((entry) => entry.key !== DEVELOPER_MODE_KEY)
+          .map((entry) => (
+            <SettingWidget key={entry.key} entry={entry} />
+          ))}
       </SettingFieldList>
+      {node.id === "general" && developerEntry && (
+        <section className="mt-8 max-w-2xl space-y-3">
+          <h3 className="ui-meta border-t border-(--rule-color) pt-4 text-[10px] text-muted-foreground">
+            {t("settings.advancedHeading")}
+          </h3>
+          <SettingWidget entry={developerEntry} />
+        </section>
+      )}
     </>
   );
 }

@@ -315,6 +315,11 @@ export function OrchestrationSettings({
             />
             {button(field)}
           </div>
+          {field === "maxSubagentCalls" && (
+            <p className="mt-1 text-muted-foreground">
+              {t("orchestration.maxSubagentCallsHint")}
+            </p>
+          )}
           {errors[field] && (
             <p id={`${sessionId}-${field}-error`} role="alert">
               {t("orchestration.fieldError")}

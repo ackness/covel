@@ -120,7 +120,7 @@ vi.mock("../game-view/connection-status.js", () => ({
 }));
 vi.mock("../session-music.js", () => ({
   SessionMusic: () => null,
-  MusicToggle: () => null,
+  MusicMenuControls: () => null,
 }));
 vi.mock("../session-backdrop.js", () => ({ SessionBackdrop: () => null }));
 vi.mock("../scene-hud.js", () => ({ SceneHud: () => null }));
@@ -128,7 +128,6 @@ vi.mock("../session-dimensions-panel.js", () => ({
   SessionDimensionsPanel: () => null,
 }));
 vi.mock("../memory-index-notice.js", () => ({ MemoryIndexNotice: () => null }));
-vi.mock("../left-panel.js", () => ({ LeftPanel: () => null }));
 vi.mock("../right-panel.js", () => ({ RightPanel: () => null }));
 vi.mock("../chat-messages.js", () => ({
   ChatMessages: () => (
@@ -275,7 +274,7 @@ it("leaves a plugin page through the Text and Stage toggle", () => {
   expect(screen.getByRole("region", { name: "Story page" })).toBeTruthy();
   fireEvent.click(
     within(header()).getByRole("button", {
-      name: i18n.t("session.viewParsedAria"),
+      name: i18n.t("session.viewRead"),
     }),
   );
   expect(screen.queryByRole("region", { name: "Story page" })).toBeNull();

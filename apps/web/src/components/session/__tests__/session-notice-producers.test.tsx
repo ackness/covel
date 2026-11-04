@@ -102,7 +102,7 @@ describe("SessionThemeNotice", () => {
     const card = screen.getByTestId("notice-session-theme");
     expect(card.textContent).toContain("This game's theme could not be loaded");
     fireEvent.click(
-      screen.getByRole("button", { name: "Use default appearance" }),
+      screen.getByRole("button", { name: "Restore default appearance" }),
     );
     expect(select).toHaveBeenCalledWith(null);
   });

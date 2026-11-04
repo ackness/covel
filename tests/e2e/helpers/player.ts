@@ -78,35 +78,61 @@ export async function seedAppSettings(page: Page) {
   });
 }
 
-/** Open the studio rail through the same toolbar menu a player uses. */
-export async function openStudioConfiguration(page: Page) {
-  const more = page.getByRole("button", { name: /^(更多|More)$/, exact: true });
-  await more.click();
-  const studio = page.getByRole("button", {
-    name: /^(工作室配置|Studio Config)$/,
-    exact: true,
-  });
-  if ((await studio.getAttribute("aria-pressed")) !== "true")
-    await studio.click();
-  else await more.click();
-  await expect(
-    page.getByRole("heading", { name: /^(工作室配置|Studio Config)$/ }),
-  ).toBeVisible();
+/** Open Settings from the top bar, as a player does. */
+export async function openAppSettings(page: Page) {
+  await page
+    .getByRole("navigation", { name: /^(主导航|Primary)$/ })
+    .getByRole("button", { name: /^(设置|Settings)$/ })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
 }
 
-/** Close the studio rail through its toolbar toggle and return to the composer. */
-export async function closeStudioConfiguration(page: Page) {
-  const more = page.getByRole("button", { name: /^(更多|More)$/, exact: true });
-  await more.click();
-  const studio = page.getByRole("button", {
-    name: /^(工作室配置|Studio Config)$/,
-    exact: true,
+/** Switch the color scheme in Settings → Appearance and close the dialog. */
+export async function chooseColorScheme(page: Page, scheme: "light" | "dark") {
+  await openAppSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^(外观|Appearance)$/ }).click();
+  await dialog
+    .getByRole("button", {
+      name: scheme === "light" ? /^(亮色|Light)$/ : /^(暗色|Dark)$/,
+    })
+    .first()
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+}
+
+/** Seed a profile with Developer mode on, so the top bar offers Debugger. */
+export async function seedDeveloperMode(page: Page) {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "zh-CN",
+    "ui.developerView": true,
   });
-  if ((await studio.getAttribute("aria-pressed")) === "true")
-    await studio.click();
-  else await more.click();
+}
+
+/** Open "This game's settings" through the session menu, as a player does. */
+export async function openStudioConfiguration(page: Page) {
+  await page
+    .getByRole("button", { name: /^(菜单|Menu)$/, exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: /^(本局设置…|This game's settings…)$/ })
+    .click();
+  const drawer = page.getByRole("dialog", {
+    name: /^(本局设置|This game's settings)$/,
+  });
+  await expect(drawer).toBeVisible();
+  // The speaking and advancing limits sit in the collapsed Advanced block.
+  const closed = drawer.locator("details:not([open]) > summary");
+  if ((await closed.count()) > 0) await closed.click();
+}
+
+/** Close "This game's settings" and return to the composer. */
+export async function closeStudioConfiguration(page: Page) {
+  await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("heading", { name: /^(工作室配置|Studio Config)$/ }),
+    page.getByRole("dialog", { name: /^(本局设置|This game's settings)$/ }),
   ).toBeHidden();
   await expect(composer(page)).toBeVisible();
 }

@@ -1,8 +1,5 @@
-import { OrchestrationSettings } from "./orchestration-settings.js";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { stageRank } from "@covel/shared";
-import { getDataService } from "@/services/data-service.js";
 import type { SessionPlugin } from "@/services/api.js";
 import { PluginErrorItem } from "./plugin-list-panel/plugin-error-item.js";
 import { PluginItem } from "./plugin-list-panel/plugin-item.js";
@@ -19,98 +16,16 @@ export function PluginListPanel({
   sessionId,
   runtimeModelOverrides,
   setupRuntimes,
+  developerMode = false,
+  onOpenModelSettings,
 }: PluginListPanelProps) {
   const { t } = useTranslation();
-  const [advanced, setAdvanced] = useState(false);
-  const [effectiveOverrides, setEffectiveOverrides] = useState<
-    Record<string, string>
-  >(() => runtimeModelOverrides ?? {});
-  const overridesRef = useRef(effectiveOverrides);
-  const confirmedOverridesRef = useRef(effectiveOverrides);
-  const saveTailRef = useRef<Promise<void>>(Promise.resolve());
-  const revisionRef = useRef(0);
-  const generationRef = useRef(0);
-  const sessionRef = useRef(sessionId);
-  sessionRef.current = sessionId;
-  overridesRef.current = effectiveOverrides;
-
-  useEffect(() => {
-    const next = runtimeModelOverrides ?? {};
-    generationRef.current += 1;
-    revisionRef.current = 0;
-    saveTailRef.current = Promise.resolve();
-    confirmedOverridesRef.current = next;
-    overridesRef.current = next;
-    setEffectiveOverrides(next);
-  }, [sessionId, runtimeModelOverrides]);
-
-  const updateRuntimeModelOverride = useCallback(
-    (runtimeKey: string, slot: string): Promise<void> => {
-      if (!sessionId || !runtimeKey) return Promise.resolve();
-      const next = { ...overridesRef.current };
-      if (slot) next[runtimeKey] = slot;
-      else delete next[runtimeKey];
-      const revision = ++revisionRef.current;
-      const generation = generationRef.current;
-      overridesRef.current = next;
-      setEffectiveOverrides(next);
-
-      const operation = saveTailRef.current
-        .catch(() => undefined)
-        .then(() =>
-          getDataService().updateSession(sessionId, {
-            runtimeModelOverrides: next,
-          }),
-        );
-      saveTailRef.current = operation.then(
-        () => undefined,
-        () => undefined,
-      );
-
-      return operation.then(
-        (updated) => {
-          if (
-            sessionRef.current !== sessionId ||
-            generationRef.current !== generation
-          )
-            return;
-          const confirmed = updated.runtimeModelOverrides ?? next;
-          confirmedOverridesRef.current = confirmed;
-          if (revisionRef.current === revision) {
-            overridesRef.current = confirmed;
-            setEffectiveOverrides(confirmed);
-          }
-        },
-        (error: unknown) => {
-          if (
-            sessionRef.current === sessionId &&
-            generationRef.current === generation &&
-            revisionRef.current === revision
-          ) {
-            const confirmed = confirmedOverridesRef.current;
-            overridesRef.current = confirmed;
-            setEffectiveOverrides(confirmed);
-          }
-          throw error;
-        },
-      );
-    },
-    [sessionId],
-  );
 
   const hasSessionPlugins = (sessionPlugins ?? []).length > 0;
 
   if (plugins.length === 0 && loadErrors.length === 0 && !hasSessionPlugins) {
     return (
       <div className="space-y-1.5">
-        {sessionId && (
-          <OrchestrationSettings
-            key={sessionId}
-            sessionId={sessionId}
-            disabled={executing}
-            refreshKey={sessionPlugins}
-          />
-        )}
         <p className="text-xs text-muted-foreground italic">
           {t("session.noPluginsLoaded")}
         </p>
@@ -136,22 +51,6 @@ export function PluginListPanel({
 
   return (
     <div className="space-y-1.5">
-      {sessionId && (
-        <OrchestrationSettings
-          key={sessionId}
-          sessionId={sessionId}
-          disabled={executing}
-          refreshKey={sessionPlugins}
-        />
-      )}
-      <label className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={advanced}
-          onChange={(event) => setAdvanced(event.target.checked)}
-        />
-        {t("session.advancedPluginSettings")}
-      </label>
       {loadErrors.length > 0 && (
         <div className="space-y-1.5">
           {loadErrors.map((err) => (
@@ -163,29 +62,29 @@ export function PluginListPanel({
         ? sortedPlugins.map((sp) => (
             <SessionPluginItem
               key={sp.id}
-              advanced={advanced}
+              advanced={developerMode}
               plugin={sp}
               executing={executing}
               onToggle={onTogglePlugin}
               resolvedSlots={resolvedSlots}
               sessionId={sessionId}
-              runtimeModelOverrides={effectiveOverrides}
-              onRuntimeModelOverrideChange={updateRuntimeModelOverride}
+              runtimeModelOverrides={runtimeModelOverrides}
+              onOpenModelSettings={onOpenModelSettings}
               setupRuntimes={setupRuntimes}
             />
           ))
         : plugins.map((pkg) => (
             <PluginItem
               key={pkg.id}
-              advanced={advanced}
+              advanced={developerMode}
               pkg={pkg}
               sessionPlugin={sessionPluginMap.get(pkg.id)}
               executing={executing}
               onToggle={onTogglePlugin}
               resolvedSlots={resolvedSlots}
               sessionId={sessionId}
-              runtimeModelOverrides={effectiveOverrides}
-              onRuntimeModelOverrideChange={updateRuntimeModelOverride}
+              runtimeModelOverrides={runtimeModelOverrides}
+              onOpenModelSettings={onOpenModelSettings}
               setupRuntimes={setupRuntimes}
             />
           ))}

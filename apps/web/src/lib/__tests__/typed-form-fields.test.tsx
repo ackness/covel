@@ -231,9 +231,9 @@ it("unlocks a streamed form after execution and uses the current submission hand
     (screen.getByRole("textbox", { name: "Notes" }) as HTMLTextAreaElement)
       .value,
   ).toBe("Keep this draft");
-  expect(screen.getByRole("button", { name: "Save" }).matches(":disabled")).toBe(
-    true,
-  );
+  expect(
+    screen.getByRole("button", { name: "Save" }).matches(":disabled"),
+  ).toBe(true);
 });
 
 it.each(["turn", "handler"])(

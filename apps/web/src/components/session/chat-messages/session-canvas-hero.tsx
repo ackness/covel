@@ -1,6 +1,5 @@
 import { dimensionSnapshotSchema } from "@covel/shared";
 import { z } from "zod";
-import { useTranslation } from "react-i18next";
 import { Flame } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
@@ -25,7 +24,6 @@ export function SessionCanvasHero({
   beginLabel,
   hintLabel,
 }: SessionCanvasHeroProps) {
-  const { t } = useTranslation();
   const displayText = world ? worldDisplayText(world, locale) : undefined;
   const worldName = displayText?.name ?? "";
   const parsedDimensions = dimensionSnapshotSchema.safeParse(dimensions ?? {});
@@ -88,9 +86,6 @@ export function SessionCanvasHero({
 
       <div className="relative z-10 flex min-h-90 flex-col justify-between p-5 text-white md:min-h-105 md:p-7">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="ui-eyebrow text-white/62">
-            {t("session.canvasEyebrow")}
-          </span>
           {chips.map((chip, i) => (
             <span
               key={`${chip}-${i}`}

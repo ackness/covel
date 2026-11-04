@@ -283,16 +283,16 @@ export async function prepareEnsemble(
     page.getByRole("button", { name: "Begin Adventure", exact: true }),
   ).toHaveCount(0);
   await waitForTurnIdle(page);
-  await page.getByRole("button", { name: "Parsed view", exact: true }).click();
+  await page.getByRole("button", { name: "Read", exact: true }).click();
   await openStudioConfiguration(page);
   const orchestration = page.getByRole("group", {
-    name: "Orchestration",
+    name: "Speaking and advancing",
     exact: true,
   });
   await expect(orchestration.getByText(/^Who Speaks Next \/ /)).toBeVisible();
   await expect(orchestration.getByRole("combobox")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Save Turn policy", exact: true }),
+    page.getByRole("button", { name: "Save Speaking rules", exact: true }),
   ).toHaveCount(0);
   const resolved = await page.request.get(
     `/api/sessions/${session.id}/orchestration`,
@@ -303,9 +303,9 @@ export async function prepareEnsemble(
     settings: { maxActors: 4, maxSubagentCalls: 16 },
   });
   expect((await resolved.json()).settings.turnPolicy).toBeUndefined();
-  await page.getByLabel("Automatic rounds", { exact: true }).fill("2");
+  await page.getByLabel("Auto-advance turns", { exact: true }).fill("2");
   const saveAdvance = page.getByRole("button", {
-    name: "Save Automatic rounds",
+    name: "Save Auto-advance turns",
     exact: true,
   });
   await saveAdvance.click();

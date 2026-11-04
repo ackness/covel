@@ -223,12 +223,12 @@ The player's Perspective setting overrides this world default for subsequent nar
 
 ## Game Master Panel (`dm-console`)
 
-Choose Game Master Panel from the header's Plugin pages menu to see scene cast, pending interactions, story and input in the full story column; the page has its own input box, so the host shows no second one. Click Text or Stage in the header to leave; Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
+Choose Game Master Panel from the header's Plugin pages menu to see scene cast, pending interactions, story and input in the full story column; the page has its own input box, so the host shows no second one. Click Read or Stage in the header to leave; Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
 
 Cast shows public scene actors only, with an empty state without a provider. It is not all known characters or actor eligibility. Pending interactions are already public unanswered, non-stale forms, choices and confirmations, without unrevealed plot or hidden event counts. Story omits tools, reasoning and execution detail.
 
 Select an action permitted for the current role: Game masters can use Direct, Narrate and Advance; spectators can only Advance; players retain ordinary modes. Advance takes no text. Changing views preserves drafts, modes, fields and queued choices; refusal does not clear them. Opening the page changes no role, narrator perspective or policy.
 
-Game Master and Spectator include the console; Ensemble recommends it. Defaults remain text and stage respectively. Ordinary Game Master still uses Storyteller and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.
+Game Master and Spectator include the console; Ensemble recommends it. Defaults remain Read and Stage respectively. Ordinary Game Master still uses Storyteller and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.
 
 When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.

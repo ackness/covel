@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card.js";
 import type * as api from "@/services/api.js";
 import {
   formatSessionDate,
+  sessionSaveLabel,
   sessionStatusLabel,
   sessionTurnLabel,
 } from "@/lib/session-display.js";
@@ -131,7 +132,11 @@ export function SessionHistoryCard({
                   size="sm"
                   className="text-xs text-muted-foreground hover:text-destructive h-8 w-8 p-0"
                   aria-label={t("session.deleteSessionAria", {
-                    id: session.id.slice(0, 16),
+                    label: sessionSaveLabel(
+                      t,
+                      i18n.resolvedLanguage ?? i18n.language,
+                      session,
+                    ),
                   })}
                   disabled={Boolean(deletingId)}
                   onClick={(event) => {

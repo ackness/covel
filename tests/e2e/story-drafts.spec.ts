@@ -154,7 +154,7 @@ test("the stage reads the story line by line while it is written and keeps the p
   page,
 }) => {
   await withHeldStory(page, async ({ release, saved }) => {
-    await page.getByRole("button", { name: /Stage view/i }).click();
+    await page.getByRole("button", { name: /^Stage$/ }).click();
     const input = page.getByTestId("stage-decision-input");
     await expect(input).toBeEnabled();
     await input.fill("I lift the lantern.");

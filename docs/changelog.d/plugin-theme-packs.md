@@ -3,7 +3,7 @@
 - **Plugins can publish restricted static theme packs.** `contributes.ui.theme` supports localized palettes, shared layout presets and AST-compiled CSS, including zero-runtime community packages. Author validation, ZIP admission and discovery share the same compiler; players explicitly choose one pack per session on this device. Contract: `docs/reference/theme-packages.md`.
 - **Theme backgrounds use content-bound public bitmap resources.** Only indexed PNG, JPEG, WebP, GIF and AVIF bytes are published through the existing asset route, with purpose-specific listings, exact hashes and no HTML bridge.
 
-- **Session themes preserve host recovery and player adjustments.** Restricted styles affect narrative text and decorative content only; Use default appearance stays one click away in the session theme menu. Discovery refreshes retain pending save results and failure warnings. Save failures, missing resources and changed content fall back safely without changing the base appearance. Scene Stage provides an optional reading pack.
+- **Session themes preserve host recovery and player adjustments.** Restricted styles affect narrative text and decorative content only; Restore default appearance stays one click away under This game's theme in the session menu. Discovery refreshes retain pending save results and failure warnings. Save failures, missing resources and changed content fall back safely without changing the base appearance. Scene Stage provides an optional reading pack.
 
 ### Changed
 

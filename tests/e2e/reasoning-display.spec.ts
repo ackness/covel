@@ -116,7 +116,7 @@ for (const width of [1280, 390]) {
       await expect(
         page.locator('[data-turn-id="background-turn"]'),
       ).toHaveCount(0);
-      await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      await page.getByRole("button", { name: "舞台", exact: true }).click();
       await page.getByRole("button", { name: "履历", exact: true }).click();
       const history = page.getByRole("dialog", { name: "对话履历" });
       const historyReasoning = history.getByTestId("reasoning-disclosure");

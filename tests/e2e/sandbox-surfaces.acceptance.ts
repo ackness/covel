@@ -799,9 +799,11 @@ for (const retire of [true, false]) {
       await ready;
       if (retire) {
         await openStudioConfiguration(page);
-        await page.getByTitle("Switch session", { exact: true }).click();
+        // The drawer lists every other save of this world; only the
+        // destination exists, so it is the one switch button.
         await page
-          .getByRole("button", { name: new RegExp(`^${destination}\\b`) })
+          .getByRole("dialog", { name: "This game's settings" })
+          .getByRole("button", { name: /^Switch save:/ })
           .click();
         await expect(page).toHaveURL(new RegExp(`sid=${destination}`));
         expect(
@@ -939,7 +941,7 @@ for (const width of [1280, 360]) {
       // No control strip exists; the header's text toggle leaves any page.
       await expect(page.getByTestId("sandbox-surface-controls")).toHaveCount(0);
       const back = header.getByRole("button", {
-        name: "Parsed view",
+        name: "Read",
         exact: true,
       });
       const assertHitTarget = async (target: typeof back) => {
@@ -1148,9 +1150,7 @@ for (const width of [1280, 360]) {
 
       // Choosing Stage leaves a plugin page; the page never takes over the stage input.
       await reopenInput();
-      await page
-        .getByRole("button", { name: "Stage view", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Stage", exact: true }).click();
       await expect(input).toHaveCount(0);
       await expect(page.getByTestId("stage-decision-input")).toBeVisible();
     } finally {
@@ -1297,7 +1297,7 @@ for (const delivery of ["url", "inline"] as const) {
       }
       await page
         .getByTestId("session-header")
-        .getByRole("button", { name: "Parsed view", exact: true })
+        .getByRole("button", { name: "Read", exact: true })
         .click();
       await expect(container).toHaveCount(0);
     } finally {

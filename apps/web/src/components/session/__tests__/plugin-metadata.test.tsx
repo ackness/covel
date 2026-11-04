@@ -183,6 +183,7 @@ describe("session plugin metadata UI", () => {
     await i18n.changeLanguage("en-US");
     render(
       <PluginListPanel
+        developerMode
         plugins={[
           plugin("auto", "auto"),
           plugin("manual", "manual"),
@@ -191,11 +192,6 @@ describe("session plugin metadata UI", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: "Customize plugins and advanced settings",
-      }),
-    );
     fireEvent.click(screen.getByText("Auto Plugin"));
     fireEvent.click(screen.getByText("Manual Plugin"));
     fireEvent.click(screen.getByText("Event Plugin"));

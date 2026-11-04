@@ -52,7 +52,7 @@ During one turn, you will see these things, in order:
 > [!TIP]
 > Wait for "Turn complete" before you send the next message. The story text being finished does not mean the turn is over. Plugins are still updating the state after it.
 
-To change how the story is displayed, switch between the parsed view and the stage view.
+To change how the story is displayed, switch between Read and Stage.
 
 ## 5. Check that you can continue
 

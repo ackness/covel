@@ -62,7 +62,7 @@ test("preserves the story operation notice through reload and stage history with
     await expect(footer).toHaveCount(1);
     await expect(composerInput(page)).toBeEnabled();
     await expect(page.locator(".ui-narrative")).toHaveCount(1);
-    await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+    await page.getByRole("button", { name: "舞台", exact: true }).click();
     await expect(page.getByTestId("stage-choices")).toBeVisible();
     await expect(footer).toHaveCount(1);
     await expect(page.getByTestId("stage-decision-input")).toBeEnabled();

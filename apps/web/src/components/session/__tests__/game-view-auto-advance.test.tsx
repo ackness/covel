@@ -70,7 +70,7 @@ vi.mock("../game-view/connection-status.js", () => ({
 }));
 vi.mock("../session-music.js", () => ({
   SessionMusic: () => null,
-  MusicToggle: () => null,
+  MusicMenuControls: () => null,
 }));
 vi.mock("../session-backdrop.js", () => ({ SessionBackdrop: () => null }));
 vi.mock("../scene-hud.js", () => ({ SceneHud: () => null }));
@@ -78,7 +78,6 @@ vi.mock("../session-dimensions-panel.js", () => ({
   SessionDimensionsPanel: () => null,
 }));
 vi.mock("../memory-index-notice.js", () => ({ MemoryIndexNotice: () => null }));
-vi.mock("../left-panel.js", () => ({ LeftPanel: () => null }));
 vi.mock("../right-panel.js", () => ({ RightPanel: () => null }));
 vi.mock("../chat-messages.js", () => ({ ChatMessages: () => null }));
 vi.mock("../game-view/message-composer.js", () => ({
@@ -143,7 +142,7 @@ it.each(["chat", "stage", "immersive stage"])(
     if (mode !== "chat") {
       fireEvent.click(
         screen.getByRole("button", {
-          name: i18n.t("session.viewStageAria"),
+          name: i18n.t("session.viewStage"),
         }),
       );
       if (mode === "immersive stage") {

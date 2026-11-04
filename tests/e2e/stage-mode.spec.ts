@@ -36,10 +36,10 @@ test.describe("Stage view mode", () => {
 
     try {
       const stageToggle = page.getByRole("button", {
-        name: /舞台视图|Stage view/i,
+        name: /^(舞台|Stage)$/,
       });
       const parsedToggle = page.getByRole("button", {
-        name: /解析视图|Parsed view/i,
+        name: /^(阅读|Read)$/,
       });
 
       // world.yaml `defaultViewMode: stage` → stage is the initial mode on mount.

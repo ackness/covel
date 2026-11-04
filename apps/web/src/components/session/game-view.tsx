@@ -15,6 +15,9 @@ import {
 } from "./plugin-view-consent.js";
 import { Button } from "@/components/ui/button.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
+import { exportChat } from "@/lib/chat-export.js";
+import { useSetting } from "@/settings/use-settings.js";
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -51,13 +54,14 @@ import { useSession } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { useDocumentSessionState } from "@/hooks/use-document-session-state.js";
-import { LeftPanel } from "./left-panel.js";
+import { SessionSettingsDrawer } from "./session-settings-drawer.js";
 import { useRightPanelState } from "./right-panel-state.js";
 import { RightPanel } from "./right-panel.js";
 import {
   GameViewHeader,
   type GameViewMode,
 } from "./game-view/game-view-header.js";
+import { SessionMenu } from "./game-view/session-menu.js";
 import { NoticeStatusChips } from "./game-view/notice-status-chips.js";
 import { pageHidesHostComposer } from "./game-view/plugin-page-composer.js";
 import { MessageComposer } from "./game-view/message-composer.js";
@@ -66,7 +70,11 @@ import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { useGameViewMode } from "./game-view/use-game-view-mode.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
-import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
+import {
+  emitNavEvent,
+  onSettingsRequest,
+  type SessionPanel,
+} from "@/lib/nav-events.js";
 import {
   executionRecoveryNoticeVisible,
   latestExecutionPresentation,
@@ -252,6 +260,18 @@ export function GameView({
     session.phase === "playing" ||
     hasSubmittedForm(messages, submittedBlockIds);
   const settings = useSettingsDialog(refreshSlots);
+  // The top bar's Settings item opens the dialog owned by this screen.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  useEffect(
+    () =>
+      onSettingsRequest((key) => {
+        if (key) settingsRef.current.openWithKey(key);
+        else settingsRef.current.setOpen(true);
+        return true;
+      }),
+    [],
+  );
   // Publishes data-turn / data-session on <html> for theme CSS to hook into.
   useDocumentSessionState();
 
@@ -325,7 +345,7 @@ export function GameView({
     onCommandClientAction: handleCommandClientAction,
   });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
-  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
 
   // Load session-scoped plugin list whenever the session changes.
@@ -339,38 +359,28 @@ export function GameView({
   const isTablet = useMediaQuery("(max-width: 1023.98px)");
 
   const {
-    leftPanelRef,
     rightPanelRef,
-    isLeftCollapsed,
     isRightCollapsed,
-    handleLeftResize,
     handleRightResize,
-    toggleLeftPanel,
     toggleRightPanel,
   } = usePanelCollapse();
 
-  // Immersive stage: collapse both rails on enter, restore prior expansion on
+  // Immersive stage: collapse the side panel on enter, restore prior expansion on
   // exit. Only an explicit mode change drives mounted desktop panels; resize
   // transitions must not query the panel registry while rails re-register.
-  const priorRailState = useRef<{ left: boolean; right: boolean } | null>(null);
+  const priorRailState = useRef<{ right: boolean } | null>(null);
   useEffect(() => {
     if (isMobile || isTablet) return;
-    const left = leftPanelRef.current;
     const right = rightPanelRef.current;
-    if (!left || !right) return;
+    if (!right) return;
     if (immersive) {
-      priorRailState.current = {
-        left: left.isCollapsed(),
-        right: right.isCollapsed(),
-      };
-      left.collapse();
+      priorRailState.current = { right: right.isCollapsed() };
       right.collapse();
     } else if (priorRailState.current) {
-      if (!priorRailState.current.left) left.expand();
       if (!priorRailState.current.right) right.expand();
       priorRailState.current = null;
     }
-  }, [immersive, leftPanelRef, rightPanelRef]);
+  }, [immersive, rightPanelRef]);
 
   // Esc leaves immersive — but only when nothing editable is focused (the stage
   // free-text composer owns Esc to cancel input) and no modal already ate it.
@@ -420,11 +430,7 @@ export function GameView({
   const visual = worldVisual(world);
   const layout = useThemeLayout();
   const stageActive = viewMode === "stage" && stageReady;
-  const leftCollapsed = isMobile ? !mobileLeftOpen : isLeftCollapsed;
   const rightCollapsed = isMobile ? !mobileRightOpen : isRightCollapsed;
-  const handleToggleLeft = isMobile
-    ? () => setMobileLeftOpen((open) => !open)
-    : toggleLeftPanel;
   const handleToggleRight = isMobile
     ? () => setMobileRightOpen((open) => !open)
     : toggleRightPanel;
@@ -439,15 +445,24 @@ export function GameView({
     storage: localStorage,
   });
 
-  // ── Left Panel ─────────────────────────────────────────────────
+  // ── Session menu ──────────────────────────────────────────────
 
-  const enabledPlugins = plugins;
-  const [showSessionList, setShowSessionList] = useState(false);
+  const [developerMode] = useSetting<boolean>("ui.developerView");
   const otherSessions = worldSessions.filter((s) => s.id !== session.id);
+  // The author views belong to developer mode; without it, read.
+  useEffect(() => {
+    if (!developerMode && (viewMode === "detailed" || viewMode === "raw"))
+      setViewMode("parsed");
+  }, [developerMode, viewMode, setViewMode]);
 
-  const handleToggleSessionList = () => {
-    if (!showSessionList) onLoadWorldSessions();
-    setShowSessionList((v) => !v);
+  const handleRestart = async () => {
+    const confirmed = await requestConfirm({
+      title: t("session.restartConfirmTitle"),
+      message: t("session.restartConfirmMessage"),
+      confirmLabel: t("session.menuRestart"),
+      cancelLabel: t("common.cancel", "Cancel"),
+    });
+    if (confirmed) onResetSession();
   };
 
   // ── Layout ─────────────────────────────────────────────────────
@@ -560,32 +575,26 @@ export function GameView({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={mobileLeftOpen} onOpenChange={setMobileLeftOpen}>
-        <DialogContent className="bottom-3 left-3 right-3 top-auto h-[min(88dvh,48rem)] w-auto max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden p-0">
-          <DialogTitle className="sr-only">
-            {t("session.config", "Studio Config")}
-          </DialogTitle>
-          <LeftPanel
-            session={session}
-            isLeftCollapsed={!mobileLeftOpen}
-            showSessionList={showSessionList}
-            otherSessions={otherSessions}
-            enabledPlugins={enabledPlugins}
-            pluginLoadErrors={pluginLoadErrors}
-            sessionPlugins={sessionPlugins}
-            executing={executing}
-            resolvedSlots={resolvedSlots}
-            onToggleLeftPanel={() => setMobileLeftOpen(false)}
-            onToggleSessionList={handleToggleSessionList}
-            onSwitchSession={onSwitchSession}
-            onDeleteSession={onDeleteSession}
-            onCloseSessionList={() => setShowSessionList(false)}
-            onOpenSettings={() => settings.setOpen(true)}
-            onResetSession={onResetSession}
-            onTogglePlugin={onTogglePlugin}
-          />
-        </DialogContent>
-      </Dialog>
+      <SessionSettingsDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        session={session}
+        world={world}
+        otherSessions={otherSessions}
+        plugins={plugins}
+        pluginLoadErrors={pluginLoadErrors}
+        sessionPlugins={sessionPlugins}
+        executing={executing}
+        resolvedSlots={resolvedSlots}
+        onLoadSessions={onLoadWorldSessions}
+        onSwitchSession={onSwitchSession}
+        onDeleteSession={onDeleteSession}
+        onTogglePlugin={onTogglePlugin}
+        onOpenModelSettings={() => {
+          setDrawerOpen(false);
+          settings.openWithKey("llm.slots");
+        }}
+      />
 
       <Dialog open={mobileRightOpen} onOpenChange={setMobileRightOpen}>
         <DialogContent className="bottom-3 left-3 right-3 top-auto h-[min(88dvh,48rem)] w-auto max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden p-0">
@@ -607,50 +616,6 @@ export function GameView({
         onLayoutChanged={onLayoutChanged}
         className="w-full h-full"
       >
-        {/* Left Panel */}
-        {/* Collapsed by default on every viewport: the rail holds studio
-            configuration (plugin toggles, model slots), not anything the
-            player acts on mid-story. The header toggle brings it back. */}
-        {!isMobile && (
-          <>
-            <ResizablePanel
-              id="left-panel"
-              panelRef={leftPanelRef}
-              defaultSize="0%"
-              minSize="15%"
-              maxSize="40%"
-              collapsible={true}
-              collapsedSize="0%"
-              onResize={handleLeftResize}
-              className="ui-rail flex flex-col min-h-0 min-w-0"
-            >
-              <LeftPanel
-                session={session}
-                isLeftCollapsed={isLeftCollapsed}
-                showSessionList={showSessionList}
-                otherSessions={otherSessions}
-                enabledPlugins={enabledPlugins}
-                pluginLoadErrors={pluginLoadErrors}
-                sessionPlugins={sessionPlugins}
-                executing={executing}
-                resolvedSlots={resolvedSlots}
-                onToggleLeftPanel={toggleLeftPanel}
-                onToggleSessionList={handleToggleSessionList}
-                onSwitchSession={onSwitchSession}
-                onDeleteSession={onDeleteSession}
-                onCloseSessionList={() => setShowSessionList(false)}
-                onOpenSettings={() => settings.setOpen(true)}
-                onResetSession={onResetSession}
-                onTogglePlugin={onTogglePlugin}
-              />
-            </ResizablePanel>
-            <ResizableHandle
-              orientation={direction}
-              className={isLeftCollapsed ? "hidden" : ""}
-            />
-          </>
-        )}
-
         {/* Center Panel */}
         <ResizablePanel
           id="center-panel"
@@ -698,11 +663,26 @@ export function GameView({
               style={{ zIndex: 40 }}
             >
               <GameViewHeader
-                themeSettings={
-                  <SessionThemeSettings
-                    key={pluginThemes.source?.scope ?? session.id}
-                    source={pluginThemes.source}
-                    onReload={pluginThemes.reload}
+                menu={
+                  <SessionMenu
+                    t={t}
+                    sessionId={session.id}
+                    executing={executing}
+                    developerMode={developerMode}
+                    viewMode={viewMode}
+                    onViewModeChange={handleViewModeChange}
+                    themeSection={
+                      <SessionThemeSettings
+                        key={pluginThemes.source?.scope ?? session.id}
+                        source={pluginThemes.source}
+                        onReload={pluginThemes.reload}
+                      />
+                    }
+                    onOpenGameSettings={() => setDrawerOpen(true)}
+                    onOpenSettings={() => settings.setOpen(true)}
+                    onRestart={() => void handleRestart()}
+                    onExport={() => void exportChat(t, session.id, messages)}
+                    onOpenDatabase={() => emitNavEvent("open-database")}
                   />
                 }
                 recoveryNoticeVisible={recoveryNoticeVisible}
@@ -726,15 +706,11 @@ export function GameView({
                 onStop={() => void abortActiveTurn()}
                 viewMode={viewMode}
                 pluginViews={pluginViews.views}
-                isLeftCollapsed={leftCollapsed}
                 isRightCollapsed={rightCollapsed}
                 onViewModeChange={handleViewModeChange}
-                onToggleLeftPanel={handleToggleLeft}
                 onToggleRightPanel={handleToggleRight}
-                onOpenSettings={() => settings.setOpen(true)}
                 onOpenSuspensions={() => setSuspensionsOpen(true)}
                 onBackToWorldSelect={onBackToWorldSelect}
-                onResetSession={onResetSession}
                 suspensionsCount={suspensions.length}
               />
             </div>

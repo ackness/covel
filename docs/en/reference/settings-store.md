@@ -225,7 +225,7 @@ This section covers what the model settings pages show and when they save.
 
 - World preparation shows all run stages of the selected plugins, and offers a separate text-model binding for each agent runtime.
 - The provider roles of function runtimes are shown one by one for every `type: slot` setting. The precedence of the default is: the user's explicit override, the world's `pluginSettings`, the plugin's declaration. Clearing the user override restores the current world's default.
-- The session's left sidebar reads the current session's plugin metadata and edits the session's model override for each runtime. A missing or incompatible binding is indicated explicitly.
+- The "This game's settings" drawer reads the current session's plugin metadata and shows, as read-only text, the model each runtime actually uses, with a link to the model page of Settings. A missing or incompatible binding is indicated explicitly.
 
 **Where model limits come from.** Model Roles and Generation target the currently bound provider, model, and protocol. After the binding changes, the token limits of the previous server slot no longer limit the new model. Provider details also include the connection's protocol in capability lookups.
 

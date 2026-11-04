@@ -80,11 +80,7 @@ describe.each(["session", "prep"] as const)(
             resolvedSlots={resolvedSlots}
           />,
         );
-        fireEvent.click(
-          screen.getByRole("checkbox", {
-            name: "Customize plugins and advanced settings",
-          }),
-        );
+        fireEvent.click(screen.getByText(pkg.displayName as string));
         return view;
       }
       return render(

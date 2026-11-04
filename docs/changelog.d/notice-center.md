@@ -5,5 +5,5 @@
 
 ### Changed
 
-- **Nothing full-width sits between the session header and the story.** The banners for a failed theme, plugins waiting for approval, unavailable plugins, world data, world state, an unfinished turn, a stale memory index and the setup progress are now cards; auto-advance is a chip in the session header; the public-trial notice is a card you can dismiss for good. The theme menu has a direct "Use default appearance" button, and "Clear index" for the memory index shows only in developer view.
+- **Nothing full-width sits between the session header and the story.** The banners for a failed theme, plugins waiting for approval, unavailable plugins, world data, world state, an unfinished turn, a stale memory index and the setup progress are now cards; auto-advance is a chip in the session header; the public-trial notice is a card you can dismiss for good. "Clear index" for the memory index shows only in developer mode.
 - **A failed operation shows once.** The "N actions did not take effect" line stays under the story; the matching toast is gone.

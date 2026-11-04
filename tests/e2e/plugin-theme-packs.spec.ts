@@ -107,11 +107,11 @@ async function visit(page: Page, sessionId: string) {
   await expect(composerInput(page)).toBeEnabled();
 }
 async function select(page: Page) {
-  const trigger = page.getByRole("button", { name: "会话主题", exact: true });
+  const trigger = page.getByRole("button", { name: "菜单", exact: true });
   if ((await trigger.getAttribute("aria-expanded")) !== "true")
     await trigger.click();
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
-  const picker = page.getByRole("combobox", { name: "会话主题", exact: true });
+  const picker = page.getByRole("combobox", { name: "本局主题", exact: true });
   await expect(picker).toBeEnabled();
   const option = picker.getByRole("option", {
     name: /阅读室.*theme-pack-probe/,
@@ -126,10 +126,10 @@ async function select(page: Page) {
 }
 /** The reset to the default look lives in the theme menu. */
 async function themeReset(page: Page) {
-  const trigger = page.getByRole("button", { name: "会话主题", exact: true });
+  const trigger = page.getByRole("button", { name: "菜单", exact: true });
   if ((await trigger.getAttribute("aria-expanded")) !== "true")
     await trigger.click();
-  return page.getByRole("button", { name: "使用默认外观", exact: true });
+  return page.getByRole("button", { name: "恢复默认外观", exact: true });
 }
 async function resetTheme(page: Page) {
   await (await themeReset(page)).click();
@@ -391,7 +391,7 @@ test("installed community palette, texture and session layout survive hydration 
     const settings = page
       .getByTestId("center-panel")
       .locator(".ui-session-header")
-      .getByRole("button", { name: "设置", exact: true });
+      .getByRole("button", { name: "菜单", exact: true });
     const before = await controlStyle(settings);
     await select(page);
     const story = page
@@ -427,7 +427,9 @@ test("installed community palette, texture and session layout survive hydration 
     const after = await controlStyle(settings);
     expect(after).toEqual(before);
     await hit(settings);
-    await settings.click();
+    if ((await settings.getAttribute("aria-expanded")) !== "true")
+      await settings.click();
+    await page.getByRole("button", { name: "设置…", exact: true }).click();
     const appearance = page.getByRole("dialog");
     await appearance.getByRole("button", { name: "外观", exact: true }).click();
     const bodyColor = appearance
@@ -674,9 +676,10 @@ for (const width of [360, 1440])
       const settings = page
         .getByTestId("center-panel")
         .locator(".ui-session-header")
-        .getByRole("button", { name: "设置", exact: true });
+        .getByRole("button", { name: "菜单", exact: true });
       await hit(settings);
       await settings.click();
+      await page.getByRole("button", { name: "设置…", exact: true }).click();
       await expect(page.getByRole("dialog")).toBeVisible();
       expect(
         await page
@@ -700,7 +703,7 @@ for (const width of [360, 1440])
           .getByTestId("plugin-view-bar")
           .evaluate((element) => element.closest("[data-covel-theme-part]")),
       ).toBeNull();
-      await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      await page.getByRole("button", { name: "舞台", exact: true }).click();
       await expect(page.getByTestId("plugin-view-bar")).toHaveCount(0);
       const currentParagraph = page
         .getByTestId("stage-dialog")
@@ -793,7 +796,7 @@ for (const width of [360, 1440])
       const header = page.getByTestId("session-header");
       // Choosing the text view leaves any plugin page.
       const back = header.getByRole("button", {
-        name: "解析视图",
+        name: "阅读",
         exact: true,
       });
       await hit(back);
@@ -830,7 +833,7 @@ for (const width of [360, 1440])
         .frameLocator("iframe")
         .getByRole("button", { name: "Fill viewport", exact: true })
         .click();
-      await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      await page.getByRole("button", { name: "舞台", exact: true }).click();
       // Entering stage leaves the plugin page.
       await expect(input).toHaveCount(0);
       const currentParagraph = page
@@ -889,12 +892,12 @@ test("malicious uploaded styles are diagnosed atomically while an accepted pack 
       });
     };
     await page.route(routePattern, deferredRead);
-    await page.getByRole("button", { name: "会话主题", exact: true }).click();
+    await page.getByRole("button", { name: "菜单", exact: true }).click();
     await expect(
-      page.getByRole("group", { name: "会话主题", exact: true }),
+      page.getByRole("region", { name: "本局主题", exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("group", { name: "会话主题", exact: true })
+      .getByRole("region", { name: "本局主题", exact: true })
       .getByRole("button", { name: "重试", exact: true })
       .click();
     await expect
@@ -909,9 +912,9 @@ test("malicious uploaded styles are diagnosed atomically while an accepted pack 
     );
     release();
     await refreshed;
-    await page.getByRole("button", { name: "会话主题", exact: true }).click();
+    await page.getByRole("button", { name: "菜单", exact: true }).click();
     await expect(
-      page.getByRole("combobox", { name: "会话主题", exact: true }),
+      page.getByRole("combobox", { name: "本局主题", exact: true }),
     ).toBeEnabled();
     await page.unroute(routePattern, deferredRead);
     await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(0);
@@ -1260,7 +1263,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
     // notices are checked after leaving it with the Text toggle.
     await page
       .getByTestId("session-header")
-      .getByRole("button", { name: "解析视图", exact: true })
+      .getByRole("button", { name: "阅读", exact: true })
       .click();
     await expect(input).toHaveCount(0);
     const story = page
