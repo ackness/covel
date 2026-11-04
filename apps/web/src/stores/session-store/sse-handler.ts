@@ -3,7 +3,7 @@ import { readExecutionProgress } from "./execution-progress.js";
 import { handlePluginFaultNotice } from "./fault-notices.js";
 import i18n from "i18next";
 import type { MutableRef } from "./runtime-refs.js";
-import { emitToast } from "@/lib/toast-channel.js";
+import { pushNotice } from "@/lib/notice-center.js";
 import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
 import { reasoningAction } from "./reasoning.js";
 import {
@@ -64,6 +64,14 @@ export interface SseEventHandlerDeps {
   sessionIdRef: MutableRef<string | null>;
   stateRef: MutableRef<SessionState>;
   lastBackfilledTurnIdRef: MutableRef<string | null>;
+}
+
+function safeJson(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return undefined;
+  }
 }
 
 export type SseEventHandler = (envelope: api.SseEnvelope) => void;
@@ -580,12 +588,7 @@ export function createSseEventHandler(
           turnId: payload.turnId,
           messages,
         });
-        emitToast(
-          "info",
-          i18n.t("session.operationFailedNotice", {
-            count: payload.count as number,
-          }),
-        );
+        // The story footer keeps the persistent line for this turn.
         return;
       }
       // A proposal failed to commit: part of this turn's writes did
@@ -607,6 +610,25 @@ export function createSseEventHandler(
       // reserved lifecycle events handled elsewhere. Listed explicitly so the
       // `assertNeverEvent` exhaustiveness guard below stays green — adding a
       // new CovelEvent forces a conscious decision here (handle or ignore).
+      // Background failures the player did not ask about: no toast, but the
+      // bell remembers them (and developer mode shows them as toasts).
+      case "hook.aborted":
+      case "subagent.writes-dropped":
+      case "gateway.failed":
+      case "utils.fetch.failed":
+      case "context.compaction.failed":
+      case "commit.fanout.failed":
+      case "command.failed":
+        pushNotice({
+          key: `quiet:${eventType}:${turnId ?? ""}`,
+          kind: "toast",
+          tone: "warning",
+          quiet: true,
+          scope: envelope.sessionId || "global",
+          title: i18n.t(`notice.quiet.${eventType}`),
+          detail: safeJson(payload),
+        });
+        break;
       case "ui.part.update":
       case "world.dimensions.changed":
       case "state.snapshot.created":
@@ -616,13 +638,11 @@ export function createSseEventHandler(
       case "block.emitted":
       case "hook.fired":
       case "hook.rewrote":
-      case "hook.aborted":
       case "plugin.service.completed":
       // Command lifecycle is trace-only and never forwarded to this action
       // stream; keep the closed event union exhaustive for future changes.
       case "command.invoked":
       case "command.completed":
-      case "command.failed":
       // Recursive-runtime trace events: subscription-channel only, never
       // forwarded to this action stream — listed for exhaustiveness only.
       case "recursive.calling":
@@ -632,7 +652,6 @@ export function createSseEventHandler(
       case "subagent.started":
       case "subagent.completed":
       case "subagent.failed":
-      case "subagent.writes-dropped":
       // Function-runtime trace events: drive the /debug timeline via the
       // subscription channel / trace_events, not this action renderer.
       // gateway.* forward to the action stream (llm.* parity) but the action
@@ -641,15 +660,11 @@ export function createSseEventHandler(
       case "function.completed":
       case "presentation.completed":
       case "gateway.calling":
-      case "gateway.failed":
       // Plugin-utils provider-call trace: /debug-only, same as gateway.*
       case "utils.fetch.calling":
       case "utils.fetch.responded":
-      case "utils.fetch.failed":
       // Prompt-budget prune trace: /debug reads it from trace_events.
       case "context.pruned":
-      case "context.compaction.failed":
-      case "commit.fanout.failed":
         break;
       case "job-status.updated": {
         const jobId = runtimeJobCorrelationId(payload);

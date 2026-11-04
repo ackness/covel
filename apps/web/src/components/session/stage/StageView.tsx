@@ -69,7 +69,6 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageViewProps {
-  readonly composerReplaced?: boolean;
   readonly composerDraft?: { value: string; onChange: (value: string) => void };
   /** The composer's modes and character switcher, shared with the free input. */
   readonly composerModes?: ComposerModes;
@@ -368,7 +367,6 @@ export function StageView(props: StageViewProps): ReactElement {
           />
         )}
         <StageChoices
-          hideInput={props.composerReplaced}
           storyReview={
             reader ? (
               reader

@@ -36,8 +36,8 @@ for (const mode of ["chat", "stage"] as const) {
         });
       });
       await page.goto(`/session?sid=${host.sessionId}`);
-      const controls = page.getByTestId("auto-advance-control");
-      // Idle auto-advance leaves no empty bar across the session backdrop.
+      const controls = page.getByTestId("notice-status-auto-advance");
+      // Idle auto-advance shows no chip.
       await expect(controls).toHaveCount(0);
       await composerInput(page).fill("Begin");
       await composerInput(page).press("Enter");
@@ -50,15 +50,15 @@ for (const mode of ["chat", "stage"] as const) {
       host.holdNextAuto();
       await composerInput(page).fill("Again");
       await composerInput(page).press("Enter");
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       if (mode === "stage")
         await page
           .getByRole("button", { name: "舞台视图", exact: true })
           .click();
       await expect(
-        controls.getByRole("button", { name: "停止推进" }),
+        controls,
       ).toBeVisible();
-      await controls.getByRole("button", { name: "停止推进" }).click();
+      await controls.click();
       await expect(controls).toHaveCount(0);
       expect(
         (await host.store.listMessages(host.sessionId)).filter(
@@ -98,9 +98,9 @@ for (const mode of ["chat", "stage"] as const) {
       host.holdNextAuto();
       await composerInput(page).fill("Keep going");
       await composerInput(page).press("Enter");
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       await page.reload();
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       if (mode === "stage")
         await page
           .getByRole("button", { name: "舞台视图", exact: true })
@@ -112,7 +112,7 @@ for (const mode of ["chat", "stage"] as const) {
       await freshInput.fill("Change course");
       await freshInput.press("Enter");
       await expect.poll(() => host.calls()).toBe(10);
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(controls).toHaveCount(0);
       const messages = await host.store.listMessages(host.sessionId);
       expect(
         messages.filter((message) => message.role === "assistant"),
@@ -133,7 +133,7 @@ for (const mode of ["chat", "stage"] as const) {
       host.holdNextAuto();
       await composerInput(page).fill("Continue after I leave");
       await composerInput(page).press("Enter");
-      await expect(controls.getByRole("status")).toContainText("1 / 2");
+      await expect(controls).toContainText("1 / 2");
       const response = await page.request.post(`${host.baseUrl}/api/sessions`, {
         data: {
           worldId: "advance-world",
@@ -160,7 +160,7 @@ for (const mode of ["chat", "stage"] as const) {
           return ((await response.json()) as { state: string }).state;
         })
         .toBe("completed");
-      await expect(controls.getByRole("status")).toHaveCount(0);
+      await expect(controls).toHaveCount(0);
       await expect(page.locator(".ui-narrative")).toHaveCount(0);
     } finally {
       host.release();

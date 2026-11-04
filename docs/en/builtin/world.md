@@ -149,7 +149,7 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 ## Codex (`codex`)
 
-The Codex page (`library`) in Plugin views and the original right panel share committed entries. Search covers titles, content and tags, retaining category counts, expandable full content, tags/rarity, empty and no-match states. Page filters are independent of the panel; ordinary hydration updates both without model calls when opening. Back to default view returns to ordinary play.
+The right panel shows committed entries, and “Expand panel” opens it in the large view. Search covers titles, content and tags, retaining category counts, expandable full content, tags/rarity, empty and no-match states. Ordinary hydration updates the panel; opening or enlarging it makes no model calls.
 
 When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
@@ -165,7 +165,7 @@ When a named place, person, item, skill, legend or monster first appears in the 
 
 ## Relationship Graph (`npc-graph`)
 
-The Relationship Graph page (`relationships`) in Plugin views keeps the original right panel and reads the same nodes and edges. The larger graph supports pan, zoom, fit, accessible character lists and node details; superseded relationships stay hidden. Empty data still has a selectable page. Narrow screens can scroll through controls and details, while host Back/Stop remain outside. Hydration updates both surfaces; opening does not trigger extraction. Disabling the provider removes only its entries and falls back without deleting graph data.
+The right panel reads the nodes and edges, and “Expand panel” shows a larger graph in a dialog. The graph supports pan, zoom, fit, accessible character lists and node details; superseded relationships stay hidden. Narrow screens can scroll through controls and details. Hydration updates the panel; opening or enlarging it does not trigger extraction. Disabling the provider removes only its entries without deleting graph data.
 
 A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
 

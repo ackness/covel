@@ -237,23 +237,27 @@ function SessionScreen() {
   // Auto-resuming from URL — show spinner while loading
   if (!state.session && state.executionRecovery) {
     return (
-      <div className="flex h-full items-center justify-center p-4">
-        <div className="w-full max-w-2xl overflow-hidden rounded-(--radius-control) border border-border">
-          <ExecutionRecoveryNotice
-            recovery={state.executionRecovery}
-            steps={state.executionSteps}
-            onOpenSettings={settings.openWithKey}
-            onRetry={retryInterruptedTurn}
-            onRefresh={refreshExecutionRecovery}
-            onStop={abortActiveTurn}
-          />
-          <SettingsDialog
-            open={settings.open}
-            onOpenChange={settings.onOpenChange}
-            initialKey={settings.initialKey}
-            plugins={state.plugins}
-          />
-        </div>
+      <div
+        role="status"
+        className="flex h-full items-center justify-center p-4"
+      >
+        <span className="sr-only">{t("common.loading")}</span>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        {/* The recovery card appears in the notice host. */}
+        <ExecutionRecoveryNotice
+          recovery={state.executionRecovery}
+          steps={state.executionSteps}
+          onOpenSettings={settings.openWithKey}
+          onRetry={retryInterruptedTurn}
+          onRefresh={refreshExecutionRecovery}
+          onStop={abortActiveTurn}
+        />
+        <SettingsDialog
+          open={settings.open}
+          onOpenChange={settings.onOpenChange}
+          initialKey={settings.initialKey}
+          plugins={state.plugins}
+        />
       </div>
     );
   }

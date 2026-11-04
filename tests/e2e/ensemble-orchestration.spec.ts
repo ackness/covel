@@ -128,8 +128,7 @@ for (const mode of ["Stop", "new input"])
       );
       if (mode === "Stop")
         await page
-          .getByTestId("auto-advance-control")
-          .getByRole("button", { name: "Stop advancement", exact: true })
+          .getByTestId("notice-status-auto-advance")
           .click();
       else {
         await composerInput(page).fill("Mara and Ivo, begin a new exchange.");

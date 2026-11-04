@@ -13,6 +13,7 @@ import { MessageComposer } from "../game-view/message-composer.js";
 import type { ExecutionPresentation } from "../execution-presentation.js";
 import { executionRecoveryNoticeVisible } from "../execution-presentation.js";
 import { ExecutionRecoveryNotice } from "../execution-recovery-notice.js";
+import { NoticeHost } from "@/components/ui/notice-host.js";
 import type { ExecutionRecovery } from "@/stores/session-store/types.js";
 import { ChapterBanner } from "../chapter-banner.js";
 import { SessionCanvasHero } from "../chat-messages/session-canvas-hero.js";
@@ -43,7 +44,6 @@ function sessionStatus(
     <>
       <GameViewHeader
         pluginViews={[]}
-        hostDefaultMode="parsed"
         recoveryNoticeVisible={executionRecoveryNoticeVisible(recovery)}
         t={i18n.t}
         sessionId="s"
@@ -86,6 +86,7 @@ function sessionStatus(
         onStop={vi.fn()}
         onOpenSettings={vi.fn()}
       />
+      <NoticeHost />
     </>
   );
 }
@@ -104,12 +105,12 @@ it.each(["failed", "interrupted"] as const)(
       },
     };
     const view = render(sessionStatus("playing", state, false, recovery));
-    expect(screen.getByTestId("execution-recovery-notice")).toBeTruthy();
+    expect(screen.getByTestId("notice-execution-recovery")).toBeTruthy();
     expect(
       screen.queryByText(i18n.t(`session.executionState.${state}`)),
     ).toBeNull();
     view.rerender(sessionStatus("playing", state));
-    expect(screen.queryByTestId("execution-recovery-notice")).toBeNull();
+    expect(screen.queryByTestId("notice-execution-recovery")).toBeNull();
     expect(
       screen.getAllByText(i18n.t(`session.executionState.${state}`)),
     ).toHaveLength(2);
@@ -127,7 +128,7 @@ it.each(["generating", "updating"] as const)(
         status: { state: "running", turnId: "t" },
       }),
     );
-    expect(screen.getByTestId("execution-recovery-notice")).toBeTruthy();
+    expect(screen.getByTestId("notice-execution-recovery")).toBeTruthy();
     expect(
       screen.getAllByText(i18n.t(`session.executionState.${state}`)),
     ).toHaveLength(2);
@@ -169,7 +170,6 @@ it("uses native buttons in the overflow disclosure and restores focus on Escape 
   render(
     <GameViewHeader
       pluginViews={[]}
-      hostDefaultMode="parsed"
       t={i18n.t}
       sessionId="s"
       sessionPhase="playing"
@@ -238,7 +238,6 @@ it.each(["zh-CN", "en-US"])(
       <>
         <GameViewHeader
           pluginViews={[]}
-          hostDefaultMode="parsed"
           t={i18n.t}
           sessionId="translated-session"
           sessionPhase="playing"

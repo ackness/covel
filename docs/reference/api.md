@@ -6838,4 +6838,4 @@ Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮
 
 ## 沙箱区域声明与宿主转发
 
-既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `surface` 和 `capabilities`；composer 不作为主视图默认值。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该区域，晚到结果丢弃；见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。现有 action/command RPC 的即时写入契约不变。
+既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `composer`（只有 `false`）和 `capabilities`。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该页面，晚到结果丢弃；见[页面中的输入框](./ui-panels.md#页面中的输入框)。现有 action/command RPC 的即时写入契约不变。

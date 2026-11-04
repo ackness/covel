@@ -223,7 +223,7 @@ The player's Perspective setting overrides this world default for subsequent nar
 
 ## DM Console (`dm-console`)
 
-Choose DM Console from the header's Plugin views menu to see scene cast, pending interactions, story and input in the full story column. Host Back, Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
+Choose DM Console from the header's Plugin pages menu to see scene cast, pending interactions, story and input in the full story column; the page has its own input box, so the host shows no second one. Click Text or Stage in the header to leave; Stop and recovery remain available. Right panels stay accessible; page selection is not saved to the session.
 
 Cast shows public scene actors only, with an empty state without a provider. It is not all known characters or actor eligibility. Pending interactions are already public unanswered, non-stale forms, choices and confirmations, without unrevealed plot or hidden event counts. Story omits tools, reasoning and execution detail.
 

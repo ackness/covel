@@ -64,13 +64,7 @@ describe("active bundled views", () => {
         entry.pluginId,
         entry.specs.map((spec) => spec.id),
       ]),
-    ).toEqual(
-      expect.arrayContaining([
-        ["dm-console", ["dm-console"]],
-        ["npc-graph", ["relationships"]],
-        ["codex", ["library"]],
-      ]),
-    );
+    ).toEqual([["dm-console", ["dm-console"]]]);
     expect(result.right.map((entry) => entry.pluginId)).toEqual(
       expect.arrayContaining(["npc-graph", "codex"]),
     );
@@ -79,12 +73,9 @@ describe("active bundled views", () => {
       activePlugins: activePlugins.filter((id) => id !== "npc-graph"),
     });
     const disabled = await read();
-    expect(disabled.view.map((entry) => entry.pluginId)).toEqual(
-      expect.arrayContaining(["dm-console", "codex"]),
-    );
-    expect(disabled.view.some((entry) => entry.pluginId === "npc-graph")).toBe(
-      false,
-    );
+    expect(disabled.view.map((entry) => entry.pluginId)).toEqual([
+      "dm-console",
+    ]);
     expect(disabled.right.some((entry) => entry.pluginId === "npc-graph")).toBe(
       false,
     );

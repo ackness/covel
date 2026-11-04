@@ -39,9 +39,7 @@ export function useGameViewMode(
     (mode: GameViewMode) => {
       if (
         parsePluginViewMode(mode) &&
-        !views?.views.some(
-          (entry) => entry.mode === mode && entry.spec.surface !== "composer",
-        )
+        !views?.views.some((entry) => entry.mode === mode)
       )
         return;
       setAwaitingWorld(false);
@@ -50,9 +48,7 @@ export function useGameViewMode(
     [views],
   );
   const pluginMode = parsePluginViewMode(storedMode);
-  const entry = views?.views.find(
-    (entry) => entry.mode === storedMode && entry.spec.surface !== "composer",
-  );
+  const entry = views?.views.find((entry) => entry.mode === storedMode);
   const consentView = entry && canUse && !canUse(entry) ? entry : undefined;
   const available = !pluginMode || (entry && !consentView);
   return [

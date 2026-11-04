@@ -595,7 +595,7 @@ jobs:
         run: >-
           taskset -c "${{ steps.setup.outputs.cpus }}"
           pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts
-          --grep 'a delayed runtime approval|independent sandbox regions'
+          --grep 'a delayed runtime approval|plugin pages keep the host input'
           --repeat-each=3 --workers=1 --retries=0
           --output=tests/e2e/artifacts/extensions-stress
 

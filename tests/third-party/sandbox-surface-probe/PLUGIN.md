@@ -1,5 +1,5 @@
 ---
-version: 0.1.1
+version: 0.1.2
 displayName: Sandbox bridge probe
 description: Public session actions and proposal writes from an isolated page.
 contributes:
@@ -15,6 +15,6 @@ contributes:
 
 # Sandbox bridge probe
 
-Two independently selected session surfaces share a classic-script page. The manual function
+Two session pages share a classic-script root: Bridge reader keeps the host input box beneath it, and Bridge input declares `composer: false` to hide it. The manual function
 runtime is server code and requires its normal approval independently of page
 capability consent.

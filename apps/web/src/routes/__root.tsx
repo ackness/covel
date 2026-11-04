@@ -32,10 +32,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ToastHost } from "@/components/ui/toast-host";
+import { NoticeHost, useNoticeAnchor } from "@/components/ui/notice-host";
+import { NoticeBell } from "@/components/notice-bell";
 import { ConfirmHost } from "@/components/ui/confirm-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
-import { SharedServerNotice } from "@/components/shared-server-notice";
+import { useSharedServerNotice } from "@/components/shared-server-notice";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { useWindowControlsColors } from "@/hooks/use-window-controls-colors.js";
 import { getCovelIpc } from "@/lib/desktop-bridge";
@@ -54,7 +55,7 @@ const noDragStyle: CSSProperties = {
 function RootLayout() {
   const { t } = useTranslation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  // Runs after the toast host below has subscribed. Most of these notices
+  // Runs after the notice host below has subscribed. Most of these notices
   // arise during boot, before anything could show a message.
   useEffect(
     () =>
@@ -77,6 +78,7 @@ function RootLayout() {
       }),
     [t],
   );
+  useSharedServerNotice();
   const { locale, setLocale } = useLocalePreference();
   const layoutNav = useThemeLayout().nav;
   const location = useLocation();
@@ -85,6 +87,7 @@ function RootLayout() {
   const isDebugRoute = location.pathname.startsWith("/debug");
   const railNav = layoutNav === "rail";
   const headerRef = useRef<HTMLElement>(null);
+  useNoticeAnchor(headerRef);
   useWindowControlsColors(headerRef, railNav);
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
@@ -222,7 +225,7 @@ function RootLayout() {
 
   return (
     <>
-      <ToastHost />
+      <NoticeHost />
       <ConfirmHost />
       <div className="ui-app-shell h-dvh w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex overflow-hidden">
         {/* Icon rail — the `nav: "rail"` layout. Desktop widths only; phones
@@ -285,6 +288,7 @@ function RootLayout() {
               className="flex flex-col items-center gap-1"
               style={isElectron ? noDragStyle : undefined}
             >
+              <NoticeBell {...(activeSid ? { sessionId: activeSid } : {})} />
               <ThemeToggle />
               <Button
                 variant="ghost"
@@ -356,6 +360,7 @@ function RootLayout() {
                 className="ui-window-controls-clear flex items-center gap-1 md:gap-1.5 ml-auto"
                 style={isElectron ? noDragStyle : undefined}
               >
+                <NoticeBell {...(activeSid ? { sessionId: activeSid } : {})} />
                 <ThemeToggle />
                 {/* The desktop nav is `lg:` only, so on a phone this dialog
                     is the ONLY way to reach worlds / session / plugins /
@@ -374,7 +379,6 @@ function RootLayout() {
             </div>
           </header>
 
-          <SharedServerNotice />
           <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
             <AppErrorBoundary>
               <Outlet />

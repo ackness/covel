@@ -72,6 +72,23 @@ How world authors and plugin authors get content to appear here:
 
 To the right of the toolbar are the "Text / Stage" switch, settings, the "More" menu, and the right-side panel toggle. Detailed view, raw view, Studio Config, back to the config page, and Debug Traces are inside "More".
 
+## Notice center
+
+Everything the app tells the player goes through one channel with three looks. Nothing full-width sits between the session header and the story, so the backdrop runs from the header down to the composer.
+
+| Look        | When                                                                                                                                                              | Where                                               | When it goes                                                                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Toast       | A one-shot result: exported, save failed, network error                                                                                                           | Top-right, under the app bar and the session header | Fades after 3 s (errors 6 s); hover or keyboard focus pauses it; at most 3 at once, older ones fall into the bell history          |
+| Card        | Something the player has to handle: a plugin waiting for approval, a failed preparation, an interrupted turn, problems with world data, a theme that did not load | The same place, stacked above toasts                | Never times out; removed automatically when the problem is gone. The × only collapses it: it stays in the bell and can be restored |
+| Status chip | Something in progress: auto-advance 2/5                                                                                                                           | A small chip in the session header                  | Gone when the state ends; selecting it runs its action (for example, stop advancing)                                               |
+
+- **The bell.** The bell on the right of the app bar counts cards that are still open, collapsed ones included. Its popover lists those cards first (select one to restore and focus it); a card that changed while collapsed rings the number. Below is the last 50 history entries per scope ("This game" or "All"): toasts, resolved cards, and background failures that only go to history, each with a time and copyable detail.
+- **Background failures that only reach the bell.** Failed context compaction, failed post-commit fan-out, aborted hooks, dropped sub-agent writes, gateway and fetch failures, and failed commands do not pop up. They leave one plain line in the bell history with the raw payload as copyable detail. With "Developer view" on in Settings they also show as toasts.
+- **What stays elsewhere.** Notices that belong to one turn stay in the story: the error box in a turn, the execution timeline, the "N actions from this turn did not take effect" footer (it no longer also pops up a toast), the line of feedback under the composer. Notices that belong to the settings dialog stay in the dialog, because a modal dialog blocks anything outside it. Confirmation dialogs and the overlays for "the whole app is unavailable" are not part of the notice center.
+- **Host controls.** The notice area carries `data-covel-host-controls`, so plugin themes cannot restyle it. Its top edge follows `--covel-notice-top`: notices sit under the lowest of the app bar, the session header and a plugin page's bar, so they never cover them. On a phone the area spans the width with a 16px gutter.
+- **Layers.** Cards are drawn inside the app, under the session header's menus, popovers and dialogs, so an open menu is never hidden by a card. Toasts stay only a few seconds and often report an action taken inside a dialog, so they are attached to the page body and sit above everything.
+- **Who publishes.** Each feature in a session registers its own notice while its condition holds and withdraws it when the condition ends. `emitToast(kind, message, detail?)` still works and publishes a one-shot toast.
+
 ## Navigation Across Pages
 
 Another page can jump into a session with a parameter and ask for a panel to be opened:
@@ -796,7 +813,7 @@ Implementation: `apps/web/src/components/session/stage/` (`StageView.tsx` does t
 
 ## Plugin views
 
-A plugin view fills the story column. Players choose a page from the header’s “Plugin views” menu, which lists views of active session plugins. A host bar shows the view and plugin names. The host draws a “Back to default view” button in both the header and the view bar. Both remain available during execution, outside the plugin DOM.
+A plugin view fills the story column. Players choose a page from the header’s “Plugin pages” menu, which lists the pages of active session plugins with the plugin name as secondary text. A host bar shows the view and plugin names. While a page is open, neither the header’s Text nor Stage toggle is selected, and clicking either leaves the page. The host draws no separate “Back to default view” button or control strip, and plugins cannot hide the header.
 
 Declare spec files in the root `PLUGIN.md`:
 
@@ -822,8 +839,8 @@ Write source text in English and translations under `messages` in `locales/<loca
 - Declare exactly one of `view` and `webview`. Optional fields are `icon`, `description`, `dataSource`, `emptyState` and `alwaysRender`. A declarative page without data can use `alwaysRender: true`.
 - `surfaces`, `group`, `groupLabel`, `groupOrder`, `shortLabel` and `navTarget` are not allowed here; they route panels and stage surfaces.
 - The mode is `plugin:<pluginId>:<viewId>`, for example `plugin:session-view-probe:story`. World and pack `defaultViewMode` accept this format, `parsed` and `stage`. Authors can select `detailed` and `raw` manually only.
-- On initial discovery, show the host default. During discovery refreshes within the same session, including UI language changes, changes to other plugins and temporary request failures, retain loaded, authorized pages, their menu and local display state. Clear only the affected selection when its plugin is disabled, successful discovery confirms its removal, permission is revoked or rendering fails; preserve the other region and its draft. Never reuse another session's view list. The host default is `stage` only when the world's default is exactly `stage`, otherwise `parsed`; a plugin view is never a fallback target.
-- The choice lasts for the current mount and is not saved per session. Ordinary plugin views do not use stage immersion and omit the host composer by default; a declarative page can explicitly compose `SessionComposer`. Explicit main replacement and independent composer selection are described below.
+- On initial discovery, show the host default. During discovery refreshes within the same session, including UI language changes, changes to other plugins and temporary request failures, retain loaded, authorized pages, their menu and local display state. Clear only the affected selection when its plugin is disabled, successful discovery confirms its removal, permission is revoked or rendering fails. Never reuse another session's view list. The host default is `stage` only when the world's default is exactly `stage`, otherwise `parsed`; a plugin view is never a fallback target.
+- The choice lasts for the current mount and is not saved per session. Plugin pages do not use stage immersion. Every page is the same kind of page, and the host input box sits below it by default; `composer: false` or an embedded `SessionComposer` hides it, as described below.
 
 ### Live session components
 
@@ -833,38 +850,39 @@ The host supplies render slots for the current session only. Messages, settings,
 
 Both public message regions retain current-turn row metadata. Choice lists in the same region share consecutive numbering for the current turn and support number keys; stale choices do not consume current numbers. Clicking or using a number key to answer a required choice sends its current turn, interaction and option through the existing interaction submission path. It never becomes free text or a local-only submitted marker. Suggestions can still enter the draft queue. Execution details, reasoning and asset administration remain unmounted.
 
-Input shares the session's single controller: changing views preserves text, mode, fields, queued choices and restored stopped input; busy refusal retains drafts. An unavailable catalogue or identity, ended session, blocked opening or mandatory interaction cannot send a fallback Say. Direct and textless Advance retain existing player-action validation and persist only through normal commit. Opening a view changes no role, narrator perspective or policy. Selecting an independent composer hides the declarative `SessionComposer` input to avoid duplication; returning to default input restores its draft and mode.
+Input shares the session's single controller: changing views preserves text, mode, fields, queued choices and restored stopped input; busy refusal retains drafts. An unavailable catalogue or identity, ended session, blocked opening or mandatory interaction cannot send a fallback Say. Direct and textless Advance retain existing player-action validation and persist only through normal commit. Opening a view changes no role, narrator perspective or policy. When a page embeds `SessionComposer`, the host does not show a second input box below it; leaving the page restores the draft and mode.
 
-Host Back, Stop, Begin and recovery remain outside plugin layout. A view error does not own story execution. Messages and blocks mask live context to prevent recursive feeds or composers; snapshots and debug panels have no such capability. Webviews receive no live context; their consent, content hashes and bridge capabilities remain separate.
+The host header, the Text/Stage toggle, Stop, Begin and recovery remain outside plugin layout. A view error does not own story execution. Messages and blocks mask live context to prevent recursive feeds or composers; snapshots and debug panels have no such capability. Webviews receive no live context; their consent, content hashes and bridge capabilities remain separate.
 
-### Sandbox main view and composer
+<a id="sandbox-main-view-and-composer"></a>
 
-Add singular `surface` to a spec in the existing `contributes.ui.view`, without a new placement:
+### The input box on a page
+
+The host input box appears below every plugin page by default; a page declares nothing. A page that handles input itself hides it in one of two ways, and two input boxes never appear together:
+
+- Write `"composer": false` in the `contributes.ui.view` spec. Only `false` is meaningful and the field is omitted by default; any other value, or the field in `ui.right` and other placements, produces a `composer` field diagnostic while the rest loads.
+- A declarative page embeds `SessionComposer` (see [Live session components](#live-session-components)). No field is needed; the host stops showing its own box.
 
 ```json
 {
   "id": "input",
   "label": "Adventure input",
-  "surface": "composer",
+  "composer": false,
   "bridge": "session",
   "capabilities": ["submitAction", "submitInteraction", "invokeRuntime"],
   "webview": { "root": "./ui/app", "entry": "index.html" }
 }
 ```
 
-Each spec targets one region; two specs may share a published root. Unknown values, misplaced fields and JSON views receive a `surface` diagnostic while siblings load. The main menu lists ordinary views and `main`; the composer selector lists only `composer`. Each region has at most one provider, chosen by the player without guessing the first. A world's `defaultViewMode` may name main or an ordinary view, never composer, and still requires consent. There is no world/pack composer default.
+While the host input box is hidden and a turn is running, “Stop” appears beside the busy indicator in the header, so a player can always stop the turn from outside the page. The page choice lasts only for the current mount and session visit; content consent persists on this device. The default UI remains usable while loading or awaiting consent.
 
-Explicit main replaces only the story column and retains the host composer by default. An independently selected composer works in chat, ordinary plugin views and stage, including a different plugin's main. Stage places it below narrative and removes duplicate free input, suggestion submission and choice hotkeys; paragraph progression, required forms, suspension and recovery remain host features. Pages without submitAction may offer only interactions or runtime UI. Players can always return to default input.
+Pages retain a minimum usable height, with the host input box outside that space. When recovery notices and other content stack on a phone, the session center column scrolls vertically so the page, input box and host controls remain reachable. Page permission menus revoke one capability or all, and stay inside the viewport horizontally. The `data-covel-host-controls` marker and its descendants belong to the host and must be excluded from theme selectors. Fixed positioning, high z-index and iframe focus cannot cross the clipping boundary.
 
-Selection lasts only for the current mount and session visit; content consent persists on this device. Default UI remains usable while loading or awaiting consent. Each frame owns its lease and handles; failure, disable or revocation in one region does not reset the other.
-
-Sandbox main views retain a minimum usable height, with the host composer outside that space. When recovery notices and other content stack on a phone, the session center column scrolls vertically so the main view, composer and host controls remain reachable.
-
-Outside the clipped frames, a labelled host strip provides “Back to default interface”, Stop, and interactions/recovery. Global return clears both selections; region return clears only its own. The global strip remains in immersive stage and narrow layouts. Page permission menus revoke one capability or all; menus stay inside the viewport horizontally when narrow layouts wrap their triggers. The `data-covel-host-controls` marker and its descendants belong to the host and must be excluded from theme selectors. Fixed positioning, high z-index and iframe focus cannot cross the clipping boundary.
+When a page cannot mount or render, the host returns to the read view and shows a notice naming the page. Choosing the page again from the “Plugin pages” menu retries.
 
 ### Multi-file pages
 
-Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Ordinary pages keep the story-column layout; singular `surface` opts into a system region below.
+Pages are plugin views; there is no `contributes.ui.pages`. Only `contributes.ui.view` accepts `webview.root`; right panels and message blocks keep single-file HTML. Pages fill the story column; the input box rules are above.
 
 Authors declare this in the spec:
 
@@ -911,7 +929,7 @@ The entry response CSP is:
 
 Use classic external scripts such as `<script src="app.js"></script>`, without modules, inline scripts, event attributes or `eval`. Inline styles are allowed; network requests are blocked. Embed custom fonts as `data:font/woff2;base64,...` (or WOFF) in CSS `@font-face`. Font URL requests use CORS, and the sandboxed document has an opaque origin, so even relative `.woff` / `.woff2` URLs are cross-origin. Font asset responses send no CORS allow headers, so those URLs cannot load. `font-src 'self' data:` is unchanged; publishing a font file does not make its URL usable. `'self'` uses the browser-visible origin, supporting Vite and reverse proxies without a path-prefix restriction. The route checks the published listing for containment. The main page's `frame-src 'self'` limits iframe navigation; `/api` separately rejects opaque origins and embedded destinations. See the [security boundary](../internals/security.md#plugin-pages-loaded-by-url).
 
-The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. Without a head it uses `<html>`, the doctype, or the document start, in that order; nested entries receive the appropriate `../` prefix. Authors do not copy the script. Using parsed HTML locations, the host sets `crossorigin="anonymous"` on external scripts in the entry and on the bridge. Verified public JavaScript responses send `Access-Control-Allow-Origin: *`, without allowing credentials. Otherwise the browser mutes classic-script errors in the opaque origin, and Promise rejections in click callbacks can produce no `unhandledrejection` event. External scripts created at runtime should also set `crossOrigin = "anonymous"`. Other assets, missing files and APIs receive no such CORS permission. Views and replacement regions use the lifecycle below. Ordinary URL panels without region recovery keep their existing failure overlay: a credential-free HEAD distinguishes an expired digest (404) from other failures, late ready may clear that overlay, and Retry reloads declarations and remounts the iframe.
+The host injects the classic bridge script `__covel__/bridge-<hash8>.js` after the entry's `<head>`. Without a head it uses `<html>`, the doctype, or the document start, in that order; nested entries receive the appropriate `../` prefix. Authors do not copy the script. Using parsed HTML locations, the host sets `crossorigin="anonymous"` on external scripts in the entry and on the bridge. Verified public JavaScript responses send `Access-Control-Allow-Origin: *`, without allowing credentials. Otherwise the browser mutes classic-script errors in the opaque origin, and Promise rejections in click callbacks can produce no `unhandledrejection` event. External scripts created at runtime should also set `crossOrigin = "anonymous"`. Other assets, missing files and APIs receive no such CORS permission. Views use the lifecycle below. Ordinary URL panels that do not fall back keep their existing failure overlay: a credential-free HEAD distinguishes an expired digest (404) from other failures, late ready may clear that overlay, and Retry reloads declarations and remounts the iframe.
 
 The digest is the first 32 lowercase hexadecimal characters of SHA-256 over JSON lines of `[relativePath, size, sha256(content)]`, sorted by relative path. It is computed on the first registry projection and recomputed on re-registration. Production files should change only on restart; old file copies are not retained. After re-registration old digest URLs return 404 and the new URL works. Every read verifies length and SHA-256 through the same bounded O_NOFOLLOW handle, then serves that buffer; same-length edits receive a no-store 404 before GET, HEAD or 304 success. Entry HTML uses `Cache-Control: no-cache` and must revalidate on every reuse; its ETag includes the bridge script hash. A host upgrade therefore returns HTML referencing the new bridge even when plugin files and the URL are unchanged. Other assets, including the bridge script with its hashed filename, keep a one-year immutable cache.
 
@@ -919,9 +937,9 @@ Per-capability consent for `bridge: "session"` is unchanged. The whole-spec cons
 
 ### Consent before reading a session
 
-Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Optional `capabilities` lists at most five distinct additional capabilities. Unknown capabilities, other placements, JSON views and a missing session bridge produce field diagnostics and remove only that feature. `session` is inferred from the bridge and is not written in the list. Optional singular `surface: "main" | "composer"` selects a system region and requires the same session webview; plural `surfaces` still routes panels and stage content.
+Only a `webview` in `contributes.ui.view` can declare `bridge: "session"`. Optional `capabilities` lists at most five distinct additional capabilities. Unknown capabilities, other placements, JSON views and a missing session bridge produce field diagnostics and remove only that feature. `session` is inferred from the bridge and is not written in the list. Plural `surfaces` still only routes panels and stage content and is unrelated to pages.
 
-Until every requested grant has persisted, the page is not mounted, receives no projection and cannot invoke methods. A world default opens the same dialog with `parsed` / `stage` underneath. The dialog names the plugin, page and each capability. While saving, its host return and Stop controls remain available. Builtin or trusted source, declarative classification and server-code approval never replace page consent.
+Until every requested grant has persisted, the page is not mounted, receives no projection and cannot invoke methods. A world default opens the same dialog with `parsed` / `stage` underneath. The dialog names the plugin, page and each capability. While saving, “No thanks” (back to the read view) and Stop remain available. Builtin or trusted source, declarative classification and server-code approval never replace page consent.
 
 <!-- prettier-ignore -->
 | Capability | Meaning |
@@ -985,7 +1003,7 @@ Inline HTML and URL views wait for ready from frame mount, with an 8-second dead
 
 After ready, the host sends increasing ping probes every 5 seconds while visible; the script replies with the matching pong on the same port. Three unanswered probes trigger fallback. Hidden tabs do not accumulate missed probes; returning resets probes and grants 8 seconds of grace. This measures the document event loop, not model/RPC duration, and cannot recover a browser-wide renderer freeze.
 
-Failure closes ports and timers before restoring that region's default UI. A retained host notice names the page and offers Retry and permission revocation. Late ready, HEAD and RPC callbacks cannot revive the attempt. Retry requires a player click, refetching declarations and checking current content consent before creating a new frame. Normal action/runtime refusals are not page failures; never automatically replay mutations. Server-admitted work may settle normally without replying to the retired page.
+Failure closes ports and timers before returning to the read view. A host notice names the page; permissions can still be revoked from the page menu. Late ready, HEAD and RPC callbacks cannot revive the attempt. Retry is the player choosing the page again: the host checks current content consent before creating a new frame. Normal action/runtime refusals are not page failures; never automatically replay mutations. Server-admitted work may settle normally without replying to the retired page.
 
 ### Page requests and safe outcomes
 
@@ -1006,7 +1024,7 @@ Each connection allows eight calls in flight and 128 KiB serialized request byte
 
 Session navigation, plugin disable, content replacement, revocation, return and unmount retire the lease. The host rechecks ownership after awaits and before approval retries. Mutations and approval grants recheck the lease after credential lookup, immediately before HTTP dispatch; revocation or navigation during that lookup prevents dispatch. A stale approval may still be denied to clean up the request. Normal input also rechecks the caller after seat-switch, automatic-stop and workspace waits. Work already dispatched may settle normally, without replying to the retired frame.
 
-There is no media-byte/blob channel. Views and replacement regions use the recovery rules below; ordinary non-session panels keep their separate data and action contract.
+There is no media-byte/blob channel. Views use the recovery rules below; ordinary non-session panels keep their separate data and action contract.
 
 ## Component Catalogue
 

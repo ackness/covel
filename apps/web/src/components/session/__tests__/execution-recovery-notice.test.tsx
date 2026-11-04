@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { ExecutionRecoveryNotice } from "../execution-recovery-notice.js";
+import { NoticeHost } from "@/components/ui/notice-host.js";
 import type {
   ExecutionRecovery,
   ExecutionStep,
@@ -33,14 +34,17 @@ function setup(recovery: ExecutionRecovery, steps: ExecutionStep[] = []) {
   const onStop = vi.fn(async () => {});
   const onOpenSettings = vi.fn();
   render(
-    <ExecutionRecoveryNotice
-      recovery={recovery}
-      steps={steps}
-      onOpenSettings={onOpenSettings}
-      onRetry={onRetry}
-      onRefresh={onRefresh}
-      onStop={onStop}
-    />,
+    <>
+      <ExecutionRecoveryNotice
+        recovery={recovery}
+        steps={steps}
+        onOpenSettings={onOpenSettings}
+        onRetry={onRetry}
+        onRefresh={onRefresh}
+        onStop={onStop}
+      />
+      <NoticeHost />
+    </>,
   );
   return { onRetry, onRefresh, onStop, onOpenSettings };
 }

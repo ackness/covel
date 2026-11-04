@@ -2,7 +2,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
-import { SessionPluginNotices } from "../session-plugin-notices.js";
+import {
+  SessionPluginNoticeCards,
+  SessionPluginNotices,
+} from "../session-plugin-notices.js";
+import { NoticeHost } from "@/components/ui/notice-host.js";
 
 const plugin = (
   id: string,
@@ -30,32 +34,35 @@ describe("SessionPluginNotices", () => {
   it("says which plugin is off, what it needs, and turns the provider on", () => {
     const onTurnOn = vi.fn();
     render(
-      <SessionPluginNotices
-        plugins={[
-          plugin("narrator", true, { runtimes: [story] }),
-          plugin("opening", false, { provides: ["opening@1"] }),
-          plugin("creator", false),
-        ]}
-        unavailable={[
-          {
-            pluginId: "creator",
-            code: "missing-provider",
-            reason: "Required contract opening@1 has no active provider",
-            contract: "opening@1",
-          },
-        ]}
-        offTitle="Off:"
-        busy={false}
-        onTurnOn={onTurnOn}
-        variant="bar"
-      />,
+      <>
+        <SessionPluginNoticeCards
+          sessionId="s"
+          plugins={[
+            plugin("narrator", true, { runtimes: [story] }),
+            plugin("opening", false, { provides: ["opening@1"] }),
+            plugin("creator", false),
+          ]}
+          unavailable={[
+            {
+              pluginId: "creator",
+              code: "missing-provider",
+              reason: "Required contract opening@1 has no active provider",
+              contract: "opening@1",
+            },
+          ]}
+          offTitle="Off:"
+          busy={false}
+          onTurnOn={onTurnOn}
+        />
+        <NoticeHost />
+      </>,
     );
     expect(
-      screen.getByText(
-        "creator name is off: it needs opening@1. Turn on opening name to use it.",
-      ),
-    ).toBeTruthy();
-    expect(screen.queryByTestId("no-story-plugin")).toBeNull();
+      screen.getByTestId("notice-plugins-unavailable").textContent,
+    ).toContain(
+      "creator name is off: it needs opening@1. Turn on opening name to use it.",
+    );
+    expect(screen.queryByTestId("notice-no-story-plugin")).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "Turn on opening name" }),
     );
@@ -74,7 +81,6 @@ describe("SessionPluginNotices", () => {
         offTitle="Off:"
         busy={false}
         onTurnOn={onTurnOn}
-        variant="card"
       />,
     );
     const notice = screen.getByTestId("no-story-plugin");
@@ -85,7 +91,26 @@ describe("SessionPluginNotices", () => {
     expect(onTurnOn).toHaveBeenCalledWith("narrator");
   });
 
-  it("tells the player to install one when no narrative plugin is installed", () => {
+  it("shows a missing story plugin as an error card in the game", () => {
+    render(
+      <>
+        <SessionPluginNoticeCards
+          sessionId="s"
+          plugins={[plugin("memory", true)]}
+          unavailable={[]}
+          offTitle="Off:"
+          busy={false}
+          onTurnOn={() => {}}
+        />
+        <NoticeHost />
+      </>,
+    );
+    const card = screen.getByTestId("notice-no-story-plugin");
+    expect(card.getAttribute("role")).toBe("alert");
+    expect(card.textContent).toContain("Install a narrative plugin");
+  });
+
+  it("tells the prep screen to install one when no narrative plugin is installed", () => {
     render(
       <SessionPluginNotices
         plugins={[plugin("memory", true)]}
@@ -93,7 +118,6 @@ describe("SessionPluginNotices", () => {
         offTitle="Off:"
         busy={false}
         onTurnOn={() => {}}
-        variant="bar"
       />,
     );
     expect(screen.getByTestId("no-story-plugin").textContent).toContain(

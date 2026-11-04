@@ -46,7 +46,7 @@ test("preserves the story operation notice through reload and stage history with
     await page.goto(`/session?sid=${host.sessionId}`);
     await Promise.all(hydration);
     await expect(composerInput(page)).toBeVisible();
-    await expect(page.getByTestId("no-story-plugin")).toBeHidden();
+    await expect(page.getByTestId("notice-no-story-plugin")).toBeHidden();
     await composerInput(page).fill("Buy a book");
     await composerInput(page).press("Enter");
     await waitForTurnIdle(page);

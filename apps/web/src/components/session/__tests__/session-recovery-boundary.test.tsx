@@ -9,6 +9,7 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import "@/i18n/index.js";
 import { SessionRecoveryBoundary } from "../session-recovery-boundary.js";
+import { NoticeHost } from "@/components/ui/notice-host.js";
 
 afterEach(cleanup);
 
@@ -23,29 +24,32 @@ it.each(["running", "interrupted"] as const)(
     const retry = vi.fn();
     const stop = vi.fn(async () => {});
     render(
-      <SessionRecoveryBoundary
-        recovery={{
-          sessionId: "s",
-          hydrating: false,
-          checking: false,
-          status: {
-            state,
-            turnId: "t",
-            ...(state === "interrupted"
-              ? { retry: { type: "retry_turn" as const, payload: {} } }
-              : {}),
-          },
-        }}
-        onRetry={retry}
-        onRefresh={vi.fn()}
-        onStop={stop}
-        onOpenSettings={vi.fn()}
-        loading={<p>Loading surface</p>}
-      >
-        <Surface />
-      </SessionRecoveryBoundary>,
+      <>
+        <NoticeHost />
+        <SessionRecoveryBoundary
+          recovery={{
+            sessionId: "s",
+            hydrating: false,
+            checking: false,
+            status: {
+              state,
+              turnId: "t",
+              ...(state === "interrupted"
+                ? { retry: { type: "retry_turn" as const, payload: {} } }
+                : {}),
+            },
+          }}
+          onRetry={retry}
+          onRefresh={vi.fn()}
+          onStop={stop}
+          onOpenSettings={vi.fn()}
+          loading={<p>Loading surface</p>}
+        >
+          <Surface />
+        </SessionRecoveryBoundary>
+      </>,
     );
-    const notice = screen.getByTestId("execution-recovery-notice");
+    const notice = screen.getByTestId("notice-execution-recovery");
     expect(notice.getAttribute("role")).toBe(
       state === "running" ? "status" : "alert",
     );
@@ -61,6 +65,6 @@ it.each(["running", "interrupted"] as const)(
       await pending;
     });
     expect(screen.getByText("Ready surface")).toBeDefined();
-    expect(screen.queryByTestId("execution-recovery-notice")).toBeNull();
+    expect(screen.queryByTestId("notice-execution-recovery")).toBeNull();
   },
 );

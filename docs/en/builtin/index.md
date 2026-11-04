@@ -52,7 +52,7 @@ A world can add plugins to a built-in pack and give that combination a name. For
 
 ## All built-in plugins
 
-DM Mode and Spectator request DM Console; Ensemble Dialogue recommends it without changing default views, roles or policy. Enabled Codex and Relationship Graph also offer dedicated pages in Plugin views, keeping their original right panels. Pages themselves make no model calls; story actions retain the selected providers’ costs.
+DM Mode and Spectator request DM Console; Ensemble Dialogue recommends it without changing default views, roles or policy. Codex and Relationship Graph provide only right panels, which “Expand panel” opens larger. The panels make no model calls; story actions retain the selected providers’ costs.
 
 Plugins marked "On by default" are added to every game automatically, and you can turn them off on the session-prep screen. Some plugins require capabilities from other plugins. If a provider is missing, its dependents are disabled and the interface explains what is missing; other features keep working. The others are chosen by the gameplay pack, the world, or you.
 

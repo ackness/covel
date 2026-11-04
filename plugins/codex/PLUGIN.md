@@ -14,8 +14,6 @@ requires:
   - world-ir-provider@1
 contributes:
   ui:
-    view:
-      - ./ui/library-view.json
     right:
       - ./ui/codex-panel.json
   prompt:

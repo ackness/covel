@@ -189,7 +189,7 @@ test("batch retry survives refresh, retains only its failed task and clears reso
       },
     });
     await page.reload();
-    await expect(page.getByTestId("execution-recovery-notice")).toContainText(
+    await expect(page.getByTestId("notice-execution-recovery")).toContainText(
       "上一回合仍在执行",
     );
     await expect(composer(page)).toHaveAttribute("data-executing", "true");
@@ -202,7 +202,7 @@ test("batch retry survives refresh, retains only its failed task and clears reso
     await expect(current.locator(".animate-spin").first()).toBeVisible();
 
     finishBatch();
-    await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(0, {
+    await expect(page.getByTestId("notice-execution-recovery")).toHaveCount(0, {
       timeout: 10_000,
     });
     await current.getByRole("button").first().click();
@@ -229,7 +229,7 @@ test("batch retry survives refresh, retains only its failed task and clears reso
     await expect(current.getByRole("alert")).toHaveCount(0, {
       timeout: 10_000,
     });
-    await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(0);
+    await expect(page.getByTestId("notice-execution-recovery")).toHaveCount(0);
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
     await expect(story).toContainText(recoveredStory);
     await expect(page.getByRole("alert")).toHaveCount(0);

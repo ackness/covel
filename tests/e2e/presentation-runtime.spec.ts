@@ -45,7 +45,7 @@ async function openPresentationSession(page: Page, host: PresentationHost) {
   await page.goto(`/session?sid=${host.sessionId}`);
   await Promise.all(hydration);
   await expect(composerInput(page)).toBeVisible();
-  await expect(page.getByTestId("no-story-plugin")).toBeHidden();
+  await expect(page.getByTestId("notice-no-story-plugin")).toBeHidden();
 }
 
 async function showStage(page: Page) {
@@ -289,7 +289,7 @@ for (const outcome of ["updated", "exhausted", "failed"] as const) {
       await page.getByRole("button", { name: "解析视图", exact: true }).click();
       await expect(composer(page)).toHaveAttribute("data-executing", "false");
       await expect(composerInput(page)).toBeEnabled();
-      await expect(page.getByTestId("no-story-plugin")).toBeHidden();
+      await expect(page.getByTestId("notice-no-story-plugin")).toBeHidden();
       await expect(page.locator(".ui-narrative")).toContainText(
         "Public library story 1.",
       );

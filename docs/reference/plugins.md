@@ -1566,6 +1566,6 @@ runtime:
 
 场景舞台通过公共 `contributes.ui.theme` 声明“舞台阅读”，不自动启用或切换视图。无 entry/runtime 的社区 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md) 通过同一清单、静态验证、资源路由和会话选择路径工作。玩家操作、严格语法与限制统一见[插件主题](./theme-packages.md#插件提供的受限主题)。
 
-## 沙箱系统区域
+## 页面中的输入框
 
-沙箱区域继续使用 `contributes.ui.view` 的 spec 路径，单数 surface 选择主视图或输入框；不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[沙箱主视图与输入框](./ui-panels.md#沙箱主视图与输入框)。
+插件页面使用 `contributes.ui.view` 的 spec 路径。宿主输入框默认显示在页面下方；页面用可选的 `composer: false` 或嵌入 `SessionComposer` 来隐藏它。不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[页面中的输入框](./ui-panels.md#页面中的输入框)。

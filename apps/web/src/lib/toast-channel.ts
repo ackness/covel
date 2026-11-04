@@ -1,11 +1,14 @@
 /**
- * Global toast channel — dependency-free pub/sub for surfacing server-side
- * and client-side errors as in-app notifications.
- *
- * Keep the API minimal: `emit()` publishes an event, `subscribe()` registers
- * a listener and returns an unsubscribe function. ToastHost is the only
- * intended consumer today, but anything else in the web app may subscribe.
+ * Toast shorthand over the notice center. `emitToast` keeps the signature of
+ * the original channel: about a hundred call sites publish one-shot results
+ * through it.
  */
+
+import {
+  pushNotice,
+  subscribeToastShown,
+  type NoticeRecord,
+} from "./notice-center.js";
 
 export type ToastKind = "error" | "info" | "success";
 
@@ -23,49 +26,34 @@ export interface ToastEvent {
   durationMs?: number;
 }
 
-type Subscriber = (event: ToastEvent) => void;
-
-const subscribers: Subscriber[] = [];
-let nextId = 1;
-
 export function emitToast(
   kind: ToastKind,
   message: string,
   detail?: string,
   options: { durationMs?: number } = {},
 ): void {
-  // Clamp absurdly long details so copy-to-clipboard payloads stay sane.
-  const trimmedDetail =
-    typeof detail === "string" && detail.length > 4000
-      ? `${detail.slice(0, 4000)}…`
-      : detail;
-
-  const event: ToastEvent = {
-    id: nextId++,
-    kind,
-    message,
-    detail: trimmedDetail,
-    timestamp: Date.now(),
+  pushNotice({
+    key: `toast:${kind}:${message}`,
+    kind: "toast",
+    tone: kind,
+    title: message,
+    ...(detail === undefined ? {} : { detail }),
     ...(options.durationMs ? { durationMs: options.durationMs } : {}),
-  };
-
-  // Iterate a snapshot so a subscriber that unsubscribes mid-dispatch
-  // doesn't skip siblings.
-  for (const cb of [...subscribers]) {
-    try {
-      cb(event);
-    } catch (err) {
-      // Subscriber threw — isolate the failure, do not break the channel.
-      // eslint-disable-next-line no-console
-      console.warn("[toast-channel] subscriber threw:", err);
-    }
-  }
+  });
 }
 
-export function subscribeToast(cb: Subscriber): () => void {
-  subscribers.push(cb);
-  return () => {
-    const idx = subscribers.indexOf(cb);
-    if (idx >= 0) subscribers.splice(idx, 1);
+function toEvent(notice: NoticeRecord): ToastEvent {
+  return {
+    id: notice.id,
+    kind: notice.tone === "warning" ? "info" : notice.tone,
+    message: notice.title,
+    ...(notice.detail === undefined ? {} : { detail: notice.detail }),
+    timestamp: notice.updatedAt,
+    ...(notice.durationMs ? { durationMs: notice.durationMs } : {}),
   };
+}
+
+/** Listen to every toast as it is shown. Returns an unsubscribe function. */
+export function subscribeToast(cb: (event: ToastEvent) => void): () => void {
+  return subscribeToastShown((notice) => cb(toEvent(notice)));
 }

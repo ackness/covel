@@ -8,6 +8,7 @@
 import i18n, { i18nReady } from "@/i18n";
 import { locks } from "node:worker_threads";
 import "fake-indexeddb/auto";
+import { afterEach } from "vitest";
 
 // jsdom lacks Web Locks. Use the configured Node runtime's real LockManager.
 Object.defineProperty(navigator, "locks", {
@@ -19,3 +20,7 @@ Object.defineProperty(navigator, "locks", {
 // because vitest may load the module graph before setupFiles execute).
 await i18nReady;
 await i18n.changeLanguage("zh-CN");
+
+// The notice center is module state; start every test with an empty one.
+const { resetNoticeCenter } = await import("@/lib/notice-center.js");
+afterEach(() => resetNoticeCenter());

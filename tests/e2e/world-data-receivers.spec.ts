@@ -251,7 +251,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
       );
       expect(saved.session.completedPlayerTurns).toBe(1);
       if (mode === "disabled")
-        await expect(page.getByTestId("world-data-notices")).toContainText(
+        await expect(page.getByTestId("notice-world-data:receiver-excluded")).toContainText(
           "Receiving plugins are disabled.",
         );
     } finally {

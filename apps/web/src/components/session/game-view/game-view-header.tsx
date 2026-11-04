@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
+import { useNoticeAnchor } from "@/components/ui/notice-host.js";
 import {
   Bug,
   ChevronLeft,
@@ -37,6 +38,7 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
 import { ConnectionStatus } from "./connection-status.js";
+import { NoticeStatusChips } from "./notice-status-chips.js";
 import { MusicToggle } from "../session-music.js";
 import {
   executionTone,
@@ -60,7 +62,11 @@ interface GameViewHeaderProps {
   recoveryNoticeVisible?: boolean;
   viewMode: GameViewMode;
   pluginViews: readonly PluginViewEntry[];
-  hostDefaultMode: GameViewMode;
+  /** A plugin page replaced the host input box, so Stop must live here. */
+  composerHidden?: boolean;
+  /** A turn or auto-advance run is actually in progress. */
+  stoppable?: boolean;
+  onStop?: () => void;
   isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
   onViewModeChange: (mode: GameViewMode) => void;
@@ -93,7 +99,9 @@ export function GameViewHeader({
   recoveryNoticeVisible = false,
   viewMode,
   pluginViews,
-  hostDefaultMode,
+  composerHidden = false,
+  stoppable = false,
+  onStop,
   isLeftCollapsed,
   isRightCollapsed,
   onViewModeChange,
@@ -132,10 +140,15 @@ export function GameViewHeader({
       ) &&
       (sessionPhase !== "setup" ||
         ["generating", "updating"].includes(executionState)));
+  const headerRef = useRef<HTMLDivElement>(null);
+  useNoticeAnchor(headerRef);
   const authorView = viewMode === "detailed" || viewMode === "raw";
 
   return (
-    <div className="ui-session-header ui-panel-header ui-drag-region relative h-auto min-h-(--panel-header-height) py-1 px-2 md:px-3 flex justify-between items-center gap-3 z-10 flex-wrap sm:flex-nowrap">
+    <div
+      ref={headerRef}
+      className="ui-session-header ui-panel-header ui-drag-region relative h-auto min-h-(--panel-header-height) py-1 px-2 md:px-3 flex justify-between items-center gap-3 z-10 flex-wrap sm:flex-nowrap"
+    >
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <Button
           variant="ghost"
@@ -202,6 +215,17 @@ export function GameViewHeader({
                 : t("session.stateStreaming")}
           </span>
         )}
+        <NoticeStatusChips scope={sessionId} />
+        {stoppable && composerHidden && onStop && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 px-2 text-xs"
+            onClick={onStop}
+          >
+            {t("session.stopTurn")}
+          </Button>
+        )}
         <ConnectionStatus />
       </div>
       <div className="ml-auto flex max-w-full flex-wrap items-center gap-1 shrink-0 sm:flex-nowrap">
@@ -230,7 +254,7 @@ export function GameViewHeader({
 
         {pluginViews.length > 0 && (
           <HeaderMenu
-            label={t("session.pluginViews")}
+            label={t("session.pluginPages")}
             active={Boolean(parsePluginViewMode(viewMode))}
             icon={PanelsTopLeft}
           >
@@ -246,19 +270,6 @@ export function GameViewHeader({
             ))}
           </HeaderMenu>
         )}
-        {parsePluginViewMode(viewMode) && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0 md:h-8 md:w-8"
-            aria-label={t("session.backToDefaultView")}
-            title={t("session.backToDefaultView")}
-            onClick={() => onViewModeChange(hostDefaultMode)}
-          >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-        )}
-
         {suspensionsCount > 0 && (
           <Button
             variant="ghost"

@@ -1,8 +1,15 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { SharedServerInfo } from "@/services/api/health.js";
-import { SharedServerNotice } from "../shared-server-notice.js";
+import { NoticeHost } from "../ui/notice-host.js";
+import { resetNoticeCenter } from "@/lib/notice-center.js";
+import { useSharedServerNotice } from "../shared-server-notice.js";
+
+function SharedServerNotice() {
+  useSharedServerNotice();
+  return <NoticeHost />;
+}
 
 const server = vi.hoisted(() => ({
   info: null as SharedServerInfo | null,
@@ -11,6 +18,11 @@ const server = vi.hoisted(() => ({
 vi.mock("@/services/api/health.js", () => ({
   getSharedServerInfo: () => server.info,
 }));
+
+afterEach(() => {
+  cleanup();
+  resetNoticeCenter();
+});
 
 beforeEach(async () => {
   localStorage.clear();
@@ -21,6 +33,7 @@ beforeEach(async () => {
 it("stays hidden on a server that is not shared", () => {
   const { container } = render(<SharedServerNotice />);
   expect(container.textContent).toBe("");
+  expect(document.querySelector("[data-notice-host]")).toBeNull();
 });
 
 it("explains where saves and keys go and links the docs and the running source", () => {
@@ -64,9 +77,9 @@ it("stays dismissed for this browser", () => {
   server.info = {};
   const first = render(<SharedServerNotice />);
   fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-  expect(first.container.textContent).toBe("");
+  expect(screen.queryByText("This is a public Covel trial")).toBeNull();
   first.unmount();
 
-  const second = render(<SharedServerNotice />);
-  expect(second.container.textContent).toBe("");
+  render(<SharedServerNotice />);
+  expect(screen.queryByText("This is a public Covel trial")).toBeNull();
 });
