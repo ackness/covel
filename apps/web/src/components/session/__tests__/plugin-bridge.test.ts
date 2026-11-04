@@ -244,7 +244,7 @@ it("provides complete state delivery without a stream sender", async () => {
   connection.bridge.close();
 });
 
-it("the page bridge rejects version two and accepts only complete version three session state", async () => {
+it("the page bridge rejects older versions and accepts only complete version four session state", async () => {
   const { runInNewContext } = await import("node:vm");
   let listener: ((event: unknown) => void) | undefined;
   const page: {
@@ -291,16 +291,21 @@ it("the page bridge rejects version two and accepts only complete version three 
   expect(page.covel?.getState()).toEqual({});
   expect(notify).not.toHaveBeenCalled();
   port.onmessage?.({
+    data: { type: "state", value: { session: { version: 3, messages: [] } } },
+  });
+  expect(page.covel?.getState()).toEqual({});
+  expect(notify).not.toHaveBeenCalled();
+  port.onmessage?.({
     data: {
       type: "state",
       value: {
-        session: { version: 3, messages: [{ seq: 2, text: "Full story" }] },
+        session: { version: 4, messages: [{ seq: 2, text: "Full story" }] },
       },
     },
   });
   port.onmessage?.({ data: { type: "stream", seq: 2, append: "PRIVATE" } });
   expect(page.covel?.getState()).toMatchObject({
-    session: { version: 3, messages: [{ seq: 2, text: "Full story" }] },
+    session: { version: 4, messages: [{ seq: 2, text: "Full story" }] },
   });
   expect(notify).toHaveBeenCalledOnce();
 });
@@ -471,7 +476,7 @@ it("executes the shipped page script against a real channel, reconstructs text a
     } as unknown as Pick<Window, "postMessage">,
     undefined,
     () => ({
-      state: { session: { version: 3, messages: [] } },
+      state: { session: { version: 4, messages: [] } },
       sessionPage: true,
       locked: false,
       handlers: {
@@ -489,7 +494,7 @@ it("executes the shipped page script against a real channel, reconstructs text a
   await vi.waitFor(() => expect(page.covel?.getState().session).toBeDefined());
   const expected = "字🙂".repeat(50);
   bridge.pushState({
-    session: { version: 3, messages: [{ seq: 1, text: expected }] },
+    session: { version: 4, messages: [{ seq: 1, text: expected }] },
   });
   await vi.waitFor(() =>
     expect(page.covel?.getState().session?.messages?.[0]?.text).toBe(expected),

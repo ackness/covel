@@ -941,7 +941,9 @@ SettingsStore saves device-local records at `ui.pluginViewConsent.<pluginId>.<ha
 
 <a id="sessionprojection-version-2"></a>
 
-### SessionProjection (version 3)
+<a id="sessionprojection-version-3"></a>
+
+### SessionProjection (version 4)
 
 Read the `session` field of the state object exposed on `window.covel`, or subscribe with `window.covel.subscribe`. Top-level state contains only `session`, `locale` and host `theme`, without ordinary panel `data`, `sources`, `jobs`, `context` or own-plugin KV.
 
@@ -950,14 +952,17 @@ When another client commits a turn, the host also refreshes messages and the tur
 <!-- prettier-ignore -->
 | Field | Content |
 | --- | --- |
-| `version` | Always `3`; version 2 is rejected |
+| `version` | Always `4`; earlier versions are rejected |
 | `phase` / `turn` / `executing` | `setup` or `playing`, committed player-turn count, execution state |
-| `messages[]` | `{seq, role, text, truncated?}`, public stories and player messages without blocks |
+| `messages[]` | `{seq, role, text, lines?, truncated?}`, public stories and player messages without blocks |
+| `drafts[]` | `{state, text, lines?, truncated?}`, story drafts not yet committed; `state` is `writing`, `revising` (voided and being rewritten, empty `text`) or `accepted` (only the commit is missing). Follows the player's "Show the story as it is written" setting and is empty when they chose "Once the turn is saved" |
 | `pending[]` | `{seq,interaction,handle?}`, public display and an opaque answer handle for this frame |
 | `input.seats[]` | Human seats' `{id,role,characterIds,currentCharacterId?,allowed}`; public associations only, without user/account identity |
 | `input.kinds[]` | Currently permitted `{kind,label,text,actor,fields?}`; fields contain public JSON Schema display vocabulary, without executable validators |
 | `characters[]` | `id`, `name`, `type`, optional `aliases`, `description`; no arbitrary `fields` or private knowledge |
 | `slots[]` | `{slot,key?,value}`, validated against kernel slot schemas; media retains only opaque `{id,mime,size}` references |
+
+`lines[]` holds a story's display lines `{kind, text, speaker?, speakerId?}`, the same lines the host stage reads one by one: `kind` is `narration`, `dialogue` or `action`, and `speakerId` is the resolved speaking character's `id`, to match against `characters[]`. They appear only when the story has segments whose texts, joined by blank lines, equal `text` exactly; split other stories at blank lines yourself.
 
 An `interaction` is `form`, `choice`, `confirmation` or `unavailable`. Forms expose title, submit label and field names, types, labels, placeholders, required flags, defaults, numeric bounds and options. Choices expose `choices[].{id,label,description?}`; confirmations expose prompt and confirm/cancel labels. Internal block/turn/interaction references, `meta`, action maps and server validators remain with the host. Handles belong to the current frame attempt and interaction, expiring on answer, replacement, eviction or departure. Custom JSON UI and unsupported/oversized interactions expose `unavailable` without a handle; a host button opens the ordinary interaction interface. Optional suggestions remain with the host.
 
@@ -966,11 +971,13 @@ Ordinals are keyed by durable message ID, allocated on first observation and nev
 <!-- prettier-ignore -->
 | Content | Limit and handling |
 | --- | --- |
-| Messages | Last 200, 256 KiB total text; 32 KiB each with `truncated:true` when cut |
+| Messages | Last 200, 256 KiB total of text and display lines; 32 KiB each with `truncated:true` when cut |
 | Characters | At most 100, each 8 KiB serialized; oversized entries skipped |
 | Pending interactions | At most 8, each 16 KiB; oversized display becomes `unavailable` without a handle |
+| Drafts | At most 4, 32 KiB each with `truncated:true` when cut |
+| Display lines | 64 KiB serialized per message or draft; omitted when larger or when the text was cut. Message lines count toward the 256 KiB total |
 
-KiB counts UTF-8 bytes. The bridge sends complete state snapshots containing committed messages only. Version 3 removes `streaming` and the `type: "stream"` append channel; host and page must upgrade together. Execution starts immediately on action admission. The host retains the previous story, progress, Stop and failure/retry controls outside immersive plugin views. Safe rejection codes display “Revising response”; rejected candidates, tool arguments and review feedback never enter the page projection.
+KiB counts UTF-8 bytes. The bridge sends complete state snapshots, with no append channel: `messages` contains committed messages only, and each draft update replaces `drafts` in a new snapshot. Version 4 adds `drafts`; host and page must upgrade together. A draft is the same unreviewed story text the chat shows (see [story drafts](./plugins.md#story-drafts)), without turn, runtime or plugin identity; once the story commits it leaves `drafts` and its text appears in `messages`. Execution starts immediately on action admission. The host retains the previous story, progress, Stop and failure/retry controls outside immersive plugin views. Safe rejection codes display “Revising response”; tool arguments and review feedback never enter the page projection.
 
 ### Page failure and recovery
 

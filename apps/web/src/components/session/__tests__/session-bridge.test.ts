@@ -13,6 +13,8 @@ import {
   sessionProjectionSchema,
   type SessionProjectionInput,
   SESSION_BRIDGE_MAX_CHARACTER_BYTES,
+  SESSION_BRIDGE_MAX_DRAFTS,
+  SESSION_BRIDGE_MAX_MESSAGE_BYTES,
 } from "../session-bridge.js";
 import {
   createInteractionHandles,
@@ -75,18 +77,75 @@ describe("public session projection", () => {
     expect(result.turn).toBe(4);
     expect(sessionProjectionSchema.safeParse(result).success).toBe(true);
   });
-  it("accepts only version 3 complete state with no streaming field", () => {
+  it("accepts only version 4 complete state with no streaming field", () => {
     const result = buildSessionProjection(
       input({ messages: [message("one")] }),
     );
-    expect(result.version).toBe(3);
+    expect(result.version).toBe(4);
+    expect(result.drafts).toEqual([]);
     expect(result).not.toHaveProperty("streaming");
-    expect(
-      sessionProjectionSchema.safeParse({ ...result, version: 2 }).success,
-    ).toBe(false);
+    for (const version of [2, 3])
+      expect(
+        sessionProjectionSchema.safeParse({ ...result, version }).success,
+      ).toBe(false);
     expect(
       sessionProjectionSchema.safeParse({ ...result, streaming: null }).success,
     ).toBe(false);
+  });
+  it("gives a story's segments as display lines only when they spell out its text", () => {
+    const segmented = {
+      ...message("lines", "Rain.\n\n“Go.”"),
+      segments: [
+        { kind: "narration" as const, text: "Rain." },
+        {
+          kind: "dialogue" as const,
+          text: "“Go.”",
+          speaker: "Aya",
+          speakerId: "char-aya",
+        },
+      ],
+    };
+    const stale = { ...segmented, id: "stale", content: "Edited text" };
+    const result = buildSessionProjection(
+      input({ messages: [segmented, stale, message("plain")] }),
+    );
+    expect(sessionProjectionSchema.safeParse(result).success).toBe(true);
+    expect(result.messages.map((m) => m.lines)).toEqual([
+      [
+        { kind: "narration", text: "Rain." },
+        {
+          kind: "dialogue",
+          text: "“Go.”",
+          speaker: "Aya",
+          speakerId: "char-aya",
+        },
+      ],
+      undefined,
+      undefined,
+    ]);
+  });
+  it("bounds drafts by count and size", () => {
+    const long = "雨".repeat(SESSION_BRIDGE_MAX_MESSAGE_BYTES);
+    const drafts = Array.from(
+      { length: SESSION_BRIDGE_MAX_DRAFTS + 2 },
+      (_, i) => ({
+        turnId: `turn-${i}`,
+        runtimeId: "narrator",
+        pluginId: "narrator",
+        draftId: `d${i}`,
+        units: [{ text: i === 0 ? long : `Line ${i}` }],
+        accepted: false,
+        revising: false,
+      }),
+    );
+    const result = buildSessionProjection(input({ drafts }));
+    expect(sessionProjectionSchema.safeParse(result).success).toBe(true);
+    expect(result.drafts).toHaveLength(SESSION_BRIDGE_MAX_DRAFTS);
+    expect(result.drafts[0]?.truncated).toBe(true);
+    expect(
+      new TextEncoder().encode(result.drafts[0]!.text).length,
+    ).toBeLessThanOrEqual(SESSION_BRIDGE_MAX_MESSAGE_BYTES);
+    expect(result.drafts[1]).toEqual({ state: "writing", text: "Line 1" });
   });
   it("keeps full visible sequence numbers when the 200-message window slides", () => {
     const result = buildSessionProjection(

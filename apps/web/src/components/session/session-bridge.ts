@@ -13,15 +13,22 @@ import {
 } from "./session-bridge-interactions.js";
 import type { SessionRecord } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
+import {
+  draftStoryMessage,
+  visibleDraftUnits,
+  type LiveOutputPreference,
+  type OutputDraft,
+} from "@/stores/session-store/output-drafts.js";
 import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
 
-export const SESSION_BRIDGE_VERSION = 3;
+export const SESSION_BRIDGE_VERSION = 4;
 export const SESSION_BRIDGE_MAX_MESSAGES = 200;
 export const SESSION_BRIDGE_MAX_MESSAGE_BYTES = 32 * 1024;
 export const SESSION_BRIDGE_MAX_TEXT_BYTES = 256 * 1024;
 export const SESSION_BRIDGE_MAX_CHARACTERS = 100;
 export const SESSION_BRIDGE_MAX_CHARACTER_BYTES = 8 * 1024;
 export const SESSION_BRIDGE_MAX_PENDING = 8;
+export const SESSION_BRIDGE_MAX_DRAFTS = 4;
 export const SESSION_BRIDGE_MAX_BLOCK_BYTES = 16 * 1024;
 export const SESSION_BRIDGE_MAX_DEPTH = 8;
 
@@ -70,6 +77,17 @@ export function boundedSessionText(text: string, bytes: number): string {
 const jsonBytes = (value: unknown) =>
   encoder.encode(JSON.stringify(value)).length;
 const positiveSeq = z.number().int().positive();
+/** A story's display lines, the same ones the host stage reads one by one. */
+const linesSchema = z
+  .array(
+    z.strictObject({
+      kind: z.enum(["narration", "dialogue", "action"]),
+      text: z.string(),
+      speaker: z.string().optional(),
+      speakerId: z.string().optional(),
+    }),
+  )
+  .optional();
 const characterSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
@@ -89,10 +107,21 @@ export const sessionProjectionSchema = z.strictObject({
         seq: positiveSeq,
         role: z.enum(["user", "assistant"]),
         text: z.string(),
+        lines: linesSchema,
         truncated: z.literal(true).optional(),
       }),
     )
     .max(SESSION_BRIDGE_MAX_MESSAGES),
+  drafts: z
+    .array(
+      z.strictObject({
+        state: z.enum(["writing", "revising", "accepted"]),
+        text: z.string(),
+        lines: linesSchema,
+        truncated: z.literal(true).optional(),
+      }),
+    )
+    .max(SESSION_BRIDGE_MAX_DRAFTS),
   pending: z
     .array(
       z.strictObject({
@@ -150,6 +179,9 @@ export interface SessionProjectionInput {
   interactionHandle?: (message: StreamMessage) => string | undefined;
   executing: boolean;
   messages: readonly StreamMessage[];
+  /** Stories still being written, shown as far as the player's preference allows. */
+  drafts?: readonly OutputDraft[];
+  liveOutput?: LiveOutputPreference;
   /** Host-only identity map; only the assigned ordinals cross the port. */
   messageSeqs: ReadonlyMap<string, number>;
   submittedBlockIds: ReadonlySet<string>;
@@ -203,19 +235,21 @@ export function buildSessionProjection(
       message.content,
       SESSION_BRIDGE_MAX_MESSAGE_BYTES,
     );
+    const lines = text === message.content ? publicLines(message) : undefined;
     messages.push({
       seq,
       role: message.role as "user" | "assistant",
       text,
+      ...(lines ? { lines } : {}),
       ...(text !== message.content ? { truncated: true as const } : {}),
     });
-    textBytes += encoder.encode(text).length;
+    textBytes += messageBytes(text, lines);
     while (
       messages.length > SESSION_BRIDGE_MAX_MESSAGES ||
       textBytes > SESSION_BRIDGE_MAX_TEXT_BYTES
     ) {
       const removed = messages.shift();
-      if (removed) textBytes -= encoder.encode(removed.text).length;
+      if (removed) textBytes -= messageBytes(removed.text, removed.lines);
     }
   }
   const pending: ProjectionShape["pending"] = [];
@@ -272,6 +306,7 @@ export function buildSessionProjection(
     turn: input.session.completedPlayerTurns,
     executing: input.executing,
     messages,
+    drafts: publicDrafts(input),
     pending,
     input: publicActionInput(input, characters),
     characters,
@@ -294,6 +329,68 @@ export function buildSessionProjection(
       ];
     }),
   };
+}
+
+type PublicLines = NonNullable<ProjectionShape["messages"][number]["lines"]>;
+
+/**
+ * A story's segments as display lines, only when they spell out its text
+ * exactly and fit the per-message bound; a page splits other text itself.
+ */
+function publicLines(
+  message: Pick<StreamMessage, "content" | "segments">,
+): PublicLines | undefined {
+  const segments = message.segments;
+  if (
+    !segments?.length ||
+    segments.map((segment) => segment.text).join("\n\n") !== message.content
+  )
+    return undefined;
+  const lines = segments.map((segment) => ({
+    kind: segment.kind,
+    text: segment.text,
+    ...(segment.speaker ? { speaker: segment.speaker } : {}),
+    ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
+  }));
+  return jsonBytes(lines) <= SESSION_BRIDGE_MAX_MESSAGE_BYTES * 2
+    ? lines
+    : undefined;
+}
+const messageBytes = (text: string, lines: PublicLines | undefined) =>
+  encoder.encode(text).length + (lines ? jsonBytes(lines) : 0);
+
+/**
+ * Story text before its commit, never its turn, runtime or plugin. A player
+ * who waits for the commit sees none, so neither does their page.
+ */
+function publicDrafts(
+  input: SessionProjectionInput,
+): ProjectionShape["drafts"] {
+  const preference = input.liveOutput ?? "units";
+  const drafts: ProjectionShape["drafts"] = [];
+  if (preference === "committed") return drafts;
+  for (const draft of input.drafts ?? []) {
+    if (drafts.length >= SESSION_BRIDGE_MAX_DRAFTS) break;
+    const units = visibleDraftUnits(draft, preference);
+    if (!units && !draft.revising) continue;
+    const message = draftStoryMessage(draft, units ?? []);
+    const text = boundedSessionText(
+      message.content,
+      SESSION_BRIDGE_MAX_MESSAGE_BYTES,
+    );
+    const lines = text === message.content ? publicLines(message) : undefined;
+    drafts.push({
+      state: draft.revising
+        ? "revising"
+        : draft.accepted
+          ? "accepted"
+          : "writing",
+      text,
+      ...(lines ? { lines } : {}),
+      ...(text !== message.content ? { truncated: true as const } : {}),
+    });
+  }
+  return drafts;
 }
 
 /** A small display vocabulary from an action field schema, never executable validation. */

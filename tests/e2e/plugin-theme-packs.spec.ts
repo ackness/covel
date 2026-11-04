@@ -290,7 +290,7 @@ type PortEnvelope = {
     session?: {
       turn: number;
       executing: boolean;
-      version: 3;
+      version: 4;
       messages: { seq: number; role: string; text: string }[];
     };
   };
@@ -1163,7 +1163,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
             return bridge.covel.getState().session;
           }),
         )
-        .toMatchObject({ version: 3, executing: true, turn });
+        .toMatchObject({ version: 4, executing: true, turn });
       const beforeCommit = await portMessages(frame!);
       expect(beforeCommit.some((message) => message.type === "stream")).toBe(
         false,

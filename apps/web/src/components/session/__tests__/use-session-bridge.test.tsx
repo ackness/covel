@@ -1,6 +1,7 @@
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
+import type { OutputDraft } from "@/stores/session-store/output-drafts.js";
 import { useSessionBridge } from "../use-session-bridge.js";
 const story = (
   id: string,
@@ -17,10 +18,17 @@ const mocks = vi.hoisted(() => ({
     session: { id: "s", phase: "playing", completedPlayerTurns: 1 },
     executing: true,
     messages: [] as StreamMessage[],
+    outputDrafts: [] as OutputDraft[],
     submittedBlockIds: new Set<string>(),
     gameState: { characters: [] },
   },
   slots: [],
+  liveOutput: "units",
+}));
+vi.mock("@/settings/use-settings.js", () => ({
+  useSetting: (key: string) => [
+    key === "ui.liveOutput" ? mocks.liveOutput : undefined,
+  ],
 }));
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({ state: mocks.state }),
@@ -35,7 +43,9 @@ beforeEach(() => {
     session: { id: "s", phase: "playing", completedPlayerTurns: 1 },
     executing: true,
     messages: [story("saved")],
+    outputDrafts: [],
   };
+  mocks.liveOutput = "units";
 });
 afterEach(() => {
   cleanup();
@@ -44,7 +54,7 @@ afterEach(() => {
 it("keeps previous complete story while running and projects the next durable completion", () => {
   const { result, rerender } = renderHook(() => useSessionBridge("s"));
   expect(result.current.projection).toMatchObject({
-    version: 3,
+    version: 4,
     executing: true,
     messages: [{ seq: 1, text: "Previous committed story" }],
   });
@@ -89,7 +99,7 @@ it("withholds invalid projections with a single warning", () => {
   expect(warn).toHaveBeenCalledOnce();
 });
 
-it("builds version three from public lanes while unrelated private state changes", () => {
+it("builds version four from public lanes while unrelated private state changes", () => {
   const publicStory: StreamMessage = {
     id: "public",
     role: "assistant",
@@ -120,7 +130,7 @@ it("builds version three from public lanes while unrelated private state changes
   mocks.state = next;
   const { result, rerender } = renderHook(() => useSessionBridge("s"));
   expect(result.current.projection).toMatchObject({
-    version: 3,
+    version: 4,
     messages: [{ text: "A public story" }],
     input: { seats: [], kinds: [] },
   });
@@ -130,4 +140,65 @@ it("builds version three from public lanes while unrelated private state changes
     "credential-sentinel",
   );
   expect(result.current.projection?.messages).toHaveLength(1);
+});
+
+it("shows a story being written as far as the player reads it, without its identity", () => {
+  const draft: OutputDraft = {
+    turnId: "turn-sentinel",
+    runtimeId: "runtime-sentinel",
+    pluginId: "plugin-sentinel",
+    draftId: "draft-sentinel",
+    units: [
+      { text: "The rain stopped.", meta: { kind: "narration" } },
+      { text: "“Let's go.”", meta: { kind: "dialogue", speaker: "Aya" } },
+    ],
+    partial: { text: "“Wai", meta: { kind: "dialogue", speaker: "Ren" } },
+    accepted: false,
+    revising: false,
+  };
+  mocks.state = { ...mocks.state, outputDrafts: [draft] };
+  const { result, rerender } = renderHook(() => useSessionBridge("s"));
+  expect(result.current.projection?.drafts).toEqual([
+    {
+      state: "writing",
+      text: "The rain stopped.\n\n“Let's go.”",
+      lines: [
+        { kind: "narration", text: "The rain stopped." },
+        { kind: "dialogue", text: "“Let's go.”", speaker: "Aya" },
+      ],
+    },
+  ]);
+  expect(JSON.stringify(result.current.projection)).not.toContain("sentinel");
+
+  mocks.liveOutput = "text";
+  rerender();
+  expect(result.current.projection?.drafts[0]?.text).toBe(
+    "The rain stopped.\n\n“Let's go.”\n\n“Wai",
+  );
+  expect(result.current.projection?.drafts[0]?.lines?.at(-1)).toEqual({
+    kind: "dialogue",
+    text: "“Wai",
+    speaker: "Ren",
+  });
+
+  mocks.state = {
+    ...mocks.state,
+    outputDrafts: [{ ...draft, units: [], partial: undefined, revising: true }],
+  };
+  rerender();
+  expect(result.current.projection?.drafts).toEqual([
+    { state: "revising", text: "" },
+  ]);
+
+  mocks.state = {
+    ...mocks.state,
+    outputDrafts: [{ ...draft, partial: undefined, accepted: true }],
+  };
+  rerender();
+  expect(result.current.projection?.drafts[0]?.state).toBe("accepted");
+
+  // A player who waits for the commit sees no draft, so neither does the page.
+  mocks.liveOutput = "committed";
+  rerender();
+  expect(result.current.projection?.drafts).toEqual([]);
 });

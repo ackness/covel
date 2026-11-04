@@ -1554,7 +1554,7 @@ How snapshots are saved:
 
 Declarative [SessionMessages / SessionComposer](./ui-components.md#live-session-view-components) render directly through the host, without this port. Input reuses player-source `submit_actions` and existing interaction responses. Refusal or busy admission retains drafts; UI callbacks are not plugin RPC and do not imply persistence.
 
-Plugin views reuse the sandbox MessagePort. Complete `{ type: "state", value }` messages carry version 3 in `value.session`, with committed messages only. There is no story append channel. This adds no HTTP or SSE endpoint. Reading requires player consent bound to plugin ID and the spec plus HTML content hash; revocation closes the page. Declared, validated public methods return safe outcomes. See [Plugin views](./ui-panels.md#plugin-views) for the authoritative projection and consent rules.
+Plugin views reuse the sandbox MessagePort. Complete `{ type: "state", value }` messages carry version 4 in `value.session`: messages hold committed stories only, and stories not yet committed appear in `drafts` as the player's setting allows. There is no story append channel. This adds no HTTP or SSE endpoint. Reading requires player consent bound to plugin ID and the spec plus HTML content hash; revocation closes the page. Declared, validated public methods return safe outcomes. See [Plugin views](./ui-panels.md#plugin-views) for the authoritative projection and consent rules.
 
 <a id="auto-advance-events"></a>
 
@@ -1612,7 +1612,7 @@ The event contains no raw input, free-text reason, asset path, reply or credenti
 
 ## Sandbox session page protocol
 
-Ordinary session webviews use one MessagePort and public projection version 3. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-3). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
+Ordinary session webviews use one MessagePort and public projection version 4. `pending[].interaction` and opaque per-frame handles replace raw blocks; `input` exposes human seats and currently permitted actions. Independently consented methods request player actions, interaction answers, own manual runtimes, abort and own-panel navigation. Replies contain only fixed safe outcomes, without execution internals. The authoritative field tables, limits, replay budget and retirement rules are in the [session bridge](./ui-panels.md#sessionprojection-version-4). Normal HTTP/SSE authorization and proposal commit retain their existing boundaries.
 
 ### Session theme snapshots
 
