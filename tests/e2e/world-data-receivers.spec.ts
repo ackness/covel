@@ -154,7 +154,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
       if (mode === "ambiguous") {
         await expect(
           page.getByText(
-            "Lamp notes: This data has no plugin to receive it. Choose a receiving plugin.",
+            "Lamp notes: Some world data was not used because no plugin takes it. Choose a receiving plugin.",
             { exact: true },
           ),
         ).toBeVisible();
@@ -185,7 +185,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
       if (mode === "disabled")
         await expect(
           page.getByText(
-            "Lamp notes: This data has no plugin to receive it. Receiving plugins are disabled.",
+            "Lamp notes: Some world data was not used because no plugin takes it. Receiving plugins are turned off.",
             { exact: true },
           ),
         ).toHaveCount(1);
@@ -254,7 +254,7 @@ for (const mode of ["ambiguous", "disabled"] as const) {
       if (mode === "disabled")
         await expect(
           page.getByTestId("notice-world-data:receiver-excluded"),
-        ).toContainText("Receiving plugins are disabled.");
+        ).toContainText("Receiving plugins are turned off.");
     } finally {
       await page.evaluate(async (id) => {
         const servicePath = "/src/services/data-service.ts";
