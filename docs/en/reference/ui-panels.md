@@ -72,6 +72,22 @@ How world authors and plugin authors get content to appear here:
 
 To the right of the toolbar are the "Text / Stage" switch, settings, the "More" menu, and the right-side panel toggle. Detailed view, raw view, Studio Config, back to the config page, and Debug Traces are inside "More".
 
+## Notice center
+
+Everything the app tells the player goes through one channel with three looks. Nothing full-width sits between the session header and the story, so the backdrop runs from the header down to the composer.
+
+| Look        | When                                                                                                                                                              | Where                                               | When it goes                                                                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Toast       | A one-shot result: exported, save failed, network error                                                                                                           | Top-right, under the app bar and the session header | Fades after 3 s (errors 6 s); hover or keyboard focus pauses it; at most 3 at once, older ones fall into the bell history          |
+| Card        | Something the player has to handle: a plugin waiting for approval, a failed preparation, an interrupted turn, problems with world data, a theme that did not load | The same place, stacked above toasts                | Never times out; removed automatically when the problem is gone. The × only collapses it: it stays in the bell and can be restored |
+| Status chip | Something in progress: auto-advance 2/5                                                                                                                           | A small chip in the session header                  | Gone when the state ends; selecting it runs its action (for example, stop advancing)                                               |
+
+- **The bell.** The bell on the right of the app bar counts cards that are still open, collapsed ones included. Its popover lists those cards first (select one to restore and focus it); a card that changed while collapsed rings the number. Below is the last 50 history entries per scope ("This game" or "All"): toasts, resolved cards, and background failures that only go to history, each with a time and copyable detail.
+- **Background failures that only reach the bell.** Failed context compaction, failed post-commit fan-out, aborted hooks, dropped sub-agent writes, gateway and fetch failures, and failed commands do not pop up. They leave one plain line in the bell history with the raw payload as copyable detail. With "Developer view" on in Settings they also show as toasts.
+- **What stays elsewhere.** Notices that belong to one turn stay in the story: the error box in a turn, the execution timeline, the "N actions from this turn did not take effect" footer (it no longer also pops up a toast), the line of feedback under the composer. Notices that belong to the settings dialog stay in the dialog, because a modal dialog blocks anything outside it. Confirmation dialogs and the overlays for "the whole app is unavailable" are not part of the notice center.
+- **Host controls.** The notice area carries `data-covel-host-controls`, so plugin themes cannot restyle it. Its top edge follows `--covel-notice-top`, which tracks the height of the app bar and the session header; on a phone it spans the width with a 16px gutter.
+- **Who publishes.** Each feature in a session registers its own notice while its condition holds and withdraws it when the condition ends. `emitToast(kind, message, detail?)` still works and publishes a one-shot toast.
+
 ## Navigation Across Pages
 
 Another page can jump into a session with a parameter and ask for a panel to be opened:

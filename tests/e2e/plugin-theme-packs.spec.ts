@@ -119,11 +119,21 @@ async function select(page: Page) {
   await picker.selectOption((await option.getAttribute("value")) ?? "");
   await page.getByRole("button", { name: "应用", exact: true }).click();
   await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(1);
-  await expect(page.getByTestId("session-recovery-controls")).toBeVisible();
   // Applying can blur the disabled Apply button and close its menu. Escape
   // leaves it closed in either state; another toggle could reopen it.
   await page.keyboard.press("Escape");
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
+}
+/** The reset to the default look lives in the theme menu. */
+async function themeReset(page: Page) {
+  const trigger = page.getByRole("button", { name: "会话主题", exact: true });
+  if ((await trigger.getAttribute("aria-expanded")) !== "true")
+    await trigger.click();
+  return page.getByRole("button", { name: "使用默认外观", exact: true });
+}
+async function resetTheme(page: Page) {
+  await (await themeReset(page)).click();
+  await page.keyboard.press("Escape");
 }
 async function themeIdentity(host: Host, sessionId = host.sessionId) {
   const body = await api(host, `/api/ui-specs?sessionId=${sessionId}`).then(
@@ -510,10 +520,7 @@ test("installed community palette, texture and session layout survive hydration 
     expect((await fetch(`${host.baseUrl}${texture}`)).status).toBe(404);
     await select(page);
     await expect(story).toHaveCSS("color", "rgb(237, 216, 187)");
-    const reset = page.getByRole("button", {
-      name: "使用默认外观",
-      exact: true,
-    });
+    const reset = await themeReset(page);
     await hit(reset);
     await reset.focus();
     expect(
@@ -682,11 +689,8 @@ for (const width of [360, 1440])
       await expect(page.getByTestId("plugin-view-bar")).toContainText(
         "主持人控制台",
       );
-      await hit(
-        page
-          .getByTestId("session-recovery-controls")
-          .getByRole("button", { name: "使用默认外观", exact: true }),
-      );
+      await hit(await themeReset(page));
+      await page.keyboard.press("Escape");
       expect(
         await page
           .getByTestId("plugin-view-bar")
@@ -704,13 +708,12 @@ for (const width of [360, 1440])
       await expect(
         currentParagraph.locator('[data-covel-theme-part="dialogue"]'),
       ).toHaveCSS("color", "rgb(245, 234, 210)");
-      await page.getByRole("button", { name: "全屏舞台", exact: true }).click();
-      const reset = page.getByRole("button", {
-        name: "使用默认外观",
-        exact: true,
-      });
+      // The header, and with it the theme menu, is the way back to the
+      // default look; it is hidden while the stage is immersive.
+      const reset = await themeReset(page);
       await hit(reset);
       await reset.click();
+      await page.keyboard.press("Escape");
       await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
         0,
       );
@@ -844,12 +847,12 @@ for (const width of [360, 1440])
       await page.getByTestId("stage-immersive-toggle").click();
       await expectSandboxStory(input, "Public reading theme story.");
       await hit(back);
-      const reset = page.getByRole("button", {
-        name: "使用默认外观",
-        exact: true,
-      });
+      // The header with the theme menu returns when the stage is left.
+      await page.getByTestId("stage-immersive-toggle").click();
+      const reset = await themeReset(page);
       await hit(reset);
       await reset.click();
+      await page.keyboard.press("Escape");
       await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
         0,
       );
@@ -907,10 +910,7 @@ test("malicious uploaded styles are diagnosed atomically while an accepted pack 
         message: "Theme retry must enter the held discovery route",
       })
       .toBe(true);
-    await page
-      .getByTestId("session-recovery-controls")
-      .getByRole("button", { name: "使用默认外观", exact: true })
-      .click();
+    await resetTheme(page);
     const refreshed = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === "/api/ui-specs" && response.ok(),
@@ -1045,10 +1045,7 @@ test("appearance changes make no action requests during a running turn and disco
       if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method()))
         writes.push(new URL(request.url()).pathname);
     });
-    await page
-      .getByTestId("session-recovery-controls")
-      .getByRole("button", { name: "使用默认外观", exact: true })
-      .click();
+    await resetTheme(page);
     await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(0);
     await select(page);
     await hit(stop);
@@ -1138,9 +1135,6 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       if (new URL(request.url()).pathname === "/api/actions")
         actions.push(request.postDataJSON());
     });
-    const reset = page
-      .getByTestId("session-recovery-controls")
-      .getByRole("button", { name: "使用默认外观", exact: true });
     for (let turn = 0; turn < 2; turn++) {
       if (turn === 1) fixture.allowChange();
       await sandbox
@@ -1186,8 +1180,10 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       await hit(stop);
       const before = await controlStyle(stop);
       const writesBefore = [...writes];
+      const reset = await themeReset(page);
       await hit(reset);
       await reset.click();
+      await page.keyboard.press("Escape");
       await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
         0,
       );
@@ -1259,16 +1255,10 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       if (turn === 0) {
         expect(values).toEqual([]);
         const noticeText = "本回合有 1 个操作没有生效。";
-        const toast = page.getByRole("status").filter({ hasText: noticeText });
-        await expect(toast).toBeVisible();
+        // The story footer is the one persistent line; no toast repeats it.
         await expect(
-          toast.getByText(noticeText, { exact: true }),
-        ).toBeVisible();
-        expect(
-          await toast.evaluate((element) =>
-            element.closest("[data-covel-theme-part]"),
-          ),
-        ).toBeNull();
+          page.locator("[data-notice-host]").getByText(noticeText),
+        ).toHaveCount(0);
         const footer = page.getByTestId("story-operation-failure-notice");
         const checkFooter = async () => {
           await expect(footer).toHaveCount(1);
@@ -1286,7 +1276,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
         };
         await checkFooter();
         const before = await controlStyle(footer);
-        await reset.click();
+        await resetTheme(page);
         await checkFooter();
         await expect(footer).toHaveCSS("color", before.color);
         await expect(footer).toHaveCSS("font", before.font);
@@ -1306,7 +1296,7 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       await expect(
         page.getByTestId("story-operation-failure-notice"),
       ).toBeVisible();
-      await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(
+      await expect(page.getByTestId("notice-execution-recovery")).toHaveCount(
         0,
       );
       await expect(

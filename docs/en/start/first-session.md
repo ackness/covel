@@ -81,7 +81,7 @@ To see what each plugin did in a turn, expand the turn's execution details. The 
 
 ### While the story advances automatically
 
-When a story requests another round, both chat and stage show “Advancing” with the current round and limit. Choose “Stop advancement” to stop further rounds; previously saved stories remain. You can also send new speech, a host action or a spectator advance: it stops the old advancement and then submits a new input. During an ordinary turn, speech still interjects into that turn.
+When a story requests another round, the session header shows an “Advancing 2 / 5” chip with the current round and limit (over the immersive stage it floats at the stage's top left). Select the chip to stop further rounds; previously saved stories remain. You can also send new speech, a host action or a spectator advance: it stops the old advancement and then submits a new input. During an ordinary turn, speech still interjects into that turn.
 
 Set “Automatic rounds” to 0 in Orchestration and save to turn it off. “Applies to your next input” means saving a setting does not change the current advancement. See [session settings](../reference/api.md#auto-advance) for the range. Each round can call a model; closing the page or disconnecting does not stop server advancement, so use Stop. Refresh restores current progress without restarting a finished chain.
 

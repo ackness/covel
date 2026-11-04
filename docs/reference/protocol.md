@@ -697,7 +697,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 | `operation.failed`              | 已提交回合有操作未生效 | `{sessionId,turnId,count,messages: readonly {messageId,count}[]}`                                                                       |
 | `context.compacted`             | 压缩摘要保存           | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
-`operation.failed.messages` 是必填的安全回执列表，只含已保存提示的故事消息 ID 和正的安全整数计数。事件在事务成功、对应的 `narrative.completed` 发布之后发送，每次已提交执行仍只发一次并显示一个即时通知；直接 action 路由规则和 `forwardToActionStream: false` 不变。`count` 保持整次执行的失败操作总数，辅助单元失败或没有公开故事时 `messages` 可以为空，各消息计数之和也可以小于总数。自动推进每轮用自己的 turn 和消息回执。
+`operation.failed.messages` 是必填的安全回执列表，只含已保存提示的故事消息 ID 和正的安全整数计数。事件在事务成功、对应的 `narrative.completed` 发布之后发送，每次已提交执行仍只发一次，客户端只在故事下方显示持续的页脚，不再同时弹出通知；直接 action 路由规则和 `forwardToActionStream: false` 不变。`count` 保持整次执行的失败操作总数，辅助单元失败或没有公开故事时 `messages` 可以为空，各消息计数之和也可以小于总数。自动推进每轮用自己的 turn 和消息回执。
 
 客户端按会话、turn 和持久消息 ID 设置或替换计数；重复回执不累加，不猜测最新故事。未知或未加载的 ID 等普通历史恢复。丢失事件时通过[保存的消息字段](./api.md#get-apisessionsidmessages)恢复提示，不重跑操作。非 action 提交沿用会话视图和订阅恢复，不重开流。服务端和 Web 必须一起更新，不接收旧事件形状。
 

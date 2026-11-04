@@ -108,4 +108,4 @@ Orchestration groups Turn policy, distinct characters, sub-agent calls and Autom
 
 Refreshing the plugin list preserves unsaved drafts, errors and saves in progress. Untouched fields update to the latest saved values; earlier reads cannot overwrite a later confirmed save.
 
-Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view retains progress and Stop advancement; new input also ends the old automatic chain.
+Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view keeps the progress chip in the header, and selecting it stops the advancement; new input also ends the old automatic chain.

@@ -130,7 +130,7 @@ A registered setting without a purpose-built pane renders through the generic wi
 - **Destructive actions.** Deleting a provider or model configuration, uninstalling a plugin, deleting a theme and resetting all settings require `requestConfirm`. Provider deletion clears its key and model role bindings; model configuration deletion clears only its bindings, keeping the key.
 - **Read-only mode.** When settings have not loaded successfully, only controls that write settings are disabled. Viewing, exporting and downloading backups remain available; other maintenance operations keep their own permission checks. Exports contain currently readable settings and may be incomplete; they are not the original backups. Including keys still requires explicit opt-in.
 
-**Toasts.** Toasts render under `document.body`, above every dialog. A click on a toast does not close the dialog under it.
+**Toasts.** Toasts and cards come from the notice host (see [Notice center](./ui-panels.md#notice-center)), which renders under `document.body`, above every dialog. A click on one does not close the dialog under it.
 
 **The Configuration files page.** It edits the raw configuration as text: the settings of this device (JSON, without secrets), and the files the server offers — `llm.toml`, and `config.toml` in desktop mode (see `/api/config/raw` in the [API reference](./api.md)). When the settings JSON is saved:
 

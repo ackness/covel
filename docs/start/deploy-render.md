@@ -31,7 +31,7 @@
    Server running at http://0.0.0.0:10000
    ```
 
-4. 打开服务地址（`https://<服务名>.onrender.com`）。页面顶部应当出现提示“这是 Covel 的公开体验站”。
+4. 打开服务地址（`https://<服务名>.onrender.com`）。页面右上角应当出现提示卡片“这是 Covel 的公开体验站”。
 5. 检查健康接口：
 
    ```bash
@@ -84,7 +84,7 @@
 | Render 提示 “No open ports detected”             | 确认 `COVEL_BIND_HOST=0.0.0.0`、`SERVER_PORT=10000` 没有被改掉                                           |
 | 部署后实例因为内存超限反复重启                   | 看日志里重启前在做什么。免费实例放不下时，把服务换成付费实例                                             |
 | 启动日志提示 `COVEL_ALLOWED_HOSTS has no effect` | 删掉这个变量                                                                                             |
-| 页面顶部没有体验站提示                           | 用上面的 `curl` 检查：`deployment.form` 应为 `browser-private`，`storage.data.frontendMode` 应为 `local` |
+| 右上角没有体验站提示卡片                         | 用上面的 `curl` 检查：`deployment.form` 应为 `browser-private`，`storage.data.frontendMode` 应为 `local` |
 | 提示里没有源代码链接                             | 设置 `COVEL_SOURCE_REPOSITORY`，值必须是 `https://` 地址                                                 |
 | 提示里的源代码链接没有版本号                     | Render 没有提供 `RENDER_GIT_COMMIT` 时，用 `COVEL_SOURCE_COMMIT` 写上提交号                              |
 | 玩家偶尔收到 `429`                               | 共用的限流额度用完了，过一分钟再试                                                                       |

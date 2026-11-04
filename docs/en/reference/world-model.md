@@ -241,7 +241,7 @@ Rules:
 - When no plugin is responsible for dimensions, or the dimensions have not been initialized yet, the snapshot can be empty. When no plugin responsible for dimensions is turned on as a session is created, the dimensions the world declares are not imported and the session starts as usual; see the [session API](./api.md#post-apisessions). The kernel does not store dimensions itself.
 - When the plugin responsible for dimensions is not running (it is not installed, failed to load, or misses a dependency), the game goes on and the dimensions pause:
   - The story reads the saved values. No plugin can write the dimensions, and no settlement obligation is recorded.
-  - The session view returns the saved values as usual, and the game screen tells the player the dimensions are paused.
+  - The session view returns the saved values as usual, and the game screen tells the player with a card that the world state is paused.
   - Once that plugin is back, the dimensions change again. Another plugin responsible for dimensions cannot take over: while it is on, turns are refused.
   - It cannot fall back to the world package's initial values, and it cannot pretend the snapshot is empty.
 - When the plugin responsible for dimensions runs but the read fails, this must be an error.

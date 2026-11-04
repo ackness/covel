@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Palette } from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import type { PluginThemeSession } from "@/theme-system/plugin-themes.js";
+import { Button } from "@/components/ui/button.js";
 import { HeaderMenu } from "./game-view/game-view-header.js";
 
 export function SessionThemeSettings({
@@ -134,13 +135,15 @@ export function SessionThemeSettings({
         {(effective || state?.selected || state?.error || state?.saving) && (
           // Always enabled: going back to the default look must stay possible
           // while a theme is loading, saving or failing.
-          <button
+          <Button
             type="button"
-            className="ui-menu-item w-full rounded border p-2 text-sm"
+            variant="outline"
+            size="sm"
+            className="w-full"
             onClick={() => void source?.select(null)}
           >
             {t("session.theme.default")}
-          </button>
+          </Button>
         )}
         <button type="button" className="text-xs underline" onClick={onReload}>
           {t("common.retry")}

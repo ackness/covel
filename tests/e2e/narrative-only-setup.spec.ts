@@ -104,7 +104,7 @@ for (const explicitSetup of [false, true]) {
         await expect(page).toHaveURL(/sid=/);
         await expect(composerInput(page)).toBeVisible();
         await waitForTurnIdle(page);
-        await expect(page.getByTestId("setup-progress-notice")).toHaveCount(0);
+        await expect(page.getByTestId("notice-setup-progress")).toHaveCount(0);
         const readSession = async () =>
           (
             await page.request.get(`/api/sessions/${sessionId}`, { headers })
@@ -128,10 +128,10 @@ for (const explicitSetup of [false, true]) {
           expect(action.ok()).toBe(true);
           await action.text();
           await waitForTurnIdle(page);
-          await expect(page.getByTestId("setup-progress-notice")).toContainText(
+          await expect(page.getByTestId("notice-setup-progress")).toContainText(
             "A setup step is still waiting",
           );
-          await expect(page.getByTestId("setup-progress-notice")).toContainText(
+          await expect(page.getByTestId("notice-setup-progress")).toContainText(
             "Tabletop Rules",
           );
           await expect(
@@ -190,7 +190,7 @@ for (const explicitSetup of [false, true]) {
         await expect(
           page.getByText("I lift the lantern.", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByTestId("setup-progress-notice")).toHaveCount(0);
+        await expect(page.getByTestId("notice-setup-progress")).toHaveCount(0);
       } finally {
         release();
         if (sessionId)

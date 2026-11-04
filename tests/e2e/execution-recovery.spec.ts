@@ -30,7 +30,7 @@ test("a stopped turn stays uncommitted after reload and retries only on request"
   try {
     await page.goto(`/session?sid=${fixture.id}`);
     await page.reload();
-    const notice = page.getByTestId("execution-recovery-notice");
+    const notice = page.getByTestId("notice-execution-recovery");
     await expect(notice).toContainText("已停止，本轮未提交");
     await expect(notice).not.toContainText("执行失败");
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
@@ -55,7 +55,7 @@ test("refresh waits for the existing running turn and restores its completed sto
   const fixture = await createRecoveryFixture(page, "running");
   try {
     await page.goto(`/session?sid=${fixture.id}`);
-    const notice = page.getByTestId("execution-recovery-notice");
+    const notice = page.getByTestId("notice-execution-recovery");
     await expect(notice).toContainText("上一回合仍在执行");
     await page.reload();
     await expect(notice).toHaveAttribute("role", "status");
@@ -89,8 +89,8 @@ test("refreshing an interrupted turn only retries after explicit player confirma
   const fixture = await createRecoveryFixture(page, "interrupted");
   try {
     await page.goto(`/session?sid=${fixture.id}`);
-    const notice = page.getByTestId("execution-recovery-notice");
-    await expect(notice).toContainText("此回合已中断");
+    const notice = page.getByTestId("notice-execution-recovery");
+    await expect(notice).toContainText("上一回合没有完成");
     await page.reload();
     await expect(notice).toHaveAttribute("role", "alert");
     await expect(notice).toContainText("只有点击重试，才会发起新的尝试");
@@ -184,7 +184,7 @@ test("older orphaned execution stays before the latest story while an optional t
       `[data-row-kind="execution"][data-turn-id="${latestTurnId}"]`,
     );
     await expect(page.locator(".ui-narrative")).toContainText(recoveredStory);
-    await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(0);
+    await expect(page.getByTestId("notice-execution-recovery")).toHaveCount(0);
     await expect(historical).toHaveAttribute("data-turn-current", "false");
     await expect(current).toHaveAttribute("data-turn-current", "true");
     const fold = historical.getByRole("button").first();
@@ -284,9 +284,9 @@ test("a new running turn keeps historical interruption folded and shows its own 
     const current = page.locator(
       `[data-row-kind="execution"][data-turn-id="${latestTurnId}"]`,
     );
-    const notice = page.getByTestId("execution-recovery-notice");
+    const notice = page.getByTestId("notice-execution-recovery");
     await expect(notice).toContainText("上一回合仍在执行");
-    await expect(notice).not.toContainText("此回合已中断");
+    await expect(notice).not.toContainText("上一回合没有完成");
     await expect(notice.getByRole("button", { name: /重试/ })).toHaveCount(0);
     await expect(historical).toHaveAttribute("data-turn-current", "false");
     await expect(historical.getByRole("button").first()).toHaveAttribute(
