@@ -4,12 +4,14 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { getNoticeSnapshot, registerNotice } from "@/lib/notice-center.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { NoticeHost } from "../notice-host.js";
+import { NoticeHost, useNoticeAnchor } from "../notice-host.js";
 
 beforeEach(async () => {
   await i18n.changeLanguage("en-US");
@@ -71,11 +73,22 @@ it("stacks cards above toasts, never times a card out, and collapses it with the
       actions: [{ label: "Review", onClick: vi.fn() }],
     });
   });
-  const host = document.querySelector("[data-notice-host]")!;
-  expect(host.hasAttribute("data-covel-host-controls")).toBe(true);
+  const hosts = Array.from(document.querySelectorAll("[data-notice-host]"));
+  for (const host of hosts)
+    expect(host.hasAttribute("data-covel-host-controls")).toBe(true);
   expect(
-    Array.from(host.children).map((el) => el.getAttribute("data-notice-kind")),
+    Array.from(document.querySelectorAll("[data-notice-kind]")).map((el) =>
+      el.getAttribute("data-notice-kind"),
+    ),
   ).toEqual(["card", "toast"]);
+  // Cards render inside the app, under the session header menus (z 40) and
+  // dialogs; brief toasts go to <body> and sit above everything.
+  const cards = document.querySelector("[data-notice-cards]")!;
+  const toasts = document.querySelector("[data-notice-toasts]")!;
+  expect(cards.className).toContain("z-30");
+  expect(cards.parentElement).not.toBe(document.body);
+  expect(toasts.className).toContain("z-100");
+  expect(toasts.parentElement).toBe(document.body);
   act(() => vi.advanceTimersByTime(60_000));
   expect(screen.getByText("A card")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Review" })).toBeTruthy();
@@ -117,18 +130,37 @@ it("renders a rich card body supplied by the producer", () => {
   expect(screen.getByRole("alert")).toBeTruthy();
 });
 
-it("sets the top offset variable from the header area", () => {
-  const header = document.createElement("header");
-  header.className = "ui-app-header";
-  header.getBoundingClientRect = () =>
-    ({ top: 0, bottom: 48, height: 48 }) as DOMRect;
-  document.body.append(header);
-  try {
-    render(<NoticeHost />);
-    expect(
-      document.documentElement.style.getPropertyValue("--covel-notice-top"),
-    ).toBe("56px");
-  } finally {
-    header.remove();
-  }
+function Anchor({ bottom }: { bottom: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useNoticeAnchor(ref);
+  return (
+    <div
+      ref={(element) => {
+        ref.current = element;
+        if (element)
+          element.getBoundingClientRect = () =>
+            ({ top: 0, bottom, height: bottom }) as DOMRect;
+      }}
+    />
+  );
+}
+
+it("keeps notices under the lowest registered top chrome", async () => {
+  const offset = () =>
+    document.documentElement.style.getPropertyValue("--covel-notice-top");
+  const view = render(
+    <>
+      <NoticeHost />
+      <Anchor bottom={48} />
+      <Anchor bottom={96} />
+    </>,
+  );
+  await waitFor(() => expect(offset()).toBe("104px"));
+  view.rerender(
+    <>
+      <NoticeHost />
+      <Anchor bottom={48} />
+    </>,
+  );
+  await waitFor(() => expect(offset()).toBe("56px"));
 });

@@ -2,6 +2,7 @@ import type { SessionBridgeGrant } from "@covel/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldOff } from "lucide-react";
+import { useNoticeAnchor } from "@/components/ui/notice-host.js";
 import { Button } from "@/components/ui/button.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -46,6 +47,8 @@ export function PluginViewHost({
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const retire = useRef<(() => void) | undefined>(undefined);
+  const barRef = useRef<HTMLDivElement>(null);
+  useNoticeAnchor(barRef);
   const fallback = () => {
     retire.current?.();
     onFallback();
@@ -62,6 +65,7 @@ export function PluginViewHost({
       aria-label={entry.label}
     >
       <div
+        ref={barRef}
         className="relative z-10 flex shrink-0 flex-wrap items-center gap-2 border-b bg-background px-3 py-2 text-xs"
         data-testid="plugin-view-bar"
         data-covel-host-controls=""

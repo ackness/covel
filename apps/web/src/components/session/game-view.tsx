@@ -827,7 +827,7 @@ export function GameView({
             </div>
           )}
           {!(immersive && viewMode === "stage") && (
-            // Host menus must open above both surface controls and notices.
+            // Host menus must open above the notice cards (z 30).
             <div
               data-testid="session-header"
               className="relative animate-in fade-in-0 duration-200"

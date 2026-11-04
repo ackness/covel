@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { NoticeHost } from "@/components/ui/notice-host";
+import { NoticeHost, useNoticeAnchor } from "@/components/ui/notice-host";
 import { NoticeBell } from "@/components/notice-bell";
 import { ConfirmHost } from "@/components/ui/confirm-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
@@ -87,6 +87,7 @@ function RootLayout() {
   const isDebugRoute = location.pathname.startsWith("/debug");
   const railNav = layoutNav === "rail";
   const headerRef = useRef<HTMLElement>(null);
+  useNoticeAnchor(headerRef);
   useWindowControlsColors(headerRef, railNav);
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)

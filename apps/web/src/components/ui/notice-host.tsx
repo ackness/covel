@@ -4,7 +4,7 @@
  * condition ends; toasts below them fade out.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -16,11 +16,31 @@ import {
 import { NoticeView } from "./notice-parts.js";
 
 const DEFAULT_TOP = "4rem";
-/** Elements whose bottom edge the notices sit under. */
-const HEADER_SELECTOR = ".ui-app-header, .ui-session-header";
 const GAP_PX = 8;
 
-/** Keep `--covel-notice-top` at the bottom edge of the header area. */
+// Host chrome along the top of the page (app bar, session header, plugin
+// page bar). Notices sit under the lowest one, so they never cover it.
+const anchors = new Set<Element>();
+const anchorListeners = new Set<() => void>();
+function anchorsChanged(): void {
+  for (const listener of [...anchorListeners]) listener();
+}
+
+/** Mark an element as top chrome that notices must stay below. */
+export function useNoticeAnchor(ref: RefObject<Element | null>): void {
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    anchors.add(element);
+    anchorsChanged();
+    return () => {
+      anchors.delete(element);
+      anchorsChanged();
+    };
+  }, [ref]);
+}
+
+/** Keep `--covel-notice-top` at the bottom edge of the lowest anchor. */
 function useNoticeTop(): void {
   useEffect(() => {
     let frame = 0;
@@ -32,7 +52,7 @@ function useNoticeTop(): void {
     const measure = () => {
       frame = 0;
       let bottom = 0;
-      for (const element of document.querySelectorAll(HEADER_SELECTOR)) {
+      for (const element of anchors) {
         const rect = element.getBoundingClientRect();
         if (rect.height > 0) bottom = Math.max(bottom, rect.bottom);
         if (resizeObserver && !observed.has(element)) {
@@ -41,7 +61,7 @@ function useNoticeTop(): void {
         }
       }
       for (const element of observed) {
-        if (!element.isConnected) {
+        if (!anchors.has(element)) {
           resizeObserver?.unobserve(element);
           observed.delete(element);
         }
@@ -59,21 +79,35 @@ function useNoticeTop(): void {
       frame = requestAnimationFrame(measure);
     }
     measure();
-    // Headers mount and unmount with routes; re-measure when the page changes.
-    const mutations =
-      typeof MutationObserver === "undefined"
-        ? null
-        : new MutationObserver(schedule);
-    mutations?.observe(document.body, { childList: true, subtree: true });
+    anchorListeners.add(schedule);
     window.addEventListener("resize", schedule);
     return () => {
       if (frame) cancelAnimationFrame(frame);
-      mutations?.disconnect();
+      anchorListeners.delete(schedule);
       resizeObserver?.disconnect();
       window.removeEventListener("resize", schedule);
       document.documentElement.style.removeProperty("--covel-notice-top");
     };
   }, []);
+}
+
+/** Height of the card stack, so toasts start right under it. */
+function useStackHeight(ref: RefObject<HTMLElement | null>, active: boolean) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!active || !element) {
+      setHeight(0);
+      return;
+    }
+    const update = () => setHeight(element.getBoundingClientRect().height);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref, active]);
+  return height;
 }
 
 export function NoticeHost() {
@@ -150,49 +184,81 @@ export function NoticeHost() {
     );
   };
 
+  const stackRef = useRef<HTMLDivElement>(null);
+  const stackHeight = useStackHeight(stackRef, cards.length > 0);
+
   if (toasts.length === 0 && cards.length === 0) return null;
 
-  // Rendered under `document.body`: the app root is its own stacking context,
-  // so a notice inside it would sit under every dialog, whatever its z-index.
-  return createPortal(
-    <div
-      data-notice-host
-      data-covel-host-controls=""
-      aria-live="polite"
-      aria-atomic="false"
-      style={{ top: `var(--covel-notice-top, ${DEFAULT_TOP})` }}
-      className="pointer-events-none fixed right-4 z-100 flex max-h-[calc(100dvh-5rem)] w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 overflow-y-auto max-sm:left-4 max-sm:w-auto"
-    >
-      {cards.map(({ notice }) => (
-        <NoticeView
-          key={notice.key}
-          notice={notice}
-          closeLabel={
-            notice.onDismiss
-              ? t("toast.dismiss", "Dismiss")
-              : t("notice.collapse")
-          }
-          onClose={() =>
-            notice.onDismiss ? notice.onDismiss() : dismissNotice(notice.key)
-          }
-        />
-      ))}
-      {toasts.map((toast) => (
-        <NoticeView
-          key={toast.id}
-          notice={toast}
-          closeLabel={t("toast.dismiss", "Dismiss")}
-          onClose={() => dismissToast(toast.id)}
-          onMouseEnter={() => pause(toast.id, "hover")}
-          onMouseLeave={() => resume(toast.id, "hover")}
-          onFocus={() => pause(toast.id, "focus")}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget))
-              resume(toast.id, "focus");
-          }}
-        />
-      ))}
-    </div>,
-    document.body,
+  const top = `var(--covel-notice-top, ${DEFAULT_TOP})`;
+  const column =
+    "pointer-events-none fixed right-4 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 max-sm:left-4 max-sm:w-auto";
+  // Every child of <body> is its own stacking context at z-index 1 (see
+  // index.css), the app root included. Cards stay until resolved, so they
+  // render inside the app, under the session header (z 40) with its menus
+  // and under popovers and dialogs. Toasts are brief results, often of an
+  // action taken inside a dialog, so they go to <body> and sit above it all.
+  return (
+    <>
+      {cards.length > 0 && (
+        <div
+          ref={stackRef}
+          data-notice-host=""
+          data-notice-cards=""
+          data-covel-host-controls=""
+          aria-live="polite"
+          style={{ top }}
+          className={`${column} z-30 max-h-[calc(100dvh-8rem)] overflow-y-auto`}
+        >
+          {cards.map(({ notice }) => (
+            <NoticeView
+              key={notice.key}
+              notice={notice}
+              closeLabel={
+                notice.onDismiss
+                  ? t("toast.dismiss", "Dismiss")
+                  : t("notice.collapse")
+              }
+              onClose={() =>
+                notice.onDismiss
+                  ? notice.onDismiss()
+                  : dismissNotice(notice.key)
+              }
+            />
+          ))}
+        </div>
+      )}
+      {toasts.length > 0 &&
+        createPortal(
+          <div
+            data-notice-host=""
+            data-notice-toasts=""
+            data-covel-host-controls=""
+            aria-live="polite"
+            style={{
+              top: stackHeight
+                ? `calc(${top} + ${Math.round(stackHeight + GAP_PX)}px)`
+                : top,
+            }}
+            className={`${column} z-100`}
+          >
+            {toasts.map((toast) => (
+              <NoticeView
+                key={toast.id}
+                notice={toast}
+                closeLabel={t("toast.dismiss", "Dismiss")}
+                onClose={() => dismissToast(toast.id)}
+                onMouseEnter={() => pause(toast.id, "hover")}
+                onMouseLeave={() => resume(toast.id, "hover")}
+                onFocus={() => pause(toast.id, "focus")}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget))
+                    resume(toast.id, "focus");
+                }}
+              />
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

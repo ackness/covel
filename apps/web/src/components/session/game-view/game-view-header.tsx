@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
+import { useNoticeAnchor } from "@/components/ui/notice-host.js";
 import {
   Bug,
   ChevronLeft,
@@ -133,10 +134,15 @@ export function GameViewHeader({
       ) &&
       (sessionPhase !== "setup" ||
         ["generating", "updating"].includes(executionState)));
+  const headerRef = useRef<HTMLDivElement>(null);
+  useNoticeAnchor(headerRef);
   const authorView = viewMode === "detailed" || viewMode === "raw";
 
   return (
-    <div className="ui-session-header ui-panel-header ui-drag-region relative h-auto min-h-(--panel-header-height) py-1 px-2 md:px-3 flex justify-between items-center gap-3 z-10 flex-wrap sm:flex-nowrap">
+    <div
+      ref={headerRef}
+      className="ui-session-header ui-panel-header ui-drag-region relative h-auto min-h-(--panel-header-height) py-1 px-2 md:px-3 flex justify-between items-center gap-3 z-10 flex-wrap sm:flex-nowrap"
+    >
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <Button
           variant="ghost"
