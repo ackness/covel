@@ -9,6 +9,8 @@ Entries are in English alphabetical order. Each entry first says what the term i
 Each English term has only one Chinese term. The Chinese docs, the UI text, and the Chinese prompts (`*.zh.md`) all use the terms in this table.
 
 <!-- prettier-ignore -->
+| Developer mode | Developer mode | The Settings switch (`ui.developerView`). Only when it is on does the app show what authors and troubleshooting need: the Debugger entry, the detailed and raw views, debug traces, the Database tab and storage line, raw IDs, plugin step counts and the raw-data box in the Waiting for you dialog. |
+| Read / Stage | Read / Stage | The two built-in views of the session screen: Read is the page-by-page text view, Stage is the picture with background and portraits. Formerly Text, Parsed view and Stage view. |
 | Term | Chinese | Notes |
 | --- | --- | --- |
 | Action | 行动 | One item of a player's submission: from which seat, as which character, what kind of thing (`submit_actions`). |
@@ -57,10 +59,12 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Story draft | 故事草稿 | The part of a story runtime's output written before the commit, shown for display only; not output and never stored. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
+| This game | This game | The game being played. The menu's This game's settings… manages its saves, plugins and advanced options. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
 | Trigger mode | 触发模式 | How a runtime is triggered: `auto`, `manual` or `event`. |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
+| Waiting for you | Waiting for you | A suspended execution (`suspend`) waiting for the player's answer. The toolbar chip Waiting for you · N opens the dialog of the same name. Formerly Suspended executions. |
 | World | 世界 | A world's installation package is called a "world package". |
 | Write service | 写服务 | A service with `access: write` that changes its provider's own data for the caller; its writes are staged as one **operation**. See [Write services](./plugin-extensions.md#write-services). |
 

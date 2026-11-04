@@ -13,8 +13,7 @@ import { LlmKeysPane } from "../LlmKeysPane.js";
 
 const sessionMocks = vi.hoisted(() => ({
   llmConfig: undefined as
-    | { configured?: boolean; envKeyOverrides?: string[] }
-    | undefined,
+    { configured?: boolean; envKeyOverrides?: string[] } | undefined,
   desktop: false,
 }));
 

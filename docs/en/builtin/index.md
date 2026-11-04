@@ -143,7 +143,7 @@ Scene Stage and Soundtrack story-cue selectors adopt zero-budget [presentation f
 
 Scene Stage dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while cast and direction providers explicitly opt into host-owned departure fades; see [Stage and sound](./stage.md).
 
-Scene Stage also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly from the session theme menu and recoverable through Use default appearance.
+Scene Stage also offers an initially-off [reading appearance](./stage.md#optional-reading-appearance), selected explicitly under This game's theme in the Menu and recoverable through Restore default appearance.
 
 When extending these bundled agents, follow the [output submission contract](../reference/plugins.md#agent-output-submission). Function runtimes continue returning their business value directly.
 

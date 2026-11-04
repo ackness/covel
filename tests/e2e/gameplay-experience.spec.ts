@@ -4,6 +4,7 @@ import {
   selectWorldByText,
   startGame,
   useServerWorlds,
+  chooseColorScheme,
 } from "./helpers/player.js";
 
 test.use({ viewport: { width: 1512, height: 955 } });
@@ -135,7 +136,7 @@ test("story remains legible in both themes and failed updates stay visible", asy
       );
       expect(reading.paragraphGap).toBeGreaterThanOrEqual(16);
       if (index === 0) {
-        await page.getByRole("button", { name: /深色模式|Dark mode/i }).click();
+        await chooseColorScheme(page, reading.dark ? "light" : "dark");
         await expect
           .poll(() =>
             page
@@ -183,8 +184,9 @@ test("settings and context rails survive desktop-mobile-desktop transitions", as
   try {
     await page
       .getByTestId("center-panel")
-      .getByRole("button", { name: /^设置$|^Settings$/ })
+      .getByRole("button", { name: /^菜单$|^Menu$/ })
       .click();
+    await page.getByRole("button", { name: /^设置…$|^Settings…$/ }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     for (const width of [900, 390, 1512, 390, 900, 1512]) {
       await page.setViewportSize({ width, height: width < 768 ? 844 : 955 });
@@ -195,12 +197,8 @@ test("settings and context rails survive desktop-mobile-desktop transitions", as
       .getByRole("button", { name: /^关闭$|^Close$/ })
       .click();
     await expect(page.getByTestId("game-composer-input")).toBeVisible();
-    await page
-      .getByRole("button", { name: /切换状态与世界上下文|Toggle context/i })
-      .click();
-    await page
-      .getByRole("button", { name: /切换状态与世界上下文|Toggle context/i })
-      .click();
+    await page.getByRole("button", { name: /侧栏|Side panel/i }).click();
+    await page.getByRole("button", { name: /侧栏|Side panel/i }).click();
     await page
       .getByTestId("game-composer-input")
       .fill("Keep the evidence intact");

@@ -164,7 +164,7 @@ test("package webview receives runtime outcomes and sanitized transport errors",
       });
     });
     await page.goto(`/session?sid=${fixture.id}`);
-    await page.getByRole("button", { name: "切换状态与世界上下文" }).click();
+    await page.getByRole("button", { name: "侧栏" }).click();
     await page
       .getByRole("tab", { name: "Webview Fixture", exact: true })
       .click();

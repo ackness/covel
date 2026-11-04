@@ -1,26 +1,12 @@
-import { useDismissibleMenu } from "@/hooks/use-dismissible-menu.js";
-import { Link } from "@tanstack/react-router";
-import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from "react";
+import { useRef, type ReactNode } from "react";
 import { useNoticeAnchor } from "@/components/ui/notice-host.js";
 import {
-  Bug,
+  ChevronDown,
   ChevronLeft,
   Clock,
-  Code,
-  ListTree,
   PanelsTopLeft,
   MapPin,
-  MoreHorizontal,
   PanelRight,
-  Settings,
-  SlidersHorizontal,
-  Undo2,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 import {
@@ -39,7 +25,7 @@ import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
 import { ConnectionStatus } from "./connection-status.js";
 import { NoticeStatusChips } from "./notice-status-chips.js";
-import { MusicToggle } from "../session-music.js";
+import { HeaderMenu, MenuItem } from "./header-menu.js";
 import {
   executionTone,
   type ExecutionPresentation,
@@ -49,7 +35,8 @@ export type GameViewMode =
   "parsed" | "detailed" | "raw" | "stage" | PluginViewMode;
 
 interface GameViewHeaderProps {
-  themeSettings?: ReactNode;
+  /** The session menu; the header only places it. */
+  menu: ReactNode;
   t: TFunction;
   sessionId: string;
   sessionPhase: SessionRecord["phase"];
@@ -67,27 +54,21 @@ interface GameViewHeaderProps {
   /** A turn or auto-advance run is actually in progress. */
   stoppable?: boolean;
   onStop?: () => void;
-  isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
   onViewModeChange: (mode: GameViewMode) => void;
-  onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
-  onOpenSettings: () => void;
   onOpenSuspensions: () => void;
   onBackToWorldSelect: () => void;
-  onResetSession: () => void;
   suspensionsCount: number;
 }
 
 /**
  * Session toolbar. The left side says where the player is — world, turn,
- * current scene; the right side holds what a player reaches for mid-story.
- * Author tools (detailed and raw message views, studio configuration, traces)
- * sit behind the overflow menu so they stay one click away without crowding
- * the bar.
+ * scene, what the story waits for; the right side holds the view switch, the
+ * one menu and the side panel. Everything else is in the menu.
  */
 export function GameViewHeader({
-  themeSettings,
+  menu,
   t,
   sessionId,
   sessionPhase,
@@ -102,15 +83,11 @@ export function GameViewHeader({
   composerHidden = false,
   stoppable = false,
   onStop,
-  isLeftCollapsed,
   isRightCollapsed,
   onViewModeChange,
-  onToggleLeftPanel,
   onToggleRightPanel,
-  onOpenSettings,
   onOpenSuspensions,
   onBackToWorldSelect,
-  onResetSession,
   suspensionsCount,
 }: GameViewHeaderProps) {
   // The scene comes from the same kernel slot the stage view reads, so its
@@ -142,7 +119,6 @@ export function GameViewHeader({
         ["generating", "updating"].includes(executionState)));
   const headerRef = useRef<HTMLDivElement>(null);
   useNoticeAnchor(headerRef);
-  const authorView = viewMode === "detailed" || viewMode === "raw";
 
   return (
     <div
@@ -215,6 +191,18 @@ export function GameViewHeader({
                 : t("session.stateStreaming")}
           </span>
         )}
+        {suspensionsCount > 0 && (
+          <button
+            type="button"
+            className="ui-chip shrink-0 text-[11px] text-(--accent-warning)"
+            onClick={onOpenSuspensions}
+            aria-haspopup="dialog"
+            title={t("session.suspensionsTitle")}
+          >
+            <Clock className="h-3 w-3" />
+            {t("session.waitingForYou", { count: suspensionsCount })}
+          </button>
+        )}
         <NoticeStatusChips scope={sessionId} />
         {stoppable && composerHidden && onStop && (
           <Button
@@ -229,257 +217,65 @@ export function GameViewHeader({
         <ConnectionStatus />
       </div>
       <div className="ml-auto flex max-w-full flex-wrap items-center gap-1 shrink-0 sm:flex-nowrap">
-        <div className="ui-view-switch flex items-center border border-(--rule-color) rounded-(--radius-control) overflow-hidden">
+        <div className="ui-view-switch flex items-center border border-(--rule-color) rounded-(--radius-control)">
           <Toggle
             pressed={viewMode === "parsed"}
             onPressedChange={() => onViewModeChange("parsed")}
             size="sm"
-            className="h-10 rounded-none border-0 px-3 text-xs data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) md:h-8"
-            aria-label={t("session.viewParsedAria")}
-            title={t("session.viewParsedAria")}
+            className="h-10 rounded-none rounded-l-[calc(var(--radius-control)-1px)] border-0 px-3 text-xs data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) md:h-8"
+            aria-label={t("session.viewRead")}
+            title={t("session.viewRead")}
           >
-            {t("session.viewText")}
+            {t("session.viewRead")}
           </Toggle>
           <Toggle
             pressed={viewMode === "stage"}
             onPressedChange={() => onViewModeChange("stage")}
             size="sm"
-            className="h-10 rounded-none border-0 px-3 text-xs data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) md:h-8"
-            aria-label={t("session.viewStageAria")}
-            title={t("session.viewStageAria")}
+            className={`h-10 rounded-none border-0 px-3 text-xs data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) md:h-8 ${pluginViews.length > 0 ? "" : "rounded-r-[calc(var(--radius-control)-1px)]"}`}
+            aria-label={t("session.viewStage")}
+            title={t("session.viewStage")}
           >
             {t("session.viewStage")}
           </Toggle>
+          {pluginViews.length > 0 && (
+            <HeaderMenu
+              label={t("session.pluginPages")}
+              active={Boolean(parsePluginViewMode(viewMode))}
+              icon={ChevronDown}
+              triggerClassName="h-10 w-7 rounded-none rounded-r-[calc(var(--radius-control)-1px)] border-l border-(--rule-color) md:h-8"
+            >
+              {pluginViews.map((entry) => (
+                <MenuItem
+                  key={entry.mode}
+                  icon={PanelsTopLeft}
+                  label={entry.label}
+                  secondary={entry.pluginName}
+                  checked={viewMode === entry.mode}
+                  onSelect={() => onViewModeChange(entry.mode)}
+                />
+              ))}
+            </HeaderMenu>
+          )}
         </div>
 
-        {pluginViews.length > 0 && (
-          <HeaderMenu
-            label={t("session.pluginPages")}
-            active={Boolean(parsePluginViewMode(viewMode))}
-            icon={PanelsTopLeft}
-          >
-            {pluginViews.map((entry) => (
-              <MenuItem
-                key={entry.mode}
-                icon={PanelsTopLeft}
-                label={entry.label}
-                secondary={entry.pluginName}
-                checked={viewMode === entry.mode}
-                onSelect={() => onViewModeChange(entry.mode)}
-              />
-            ))}
-          </HeaderMenu>
-        )}
-        {suspensionsCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ui-session-action h-8 px-2 shrink-0 gap-1 text-(--accent-warning) hover:bg-[color-mix(in_oklab,var(--accent-warning)_8%,transparent)]"
-            onClick={onOpenSuspensions}
-            aria-label={t("session.suspensionsBadge", {
-              count: suspensionsCount,
-            })}
-            title={t("session.suspensionsTitle")}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span className="text-[11px] tabular-nums">{suspensionsCount}</span>
-          </Button>
-        )}
-
-        {themeSettings}
-
-        <MusicToggle sessionId={sessionId} t={t} />
+        {menu}
 
         <Button
           variant="ghost"
-          size="icon"
-          className="ui-session-action h-10 w-10 shrink-0 md:h-8 md:w-8"
-          onClick={onOpenSettings}
-          aria-label={t("nav.settings")}
-          title={t("nav.settings")}
-        >
-          <Settings className="w-4 h-4" />
-        </Button>
-
-        <HeaderMenu label={t("session.moreActions")} active={authorView}>
-          <MenuItem
-            icon={ListTree}
-            label={t("session.viewDetailedAria")}
-            checked={viewMode === "detailed"}
-            onSelect={() => onViewModeChange("detailed")}
-          />
-          <MenuItem
-            icon={Code}
-            label={t("session.viewRawAria")}
-            checked={viewMode === "raw"}
-            onSelect={() => onViewModeChange("raw")}
-          />
-          <div role="separator" className="my-1 h-px bg-(--rule-color)" />
-          <MenuItem
-            icon={SlidersHorizontal}
-            label={t("session.config", "Studio Config")}
-            checked={!isLeftCollapsed}
-            onSelect={onToggleLeftPanel}
-          />
-          <MenuItem
-            icon={Undo2}
-            label={t("session.breadcrumbPrep")}
-            disabled={executing}
-            onSelect={onResetSession}
-          />
-          <Link
-            to="/debug"
-            search={{ sid: sessionId }}
-            className="ui-menu-item flex h-9 w-full items-center gap-2.5 rounded-(--radius-control) px-2.5 text-left text-[13px] hover:bg-muted/60"
-          >
-            <Bug className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            {t("session.debugTraces")}
-          </Link>
-        </HeaderMenu>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`ui-session-action h-10 w-10 shrink-0 md:h-8 md:w-8 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
+          size="sm"
+          className={`ui-session-action h-10 shrink-0 gap-1.5 px-2 md:h-8 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
           onClick={onToggleRightPanel}
-          aria-label={t("session.toggleContextPanel")}
-          title={t("session.toggleContextPanel")}
+          aria-label={t("session.sidePanel")}
+          aria-pressed={!isRightCollapsed}
+          title={t("session.sidePanel")}
         >
           <PanelRight className="w-4 h-4" />
+          <span className="hidden text-xs sm:inline">
+            {t("session.sidePanel")}
+          </span>
         </Button>
       </div>
     </div>
-  );
-}
-
-const MENU_VIEWPORT_GUTTER = 12;
-const MENU_MAX_WIDTH = `calc(100vw - ${MENU_VIEWPORT_GUTTER * 2}px)`;
-
-/** A click-away menu kept within the viewport when toolbar controls wrap. */
-export function HeaderMenu({
-  label,
-  active,
-  children,
-  icon: Icon = MoreHorizontal,
-}: {
-  readonly icon?: ComponentType<{ className?: string }>;
-  readonly label: string;
-  /** Marks the trigger when an option inside is switched on. */
-  readonly active: boolean;
-  readonly children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const [menuLeft, setMenuLeft] = useState(0);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const { containerRef, triggerRef } = useDismissibleMenu(open, setOpen, true);
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    const menu = menuRef.current;
-    if (!open || !container || !menu) return;
-    const position = () => {
-      const anchor = container.getBoundingClientRect();
-      const width = menu.getBoundingClientRect().width;
-      const left = Math.max(
-        MENU_VIEWPORT_GUTTER,
-        Math.min(
-          anchor.right - width,
-          window.innerWidth - width - MENU_VIEWPORT_GUTTER,
-        ),
-      );
-      setMenuLeft(left - anchor.left);
-    };
-    position();
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(position);
-    observer?.observe(container);
-    observer?.observe(menu);
-    window.addEventListener("resize", position);
-    window.addEventListener("scroll", position, true);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", position);
-      window.removeEventListener("scroll", position, true);
-    };
-  }, [open, containerRef, children]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-      }}
-    >
-      <Button
-        ref={triggerRef}
-        variant="ghost"
-        size="icon"
-        className={`ui-session-action h-10 w-10 shrink-0 md:h-8 md:w-8 ${(open || active) && "bg-accent text-accent-foreground"}`}
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-label={label}
-        title={label}
-      >
-        <Icon className="w-4 h-4" />
-      </Button>
-      {open && (
-        <div
-          ref={menuRef}
-          role="group"
-          aria-label={label}
-          className="ui-dialog-shell absolute top-full z-30 mt-1.5 w-max p-1"
-          style={{
-            left: menuLeft,
-            minWidth: `min(12rem, ${MENU_MAX_WIDTH})`,
-            maxWidth: MENU_MAX_WIDTH,
-          }}
-          // Any choice closes the menu; the items handle their own action.
-          onClick={() => {
-            setOpen(false);
-            triggerRef.current?.focus();
-          }}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function MenuItem({
-  icon: Icon,
-  label,
-  secondary,
-  checked,
-  disabled,
-  onSelect,
-}: {
-  readonly icon: ComponentType<{ className?: string }>;
-  readonly label: string;
-  readonly secondary?: string;
-  readonly checked?: boolean;
-  readonly disabled?: boolean;
-  readonly onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={checked}
-      disabled={disabled}
-      onClick={onSelect}
-      className={`ui-menu-item flex h-9 w-full items-center gap-2.5 rounded-(--radius-control) px-2.5 text-left text-[13px] hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50 ${
-        checked ? "text-(--accent-primary) font-medium" : ""
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span>{label}</span>
-      {secondary && (
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          {secondary}
-        </span>
-      )}
-    </button>
   );
 }

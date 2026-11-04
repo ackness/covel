@@ -4,13 +4,11 @@ import { lazyWithRetry } from "@/lib/lazy-with-retry.js";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
-import { getDataService } from "@/services/data-service.js";
-import { mergeChatExportMessages } from "@/lib/chat-export.js";
-import { emitToast } from "@/lib/toast-channel.js";
+import { exportChat } from "@/lib/chat-export.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSessionNavigation } from "@/hooks/use-session-navigation.js";
 import { usePrepWorldRestore } from "@/hooks/use-prep-world-restore.js";
-import type { SessionPanel } from "@/lib/nav-events.js";
+import { onSettingsRequest, type SessionPanel } from "@/lib/nav-events.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
@@ -143,64 +141,33 @@ function SessionScreen() {
   const tRef = useRef(t);
   tRef.current = t;
 
+  // The topbar's Settings item. Once a game is open its own screen shows the
+  // dialog instead.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  useEffect(
+    () =>
+      onSettingsRequest((key) => {
+        if (sessionIdRef.current) return false;
+        if (key) settingsRef.current.openWithKey(key);
+        else settingsRef.current.setOpen(true);
+        return true;
+      }),
+    [],
+  );
+
   useEffect(() => {
     return initDesktopBridge({
       onOpenSettings: () => settings.setOpen(true),
       onImportPlugin: () => settings.openWithKey("packages"),
       onImportWorld: () => settings.openWithKey("packages"),
       onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
-      onExportChat: () => {
-        const tt = tRef.current;
-        const sid = sessionIdRef.current;
-        void (async () => {
-          // 导出以持久化全量历史为基底（窗口化后 state.messages 只含最近一窗 + 已上滚
-          // 加载的部分，可能不完整），再按 id 并入内存里尚未落盘的消息（如正在流式生成的
-          // 占位）。这样既不丢早期历史，也不丢屏幕上正在生成、尚未落盘的内容。拉取失败则
-          // 回退到内存已加载部分。
-          const inMemory = messagesRef.current;
-          let msgs: ReadonlyArray<{
-            id: string;
-            role: string;
-            content: string;
-          }> = inMemory;
-          if (sid) {
-            try {
-              const full = await getDataService().listMessages(sid);
-              if (full.length > 0) {
-                msgs = mergeChatExportMessages(full, inMemory);
-              }
-            } catch {
-              // 回退到内存中已加载的消息。
-            }
-          }
-          if (msgs.length === 0) {
-            emitToast(
-              "info",
-              tt("session.exportEmpty", "No messages to export yet"),
-            );
-            return;
-          }
-          try {
-            const text = msgs
-              .map((m) => `[${m.role}] ${m.content}`)
-              .join("\n\n");
-            const blob = new Blob([text], { type: "text/plain" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "covel-chat.txt";
-            a.click();
-            URL.revokeObjectURL(url);
-            emitToast("success", tt("session.exportSuccess", "Chat exported"));
-          } catch (err) {
-            emitToast(
-              "error",
-              tt("session.exportFailed", "Failed to export chat"),
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-        })();
-      },
+      onExportChat: () =>
+        void exportChat(
+          tRef.current,
+          sessionIdRef.current,
+          messagesRef.current,
+        ),
     });
   }, []);
 

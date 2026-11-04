@@ -113,7 +113,7 @@ test("bundled dialogue portraits enlarge and a story departure fades without ano
     await expect(page.getByTestId("story-segments")).toContainText(
       "A readable line without a portrait.",
     );
-    await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+    await page.getByRole("button", { name: "舞台", exact: true }).click();
     await expect(actor(page, "mira")).toBeVisible();
     await expect(actor(page, "theo")).toBeVisible();
     await freezeDepartures(page);
@@ -141,7 +141,7 @@ test("bundled dialogue portraits enlarge and a story departure fades without ano
     });
     await finishExit(page, "theo");
     await page.clock.resume();
-    await page.getByRole("button", { name: "解析视图", exact: true }).click();
+    await page.getByRole("button", { name: "阅读", exact: true }).click();
     await expect(page.getByTestId("story-segments")).toContainText([
       "Public dialogue 1.",
       "Public dialogue 2.",
@@ -156,7 +156,7 @@ test("bundled dialogue portraits enlarge and a story departure fades without ano
     await page.reload();
     await hydrated;
     await expect(composerInput(page)).toBeVisible();
-    await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+    await page.getByRole("button", { name: "舞台", exact: true }).click();
     await expect(actor(page, "mira")).toBeVisible();
     await expect(actor(page, "theo")).toHaveCount(0);
     await expect(page.locator('[data-phase="exit"]')).toHaveCount(0);
@@ -173,7 +173,7 @@ test("full cast updates preserve newcomers and explicit none and reduced motion 
   const host = await startStageRenderHost();
   try {
     await openSession(page, host);
-    await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+    await page.getByRole("button", { name: "舞台", exact: true }).click();
     const cast = (...ids: string[]) => ({
       actors: ids.map((id) => ({ characterId: id, displayName: id })),
       retainWhenEmpty: false,
@@ -249,7 +249,7 @@ test("full cast updates preserve newcomers and explicit none and reduced motion 
     await expect(page.locator('[data-phase="exit"]')).toHaveCount(0);
     await page.clock.resume();
     await expect(page.getByTestId("stage-decision-input")).toBeEnabled();
-    await page.getByRole("button", { name: "解析视图", exact: true }).click();
+    await page.getByRole("button", { name: "阅读", exact: true }).click();
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
     await expect(composerInput(page)).toBeEnabled();
   } finally {

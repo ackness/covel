@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
-import { seedAppSettings } from "./helpers/player.js";
+import { seedAppSettings, seedDeveloperMode } from "./helpers/player.js";
 
 async function navigateTopbar(page: Page, name: string, width: number) {
   if (width < 1024) {
@@ -22,6 +22,7 @@ for (const width of [1512, 390]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
+    await seedDeveloperMode(page);
     const fixture = await createRecoveryFixture(page, "completed");
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -74,14 +75,15 @@ for (const width of [1512, 390]) {
       await navigateTopbar(page, "调试", width);
       await expect(page).toHaveURL(new RegExp(`/debug\\?sid=${fixture.id}`));
       await expect(page.getByText("§ TRACE", { exact: true })).toBeVisible();
-      await navigateTopbar(page, "插件", width);
+      await navigateTopbar(page, "设置", width);
       await expect(
         page.getByRole("dialog", { name: "设置", exact: true }),
       ).toBeVisible();
       await page.keyboard.press("Escape");
       await navigateTopbar(page, "调试", width);
       await expect(page.getByText("§ TRACE", { exact: true })).toBeVisible();
-      await navigateTopbar(page, "图像", width);
+      // There is no Images entry; the panel opens through its deep link.
+      await page.goto(`/session?sid=${fixture.id}&panel=images`);
       await expect(
         page.getByRole("tab", { name: "Review gallery" }),
       ).toHaveAttribute("aria-selected", "true");
@@ -101,6 +103,7 @@ for (const width of [1512, 390]) {
 test("debugger navigation opens the selected session and resets the previous composer", async ({
   page,
 }) => {
+  await seedDeveloperMode(page);
   const first = await createRecoveryFixture(page, "completed");
   const second = await createRecoveryFixture(page, "completed");
   try {
@@ -112,7 +115,7 @@ test("debugger navigation opens the selected session and resets the previous com
     await navigateTopbar(page, "调试", 1280);
     await page.getByRole("button", { name: new RegExp(second.id) }).click();
     await expect(page).toHaveURL(new RegExp(`/debug\\?sid=${second.id}`));
-    await navigateTopbar(page, "会话", 1280);
+    await navigateTopbar(page, "游戏", 1280);
     await expect(page).toHaveURL(new RegExp(`/session\\?sid=${second.id}`));
     await expect(page.getByTestId("game-composer-input")).toBeVisible();
     await expect(page.getByTestId("game-composer-input")).toHaveValue("");

@@ -1,11 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { GameViewHeader } from "../game-view/game-view-header.js";
@@ -31,7 +25,7 @@ vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlot: () => undefined }));
 vi.mock("../game-view/connection-status.js", () => ({
   ConnectionStatus: () => null,
 }));
-vi.mock("../session-music.js", () => ({ MusicToggle: () => null }));
+vi.mock("../session-music.js", () => ({ MusicMenuControls: () => null }));
 afterEach(cleanup);
 
 function sessionStatus(
@@ -43,6 +37,7 @@ function sessionStatus(
   return (
     <>
       <GameViewHeader
+        menu={null}
         pluginViews={[]}
         recoveryNoticeVisible={executionRecoveryNoticeVisible(recovery)}
         t={i18n.t}
@@ -54,16 +49,12 @@ function sessionStatus(
         executing={executing}
         executionState={executionState}
         viewMode="parsed"
-        isLeftCollapsed
         isRightCollapsed
         onViewModeChange={vi.fn()}
-        onToggleLeftPanel={vi.fn()}
         onToggleRightPanel={vi.fn()}
-        onOpenSettings={vi.fn()}
         onOpenSuspensions={vi.fn()}
         suspensionsCount={0}
         onBackToWorldSelect={vi.fn()}
-        onResetSession={vi.fn()}
       />
       <MessageComposer
         recoveryNoticeVisible={executionRecoveryNoticeVisible(recovery)}
@@ -165,54 +156,35 @@ it.each(["generating", "updating"] as const)(
   },
 );
 
-it("uses native buttons in the overflow disclosure and restores focus on Escape and selection", () => {
-  const changeView = vi.fn();
-  render(
-    <GameViewHeader
-      pluginViews={[]}
-      t={i18n.t}
-      sessionId="s"
-      sessionPhase="playing"
-      locale="zh-CN"
-      turnCount={1}
-      world={null}
-      executing={false}
-      viewMode="parsed"
-      isLeftCollapsed
-      isRightCollapsed
-      onViewModeChange={changeView}
-      onToggleLeftPanel={vi.fn()}
-      onToggleRightPanel={vi.fn()}
-      onOpenSettings={vi.fn()}
-      onOpenSuspensions={vi.fn()}
-      suspensionsCount={0}
-      onBackToWorldSelect={vi.fn()}
-      onResetSession={vi.fn()}
-    />,
-  );
-  const trigger = screen.getByRole("button", {
-    name: i18n.t("session.moreActions"),
-  });
-  fireEvent.click(trigger);
-  const group = screen.getByRole("group", {
-    name: i18n.t("session.moreActions"),
-  });
-  const detailed = within(group).getByRole("button", {
-    name: i18n.t("session.viewDetailedAria"),
-  });
-  expect(detailed.getAttribute("aria-pressed")).toBe("false");
-  detailed.focus();
-  fireEvent.keyDown(detailed, { key: "Escape" });
-  expect(
-    screen.queryByRole("group", { name: i18n.t("session.moreActions") }),
-  ).toBeNull();
-  expect(document.activeElement).toBe(trigger);
-  fireEvent.click(trigger);
-  fireEvent.click(
-    screen.getByRole("button", { name: i18n.t("session.viewDetailedAria") }),
-  );
-  expect(changeView).toHaveBeenCalledWith("detailed");
-  expect(document.activeElement).toBe(trigger);
+it("shows the waiting chip only while the story waits and opens the dialog from it", async () => {
+  await i18n.changeLanguage("en-US");
+  const open = vi.fn();
+  const base = {
+    menu: null,
+    pluginViews: [],
+    t: i18n.t,
+    sessionId: "s",
+    sessionPhase: "playing" as const,
+    locale: "en-US",
+    turnCount: 1,
+    world: null,
+    executing: false,
+    viewMode: "parsed" as const,
+    isRightCollapsed: true,
+    onViewModeChange: vi.fn(),
+    onToggleRightPanel: vi.fn(),
+    onOpenSuspensions: open,
+    onBackToWorldSelect: vi.fn(),
+  };
+  const view = render(<GameViewHeader {...base} suspensionsCount={0} />);
+  expect(screen.queryByText(/Waiting for you/)).toBeNull();
+  view.rerender(<GameViewHeader {...base} suspensionsCount={2} />);
+  const chip = screen.getByRole("button", { name: "Waiting for you · 2" });
+  fireEvent.click(chip);
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: "Read" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Stage" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Side panel" })).toBeTruthy();
 });
 
 const world: WorldRecord = {
@@ -237,6 +209,7 @@ it.each(["zh-CN", "en-US"])(
     render(
       <>
         <GameViewHeader
+          menu={null}
           pluginViews={[]}
           t={i18n.t}
           sessionId="translated-session"
@@ -246,16 +219,12 @@ it.each(["zh-CN", "en-US"])(
           world={world}
           executing={false}
           viewMode="parsed"
-          isLeftCollapsed
           isRightCollapsed
           onViewModeChange={vi.fn()}
-          onToggleLeftPanel={vi.fn()}
           onToggleRightPanel={vi.fn()}
-          onOpenSettings={vi.fn()}
           onOpenSuspensions={vi.fn()}
           suspensionsCount={0}
           onBackToWorldSelect={vi.fn()}
-          onResetSession={vi.fn()}
         />
         <ChapterBanner world={world} locale={session.locale} />
         <SessionCanvasHero

@@ -26,7 +26,7 @@ The name of the current scene is shown on the screen. A row of small buttons let
 
 ### How to switch
 
-At the top of the game screen there are two buttons side by side: "Text" and "Stage". Click "Stage" to enter stage mode, and "Text" to go back to the text view. Switching does not affect your save, and you can switch back and forth at any time.
+At the top of the game screen there are two buttons side by side: "Read" and "Stage". Click "Stage" to enter stage mode, and "Read" to go back to the text view. Switching does not affect your save, and you can switch back and forth at any time.
 
 Choosing Stage offers the current story for rereading in the response panel, using the selected session theme. Choices and input remain available throughout; rereading never delays the next action. Reopening a session still takes already-read stories straight to the response panel.
 
@@ -145,7 +145,7 @@ Stories that do not answer in segments can still emit `music.cue`; worlds and pl
 
 ## Next
 
-- [Built-in app features](./features.md): besides the text and stage views, what else the app offers.
+- [Built-in app features](./features.md): besides the Read and Stage views, what else the app offers.
 - [Add scene pictures to a world](../worlds/scenes.md)
 - [Add portraits to characters](../worlds/portraits.md)
 
@@ -159,6 +159,6 @@ Scene Stage and Soundtrack `story-cues` use zero-budget presentation functions, 
 
 ### Optional reading appearance
 
-Scene Stage offers **Stage reading**. Enable the plugin, open **Session theme** in the session toolbar, choose it and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. **Use default appearance** in the session theme menu turns it off at any time; immersive stage hides the header, so leave it first to open the menu. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).
+Scene Stage offers **Stage reading**. Enable the plugin, open **Menu** in the session toolbar, choose it under **This game's theme** and click **Apply**. It starts off and changes only narrative/dialogue colors, typography and session layout options, without starting a story or selecting stage/plugin views. **Restore default appearance** under This game's theme turns it off at any time; immersive stage hides the header, so leave it first to open the menu. Settings, approvals and host bars keep their appearance; player colors and narrative typography adjustments win. See [plugin themes](../reference/theme-packages.md#selecting-in-a-session).
 
 Scene Stage opts its dialogue template into the shared [segment reveal](../reference/ui-components.md#complete-content-reveal). Only newly committed live stories use it. History, reload and reduced motion are instant; **Show all** and the **Instant text** setting finish immediately. This changes presentation after commit and does not speed generation.

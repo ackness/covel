@@ -19,6 +19,7 @@ import { resolveDisplayText } from "@/lib/i18n-text.js";
 import type { SuspensionSummary } from "@/services/api";
 import { DimensionValueEditor, emptyValue } from "./dimension-value-editor.js";
 import { classifySuspensionInput } from "./suspension-input.js";
+import { useSetting } from "@/settings/use-settings.js";
 
 interface SuspensionsPanelProps {
   suspensions: readonly SuspensionSummary[];
@@ -91,6 +92,8 @@ function SuspensionCard({
 }: SuspensionCardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
+  // Raw ids and the raw-data answer box are developer tools.
+  const [developerMode] = useSetting<boolean>("ui.developerView");
   const input = useMemo(
     () => classifySuspensionInput(suspension.resumeSchema),
     [suspension.resumeSchema],
@@ -160,8 +163,12 @@ function SuspensionCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 font-medium text-foreground">
             <Clock className="w-3 h-3 text-amber-500 shrink-0" />
-            <span className="wrap-break-word" title={runtimeLabel}>
-              {suspension.reason || runtimeLabel}
+            <span
+              className="wrap-break-word"
+              title={developerMode ? runtimeLabel : undefined}
+            >
+              {suspension.reason ||
+                (developerMode ? runtimeLabel : t("session.suspensionsTitle"))}
             </span>
           </div>
         </div>
@@ -233,7 +240,13 @@ function SuspensionCard({
         />
       )}
 
-      {input.kind === "advanced" && (
+      {input.kind === "advanced" && !developerMode && (
+        <p className="text-xs text-muted-foreground">
+          {t("session.suspensionNoAnswerUi")}
+        </p>
+      )}
+
+      {input.kind === "advanced" && developerMode && (
         <details className="text-xs" open>
           <summary className="cursor-pointer text-muted-foreground">
             {t("session.suspensionAdvanced")}
@@ -270,7 +283,10 @@ function SuspensionCard({
             t("session.suspensionCancelLabel")
           )}
         </Button>
-        {input.kind !== "confirm" && input.kind !== "choice" && resumeButton}
+        {input.kind !== "confirm" &&
+          input.kind !== "choice" &&
+          (input.kind !== "advanced" || developerMode) &&
+          resumeButton}
       </div>
     </div>
   );

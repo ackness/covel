@@ -628,7 +628,7 @@ To see what data a panel actually receives: in development mode, press `Cmd/Ctrl
 
 1. Copy [session-view-probe](../../../tests/third-party/session-view-probe/README.md) to your user plugin directory. It contains no runtime or server entry.
 2. Open `contributes.ui.view` in the root `PLUGIN.md` and inspect `story-view.json` and `notes-view.json`. The former reads the story in single-file HTML; the latter uses `Stack` and `Text` without session data. When editing English labels, update `locales/zh.yaml` too.
-3. Enable the plugin in a session and choose “Story reader” from the header’s “Plugin pages” menu. A reading consent prompt appears first. The story is shown only after consent. Click Text or Stage in the header to leave, or revoke access from the view bar menu. Editing the spec or HTML requires consent again.
+3. Enable the plugin in a session and choose “Story reader” from the header’s “Plugin pages” menu. A reading consent prompt appears first. The story is shown only after consent. Click Read or Stage in the header to leave, or revoke access from the view bar menu. Editing the spec or HTML requires consent again.
 
 See the [plugin view reference](../reference/ui-panels.md#plugin-views) for projection scope, fields and limits. This sample submits no actions or forms and shows no images; the host input box stays below it (see [the input box on a page](../reference/ui-panels.md#the-input-box-on-a-page) to hide it).
 

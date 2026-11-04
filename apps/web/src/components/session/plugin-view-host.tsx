@@ -6,7 +6,7 @@ import { useNoticeAnchor } from "@/components/ui/notice-host.js";
 import { Button } from "@/components/ui/button.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { HeaderMenu, MenuItem } from "./game-view/game-view-header.js";
+import { HeaderMenu, MenuItem } from "./game-view/header-menu.js";
 import type { PluginViewEntry } from "./game-view/use-plugin-views.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { useSessionBridgeActions } from "./use-session-bridge-actions.js";

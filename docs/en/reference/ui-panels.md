@@ -70,7 +70,15 @@ How world authors and plugin authors get content to appear here:
 - Neither of these needs plugin UI.
 - A plugin's own data (quests, inventory, time) does not go into character records. It appears in the same place through the `session.summary@1` slot.
 
-To the right of the toolbar are the "Text / Stage" switch, settings, the "More" menu, and the right-side panel toggle. Detailed view, raw view, Studio Config, back to the config page, and Debug Traces are inside "More".
+To the right of the toolbar are the "Read / Stage" switch (with a trailing ▾ that lists plugin pages when there are any), the "Menu" and the "Side panel" toggle. "Waiting for you · N" is a status chip on the left of the toolbar.
+
+The "Menu" has three sections:
+
+- **This game**: "This game's settings…" (saves, the plugins in this game and a collapsed "Advanced" block, opened as a drawer that replaces the old left rail), "Start over" (asks first, then returns to this world's start screen without deleting the save) and "Export save".
+- **Preferences**: the background-music switch and volume (marked as applying to all games, shown only when the world has music), "This game's theme" (shown only when a plugin provides themes, with "Restore default appearance") and "Settings…".
+- **Developer**: shown only when "Developer mode" is on, with the detailed view, raw view, debug traces and Database. If developer mode is turned off while a session is on the detailed or raw view, it returns to Read.
+
+The top bar holds only "World", "Games", "Settings" and the bell. "Games" appears only while a game is open; "Debugger" appears only in developer mode. Dark mode and the interface language are in Settings.
 
 ## Notice center
 
@@ -99,7 +107,7 @@ Another page can jump into a session with a parameter and ask for a panel to be 
 
 - This request is used only once. After the session is restored and `GameView` has mounted, the page handles the request and removes the `panel` parameter from the address.
 - On a phone, the request is not swallowed by the drawer: the page waits until the drawer and the asynchronously loaded UI specs are both ready, and only then selects the target panel.
-- The Images entry opens only a right-panel spec declaring top-level `navTarget: "images"`; icons do not assign navigation destinations. If several panels declare it, the first by `groupOrder` and load order wins. Undeclared panels remain manually accessible; community image plugins must add this field to their gallery spec. After a successful load, a missing target (including an explicitly requested plugin panel) clears the request and shows “This panel is not available in this session.” Later spec reloads do not replay it. A failed load retains the request until the player retries loading.
+- The Images panel (a right-panel tab, also reachable by the `?panel=images` link) opens only a right-panel spec declaring top-level `navTarget: "images"`; icons do not assign navigation destinations. If several panels declare it, the first by `groupOrder` and load order wins. Undeclared panels remain manually accessible; community image plugins must add this field to their gallery spec. After a successful load, a missing target (including an explicitly requested plugin panel) clears the request and shows “This panel is not available in this session.” Later spec reloads do not replay it. A failed load retains the request until the player retries loading.
 - When the session ID changes, the session view is rebuilt as a whole. This keeps drafts and panel selections from mixing with the previous session.
 - The debug page switches its data by the `sid` in the address. When you return to the session from the debug page, the ID currently being viewed also takes priority.
 
@@ -116,7 +124,7 @@ The right-side panels are the main place where plugins show their state. First, 
 
 ### Design Principles
 
-- **A plugin's status panel is declared by `ui.right`.** It appears together with the built-in "World" document entry from the framework. The raw "Database" tab appears only after you open the developer view. See below. Lorebook has only an HTTP API. See the note at the end of the [World document](#world-document-framework-owned-tab) section.
+- **A plugin's status panel is declared by `ui.right`.** It appears together with the built-in "World" document entry from the framework. The raw "Database" tab appears only after you turn on Developer mode. See below. Lorebook has only an HTTP API. See the note at the end of the [World document](#world-document-framework-owned-tab) section.
 - **The framework does not know specific plugins.** It finds panels through `/api/ui-specs`.
 - **It renders with json-render.** A plugin provides a JSON spec, and the framework provides a fixed set of components (the catalog).
 - **The data comes from pluginData.** When plugin data changes, the server sends a `plugin-data.changed` SSE event, and the panel updates.
@@ -142,9 +150,9 @@ When you switch sessions, these things also happen:
 - When the selected plugin group is removed, the view goes back to the "World" document.
 - The vertical navigation can scroll on its own, and the narrow-screen overlay can hold a very long list of panels.
 
-**The Database tab is a developer view.** It lists, row by row and as stored, every public plugin row, including content that is written only for the narrator to see, such as secrets on a character card. So it does not appear in the play screen by default.
+**The Database tab belongs to Developer mode.** It lists, row by row and as stored, every public plugin row, including content that is written only for the narrator to see, such as secrets on a character card. So it does not appear in the play screen by default.
 
-- When the player turns on "Developer view" (`ui.developerView`, off by default) under "General" in Settings, an extra "Database" tab appears in the right-side panel.
+- When the player turns on "Developer mode" (`ui.developerView`, off by default) under "Advanced" at the bottom of "General" in Settings, an extra "Database" tab appears in the right-side panel, together with the storage line, raw IDs, plugin step counts and the raw-data box in the "Waiting for you" dialog.
 - When it is turned off, the tab and its content are removed together, and an `open-database` navigation request goes back to the "World" document.
 - The `/debug` page always shows the full view.
 
@@ -852,7 +860,7 @@ Both public message regions retain current-turn row metadata. Choice lists in th
 
 Input shares the session's single controller: changing views preserves text, mode, fields, queued choices and restored stopped input; busy refusal retains drafts. An unavailable catalogue or identity, ended session, blocked opening or mandatory interaction cannot send a fallback Say. Direct and textless Advance retain existing player-action validation and persist only through normal commit. Opening a view changes no role, narrator perspective or policy. When a page embeds `SessionComposer`, the host does not show a second input box below it; leaving the page restores the draft and mode.
 
-The host header, the Text/Stage toggle, Stop, Begin and recovery remain outside plugin layout. A view error does not own story execution. Messages and blocks mask live context to prevent recursive feeds or composers; snapshots and debug panels have no such capability. Webviews receive no live context; their consent, content hashes and bridge capabilities remain separate.
+The host header, the Read/Stage toggle, Stop, Begin and recovery remain outside plugin layout. A view error does not own story execution. Messages and blocks mask live context to prevent recursive feeds or composers; snapshots and debug panels have no such capability. Webviews receive no live context; their consent, content hashes and bridge capabilities remain separate.
 
 <a id="sandbox-main-view-and-composer"></a>
 
@@ -1326,7 +1334,7 @@ The built-in `world-time` (current time), `core-quest` (the next unfinished obje
 
 ### Suspended Resume Panel
 
-After an agent runtime calls `suspend`, a badge appears on the session toolbar. Clicking it opens the "Suspended executions" dialog (`suspensions-panel.tsx`).
+After an agent runtime calls `suspend`, a "Waiting for you · N" chip appears on the left of the session toolbar. Clicking it opens the "Waiting for you" dialog (`suspensions-panel.tsx`).
 
 Each card uses `reason` as its title, and it picks the answer control from `resumeSchema` (`suspension-input.ts`):
 
@@ -1337,7 +1345,7 @@ Each card uses `reason` as its title, and it picks the answer control from `resu
 | `string`                                                            | Text box                                                                         |
 | Object schema compiled from `suspend.fields`                        | Form controls labelled with each property's `title`; answer keys are field names |
 | An object / number schema that the dimension value editor can cover | A form (reusing `DimensionValueEditor`)                                          |
-| No schema, or no control can cover it                               | A raw JSON text box inside the "Advanced" collapsible section                    |
+| No schema, or no control can cover it                               | A raw JSON text box inside the "Advanced" collapsible section in Developer mode; otherwise one line of explanation and Abandon                    |
 
 ### Loading Older Messages and Execution Status
 

@@ -16,57 +16,53 @@ afterEach(async () => {
 });
 
 it.each([
-  ["zh-CN", "§ 故事开场", "内容块：example", "进行中"],
-  ["en-US", "§ SESSION CANVAS", "Block: example", "Running"],
-  ["ru-RU", "§ НАЧАЛО ИСТОРИИ", "Блок: example", "Выполняется"],
-])(
-  "renders session text in %s",
-  async (locale, eyebrow, blockLabel, running) => {
-    await i18n.changeLanguage(locale);
-    render(
-      <>
-        <SessionCanvasHero
-          world={null}
-          locale={locale}
-          onBegin={vi.fn()}
-          beginLabel="Start"
-          hintLabel="Welcome"
-        />
-        <ChatBlockRenderer
-          msg={{
-            id: "block",
-            role: "assistant",
-            content: "",
-            timestamp: "now",
-            block: { type: "example" },
-          }}
-          index={0}
-          lastUserMsgIndex={-1}
-          viewMode="raw"
-          sessionId="session"
-          executing={false}
-          submittedBlockIds={new Set()}
-          submittedBlockValues={{}}
-          onSendMessage={vi.fn()}
-          onSubmitBlock={vi.fn()}
-          t={i18n.t}
-        />
-        <JobListPanel
-          props={{
-            items: [
-              { jobId: "job", status: "running" },
-              { jobId: "custom", status: "Custom state" },
-            ],
-          }}
-        />
-      </>,
-    );
-    expect(screen.getByText(eyebrow)).toBeTruthy();
-    expect(screen.getByText(blockLabel)).toBeTruthy();
-    expect(screen.getByText(running)).toBeTruthy();
-    expect(screen.getByText("Custom state")).toBeTruthy();
-  },
-);
+  ["zh-CN", "内容块：example", "进行中"],
+  ["en-US", "Block: example", "Running"],
+  ["ru-RU", "Блок: example", "Выполняется"],
+])("renders session text in %s", async (locale, blockLabel, running) => {
+  await i18n.changeLanguage(locale);
+  render(
+    <>
+      <SessionCanvasHero
+        world={null}
+        locale={locale}
+        onBegin={vi.fn()}
+        beginLabel="Start"
+        hintLabel="Welcome"
+      />
+      <ChatBlockRenderer
+        msg={{
+          id: "block",
+          role: "assistant",
+          content: "",
+          timestamp: "now",
+          block: { type: "example" },
+        }}
+        index={0}
+        lastUserMsgIndex={-1}
+        viewMode="raw"
+        sessionId="session"
+        executing={false}
+        submittedBlockIds={new Set()}
+        submittedBlockValues={{}}
+        onSendMessage={vi.fn()}
+        onSubmitBlock={vi.fn()}
+        t={i18n.t}
+      />
+      <JobListPanel
+        props={{
+          items: [
+            { jobId: "job", status: "running" },
+            { jobId: "custom", status: "Custom state" },
+          ],
+        }}
+      />
+    </>,
+  );
+  expect(screen.getByText(blockLabel)).toBeTruthy();
+  expect(screen.getByText(running)).toBeTruthy();
+  expect(screen.getByText("Custom state")).toBeTruthy();
+});
 
 const kinds: ActionableErrorKind[] = [
   "auth",

@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import type { SessionPlugin } from "@covel/shared";
-import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
+import {
+  closeStudioConfiguration,
+  ONBOARDING_VERSION,
+  openStudioConfiguration,
+  seedBrowserSettings,
+} from "./helpers/player.js";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
 
 test("saved custom roles remain editable in generation, assignment and import panes", async ({
@@ -211,39 +216,27 @@ for (const width of [1512, 390]) {
     let releaseHealth = () => {};
     try {
       await page.goto(`/session?sid=${fixture.id}`);
-      // Studio configuration lives in the toolbar's overflow menu.
-      await page.getByRole("button", { name: "更多", exact: true }).click();
-      await page
-        .getByRole("button", { name: "工作室配置", exact: true })
-        .click();
-      await page
-        .getByRole("checkbox", { name: "自定义插件与高级设置" })
-        .check();
+      // Notice cards float above the header on a narrow screen and would
+      // cover the menu: dismiss them first.
+      const dismiss = page.getByRole("button", { name: "先收起", exact: true });
+      await dismiss.first().waitFor();
+      while ((await dismiss.count()) > 0) await dismiss.first().click();
+      // "This game's settings" opens from the session menu.
+      await openStudioConfiguration(page);
       const pluginName = page
         .getByRole("button", { name: "Current plugin fixture", exact: true })
         .getByText("Current plugin fixture", { exact: true });
       await expect(pluginName).toBeVisible();
       expect((await pluginName.boundingBox())!.width).toBeGreaterThan(40);
-      const model = page.getByRole("combobox", {
-        name: "模型 · panel-fixture/plugin",
-      });
-      await expect(model).toBeVisible();
-      const options = await model
-        .locator("option")
-        .evaluateAll((nodes) =>
-          nodes.map((node) => (node as HTMLOptionElement).value),
-        );
-      expect(options).toContain("story");
-      expect(options).not.toContain("image");
-      await model.selectOption("story");
-      await expect
-        .poll(() => assignments.at(-1)?.["panel-fixture/plugin"])
-        .toBe("story");
+      // The model of each step is read-only text with a link to Settings.
+      await pluginName.click();
+      await expect(
+        page.getByText("panel-fixture/plugin", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole("combobox", { name: /模型/ })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "去设置" })).toBeVisible();
+      await closeStudioConfiguration(page);
       if (width === 390) {
-        await page
-          .getByRole("dialog")
-          .getByRole("button", { name: "关闭", exact: true })
-          .click();
         const health = await (await page.request.get("/api/health")).json();
         const healthReady = Promise.withResolvers<void>();
         releaseHealth = () => healthReady.resolve();
@@ -259,9 +252,7 @@ for (const width of [1512, 390]) {
             },
           });
         });
-        await page
-          .getByRole("button", { name: "切换状态与世界上下文" })
-          .click();
+        await page.getByRole("button", { name: "侧栏" }).click();
       }
       const lastTab = page.getByRole("tab", {
         name: "Fixture panel 15",
@@ -283,23 +274,14 @@ for (const width of [1512, 390]) {
           .getByRole("dialog")
           .getByRole("button", { name: "关闭", exact: true })
           .click();
-        await page.getByRole("button", { name: "更多", exact: true }).click();
-        await page
-          .getByRole("button", { name: "工作室配置", exact: true })
-          .click();
       }
+      await openStudioConfiguration(page);
       await page
         .getByRole("switch", { name: /Current plugin fixture/ })
         .click();
-      if (width === 390) {
-        await page
-          .getByRole("dialog")
-          .getByRole("button", { name: "关闭", exact: true })
-          .click();
-        await page
-          .getByRole("button", { name: "切换状态与世界上下文" })
-          .click();
-      }
+      await closeStudioConfiguration(page);
+      if (width === 390)
+        await page.getByRole("button", { name: "侧栏" }).click();
       await expect(
         page.getByRole("tab", { name: "Fixture panel 15", exact: true }),
       ).toHaveCount(0);

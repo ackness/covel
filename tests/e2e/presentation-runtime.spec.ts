@@ -49,7 +49,7 @@ async function openPresentationSession(page: Page, host: PresentationHost) {
 }
 
 async function showStage(page: Page) {
-  await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+  await page.getByRole("button", { name: "舞台", exact: true }).click();
   await expect(page.getByTestId("stage-view")).toBeVisible();
   await expect(page.getByTestId("stage-choices")).toBeVisible();
 }
@@ -69,9 +69,12 @@ async function expectPresentation(page: Page) {
   await expect(
     page.getByTestId("stage-sprites").getByLabel("Mira", { exact: true }),
   ).toBeVisible();
-  const music = page.getByRole("button", { name: "关闭背景音乐", exact: true });
-  await expect(music).toHaveAttribute("title", /Library tension/);
-  await expect(music).toHaveAttribute("aria-pressed", "true");
+  // The music switch lives in the session menu, with the playing track.
+  await page.getByRole("button", { name: "菜单", exact: true }).click();
+  const music = page.getByRole("switch", { name: "背景音乐（所有游戏）" });
+  await expect(music).toBeChecked();
+  await expect(page.getByText("Library tension")).toBeVisible();
+  await page.keyboard.press("Escape");
 }
 
 async function expectDisplay(page: Page, title: string, source: string) {
@@ -98,7 +101,7 @@ test("story and both selectors remain usable while generated display waits and b
     await expect(page.getByTestId("stage-plugin-panels")).toContainText(
       "No generated display",
     );
-    await page.getByRole("button", { name: "解析视图", exact: true }).click();
+    await page.getByRole("button", { name: "阅读", exact: true }).click();
     await composerInput(page).fill("Read the next shelf");
     await composerInput(page).press("Enter");
     await waitForTurnIdle(page);
@@ -127,7 +130,7 @@ test("story and both selectors remain usable while generated display waits and b
       "Explicit newer display",
       "Source: player override",
     );
-    await page.getByRole("button", { name: "解析视图", exact: true }).click();
+    await page.getByRole("button", { name: "阅读", exact: true }).click();
     host.release();
     await expect
       .poll(
@@ -177,7 +180,7 @@ test("story and both selectors remain usable while generated display waits and b
     await expect(page.getByTestId("stage-choices")).toBeVisible();
     await page.reload();
     // The view mode is not kept across a reload; reopen the stage.
-    await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+    await page.getByRole("button", { name: "舞台", exact: true }).click();
     await expect(page.getByTestId("stage-choices")).toBeVisible();
     await expectPresentation(page);
     await expectDisplay(
@@ -185,7 +188,7 @@ test("story and both selectors remain usable while generated display waits and b
       "Explicit newer display",
       "Source: player override",
     );
-    await page.getByRole("button", { name: "解析视图", exact: true }).click();
+    await page.getByRole("button", { name: "阅读", exact: true }).click();
     await expect(composer(page)).toHaveAttribute("data-executing", "false");
     await expect(composerInput(page)).toBeEnabled();
     await expect(page.locator(".ui-narrative")).toContainText([
@@ -272,7 +275,7 @@ for (const outcome of ["updated", "exhausted", "failed"] as const) {
       await page.reload();
       await hydrated;
       // The view mode is not kept across a reload; reopen the stage.
-      await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      await page.getByRole("button", { name: "舞台", exact: true }).click();
       await expect(page.getByTestId("stage-choices")).toBeVisible();
       await expect(page.getByTestId("stage-error")).toBeHidden();
       await expectPresentation(page);
@@ -286,7 +289,7 @@ for (const outcome of ["updated", "exhausted", "failed"] as const) {
         await expect(page.getByTestId("stage-plugin-panels")).toContainText(
           "No generated display",
         );
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
       await expect(composer(page)).toHaveAttribute("data-executing", "false");
       await expect(composerInput(page)).toBeEnabled();
       await expect(page.getByTestId("notice-no-story-plugin")).toBeHidden();

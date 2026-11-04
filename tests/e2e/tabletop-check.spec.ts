@@ -269,9 +269,7 @@ for (const width of [1512, 390]) {
         name: /发起属性检定|Request an attribute check/,
       });
       if (width < 1024)
-        await page
-          .getByRole("button", { name: "切换状态与世界上下文" })
-          .click();
+        await page.getByRole("button", { name: "侧栏" }).click();
       await page.getByRole("tab", { name: "属性检定", exact: true }).click();
       await request.click({ timeout: 5_000 });
       await expect.poll(() => opened).toBe(true);

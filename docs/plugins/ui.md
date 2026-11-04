@@ -628,7 +628,7 @@ HTML 文件在一个隔离的框里运行。框架给它一个 `window.covel` �
 
 1. 复制 [session-view-probe](../../tests/third-party/session-view-probe/README.md) 到用户插件目录。它不含 runtime 和服务端入口。
 2. 打开根 `PLUGIN.md` 的 `contributes.ui.view`，查看 `story-view.json` 和 `notes-view.json`。前者用单文件 HTML 读取故事，后者用 `Stack` 和 `Text` 画一个无需会话数据的页面。修改英文标签时，同步修改 `locales/zh.yaml`。
-3. 在会话启用插件，从顶部“插件页面”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。点击头部的“文本”或“舞台”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
+3. 在会话启用插件，从顶部“插件页面”菜单选择“故事阅读器”。先出现读取授权提示，同意后才显示故事。点击头部的“阅读”或“舞台”回去；通过视图栏菜单撤销授权。修改 spec 或 HTML 后再次选择会要求重新授权。
 
 桥接读取范围、视图字段和当前限制见[插件视图参考](../reference/ui-panels.md#插件视图)。此示例不提交行动或表单，也不显示图片；宿主输入框仍在页面下方，要隐藏它见[页面中的输入框](../reference/ui-panels.md#页面中的输入框)。
 

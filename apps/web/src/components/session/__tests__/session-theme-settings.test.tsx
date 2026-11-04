@@ -87,7 +87,6 @@ function show(source: PluginThemeSession, onReload = () => {}) {
       <SessionThemeSettings source={source} onReload={onReload} />
     </>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "会话主题" }));
 }
 it("leaves a sole pack off and lists its label and owner before saving and clearing the session identity", async () => {
   const { store } = await themeStore();
@@ -117,11 +116,11 @@ it("leaves a sole pack off and lists its label and owner before saving and clear
   );
   expect(
     screen
-      .getByRole("button", { name: "使用默认外观" })
+      .getByRole("button", { name: "恢复默认外观" })
       .closest("[data-covel-theme-part]"),
   ).toBeNull();
   await act(async () =>
-    fireEvent.click(screen.getByRole("button", { name: "使用默认外观" })),
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认外观" })),
   );
   expect(source.state.effective).toBeNull();
   expect(store.has(sessionThemeKey("session-one"))).toBe(false);
@@ -155,10 +154,10 @@ it("retains the selection draft after failed persistence and keeps recovery enab
   fireEvent.click(screen.getByRole("button", { name: "应用" }));
   await waitFor(() => expect(source.state.saving).toBe(true));
   expect(
-    (screen.getByRole("button", { name: "使用默认外观" }) as HTMLButtonElement)
+    (screen.getByRole("button", { name: "恢复默认外观" }) as HTMLButtonElement)
       .disabled,
   ).toBe(false);
-  fireEvent.click(screen.getByRole("button", { name: "使用默认外观" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复默认外观" }));
   await act(async () => {
     gate.resolve();
     await gate.promise;
@@ -298,7 +297,7 @@ it("keeps default appearance reachable while an active selection awaits refreshe
   act(() => source.replace([], "loading"));
   expect(source.state.effective).toBeNull();
   await act(async () =>
-    fireEvent.click(screen.getByRole("button", { name: "使用默认外观" })),
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认外观" })),
   );
   act(() =>
     source.replace([{ theme: themeFixture(), owner: "Author" }], "ready"),
@@ -329,7 +328,7 @@ it("retries from the menu and keeps reset authoritative while the discovery read
   expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(
     true,
   );
-  const reset = screen.getByRole("button", { name: "使用默认外观" });
+  const reset = screen.getByRole("button", { name: "恢复默认外观" });
   expect((reset as HTMLButtonElement).disabled).toBe(false);
   await act(async () => fireEvent.click(reset));
   expect(store.has(sessionThemeKey("session-one"))).toBe(false);
@@ -343,4 +342,11 @@ it("retries from the menu and keeps reset authoritative while the discovery read
   );
   expect(source.state.effective).toBeNull();
   expect(document.querySelector("style[data-plugin-theme-style]")).toBeNull();
+});
+
+it("draws nothing when no plugin offers a theme", () => {
+  const { container } = render(
+    <SessionThemeSettings source={undefined} onReload={() => {}} />,
+  );
+  expect(container.textContent).toBe("");
 });

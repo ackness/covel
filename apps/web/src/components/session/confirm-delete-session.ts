@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import { formatSessionDate, sessionTurnLabel } from "@/lib/session-display.js";
+import { sessionSaveLabel } from "@/lib/session-display.js";
 import type { SessionRecord } from "@/services/api.js";
 
 /**
@@ -15,18 +15,12 @@ export function confirmDeleteSession(
   worldName?: string,
 ): Promise<boolean> {
   return requestConfirm({
-    title: t("session.deleteConfirmTitle", "Delete Session"),
+    title: t("session.deleteConfirmTitle", "Delete save"),
     message: t(
       "session.deleteConfirmDesc",
-      "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.",
+      "This permanently deletes the save and all its data (messages, game state and so on). It cannot be undone.",
     ),
-    subject: [
-      worldName,
-      sessionTurnLabel(t, session.completedPlayerTurns),
-      formatSessionDate(session.createdAt, locale),
-    ]
-      .filter(Boolean)
-      .join(" · "),
+    subject: sessionSaveLabel(t, locale, session, worldName),
     confirmLabel: t("common.delete", "Delete"),
     cancelLabel: t("common.cancel", "Cancel"),
     destructive: true,

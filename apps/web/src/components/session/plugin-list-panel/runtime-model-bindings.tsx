@@ -1,29 +1,27 @@
 import { useTranslation } from "react-i18next";
 import type { PluginRuntimeSummary } from "@covel/shared";
-import {
-  formatSlotBindingLabel,
-  formatSlotLabel,
-  type ResolvedSlot,
-} from "@/hooks/use-slot-config.js";
+import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
   resolveDeclaredSlot,
   resolveTextRuntimeSlot,
 } from "../session-prep/model-slot-helpers.js";
-import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
-import type { RuntimeModelOverrideChange } from "./types.js";
 import { FunctionRuntimeModels } from "../function-runtime-models.js";
 
 interface RuntimeModelBindingsProps {
   runtimes: readonly PluginRuntimeSummary[];
   resolvedSlots?: ResolvedSlot[];
-  sessionId?: string;
-  executing?: boolean;
+  /** The session's saved overrides; shown, never edited here. */
   runtimeModelOverrides?: Record<string, string>;
-  onChange?: RuntimeModelOverrideChange;
+  /** Opens the settings dialog on the model pane. */
+  onOpenModelSettings?: () => void;
 }
 
-/** Agents can override their binding; functions only display their declared text slot. */
+/**
+ * Which model each step of a plugin runs on, as text. Changing it happens in
+ * Settings; the link leads there.
+ */
 export function RuntimeModelBindings(props: RuntimeModelBindingsProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2 px-2.5 pb-2">
       {props.runtimes
@@ -43,6 +41,15 @@ export function RuntimeModelBindings(props: RuntimeModelBindingsProps) {
         resolvedSlots={props.resolvedSlots}
         className="space-y-2"
       />
+      {props.onOpenModelSettings && (
+        <button
+          type="button"
+          className="text-xs underline"
+          onClick={props.onOpenModelSettings}
+        >
+          {t("session.goToSettings")}
+        </button>
+      )}
     </div>
   );
 }
@@ -50,21 +57,10 @@ export function RuntimeModelBindings(props: RuntimeModelBindingsProps) {
 function RuntimeModelBinding({
   runtime,
   resolvedSlots = [],
-  sessionId,
-  executing,
   runtimeModelOverrides,
-  onChange,
 }: RuntimeModelBindingsProps & { runtime: PluginRuntimeSummary }) {
   const { t } = useTranslation();
-  const [boundSlot, setSlot, error] = useRuntimeModelSlotOverride({
-    runtimeKey: runtime.id,
-    sessionId,
-    runtimeModelOverrides,
-    onChange,
-  });
-  const slots = resolvedSlots.filter(
-    (slot) => slot.tag === "text" && slot.isAvailable !== false,
-  );
+  const boundSlot = runtimeModelOverrides?.[runtime.id] ?? "";
   const declaredSlot = runtime.model ?? "default";
   // A declared slot that is not set up runs on the first text slot; a chosen
   // slot that is gone is reported.
@@ -75,32 +71,9 @@ function RuntimeModelBinding({
     ? resolveDeclaredSlot(resolvedSlots, boundSlot)
     : (runtimeDefault?.slot ?? null);
   const effectiveSlot = resolvedSlot?.tag === "text" ? resolvedSlot : null;
-  const missingOverride =
-    boundSlot && !slots.some((slot) => slot.slotId === boundSlot);
   return (
-    <label className="block min-w-0 space-y-1 text-xs text-muted-foreground">
+    <div className="block min-w-0 space-y-0.5 text-xs text-muted-foreground">
       <span className="block break-all font-mono">{runtime.id}</span>
-      <select
-        aria-label={`${t("plugin.modelBinding")} · ${runtime.id}`}
-        value={boundSlot}
-        disabled={executing || !sessionId || !onChange}
-        onChange={(event) => setSlot(event.target.value)}
-        className="w-full min-w-0 rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
-      >
-        <option value="">
-          {t("plugin.useRuntimeDefault", { slot: declaredSlot })}
-        </option>
-        {missingOverride && (
-          <option value={boundSlot}>
-            {t("plugin.runtimeModelMissing", { slot: boundSlot })}
-          </option>
-        )}
-        {slots.map((slot) => (
-          <option key={slot.slotId} value={slot.slotId}>
-            {formatSlotBindingLabel(slot)}
-          </option>
-        ))}
-      </select>
       <span
         className="block break-all"
         role={effectiveSlot ? undefined : "status"}
@@ -116,11 +89,6 @@ function RuntimeModelBinding({
               slot: boundSlot || declaredSlot,
             })}
       </span>
-      {error && (
-        <span className="block text-destructive" role="alert" title={error}>
-          {t("plugin.modelOverrideFailed")}
-        </span>
-      )}
-    </label>
+    </div>
   );
 }

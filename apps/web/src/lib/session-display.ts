@@ -25,3 +25,23 @@ export function sessionContinueLabel(t: TFunction, count: number): string {
 export function formatSessionDate(value: string, locale: string): string {
   return new Date(value).toLocaleString(locale);
 }
+
+/**
+ * How a save is named everywhere: its world, the turn it reached and when it
+ * was started. A save has no title of its own and its id means nothing to a
+ * player.
+ */
+export function sessionSaveLabel(
+  t: TFunction,
+  locale: string,
+  session: { completedPlayerTurns: number; createdAt: string },
+  worldName?: string,
+): string {
+  return [
+    worldName,
+    sessionTurnLabel(t, session.completedPlayerTurns),
+    formatSessionDate(session.createdAt, locale),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}

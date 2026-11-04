@@ -29,7 +29,7 @@ export function SessionPluginItem({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
-  onRuntimeModelOverrideChange,
+  onOpenModelSettings,
   setupRuntimes,
 }: SessionPluginItemProps) {
   const { t, i18n } = useTranslation();
@@ -180,17 +180,6 @@ export function SessionPluginItem({
         </div>
       )}
 
-      {advanced && (
-        <RuntimeModelBindings
-          runtimes={plugin.runtimes}
-          resolvedSlots={resolvedSlots}
-          sessionId={sessionId}
-          executing={executing}
-          runtimeModelOverrides={runtimeModelOverrides}
-          onChange={onRuntimeModelOverrideChange}
-        />
-      )}
-
       {expanded && (
         <div className="px-3 pb-2.5 pt-1 space-y-2 border-t border-border bg-muted/20">
           {description && (
@@ -198,6 +187,13 @@ export function SessionPluginItem({
               {description}
             </p>
           )}
+
+          <RuntimeModelBindings
+            runtimes={plugin.runtimes}
+            resolvedSlots={resolvedSlots}
+            runtimeModelOverrides={runtimeModelOverrides}
+            onOpenModelSettings={onOpenModelSettings}
+          />
 
           {advanced && (
             <>

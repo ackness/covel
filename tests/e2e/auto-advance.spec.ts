@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { startAdvancementBrowserHost } from "../../apps/server/tests/helpers/auto-advance-browser.js";
 import {
   composer,
+  closeStudioConfiguration,
   composerInput,
   openStudioConfiguration,
   seedAppSettings,
@@ -52,12 +53,8 @@ for (const mode of ["chat", "stage"] as const) {
       await composerInput(page).press("Enter");
       await expect(controls).toContainText("1 / 2");
       if (mode === "stage")
-        await page
-          .getByRole("button", { name: "舞台视图", exact: true })
-          .click();
-      await expect(
-        controls,
-      ).toBeVisible();
+        await page.getByRole("button", { name: "舞台", exact: true }).click();
+      await expect(controls).toBeVisible();
       await controls.click();
       await expect(controls).toHaveCount(0);
       expect(
@@ -68,7 +65,7 @@ for (const mode of ["chat", "stage"] as const) {
       await page.reload();
       await expect(composer(page)).toHaveAttribute("data-executing", "false");
       await expect(controls).toHaveCount(0);
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
       await openStudioConfiguration(page);
       await page.getByLabel("自动推进轮数", { exact: true }).fill("0");
       await page
@@ -84,10 +81,12 @@ for (const mode of ["chat", "stage"] as const) {
       await expect(
         page.getByLabel("自动推进轮数", { exact: true }),
       ).toHaveValue("0");
+      await closeStudioConfiguration(page);
 
       // A fresh input interrupts automatic work, and refresh only recovers
       // its live controls. Neither operation replays a saved continue flag.
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
+      await openStudioConfiguration(page);
       await page.getByLabel("自动推进轮数", { exact: true }).fill("2");
       await page
         .getByRole("button", { name: "保存自动推进轮数", exact: true })
@@ -95,6 +94,7 @@ for (const mode of ["chat", "stage"] as const) {
       await expect(
         page.getByLabel("自动推进轮数", { exact: true }),
       ).toBeEnabled();
+      await closeStudioConfiguration(page);
       host.holdNextAuto();
       await composerInput(page).fill("Keep going");
       await composerInput(page).press("Enter");
@@ -102,9 +102,7 @@ for (const mode of ["chat", "stage"] as const) {
       await page.reload();
       await expect(controls).toContainText("1 / 2");
       if (mode === "stage")
-        await page
-          .getByRole("button", { name: "舞台视图", exact: true })
-          .click();
+        await page.getByRole("button", { name: "舞台", exact: true }).click();
       const freshInput =
         mode === "stage"
           ? page.getByTestId("stage-decision-input")
@@ -129,7 +127,7 @@ for (const mode of ["chat", "stage"] as const) {
 
       // Leave a live chain and verify that its later completion cannot fill
       // the newly selected session's view.
-      await page.getByRole("button", { name: "解析视图", exact: true }).click();
+      await page.getByRole("button", { name: "阅读", exact: true }).click();
       host.holdNextAuto();
       await composerInput(page).fill("Continue after I leave");
       await composerInput(page).press("Enter");

@@ -14,9 +14,10 @@ vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlot: () => undefined }));
 vi.mock("../game-view/connection-status.js", () => ({
   ConnectionStatus: () => null,
 }));
-vi.mock("../session-music.js", () => ({ MusicToggle: () => null }));
+vi.mock("../session-music.js", () => ({ MusicMenuControls: () => null }));
 afterEach(cleanup);
 const props = (): ComponentProps<typeof GameViewHeader> => ({
+  menu: null,
   t: i18n.t,
   sessionId: "s",
   sessionPhase: "playing",
@@ -26,15 +27,11 @@ const props = (): ComponentProps<typeof GameViewHeader> => ({
   executing: false,
   viewMode: "parsed",
   pluginViews: [],
-  isLeftCollapsed: true,
   isRightCollapsed: true,
   onViewModeChange: vi.fn(),
-  onToggleLeftPanel: vi.fn(),
   onToggleRightPanel: vi.fn(),
-  onOpenSettings: vi.fn(),
   onOpenSuspensions: vi.fn(),
   onBackToWorldSelect: vi.fn(),
-  onResetSession: vi.fn(),
   suspensionsCount: 0,
 });
 it("adds no page menu without plugin pages", () => {
@@ -67,10 +64,10 @@ it("shows neither Text nor Stage active on a plugin page and leaves it on click"
     screen.queryByRole("button", { name: i18n.t("session.backToDefaultView") }),
   ).toBeNull();
   const text = screen.getByRole("button", {
-    name: i18n.t("session.viewParsedAria"),
+    name: i18n.t("session.viewRead"),
   });
   const stage = screen.getByRole("button", {
-    name: i18n.t("session.viewStageAria"),
+    name: i18n.t("session.viewStage"),
   });
   expect(text.getAttribute("aria-pressed")).toBe("false");
   expect(stage.getAttribute("aria-pressed")).toBe("false");

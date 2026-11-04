@@ -16,7 +16,7 @@ async function openView(page: Page, label: string) {
 async function back(page: Page) {
   await page
     .getByTestId("session-header")
-    .getByRole("button", { name: "Parsed view", exact: true })
+    .getByRole("button", { name: "Read", exact: true })
     .click();
 }
 
@@ -106,7 +106,12 @@ test("bundled graph and codex keep their right panels on committed data, and onl
       .getByRole("button", { name: /primary|主导航|основное/i })
       .click();
     await page
-      .getByRole("combobox", { name: /language|语言|язык/i })
+      .getByRole("dialog")
+      .getByRole("button", { name: /^(设置|Settings|Настройки)$/ })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("combobox", { name: /界面语言|interface language|язык/i })
       .selectOption("zh-CN");
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await page.keyboard.press("Escape");
@@ -193,7 +198,7 @@ test("host console sends admitted Direct and textless Advance while retaining dr
     await expect(
       page
         .getByTestId("session-header")
-        .getByRole("button", { name: "Parsed view", exact: true }),
+        .getByRole("button", { name: "Read", exact: true }),
     ).toBeInViewport();
   } finally {
     await f.close();
