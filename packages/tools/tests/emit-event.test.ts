@@ -432,6 +432,35 @@ describe("local schema references", () => {
     expect(JSON.stringify(data)).not.toContain('"#/');
   });
 
+  it("keeps payload fields named like schema keywords", () => {
+    const tool = buildSessionEmitEventTool(deps, [
+      {
+        topic: "a.b",
+        schema: {
+          type: "object",
+          required: ["definitions", "default"],
+          properties: {
+            definitions: { type: "array", items: { $ref: "#/$defs/word" } },
+            default: { $ref: "#/$defs/word" },
+            enum: { type: "boolean" },
+          },
+          $defs: { word: { type: "string" } },
+        },
+      },
+    ])!;
+    const data = (tool.jsonSchema as { properties: { data: unknown } })
+      .properties.data;
+    expect(data).toMatchObject({
+      required: ["definitions", "default"],
+      properties: {
+        definitions: { type: "array", items: { type: "string" } },
+        default: { type: "string" },
+        enum: { type: "boolean" },
+      },
+    });
+    expect(JSON.stringify(data)).not.toContain('"#/');
+  });
+
   it.each([
     [
       "a local reference",
