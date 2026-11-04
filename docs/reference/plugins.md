@@ -441,6 +441,8 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 - `text`：还显示正在写的那一段。
 - `off`：没有草稿，故事在提交后出现。
 
+草稿里的段落与接受后的故事相同：没有文字的段落元素不显示，也不挡住后面的段落。
+
 草稿只是显示：宿主不校验它，它不进 trace、不存库，也不改变输出。重试、换服务商或提交被拒绝时，已经显示的草稿先撤回；回滚或失败时玩家只看到撤回。玩家的“生成中显示故事”只能比作者更保守。只有 `io.visibility: story` 且输出由模型写出的 agent 能写 `units` 或 `text`：函数 runtime、`system` runtime 和 `io.output.from` 这样写会被拒绝。`io.concealed` 的 runtime 没有草稿。审核插件可以声明 `holdsDrafts`，让会话里的故事等全部审核通过后再显示，见[压住故事草稿](./hooks.md#holds-drafts)。事件见[草稿事件](./protocol.md#草稿事件)。
 
 实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
