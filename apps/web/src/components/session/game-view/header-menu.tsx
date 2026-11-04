@@ -12,6 +12,15 @@ import { Button } from "@/components/ui/button.js";
 const MENU_VIEWPORT_GUTTER = 12;
 const MENU_MAX_WIDTH = `calc(100vw - ${MENU_VIEWPORT_GUTTER * 2}px)`;
 
+/** A square icon-only header button. */
+export const HEADER_ICON_BUTTON = "h-10 w-10 md:h-8 md:w-8";
+/**
+ * A header button with words beside its icon: square while the words are
+ * hidden on phones, then as wide as its content.
+ */
+export const HEADER_TEXT_BUTTON =
+  "h-10 min-w-10 justify-center gap-1.5 px-2 md:h-8 md:min-w-8";
+
 /** A click-away menu kept within the viewport when toolbar controls wrap. */
 export function HeaderMenu({
   label,
@@ -19,13 +28,24 @@ export function HeaderMenu({
   children,
   icon: Icon = MoreHorizontal,
   text,
-  triggerClassName = "h-10 w-10 md:h-8 md:w-8",
+  inGroup = false,
+  triggerClassName,
 }: {
   readonly icon?: ComponentType<{ className?: string }>;
   readonly label: string;
-  /** Visible words beside the icon; the label stays the accessible name. */
+  /**
+   * Visible words beside the icon from the `sm` width up; the label stays the
+   * accessible name. The trigger then grows with the words instead of keeping
+   * the icon button's fixed width.
+   */
   readonly text?: string;
-  /** Size and shape of the trigger. */
+  /**
+   * The trigger is one segment of a grouped control (such as the Read / Stage
+   * switch), so it takes the group's shape instead of a standalone header
+   * button's (round glass in the stage appearance).
+   */
+  readonly inGroup?: boolean;
+  /** Size and shape of the trigger; replaces the default size. */
   readonly triggerClassName?: string;
   /** Marks the trigger when an option inside is switched on. */
   readonly active: boolean;
@@ -36,11 +56,11 @@ export function HeaderMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const { containerRef, triggerRef } = useDismissibleMenu(open, setOpen, true);
   useLayoutEffect(() => {
-    const container = containerRef.current;
+    const wrapper = containerRef.current;
     const menu = menuRef.current;
-    if (!open || !container || !menu) return;
+    if (!open || !wrapper || !menu) return;
     const position = () => {
-      const anchor = container.getBoundingClientRect();
+      const anchor = wrapper.getBoundingClientRect();
       const width = menu.getBoundingClientRect().width;
       const left = Math.max(
         MENU_VIEWPORT_GUTTER,
@@ -56,7 +76,7 @@ export function HeaderMenu({
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(position);
-    observer?.observe(container);
+    observer?.observe(wrapper);
     observer?.observe(menu);
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
@@ -79,7 +99,7 @@ export function HeaderMenu({
         ref={triggerRef}
         variant="ghost"
         size={text ? "sm" : "icon"}
-        className={`ui-session-action shrink-0 ${text ? "h-10 gap-1.5 px-2 md:h-8" : ""} ${triggerClassName} ${(open || active) && "bg-accent text-accent-foreground"}`}
+        className={`shrink-0 ${inGroup ? "" : "ui-session-action"} ${triggerClassName ?? (text ? HEADER_TEXT_BUTTON : HEADER_ICON_BUTTON)} ${open || active ? "bg-accent text-accent-foreground" : ""}`}
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-label={label}
