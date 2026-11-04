@@ -75,7 +75,7 @@ export function PluginPackageRow({
     ),
     packOptional: t(
       "session.recommendationReasons.packOptional",
-      "Pack optional",
+      "Optional in this mode",
     ),
   });
   const runtimes = pkg.runtimes ?? [];

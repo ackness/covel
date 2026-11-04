@@ -96,7 +96,7 @@ describe("world select — deleting player-created worlds", () => {
     expect(await screen.findByText("删除世界？")).toBeTruthy();
     // The prompt names the world, so the player can check what goes.
     expect(
-      screen.getByText(/「自定义世界」及其关联的所有会话数据/),
+      screen.getByText(/「自定义世界」及其关联的所有存档数据/),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
 

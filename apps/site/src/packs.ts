@@ -2,7 +2,7 @@ import { type PluginId, type Visual } from "./copy.js";
 
 // Which plugins the hero lights up for each way to play. The sets are
 // copied from each world's initial pack, explicit plugin references, conventional
-// data receivers and core defaults, including World Dimensions / World Time.
+// data receivers and core defaults, including World State / World Time.
 // This is a presentation subset, not a complete resolved session registry:
 // - stage: worlds/haruka-academy/world.yaml, `pack:dialogue-mode`
 // - tabletop: worlds/lantern-barrow/world.yaml, `pack:traditional-story`

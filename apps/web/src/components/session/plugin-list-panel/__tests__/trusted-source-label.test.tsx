@@ -55,7 +55,7 @@ it("shows declarative status without claiming trusted-source or code authorizati
   );
   expect(
     screen.getByText(
-      "No plugin server code · no code or runtime approval needed",
+      "Settings-only plugin · no approval needed",
     ),
   ).toBeTruthy();
   expect(screen.queryByText("auto-approved: trusted source")).toBeNull();

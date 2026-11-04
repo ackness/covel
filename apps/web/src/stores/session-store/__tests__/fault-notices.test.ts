@@ -64,7 +64,7 @@ describe("plugin fault notices", () => {
       );
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: "p is paused in this session after repeated errors.",
+          message: "p is paused in this game after repeated errors.",
           kind: "info",
         }),
       );

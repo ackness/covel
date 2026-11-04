@@ -167,7 +167,7 @@ export function LlmSlotCard({
           )}
           {isDiscovered && (
             <Badge variant="secondary" className="text-[10px]">
-              {t("settings.runtime", "runtime")}
+              {t("settings.runtime", "step")}
             </Badge>
           )}
           {isVirtualSlot && (

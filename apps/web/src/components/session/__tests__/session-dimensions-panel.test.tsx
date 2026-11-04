@@ -21,7 +21,7 @@ afterEach(cleanup);
 it("contains invalid active-session dimensions in a local alert", () => {
   render(<SessionDimensionsPanel recoveryOnly />);
   expect(screen.getByRole("alert").textContent).toContain(
-    "Dimension controls are unavailable",
+    "World state controls are unavailable",
   );
 });
 

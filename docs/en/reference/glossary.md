@@ -59,18 +59,16 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Story draft | 故事草稿 | The part of a story runtime's output written before the commit, shown for display only; not output and never stored. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
 | Sub-agent | 子 agent | An agent runtime another runtime runs inside its own execution, returning output only. |
-| This game | This game | The game being played. The menu's This game's settings… manages its saves, plugins and advanced options. |
 | Tool result | 工具结果 | Code-facing content and model-facing feedback have different shapes; success does not confirm persistence. |
 | Trigger mode | 触发模式 | How a runtime is triggered: `auto`, `manual` or `event`. |
 | Trusted source | 可信来源 | A GitHub source chosen by the instance owner or operator to reduce approval prompts. |
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
-| Waiting for you | Waiting for you | A suspended execution (`suspend`) waiting for the player's answer. The toolbar chip Waiting for you · N opens the dialog of the same name. Formerly Suspended executions. |
 | World | 世界 | A world's installation package is called a "world package". |
 | Write service | 写服务 | A service with `access: write` that changes its provider's own data for the caller; its writes are staged as one **operation**. See [Write services](./plugin-extensions.md#write-services). |
 
 ## Player terms
 
-Plugin names, settings and panels shown to players use one set of words, matched across Chinese, English and Russian. Write every player-visible plugin text (`displayName`, `description`, settings, panels, buttons and notices) with this table and do not vary the wording. The internal terms are in the tables above.
+Plugin names, settings and panels shown to players use one set of words, matched across Chinese, English and Russian. Write every player-visible plugin text (`displayName`, `description`, settings, panels, buttons and notices) with this table and do not vary the wording. Players no longer see these words: session, main view, framework default, dimension, runtime, slot, contract, narrator, setup page, traditional story mode. The internal terms are in the tables above.
 
 <!-- prettier-ignore -->
 | Concept | 中文 | English | Русский |
@@ -78,7 +76,7 @@ Plugin names, settings and panels shown to players use one set of words, matched
 | Storyteller (the plugin that tells the story) | 讲述者 | Storyteller | Рассказчик |
 | Game master | 主持人 | Game master | Ведущий |
 | World state | 世界状态 | World state | Состояние мира |
-| The step before play | 开局准备 | Get ready | Подготовка к игре |
+| The step before play | 开局准备 | Getting ready | Подготовка к игре |
 | Bag | 背包 | Bag | Сумка |
 | Lore book (entries) | 图鉴（条目） | Almanac (entries) | Энциклопедия (записи) |
 | Story memory | 故事记忆 | Story memory | Память истории |
@@ -91,6 +89,15 @@ Plugin names, settings and panels shown to players use one set of words, matched
 | Portraits | 立绘 | Portraits | Портреты |
 | Hidden plot events | 隐藏剧情 | Hidden plot events | Скрытые события |
 | AI (not model or LLM in player text) | AI | AI | ИИ |
+| A game being played / the saved one | 游戏 / 存档 | Game / Save | Игра / Сохранение |
+| The game being played now | 本局 | This game | Эта игра |
+| The two built-in screens | 阅读 / 舞台 | Read / Stage | Чтение / Сцена |
+| A page a plugin provides | 插件页面（直接写页面名） | Plugin page | Страница плагина |
+| A question waiting for the player | 等你回答 | Waiting for you | Ждёт ответа |
+| One unit of work inside a plugin | 步骤 | Step | Шаг |
+| Which model does which job | AI 分工 | AI roles | Роли ИИ |
+| Features a plugin depends on | 需要的功能 | Needs | Требуется |
+| Content for authors and troubleshooting | 开发者模式 | Developer mode | Режим разработчика |
 
 ## Prompt vocabulary
 

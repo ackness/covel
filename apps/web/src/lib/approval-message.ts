@@ -50,7 +50,7 @@ export function approvalConfirmMessage(
       plugin,
       runtime: action.slice(RUNTIME_ACTION_PREFIX.length),
       defaultValue:
-        '"{{plugin}}" asks to run its task {{runtime}} in this game. Allow it?',
+        '"{{plugin}}" wants to run the step {{runtime}} in this game. Allow it?',
     });
   return t("plugin.approval.confirmMessage", {
     plugin,

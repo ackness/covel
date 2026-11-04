@@ -198,7 +198,7 @@ export function reportWorkspaceSyncError(
   emitToast(
     "error",
     i18n.t("toast.syncFailed", {
-      defaultValue: "Could not sync this session to the server",
+      defaultValue: "Could not sync this game to the server",
     }) as string,
     detail,
   );

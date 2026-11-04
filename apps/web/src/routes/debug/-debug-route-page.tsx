@@ -225,7 +225,7 @@ export function DebugRoutePage({
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
             <span className="inline-flex min-w-0 items-center gap-1.5">
               <span className="ui-meta text-xs">
-                {t("debugger.session", "Session")}
+                {t("debugger.session", "Save")}
               </span>
               <span className="truncate font-mono text-foreground">
                 {selectedSessionId}

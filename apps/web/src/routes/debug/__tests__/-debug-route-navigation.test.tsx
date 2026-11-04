@@ -74,7 +74,7 @@ describe("debug route navigation", () => {
       <DebugRoutePage sid="session-a" view="plugins" />,
     );
     expect(screen.getByTestId("plugins-panel")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "会话数据" }));
+    fireEvent.click(screen.getByRole("button", { name: "存档数据" }));
     expect(mocks.navigate).toHaveBeenLastCalledWith({
       to: "/debug",
       search: { sid: "session-a", view: "data", pluginId: undefined },

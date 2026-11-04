@@ -109,7 +109,7 @@ export function WorldTranslatePanel({
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t(
             "world.translateHint",
-            "This world is written in {{worldLanguage}}, and a session plays in a language the world has. You can add a {{language}} edition.",
+            "This world is written in {{worldLanguage}}, and a game plays in a language the world has. You can add a {{language}} edition.",
             { worldLanguage, language },
           )}
         </p>

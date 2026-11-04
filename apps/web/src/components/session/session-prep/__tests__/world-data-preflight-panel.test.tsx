@@ -60,7 +60,7 @@ describe("WorldDataPreflightPanel", () => {
     expect(screen.getByText("1 lore entry")).toBeTruthy();
     expect(screen.queryByText(/portrait-assets/)).toBeNull();
     expect(
-      screen.getByText("This data has no plugin to receive it."),
+      screen.getByText("Some world data was not used because no plugin takes it."),
     ).toBeTruthy();
   });
 });
@@ -93,7 +93,7 @@ it.each([
   );
   try {
     expect(container.textContent).toContain(
-      "This data has no plugin to receive it.",
+      "Some world data was not used because no plugin takes it.",
     );
     expect(container.textContent).not.toContain("SECRET");
     expect(screen.queryByText("Check failed")).toBeNull();

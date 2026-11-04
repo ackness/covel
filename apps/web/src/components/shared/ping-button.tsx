@@ -22,7 +22,7 @@ type PingVariant = "inline" | "icon";
 
 interface PingButtonProps {
   target: PingTarget;
-  /** "icon" = single Zap button (compact); "inline" = button + "Ping" label. */
+  /** "icon" = single Zap button (compact); "inline" = button + "Test" label. */
   variant?: PingVariant;
   /** Tailwind size for the underlying Button. Defaults to "sm". */
   size?: "xs" | "sm";
@@ -198,7 +198,7 @@ export function PingButton({
     tooltipLines.push(
       t("settings.pingTtfb", {
         ms: latencyDisplay,
-        defaultValue: "{{ms}}ms TTFB",
+        defaultValue: "{{ms}}ms to first reply",
       }),
     );
   } else if (result && !result.ok && failureText) {
@@ -242,7 +242,7 @@ export function PingButton({
           className={`${size === "xs" ? "w-2.5 h-2.5" : "w-3 h-3"} ${variant === "inline" ? "mr-1" : ""}`}
         />
       )}
-      {variant === "inline" && t("settings.ping", "Ping")}
+      {variant === "inline" && t("settings.ping", "Test")}
     </Button>
   );
 
@@ -265,7 +265,7 @@ export function PingButton({
                   title={t("settings.pingSlotFallbackTitle", {
                     resolvedVia,
                     defaultValue:
-                      "Slot fell through to {{resolvedVia}}; the slot you requested is not configured.",
+                      "This AI role fell back to {{resolvedVia}}; the role you requested is not configured.",
                   })}
                 >
                   ⚠

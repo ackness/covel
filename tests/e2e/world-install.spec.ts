@@ -164,7 +164,7 @@ for (const width of [1280, 390]) {
       "example-demo",
       "example-note",
     ]);
-    await expect(dialog.getByText(/Package files changed/)).toHaveCount(0);
+    await expect(dialog.getByText(/Plugin or world files changed/)).toHaveCount(0);
     expect(
       await dialog.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,

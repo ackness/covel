@@ -157,7 +157,7 @@ for (const width of [1280, 390]) {
     await expect(
       dialog.getByText("example-note · 1.0.0", { exact: true }),
     ).toBeVisible();
-    await expect(dialog.getByText(/Package files changed/)).toBeVisible();
+    await expect(dialog.getByText(/Plugin or world files changed/)).toBeVisible();
     await installedPlugin
       .getByRole("button", { name: "Cancel pending update", exact: true })
       .click();
@@ -173,6 +173,6 @@ for (const width of [1280, 390]) {
         exact: true,
       }),
     ).toHaveCount(0);
-    await expect(dialog.getByText(/Package files changed/)).toHaveCount(0);
+    await expect(dialog.getByText(/Plugin or world files changed/)).toHaveCount(0);
   });
 }

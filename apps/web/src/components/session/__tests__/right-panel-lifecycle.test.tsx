@@ -329,7 +329,7 @@ it.each(["images", "plugin"])(
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledOnce());
     expect(mocks.toast).toHaveBeenCalledWith(
       "info",
-      "This panel is not available in this session.",
+      "This panel is not available in this game.",
     );
     const available = spec("provider-a", "missing");
     available.specs[0]!.navTarget = "images";

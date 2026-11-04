@@ -408,7 +408,7 @@ export function warnWhenCheckpointNearLimit(
     i18n.t("toast.checkpointNearLimit", {
       percent: Math.floor((bytes / limitBytes) * 100),
       defaultValue:
-        "This session uses {{percent}}% of the size a browser-stored session can have. At the limit it can no longer be saved; continue the story in a new session soon.",
+        "This game uses {{percent}}% of the size a browser can store. At the limit it can no longer be saved; continue the story in a new game soon.",
     }) as string,
     undefined,
     { durationMs: 20_000 },

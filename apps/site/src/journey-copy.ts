@@ -5,7 +5,7 @@ export const journeyEn = {
   stage: [
     {
       title: "A scene opens",
-      body: "Scene Stage places Mio in the library; the dialogue narrator gives her the next line.",
+      body: "Stage Scene places Mio in the library; the Chat Storyteller gives her the next line.",
     },
     {
       title: "You answer",
@@ -33,7 +33,7 @@ export const journeyEn = {
   story: [
     {
       title: "Follow the story",
-      body: "The narrator unfolds the letter. The Guide offers the next paths through Mistport.",
+      body: "The Storyteller unfolds the letter. The Guide offers the next paths through Mistport.",
     },
     {
       title: "Keep the clue",
@@ -41,13 +41,13 @@ export const journeyEn = {
     },
     {
       title: "Connect the case",
-      body: "The world’s Case Board tracks confirmed leads through World Dimensions. The investigation has moved on.",
+      body: "The world’s Case Board tracks confirmed leads through World State. The investigation has moved on.",
     },
   ],
   survival: [
     {
       title: "Hear the call",
-      body: "The narrator brings a future distress call into the present. The relay’s world panels show what is at stake.",
+      body: "The Storyteller brings a future distress call into the present. The relay’s world panels show what is at stake.",
     },
     {
       title: "Take the assignment",
@@ -55,7 +55,7 @@ export const journeyEn = {
     },
     {
       title: "See the cost",
-      body: "World Time advances the storm countdown; World Dimensions records the shared grid’s running cost.",
+      body: "World Time advances the storm countdown; World State records the shared grid’s running cost.",
     },
   ],
   stageState: {
@@ -97,7 +97,7 @@ export const journeyZh: typeof journeyEn = {
   stage: [
     {
       title: "相遇入画",
-      body: "场景舞台把澪带进图书馆，对话叙事接上她未说完的话。",
+      body: "舞台画面把澪带进图书馆，聊天式讲述接上她未说完的话。",
     },
     {
       title: "一句回应",
@@ -125,7 +125,7 @@ export const journeyZh: typeof journeyEn = {
   story: [
     {
       title: "循信入局",
-      body: "叙事者展开来信，行动建议留下几条通向雾港深处的路。",
+      body: "讲述者展开来信，行动建议留下几条通向雾港深处的路。",
     },
     {
       title: "线索入册",
@@ -133,13 +133,13 @@ export const journeyZh: typeof journeyEn = {
     },
     {
       title: "案情推进",
-      body: "世界维度承载雾港自定义的案情板。一条线索被确认，调查便向前走了一步。",
+      body: "世界状态承载雾港自定义的案情板。一条线索被确认，调查便向前走了一步。",
     },
   ],
   survival: [
     {
       title: "远方来电",
-      body: "叙事者把未来的求救送到此刻，中继站的世界面板呈现眼前的危机。",
+      body: "讲述者把未来的求救送到此刻，中继站的世界面板呈现眼前的危机。",
     },
     {
       title: "接下救援",
@@ -147,7 +147,7 @@ export const journeyZh: typeof journeyEn = {
     },
     {
       title: "代价可见",
-      body: "世界时间推动风暴倒计时，世界维度记下共享电网运转所花去的储备。",
+      body: "世界时间推动风暴倒计时，世界状态记下共享电网运转所花去的储备。",
     },
   ],
   stageState: {

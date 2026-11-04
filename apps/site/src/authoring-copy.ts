@@ -6,13 +6,13 @@ export const foundationsEn = {
   plugin: {
     title: "The plugin system",
     body: "Narration, dice, memory and panels are pieces you can choose, extend or replace—even the ones that come with Covel.",
-    diagramTitle: "Start with a narrator",
+    diagramTitle: "Start with a Storyteller",
     diagramNote: "Add only what this story needs.",
     modules: ["Dice", "Quests", "Memory", "Relationships"],
     points: [
       {
         title: "Small enough for a conversation",
-        body: "One narrative plugin is enough to play. Add tools, rules and interfaces as your story asks for them.",
+        body: "One Storyteller plugin is enough to play. Add tools, rules and interfaces as your story asks for them.",
       },
       {
         title: "Open to a different way of playing",
@@ -54,13 +54,13 @@ export const foundationsZh: typeof foundationsEn = {
   plugin: {
     title: "插件系统",
     body: "叙事、骰子、记忆和面板，都是可以选择、扩展或替换的组成部分。随 Covel 提供的插件，也遵循同一套接口。",
-    diagramTitle: "从一位叙事者开始",
+    diagramTitle: "从一位讲述者开始",
     diagramNote: "故事需要什么，就添上什么。",
     modules: ["骰点", "任务", "记忆", "人物关系"],
     points: [
       {
         title: "一段对话，也能成行",
-        body: "只启用一个叙事插件就能游玩。随着故事需要，再添上工具、规则与界面。",
+        body: "只启用一个讲述者插件就能游玩。随着故事需要，再添上工具、规则与界面。",
       },
       {
         title: "让新的玩法，有处落脚",
@@ -117,7 +117,7 @@ export const creationEn = {
   },
   skills: {
     title: "Create with Agent Skills",
-    body: "In a code workspace, give a coding assistant your brief and the relevant skill. It can write and validate world packs or plugins against Covel’s current authoring contracts.",
+    body: "In a code workspace, give a coding assistant your brief and the relevant skill. It can write and validate world packs or plugins against Covel’s current authoring rules.",
     installTitle: "Install the authoring skills",
     installNote:
       "Run in a prepared Covel source workspace with Node.js and npx available. Choose the coding assistant you use; then describe what you want to create.",
@@ -153,7 +153,7 @@ export const creationZh: typeof creationEn = {
   },
   skills: {
     title: "用 Agent Skills，写自己的世界与玩法",
-    body: "在代码工作区，把创作意图和对应 Skill 交给编程助手。它可以按 Covel 当前的作者契约编写并校验世界包或插件。",
+    body: "在代码工作区，把创作意图和对应 Skill 交给编程助手。它可以按 Covel 当前的创作规范编写并校验世界包或插件。",
     installTitle: "安装创作技能",
     installNote:
       "准备好 Covel 源码工作区与 Node.js / npx，在终端运行命令，选择你使用的编程助手，再向它描述创作意图。",

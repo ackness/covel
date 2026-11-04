@@ -506,7 +506,7 @@ it("renders public cast, a separate pending interaction and committed story upda
   );
   state = { ...state, submittedBlockIds: new Set(["form"]) };
   view.rerender(shell(<GameView session={state.session!} />));
-  expect(screen.getByText("No pending interactions.")).toBeTruthy();
+  expect(screen.getByText("No questions are waiting for you.")).toBeTruthy();
 
   state = {
     ...state,
@@ -537,7 +537,7 @@ it("renders public cast, a separate pending interaction and committed story upda
   };
   view.rerender(shell(<GameView session={state.session!} />));
   expect(screen.getByText("FINAL-STORY")).toBeTruthy();
-  expect(screen.getByText("No pending interactions.")).toBeTruthy();
+  expect(screen.getByText("No questions are waiting for you.")).toBeTruthy();
   for (const secret of [
     "TOOL-SECRET",
     "HIDDEN-PLOT",
@@ -661,7 +661,7 @@ it("numbers current console choices across lists and submits their selected inte
     expect(actions.submitBlock).not.toHaveBeenCalled();
     state = { ...state, submittedBlockIds: new Set(["first", "second"]) };
     view.rerender(shell(<GameView session={state.session!} />));
-    expect(screen.getByText("No pending interactions.")).toBeTruthy();
+    expect(screen.getByText("No questions are waiting for you.")).toBeTruthy();
     expect(
       document.querySelector(
         '[data-row-kind="execution"], [data-row-kind="assets"], [data-row-kind="reasoning"]',
@@ -698,7 +698,7 @@ it("masks live context in nested plugin messages and snapshot panels", () => {
   expect(screen.getAllByTestId("game-composer")).toHaveLength(1);
   expect(
     screen.getByText(
-      "Session controls are available only in the current live plugin view.",
+      "These controls are available only on the current plugin page.",
     ),
   ).toBeTruthy();
 });

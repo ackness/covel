@@ -750,7 +750,7 @@ it("offers Continue for a live stopped opening with no runtime steps, using the 
     await pending;
   });
   const button = await screen.findByRole("button", { name: "Continue" });
-  expect(screen.getByText("Stopped; turn not committed")).toBeTruthy();
+  expect(screen.getByText("Stopped; this turn was not recorded")).toBeTruthy();
   expect(runKernelAction).not.toHaveBeenCalled();
   fireEvent.click(button);
   fireEvent.click(button);
