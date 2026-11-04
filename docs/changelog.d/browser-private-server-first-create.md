@@ -4,4 +4,4 @@
 
 ### Upgrade notes
 
-- **Browser-private development saves that never completed a first sync must be recreated.** They no longer get special treatment and upload as ordinary saves without the server's initialization.
+- **Recreate browser-private development saves that never completed a first sync.** The server now creates and initializes the session first and the first upload is revision 1; saves that never synced upload as ordinary saves without the server's initialization.

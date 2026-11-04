@@ -4,4 +4,4 @@
 
 ### Changed
 
-- **Inferred stage departures now require an explicit opt-in.** Omission or `"none"` cuts immediately. Scene Stage cast and direction providers both emit `"fade"` to preserve their existing presentation; delivered explicit actor exits retain their own transitions. No persistent schema change or development-data reset is needed.
+- **Inferred stage departures now require an explicit opt-in.** Omission or `"none"` cuts immediately, so a third-party stage cast provider cuts instantly unless it emits `exitTransition: "fade"`. Scene Stage cast and direction providers both emit `"fade"` to preserve their existing presentation; delivered explicit actor exits retain their own transitions. No persistent schema change or development-data reset is needed.

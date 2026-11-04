@@ -10,4 +10,4 @@
 
 ### Upgrade notes
 
-- **Recreate queued or withheld development jobs for the changed plugin versions and experimental presentation snapshots.** Ordinary story segments and display records remain current; no database reset or migration is required.
+- **Discard queued or withheld presentation jobs created before the upgrade.** Jobs queued for earlier Scene Stage and Soundtrack versions and experimental presentation snapshots cannot be reused; recreate them. Ordinary story segments and display records remain current, and no database reset or migration is required.

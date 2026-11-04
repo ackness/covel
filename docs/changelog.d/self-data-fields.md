@@ -1,6 +1,6 @@
 ### Added
 
-- **`io.selfData[].fields` chooses which record fields an agent sees, and in what order.** Leave out display-only fields and put what matters first, since the `summary` format cuts each entry at 200 characters. Values that are not objects are shown whole; read baselines and tools still see the complete value. Reference: [plugins](../reference/plugins.md#ioselfdata).
+- **`io.selfData[].fields` chooses which record fields an agent sees, and in what order.** Leave out display-only fields and put what matters first, since the `summary` format cuts each entry at 200 characters. Values that are not objects are shown whole; read baselines and tools still see the complete value. Reference: [plugins](../en/reference/plugins.md#ioselfdata).
 
 ### Fixed
 

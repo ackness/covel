@@ -1,3 +1,7 @@
+### Added
+
+- **`pnpm --filter @covel/ai-provider update-models-dev` refreshes the catalog snapshot.** Reasoning rules gain `format`, `thinksByDefault`, `toolChoiceWhileThinking`, `sampling` and `whenUnlisted`, `providers` (scope a rule to one provider) and `withTools` (limit the levels used with tools), in the bundled data and in the user's `reasoning-models.json`. Settings shows which level is sent by default and which sampling parameters a model ignores or fixes.
+
 ### Changed
 
 - **Reasoning levels come from the models.dev catalog.** Covel bundles a trimmed snapshot of [models.dev](https://models.dev) and reads each model's levels, default level, fixed sampling parameters and accepted tool choices from it, per provider endpoint. Many models that showed no reasoning options before (Kimi K3, GLM 5.x, MiniMax, Gemma, Claude on Bedrock and Vertex, and others) now list them. Covel's own rules still win where they name a model, and still decide how each vendor switches thinking on and off.
@@ -7,9 +11,5 @@
 
 ### Fixed
 
-- **Runtimes that turn reasoning off use the lowest level on catalog models that always think.** Kimi K3.1 Pro was unknown before, so the "off" runtime default was dropped and every call, including memory extraction, thought at `max`; the opening timed out. It now sends `low`.
+- **A model that always thinks uses its lowest level when a runtime turns reasoning off.** A model whose catalog entry says it always thinks now sends its lowest level (`low` for Kimi K3.1 Pro) instead of thinking at its highest; Kimi K3.1 Pro ran every call, including memory extraction, at `max` and the opening timed out.
 - **Models named like `MiniMaxAI/...` are no longer taken for xAI models.**
-
-### Added
-
-- **`pnpm --filter @covel/ai-provider update-models-dev` refreshes the catalog snapshot.** Reasoning rules gain `format`, `thinksByDefault`, `toolChoiceWhileThinking`, `sampling` and `whenUnlisted`, in the bundled data and in the user's `reasoning-models.json`. Settings shows which level is sent by default and which sampling parameters a model ignores or fixes.

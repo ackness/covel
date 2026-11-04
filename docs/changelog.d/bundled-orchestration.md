@@ -10,7 +10,7 @@
 
 ### Changed
 
-- **Dialogue narration prepares a policy once, then delegates inside the story agent.** Successful public actor segments retain plan order; this bundled consumer dispatches sequentially, including parallel advice. Shared briefs contain current observations, while each actor receives its own witnessed history. Private intent is discarded. Stage presence informs both planning and narration. Only committed story yield requests bounded host advancement.
+- **Dialogue narration prepares a policy once, then delegates inside the story agent.** Successful public actor segments retain plan order; sequential plans use one `delegate` call per actor and parallel plans use one `delegate-batch`. Shared briefs contain current observations, while each actor receives its own witnessed history. Private intent is discarded. Stage presence informs both planning and narration. Only committed story yield requests bounded host advancement.
 - **Director uses the planner's text slot, including browser request bindings.** Slot inspection matches generation, and function gateways convert JSON Schema for structured output by default. Missing gateways or usable slots fall back to mention with a reason; model failures leave narrator-only play available.
 - **Orchestration groups policy selection and all three limits.** A sole provider resolves automatically with its name and settings link; multiple providers offer a selector, and stale selections can be cleared. Independent field saves use their existing routes and preserve failed drafts and successful saves. Live advancement and Stop remain in every game view.
 - **Preparation waits for plugin defaults before accepting selection edits.** Plugin switches and pack controls stay disabled while the plugin plan loads, so its defaults cannot overwrite a player's exclusions.
@@ -19,4 +19,4 @@
 
 ### Upgrade notes
 
-- **Choose a different seat role by creating a new session.** Existing seats are unchanged. Refresh local dialogue/delegate model recordings if used. Keep the existing instruction to discard unresolved delegated suspensions and their checkpoints created before delegation-budget snapshots; no whole database or world reset is required.
+- **Choose a seat role when you create the session.** Existing seats keep their role; create a new session to play as Game master or Spectator. No database or world reset is required.
