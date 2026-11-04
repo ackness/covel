@@ -1,0 +1,33 @@
+# Russian text of the world-init plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Состояние мира
+  description: Следит за числами и состояниями мира, например за влиянием фракций, погодой и репутацией, и обновляет их по ходу истории.
+runtimes/dimension-clock/RUNTIME.md:
+  description: Обновляет значения, которые следуют за часами мира, например дату. Не обращается к ИИ.
+runtimes/dimension-context/RUNTIME.md:
+  description: Передаёт истории состояние мира на этот ход. Не обращается к ИИ.
+runtimes/dimension-tracker/RUNTIME.md:
+  description: После каждого хода обновляет состояние мира по правилам мира и тому, что произошло в истории.
+runtimes/edit-dimensions/RUNTIME.md:
+  description: Позволяет изменить значение или вручную обработать либо пропустить ожидающее обновление.
+runtimes/schema-gen/RUNTIME.md:
+  description: Один раз в начале игры настраивает характеристики персонажей и сведения о мире.
+messages:
+  World: Мир
+  Overview: Обзор
+  Character traits: Характеристики персонажей
+  Character traits are not ready yet. Waiting for the world to get ready…: Характеристики персонажей ещё не готовы. Подождите, пока мир подготовится…
+  Free text: Свободный текст
+  Number: Число
+  Yes / No: Да / Нет
+  One of several: Один из вариантов
+  List: Список
+  Group: Группа
+  Labeled list: Список с названиями
+  Stats: Показатели
+  Biography: Биография
+  Abilities: Способности
+  Equipment: Снаряжение
+  Social: Общение

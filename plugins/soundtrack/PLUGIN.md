@@ -1,9 +1,9 @@
 ---
-version: 0.0.7
+version: 0.0.8
 displayName: Soundtrack
 description: >-
-  Plays the background music a world ships, and follows the scene and the mood
-  of the story.
+  Plays the world's background music and switches tracks as the scene and mood
+  of the story change.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel

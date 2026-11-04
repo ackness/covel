@@ -8,7 +8,7 @@
   "groupOrder": 450,
   "dataSource": { "namespace": "stage" },
   "emptyState": {
-    "message": "No scene established yet, waiting for the narrative to progress…"
+    "message": "The scene will appear once the story gets going…"
   },
   "view": {
     "component": "Stack",

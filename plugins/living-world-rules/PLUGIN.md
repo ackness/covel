@@ -1,9 +1,9 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: World Rules
 description: >-
-  Shows the world's lasting rules, such as taboos, customs, and special setting
-  details, and keeps the story following them.
+  Shows the lasting rules of the world, such as taboos and customs, and keeps
+  the story following them.
 tags:
   - "data:world-data"
   - "data:lorebook"
@@ -18,7 +18,7 @@ contributes:
   data:
     rules:
       schema: ./schemas/rules.schema.json
-      description: Importable world info rules that can also project to lorebook.
+      description: Lasting rules of the world, such as taboos and customs.
       accepts:
         - world.rules@1
       authoring:

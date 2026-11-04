@@ -1,8 +1,8 @@
 ---
 kind: core
-version: 0.0.45
-displayName: History Compaction
-description: Maintains bounded segmented summaries of older conversation history.
+version: 0.0.46
+displayName: Long-Story Memory
+description: Shrinks older parts of a long story into short summaries, so the game stays fast and the story does not forget what happened.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel

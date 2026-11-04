@@ -1,0 +1,21 @@
+# Russian text of the story-events plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Скрытые события
+  description: Тайные события мира остаются скрытыми, пока не выполнятся их условия, и тогда естественно вплетаются в историю. По желанию ИИ может сам планировать новые скрытые события по ходу игры.
+  contributes:
+    settings:
+      - key: planner
+        label: Планировать скрытые события
+        description: Позволяет ИИ в фоне планировать будущие скрытые события. Раз в 3 хода тратится дополнительный запрос к ИИ, поэтому игра обходится дороже.
+    data:
+      events:
+        authoring:
+          title: Скрытые события
+runtimes/evaluate/RUNTIME.md:
+  description: Каждый ход проверяет, выполнены ли условия скрытого события, и если да, вплетает его в историю.
+runtimes/intake/RUNTIME.md:
+  description: Проверяет новые скрытые события, запланированные по ходу игры, и добавляет их в список.
+runtimes/plot/RUNTIME.md:
+  description: Раз в несколько ходов читает последние события и состояние мира и планирует скрытые события на будущее.

@@ -2,31 +2,30 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 世界维度
-  description: 初始化角色属性和作者声明的世界维度，持续维护可变状态。
+  displayName: 世界状态
+  description: 记录世界的数值和状态，如势力、天气、声望，并随剧情更新。
 runtimes/dimension-clock/RUNTIME.md:
-  description: 按世界时钟计算作者声明为由时钟推导的维度值，不调用模型。
+  description: 更新跟随世界时钟变化的数值，例如日期。不调用 AI。
 runtimes/dimension-context/RUNTIME.md:
-  description: 发布本回合冻结的世界维度快照，不调用模型。
+  description: 把本回合的世界状态交给故事。不调用 AI。
 runtimes/dimension-tracker/RUNTIME.md:
-  description: 按作者规则维护本轮叙事发生的维度变化；无变化也明确结算。
+  description: 每回合结束后，按世界的规则根据故事里发生的事更新世界状态。
 runtimes/edit-dimensions/RUNTIME.md:
-  description: 玩家修正维度当前值，或明确人工处理/跳过待结算回合。
+  description: 让你修改某个数值，或手动处理、跳过等待中的更新。
 runtimes/schema-gen/RUNTIME.md:
-  description: 开局一次性构建角色属性结构和世界资料。
+  description: 开局时一次性设置好角色属性和世界信息。
 messages:
-  World Details: 世界资料
-  Details: 资料
+  World: 世界
   Overview: 总览
-  Character Traits: 角色属性
-  Character traits are not ready yet. Waiting for the world to finish preparing…: 角色属性定义尚未生成，等待世界初始化……
-  Text: 文本
-  Number: 数值
-  Boolean: 是非
-  Choice: 选项
+  Character traits: 角色属性
+  Character traits are not ready yet. Waiting for the world to get ready…: 角色属性还没准备好，请稍候…
+  Free text: 自由填写
+  Number: 数字
+  Yes / No: 是 / 否
+  One of several: 多选一
   List: 列表
-  Object: 对象
-  Map: 映射
+  Group: 分组
+  Labeled list: 带名称的列表
   Stats: 数值属性
   Biography: 背景
   Abilities: 能力

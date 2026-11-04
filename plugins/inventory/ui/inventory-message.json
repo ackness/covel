@@ -16,7 +16,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "Inventory changes",
+              "content": "Bag changes",
               "size": "xs",
               "variant": "muted"
             }

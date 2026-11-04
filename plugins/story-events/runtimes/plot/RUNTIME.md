@@ -1,7 +1,7 @@
 ---
 description: >-
-  Every few turns, reads this turn's narrative and world state to plant hidden
-  follow-up events that happen later.
+  Every few turns, reads the latest story and world state and plans hidden
+  events for later.
 schedule:
   stage: post-turn
   every: 3

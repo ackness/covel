@@ -1,7 +1,6 @@
 ---
 description: >-
-  Builds the character attribute structure and world reference data once at game
-  start.
+  Sets up the character traits and world details once, when the game starts.
 schedule:
   stage: setup
   trigger:

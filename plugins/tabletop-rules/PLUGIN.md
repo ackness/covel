@@ -1,9 +1,9 @@
 ---
-version: 0.0.38
-displayName: Tabletop Rules
+version: 0.0.39
+displayName: Ability Checks
 description: >-
-  Layer opening point allocation onto character creation and resolve attribute
-  checks with durable dice receipts.
+  Lets you spend starting points on your hero's abilities, then rolls dice for
+  ability checks and keeps the results.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -18,11 +18,11 @@ contributes:
   data:
     rules:
       schema: ./schemas/rules.schema.json
-      description: Point-buy rules for character creation.
+      description: How many starting points a player spends on abilities, and which ones.
       accepts:
         - tabletop-rules.rules.initial@1
       authoring:
-        title: Character creation rules
+        title: Starting ability points
         hint: >-
           Write one object with `id: creation`, a point `budget` and the
           `attributes` the player may raise. Each attribute `id` must be a

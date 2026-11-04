@@ -1,6 +1,5 @@
 ---
-description: Edits current values or explicitly resolves a pending settlement
-  manually or by skipping.
+description: Lets you correct a value, or handle a waiting update by hand or skip it.
 schedule:
   trigger:
     type: manual

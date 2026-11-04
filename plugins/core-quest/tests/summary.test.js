@@ -47,7 +47,7 @@ describe("quest session summary", () => {
           id: "quest.current",
           kind: "text",
           // Every language the plugin has: the client picks the UI language.
-          label: { en: "Objective", zh: "当前目标" },
+          label: { en: "Objective", zh: "当前目标", ru: "Текущая цель" },
           value: "Ask Tiegu about page 74",
         },
         {

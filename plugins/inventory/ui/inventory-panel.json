@@ -1,7 +1,7 @@
 {
   "id": "inventory",
   "group": "inventory",
-  "label": "Inventory",
+  "label": "Bag",
   "shortLabel": "Bag",
   "icon": "backpack",
   "groupOrder": 720,
@@ -10,7 +10,7 @@
     "namespace": "items"
   },
   "emptyState": {
-    "message": "Your bag is empty. Items you explicitly obtain in the story will appear here…"
+    "message": "Your bag is empty. Items you pick up in the story will appear here."
   },
   "view": {
     "component": "Stack",
@@ -164,7 +164,7 @@
           {
             "component": "Section",
             "props": {
-              "title": "Backpack",
+              "title": "Carried",
               "icon": "backpack",
               "defaultOpen": true
             },

@@ -263,9 +263,7 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
       );
       expect(state.snapshot.session.phase).toBe("playing");
       expect(state.snapshot.session.completedPlayerTurns).toBe(0);
-      await page
-        .getByRole("tab", { name: "World Details", exact: true })
-        .click();
+      await page.getByRole("tab", { name: "World", exact: true }).click();
       if (!clear) {
         await expect(
           page.getByRole("heading", { name: "Harbor alarm", exact: true }),

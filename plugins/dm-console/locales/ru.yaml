@@ -1,0 +1,10 @@
+PLUGIN.md:
+  displayName: Панель ведущего
+  description: В одном месте видно, кто в сцене, что ждёт вашего решения и как идёт история.
+messages:
+  Game Master Panel: Панель ведущего
+  Characters in the scene: Герои в сцене
+  Waiting for you: Ждёт вас
+  Story: История
+  Your input: Ваш ввод
+  Use the input for your current role to guide the story or move it forward. Opening this panel does not change your role or who speaks next.: Вводите текст от имени своей текущей роли, чтобы направить историю или двинуть её дальше. Открытие панели не меняет вашу роль и то, кто говорит.

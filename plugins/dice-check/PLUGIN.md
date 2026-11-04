@@ -1,9 +1,8 @@
 ---
-version: 0.0.42
+version: 0.0.43
 displayName: Dice Check
 description: >-
-  Dice checks for risky actions — pre-rolled dice pools, rule-based outcomes,
-  and visible receipts.
+  Rolls dice when an action is risky and shows the result in the chat.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -37,11 +36,11 @@ contributes:
     - name: roll
       aliases:
         - r
-      description: "Roll dice notation, defaulting to 1d20."
+      description: "Roll dice, for example /roll 2d6. Rolls one 20-sided die by default."
       arguments:
         - name: notation
           type: string
-          description: "Dice notation in NdM form, such as 2d6."
+          description: "What to roll, such as 2d6 (two six-sided dice)."
           required: false
       action: roll
   actions:

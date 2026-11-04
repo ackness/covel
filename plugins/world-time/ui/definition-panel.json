@@ -7,7 +7,7 @@
     "namespace": "definitions"
   },
   "emptyState": {
-    "message": "Uses the default world calendar: 12 months of 30 days, 24-hour days; starts at year 1, month 1, day 1, 08:00."
+    "message": "This world has no custom calendar. It uses a standard one: 12 months of 30 days, 24-hour days, starting at year 1, month 1, day 1, 08:00."
   },
   "view": {
     "component": "Stack",
@@ -89,7 +89,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "Starts at",
+              "content": "Starting phase",
               "variant": "muted",
               "size": "xs"
             }
@@ -243,7 +243,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "Starts at",
+              "content": "Starting date",
               "variant": "muted",
               "size": "xs"
             }
@@ -315,7 +315,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "Time moves",
+              "content": "How time moves",
               "variant": "muted",
               "size": "xs"
             }
@@ -330,7 +330,7 @@
                 "labels": {
                   "forward": "Forward",
                   "backward": "Backward",
-                  "bidirectional": "Forward or backward, as the story goes",
+                  "bidirectional": "Forward or backward, as the story needs",
                   "random": "Jumps at random"
                 }
               },
@@ -344,7 +344,7 @@
               "eq": "phases"
             },
             "props": {
-              "content": "Default per turn, in phases",
+              "content": "Time passing each turn, in phases",
               "variant": "muted",
               "size": "xs"
             }
@@ -356,7 +356,7 @@
               "eq": "calendar"
             },
             "props": {
-              "content": "Default per turn, in minutes",
+              "content": "Time passing each turn, in minutes",
               "variant": "muted",
               "size": "xs"
             }
@@ -380,7 +380,7 @@
               "eq": "phases"
             },
             "props": {
-              "content": "Most per turn, in phases",
+              "content": "Longest jump per turn, in phases",
               "variant": "muted",
               "size": "xs"
             }
@@ -392,7 +392,7 @@
               "eq": "calendar"
             },
             "props": {
-              "content": "Most per turn, in minutes",
+              "content": "Longest jump per turn, in minutes",
               "variant": "muted",
               "size": "xs"
             }

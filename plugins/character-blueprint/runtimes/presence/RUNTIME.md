@@ -1,5 +1,5 @@
 ---
-description: Saves a character's portrait, sprite, and voice.
+description: Saves a character's portrait and voice.
 schedule:
   trigger:
     type: manual

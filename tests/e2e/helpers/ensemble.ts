@@ -289,7 +289,7 @@ export async function prepareEnsemble(
     name: "Orchestration",
     exact: true,
   });
-  await expect(orchestration.getByText(/^Turn Policy \/ /)).toBeVisible();
+  await expect(orchestration.getByText(/^Who Speaks Next \/ /)).toBeVisible();
   await expect(orchestration.getByRole("combobox")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Save Turn policy", exact: true }),

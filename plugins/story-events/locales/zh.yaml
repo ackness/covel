@@ -2,20 +2,20 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 隐藏事件
-  description: 世界包声明的隐藏剧情在条件满足前对模型与玩家都不可见；满足时由叙事在本回合自然演出。可开启剧情策划，在幕后追加后续事件。
+  displayName: 隐藏剧情
+  description: 世界里的隐藏剧情会一直保密，条件满足的那一回合才自然融入故事。也可以让 AI 在游戏中规划新的隐藏剧情。
   contributes:
     settings:
       - key: planner
-        label: 剧情策划
-        description: 每 3 回合调用一次模型，根据剧情在幕后埋下之后才会发生的隐藏事件。
+        label: 规划隐藏剧情
+        description: 让 AI 在后台规划之后才会发生的隐藏剧情。每 3 回合多用一次 AI，花费更高。
     data:
       events:
         authoring:
-          title: 隐藏剧情事件
+          title: 隐藏剧情
 runtimes/evaluate/RUNTIME.md:
-  description: 每回合用当前维度与世界时间判断隐藏事件是否满足条件，满足时向叙事交出本回合的剧情提示。
+  description: 每回合检查隐藏剧情的条件是否满足，满足就把它融入故事。
 runtimes/intake/RUNTIME.md:
-  description: 接收其他 runtime 在剧情推进中提出的后续隐藏事件，校验后加入隐藏事件表。
+  description: 校验游戏中新规划的隐藏剧情，并把它们加入隐藏剧情表。
 runtimes/plot/RUNTIME.md:
-  description: 每隔几回合读取本轮叙事和世界状态，埋下之后才会发生的隐藏后续事件。
+  description: 每隔几回合读取最新剧情和世界状态，为之后规划隐藏剧情。

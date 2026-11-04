@@ -1,13 +1,13 @@
 {
   "id": "world-schema",
   "group": "world-data",
-  "groupLabel": "World Details",
-  "shortLabel": "Details",
-  "label": "Character Traits",
+  "groupLabel": "World",
+  "shortLabel": "World",
+  "label": "Character traits",
   "icon": "sliders-horizontal",
   "dataSource": { "source": "session.characterSchema" },
   "emptyState": {
-    "message": "Character traits are not ready yet. Waiting for the world to finish preparing…"
+    "message": "Character traits are not ready yet. Waiting for the world to get ready…"
   },
   "view": {
     "component": "CardList",
@@ -34,13 +34,13 @@
                   "label": {
                     "$map": { "$item": "type" },
                     "labels": {
-                      "string": "Text",
+                      "string": "Free text",
                       "number": "Number",
-                      "boolean": "Boolean",
-                      "enum": "Choice",
+                      "boolean": "Yes / No",
+                      "enum": "One of several",
                       "array": "List",
-                      "object": "Object",
-                      "map": "Map"
+                      "object": "Group",
+                      "map": "Labeled list"
                     }
                   },
                   "color": "blue"
@@ -62,14 +62,6 @@
                 }
               }
             ]
-          },
-          {
-            "component": "Text",
-            "props": {
-              "content": { "$item": "id" },
-              "variant": "muted",
-              "size": "xs"
-            }
           },
           {
             "component": "Text",

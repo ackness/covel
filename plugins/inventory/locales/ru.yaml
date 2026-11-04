@@ -1,0 +1,33 @@
+# Russian text of the inventory plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Сумка
+  description: Следит за тем, что вы носите с собой. Предметы, которые вы получаете, теряете или надеваете в истории, сами попадают в сумку.
+  contributes:
+    commands:
+      - name: bag
+        description: Показать, что у вас с собой, и открыть вкладку «Сумка».
+    data:
+      items:
+        authoring:
+          title: Начальные предметы
+runtimes/ledger/RUNTIME.md:
+  description: После каждого хода записывает предметы, которые вы получили, потеряли или надели.
+runtimes/vocabulary/RUNTIME.md:
+  description: Запоминает названия предметов из сумки, чтобы дальше они назывались одинаково.
+messages:
+  Bag changes: Изменения в сумке
+  Bag: Сумка
+  Your bag is empty. Items you pick up in the story will appear here.: Сумка пуста. Предметы, найденные в истории, появятся здесь сами.
+  title|Equipped: Надето
+  Unequip: Снять
+  Drop: Выбросить
+  Carried: С собой
+  Equip: Надеть
+  You have {count} item in your bag.: "В сумке предметов: {count}."
+  You have {count} items in your bag.: "В сумке предметов: {count}."
+  Gained: Получено
+  Lost: Потеряно
+  Equipped: Надето
+  Unequipped: Снято

@@ -1,0 +1,14 @@
+# Russian text of the npc-graph plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Отношения
+  description: Помнит, кто с кем связан, чтобы история не забывала людей, которых вы встретили, и то, как они связаны между собой.
+runtimes/extractor/RUNTIME.md:
+  description: Отмечает персонажей, группы и фракции в истории и то, как они связаны.
+runtimes/rag-retriever/RUNTIME.md:
+  description: Когда речь заходит о ком-то, напоминает истории о людях, связанных с ним.
+messages:
+  Relationships: Отношения
+  No character or faction relationships yet. They will appear as the story continues.: Связей между персонажами и фракциями пока нет. Они появятся по ходу истории.
+  How the characters, groups and factions in this story are connected. Green lines are good relationships, red are bad, gray are neutral. Click a character for details.: Как связаны персонажи, группы и фракции этой истории. Зелёные линии — хорошие отношения, красные — плохие, серые — нейтральные. Нажмите на персонажа, чтобы узнать больше.

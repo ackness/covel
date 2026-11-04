@@ -72,7 +72,7 @@ describe("pregame handler", () => {
     expect(result.effects.notifications[0].title).toContain(
       "Welcome to Unknown World",
     );
-    expect(result.value.narrativeOutput).toContain("Game initialized");
+    expect(result.value.narrativeOutput).toContain("Welcome to Unknown World.");
   });
 
   it("survives a throwing store instead of failing pre-game", async () => {

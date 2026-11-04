@@ -2,11 +2,11 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 回复变体
-  description: 提供多条可切换的回复，让你挑选更合适的说法。
+  displayName: 备选回复
+  description: 可以让故事换个说法再回复一次，从中挑出你最喜欢的一条。
 messages:
-  Reply candidates: 回复候选
-  Draft: 草稿
+  Alternative replies: 备选回复
+  Edit first: 先编辑
   Send: 发送
-  Accept: 采用
-  Regenerate: 重生成
+  Use this reply: 用这条回复
+  Try again: 重新生成

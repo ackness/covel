@@ -1,6 +1,6 @@
 {
   "id": "dm-console",
-  "label": "DM Console",
+  "label": "Game Master Panel",
   "alwaysRender": true,
   "view": {
     "component": "Stack",
@@ -11,7 +11,7 @@
       {
         "component": "Text",
         "props": {
-          "content": "Use the current role’s modes for director instructions or Advance. Opening this view does not change your role or turn policy.",
+          "content": "Use the input for your current role to guide the story or move it forward. Opening this panel does not change your role or who speaks next.",
           "variant": "muted",
           "size": "sm"
         }
@@ -19,7 +19,7 @@
       {
         "component": "Section",
         "props": {
-          "title": "Scene cast",
+          "title": "Characters in the scene",
           "defaultOpen": true
         },
         "children": [
@@ -31,7 +31,7 @@
       {
         "component": "Section",
         "props": {
-          "title": "Pending interactions",
+          "title": "Waiting for you",
           "defaultOpen": true
         },
         "children": [
@@ -58,7 +58,7 @@
       {
         "component": "Section",
         "props": {
-          "title": "Input",
+          "title": "Your input",
           "defaultOpen": true
         },
         "children": [

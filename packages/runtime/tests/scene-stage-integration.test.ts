@@ -202,7 +202,7 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
       variant: "day",
       source: "world",
       resolved: DAY_REF,
-      sourceLabel: { zh: "世界背景", en: "World art" },
+      sourceLabel: { zh: "世界背景", en: "World background" },
     });
 
     await runTurn("turn-2", { location: "图书馆", timeOfDay: "night" });
@@ -217,7 +217,7 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
       variant: "night",
       source: "world",
       resolved: NIGHT_REF,
-      sourceLabel: { zh: "世界背景", en: "World art" },
+      sourceLabel: { zh: "世界背景", en: "World background" },
     });
   });
 });

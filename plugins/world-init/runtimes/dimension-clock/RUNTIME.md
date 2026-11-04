@@ -1,6 +1,7 @@
 ---
-description: Computes the dimension values that the world declares as derived
-  from the clock, without a model call.
+description:
+  Updates the values that follow the world clock, such as the date. Makes no
+  AI call.
 schedule:
   stage: post-turn
   after:

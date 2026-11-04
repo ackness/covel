@@ -1,9 +1,9 @@
 ---
-version: 0.0.46
-displayName: Scene Stage
+version: 0.0.47
+displayName: Stage Scene
 description: >-
-  Tracks the current scene, time of day, and who is on stage for the visual
-  stage.
+  Shows the current scene, day or night, and the characters on stage with their
+  portraits.
 tags:
   - "mode:dialogue"
   - "data:characters"
@@ -64,7 +64,9 @@ contributes:
       min: 1
       max: 4
       step: 1
-      label: Active speakers
+      label: Characters speaking at once
+      description: >-
+        The most characters who can speak in one reply, from 1 to 4.
   data:
     assets:
       schema: ./schemas/assets.schema.json
@@ -84,10 +86,10 @@ contributes:
       accepts:
         - stage.scenes@1
       authoring:
-        title: Scene registry
+        title: Scene background list
         hint: >-
-          Do not write this file by hand. It maps scenes to background files by
-          content hash. Generate the scene images first, then generate this
+          Do not write this file by hand. It lists which background image belongs to
+          which scene. Generate the scene images first, then generate this
           file; see docs/worlds/scenes.md.
         source:
           path: media/scenes.registry.json

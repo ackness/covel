@@ -1,14 +1,23 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#contributes.data.assets.authoring.title": "ad6a60acfca5f8b1",
+      "PLUGIN.md#contributes.data.tracks.authoring.title": "0d9b531ac15bc616",
+      "PLUGIN.md#description": "da56f3f58b1a50cd",
+      "PLUGIN.md#displayName": "e9d334b55097d5f6",
+      "runtimes/cue/RUNTIME.md#description": "248a4f64b09d9c49",
+      "runtimes/scene/RUNTIME.md#description": "7e52c32e049401cf",
+      "runtimes/story-cues/RUNTIME.md#description": "f8980fd36c9d3afa"
+    },
     "zh": {
       "PLUGIN.md#contributes.data.assets.authoring.title": "ad6a60acfca5f8b1",
       "PLUGIN.md#contributes.data.tracks.authoring.title": "0d9b531ac15bc616",
-      "PLUGIN.md#description": "6ffc72f11f1e6f4a",
+      "PLUGIN.md#description": "da56f3f58b1a50cd",
       "PLUGIN.md#displayName": "e9d334b55097d5f6",
-      "runtimes/cue/RUNTIME.md#description": "af4553cc0037fa85",
-      "runtimes/scene/RUNTIME.md#description": "f41837953c819065",
-      "runtimes/story-cues/RUNTIME.md#description": "d071ad3d07ace4b0"
+      "runtimes/cue/RUNTIME.md#description": "248a4f64b09d9c49",
+      "runtimes/scene/RUNTIME.md#description": "7e52c32e049401cf",
+      "runtimes/story-cues/RUNTIME.md#description": "f8980fd36c9d3afa"
     }
   }
 }

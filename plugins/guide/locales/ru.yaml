@@ -1,0 +1,17 @@
+# Russian text of the guide plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Подсказки действий
+  description: После каждого ответа истории напоминает, что только что произошло и что нужно решить, и предлагает несколько действий, которые можно выбрать одним нажатием.
+messages:
+  Suggested actions: Подсказки действий
+  Pick a suggestion to put it in the message box, then send it.: Выберите подсказку, чтобы поместить её в поле ввода, и отправьте.
+  Your own action: Своё действие
+  e.g. I lower my voice and ask what she just saw.: "Например: я понижаю голос и спрашиваю, что она только что видела."
+  Use: Выбрать
+  Suggestions will appear here after the next story reply.: Подсказки появятся здесь после следующего ответа истории.
+  Observe: Осмотреться
+  Ask: Спросить
+  Act: Действовать
+  Negotiate: Договориться

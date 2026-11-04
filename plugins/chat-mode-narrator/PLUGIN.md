@@ -1,9 +1,9 @@
 ---
-version: 0.0.45
-displayName: Dialogue Narrator
+version: 0.0.46
+displayName: Chat Storyteller
 description: >-
-  Makes the story feel more like character dialogue, suited for play focused on
-  conversation and interaction.
+  Tells the story as a conversation, with characters talking to each other and
+  to you.
 tags:
   - "mode:dialogue"
   - "data:characters"
@@ -26,38 +26,41 @@ contributes:
       default: character-second
       label: Perspective
       description: >-
-        Who tells the story and how narration refers to the player character;
-        dialogue keeps each speaker's perspective.
+        How the story refers to your character. Other characters still speak
+        in their own words.
       options:
         - value: character-first
-          label: Player character, first person (I)
+          label: I ("I open the door.")
         - value: character-second
-          label: Player character, second person (you)
+          label: You ("You open the door.")
         - value: character-third
-          label: Player character, third person (name)
+          label: Your character's name ("Ming opens the door.")
         - value: omniscient
-          label: Omniscient narrator
+          label: Observer who knows everything
         - value: dm
-          label: Game master
+          label: Game master, like a tabletop host
     - key: dialogueRatio
       type: number
       default: 70
       min: 30
       max: 90
       step: 5
-      label: Dialogue ratio
-      description: Approximate share of dialogue and character reaction in each reply.
+      label: Dialogue share (%)
+      description: >-
+        How much of each reply is characters talking, from 30 to 90 percent.
+        Higher means more dialogue and less description.
     - key: proseLength
       type: select
       default: medium
       label: Reply length
+      description: How long each reply is. Longer replies cost more.
       options:
         - value: short
-          label: Short
+          label: Short, a few lines
         - value: medium
-          label: Medium
+          label: Medium, a short paragraph
         - value: long
-          label: Long
+          label: Long, a fuller scene
   prompt:
     - id: post-history
       content: >

@@ -1,0 +1,34 @@
+# Russian text of the tabletop-rules plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Проверки характеристик
+  description: В начале игры вы распределяете стартовые очки по характеристикам героя, а позже кубики решают исход проверок. Результаты сохраняются.
+  contributes:
+    data:
+      rules:
+        authoring:
+          title: Стартовые очки характеристик
+runtimes/check/RUNTIME.md:
+  description: Один бросок для проверки характеристики; при повторе хода кубики не перебрасываются
+runtimes/creation/RUNTIME.md:
+  description: Распределение стартовых очков по характеристикам
+messages:
+  Ability checks: Проверки характеристик
+  Make an ability check: Сделать проверку характеристики
+  This world has no abilities to check, so ability checks are unavailable.: В этом мире нет характеристик для проверки, поэтому проверки недоступны.
+  Ability check: Проверка характеристики
+  Attempted action: Что вы пытаетесь сделать
+  Ability: Характеристика
+  Difficulty: Сложность
+  Easy: Лёгкая
+  Normal: Обычная
+  Hard: Трудная
+  Very hard: Очень трудная
+  Roll the check: Бросить кубики
+  Starting ability points applied.: Стартовые очки характеристик применены.
+  "Starting ability points: spread {budget} points": "Стартовые очки характеристик: распределите {budget}"
+  Confirm points: Подтвердить очки
+  Starting ability points chosen.: Стартовые очки характеристик выбраны.
+  "{label}: enter a whole number from {min} to {max}": "{label}: введите целое число от {min} до {max}"
+  Spend exactly {budget} points. You have spent {spent}.: Нужно потратить ровно {budget}. Сейчас потрачено {spent}.

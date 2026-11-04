@@ -127,7 +127,7 @@ export default async function guard(ctx) {
             playerName: name,
             narrativeOutput: translate(
               ctx,
-              "[System] Character {name} created — your adventure is about to begin…",
+              "Character {name} created. Your adventure begins…",
               { name },
             ),
             preGameDone: true,

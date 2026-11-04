@@ -1,10 +1,17 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#contributes.data.definitions.authoring.summary": "453335521dfc823a",
+      "PLUGIN.md#contributes.data.definitions.authoring.title": "fdb1edd60ebfed3b",
+      "PLUGIN.md#description": "fc909977cbe10d01",
+      "PLUGIN.md#displayName": "6992cdf6e62561e6",
+      "runtimes/extract/RUNTIME.md#description": "be7ae60fcc603f97"
+    },
     "zh": {
-      "PLUGIN.md#contributes.data.definitions.authoring.summary": "16386b6f356e0219",
-      "PLUGIN.md#contributes.data.definitions.authoring.title": "6028734e08e53c5a",
-      "PLUGIN.md#description": "8876681597e8c053",
+      "PLUGIN.md#contributes.data.definitions.authoring.summary": "453335521dfc823a",
+      "PLUGIN.md#contributes.data.definitions.authoring.title": "fdb1edd60ebfed3b",
+      "PLUGIN.md#description": "fc909977cbe10d01",
       "PLUGIN.md#displayName": "6992cdf6e62561e6",
       "runtimes/extract/RUNTIME.md#description": "be7ae60fcc603f97"
     }

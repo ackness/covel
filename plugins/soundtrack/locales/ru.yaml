@@ -1,0 +1,19 @@
+# Russian text of the soundtrack plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+PLUGIN.md:
+  displayName: Саундтрек
+  description: Играет фоновую музыку мира и меняет трек вместе со сценой и настроением истории.
+  contributes:
+    data:
+      assets:
+        authoring:
+          title: Музыкальные файлы
+      tracks:
+        authoring:
+          title: Список треков
+runtimes/cue/RUNTIME.md:
+  description: Запоминает настроение истории, чтобы музыка ему соответствовала.
+runtimes/scene/RUNTIME.md:
+  description: Запоминает текущую сцену, чтобы музыка ей соответствовала.
+runtimes/story-cues/RUNTIME.md:
+  description: Выбирает фоновую музыку по настроению и сцене истории.

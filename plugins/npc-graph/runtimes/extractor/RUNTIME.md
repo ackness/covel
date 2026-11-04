@@ -1,7 +1,7 @@
 ---
 description: >-
-  Collects characters, groups, factions, and the relationships between them from
-  the story.
+  Notes the characters, groups and factions in the story and how they are
+  connected.
 schedule:
   stage: post-turn
   trigger:

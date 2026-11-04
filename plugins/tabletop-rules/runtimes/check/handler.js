@@ -15,7 +15,7 @@ export default async function (ctx) {
       throw new Error(
         translate(
           ctx,
-          "This world has no point-buy attributes; checks are unavailable.",
+          "This world has no abilities to check, so ability checks are unavailable.",
         ),
       );
     }
@@ -122,7 +122,7 @@ function settled(receipt, locale) {
 async function openForm(ctx, rules) {
   const form = await ctx.tools.call("create-form", {
     formId: `${ctx.pluginId}-check-${ctx.turnId}`,
-    title: translate(ctx, "Attribute check"),
+    title: translate(ctx, "Ability check"),
     fields: [
       {
         type: "text",
@@ -133,7 +133,7 @@ async function openForm(ctx, rules) {
       {
         type: "select",
         name: "attribute",
-        label: translate(ctx, "Attribute"),
+        label: translate(ctx, "Ability"),
         required: true,
         options: rules.attributes.map((attribute) => ({
           value: attribute.id,
@@ -146,11 +146,16 @@ async function openForm(ctx, rules) {
         label: translate(ctx, "Difficulty"),
         required: true,
         defaultValue: "12",
-        options: ["8", "12", "16", "20"],
+        options: [
+          { value: "8", label: translate(ctx, "Easy") },
+          { value: "12", label: translate(ctx, "Normal") },
+          { value: "16", label: translate(ctx, "Hard") },
+          { value: "20", label: translate(ctx, "Very hard") },
+        ],
       },
     ],
-    submitLabel: translate(ctx, "Resolve check"),
-    narrativeTemplate: "{{action}} ({{attribute}}, DC {{difficulty}}).",
+    submitLabel: translate(ctx, "Roll the check"),
+    narrativeTemplate: "{{action}}",
   });
   return {
     outcome: "success",

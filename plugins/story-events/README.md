@@ -4,7 +4,7 @@
 
 ## 运行时结构
 
-- `evaluate`：pre-turn function runtime。每回合读取隐藏事件、冻结的维度快照（`world.dimensions@1`）和世界时间（`world-time-context@1`），按确定性规则判断，最多揭示一个事件，输出 `story-event-cue@1`。
+- `evaluate`：pre-turn function runtime。每回合读取隐藏剧情、冻结的维度快照（`world.dimensions@1`）和世界时间（`world-time-context@1`），按确定性规则判断，最多揭示一个事件，输出 `story-event-cue@1`。
 - 事件揭示后的下一回合，如果没有新的事件要揭示，`evaluate` 会把同一个事件再交给叙事一次（`cue.reminder: true`），提示语改为「上一回合没写进去就现在写，写过了就接着写后果」。这样叙事模型漏掉提示时，只触发一次的事件不会就此消失。提醒只发一次。
 - `narrator` 与 `chat-mode-narrator` 以可选输入 `storyEvent` 消费该合约；没有启用本插件时输入为空，叙事行为不变。
 - `intake`：post-turn function runtime。接收在剧情中发布的 `story-event.plan@1` 计划（内置的 `plot` 或其他插件），校验后写入 `_hidden.planned`（见下文「剧情中追加事件」）。
@@ -108,7 +108,7 @@ sources:
 
 设置 `planner`（默认 `false`）开启内置的 `plot` agent：它从第 2 回合起每 3 回合读一次剧情，找到正在发展、还没收束的线索（许下的承诺、欠下的债、放过的人、NPC 背着主角做的事），写一条带触发条件的后续事件交给 `intake` 保管。每次规划调用一次 `plugin` 模型槽。世界包用 `pluginSettings.story-events.planner: true` 设定默认开启，玩家可在插件设置中改。
 
-- 提示词带世界名称、简介、标签和主角信息；输入本回合叙事、可选的本回合 WorldIR 抽取（`world-ir-provider@1`，有人物、关系、事件和说出口的话时更准确）、维度快照、世界时间，以及 `evaluate` 的公开账本。世界作者尚未发生的隐藏事件不在其中。
+- 提示词带世界名称、简介、标签和主角信息；输入本回合叙事、可选的本回合 WorldIR 抽取（`world-ir-provider@1`，有人物、关系、事件和说出口的话时更准确）、维度快照、世界时间，以及 `evaluate` 的公开账本。世界作者尚未发生的隐藏剧情不在其中。
 - 工具 `plan-story-events` 把模型提交的 `all` / `none` 条件列表转成条件树。模型能写四种条件：维度字段（`dimension` + `path` + 一个运算符）、世界时间字段（`time` + 一个运算符）、已触发的剧情事件（`revealed`，可带 `turnsSinceGte` / `turnsSinceLte`）和等待（`afterTurns: n`，工具按账本里的当前回合换算成 `turnGte`）。每次最多埋 2 个事件，也可以用 `retire` 撤回已经和剧情不符的旧计划，或者提交空计划。
 - 工具对照本次执行的输入检查每个条件，出错时把原因和可用的写法一起返回给模型：引用的维度、时间字段、事件必须存在；对照维度 schema，路径不存在、对非数值字段做数值比较、把整个对象拿去比较、`equals` / `in` 的取值不在枚举里的条件永远不会成立，直接拒绝，不让它占着等待名额；世界时间字段只能和数值比较。
 - 几种含义唯一的写法由工具直接整理，不退回模型：单独成条的 `turnsSince*`（并入前一条 `revealed`）、写在事件上而不在 `all` 里的条件、写成 `all` 里一项的 `none`、`payload` 旁多写的 `description`、值为 `null` 的字段、不属于事件的空字符串字段、`notExists`、把运算符和值拆成两个键（`"operator": "gte", "value": 3`）、把世界时间写成 `dimension: worldTime`（字段写在 `time` 或 `path` 下）、把路径写进 `dimension`（`map.hall.status`）或在 `path` 开头重复维度 ID、对只有一个数值字段的对象维度做数值比较时漏写的 `path`。`none` 里引用不存在的事件的条件被去掉：不存在的事件永远不会触发，这个条件不起作用。用已触发事件的 ID 提交的事件是它的后续：已触发的事件不会再排一次，工具给新事件换成下一个空闲 ID（`meg-offer` → `meg-offer-2`）。`reason` 是调试用的说明，可以不写。`events` 里夹着的字符串是模型把结尾写坏留下的碎片（如 `"reason ="`），调用里有事件时直接去掉。

@@ -24,7 +24,7 @@ async function load(id: string) {
 }
 
 describe("bundled session view declarations", () => {
-  it.each([["dm-console", "dm-console", "DM Console", "主持人控制台"]])(
+  it.each([["dm-console", "dm-console", "Game Master Panel", "主持人面板"]])(
     "loads the real %s view with English and Chinese labels",
     async (id, viewId, en, zh) => {
       const { ui } = await load(id);

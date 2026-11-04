@@ -1,7 +1,7 @@
 {
   "id": "reading",
-  "label": "Stage reading",
-  "description": "Warm story colors and quiet dialogue typography.",
+  "label": "Reading style",
+  "description": "Warm reading colors and a clean dialogue layout.",
   "tokens": {
     "light": {
       "--story-color": "#302818",

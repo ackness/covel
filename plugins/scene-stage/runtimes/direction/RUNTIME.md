@@ -1,7 +1,7 @@
 ---
 description: >-
-  Applies structured stage directions for actor presence, position, focus,
-  outfit, expression, and pose.
+  Applies stage directions: who enters or leaves, where they stand, who is in
+  focus, and their outfit, expression and pose.
 schedule:
   after:
     - scene-stage/resolver

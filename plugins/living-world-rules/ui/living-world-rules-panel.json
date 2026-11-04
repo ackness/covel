@@ -1,8 +1,8 @@
 {
   "id": "living-world-rules",
   "group": "world-data",
-  "groupLabel": "World Details",
-  "label": "World Rules",
+  "groupLabel": "World",
+  "label": "Rules",
   "shortLabel": "Rules",
   "icon": "book-marked",
   "groupOrder": 300,
@@ -10,7 +10,7 @@
     "namespace": "rules"
   },
   "emptyState": {
-    "message": "This world declares no lasting rules. Rules are authored in the world package (imported via world-data)."
+    "message": "This world has no special rules."
   },
   "view": {
     "component": "Stack",
@@ -21,7 +21,7 @@
       {
         "component": "Text",
         "props": {
-          "content": "Lasting setting rules and taboos in effect for this world (read-only).",
+          "content": "Lasting rules and taboos of this world. You can read them but not change them.",
           "variant": "muted",
           "size": "xs"
         }
@@ -42,15 +42,15 @@
               "categoryOptions": [
                 {
                   "value": "constant",
-                  "label": "Constant"
+                  "label": "Always"
                 },
                 {
                   "value": "triggered",
-                  "label": "Triggered"
+                  "label": "When triggered"
                 },
                 {
                   "value": "evolving",
-                  "label": "Evolving"
+                  "label": "Changes with the story"
                 }
               ],
               "title": {

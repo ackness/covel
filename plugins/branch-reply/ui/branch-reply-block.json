@@ -6,11 +6,11 @@
   "view": {
     "component": "CandidateList",
     "props": {
-      "title": "Reply candidates",
-      "draftLabel": "Draft",
+      "title": "Alternative replies",
+      "draftLabel": "Edit first",
       "sendLabel": "Send",
-      "acceptLabel": "Accept",
-      "regenerateLabel": "Regenerate",
+      "acceptLabel": "Use this reply",
+      "regenerateLabel": "Try again",
       "candidates": {
         "$state": "/candidates"
       },

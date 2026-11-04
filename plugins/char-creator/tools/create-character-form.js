@@ -184,7 +184,7 @@ export default function ({ tool }, createFormTool) {
               ? nameTakenMessage(context, earlier[NAME_FIELD])
               : translate(
                   context,
-                  "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
+                  "Some of your answers no longer fit this world. Check the form and try again.",
                 ),
           }
         : form;

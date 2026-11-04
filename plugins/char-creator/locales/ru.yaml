@@ -1,0 +1,20 @@
+# Russian text of the char-creator plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Создание персонажа
+  description: Помогает создать героя и ведёт записи о персонажах, которых вы встречаете в истории.
+runtimes/character-tracker/RUNTIME.md:
+  description: Отмечает новых персонажей в истории и обновляет их состояние, ранения и снаряжение.
+runtimes/player-init/RUNTIME.md:
+  description: В начале игры шаг за шагом помогает создать героя и вводит его в историю.
+messages:
+  Characters: Персонажи
+  No characters yet. They appear here once you create yours…: Персонажей пока нет. Они появятся здесь после создания вашего героя…
+  All characters: Все персонажи
+  "Character {name} created. Your adventure begins…": "Персонаж {name} создан. Приключение начинается…"
+  Some of your answers no longer fit this world. Check the form and try again.: Часть ответов больше не подходит этому миру. Проверьте форму и попробуйте ещё раз.
+  'The name "{name}" is already taken by another character in this world. Choose another name.': Имя «{name}» уже занято другим персонажем этого мира. Выберите другое имя.
+  Player: Игрок
+  Story character: Персонаж истории
+  Companion: Спутник

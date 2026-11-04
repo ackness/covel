@@ -132,7 +132,7 @@ for (const explicitSetup of [false, true]) {
             "A setup step is still waiting",
           );
           await expect(page.getByTestId("notice-setup-progress")).toContainText(
-            "Tabletop Rules",
+            "Ability Checks",
           );
           await expect(
             page.getByRole("button", { name: "Continue setup", exact: true }),

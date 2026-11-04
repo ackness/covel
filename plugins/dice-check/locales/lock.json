@@ -1,13 +1,21 @@
 {
   "version": 1,
   "labels": {
-    "zh": {
-      "PLUGIN.md#contributes.commands[name=roll].arguments[name=notation].description": "1bd42e4f78ac36d9",
-      "PLUGIN.md#contributes.commands[name=roll].description": "62009627685d410e",
-      "PLUGIN.md#description": "ed6787d79ed9544d",
+    "ru": {
+      "PLUGIN.md#contributes.commands[name=roll].arguments[name=notation].description": "034e1ea66c4357ec",
+      "PLUGIN.md#contributes.commands[name=roll].description": "53de034a3fdb7257",
+      "PLUGIN.md#description": "6b40966df84ebd9d",
       "PLUGIN.md#displayName": "27260491575f53f8",
-      "runtimes/recorder/RUNTIME.md#description": "699ca141d1723b5a",
-      "runtimes/roller/RUNTIME.md#description": "0440d5148f4d8eab"
+      "runtimes/recorder/RUNTIME.md#description": "ad7b6cbd3590d9d6",
+      "runtimes/roller/RUNTIME.md#description": "5311f868d92397df"
+    },
+    "zh": {
+      "PLUGIN.md#contributes.commands[name=roll].arguments[name=notation].description": "034e1ea66c4357ec",
+      "PLUGIN.md#contributes.commands[name=roll].description": "53de034a3fdb7257",
+      "PLUGIN.md#description": "6b40966df84ebd9d",
+      "PLUGIN.md#displayName": "27260491575f53f8",
+      "runtimes/recorder/RUNTIME.md#description": "ad7b6cbd3590d9d6",
+      "runtimes/roller/RUNTIME.md#description": "5311f868d92397df"
     }
   }
 }

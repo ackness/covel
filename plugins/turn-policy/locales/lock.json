@@ -1,15 +1,25 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.label": "8f132e6f2148d4cf",
+      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.placeholder": "30a5882a7b20a88c",
+      "PLUGIN.md#contributes.settings[key=actorOrder].description": "3f4d1e1d20bab12b",
+      "PLUGIN.md#contributes.settings[key=actorOrder].label": "2bf17aaccb312fca",
+      "PLUGIN.md#contributes.settings[key=strategy].description": "a071240d0cd32268",
+      "PLUGIN.md#contributes.settings[key=strategy].label": "1e7e4e60aa1d623b",
+      "PLUGIN.md#description": "d4f63a9b9952dd15",
+      "PLUGIN.md#displayName": "48064526c57098bb"
+    },
     "zh": {
-      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.label": "3b7924b863118eae",
-      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.placeholder": "f78b74bb44319a7c",
-      "PLUGIN.md#contributes.settings[key=actorOrder].description": "970be6c518985a27",
-      "PLUGIN.md#contributes.settings[key=actorOrder].label": "ab5dde8a549a94c5",
-      "PLUGIN.md#contributes.settings[key=strategy].description": "4b38f165a5a5d2f5",
-      "PLUGIN.md#contributes.settings[key=strategy].label": "6b27710dfaafdcec",
-      "PLUGIN.md#description": "a5f861a9beda3aa6",
-      "PLUGIN.md#displayName": "146c35043c127f22"
+      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.label": "8f132e6f2148d4cf",
+      "PLUGIN.md#contributes.actionKinds[name=choose-actors].display.placeholder": "30a5882a7b20a88c",
+      "PLUGIN.md#contributes.settings[key=actorOrder].description": "3f4d1e1d20bab12b",
+      "PLUGIN.md#contributes.settings[key=actorOrder].label": "2bf17aaccb312fca",
+      "PLUGIN.md#contributes.settings[key=strategy].description": "a071240d0cd32268",
+      "PLUGIN.md#contributes.settings[key=strategy].label": "1e7e4e60aa1d623b",
+      "PLUGIN.md#description": "d4f63a9b9952dd15",
+      "PLUGIN.md#displayName": "48064526c57098bb"
     }
   }
 }

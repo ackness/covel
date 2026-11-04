@@ -1,16 +1,29 @@
 {
   "version": 1,
   "labels": {
-    "zh": {
-      "PLUGIN.md#contributes.settings[key=dialogueRatio].description": "1fccd733cda85acd",
-      "PLUGIN.md#contributes.settings[key=dialogueRatio].label": "462417f8de8dd5ff",
-      "PLUGIN.md#contributes.settings[key=perspective].description": "7f44234bc3c5fc65",
+    "ru": {
+      "PLUGIN.md#contributes.settings[key=dialogueRatio].description": "50c9d43aaddebf34",
+      "PLUGIN.md#contributes.settings[key=dialogueRatio].label": "334f84c1f0478b93",
+      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
+      "PLUGIN.md#contributes.settings[key=proseLength].description": "89c3b8d9ee671bfb",
       "PLUGIN.md#contributes.settings[key=proseLength].label": "195bbecaed5490c0",
-      "PLUGIN.md#description": "aab0909bbfe4896e",
-      "PLUGIN.md#displayName": "7a96e2e10f385014",
-      "runtimes/narrate/RUNTIME.md#description": "97949a8123a579cf",
-      "runtimes/plan/RUNTIME.md#description": "1016f2ed9966fd41"
+      "PLUGIN.md#description": "eafe597f288c1f6a",
+      "PLUGIN.md#displayName": "2d5ebf8dacecabc9",
+      "runtimes/narrate/RUNTIME.md#description": "56c02be43e78f21e",
+      "runtimes/plan/RUNTIME.md#description": "1bcd03a7febb9b0f"
+    },
+    "zh": {
+      "PLUGIN.md#contributes.settings[key=dialogueRatio].description": "50c9d43aaddebf34",
+      "PLUGIN.md#contributes.settings[key=dialogueRatio].label": "334f84c1f0478b93",
+      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
+      "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
+      "PLUGIN.md#contributes.settings[key=proseLength].description": "89c3b8d9ee671bfb",
+      "PLUGIN.md#contributes.settings[key=proseLength].label": "195bbecaed5490c0",
+      "PLUGIN.md#description": "eafe597f288c1f6a",
+      "PLUGIN.md#displayName": "2d5ebf8dacecabc9",
+      "runtimes/narrate/RUNTIME.md#description": "56c02be43e78f21e",
+      "runtimes/plan/RUNTIME.md#description": "1bcd03a7febb9b0f"
     }
   }
 }

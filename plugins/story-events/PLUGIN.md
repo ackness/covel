@@ -1,10 +1,10 @@
 ---
-version: 0.1.9
-displayName: Hidden Story Events
+version: 0.1.10
+displayName: Hidden Plot Events
 description: >-
-  Keeps world-authored hidden story events out of prompts and player views until
-  their conditions are met, then hands narration that turn's cue. An optional
-  story planner can plant follow-up events during play.
+  Keeps the world's secret plot events hidden until their conditions are met,
+  then works them into the story that turn. Optionally, the AI can also plan new
+  hidden events as you play.
 tags:
   - "data:world-data"
 author:
@@ -23,10 +23,10 @@ contributes:
     - key: planner
       type: toggle
       default: false
-      label: Story planner
+      label: Plan hidden events
       description: >-
-        Every 3 turns, calls the model to plant hidden follow-up events from how
-        the story has developed.
+        Lets the AI plan later hidden events in the background. Uses an extra AI
+        call every 3 turns, so it costs more.
   data:
     events:
       schema: ./schemas/story-events.schema.json
@@ -34,7 +34,7 @@ contributes:
       accepts:
         - story.events@1
       authoring:
-        title: Hidden story events
+        title: Hidden plot events
         hint: >-
           Write events the player must not know in advance. `when` is one
           condition, or `all`, `any` or `not` over conditions. A condition reads
