@@ -1,0 +1,17 @@
+# Russian text of the narrator plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Рассказчик
+  description: "Продолжает историю после каждого вашего действия: сцены, реакции героев и то, что будет дальше."
+  contributes:
+    settings:
+      - key: perspective
+        label: Лицо повествования
+        description: Как история называет вашего персонажа. Остальные герои по-прежнему говорят своими словами.
+        options:
+          - label: «Я» («Я открываю дверь.»)
+          - label: «Вы» («Вы открываете дверь.»)
+          - label: По имени персонажа («Мин открывает дверь.»)
+          - label: Наблюдатель, который знает всё
+          - label: Ведущий, как за игровым столом

@@ -1,4 +1,4 @@
-# 世界事实提取 (World IR)
+# 故事整理 (World IR)
 
 `world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约选择当前故事的 `/segments`，保留逐段的 `kind`、`speaker` 和 `text`，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，模型随后用 `{}` 调用 `submit-output`，宿主直接采用工具的规范事实，通过接受门控后成为 `contract:world-ir@1` 输出。
 
@@ -36,6 +36,6 @@ runtime:
 
 ## 本轮工具操作
 
-`runtime.io.inputs.operations` 绑定内核输入 `operations@1`。非空时，hook 在 `vocabulary` 之后、`narrative` 之前加入 `operations: [{ contract, request, result }]`，不携带操作身份或提交信息；空列表不加入消息。操作是工具本轮已经作出的变化。正文呈现其中一项时，提取记录对应事件。物品名和数量沿用工具请求原文。正文没有呈现的操作不凭空生成事件。行囊可以据此避免重复记账，其他 WorldIR 消费者仍能读取同一事件，公开事实结构保持不变。
+`runtime.io.inputs.operations` 绑定内核输入 `operations@1`。非空时，hook 在 `vocabulary` 之后、`narrative` 之前加入 `operations: [{ contract, request, result }]`，不携带操作身份或提交信息；空列表不加入消息。操作是工具本轮已经作出的变化。正文呈现其中一项时，提取记录对应事件。物品名和数量沿用工具请求原文。正文没有呈现的操作不凭空生成事件。背包可以据此避免重复记账，其他 WorldIR 消费者仍能读取同一事件，公开事实结构保持不变。
 
 `submit-world-facts` 成功后，模型用 `{}` 调用 `submit-output`。`io.output.from.tool: submit-world-facts` 直接采用规范事实，不复制模型视图的 `data.facts` 包装。`entityReferences` 让模型投影保留事实实体的业务 ID，不属于最终输出；修正提交不重新抽取。

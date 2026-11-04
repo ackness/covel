@@ -1,0 +1,44 @@
+PLUGIN.md:
+  displayName: Сцена
+  description: Показывает текущую сцену, день или ночь и героев на сцене с их портретами.
+  contributes:
+    settings:
+      - key: activeSpeakerCount
+        label: Сколько героев говорят одновременно
+        description: Наибольшее число героев, которые могут говорить в одном ответе, от 1 до 4.
+    data:
+      assets:
+        authoring:
+          title: Фоновые картинки сцен
+      scenes:
+        authoring:
+          title: Список фонов сцен
+runtimes/cast/RUNTIME.md:
+  description: Следит за тем, кто в сцене и кто говорит.
+runtimes/direction/RUNTIME.md:
+  description: "Выполняет указания для сцены: кто выходит и уходит, где стоит, кто в центре внимания, а также одежда, выражение лица и поза."
+runtimes/resolver/RUNTIME.md:
+  description: Следит за текущей сценой и за тем, день сейчас или ночь.
+runtimes/seed/RUNTIME.md:
+  description: В начале игры показывает на сцене первую сцену мира, чтобы она не была пустой.
+runtimes/story-cues/RUNTIME.md:
+  description: "Подстраивает сцену под историю: где всё происходит и кто рядом."
+messages:
+  Scene: Сцена
+  groupLabel|Scene: Сцена
+  Characters: Персонажи
+  No characters in this scene yet.: В этой сцене пока нет персонажей.
+  Characters in this scene: Персонажи в этой сцене
+  The scene will appear once the story gets going…: Сцена появится, когда история начнётся…
+  World background: Фон из мира
+  No background: Без фона
+  Day: День
+  Night: Ночь
+  No character stands out in the scene right now.: Сейчас в сцене никто особенно не выделяется.
+  Mentioned by you: Вы упоминали
+  In the scene: В сцене
+  Has a profile: Есть досье
+  Has status notes: Есть заметки о состоянии
+  Recently active: Недавно действовал
+  Reading style: Стиль чтения
+  Warm reading colors and a clean dialogue layout.: Тёплые цвета для чтения и аккуратные диалоги.

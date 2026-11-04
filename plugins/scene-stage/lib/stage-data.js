@@ -29,8 +29,8 @@ export function sceneIdForLocation(location) {
 export function sourceLabelFor(ctx, source) {
   // Each text is a literal: the validator reads them from the source.
   return source === "world"
-    ? labelText(ctx, "World art")
-    : labelText(ctx, "No backdrop");
+    ? labelText(ctx, "World background")
+    : labelText(ctx, "No background");
 }
 
 /**

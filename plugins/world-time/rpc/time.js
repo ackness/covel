@@ -10,7 +10,7 @@ export default async function time(_payload, ctx) {
       ok: true,
       message: translate(
         ctx,
-        "World time has not been recorded yet. Complete the first narrative turn to view it.",
+        "There is no time yet. Play your first turn to see it.",
       ),
       data: { initialized: false },
     };

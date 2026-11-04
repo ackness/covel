@@ -1,11 +1,11 @@
 {
   "id": "dice-check-panel",
-  "label": "Check Log",
+  "label": "Roll log",
   "icon": "dices",
   "alwaysRender": true,
   "dataSource": { "namespace": "checks" },
   "emptyState": {
-    "message": "No checks resolved yet. Results will appear here when you attempt risky actions."
+    "message": "No rolls yet. Results appear here when you try a risky action."
   },
   "view": {
     "component": "Stack",
@@ -18,7 +18,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "Quick rolls use the same command pipeline as /roll.",
+              "content": "You can also type /roll in the chat, for example /roll 2d6.",
               "variant": "muted",
               "size": "xs"
             }

@@ -96,7 +96,7 @@ it("labels the framework's character types and keeps a world's own type", async 
   ];
   render(<PluginPanel pluginId="char-creator" spec={characterSpec} />);
   expect(await screen.findByText("Mira")).toBeTruthy();
-  expect(screen.getByText("NPC")).toBeTruthy();
+  expect(screen.getByText("Story character")).toBeTruthy();
   expect(screen.getByText("Companion")).toBeTruthy();
   expect(screen.getByText("宿敌")).toBeTruthy();
   expect(screen.queryByText("npc")).toBeNull();

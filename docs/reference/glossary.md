@@ -36,7 +36,7 @@
 | Operation | 操作 | 一次成功的写服务调用暂存下来的全部写入，随调用方的提交单元一起提交或丢弃。不同于数据操作列表里的单个 `op`。见[写服务的操作](./transactions.md#写服务的操作)。 |
 | Operation record | 操作记录 | 一个操作留在调用方结果上的记录（`runtimeResults[].operations`），提交后写明它最终的状态和原因。 |
 | Operation-based write | 操作式写入 | 交一串操作（`plugin.data.update`），不交算好的整个值。 |
-| Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。 |
+| Pack | 玩法包 | 供玩家选择的一组已安装插件，不负责安装包。玩家界面里叫“玩法”。 |
 | Perspective | 视角 | 叙事从谁的角度讲：以角色为中心的第一、第二、第三人称，全知旁白，或主持人。 |
 | Plugin kind | 插件类型 | 包的 `kind` 决定默认选择；不同于 runtime 的 agent/function，也不同于发现来源。 |
 | Presence record | 在场记录 | 故事消息上记下的在场角色 ID（`presentCharacterIds`）。 |
@@ -63,6 +63,30 @@
 | Turn | 回合 | “This turn” 是“本回合”。 |
 | World | 世界 | 世界的安装包叫“世界包”。 |
 | Write service | 写服务 | `access: write` 的服务，替调用方改提供者自己的数据；写入暂存为一个**操作**。见[写服务](./plugin-extensions.md#写服务)。 |
+
+## Player terms
+
+玩家界面里的插件名称、设置和面板用同一套词，中文、英文和俄文一一对应。插件的玩家可见文字（`displayName`、`description`、设置、面板、按钮和通知）都按这张表写，不要换说法。内部术语见上面的表。
+
+<!-- prettier-ignore -->
+| 概念 | 中文 | English | Русский |
+| --- | --- | --- | --- |
+| 写出故事文字的插件 | 讲述者 | Storyteller | Рассказчик |
+| 替玩家掌控故事的角色身份 | 主持人 | Game master | Ведущий |
+| 世界里会随故事变化的数值 | 世界状态 | World state | Состояние мира |
+| 进入故事前的设置步骤 | 开局准备 | Get ready | Подготовка к игре |
+| 角色携带的物品 | 背包 | Bag | Сумка |
+| 人物、地点和事物的资料 | 图鉴（条目） | Almanac (entries) | Энциклопедия (записи) |
+| 保存关键剧情的记忆 | 故事记忆 | Story memory | Память истории |
+| 一次玩家提交及其回复 | 回合 | Turn | Ход |
+| 玩家或故事里的人物 | 角色 | Character | Персонаж |
+| 在回复里开口的角色 | 发言角色 | Speaker | Говорящий |
+| 一组一起启用的插件 | 玩法 | Mode | Режим |
+| 骰子判定的结果 | 判定记录 | Roll log | Журнал бросков |
+| 故事给出的目标 | 任务日志 | Quest log | Журнал заданий |
+| 角色图像 | 立绘 | Portraits | Портреты |
+| 条件满足前玩家看不到的剧情 | 隐藏剧情 | Hidden plot events | Скрытые события |
+| 玩家文字里用 AI，设置里可称模型 | AI | AI | ИИ |
 
 ## Prompt vocabulary
 

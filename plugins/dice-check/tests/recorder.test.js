@@ -329,6 +329,7 @@ describe("dice-check recorder handler", () => {
     // Every language the plugin ships: the block picks the UI language.
     expect(messageRow.value.checks[0].outcomeLabel).toEqual({
       en: "Success",
+      ru: "Успех",
       zh: "成功",
     });
   });

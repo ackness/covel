@@ -54,7 +54,7 @@ describe("world-time command", () => {
       ok: true,
       data: { initialized: false },
     });
-    expect(result.message).toContain("尚未记录");
+    expect(result.message).toContain("还没有时间记录");
     expect(ctx.store.setPluginData).not.toHaveBeenCalled();
     expect(ctx.store.getWorld).not.toHaveBeenCalled();
   });

@@ -1,7 +1,7 @@
 {
   "id": "character-presence",
   "label": "Character Portraits",
-  "shortLabel": "Art",
+  "shortLabel": "Portraits",
   "icon": "image",
   "group": "character-art",
   "groupLabel": "Portraits",

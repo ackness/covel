@@ -9,7 +9,7 @@ Covel 不自带模型。这一页带你添加一个服务商、填入密钥、�
 - 一个模型服务商的 API 密钥，例如 DeepSeek、OpenAI、Anthropic、Google Gemini、阿里云百炼（Qwen）。
 - 一个本地或自建的模型服务，接口兼容 OpenAI。
 
-模型必须支持**工具调用**（function calling）。Covel 的插件靠工具调用来更新任务、行囊这些状态，不支持工具调用的模型无法推进游戏。
+模型必须支持**工具调用**（function calling）。Covel 的插件靠工具调用来更新任务、背包这些状态，不支持工具调用的模型无法推进游戏。
 
 > [!IMPORTANT]
 > 调用模型由服务商按用量收费，费用由你的账户承担。Covel 不经手也不代付。

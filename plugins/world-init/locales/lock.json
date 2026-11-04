@@ -1,14 +1,23 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#description": "e4f19c91091376d2",
+      "PLUGIN.md#displayName": "1dba81a40cc40a2d",
+      "runtimes/dimension-clock/RUNTIME.md#description": "a6b5bc3874a2eb88",
+      "runtimes/dimension-context/RUNTIME.md#description": "24becdfebe254223",
+      "runtimes/dimension-tracker/RUNTIME.md#description": "85f0568ac0cce7be",
+      "runtimes/edit-dimensions/RUNTIME.md#description": "06494ccf242bdde7",
+      "runtimes/schema-gen/RUNTIME.md#description": "91d8286e720b4562"
+    },
     "zh": {
-      "PLUGIN.md#description": "8cd4fec378b9c084",
-      "PLUGIN.md#displayName": "112c2409036ce285",
-      "runtimes/dimension-clock/RUNTIME.md#description": "42a00a3b114e1774",
-      "runtimes/dimension-context/RUNTIME.md#description": "c419edf2fc448d8a",
-      "runtimes/dimension-tracker/RUNTIME.md#description": "68874256834adf11",
-      "runtimes/edit-dimensions/RUNTIME.md#description": "9545222e1173e459",
-      "runtimes/schema-gen/RUNTIME.md#description": "4819c11b2fccf2e4"
+      "PLUGIN.md#description": "e4f19c91091376d2",
+      "PLUGIN.md#displayName": "1dba81a40cc40a2d",
+      "runtimes/dimension-clock/RUNTIME.md#description": "a6b5bc3874a2eb88",
+      "runtimes/dimension-context/RUNTIME.md#description": "24becdfebe254223",
+      "runtimes/dimension-tracker/RUNTIME.md#description": "85f0568ac0cce7be",
+      "runtimes/edit-dimensions/RUNTIME.md#description": "06494ccf242bdde7",
+      "runtimes/schema-gen/RUNTIME.md#description": "91d8286e720b4562"
     }
   }
 }

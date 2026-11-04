@@ -1,6 +1,7 @@
 ---
-description: Checks hidden events against current dimensions and world time each
-  turn, handing narration this turn's cue when one is met.
+description:
+  Checks each turn whether a hidden event's conditions are met and, if so,
+  works it into the story.
 schedule:
   stage: pre-turn
 io:

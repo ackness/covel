@@ -257,7 +257,7 @@ it("hydrates graph and library pages and original panels from the same committed
   expect(
     library.getByText("The complete chart of the northern islands."),
   ).toBeTruthy();
-  expect(library.getByText("1 entries collected")).toBeTruthy();
+  expect(library.getByText("1 entries")).toBeTruthy();
   fireEvent.change(library.getByPlaceholderText("Search entries…"), {
     target: { value: "no-such-tag" },
   });

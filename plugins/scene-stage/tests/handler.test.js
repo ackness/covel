@@ -131,7 +131,7 @@ describe("scene-stage resolver handler", () => {
           day: CLASSROOM_DAY,
           night: CLASSROOM_NIGHT,
           resolved: CLASSROOM_DAY,
-          sourceLabel: { zh: "世界背景", en: "World art" },
+          sourceLabel: { zh: "世界背景", en: "World background" },
           turnId: "turn-1",
         },
       },
@@ -195,7 +195,7 @@ describe("scene-stage resolver handler", () => {
       day: null,
       night: null,
       resolved: null,
-      sourceLabel: { zh: "无背景", en: "No backdrop" },
+      sourceLabel: { zh: "无背景", en: "No background" },
     });
     expect(proposals[0].payload.value.sceneId).toMatch(/^loc-[0-9a-f]{8}$/);
     expect(getToolContent(result).effects).toBeUndefined();

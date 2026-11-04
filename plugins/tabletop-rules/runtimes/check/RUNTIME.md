@@ -1,5 +1,5 @@
 ---
-description: Submit an attribute check without rerolling on retries
+description: Roll an ability check once, even if the turn is retried
 schedule:
   stage: pre-turn
 io:

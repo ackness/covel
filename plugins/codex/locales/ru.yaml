@@ -1,0 +1,20 @@
+# Russian text of the codex plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Энциклопедия
+  description: Собирает места, людей, предметы и слухи, которые вы открываете, в энциклопедию, которую можно листать в любой момент.
+messages:
+  Almanac: Энциклопедия
+  shortLabel|Almanac: Энциклопедия
+  Nothing in the almanac yet. Entries appear as you discover things in the story.: В энциклопедии пока пусто. Записи появятся, когда вы что-нибудь откроете в истории.
+  Search entries…: Поиск по записям…
+  All: Все
+  Monsters: Монстры
+  Items: Предметы
+  Locations: Места
+  Lore: Предания
+  Characters: Персонажи
+  Skills: Умения
+  "{{count}} entries": "Записей: {{count}}"
+  No matching entries: Ничего не найдено

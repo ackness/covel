@@ -1,0 +1,52 @@
+# Russian text of the world-time plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Время мира
+  description: Хранит дату и время в мире и двигает часы вперёд по ходу истории.
+  contributes:
+    data:
+      definitions:
+        authoring:
+          title: Правила времени
+          summary: Задаёт, как в этом мире ведётся счёт времени и сколько длятся разные действия.
+    commands:
+      - name: time
+        description: Показать, какое сейчас время в мире. История при этом не продвигается.
+runtimes/advance/RUNTIME.md:
+  description: Определяет, сколько времени прошло за ход, и двигает часы мира.
+runtimes/context/RUNTIME.md:
+  description: Сообщает истории, который сейчас час и как в этом мире устроено время.
+messages:
+  Time: Время
+  Time appears when the story starts.: Время появится, когда начнётся история.
+  Time rules: Правила времени
+  "This world has no custom calendar. It uses a standard one: 12 months of 30 days, 24-hour days, starting at year 1, month 1, day 1, 08:00.": "У этого мира нет своего календаря, используется обычный: 12 месяцев по 30 дней, сутки по 24 часа, отсчёт с 1 года, 1 месяца, 1 дня, 08:00."
+  There is no time yet. Play your first turn to see it.: Времени пока нет. Сыграйте первый ход, и оно появится.
+  "World time: {display}": "Время мира: {display}"
+  World time: Время мира
+  World era: Эра мира
+  "Month {n}": "Месяц {n}"
+  Night: Ночь
+  Morning: Утро
+  Afternoon: День
+  Evening: Вечер
+  Phases: Периоды
+  Cycle: Цикл
+  Starting phase: Начальный период
+  Starting date: Начальная дата
+  Era: Эра
+  Months in a year: Месяцев в году
+  Hours in a day: Часов в сутках
+  Days of the week: Дни недели
+  How time moves: Как идёт время
+  Forward: Вперёд
+  Backward: Назад
+  Forward or backward, as the story needs: Вперёд или назад, как нужно истории
+  Jumps at random: Скачет случайно
+  Time passing each turn, in phases: Сколько времени проходит за ход, в периодах
+  Time passing each turn, in minutes: Сколько времени проходит за ход, в минутах
+  Longest jump per turn, in phases: Наибольший скачок за ход, в периодах
+  Longest jump per turn, in minutes: Наибольший скачок за ход, в минутах
+  Random range: Случайный разброс
+  to: до

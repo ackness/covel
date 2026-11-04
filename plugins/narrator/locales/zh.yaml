@@ -2,16 +2,16 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 叙事
-  description: 根据你的行动继续推进故事，描写场景、人物反应和结果。
+  displayName: 讲述者
+  description: 在你每次行动之后继续讲故事，写出场景、人物的反应和接下来发生的事。
   contributes:
     settings:
       - key: perspective
-        label: 视角
-        description: 由谁讲述故事、旁白如何称呼玩家角色；人物对白保持各自的人称。
+        label: 叙述视角
+        description: 选择故事怎样称呼你的角色。其他角色仍按自己的口吻说话。
         options:
-          - label: 玩家角色·第一人称（我）
-          - label: 玩家角色·第二人称（你）
-          - label: 玩家角色·第三人称（角色名）
-          - label: 全知旁白
-          - label: 主持人（DM）
+          - label: 我（“我推开了门。”）
+          - label: 你（“你推开了门。”）
+          - label: 角色名（“阿明推开了门。”）
+          - label: 无所不知的旁观者
+          - label: 主持人，像跑团主持人那样讲

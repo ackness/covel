@@ -1,9 +1,9 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: Quest Log
 description: >-
-  Automatically registers and advances quests from the narrative so goals,
-  progress, and rewards stay visible.
+  Keeps track of your quests. New quests and their progress are noted from the
+  story as it goes, so you can check goals and rewards any time.
 tags:
   - "data:world-data"
 author:
@@ -17,8 +17,7 @@ contributes:
     quests:
       schema: ./schemas/quests.schema.json
       description: >-
-        Importable quest records — world packs may preseed main/side quests; the
-        quest log advances them by name.
+        Quests the player already has when the story begins.
       accepts:
         - quests@1
       authoring:

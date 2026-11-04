@@ -1,6 +1,6 @@
 {
   "id": "world-time",
-  "label": "World Time",
+  "label": "Time",
   "icon": "calendar-days",
   "groupOrder": 100,
   "dataSource": {

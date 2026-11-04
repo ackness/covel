@@ -486,7 +486,7 @@ it("offers the form again, filled in, when the world no longer accepts a submiss
     const again = await h.form("char-creation");
     expect(again!.turnId).toBe(turn.turnId);
     expect(again!.form.notice).toBe(
-      "这个世界不再接受你之前填写的部分内容，请检查后重新提交。",
+      "有些内容不再符合这个世界的设定，请检查后再试。",
     );
     // The name is kept; the answer the world refuses is asked again.
     expect(again!.form.fields).toEqual([
@@ -583,9 +583,9 @@ it("tells the player in their language what to correct, and keeps the form open"
     const overspent = await h.submit(allocation!, { might: 5, wits: 5 });
     expect(overspent.refused).toEqual({
       code: "form_rejected",
-      message: "需要正好分配 4 点，你已分配 8 点",
+      message: "需要正好分配 4 点，你已分配 8 点。",
       details: {
-        issues: [{ message: "需要正好分配 4 点，你已分配 8 点" }],
+        issues: [{ message: "需要正好分配 4 点，你已分配 8 点。" }],
       },
     });
     // Nothing was stored: the same form takes the corrected values.

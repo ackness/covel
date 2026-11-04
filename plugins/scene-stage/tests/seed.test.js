@@ -75,7 +75,7 @@ describe("scene-stage seed handler", () => {
           day: CLASSROOM_DAY,
           night: CLASSROOM_NIGHT,
           resolved: CLASSROOM_DAY,
-          sourceLabel: { zh: "世界背景", en: "World art" },
+          sourceLabel: { zh: "世界背景", en: "World background" },
           turnId: "turn-1",
         },
       },

@@ -1,15 +1,25 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#contributes.data.events.authoring.title": "bd1afa281f1a0a1c",
+      "PLUGIN.md#contributes.settings[key=planner].description": "cf32a6252953f6fd",
+      "PLUGIN.md#contributes.settings[key=planner].label": "90568f536078c80f",
+      "PLUGIN.md#description": "57ec8ee368e1d239",
+      "PLUGIN.md#displayName": "e5674dfaba85407a",
+      "runtimes/evaluate/RUNTIME.md#description": "b6c3b7de1e23bdf6",
+      "runtimes/intake/RUNTIME.md#description": "4aad8b1e147fda42",
+      "runtimes/plot/RUNTIME.md#description": "94b58f25ab8578bf"
+    },
     "zh": {
-      "PLUGIN.md#contributes.data.events.authoring.title": "84be676596dfe47c",
-      "PLUGIN.md#contributes.settings[key=planner].description": "a99a0740012a0f5d",
-      "PLUGIN.md#contributes.settings[key=planner].label": "78e469343a71a6a0",
-      "PLUGIN.md#description": "d8bb553ff69405cc",
-      "PLUGIN.md#displayName": "eb0158f375d9be07",
-      "runtimes/evaluate/RUNTIME.md#description": "94cc16e33c3acd45",
-      "runtimes/intake/RUNTIME.md#description": "70edccb76fb9bdf1",
-      "runtimes/plot/RUNTIME.md#description": "a9a15fdb0cc435e2"
+      "PLUGIN.md#contributes.data.events.authoring.title": "bd1afa281f1a0a1c",
+      "PLUGIN.md#contributes.settings[key=planner].description": "cf32a6252953f6fd",
+      "PLUGIN.md#contributes.settings[key=planner].label": "90568f536078c80f",
+      "PLUGIN.md#description": "57ec8ee368e1d239",
+      "PLUGIN.md#displayName": "e5674dfaba85407a",
+      "runtimes/evaluate/RUNTIME.md#description": "b6c3b7de1e23bdf6",
+      "runtimes/intake/RUNTIME.md#description": "4aad8b1e147fda42",
+      "runtimes/plot/RUNTIME.md#description": "94b58f25ab8578bf"
     }
   }
 }

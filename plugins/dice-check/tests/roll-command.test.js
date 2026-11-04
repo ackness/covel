@@ -133,19 +133,19 @@ describe("dice-check roll command", () => {
   });
 
   it("uses English fallback for non-default and Traditional Chinese locales", async () => {
-    for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
+    for (const locale of ["ja-JP", "zh-Hant-TW", "zh-TW"]) {
       const result = await roll(
         { args: { notation: "bad" } },
         await session(locale),
       );
-      expect(result.message).toContain("Use NdM dice notation");
-      expect(result.message).not.toContain("请使用");
+      expect(result.message).toContain("Enter dice like 2d6");
+      expect(result.message).not.toContain("请这样输入");
     }
 
     const simplified = await roll(
       { args: { notation: "bad" } },
       await session("zh-Hans"),
     );
-    expect(simplified.message).toContain("请使用");
+    expect(simplified.message).toContain("请这样输入");
   });
 });

@@ -1,8 +1,12 @@
 {
   "version": 1,
   "labels": {
+    "ru": {
+      "PLUGIN.md#description": "4790b0c3118ba3a6",
+      "PLUGIN.md#displayName": "bd4e2de481697eb6"
+    },
     "zh": {
-      "PLUGIN.md#description": "a7a39d75c4818665",
+      "PLUGIN.md#description": "4790b0c3118ba3a6",
       "PLUGIN.md#displayName": "bd4e2de481697eb6"
     }
   }

@@ -210,7 +210,7 @@ wrote worlds/tidelamp/media/scenes.registry.json with 1 scene(s)
 > [!NOTE]
 > 世界的 `data/world.data.yaml` 里写了 `media/scenes.registry.json` 时，这个文件必须存在，否则世界通不过校验。图还没做的时候，先运行一次 `node scripts/emit-scenes.mjs <世界ID>`：它会写出一份没有场景的空清单占位。出图后再运行一次即可。
 
-**这一局要启用管理场景的插件。** 内置的是“场景舞台”（`scene-stage`），它包含在“对话模式”（`dialogue-mode`）玩法包里，“传统故事模式”里没有。把 `world.yaml` 的 `plugins` 改成 `dialogue-mode`，或者在 `plugins` 里加上 `scene-stage`，或者在开局的准备页展开“自定义插件与高级设置”选中它。
+**这一局要启用管理场景的插件。** 内置的是“舞台画面”（`scene-stage`），它包含在“对话”（`dialogue-mode`）玩法包里，“经典故事”里没有。把 `world.yaml` 的 `plugins` 改成 `dialogue-mode`，或者在 `plugins` 里加上 `scene-stage`，或者在开局的准备页展开“自定义插件与高级设置”选中它。
 
 想让玩家一进游戏就是舞台视图，在 `world.yaml` 里加一行：
 
@@ -258,7 +258,7 @@ pnpm validate:world worlds/tidelamp
 | `Slot [covel.gpt-image-2] missing in …`、`No API key. …`、`cwebp is not installed; …` | 模型配置、密钥或 `cwebp` 的问题，处理方法见[立绘页的故障表](./portraits.md#没有按预期工作时)                          |
 | `emit-scenes` 提示 `missing day image, skipped: …`                                    | 这些场景没有日图，没有写进清单。补上 `<id>-day.webp` 再运行一次                                                       |
 | 校验报找不到 `media/scenes.registry.json`                                             | `data/world.data.yaml` 里登记了它，但文件还不存在。运行一次 `emit-scenes`                                             |
-| 游戏里背景一直不换                                                                    | 依次检查：是不是新开的一局；有没有启用“场景舞台”；是不是在“舞台”视图；故事里的地点名能不能对上场景的名字（见第 2 步） |
+| 游戏里背景一直不换                                                                    | 依次检查：是不是新开的一局；有没有启用“舞台画面”；是不是在“舞台”视图；故事里的地点名能不能对上场景的名字（见第 2 步） |
 | 背景换错了地方                                                                        | 两个场景的名字互相包含，或者共用了一个短词。把 `locationRef` 写得更具体                                               |
 | 昼夜切换时画面跳了一下                                                                | 日图和夜图是分别生成的，机位不同。以日图为参考重做夜图                                                                |
 | 改了图，游戏里还是旧图或没有图                                                        | 没有重新运行 `emit-scenes`，或者看的是改图之前开的那一局                                                              |

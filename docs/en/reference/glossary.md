@@ -36,7 +36,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Operation | 操作 | All the writes one successful write-service call staged, which commit or drop with the caller's commit unit. Not a single `op` of a data operation list. See [Write-service operations](./transactions.md#write-service-operations). |
 | Operation record | 操作记录 | The record an operation leaves on its caller's result (`runtimeResults[].operations`), which says after the commit how it ended and why. |
 | Operation-based write | 操作式写入 | Submitting a list of operations (`plugin.data.update`) instead of a computed whole value. |
-| Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. |
+| Pack | 玩法包 | A player-selectable set of installed plugins, not an installer. Players see it as a "Mode". |
 | Perspective | 视角 | Whose point of view the narration takes: character-centred first, second or third person, an omniscient narrator, or a game master. |
 | Plugin kind | 插件类型 | The package's `kind` controls default selection; distinct from runtime type and discovery source. |
 | Presence record | 在场记录 | The IDs of the characters present, recorded on a story message (`presentCharacterIds`). |
@@ -63,6 +63,30 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Turn | 回合 | "This turn" is 本回合 in Chinese. |
 | World | 世界 | A world's installation package is called a "world package". |
 | Write service | 写服务 | A service with `access: write` that changes its provider's own data for the caller; its writes are staged as one **operation**. See [Write services](./plugin-extensions.md#write-services). |
+
+## Player terms
+
+Plugin names, settings and panels shown to players use one set of words, matched across Chinese, English and Russian. Write every player-visible plugin text (`displayName`, `description`, settings, panels, buttons and notices) with this table and do not vary the wording. The internal terms are in the tables above.
+
+<!-- prettier-ignore -->
+| Concept | 中文 | English | Русский |
+| --- | --- | --- | --- |
+| Storyteller (the plugin that tells the story) | 讲述者 | Storyteller | Рассказчик |
+| Game master | 主持人 | Game master | Ведущий |
+| World state | 世界状态 | World state | Состояние мира |
+| The step before play | 开局准备 | Get ready | Подготовка к игре |
+| Bag | 背包 | Bag | Сумка |
+| Lore book (entries) | 图鉴（条目） | Almanac (entries) | Энциклопедия (записи) |
+| Story memory | 故事记忆 | Story memory | Память истории |
+| Turn | 回合 | Turn | Ход |
+| Character | 角色 | Character | Персонаж |
+| Speaker (a character who talks in a reply) | 发言角色 | Speaker | Говорящий |
+| Mode (a pack of plugins) | 玩法 | Mode | Режим |
+| Roll log | 判定记录 | Roll log | Журнал бросков |
+| Quest log | 任务日志 | Quest log | Журнал заданий |
+| Portraits | 立绘 | Portraits | Портреты |
+| Hidden plot events | 隐藏剧情 | Hidden plot events | Скрытые события |
+| AI (not model or LLM in player text) | AI | AI | ИИ |
 
 ## Prompt vocabulary
 

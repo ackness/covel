@@ -45,7 +45,7 @@ for (const [locale, itemName] of [
 
       const strip = page.getByRole("group", { name: /^(状态|Status)$/ });
       await expect(strip).toContainText(/当前目标|Objective/);
-      await expect(strip).toContainText(/行囊|Pack/);
+      await expect(strip).toContainText(/背包|Bag/);
       await expect(strip).toContainText(itemName);
       const response = await page.request.get(`/api/sessions/${sessionId}`);
       expect(response.ok()).toBeTruthy();

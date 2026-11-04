@@ -10,7 +10,7 @@
     "namespace": "characters"
   },
   "emptyState": {
-    "message": "No characters created yet, complete the character creation flow to see them here…"
+    "message": "No characters yet. They appear here once you create yours…"
   },
   "view": {
     "component": "Stack",
@@ -21,7 +21,7 @@
       {
         "component": "Text",
         "props": {
-          "content": "All Characters",
+          "content": "All characters",
           "weight": "bold",
           "size": "sm"
         }
@@ -84,7 +84,7 @@
                         },
                         "labels": {
                           "player": "Player",
-                          "npc": "NPC",
+                          "npc": "Story character",
                           "companion": "Companion"
                         }
                       },

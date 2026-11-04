@@ -90,7 +90,7 @@ describe("authoring surface", () => {
     // The view a pack asks for is data of the pack.
     expect(
       surface.packs.find((pack) => pack.id === "dialogue-mode"),
-    ).toMatchObject({ label: "对话模式", defaultViewMode: "stage" });
+    ).toMatchObject({ label: "对话", defaultViewMode: "stage" });
     expect(
       surface.packs.find((pack) => pack.id === "traditional-story"),
     ).not.toHaveProperty("defaultViewMode");

@@ -1,5 +1,5 @@
 ---
-description: Follows the story's mood and scene cues for background music.
+description: Picks background music from the story's mood and scene.
 schedule:
   stage: post-turn
 io:

@@ -469,7 +469,9 @@ it("loads the bundled optional reading pack through the same manifest and CSS po
   );
   const theme = loaded.themes.find((item) => item.id === "reading");
   expect(theme?.pluginId).toBe("scene-stage");
-  expect(theme?.label).toEqual({ en: "Stage reading", zh: "舞台阅读" });
+  expect(theme?.label).toEqual(
+    expect.objectContaining({ en: "Reading style", zh: "阅读样式" }),
+  );
   expect(theme?.layout).toEqual({ preset: "book" });
   expect(theme?.cssText).toContain('[data-covel-theme-part="dialogue"]');
   expect(theme?.cssText).not.toContain(".dialogue");

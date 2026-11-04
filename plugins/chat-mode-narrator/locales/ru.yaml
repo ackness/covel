@@ -1,0 +1,31 @@
+# Russian text of the chat-mode-narrator plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: Рассказчик в диалогах
+  description: "Рассказывает историю как беседу: герои говорят друг с другом и с вами."
+  contributes:
+    settings:
+      - key: perspective
+        label: Лицо повествования
+        description: Как история называет вашего персонажа. Остальные герои по-прежнему говорят своими словами.
+        options:
+          - label: «Я» («Я открываю дверь.»)
+          - label: «Вы» («Вы открываете дверь.»)
+          - label: По имени персонажа («Мин открывает дверь.»)
+          - label: Наблюдатель, который знает всё
+          - label: Ведущий, как за игровым столом
+      - key: dialogueRatio
+        label: Доля диалогов (%)
+        description: Какая часть каждого ответа — речь героев, от 30 до 90 процентов. Чем больше число, тем больше разговоров и меньше описаний.
+      - key: proseLength
+        label: Длина ответа
+        description: Насколько длинным будет каждый ответ. Чем длиннее, тем дороже.
+        options:
+          - label: Короткий, несколько строк
+          - label: Средний, небольшой абзац
+          - label: Длинный, развёрнутая сцена
+runtimes/plan/RUNTIME.md:
+  description: Выбирает, кто из героев заговорит в этом ответе.
+runtimes/narrate/RUNTIME.md:
+  description: Собирает реплики героев в один ответ истории.

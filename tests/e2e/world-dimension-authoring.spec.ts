@@ -202,7 +202,7 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
       const dimensionProvider = advanced
         .locator('[data-plugin-id="world-init"]')
         .getByRole("switch");
-      // Narrative Only explicitly excludes this provider; a contract request
+      // Story Only explicitly excludes this provider; a contract request
       // preserves that choice until the player turns the provider on.
       if ((await dimensionProvider.getAttribute("aria-checked")) === "false")
         await dimensionProvider.click();
@@ -263,9 +263,7 @@ test("portable dimensions survive editor save, hydration and opening, and an exp
       );
       expect(state.snapshot.session.phase).toBe("playing");
       expect(state.snapshot.session.completedPlayerTurns).toBe(0);
-      await page
-        .getByRole("tab", { name: "World Details", exact: true })
-        .click();
+      await page.getByRole("tab", { name: "World state", exact: true }).click();
       if (!clear) {
         await expect(
           page.getByRole("heading", { name: "Harbor alarm", exact: true }),

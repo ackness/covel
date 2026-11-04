@@ -1,7 +1,7 @@
 ---
-version: 0.0.39
-displayName: Reply Variants
-description: Offers several reply options so you can choose the one that fits best.
+version: 0.0.40
+displayName: Alternative Replies
+description: Lets you ask for other versions of the story's reply and pick the one you like best.
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel

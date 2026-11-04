@@ -1,7 +1,6 @@
 ---
 description: >-
-  When you mention someone, helps the story remember related people and
-  relationships.
+  When someone comes up, reminds the story of the people connected to them.
 schedule:
   stage: pre-turn
 io:

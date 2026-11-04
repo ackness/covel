@@ -9,7 +9,7 @@
     "namespace": "quests"
   },
   "emptyState": {
-    "message": "No quests yet. They will appear when the narrative introduces explicit commissions or goals…"
+    "message": "No quests yet. They will appear when the story gives you a task or goal."
   },
   "view": {
     "component": "FilterContainer",
@@ -46,7 +46,7 @@
         }
       ],
       "itemKeyField": "key",
-      "footer": "{{count}} quests tracked",
+      "footer": "{{count}} quests",
       "emptyMessage": "No matching quests",
       "itemTemplate": {
         "component": "EntryCard",

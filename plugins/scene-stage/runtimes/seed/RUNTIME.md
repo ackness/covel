@@ -1,7 +1,7 @@
 ---
 description: >-
-  Seeds the stage with the world registry's first scene at setup, so the stage
-  is never blank before the narrative emits scene.set.
+  Shows the world's first scene on the stage when the game starts, so the stage
+  is never empty.
 schedule:
   stage: setup
   trigger:

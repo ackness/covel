@@ -100,7 +100,7 @@ export default function (covel) {
         {
           id: "inventory.items",
           kind: "list",
-          label: labelText(ctx, "Pack"),
+          label: labelText(ctx, "Bag"),
           items: carried
             .slice(0, SUMMARY_ITEMS)
             .map((item) =>

@@ -9,7 +9,7 @@
         "component": "Text",
         "visible": { "$state": "/rejectedCount" },
         "props": {
-          "content": "Some checks could not be verified. Only results consistent with this turn's dice and rules are shown.",
+          "content": "Some results were left out because they did not match this turn's dice and rules.",
           "size": "sm"
         }
       },
@@ -23,8 +23,8 @@
             "props": { "gap": "sm", "align": "center" },
             "children": [
               {
-                "component": "Text",
-                "props": { "content": "🎲", "size": "sm" }
+                "component": "Icon",
+                "props": { "name": "dices", "size": "sm" }
               },
               {
                 "component": "Text",

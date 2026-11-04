@@ -3,5 +3,5 @@
 # messages translates the UI and the code: English text, then its translation.
 
 PLUGIN.md:
-  displayName: 历史压缩
-  description: 把较早的对话整理成分段摘要，让上下文保持在限定长度内。
+  displayName: 长篇故事记忆
+  description: 把较早的剧情缩成简短的摘要，长篇游戏不会变慢，故事也不会忘事。

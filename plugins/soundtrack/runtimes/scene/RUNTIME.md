@@ -1,5 +1,5 @@
 ---
-description: Records the current scene for the background music.
+description: Remembers the current scene so the music can match it.
 schedule:
   trigger:
     type: event

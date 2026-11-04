@@ -1,7 +1,7 @@
 ---
 description: >-
-  Records newly appearing characters and updates changes to their condition,
-  injuries, and equipment.
+  Notes new characters in the story and updates their condition, injuries
+  and gear.
 schedule:
   stage: post-turn
   trigger:

@@ -1,11 +1,17 @@
 {
   "version": 1,
   "labels": {
-    "zh": {
-      "PLUGIN.md#description": "4f0626f8dfc892e6",
+    "ru": {
+      "PLUGIN.md#description": "5451401a9b154f42",
       "PLUGIN.md#displayName": "890dcb2590edee83",
-      "runtimes/character-tracker/RUNTIME.md#description": "feaf4752483f1224",
-      "runtimes/player-init/RUNTIME.md#description": "3878543a65a4a885"
+      "runtimes/character-tracker/RUNTIME.md#description": "b901b72b99ad743d",
+      "runtimes/player-init/RUNTIME.md#description": "e3128091cbe80f68"
+    },
+    "zh": {
+      "PLUGIN.md#description": "5451401a9b154f42",
+      "PLUGIN.md#displayName": "890dcb2590edee83",
+      "runtimes/character-tracker/RUNTIME.md#description": "b901b72b99ad743d",
+      "runtimes/player-init/RUNTIME.md#description": "e3128091cbe80f68"
     }
   }
 }

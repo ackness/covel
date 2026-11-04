@@ -1,5 +1,5 @@
 ---
-description: Tracks the current scene and time of day for the visual stage.
+description: Keeps track of the current scene and whether it is day or night.
 schedule:
   trigger:
     type: event

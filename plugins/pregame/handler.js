@@ -37,7 +37,7 @@ export default async function pregameHandler(ctx) {
     worldSummary = world.description ?? "";
   }
 
-  const welcomeTitle = translate(ctx, "🌍 Welcome to {world}", {
+  const welcomeTitle = translate(ctx, "Welcome to {world}", {
     world: worldName,
   });
   const notifications = [
@@ -50,11 +50,11 @@ export default async function pregameHandler(ctx) {
   ];
 
   const narrativeOutput = worldSummary
-    ? translate(ctx, "[{world}] {summary}", {
+    ? translate(ctx, "Welcome to {world}. {summary}", {
         world: worldName,
         summary: worldSummary,
       })
-    : translate(ctx, "Game initialized. Welcome to {world}.", {
+    : translate(ctx, "Welcome to {world}.", {
         world: worldName,
       });
 

@@ -1,13 +1,13 @@
 {
   "id": "tabletop-rules",
-  "label": "Attribute checks",
+  "label": "Ability checks",
   "icon": "dices",
   "alwaysRender": true,
   "dataSource": { "namespace": "checks" },
   "view": {
     "component": "Button",
     "props": {
-      "label": "Request an attribute check"
+      "label": "Make an ability check"
     },
     "on": {
       "click": {

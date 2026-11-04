@@ -16,7 +16,7 @@
       {
         "component": "Text",
         "props": {
-          "content": "Scores range -100..100; the bar's midpoint is neutral.",
+          "content": "Scores run from -100 (Hostile) to 100 (Devoted). The middle of the bar is Neutral.",
           "variant": "muted",
           "size": "xs"
         }

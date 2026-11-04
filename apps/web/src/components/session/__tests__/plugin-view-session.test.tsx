@@ -280,7 +280,7 @@ it("keeps a bundled page, its filter and the view menu through deferred discover
   });
   const view = render(shell(<GameView session={state.session!} />));
   await screen.findByRole("button", { name: "Plugin pages" });
-  choose("Codex");
+  choose("Almanac");
   const filter = screen.getByPlaceholderText("Search entries…");
   fireEvent.change(filter, { target: { value: "Gate" } });
   expect(screen.getByText("Gate")).toBeTruthy();

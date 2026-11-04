@@ -1,5 +1,5 @@
 ---
-description: Tracks who is present in the scene and who is currently speaking.
+description: Keeps track of who is in the scene and who speaks.
 schedule:
   stage: pre-turn
 io:

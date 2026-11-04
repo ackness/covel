@@ -1,7 +1,7 @@
 ---
 description: >-
-  Pre-rolls three d20s each turn and hands the dice pool plus check rules to the
-  narrative engine.
+  Rolls the dice at the start of each turn, so success is decided by the dice
+  and not by the AI.
 schedule:
   stage: pre-turn
 io:

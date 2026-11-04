@@ -2,7 +2,7 @@
 
 核心插件，维护世界内时间。`world-time/context` 在叙事前发布权威时间；`world-time/advance` 在叙事后依据世界规则与 prompt 提议跨度；`advance-world-time` 工具确定性计算结果，并通过 proposal 与故事一起提交。
 
-- 世界包通过 `world.time-definition@1` 契约提供 `{ id: world, definition }`，导入插件的 `definitions/world`。schema 和类型属于本插件，世界维度不含时间。
+- 世界包通过 `world.time-definition@1` 契约提供 `{ id: world, definition }`，导入插件的 `definitions/world`。schema 和类型属于本插件，世界状态不含时间。
 - 时间规则面板在首次叙事前展示导入定义：作者的计时说明，加上带标签的摘要（时段与周期，或纪年、月数、每天小时数和星期；起点；流向；每回合默认和最多推进多少基础单位），不罗列原始字段。面板只按定义声明式展示，不往定义里加显示字段。无定义时显示默认历法说明。
 - 无文件目录的世界通过 `metadata.contractData` 提供多语言文本时，面板也解析周期、纪年、时段和星期的显示文字；有目录的世界仍使用单语言文件和翻译 overlay。
 - 支持不同月长、每日小时数、每小时分钟数、自定义纪年与时段，也支持只有粗粒度阶段的世界。

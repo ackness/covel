@@ -22,7 +22,7 @@
 | 故事段落换一种画法（对白名牌、角色头像）     | 段落模板 `ui.segment`                               | 正文里，替换匹配段落的默认画法   | 一份 JSON            |
 | 给玩家选的选项                               | `ChoiceList` / `Choice` 组件                        | 正文里；舞台视图的决策区         | JSON，或一次工具调用 |
 | 必须回答才能继续的表单                       | `create-form` 工具                                  | 正文里，回答之前输入框是锁住的   | 一次工具调用         |
-| 一眼就该看到的状态（目标、时间、行囊）       | 状态摘要 `session.summary@1`                        | 面板页签下方，或场景图上的状态条 | 十几行代码           |
+| 一眼就该看到的状态（目标、时间、背包）       | 状态摘要 `session.summary@1`                        | 面板页签下方，或场景图上的状态条 | 十几行代码           |
 | 场景图、立绘、背景音乐                       | 框架预留的画面位置                                  | 舞台视图、场景背景、头像         | 一段提供数据的代码   |
 | 现成组件画不出来的界面（地图、棋盘、小游戏） | 自己的 HTML 文件 `webview`                          | 右侧面板；也可以挂到舞台的决策区 | 一个 HTML 文件       |
 | 玩家要读的故事                               | 不是界面。由 `io.visibility: story` 的 runtime 输出 | 正文                             | 提示词               |
@@ -736,7 +736,7 @@ contributes:
 
 ## 发布静态主题
 
-配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。可静态验证、通过 API 发现，并由玩家在“会话主题”明确选择。可运行的社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)：压缩包内容后通过安装入口安装，启用插件，再选择主题。场景舞台的可选“舞台阅读”也只使用这条公共声明。
+配色和受限样式放在 `contributes.ui.theme` 的独立 JSON 中，无须添加 runtime、虚假面板或 entry。描述文件、CSS 和素材根相对包目录，CSS 图片相对素材根；完整例子与校验限制见[插件主题](../reference/theme-packages.md#插件提供的受限主题)。可静态验证、通过 API 发现，并由玩家在“会话主题”明确选择。可运行的社区例子见 [Reading theme probe](../../tests/third-party/theme-pack-probe/README.md)：压缩包内容后通过安装入口安装，启用插件，再选择主题。舞台画面的可选“舞台阅读”也只使用这条公共声明。
 
 ## 创建独立输入页面
 

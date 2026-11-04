@@ -1,9 +1,9 @@
 ---
-version: 0.0.44
-displayName: World Fact Extraction
+version: 0.0.45
+displayName: Story Notes
 description: >-
-  Extracts people, relationships, events, and clues from each story turn for
-  codex, quest, and other features.
+  Picks out the people, relationships, events and clues from each turn, so the
+  Almanac, Quest Log and other features can use them.
 tags:
   - "data:world-ir"
 author:

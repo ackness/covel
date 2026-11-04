@@ -149,7 +149,7 @@ describe("create-character-form schema boundary", () => {
       },
     );
     expect(result.interaction.notice).toBe(
-      'The name "tomas" already belongs to a character of this world. Choose another name.',
+      'The name "tomas" is already taken by another character in this world. Choose another name.',
     );
     expect(result.interaction.fields).toEqual([
       { name: "characterName", type: "text", label: "Name", required: true },
@@ -316,7 +316,7 @@ describe("create-character-form schema boundary", () => {
         ...context,
         messages: {
           translations: {
-            "This world no longer accepts some of your earlier answers. Check the form and submit it again.":
+            "Some of your answers no longer fit this world. Check the form and try again.":
               "请检查后重新提交。",
           },
         },

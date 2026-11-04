@@ -42,7 +42,7 @@ describe("world-time session summary", () => {
           id: "time.now",
           kind: "text",
           // Every language the plugin has: the client picks the UI language.
-          label: { en: "Time", zh: "时间" },
+          label: { en: "Time", zh: "时间", ru: "Время" },
           value: describeTime(DEFAULT_TIME, tick, "zh").display,
         },
       ],

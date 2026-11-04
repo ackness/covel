@@ -2,13 +2,13 @@
 # A section named after a manifest file translates its labels, under the same keys.
 # messages translates the UI: English text, then its translation.
 PLUGIN.md:
-  displayName: 关系图谱
-  description: 记录人物之间的关系，让故事提到相关人物时更连贯。
+  displayName: 人物关系
+  description: 记录谁和谁有联系，让故事记得你遇到过的人以及他们之间的关系。
 runtimes/extractor/RUNTIME.md:
-  description: 从故事里整理人物、势力和他们之间的关系。
+  description: 记下故事里的角色、群体和势力，以及它们之间的关系。
 runtimes/rag-retriever/RUNTIME.md:
-  description: 当你提到某个人时，帮助故事想起相关人物和关系。
+  description: 故事提到某个人时，提醒故事想起和他有关的人。
 messages:
-  Relationship Graph: 关系图谱
-  No character or faction relationships yet. They will appear as the story continues.: 尚未发现角色或势力关系，继续推进故事后会自动出现……
-  Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral.: 当前会话里的角色、群体与势力关系。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。
+  Relationships: 人物关系
+  No character or faction relationships yet. They will appear as the story continues.: 还没有角色或势力之间的关系。随着故事推进会自动出现。
+  How the characters, groups and factions in this story are connected. Green lines are good relationships, red are bad, gray are neutral. Click a character for details.: 这个故事里的角色、群体和势力是怎样联系在一起的。绿线表示关系好，红线表示关系差，灰线表示一般。点击角色查看详情。

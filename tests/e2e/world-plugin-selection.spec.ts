@@ -206,7 +206,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
     await expect(initial).toContainText("World tags: frontier");
     const alternative = page
       .locator("button[aria-pressed]")
-      .filter({ hasText: "Narrative Only" });
+      .filter({ hasText: "Story Only" });
     await alternative.click();
     const advanced = page.getByTestId("advanced-plugin-settings");
     await advanced.locator("summary").click();
@@ -224,7 +224,7 @@ test("local world selection survives preparation, hydration, the opening, the fi
     await expect(dice).toHaveAttribute("aria-checked", "false");
     const openingPack = page
       .locator("button[aria-pressed]")
-      .filter({ hasText: "DM Mode" });
+      .filter({ hasText: /^Game Master/ });
     await openingPack.click();
     await expect(openingPack).toHaveAttribute("aria-pressed", "true");
     await expect(dice).toHaveAttribute("aria-checked", "false");

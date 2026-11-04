@@ -131,7 +131,7 @@ describe("validateAllocation", () => {
     const ctx = {
       messages: {
         translations: {
-          "Allocate exactly {budget} points; you have allocated {spent}":
+          "Spend exactly {budget} points. You have spent {spent}.":
             "需要正好分配 {budget} 点，你已分配 {spent} 点",
         },
       },

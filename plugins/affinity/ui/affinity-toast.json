@@ -12,15 +12,6 @@
           {
             "component": "Text",
             "props": {
-              "content": "§ AFFINITY",
-              "variant": "muted",
-              "size": "xs",
-              "className": "ui-meta"
-            }
-          },
-          {
-            "component": "Text",
-            "props": {
               "content": "Affinity changes",
               "weight": "bold",
               "size": "sm"
