@@ -157,7 +157,7 @@ agent:
 
 最终输出直接采用业务工具结果时，声明 [`io.output.from`](../reference/plugins.md#agent-output-submission)。工具成功后单独用 `{}` 调用 `submit-output`；离线假模型也提交 `{}`，不复制工具结果或模型视图包装。
 
-故事 agent 写 `submit-output` 时，玩家默认每写完一段就看到一段草稿。想让玩家等到提交后再看，写 `io.output.live: off`；想显示正在写的那一段，写 `text`，见[故事草稿](../reference/plugins.md#story-drafts)。写一个不能让玩家提前读到结果的审核（比如防剧透），在它的 `ReviewAgentOutput` 声明里加 `holdsDrafts: true`，见[压住故事草稿](../reference/hooks.md#holds-drafts)。
+故事 agent 写 `submit-output` 时，玩家默认每写完一段就看到一段草稿。想让玩家等到提交后再看，写 `io.output.live: off`；想显示正在写的那一段，写 `text`，见[故事草稿](../reference/plugins.md#story-drafts)。写一个不能让玩家提前读到结果的审核（比如防剧透），在它的 `ReviewAgentOutput` 声明里加 `holdsDrafts: true`；用 `PostLLMResponse` 或 `PostRuntime` 改写故事的插件也一样，见[压住故事草稿](../reference/hooks.md#holds-drafts)。
 
 ## 怎样用别的插件的结果
 

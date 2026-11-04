@@ -169,25 +169,33 @@ export class HookPipeline {
   }
 
   /**
-   * Whether a review in the current session scope holds story drafts: one
-   * that would run for this session's `ReviewAgentOutput`, from an active
-   * plugin that is not latched off.
+   * How long story drafts wait in the current session scope: until the story
+   * is accepted (a holding `PostLLMResponse` or `ReviewAgentOutput` hook), until
+   * the commit (a holding `PostRuntime` hook), or not at all. Only hooks that
+   * would run count: from an active plugin, not latched off, and approved.
    */
-  holdsOutputDrafts(sessionId: string): boolean {
-    const raw =
-      (this.snapshots.getStore() ?? this.registrations).get(
-        "ReviewAgentOutput",
-      ) ?? [];
+  async outputDraftHold(
+    sessionId: string,
+  ): Promise<"review" | "commit" | undefined> {
+    const registrations = this.snapshots.getStore() ?? this.registrations;
     const active = currentActivePluginIds();
-    return raw.some(
-      (reg) =>
-        reg.holdsDrafts === true &&
-        isHookInScope(reg.pluginId, active) &&
-        // The same filter `run` applies to this event's handlers.
-        (currentHookLogicalKey() !== undefined ||
-          reg.pluginId === undefined ||
-          !this.options.isPluginLatched?.(sessionId, reg.pluginId)),
-    );
+    const runs = async (reg: HookRegistration): Promise<boolean> =>
+      reg.holdsDrafts === true &&
+      isHookInScope(reg.pluginId, active) &&
+      // The same filter `run` applies to the event's handlers.
+      (currentHookLogicalKey() !== undefined ||
+        reg.pluginId === undefined ||
+        !this.options.isPluginLatched?.(sessionId, reg.pluginId)) &&
+      (await (reg.runsFor?.(sessionId) ?? true));
+    const holds = async (event: HookEvent) => {
+      for (const reg of registrations.get(event) ?? [])
+        if (await runs(reg)) return true;
+      return false;
+    };
+    if (await holds("PostRuntime")) return "commit";
+    if ((await holds("ReviewAgentOutput")) || (await holds("PostLLMResponse")))
+      return "review";
+    return undefined;
   }
 
   /** Host diagnostics expose identities only, never handlers or predicates. */

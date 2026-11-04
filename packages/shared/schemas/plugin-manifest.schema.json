@@ -655,16 +655,16 @@
                   },
                   "holdsDrafts": {
                     "type": "boolean",
-                    "description": "`ReviewAgentOutput` only: players must not read a story before this review passes, so story drafts in sessions where the package is enabled appear only once every review accepted them. Defaults to `false`."
+                    "description": "`PostLLMResponse`, `ReviewAgentOutput` or `PostRuntime` only: players must not read a story before this hook has seen it. In sessions where the package is enabled, story drafts appear only once every review accepted them, or, for `PostRuntime`, only after the commit. Defaults to `false`."
                   }
                 },
                 "required": ["event"],
                 "additionalProperties": false,
-                "description": "A hook in another phase, or a review that holds story drafts: `{ event, enforce?, holdsDrafts? }`."
+                "description": "A hook in another phase, or one that holds story drafts: `{ event, enforce?, holdsDrafts? }`."
               }
             ]
           },
-          "description": "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a review that holds story drafts."
+          "description": "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a hook that holds story drafts."
         },
         "wires": {
           "type": "array",

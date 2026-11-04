@@ -40,7 +40,7 @@ The `options` for `covel.on(event, handler, options?)` have three items:
 | `timeoutMs` | The time limit for one call of the handler. The default is 5000 milliseconds.                                                                        |
 | `enforce`   | The ordering group: `pre`, `normal` (the default), or `post`. It must match the group declared in `contributes.hooks`. The ordering rules are below. |
 
-An entry in `contributes.hooks` is either an event name or an object `{ event, enforce?, holdsDrafts? }`. `enforce` names a group other than `normal`. `holdsDrafts` applies only to `ReviewAgentOutput`; see [Holding story drafts](#holds-drafts). `holdsDrafts` is written only in the declaration; `covel.on()` has no matching option.
+An entry in `contributes.hooks` is either an event name or an object `{ event, enforce?, holdsDrafts? }`. `enforce` names a group other than `normal`. `holdsDrafts` applies only to `PostLLMResponse`, `ReviewAgentOutput` and `PostRuntime`; see [Holding story drafts](#holds-drafts). `holdsDrafts` is written only in the declaration; `covel.on()` has no matching option.
 
 The handlers for one event run group by group: `pre`, then `normal`, then `post`. Inside one group, the framework's own hooks run first, followed by plugin handlers, in registration order. The order between two plugins is not something you can rely on.
 
@@ -279,8 +279,19 @@ Once declared:
 - In a session that enables the plugin, no story runtime of that session shows drafts part by part. A review chooses which runtimes it checks by `ctx.runtimeId`, which the kernel cannot know in advance, so the declaration applies to the session.
 - Each submission appears at once when every review has accepted it. It still does not wait for later plugins or the turn's commit, so it appears earlier than after the commit.
 - The declaration stops applying when the plugin is disabled in the session or switched off after failures.
+- A community plugin's hooks do not run before the player approves them, and neither does the declaration.
 - It only makes drafts more cautious: it grants no permission and is not part of the plugin's capabilities, so changing it does not ask the player again.
-- It is valid only on `ReviewAgentOutput`; on any other event it is rejected. `pnpm plugin:extract` keeps it when it syncs declarations.
+- `pnpm plugin:extract` keeps it when it syncs declarations.
+
+Any hook that can change or stop a story may declare it; they hold it for different lengths:
+
+| Event               | When the story appears                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `PostLLMResponse`   | Its rewrites and corrections come before submission, so at once when every review accepts it |
+| `ReviewAgentOutput` | At once when every review accepts it                                                         |
+| `PostRuntime`       | `replace.result` can still replace an accepted story, so only after the turn's commit        |
+
+On any other event it is rejected.
 
 Do not declare it on a review that checks only format or quality; players would lose the part-by-part story.
 

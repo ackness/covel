@@ -157,7 +157,7 @@ Every agent finishes with the host-generated `submit-output` tool. Use `completi
 
 When final output comes directly from a business tool, declare [`io.output.from`](../reference/plugins.md#agent-output-submission). After tool success, call `submit-output` alone with `{}`. Scripted models also submit `{}` without copying tool content or model-view wrappers.
 
-While a story agent writes `submit-output`, the player by default sees a draft part by part as each part is finished. To make the player wait for the commit, declare `io.output.live: off`; to show the part being written as well, declare `text`. See [story drafts](../reference/plugins.md#story-drafts). A review whose result players must not read early, such as a spoiler guard, adds `holdsDrafts: true` to its `ReviewAgentOutput` declaration; see [Holding story drafts](../reference/hooks.md#holds-drafts).
+While a story agent writes `submit-output`, the player by default sees a draft part by part as each part is finished. To make the player wait for the commit, declare `io.output.live: off`; to show the part being written as well, declare `text`. See [story drafts](../reference/plugins.md#story-drafts). A review whose result players must not read early, such as a spoiler guard, adds `holdsDrafts: true` to its `ReviewAgentOutput` declaration, as does a plugin that rewrites stories in `PostLLMResponse` or `PostRuntime`; see [Holding story drafts](../reference/hooks.md#holds-drafts).
 
 ## How to use another plugin's results
 

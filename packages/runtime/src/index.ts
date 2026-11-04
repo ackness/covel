@@ -341,7 +341,9 @@ export type {
 } from "./plugin-services.js";
 
 export {
-  draftHoldingPhases,
+  draftHoldingHooks,
+  draftHoldingKey,
+  isDraftHoldingEvent,
   validatePluginHookRegistration,
 } from "./plugin-hook-registration.js";
 

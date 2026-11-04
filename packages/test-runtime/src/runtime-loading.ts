@@ -8,7 +8,8 @@ import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
   PluginEntryScope,
   createHookPipeline,
-  draftHoldingPhases,
+  draftHoldingHooks,
+  draftHoldingKey,
   validatePluginHookRegistration,
   type HookPipeline,
   PluginExtensionHost,
@@ -392,7 +393,7 @@ export async function loadEntryTools(
       name: `${declaration.point}/${declaration.id}`,
     }));
   let hookSeq = 0;
-  const heldPhases = draftHoldingPhases(contributions);
+  const heldHooks = draftHoldingHooks(contributions);
   const scope = new PluginEntryScope();
   const registration = createExtensionRegistration(
     extensions,
@@ -482,8 +483,7 @@ export async function loadEntryTools(
               ? { timeoutMs: options.timeoutMs }
               : {}),
             ...(options?.enforce ? { enforce: options.enforce } : {}),
-            ...(event === "ReviewAgentOutput" &&
-            heldPhases.has(options?.enforce ?? "normal")
+            ...(heldHooks.has(draftHoldingKey(event, options?.enforce))
               ? { holdsDrafts: true }
               : {}),
           }),

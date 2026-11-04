@@ -561,10 +561,12 @@ describe("hook declarations that hold story drafts", () => {
       .shape.hooks.unwrap()
       .safeParse(value);
 
-  it("accepts holdsDrafts on ReviewAgentOutput, in any phase", () => {
+  it("accepts holdsDrafts on the hooks that can change a story, in any phase", () => {
     const parsed = hooks([
       { event: "ReviewAgentOutput", holdsDrafts: true },
       { event: "ReviewAgentOutput", enforce: "post", holdsDrafts: true },
+      { event: "PostLLMResponse", holdsDrafts: true },
+      { event: "PostRuntime", holdsDrafts: true },
       "PreToolUse",
     ]);
     expect(parsed.success).toBe(true);
@@ -575,10 +577,10 @@ describe("hook declarations that hold story drafts", () => {
   });
 
   it("rejects holdsDrafts on any other event", () => {
-    const parsed = hooks([{ event: "PostRuntime", holdsDrafts: true }]);
+    const parsed = hooks([{ event: "PreToolUse", holdsDrafts: true }]);
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues[0]?.message).toContain(
-      "holdsDrafts applies only to ReviewAgentOutput",
+      "holdsDrafts applies only to PostLLMResponse, ReviewAgentOutput, PostRuntime",
     );
   });
 });

@@ -1,43 +1,79 @@
 import { describe, expect, it } from "vitest";
-import { HookPipeline, runWithHookScope } from "../src/index.js";
+import {
+  HookPipeline,
+  runWithHookScope,
+  type HookEvent,
+} from "../src/index.js";
 
-const review = (pluginId: string, holdsDrafts: boolean) => ({
-  id: `${pluginId}:ReviewAgentOutput:1`,
-  event: "ReviewAgentOutput" as const,
+const hook = (
+  pluginId: string,
+  holdsDrafts: boolean,
+  event: HookEvent = "ReviewAgentOutput",
+  runsFor?: (sessionId: string) => boolean | Promise<boolean>,
+) => ({
+  id: `${pluginId}:${event}:1`,
+  event,
   pluginId,
   ...(holdsDrafts ? { holdsDrafts: true } : {}),
+  ...(runsFor ? { runsFor } : {}),
   handler: async () => ({ action: "continue" as const }),
 });
 
-describe("holdsOutputDrafts", () => {
-  it("is true only for a holding review that would run in the session", () => {
+const inSession = (pipeline: HookPipeline, ids: string[]) =>
+  runWithHookScope({ activePluginIds: new Set(ids) }, () =>
+    pipeline.outputDraftHold("s"),
+  );
+
+describe("outputDraftHold", () => {
+  it("holds only for a holding hook that would run in the session", async () => {
     const latched = new Set<string>();
     const pipeline = new HookPipeline({
       isPluginLatched: (_session, pluginId) => latched.has(pluginId),
     });
-    pipeline.register(review("quality", false));
-    expect(pipeline.holdsOutputDrafts("s")).toBe(false);
+    pipeline.register(hook("quality", false));
+    await expect(pipeline.outputDraftHold("s")).resolves.toBeUndefined();
 
-    pipeline.register(review("spoilers", true));
-    const inSession = (ids: string[]) =>
-      runWithHookScope({ activePluginIds: new Set(ids) }, () =>
-        pipeline.holdsOutputDrafts("s"),
-      );
-    expect(inSession(["quality", "spoilers"])).toBe(true);
+    pipeline.register(hook("spoilers", true));
+    await expect(inSession(pipeline, ["quality", "spoilers"])).resolves.toBe(
+      "review",
+    );
     // A plugin the session does not enable holds nothing.
-    expect(inSession(["quality"])).toBe(false);
+    await expect(inSession(pipeline, ["quality"])).resolves.toBeUndefined();
     // Neither does one whose hooks are switched off after failures.
     latched.add("spoilers");
-    expect(inSession(["quality", "spoilers"])).toBe(false);
+    await expect(
+      inSession(pipeline, ["quality", "spoilers"]),
+    ).resolves.toBeUndefined();
   });
 
-  it("ignores the flag on other events", () => {
+  it("waits for the commit when a PostRuntime hook may still replace the story", async () => {
     const pipeline = new HookPipeline();
-    pipeline.register({
-      ...review("guard", true),
-      id: "guard:PostRuntime:1",
-      event: "PostRuntime",
-    });
-    expect(pipeline.holdsOutputDrafts("s")).toBe(false);
+    pipeline.register(hook("filter", true, "PostLLMResponse"));
+    await expect(inSession(pipeline, ["filter"])).resolves.toBe("review");
+    pipeline.register(hook("redactor", true, "PostRuntime"));
+    await expect(inSession(pipeline, ["filter", "redactor"])).resolves.toBe(
+      "commit",
+    );
+  });
+
+  it("ignores the flag on events that cannot change the story", async () => {
+    const pipeline = new HookPipeline();
+    pipeline.register(hook("guard", true, "PreToolUse"));
+    await expect(pipeline.outputDraftHold("s")).resolves.toBeUndefined();
+  });
+
+  it("ignores a hook that does not run for the session, such as an unapproved one", async () => {
+    let approved = false;
+    const pipeline = new HookPipeline();
+    pipeline.register(
+      hook("community-review", true, "ReviewAgentOutput", async () => approved),
+    );
+    await expect(
+      inSession(pipeline, ["community-review"]),
+    ).resolves.toBeUndefined();
+    approved = true;
+    await expect(inSession(pipeline, ["community-review"])).resolves.toBe(
+      "review",
+    );
   });
 });

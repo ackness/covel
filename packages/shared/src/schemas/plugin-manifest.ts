@@ -498,7 +498,7 @@ export const pluginManifestSchema = z.strictObject({
       hooks: z
         .array(pluginHookContributionSchema)
         .describe(
-          "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a review that holds story drafts.",
+          "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a hook that holds story drafts.",
         )
         .optional(),
       wires: z

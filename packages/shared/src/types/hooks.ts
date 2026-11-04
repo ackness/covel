@@ -43,6 +43,18 @@ export const HOOK_EVENTS = [
  */
 export type HookEventName = (typeof HOOK_EVENTS)[number];
 
+/**
+ * Events whose handlers can change or reject a story before players should
+ * read it, and so may declare `holdsDrafts`. `PostLLMResponse` and
+ * `ReviewAgentOutput` run before the story is accepted; `PostRuntime` can
+ * still replace it afterwards, so it holds the story until the commit.
+ */
+export const DRAFT_HOLDING_HOOK_EVENTS = [
+  "PostLLMResponse",
+  "ReviewAgentOutput",
+  "PostRuntime",
+] as const satisfies readonly HookEventName[];
+
 /** Ordering group for a hook handler within an event. */
 export type HookEnforce = "pre" | "normal" | "post";
 

@@ -130,7 +130,7 @@ export type {
 } from "./plugin.js";
 
 export { SLASH_COMMAND_CONTEXT_SCOPES } from "./plugin.js";
-export { HOOK_EVENTS } from "./plugin.js";
+export { DRAFT_HOLDING_HOOK_EVENTS, HOOK_EVENTS } from "./plugin.js";
 
 export type {
   RuntimeStatus,

@@ -40,7 +40,7 @@ export default function (covel) {
 | `timeoutMs` | handler 一次调用的时间上限，默认 5000 毫秒。                                                            |
 | `enforce`   | 排序分组：`pre`、`normal`（默认）或 `post`。必须和 `contributes.hooks` 里声明的分组相同。顺序规则见下。 |
 
-`contributes.hooks` 的一项可以只写事件名，也可以写成对象 `{ event, enforce?, holdsDrafts? }`：`enforce` 写 `normal` 以外的分组；`holdsDrafts` 只用于 `ReviewAgentOutput`，见[压住故事草稿](#holds-drafts)。`holdsDrafts` 只写在声明里，`covel.on()` 没有对应的选项。
+`contributes.hooks` 的一项可以只写事件名，也可以写成对象 `{ event, enforce?, holdsDrafts? }`：`enforce` 写 `normal` 以外的分组；`holdsDrafts` 只用于 `PostLLMResponse`、`ReviewAgentOutput` 和 `PostRuntime`，见[压住故事草稿](#holds-drafts)。`holdsDrafts` 只写在声明里，`covel.on()` 没有对应的选项。
 
 同一个事件的 handler 按分组依次运行：`pre` → `normal` → `post`。同一组内，框架自己的 Hook 先运行，然后是插件的 handler，按注册顺序。两个插件之间谁先谁后不是可以依赖的约定。
 
@@ -279,8 +279,19 @@ contributes:
 - 会话启用了这个插件时，这个会话的故事 runtime 都不再逐段显示草稿。审核按 `ctx.runtimeId` 决定审哪个 runtime，内核没法提前知道，所以按会话生效。
 - 每次提交通过全部审核后，故事一次显示出来。它仍然不用等后面的插件运行和回合提交，比提交后才显示要早。
 - 插件在会话里停用，或者因故障被熔断后，声明不再生效。
+- 社区插件的 Hook 还没得到玩家批准时不会运行，声明也不生效。
 - 声明只让草稿更保守，不授予任何权限，也不进插件的能力清单，改动它不需要玩家重新批准。
-- 只能写在 `ReviewAgentOutput` 上，写在其他事件上会被拒绝。`pnpm plugin:extract` 同步声明时保留它。
+- `pnpm plugin:extract` 同步声明时保留它。
+
+能改动或拦下故事的 Hook 都可以声明，它们压住的时间不同：
+
+| 事件                | 故事什么时候出现                                                |
+| ------------------- | --------------------------------------------------------------- |
+| `PostLLMResponse`   | 改写或退回发生在提交前，故事在全部审核通过后一次出现            |
+| `ReviewAgentOutput` | 全部审核通过后一次出现                                          |
+| `PostRuntime`       | `replace.result` 在接受之后还能换掉故事，所以等回合提交后才出现 |
+
+写在其他事件上会被拒绝。
 
 只查格式或质量的审核不要声明，否则玩家就读不到逐段显示的故事了。
 
