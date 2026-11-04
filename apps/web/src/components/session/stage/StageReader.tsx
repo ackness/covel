@@ -1,8 +1,12 @@
 /**
- * Reads a newly committed story one line at a time, like a visual novel's
- * text box: a nameplate for dialogue, progress, and a marker when more
- * follows. It heads the decision panel, so choices and input stay available
- * at every line; "Show all" or Escape switches to the whole story.
+ * Reads a new story one line at a time, like a visual novel's text box: a
+ * nameplate for dialogue, progress, and a marker when more follows. It heads
+ * the decision panel, so choices and input stay available at every line;
+ * "Show all" or Escape switches to the whole story.
+ *
+ * It also reads a story still being written. Then the last line waits for
+ * the next one instead of finishing, and a revision starts again at the
+ * first line.
  */
 import { clsx } from "clsx";
 import { ChevronDown } from "lucide-react";
@@ -24,6 +28,13 @@ export interface StageReaderProps {
   readonly onSpeakerChange?: (characterId: string | undefined) => void;
   /** The player read past the last line or asked for the whole story. */
   readonly onFinish: () => void;
+  /** The current page, when the parent keeps it across remounts. */
+  readonly index?: number;
+  readonly onIndexChange?: (index: number) => void;
+  /** More lines are coming: the last line waits instead of finishing. */
+  readonly writing?: boolean;
+  /** What was shown is void and the model is writing it again. */
+  readonly revising?: boolean;
 }
 
 const NEXT_KEYS = new Set([" ", "Enter", "ArrowRight", "PageDown"]);
@@ -45,25 +56,57 @@ export function StageReader({
   reducedMotion = false,
   onSpeakerChange,
   onFinish,
+  index: controlledIndex,
+  onIndexChange,
+  writing = false,
+  revising = false,
 }: StageReaderProps): ReactElement | null {
   const { t } = useTranslation();
   const units = useMemo(() => storyReaderUnits(message), [message]);
-  const [index, setIndex] = useState(0);
-  const unit = units[Math.min(index, units.length - 1)];
+  const [ownIndex, setOwnIndex] = useState(0);
+  const pending = writing || revising;
+  const index = Math.max(
+    0,
+    Math.min(controlledIndex ?? ownIndex, units.length - 1),
+  );
+  const setIndex = (value: number) => {
+    setOwnIndex(value);
+    onIndexChange?.(value);
+  };
+  const unit = units[index];
   const last = index >= units.length - 1;
 
+  // Asking for the next line while it is still being written shows it as
+  // soon as it arrives.
+  const [asked, setAsked] = useState(false);
+
   // Handlers read the latest position without re-subscribing every page.
-  const latest = useRef({ index, last, onFinish });
-  latest.current = { index, last, onFinish };
+  const latest = useRef({ index, last, pending, onFinish, setIndex });
+  latest.current = { index, last, pending, onFinish, setIndex };
   const next = () => {
-    if (latest.current.last) latest.current.onFinish();
-    else setIndex(latest.current.index + 1);
+    if (!latest.current.last) latest.current.setIndex(latest.current.index + 1);
+    // The last line of a story still being written waits for the next one.
+    else if (latest.current.pending) setAsked(true);
+    else latest.current.onFinish();
   };
-  const previous = () => setIndex(Math.max(0, latest.current.index - 1));
+  const previous = () => {
+    setAsked(false);
+    latest.current.setIndex(Math.max(0, latest.current.index - 1));
+  };
 
   useEffect(() => {
-    if (units.length === 0) onFinish();
-  }, [units.length, onFinish]);
+    if (!asked || last) return;
+    setAsked(false);
+    latest.current.setIndex(index + 1);
+  }, [asked, last, index]);
+  // A revision starts again at the first line; nothing was asked of it yet.
+  useEffect(() => {
+    if (revising) setAsked(false);
+  }, [revising]);
+
+  useEffect(() => {
+    if (units.length === 0 && !pending) onFinish();
+  }, [units.length, pending, onFinish]);
 
   useEffect(() => {
     onSpeakerChange?.(unit?.speakerId);
@@ -93,12 +136,17 @@ export function StageReader({
   }, []);
 
   useEffect(() => {
-    if (!autoPlay || !unit) return;
+    if (!autoPlay || !unit || (last && pending)) return;
     const timer = setTimeout(next, readerPageDelayMs(unit.text));
     return () => clearTimeout(timer);
-  }, [autoPlay, index, unit]);
+  }, [autoPlay, index, unit, last, pending]);
 
-  if (!unit) return null;
+  const status = revising
+    ? t("session.draftRevising")
+    : writing
+      ? t("session.draftWriting")
+      : undefined;
+  if (!unit && !status) return null;
   return (
     <section
       className="border-b border-border/50 px-4 pt-5 pb-2"
@@ -106,7 +154,7 @@ export function StageReader({
       aria-label={t("stage.readerLabel")}
     >
       <div className="relative">
-        {unit.speaker && (
+        {unit?.speaker && (
           <span
             data-testid="stage-reader-speaker"
             className="ui-stage-panel ui-stage-nameplate absolute -top-3.5 left-3 rounded-(--radius-card) px-3 py-0.5 text-sm font-semibold"
@@ -118,7 +166,9 @@ export function StageReader({
           role="button"
           tabIndex={0}
           aria-label={
-            last ? t("stage.readerShowAll") : t("stage.nextParagraph")
+            last && !pending
+              ? t("stage.readerShowAll")
+              : t("stage.nextParagraph")
           }
           onClick={next}
           onKeyDown={(event) => {
@@ -129,22 +179,29 @@ export function StageReader({
           }}
           className="relative min-h-24 cursor-pointer rounded-(--radius-card) border border-border/60 px-4 pt-5 pb-6 text-left"
         >
-          <div
-            key={index}
-            aria-live="polite"
-            data-testid="stage-reader-line"
-            data-narration={unit.narration || undefined}
-            className={clsx(
-              "text-base leading-relaxed",
-              unit.narration && "text-muted-foreground",
-              !reducedMotion && "ui-stage-line",
-            )}
-          >
-            <Markdown themeSessionId={sessionId} themePart="dialogue">
-              {unit.text}
-            </Markdown>
-          </div>
-          {!last && (
+          {!unit && (
+            <p className="ui-eyebrow animate-pulse text-sm text-muted-foreground">
+              {status}
+            </p>
+          )}
+          {unit && (
+            <div
+              key={index}
+              aria-live="polite"
+              data-testid="stage-reader-line"
+              data-narration={unit.narration || undefined}
+              className={clsx(
+                "text-base leading-relaxed",
+                unit.narration && "text-muted-foreground",
+                !reducedMotion && "ui-stage-line",
+              )}
+            >
+              <Markdown themeSessionId={sessionId} themePart="dialogue">
+                {unit.text}
+              </Markdown>
+            </div>
+          )}
+          {unit && !last && (
             <ChevronDown
               aria-hidden="true"
               className="ui-stage-next-hint absolute right-4 bottom-3 h-4 w-4 text-(--accent-primary)"
@@ -155,6 +212,15 @@ export function StageReader({
           data-covel-host-controls=""
           className="mt-1.5 flex items-center justify-end gap-3 px-1 text-xs text-muted-foreground"
         >
+          {unit && status && (
+            <span
+              role="status"
+              data-testid="stage-reader-status"
+              className="animate-pulse"
+            >
+              {status}
+            </span>
+          )}
           {units.length > 1 && (
             <span data-testid="stage-reader-progress">
               {t("stage.readerProgress", {

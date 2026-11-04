@@ -37,7 +37,8 @@ export function StageDialog({
   reducedMotion = false,
 }: StageDialogProps): ReactElement {
   const { t } = useTranslation();
-  const admission = useStoryReveal(message);
+  // The stage reads drafts too, so a story read as one is not replayed.
+  const admission = useStoryReveal(message, { showsDrafts: true });
   const state = useContext(SessionStateContext);
   const entries = state?.segmentUiSpecs;
   const policy = useMemo(

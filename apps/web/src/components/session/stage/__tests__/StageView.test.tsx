@@ -9,6 +9,9 @@ import {
 } from "@testing-library/react";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { StageView, type StageViewProps } from "../StageView.js";
+import { SessionStateContext } from "@/stores/session-store/context.js";
+import { initialState } from "@/stores/session-store/reducer.js";
+import type { OutputDraft } from "@/stores/session-store/output-drafts.js";
 
 const stageSlots = vi.hoisted(() => ({
   renders: vi.fn(),
@@ -17,6 +20,18 @@ const stageSlots = vi.hoisted(() => ({
   items: [] as Array<{ slot: string; value: unknown }>,
 }));
 
+const liveOutput = vi.hoisted(() => ({ value: "units" }));
+vi.mock("@/settings/use-settings.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/settings/use-settings.js")>();
+  return {
+    ...actual,
+    useSetting: (key: Parameters<typeof actual.useSetting>[0]) =>
+      key === "ui.liveOutput"
+        ? [liveOutput.value, async () => {}]
+        : actual.useSetting(key),
+  };
+});
 vi.mock("@/hooks/use-media-query.js", () => ({
   useMediaQuery: () => stageSlots.reduce,
 }));
@@ -50,6 +65,7 @@ afterEach(() => {
   stageSlots.items = [];
   stageSlots.realSprites = false;
   stageSlots.reduce = true;
+  liveOutput.value = "units";
   vi.useRealTimers();
 });
 
@@ -417,4 +433,126 @@ it("keeps the current story notice visible after reading without gating input or
   expect(
     screen.getByTestId("story-operation-failure-notice").textContent,
   ).toContain("2");
+});
+
+describe("stage story drafts", () => {
+  const writing: OutputDraft = {
+    turnId: "turn-2",
+    runtimeId: "narrator",
+    pluginId: "narrator",
+    draftId: "a",
+    units: [
+      { text: "The rain stopped.", meta: { kind: "narration" } },
+      { text: "“Let's go.”", meta: { kind: "dialogue", speaker: "Aya" } },
+    ],
+    partial: { text: "“Wai", meta: { kind: "dialogue", speaker: "Ren" } },
+    accepted: false,
+    revising: false,
+  };
+  const committed: StreamMessage = {
+    id: "committed-story",
+    role: "assistant",
+    kind: "story",
+    turnId: "turn-2",
+    runtimeId: "narrator",
+    content: "The rain stopped.\n\n“Let's go.”",
+    timestamp: "2026-09-21T00:01:00Z",
+    segments: [
+      { kind: "narration", text: "The rain stopped." },
+      { kind: "dialogue", text: "“Let's go.”", speaker: "Aya" },
+    ],
+  };
+  function stage(
+    outputDrafts: readonly OutputDraft[],
+    overrides: Partial<StageViewProps> = {},
+  ) {
+    return (
+      <SessionStateContext.Provider value={{ ...initialState, outputDrafts }}>
+        <StageView {...fixture()} executing {...overrides} />
+      </SessionStateContext.Provider>
+    );
+  }
+  const line = () => screen.getByTestId("stage-reader-line").textContent;
+
+  it("reads a draft line by line while the turn runs and keeps the page when it commits", () => {
+    const view = render(stage([writing]));
+    const panel = screen.getByTestId("stage-draft-panel");
+    expect(panel).toBeDefined();
+    expect(line()).toBe("The rain stopped.");
+    expect(screen.getByTestId("stage-reader-status")).toBeDefined();
+    // The saved story is not shown over the draft.
+    expect(screen.queryByText(previousStory.content)).toBeNull();
+
+    fireEvent.click(screen.getByTestId("stage-reader-line"));
+    expect(line()).toBe("“Let's go.”");
+    expect(screen.getByTestId("stage-reader-speaker").textContent).toBe("Aya");
+    // The last line written so far waits for the next one.
+    fireEvent.keyDown(window, { key: " " });
+    expect(line()).toBe("“Let's go.”");
+
+    view.rerender(stage([{ ...writing, accepted: true, partial: undefined }]));
+    expect(line()).toBe("“Let's go.”");
+    expect(screen.queryByTestId("stage-reader-status")).toBeNull();
+
+    // The committed story replaces the draft on the same page.
+    view.rerender(
+      stage([], { messages: [previousStory, committed], executing: false }),
+    );
+    expect(line()).toBe("“Let's go.”");
+    expect(screen.getByTestId("stage-decision-input")).toBeDefined();
+    fireEvent.keyDown(window, { key: " " });
+    expect(screen.queryByTestId("stage-reader")).toBeNull();
+    expect(screen.getByText("The rain stopped.")).toBeDefined();
+  });
+
+  it("shows the partial line only to players who read text as it is written", () => {
+    liveOutput.value = "text";
+    const view = render(stage([writing]));
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: " " });
+    expect(line()).toBe("“Wai");
+    expect(screen.getByTestId("stage-reader-speaker").textContent).toBe("Ren");
+    view.unmount();
+  });
+
+  it("shows the next line as soon as it is written when the player asked for it", () => {
+    const first = { ...writing, units: writing.units.slice(0, 1) };
+    const view = render(stage([first]));
+    expect(line()).toBe("The rain stopped.");
+    fireEvent.keyDown(window, { key: " " });
+    expect(line()).toBe("The rain stopped.");
+    view.rerender(stage([writing]));
+    expect(line()).toBe("“Let's go.”");
+  });
+
+  it("auto-plays up to the last line written and waits there", () => {
+    vi.useFakeTimers();
+    render(stage([writing]));
+    fireEvent.click(document.querySelector("button[aria-pressed]")!);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(line()).toBe("“Let's go.”");
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(line()).toBe("“Let's go.”");
+  });
+
+  it("starts again at the first line when the model revises", () => {
+    const view = render(stage([writing]));
+    fireEvent.keyDown(window, { key: " " });
+    expect(line()).toBe("“Let's go.”");
+    view.rerender(
+      stage([{ ...writing, units: [], partial: undefined, revising: true }]),
+    );
+    expect(screen.queryByTestId("stage-reader-line")).toBeNull();
+    expect(screen.getByTestId("stage-reader")).toBeDefined();
+    view.rerender(stage([{ ...writing, draftId: "b" }]));
+    expect(line()).toBe("The rain stopped.");
+  });
+
+  it("shows nothing before the commit to players who wait for it", () => {
+    liveOutput.value = "committed";
+    render(stage([writing]));
+    expect(screen.queryByTestId("stage-draft-panel")).toBeNull();
+    expect(screen.queryByTestId("stage-reader")).toBeNull();
+    expect(screen.getByText(previousStory.content)).toBeDefined();
+  });
 });
