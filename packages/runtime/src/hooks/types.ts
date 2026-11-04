@@ -182,8 +182,14 @@ export interface HookRegistration<P = unknown> {
   /** Ordering group. Default normal. */
   readonly enforce?: HookEnforce;
   /**
-   * A `ReviewAgentOutput` review that players must not read ahead of: story
-   * drafts wait for acceptance. Taken from the manifest, never from code.
+   * A hook players must not read ahead of (see `DRAFT_HOLDING_HOOK_EVENTS`):
+   * story drafts wait for it. Taken from the manifest, never from code.
    */
   readonly holdsDrafts?: boolean;
+  /**
+   * Whether the handler takes part in a session at all, when that depends on
+   * more than the session's plugins: a community hook waiting for the
+   * player's approval answers `continue` without running. Defaults to yes.
+   */
+  readonly runsFor?: (sessionId: string) => boolean | Promise<boolean>;
 }

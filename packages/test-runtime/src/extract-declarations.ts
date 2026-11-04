@@ -16,7 +16,12 @@ import {
   serviceContributionContract,
   type ServiceContribution,
 } from "@covel/shared";
-import { PluginEntryScope, type PluginAPI } from "@covel/runtime";
+import {
+  draftHoldingKey,
+  isDraftHoldingEvent,
+  PluginEntryScope,
+  type PluginAPI,
+} from "@covel/runtime";
 import {
   tool,
   z,
@@ -72,8 +77,15 @@ export async function extractDeclarations(
           value && typeof value === "object"
             ? (value as Record<string, unknown>)
             : undefined;
-        return hook?.event === "ReviewAgentOutput" && hook.holdsDrafts === true
-          ? [typeof hook.enforce === "string" ? hook.enforce : "normal"]
+        return typeof hook?.event === "string" &&
+          isDraftHoldingEvent(hook.event) &&
+          hook.holdsDrafts === true
+          ? [
+              draftHoldingKey(
+                hook.event,
+                typeof hook.enforce === "string" ? hook.enforce : undefined,
+              ),
+            ]
           : [];
       }) ?? [],
   );
@@ -165,7 +177,7 @@ export async function extractDeclarations(
     on(event, _handler, options) {
       const phase = options?.enforce ?? "normal";
       // Holding drafts is declared, not registered: keep what the author wrote.
-      const held = event === "ReviewAgentOutput" && heldPhases.has(phase);
+      const held = heldPhases.has(draftHoldingKey(event, phase));
       const hook =
         phase === "normal" && !held
           ? event

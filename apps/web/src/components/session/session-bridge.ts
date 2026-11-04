@@ -96,6 +96,35 @@ const characterSchema = z.strictObject({
   description: z.string().optional(),
 });
 
+// Projections built by the host and already checked against the schema. A
+// page boundary skips checking these again on every update.
+const checkedProjections = new WeakSet<object>();
+
+/** The projection, if it passes the schema; checked ones are not parsed again. */
+export function checkedSessionProjection(
+  value: unknown,
+): SessionProjection | undefined {
+  if (value && typeof value === "object" && checkedProjections.has(value))
+    return value as SessionProjection;
+  const parsed = sessionProjectionSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  checkedProjections.add(parsed.data);
+  return parsed.data;
+}
+
+/** A checked projection with other drafts; only the drafts are checked. */
+export function withCheckedDrafts(
+  base: SessionProjection,
+  drafts: unknown,
+): SessionProjection | undefined {
+  if (!checkedProjections.has(base)) return undefined;
+  const parsed = sessionProjectionSchema.shape.drafts.safeParse(drafts);
+  if (!parsed.success) return undefined;
+  const projection = { ...base, drafts: parsed.data };
+  checkedProjections.add(projection);
+  return projection;
+}
+
 export const sessionProjectionSchema = z.strictObject({
   version: z.literal(SESSION_BRIDGE_VERSION),
   phase: z.enum(["setup", "playing"]),
@@ -189,12 +218,6 @@ export interface SessionProjectionInput {
   slots: readonly { slot: string; key?: string; value: unknown }[];
 }
 
-export function visibleSessionMessages(
-  messages: readonly StreamMessage[],
-): readonly StreamMessage[] {
-  return messages.filter(isVisibleSessionMessage);
-}
-
 function isVisibleSessionMessage(message: StreamMessage): boolean {
   return (
     (message.role === "assistant" && message.kind === "story") ||
@@ -225,10 +248,14 @@ export function createSessionMessageOrdinals() {
 export function buildSessionProjection(
   input: SessionProjectionInput,
 ): SessionProjection {
-  const visible = visibleSessionMessages(input.messages);
+  // The newest messages that fit: walk back from the end and stop at the
+  // first that does not, so a long log is not measured in full.
   const messages: ProjectionShape["messages"] = [];
   let textBytes = 0;
-  for (const message of visible) {
+  for (let at = input.messages.length - 1; at >= 0; at -= 1) {
+    if (messages.length >= SESSION_BRIDGE_MAX_MESSAGES) break;
+    const message = input.messages[at]!;
+    if (!isVisibleSessionMessage(message)) continue;
     // Missing ordinals fail the projection schema instead of reusing an index.
     const seq = input.messageSeqs.get(message.id) ?? 0;
     const text = boundedSessionText(
@@ -236,6 +263,9 @@ export function buildSessionProjection(
       SESSION_BRIDGE_MAX_MESSAGE_BYTES,
     );
     const lines = text === message.content ? publicLines(message) : undefined;
+    const bytes = messageBytes(text, lines);
+    if (textBytes + bytes > SESSION_BRIDGE_MAX_TEXT_BYTES) break;
+    textBytes += bytes;
     messages.push({
       seq,
       role: message.role as "user" | "assistant",
@@ -243,17 +273,10 @@ export function buildSessionProjection(
       ...(lines ? { lines } : {}),
       ...(text !== message.content ? { truncated: true as const } : {}),
     });
-    textBytes += messageBytes(text, lines);
-    while (
-      messages.length > SESSION_BRIDGE_MAX_MESSAGES ||
-      textBytes > SESSION_BRIDGE_MAX_TEXT_BYTES
-    ) {
-      const removed = messages.shift();
-      if (removed) textBytes -= messageBytes(removed.text, removed.lines);
-    }
   }
+  messages.reverse();
   const pending: ProjectionShape["pending"] = [];
-  const allMessages = [...input.messages];
+  const allMessages = input.messages;
   // A player message voids every interaction before it.
   let offered = allMessages.length;
   while (offered > 0 && allMessages[offered - 1]!.role !== "user") offered -= 1;

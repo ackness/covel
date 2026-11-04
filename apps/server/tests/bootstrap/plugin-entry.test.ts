@@ -728,11 +728,47 @@ describe("createBootstrapPluginEntries", () => {
     };
     const plainOnly = makeParams([plain]);
     await createBootstrapPluginEntries(plainOnly);
-    expect(plainOnly.hookPipeline.holdsOutputDrafts("s1")).toBe(false);
+    await expect(
+      plainOnly.hookPipeline.outputDraftHold("s1"),
+    ).resolves.toBeUndefined();
 
     const both = makeParams([plain, holding]);
     await createBootstrapPluginEntries(both);
-    expect(both.hookPipeline.holdsOutputDrafts("s1")).toBe(true);
+    await expect(both.hookPipeline.outputDraftHold("s1")).resolves.toBe(
+      "review",
+    );
+  });
+
+  it("holds drafts for a community review only once its hooks are approved", async () => {
+    const holding = writePlugin(
+      "review-community",
+      `export default function (covel) {
+  covel.on("PostRuntime", async () => ({ action: "continue" }));
+}`,
+      { source: "community" },
+    );
+    holding.parsed.plugin.contributes = {
+      hooks: [{ event: "PostRuntime", holdsDrafts: true }],
+    };
+    let approved = false;
+    const params = {
+      ...makeParams([holding]),
+      isCommunityHookApproved: () => approved,
+    };
+    const entries = await createBootstrapPluginEntries(params);
+    try {
+      await entries.ensurePluginEntry("review-community", "session");
+      // Unapproved hooks answer `continue` without running, so they hold nothing.
+      await expect(
+        params.hookPipeline.outputDraftHold("s1"),
+      ).resolves.toBeUndefined();
+      approved = true;
+      await expect(params.hookPipeline.outputDraftHold("s1")).resolves.toBe(
+        "commit",
+      );
+    } finally {
+      await entries.close();
+    }
   });
 
   it("runs a MULTI-runtime plugin's entry declared on the metadata-only root PLUGIN.md", async () => {

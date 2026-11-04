@@ -555,4 +555,27 @@ describe("stage story drafts", () => {
     expect(screen.queryByTestId("stage-reader")).toBeNull();
     expect(screen.getByText(previousStory.content)).toBeDefined();
   });
+
+  it("shows the whole draft, not the last story, when the player skips ahead", () => {
+    render(stage([writing]));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("stage-reader")).toBeNull();
+    expect(screen.queryByText(previousStory.content)).toBeNull();
+    expect(screen.getByText("The rain stopped.")).toBeDefined();
+  });
+
+  it("reads the latest turn's draft when an older one is still listed", () => {
+    render(
+      stage([
+        {
+          ...writing,
+          turnId: "turn-1",
+          draftId: "old",
+          units: [{ text: "Old draft.", meta: { kind: "narration" } }],
+        },
+        writing,
+      ]),
+    );
+    expect(line()).toBe("The rain stopped.");
+  });
 });

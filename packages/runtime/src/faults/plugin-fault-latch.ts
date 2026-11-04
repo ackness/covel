@@ -3,6 +3,12 @@ import type { FinalizeExecutionOutcome } from "../commit/finalize-execution.js";
 import { classifyExecutionFaults } from "./classify.js";
 
 export const PLUGIN_FAULT_THRESHOLD = 3;
+/**
+ * Inputs whose faults a plugin remembers, to count each input once. Only
+ * recent inputs can still report; older keys are dropped so a plugin that
+ * keeps faulting without latching does not grow the set forever.
+ */
+const REMEMBERED_FAULT_KEYS = 64;
 export type FaultTransition = Extract<
   CovelEvent,
   { type: `plugin.fault.${string}` }
@@ -65,6 +71,8 @@ export function createPluginFaultLatch({
     const value = entry(sessionId, pluginId);
     if (value.state.latched || value.faultKeys.has(logicalKey)) return [];
     value.faultKeys.add(logicalKey);
+    if (value.faultKeys.size > REMEMBERED_FAULT_KEYS)
+      value.faultKeys.delete(value.faultKeys.values().next().value!);
     value.owner = Math.max(
       value.owner,
       groups.get(sessionId)?.get(logicalKey)?.owner ?? ++ownership,

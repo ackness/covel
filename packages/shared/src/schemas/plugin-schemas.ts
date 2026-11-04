@@ -52,7 +52,7 @@ const extensionDeclarationSchema = z.strictObject({
     )
     .optional(),
 });
-import { HOOK_EVENTS } from "../types/hooks.js";
+import { DRAFT_HOLDING_HOOK_EVENTS, HOOK_EVENTS } from "../types/hooks.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { EffectResource } from "../types/runtime-scheduling.js";
 import { slashCommandSpecSchema } from "./slash-command-schema.js";
@@ -620,7 +620,7 @@ export const hookDeclarationSchema = z
     holdsDrafts: z
       .boolean()
       .describe(
-        "`ReviewAgentOutput` only: players must not read a story before this review passes, so story drafts in sessions where the package is enabled appear only once every review accepted them. Defaults to `false`.",
+        "`PostLLMResponse`, `PreToolUse`, `ReviewAgentOutput` or `PostRuntime` only: players must not read a story before this hook has seen it. In sessions where the package is enabled, story drafts appear only once every review accepted them, or, for `PostRuntime`, only after the commit. Defaults to `false`.",
       )
       .optional(),
   })
@@ -681,15 +681,18 @@ export const pluginHookContributionSchema = shorthandOrObject(
   hookDeclarationSchema
     .pick({ event: true, enforce: true, holdsDrafts: true })
     .superRefine((hook, ctx) => {
-      if (hook.holdsDrafts !== undefined && hook.event !== "ReviewAgentOutput")
+      if (
+        hook.holdsDrafts !== undefined &&
+        !(DRAFT_HOLDING_HOOK_EVENTS as readonly string[]).includes(hook.event)
+      )
         ctx.addIssue({
           code: "custom",
           path: ["holdsDrafts"],
-          message: "holdsDrafts applies only to ReviewAgentOutput",
+          message: `holdsDrafts applies only to ${DRAFT_HOLDING_HOOK_EVENTS.join(", ")}`,
         });
     })
     .describe(
-      "A hook in another phase, or a review that holds story drafts: `{ event, enforce?, holdsDrafts? }`.",
+      "A hook in another phase, or one that holds story drafts: `{ event, enforce?, holdsDrafts? }`.",
     ),
   (event) => ({ event }),
   "expected a hook event name, such as PreToolUse, or { event, enforce?, holdsDrafts? }",

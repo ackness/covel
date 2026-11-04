@@ -32,48 +32,45 @@ function manifest(
 }
 
 describe("runTurnPipeline recursiveCall", () => {
-  it(
-    "rejects targets in another package",
-    async () => {
-      for (const targetId of ["leaf", "leaf/worker", "probe-extra/worker"]) {
-        const caller = manifest("probe/caller");
-        const target = manifest(targetId, { trigger: { type: "manual" } });
-        const targetHandler = vi.fn(async () => ({
-          outcome: "success" as const,
-          value: { ok: true },
-        }));
-        const emitter = makeEmitterSpy();
-        const result = await runTurnPipeline(input, [caller, target], {
-          loadRuntime: async (runtime) => ({
-            manifest: runtime,
-            promptTemplate: "",
-            handler:
-              runtime.name === caller.name
-                ? async (ctx) => {
-                    await ctx.recursiveCall({
-                      manualTrigger: { runtimeId: targetId },
-                    });
-                    return { outcome: "success", value: { ok: true } };
-                  }
-                : targetHandler,
-          }),
-          llm: { generate: vi.fn() },
-          emitter,
-        });
+  it("rejects targets in another package", async () => {
+    for (const targetId of ["leaf", "leaf/worker", "probe-extra/worker"]) {
+      const caller = manifest("probe/caller");
+      const target = manifest(targetId, { trigger: { type: "manual" } });
+      const targetHandler = vi.fn(async () => ({
+        outcome: "success" as const,
+        value: { ok: true },
+      }));
+      const emitter = makeEmitterSpy();
+      const result = await runTurnPipeline(input, [caller, target], {
+        loadRuntime: async (runtime) => ({
+          manifest: runtime,
+          promptTemplate: "",
+          handler:
+            runtime.name === caller.name
+              ? async (ctx) => {
+                  await ctx.recursiveCall({
+                    manualTrigger: { runtimeId: targetId },
+                  });
+                  return { outcome: "success", value: { ok: true } };
+                }
+              : targetHandler,
+        }),
+        llm: { generate: vi.fn() },
+        emitter,
+      });
 
-        expect(result.runtimeResults[0]).toMatchObject({
-          runtimeId: caller.name,
-          status: "failed",
-          error: `recursiveCall cannot target runtime "${targetId}" outside plugin "probe"; use services or events for cross-package communication`,
-        });
-        expect(targetHandler).not.toHaveBeenCalled();
-        expect(result.nestedRuntimeResults ?? []).toEqual([]);
-        expect(
-          emitter.events.some((event) => event.type === "recursive.calling"),
-        ).toBe(false);
-      }
-    },
-  );
+      expect(result.runtimeResults[0]).toMatchObject({
+        runtimeId: caller.name,
+        status: "failed",
+        error: `recursiveCall cannot target runtime "${targetId}" outside plugin "probe"; use services or events for cross-package communication`,
+      });
+      expect(targetHandler).not.toHaveBeenCalled();
+      expect(result.nestedRuntimeResults ?? []).toEqual([]);
+      expect(
+        emitter.events.some((event) => event.type === "recursive.calling"),
+      ).toBe(false);
+    }
+  });
 
   it("allows an inline runtime to name its own package", async () => {
     const caller = manifest("probe", { trigger: { type: "manual" } });

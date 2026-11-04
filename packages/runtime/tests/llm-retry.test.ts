@@ -702,13 +702,7 @@ describe("streamLLMWithRetry", () => {
       },
     });
     expect(result.response.toolCalls).toHaveLength(1);
-    expect(seen).toEqual([
-      '0:{"a"',
-      "0:reset",
-      "1:{",
-      "1:reset",
-      "1:{}",
-    ]);
+    expect(seen).toEqual(['0:{"a"', "0:reset", "1:{", "1:reset", "1:{}"]);
   });
 
   it("fires first-token timeout when the stream stalls before any token", async () => {

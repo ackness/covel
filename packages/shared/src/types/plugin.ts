@@ -390,7 +390,7 @@ export interface PluginUserSettingSpec {
 // declaration shape now live in ./hooks.ts (single source of truth). They are
 // re-exported here so existing `@covel/shared` consumers and the types barrel
 // keep importing them from the same place.
-export { HOOK_EVENTS } from "./hooks.js";
+export { DRAFT_HOLDING_HOOK_EVENTS, HOOK_EVENTS } from "./hooks.js";
 export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
 
 // ── UI declarations ─────────────────────────────────────────────

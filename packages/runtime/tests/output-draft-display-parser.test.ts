@@ -117,9 +117,7 @@ describe("DisplayStreamParser", () => {
       ],
     };
     const { parser } = streamed(JSON.stringify(value), 3, segmentsSpec);
-    expect(parser.completeUnits()).toEqual(
-      displayUnitsOf(value, segmentsSpec),
-    );
+    expect(parser.completeUnits()).toEqual(displayUnitsOf(value, segmentsSpec));
     const lone = { units: "/story" };
     expect(streamed('{"story":""}', 1, lone).parser.completeUnits()).toEqual(
       displayUnitsOf({ story: "" }, lone),
@@ -155,5 +153,23 @@ describe("DisplayStreamParser", () => {
     parser.push('{"segments":[{"text":"draft"}');
     parser.replace('{"segments":[{"text":"final"}]}');
     expect(parser.completeUnits()).toEqual([{ text: "final" }]);
+  });
+
+  it("revises its finished units only when they change", () => {
+    const parser = new DisplayStreamParser(segmentsSpec);
+    parser.push('{"segments":[{"text":"One."},{"text":"Tw');
+    const first = parser.completeRevision;
+    parser.push("o and");
+    expect(parser.completeRevision).toBe(first);
+    parser.push(' more."}');
+    expect(parser.completeRevision).not.toBe(first);
+    const second = parser.completeRevision;
+    // A replacement with as many units is still a change.
+    parser.replace('{"segments":[{"text":"Uno."},{"text":"Dos."}');
+    expect(parser.completeUnits()).toEqual([
+      { text: "Uno." },
+      { text: "Dos." },
+    ]);
+    expect(parser.completeRevision).not.toBe(second);
   });
 });

@@ -398,6 +398,7 @@ export async function executeAgentRuntime({
       : toolExecutor
         ? { ...deps, toolExecutor }
         : deps;
+  const hold = await hookPipeline?.outputDraftHold(input.sessionId);
   const drafts = createDraftForwarder({
     sink: deps.outputDrafts,
     manifest,
@@ -405,7 +406,7 @@ export async function executeAgentRuntime({
     turnId: input.turnId,
     runId,
     toolName: agentOutput.toolName,
-    held: hookPipeline?.holdsOutputDrafts(input.sessionId) ?? false,
+    ...(hold ? { hold } : {}),
   });
   let toolLoop: Awaited<ReturnType<typeof runAgentToolLoop>>;
   try {

@@ -234,6 +234,9 @@ export function finalizeActionExecution(
     type: "FINALIZE_HANGING_RUNTIMES",
     reason: CONNECTION_CLOSED_REASON,
   });
+  // Drafts arrive only on the action stream; once it ends nothing updates or
+  // clears them, and a recovered commit would sit beside a stale copy.
+  dispatch({ type: "CLEAR_OUTPUT_DRAFTS" });
 }
 
 export function runActionStream(

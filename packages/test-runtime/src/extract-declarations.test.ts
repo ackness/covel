@@ -90,18 +90,20 @@ export default async (covel) => {
     });
   });
 
-  it("keeps a review's declared holdsDrafts, which no registration states", async () => {
+  it("keeps a declared holdsDrafts, which no registration states", async () => {
     const root = await fixture(
       `export default (covel) => {
   const review = async () => ({ action: "continue" });
   covel.on("ReviewAgentOutput", review);
-  covel.on("PostRuntime", review);
+  covel.on("PostRuntime", review, { enforce: "post" });
+  covel.on("PreToolUse", review);
 };`,
-      "description: Fixture\ncontributes:\n  hooks:\n    - { event: ReviewAgentOutput, holdsDrafts: true }\n    - PostRuntime\n",
+      "description: Fixture\ncontributes:\n  hooks:\n    - { event: ReviewAgentOutput, holdsDrafts: true }\n    - { event: PostRuntime, enforce: post, holdsDrafts: true }\n    - PreToolUse\n",
     );
     expect((await extractDeclarations(root)).hooks).toEqual([
       { event: "ReviewAgentOutput", holdsDrafts: true },
-      "PostRuntime",
+      { event: "PostRuntime", enforce: "post", holdsDrafts: true },
+      "PreToolUse",
     ]);
     expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 0 });
   });

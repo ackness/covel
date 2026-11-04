@@ -14,7 +14,8 @@ import {
 } from "@covel/shared";
 import {
   normalizeFormRefusal,
-  draftHoldingPhases,
+  draftHoldingHooks,
+  draftHoldingKey,
   validatePluginHookRegistration,
 } from "@covel/runtime";
 import {
@@ -73,7 +74,7 @@ export function buildEntryApi(
     isCommunityHookApproved,
   } = params;
   let hookSeq = 0;
-  const heldPhases = draftHoldingPhases(contributions);
+  const heldHooks = draftHoldingHooks(contributions);
   const trustInfo = getPluginTrustInfo(
     pluginId,
     discoveryMap.get(pluginId)?.source,
@@ -189,9 +190,15 @@ export function buildEntryApi(
               ? { timeoutMs: options.timeoutMs }
               : {}),
             ...(options?.enforce ? { enforce: options.enforce } : {}),
-            ...(event === "ReviewAgentOutput" &&
-            heldPhases.has(options?.enforce ?? "normal")
+            ...(heldHooks.has(draftHoldingKey(event, options?.enforce))
               ? { holdsDrafts: true }
+              : {}),
+            ...(pluginTrust === "community"
+              ? {
+                  runsFor: async (sessionId: string) =>
+                    (await isCommunityHookApproved?.(sessionId, pluginId)) ??
+                    false,
+                }
               : {}),
           }),
         );

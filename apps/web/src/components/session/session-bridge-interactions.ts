@@ -79,7 +79,7 @@ export function createInteractionHandles() {
         if (
           !message ||
           fingerprint(message) !== entry.fingerprint ||
-          !isPendingInteractionMessage(message, [...messages], submitted)
+          !isPendingInteractionMessage(message, messages, submitted)
         )
           entries.delete(id);
       }

@@ -1,4 +1,4 @@
-import { sessionProjectionSchema } from "./session-bridge.js";
+import { checkedSessionProjection } from "./session-bridge.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
@@ -120,8 +120,8 @@ export function PluginWebview(props: {
       return snapshot;
     }
     if (!current.current.sessionPage) return snapshot;
-    const parsed = sessionProjectionSchema.safeParse(snapshot.session);
-    if (parsed.success) return { ...snapshot, session: parsed.data };
+    const projection = checkedSessionProjection(snapshot.session);
+    if (projection) return { ...snapshot, session: projection };
     if (!warned.current) {
       warned.current = true;
       console.warn(

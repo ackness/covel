@@ -202,14 +202,21 @@ export function StageView(props: StageViewProps): ReactElement {
   const outputDrafts = useContext(SessionStateContext)?.outputDrafts;
   const [liveOutput] = useSetting<string>("ui.liveOutput");
   const preference = readLiveOutputPreference(liveOutput);
+  // The latest turn's story; within a turn, the runtime that started first.
   const draft = useMemo(() => {
     if (preference === "committed") return undefined;
-    for (const entry of outputDrafts ?? []) {
+    const shown = (outputDrafts ?? []).flatMap((entry) => {
       const units = visibleDraftUnits(entry, preference);
-      if (units || entry.revising)
-        return { entry, message: draftStoryMessage(entry, units ?? []) };
-    }
-    return undefined;
+      return units || entry.revising ? [{ entry, units: units ?? [] }] : [];
+    });
+    const latestTurn = shown.at(-1)?.entry.turnId;
+    const found = shown.find(({ entry }) => entry.turnId === latestTurn);
+    return found
+      ? {
+          entry: found.entry,
+          message: draftStoryMessage(found.entry, found.units),
+        }
+      : undefined;
   }, [outputDrafts, preference]);
 
   // ── Cross-layer state ─────────────────────────────────────────
@@ -285,6 +292,9 @@ export function StageView(props: StageViewProps): ReactElement {
     targetKey !== readKey &&
     (!!draft || targetKey === liveKey || (!executing && !advancing));
   const choicesVisible = advancing || !executing;
+  // Done reading line by line, the player sees the whole story: the draft
+  // while it is written, otherwise the latest committed one.
+  const shownStory = draft?.message ?? storyMsg;
   const reader =
     reading && target ? (
       <StageReader
@@ -348,11 +358,11 @@ export function StageView(props: StageViewProps): ReactElement {
             </section>
           </div>
         )}
-        {executing && storyMsg && !reading && (
+        {executing && shownStory && !reading && (
           <StageDialog
-            key={storyMsg.id}
+            key={shownStory.id}
             sessionId={session.id}
-            message={storyMsg}
+            message={shownStory}
             autoPlay={autoPlay}
             reducedMotion={reducedMotion}
           />
@@ -362,12 +372,12 @@ export function StageView(props: StageViewProps): ReactElement {
           storyReview={
             reader ? (
               reader
-            ) : storyMsg ? (
+            ) : shownStory ? (
               <StageDialog
-                key={storyMsg.id}
+                key={shownStory.id}
                 inline
                 sessionId={session.id}
-                message={storyMsg}
+                message={shownStory}
                 autoPlay={autoPlay}
                 reducedMotion={reducedMotion}
               />

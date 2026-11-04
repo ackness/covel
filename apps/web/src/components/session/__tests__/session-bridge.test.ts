@@ -8,6 +8,8 @@ import {
 import type { StreamMessage } from "@/stores/session-store.js";
 import {
   buildSessionProjection,
+  checkedSessionProjection,
+  withCheckedDrafts,
   createSessionMessageOrdinals,
   stripHiddenKeys,
   sessionProjectionSchema,
@@ -15,6 +17,7 @@ import {
   SESSION_BRIDGE_MAX_CHARACTER_BYTES,
   SESSION_BRIDGE_MAX_DRAFTS,
   SESSION_BRIDGE_MAX_MESSAGE_BYTES,
+  SESSION_BRIDGE_MAX_TEXT_BYTES,
 } from "../session-bridge.js";
 import {
   createInteractionHandles,
@@ -146,6 +149,40 @@ describe("public session projection", () => {
       new TextEncoder().encode(result.drafts[0]!.text).length,
     ).toBeLessThanOrEqual(SESSION_BRIDGE_MAX_MESSAGE_BYTES);
     expect(result.drafts[1]).toEqual({ state: "writing", text: "Line 1" });
+  });
+  it("checks a projection once and only the drafts of a checked one", () => {
+    const built = buildSessionProjection(input({ messages: [message("a")] }));
+    const checked = checkedSessionProjection(built)!;
+    expect(checked).toBeDefined();
+    expect(checkedSessionProjection(checked)).toBe(checked);
+    expect(checkedSessionProjection({ ...checked, extra: 1 })).toBeUndefined();
+
+    const next = withCheckedDrafts(checked, [
+      { state: "writing", text: "Hi" },
+    ])!;
+    expect(next.messages).toBe(checked.messages);
+    expect(checkedSessionProjection(next)).toBe(next);
+    expect(withCheckedDrafts(checked, [{ state: "lost", text: "" }])).toBe(
+      undefined,
+    );
+    // An object that was never checked is not trusted for its other fields.
+    expect(withCheckedDrafts({ ...checked }, [])).toBeUndefined();
+  });
+  it("keeps the newest messages that fit the byte budget, in order", () => {
+    const big = "x".repeat(SESSION_BRIDGE_MAX_MESSAGE_BYTES - 1024);
+    const count = Math.ceil(SESSION_BRIDGE_MAX_TEXT_BYTES / big.length) + 3;
+    const messages = Array.from({ length: count }, (_, index) =>
+      message(String(index), `${index}${big}`),
+    );
+    const result = buildSessionProjection(input({ messages }));
+    expect(sessionProjectionSchema.safeParse(result).success).toBe(true);
+    const bytes = result.messages.reduce((sum, m) => sum + m.text.length, 0);
+    expect(bytes).toBeLessThanOrEqual(SESSION_BRIDGE_MAX_TEXT_BYTES);
+    // One more would not fit.
+    expect(bytes + big.length).toBeGreaterThan(SESSION_BRIDGE_MAX_TEXT_BYTES);
+    const seqs = result.messages.map((m) => m.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(seqs.at(-1)).toBe(count);
   });
   it("keeps full visible sequence numbers when the 200-message window slides", () => {
     const result = buildSessionProjection(

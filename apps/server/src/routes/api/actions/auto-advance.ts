@@ -147,44 +147,60 @@ export function createAdvanceRoot(requestId: string) {
  * An unanswered interaction or suspension hands control back to the player.
  * Only interactions after the player's last message count: a choice the
  * player answered by typing instead is no longer offered, as in the client.
+ * Each round reads only that tail of the log, and the answers only when an
+ * interaction is there to check.
  */
 export async function hasPendingAdvanceInput(
   store: Pick<
     DataStore,
-    "listSuspensions" | "listTurnMessages" | "listPlayerInputs"
+    "listSuspensions" | "listRecentTurnMessages" | "listPlayerInputs"
   >,
   sessionId: string,
 ): Promise<boolean> {
-  const [suspensions, messages, answers] = await Promise.all([
-    store.listSuspensions(sessionId),
-    store.listTurnMessages(sessionId),
-    store.listPlayerInputs(sessionId),
-  ]);
+  const suspensions = await store.listSuspensions(sessionId);
   if (suspensions.some((record) => record.resolvedAt === undefined))
     return true;
-  const answered = new Set(
-    answers.map((answer) => JSON.stringify([answer.turnId, answer.formId])),
-  );
-  let offered = messages.length;
-  while (offered > 0 && messages[offered - 1]!.role !== "user") offered -= 1;
-  return messages.slice(offered).some(
+  const offered = (await messagesSinceLastPlayer(store, sessionId)).flatMap(
     (message) =>
-      Array.isArray(message.pendingInput) &&
-      message.pendingInput.some((input: unknown) => {
-        const interaction = z
-          .object({
-            interactionId: z.string(),
-            type: z.enum(["form", "choice", "confirmation"]),
+      Array.isArray(message.pendingInput)
+        ? message.pendingInput.flatMap((input: unknown) => {
+            const interaction = pendingInteractionSchema.safeParse(input);
+            return interaction.success
+              ? [
+                  JSON.stringify([
+                    message.turnId,
+                    interaction.data.interactionId,
+                  ]),
+                ]
+              : [];
           })
-          .safeParse(input);
-        return (
-          interaction.success &&
-          !answered.has(
-            JSON.stringify([message.turnId, interaction.data.interactionId]),
-          )
-        );
-      }),
+        : [],
   );
+  if (offered.length === 0) return false;
+  const answered = new Set(
+    (await store.listPlayerInputs(sessionId)).map((answer) =>
+      JSON.stringify([answer.turnId, answer.formId]),
+    ),
+  );
+  return offered.some((key) => !answered.has(key));
+}
+
+const pendingInteractionSchema = z.object({
+  interactionId: z.string(),
+  type: z.enum(["form", "choice", "confirmation"]),
+});
+
+/** The messages after the player's last one, read from the end of the log. */
+async function messagesSinceLastPlayer(
+  store: Pick<DataStore, "listRecentTurnMessages">,
+  sessionId: string,
+) {
+  for (let limit = 64; ; limit *= 4) {
+    const recent = await store.listRecentTurnMessages(sessionId, limit);
+    let start = recent.length;
+    while (start > 0 && recent[start - 1]!.role !== "user") start -= 1;
+    if (start > 0 || recent.length < limit) return recent.slice(start);
+  }
 }
 
 export interface AdvanceRoundOutcome {

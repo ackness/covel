@@ -317,9 +317,7 @@ describe("segmented story repair", () => {
     // submission off at its "yield" key. Both are output repairs.
     const llm = queuedLLM([
       prose("雨停了。"),
-      malformed(
-        '{"segments":[{"kind":"narration","text":"雨停了。"}],"yield"',
-      ),
+      malformed('{"segments":[{"kind":"narration","text":"雨停了。"}],"yield"'),
       validStory,
     ]);
     const { result, loop } = await run({ llm });

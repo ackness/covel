@@ -24,7 +24,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 function setup(
   overrides: Partial<RuntimeManifest> = {},
   schema: Readonly<Record<string, unknown>> = segmentsSchema,
-  held = false,
+  hold?: "review" | "commit",
 ) {
   const events: OutputDraftEvent[] = [];
   const forwarder = createDraftForwarder({
@@ -34,7 +34,7 @@ function setup(
     turnId: "turn-1",
     runId: "run",
     toolName: "submit-output",
-    held,
+    ...(hold ? { hold } : {}),
   });
   return { events, forwarder: forwarder! };
 }
@@ -78,7 +78,7 @@ describe("createDraftForwarder", () => {
   });
 
   it("shows nothing while held and the accepted story once", () => {
-    const { events, forwarder } = setup({}, segmentsSchema, true);
+    const { events, forwarder } = setup({}, segmentsSchema, "review");
     const first = forwarder.observe();
     first.fragment(0, {
       index: 0,
@@ -94,6 +94,18 @@ describe("createDraftForwarder", () => {
     });
     forwarder.accept({ segments: [{ kind: "narration", text: "Kept." }] });
     expect(summary(events)).toEqual(["accepted run:2:accepted Kept."]);
+  });
+
+  it("shows nothing at all when the hold lasts until the commit", () => {
+    const { events, forwarder } = setup({}, segmentsSchema, "commit");
+    forwarder.observe().fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"kind":"narration","text":"Raw."}]}',
+    });
+    forwarder.accept({ segments: [{ kind: "narration", text: "Raw." }] });
+    forwarder.stop();
+    expect(events).toEqual([]);
   });
 
   it("shows each complete unit of the submission, then the accepted story", () => {
@@ -195,6 +207,27 @@ describe("createDraftForwarder", () => {
       "draft run:1:0 A.",
       "retracted run:1:0 revising",
       "retracted run:1:0 stopped",
+    ]);
+  });
+
+  it("gives a stream that restarts within an attempt a new draft", () => {
+    const { events, forwarder } = setup();
+    const stream = forwarder.observe();
+    stream.fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"text":"A."},',
+    });
+    stream.reset(0);
+    stream.fragment(0, {
+      index: 0,
+      name: "submit-output",
+      argumentsDelta: '{"segments":[{"text":"B."},',
+    });
+    expect(summary(events)).toEqual([
+      "draft run:1:0 A.",
+      "retracted run:1:0 revising",
+      "draft run:1:0.1 B.",
     ]);
   });
 

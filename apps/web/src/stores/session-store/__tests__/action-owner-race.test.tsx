@@ -314,6 +314,38 @@ describe("same-session action ownership", () => {
     });
   });
 
+  it("drops story drafts when the action stream ends without a final event", async () => {
+    const workspace: SessionWorkspace = {
+      run: async (_sid, _request, mutate) => mutate(),
+      hydrate: vi.fn(),
+      checkpoint: vi.fn(),
+    };
+    const send = vi
+      .spyOn(api, "sendAction")
+      .mockImplementation(() => new AbortController());
+    const { result } = renderActions(workspace);
+    await act(async () => {
+      result.current.actions.sendMessage("First");
+    });
+    const [, onEvent, , done] = send.mock.calls[0]!;
+    await act(async () => {
+      onEvent(
+        event("output.draft", "first", {
+          turnId: "first",
+          runtimeId: "teller/story",
+          pluginId: "teller",
+          draftId: "d1",
+          mode: "units",
+          units: [{ text: "Half a story." }],
+        }),
+      );
+    });
+    expect(result.current.state.outputDrafts).toHaveLength(1);
+    // The connection drops: no execution.completed ever arrives.
+    await act(async () => done?.());
+    expect(result.current.state.outputDrafts).toEqual([]);
+  });
+
   it("does not create an empty player turn when no failed task is selected", () => {
     const workspace: SessionWorkspace = {
       run: async (_sid, _request, mutate) => mutate(),
