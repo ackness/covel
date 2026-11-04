@@ -90,6 +90,22 @@ export default async (covel) => {
     });
   });
 
+  it("keeps a review's declared holdsDrafts, which no registration states", async () => {
+    const root = await fixture(
+      `export default (covel) => {
+  const review = async () => ({ action: "continue" });
+  covel.on("ReviewAgentOutput", review);
+  covel.on("PostRuntime", review);
+};`,
+      "description: Fixture\ncontributes:\n  hooks:\n    - { event: ReviewAgentOutput, holdsDrafts: true }\n    - PostRuntime\n",
+    );
+    expect((await extractDeclarations(root)).hooks).toEqual([
+      { event: "ReviewAgentOutput", holdsDrafts: true },
+      "PostRuntime",
+    ]);
+    expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 0 });
+  });
+
   it("records a model-facing service as an object and round-trips it", async () => {
     const root = await fixture(
       `export default (covel) => {

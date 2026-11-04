@@ -652,15 +652,19 @@
                     "type": "string",
                     "enum": ["pre", "normal", "post"],
                     "description": "Phase the hook runs in. Defaults to `normal`."
+                  },
+                  "holdsDrafts": {
+                    "type": "boolean",
+                    "description": "`ReviewAgentOutput` only: players must not read a story before this review passes, so story drafts in sessions where the package is enabled appear only once every review accepted them. Defaults to `false`."
                   }
                 },
                 "required": ["event"],
                 "additionalProperties": false,
-                "description": "A hook in another phase: `{ event, enforce }`."
+                "description": "A hook in another phase, or a review that holds story drafts: `{ event, enforce?, holdsDrafts? }`."
               }
             ]
           },
-          "description": "Lifecycle hooks the entry registers: an event name, or `{ event, enforce }` for a phase other than `normal`."
+          "description": "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a review that holds story drafts."
         },
         "wires": {
           "type": "array",

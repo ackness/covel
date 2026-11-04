@@ -181,4 +181,9 @@ export interface HookRegistration<P = unknown> {
   readonly timeoutMs?: number;
   /** Ordering group. Default normal. */
   readonly enforce?: HookEnforce;
+  /**
+   * A `ReviewAgentOutput` review that players must not read ahead of: story
+   * drafts wait for acceptance. Taken from the manifest, never from code.
+   */
+  readonly holdsDrafts?: boolean;
 }

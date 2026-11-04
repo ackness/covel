@@ -480,6 +480,7 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
         vetoEnabled && event === "PreStateCommit"
           ? { action: "abort", reason: "injected commit veto" }
           : { action: "continue" },
+      holdsOutputDrafts: () => false,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 

@@ -58,12 +58,17 @@ export function createDraftForwarder(options: {
   readonly turnId: string;
   readonly runId: string;
   readonly toolName: string;
+  /**
+   * A review holds drafts: nothing shows while the model writes, and the
+   * story appears once, when its submission is accepted.
+   */
+  readonly held?: boolean;
 }): DraftForwarder | undefined {
   const { sink, manifest } = options;
   if (!sink) return undefined;
   const plan = liveOutputPlan(manifest, options.schema);
   if (!plan) return undefined;
-  return new Forwarder(sink, plan, {
+  return new Forwarder(sink, plan, options.held === true, {
     turnId: options.turnId,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
@@ -92,6 +97,7 @@ class Forwarder implements DraftForwarder {
   constructor(
     private readonly sink: OutputDraftSink,
     private readonly plan: LiveOutputPlan,
+    private readonly held: boolean,
     private readonly identity: {
       readonly turnId: string;
       readonly runtimeId: string;
@@ -103,6 +109,7 @@ class Forwarder implements DraftForwarder {
 
   observe(): ArgumentStreamObserver {
     const request = ++this.request;
+    if (this.held) return { fragment: () => {}, reset: () => {} };
     let attempt: number | undefined;
     return {
       fragment: (at, fragment) => {

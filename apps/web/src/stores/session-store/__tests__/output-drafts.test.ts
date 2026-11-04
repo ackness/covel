@@ -55,6 +55,20 @@ function liveSession() {
 }
 
 describe("story drafts in the session store", () => {
+  it("shows a story held for review when it arrives already accepted", () => {
+    const { send, drafts } = liveSession();
+    send("output.accepted", {
+      ...identity,
+      draftId: "run:1:accepted",
+      units: [narration, line],
+    });
+    expect(drafts()).toHaveLength(1);
+    const [held] = drafts();
+    expect(held).toMatchObject({ accepted: true, revising: false });
+    expect(visibleDraftUnits(held!, "units")).toEqual([narration, line]);
+    expect(visibleDraftUnits(held!, "committed")).toBeUndefined();
+  });
+
   it("follows a draft through a revision to the committed story", () => {
     const { stateRef, send, drafts } = liveSession();
     const visit = createStoryRevealVisit([]);

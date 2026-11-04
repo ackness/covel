@@ -170,6 +170,11 @@ export function authoringWarnings(
     const hook = record(value);
     if (!hook) continue;
     plugin.check(`contributes.hooks[${index}].enforce`, hook.enforce, "normal");
+    plugin.check(
+      `contributes.hooks[${index}].holdsDrafts`,
+      hook.holdsDrafts,
+      false,
+    );
     if (
       typeof hook.event === "string" &&
       hook.enforce === undefined &&

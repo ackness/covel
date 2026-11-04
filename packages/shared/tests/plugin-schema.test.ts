@@ -553,3 +553,32 @@ describe("compiled runtime manifest datasets", () => {
     expect(compiled({ other: ok.journal })).toBe(false);
   });
 });
+
+describe("hook declarations that hold story drafts", () => {
+  const hooks = (value: unknown) =>
+    pluginManifestSchema.shape.contributes
+      .unwrap()
+      .shape.hooks.unwrap()
+      .safeParse(value);
+
+  it("accepts holdsDrafts on ReviewAgentOutput, in any phase", () => {
+    const parsed = hooks([
+      { event: "ReviewAgentOutput", holdsDrafts: true },
+      { event: "ReviewAgentOutput", enforce: "post", holdsDrafts: true },
+      "PreToolUse",
+    ]);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.[0]).toEqual({
+      event: "ReviewAgentOutput",
+      holdsDrafts: true,
+    });
+  });
+
+  it("rejects holdsDrafts on any other event", () => {
+    const parsed = hooks([{ event: "PostRuntime", holdsDrafts: true }]);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain(
+      "holdsDrafts applies only to ReviewAgentOutput",
+    );
+  });
+});

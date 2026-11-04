@@ -340,7 +340,10 @@ export type {
   ServiceImportResolution,
 } from "./plugin-services.js";
 
-export { validatePluginHookRegistration } from "./plugin-hook-registration.js";
+export {
+  draftHoldingPhases,
+  validatePluginHookRegistration,
+} from "./plugin-hook-registration.js";
 
 export {
   classifyExecutionFaults,

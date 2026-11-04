@@ -40,6 +40,8 @@ export default function (covel) {
 | `timeoutMs` | handler 一次调用的时间上限，默认 5000 毫秒。                                                            |
 | `enforce`   | 排序分组：`pre`、`normal`（默认）或 `post`。必须和 `contributes.hooks` 里声明的分组相同。顺序规则见下。 |
 
+`contributes.hooks` 的一项可以只写事件名，也可以写成对象 `{ event, enforce?, holdsDrafts? }`：`enforce` 写 `normal` 以外的分组；`holdsDrafts` 只用于 `ReviewAgentOutput`，见[压住故事草稿](#holds-drafts)。`holdsDrafts` 只写在声明里，`covel.on()` 没有对应的选项。
+
 同一个事件的 handler 按分组依次运行：`pre` → `normal` → `post`。同一组内，框架自己的 Hook 先运行，然后是插件的 handler，按注册顺序。两个插件之间谁先谁后不是可以依赖的约定。
 
 Hook 什么时候会运行：
@@ -250,6 +252,37 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 `submit-output` 的完整对象通过 schema、故事不变量和必需工作检查后触发。负载类型由 SDK 导出为 `ReviewAgentOutputPayload`：`{ output, toolCall: { id, name }, toolResults, correction? }`。`toolCall` 保留供应商最初的身份；`toolResults` 只有本 runtime 已完成调用（不含提交工具）的公开 `toolCallId`、`toolName` 和 `output`，不含隐藏提交元数据或私有子 agent 值。
 
 返回 `continue` 接受；`replace.correction` 要求修正，最多保留 2000 字符，与 `PostLLMResponse` 共用审查预算。一个 reviewer 的纠正不能被后续 reviewer 清除。其他替换字段无效，不能修改候选值、工具证据、effects 或 completion。直接修改负载也无效。抛错、超时或无效结果按 guard 失败关闭，不作为模型可纠正错误；`abort` 终止本次运行。`ctx.pluginId` / `runtimeId` 仍指被审查的 runtime，`getOwnSettings()` 仍读取 handler 所属插件设置。
+
+<a id="holds-drafts"></a>
+
+#### 压住故事草稿
+
+故事 agent 写 `submit-output` 时，玩家默认在提交前就能读到[草稿](./plugins.md#story-drafts)。草稿没有经过审核：一次被你打回的提交，玩家可能已经读过。对多数审核这没有关系。检查格式、长度或者有没有写说话人的审核，被打回的版本闪过一下也无妨。
+
+有的审核存在的意义，就是不让玩家读到某些文字。这样的审核声明 `holdsDrafts: true`：
+
+```yaml
+contributes:
+  hooks:
+    - { event: ReviewAgentOutput, holdsDrafts: true }
+```
+
+两个例子：
+
+- **防剧透**：悬疑世界里，审核检查叙事有没有提前说出凶手。没有 `holdsDrafts` 时，“管家袖口有血迹，他就是凶手”会先作为草稿显示，审核打回后才撤回，玩家已经读到了。声明后，被打回的这一版玩家看不到。
+- **内容分级**：全年龄插件拦下过激的描写。被拦下的段落哪怕只闪一下，也已经给玩家看到了。
+
+为什么由审核插件声明：叙事插件和审核插件常常出自不同作者，由玩家组合在一起用。叙事作者不知道谁会审它，不能替审核写 `io.output.live: off`；玩家也不知道哪个世界该选“回合保存后”。只有审核插件自己知道，它审的内容不能提前给人看。
+
+声明之后：
+
+- 会话启用了这个插件时，这个会话的故事 runtime 都不再逐段显示草稿。审核按 `ctx.runtimeId` 决定审哪个 runtime，内核没法提前知道，所以按会话生效。
+- 每次提交通过全部审核后，故事一次显示出来。它仍然不用等后面的插件运行和回合提交，比提交后才显示要早。
+- 插件在会话里停用，或者因故障被熔断后，声明不再生效。
+- 声明只让草稿更保守，不授予任何权限，也不进插件的能力清单，改动它不需要玩家重新批准。
+- 只能写在 `ReviewAgentOutput` 上，写在其他事件上会被拒绝。`pnpm plugin:extract` 同步声明时保留它。
+
+只查格式或质量的审核不要声明，否则玩家就读不到逐段显示的故事了。
 
 ### `PostRuntime`
 

@@ -1,4 +1,4 @@
-import { HOOK_EVENTS } from "@covel/shared";
+import { HOOK_EVENTS, type PluginManifest } from "@covel/shared";
 import { z } from "zod";
 
 const events: ReadonlySet<string> = new Set(HOOK_EVENTS);
@@ -39,4 +39,18 @@ export function validatePluginHookRegistration(
   if (typeof handler !== "function") {
     throw invalid(`hook "${event}" expects a handler function`);
   }
+}
+
+/**
+ * The `ReviewAgentOutput` phases a package declares as holding story drafts.
+ * Only the manifest says so; a registration's own options never can.
+ */
+export function draftHoldingPhases(
+  contributions: PluginManifest["contributes"] | undefined,
+): ReadonlySet<string> {
+  return new Set(
+    (contributions?.hooks ?? [])
+      .filter((hook) => hook.event === "ReviewAgentOutput" && hook.holdsDrafts)
+      .map((hook) => hook.enforce ?? "normal"),
+  );
 }

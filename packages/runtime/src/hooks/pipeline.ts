@@ -168,6 +168,28 @@ export class HookPipeline {
     this.registrations.clear();
   }
 
+  /**
+   * Whether a review in the current session scope holds story drafts: one
+   * that would run for this session's `ReviewAgentOutput`, from an active
+   * plugin that is not latched off.
+   */
+  holdsOutputDrafts(sessionId: string): boolean {
+    const raw =
+      (this.snapshots.getStore() ?? this.registrations).get(
+        "ReviewAgentOutput",
+      ) ?? [];
+    const active = currentActivePluginIds();
+    return raw.some(
+      (reg) =>
+        reg.holdsDrafts === true &&
+        isHookInScope(reg.pluginId, active) &&
+        // The same filter `run` applies to this event's handlers.
+        (currentHookLogicalKey() !== undefined ||
+          reg.pluginId === undefined ||
+          !this.options.isPluginLatched?.(sessionId, reg.pluginId)),
+    );
+  }
+
   /** Host diagnostics expose identities only, never handlers or predicates. */
   list(): readonly { id: string; event: HookEvent; pluginId?: string }[] {
     return [...this.registrations.values()].flatMap((entries) =>

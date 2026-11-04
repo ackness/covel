@@ -219,6 +219,7 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `agent.loop.steering`, `fallback`, `finalizer.*`, `corrections.*` | the chosen profile's value; see [Loop profile](#loop-profile-agentloopprofile) |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
+| `contributes.hooks[].holdsDrafts` | `false` |
 | `contributes.extensions[].order` | `0` |
 | `contributes.prompt[].role` | `system` |
 
@@ -440,7 +441,7 @@ While a story agent writes `submit-output`, the player sees a draft before the c
 - `text`: also shows the part being written.
 - `off`: no draft; the story appears after the commit.
 
-A draft is display only: the host does not validate it, it never enters traces or storage, and it does not change the output. On a retry, a provider switch or a rejected submission, the draft already shown is retracted first; on a rollback or failure the player sees only the retraction. The player's "Show the story as it is written" can only be more cautious than the author. Only an agent with `io.visibility: story` whose output the model writes may declare `units` or `text`: a function runtime, a `system` runtime or `io.output.from` is rejected. A runtime with `io.concealed` has no drafts. For the events see [Draft events](./protocol.md#draft-events).
+A draft is display only: the host does not validate it, it never enters traces or storage, and it does not change the output. On a retry, a provider switch or a rejected submission, the draft already shown is retracted first; on a rollback or failure the player sees only the retraction. The player's "Show the story as it is written" can only be more cautious than the author. Only an agent with `io.visibility: story` whose output the model writes may declare `units` or `text`: a function runtime, a `system` runtime or `io.output.from` is rejected. A runtime with `io.concealed` has no drafts. A review plugin can declare `holdsDrafts` so that a session's stories appear only once every review accepts them; see [Holding story drafts](./hooks.md#holds-drafts). For the events see [Draft events](./protocol.md#draft-events).
 
 The actual model must support tools. Strict and non-strict submissions use the same host validation, preserving optional properties and open objects. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for target checks, same-tag fallback and strict profiles. Submission steps prefer a named `submit-output` choice, narrowed to `required` or `auto` when thinking capabilities require it; the player's reasoning choice is never disabled to force submission.
 
