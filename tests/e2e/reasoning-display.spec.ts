@@ -86,7 +86,7 @@ for (const width of [1280, 390]) {
         page.locator('[data-turn-id="background-turn"]'),
       ).toHaveCount(0);
       await expect(
-        page.getByText("本轮失败，未提交", { exact: true }),
+        page.getByText("这一回合没成功，没有被记录", { exact: true }),
       ).toHaveCount(0);
       await expect(page.locator(".ui-narrative")).toContainText(recoveredStory);
       await expect(page.locator(".ui-narrative")).not.toContainText(thought);

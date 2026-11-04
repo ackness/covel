@@ -458,7 +458,7 @@
     "viewCapability": {
       "session": "查看故事和你的输入",
       "submitAction": "替你发送行动",
-      "submitInteraction": "回答等你回答的问题",
+      "submitInteraction": "回答在等你的问题",
       "invokeRuntime": "运行此插件的手动功能",
       "abortExecution": "停止当前回合",
       "openPanel": "打开此插件的面板"
