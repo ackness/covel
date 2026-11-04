@@ -13,5 +13,5 @@
     "root": "./ui/app",
     "entry": "index.html"
   },
-  "surface": "composer"
+  "composer": false
 }

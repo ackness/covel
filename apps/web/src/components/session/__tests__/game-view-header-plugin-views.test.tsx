@@ -26,7 +26,6 @@ const props = (): ComponentProps<typeof GameViewHeader> => ({
   executing: false,
   viewMode: "parsed",
   pluginViews: [],
-  hostDefaultMode: "parsed",
   isLeftCollapsed: true,
   isRightCollapsed: true,
   onViewModeChange: vi.fn(),
@@ -38,38 +37,61 @@ const props = (): ComponentProps<typeof GameViewHeader> => ({
   onResetSession: vi.fn(),
   suspensionsCount: 0,
 });
-it("adds no view menu or back button without plugin views", () => {
+it("adds no page menu without plugin pages", () => {
   render(<GameViewHeader {...props()} />);
   expect(
-    screen.queryByRole("button", { name: i18n.t("session.pluginViews") }),
-  ).toBeNull();
-  expect(
-    screen.queryByRole("button", { name: i18n.t("session.backToDefaultView") }),
+    screen.queryByRole("button", { name: i18n.t("session.pluginPages") }),
   ).toBeNull();
 });
 it("lists labels and plugin names and changes the selected view", () => {
   const values = props();
   render(<GameViewHeader {...values} pluginViews={[viewEntry]} />);
   fireEvent.click(
-    screen.getByRole("button", { name: i18n.t("session.pluginViews") }),
+    screen.getByRole("button", { name: i18n.t("session.pluginPages") }),
   );
   expect(screen.getByText("Probe")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: /Reader/ }));
   expect(values.onViewModeChange).toHaveBeenCalledWith("plugin:p:v");
 });
-it("keeps the host back control enabled during execution", () => {
+it("shows neither Text nor Stage active on a plugin page and leaves it on click", () => {
   const values = props();
   render(
     <GameViewHeader
       {...values}
       pluginViews={[viewEntry]}
       viewMode={viewEntry.mode}
-      hostDefaultMode="stage"
       executing
     />,
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: i18n.t("session.backToDefaultView") }),
-  );
+  expect(
+    screen.queryByRole("button", { name: i18n.t("session.backToDefaultView") }),
+  ).toBeNull();
+  const text = screen.getByRole("button", {
+    name: i18n.t("session.viewParsedAria"),
+  });
+  const stage = screen.getByRole("button", {
+    name: i18n.t("session.viewStageAria"),
+  });
+  expect(text.getAttribute("aria-pressed")).toBe("false");
+  expect(stage.getAttribute("aria-pressed")).toBe("false");
+  fireEvent.click(text);
+  expect(values.onViewModeChange).toHaveBeenCalledWith("parsed");
+  fireEvent.click(stage);
   expect(values.onViewModeChange).toHaveBeenCalledWith("stage");
+});
+it("offers Stop beside the busy state only when the page hides the host composer", () => {
+  const onStop = vi.fn();
+  const values = props();
+  const { rerender } = render(
+    <GameViewHeader {...values} stoppable onStop={onStop} />,
+  );
+  const stop = i18n.t("session.stopTurn");
+  expect(screen.queryByRole("button", { name: stop })).toBeNull();
+  rerender(
+    <GameViewHeader {...values} stoppable onStop={onStop} composerHidden />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: stop }));
+  expect(onStop).toHaveBeenCalledOnce();
+  rerender(<GameViewHeader {...values} onStop={onStop} composerHidden />);
+  expect(screen.queryByRole("button", { name: stop })).toBeNull();
 });

@@ -248,8 +248,12 @@ async function close(page: Page, host: Host) {
 }
 
 async function chooseSandboxReader(page: Page) {
-  await page.getByRole("button", { name: "插件视图", exact: true }).click();
-  const option = page.getByRole("button", { name: /^Bridge reader\b/ });
+  await choosePluginPage(page, "Bridge reader");
+}
+
+async function choosePluginPage(page: Page, label: string) {
+  await page.getByRole("button", { name: "插件页面", exact: true }).click();
+  const option = page.getByRole("button", { name: new RegExp(`^${label}\\b`) });
   await hit(option);
   await option.click();
 }
@@ -680,9 +684,9 @@ for (const width of [360, 1440])
           .evaluate((element) => element.closest("[data-covel-theme-part]")),
       ).toBeNull();
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "插件视图", exact: true }).click();
+      await page.getByRole("button", { name: "插件页面", exact: true }).click();
       const consoleView = page
-        .getByRole("group", { name: "插件视图", exact: true })
+        .getByRole("group", { name: "插件页面", exact: true })
         .getByRole("button", { name: /^主持人控制台/ });
       await hit(consoleView);
       await consoleView.click();
@@ -696,11 +700,8 @@ for (const width of [360, 1440])
           .getByTestId("plugin-view-bar")
           .evaluate((element) => element.closest("[data-covel-theme-part]")),
       ).toBeNull();
-      await page
-        .getByTestId("plugin-view-bar")
-        .getByRole("button", { name: "返回默认视图", exact: true })
-        .click();
       await page.getByRole("button", { name: "舞台视图", exact: true }).click();
+      await expect(page.getByTestId("plugin-view-bar")).toHaveCount(0);
       const currentParagraph = page
         .getByTestId("stage-dialog")
         .locator('[data-stage-paragraph][data-reader-current="true"]');
@@ -755,7 +756,7 @@ for (const width of [360, 1440])
         page.getByTestId("plugin-view-container").locator("iframe"),
       ).toHaveCount(0);
       const decline = consent.getByRole("button", {
-        name: "使用默认视图",
+        name: "不用了",
         exact: true,
       });
       await hit(decline);
@@ -789,9 +790,10 @@ for (const width of [360, 1440])
         .frameLocator("iframe")
         .getByRole("button", { name: "Fill viewport", exact: true })
         .click();
-      const controls = page.getByTestId("sandbox-surface-controls");
-      const back = controls.getByRole("button", {
-        name: "切回默认界面",
+      const header = page.getByTestId("session-header");
+      // Choosing the text view leaves any plugin page.
+      const back = header.getByRole("button", {
+        name: "解析视图",
         exact: true,
       });
       await hit(back);
@@ -817,9 +819,7 @@ for (const width of [360, 1440])
       await page.keyboard.press("Enter");
       await expect(main).toHaveCount(0);
 
-      await controls
-        .getByRole("combobox", { name: "输入框", exact: true })
-        .selectOption("plugin:sandbox-surface-probe:input");
+      await choosePluginPage(page, "Bridge input");
       await allowSandbox(page);
       const input = page.getByRole("region", {
         name: "Bridge input",
@@ -831,12 +831,8 @@ for (const width of [360, 1440])
         .getByRole("button", { name: "Fill viewport", exact: true })
         .click();
       await page.getByRole("button", { name: "舞台视图", exact: true }).click();
-      // Entering stage moves the composer into StageView and mounts a new page.
-      await expectSandboxStory(input, "Public reading theme story.");
-      await input
-        .frameLocator("iframe")
-        .getByRole("button", { name: "Fill viewport", exact: true })
-        .click();
+      // Entering stage leaves the plugin page.
+      await expect(input).toHaveCount(0);
       const currentParagraph = page
         .getByTestId("stage-dialog")
         .locator('[data-stage-paragraph][data-reader-current="true"]');
@@ -845,8 +841,6 @@ for (const width of [360, 1440])
         currentParagraph.locator('[data-covel-theme-part="dialogue"]'),
       ).toHaveCSS("color", "rgb(245, 234, 210)");
       await page.getByTestId("stage-immersive-toggle").click();
-      await expectSandboxStory(input, "Public reading theme story.");
-      await hit(back);
       // The header with the theme menu returns when the stage is left.
       await page.getByTestId("stage-immersive-toggle").click();
       const reset = await themeReset(page);
@@ -856,9 +850,7 @@ for (const width of [360, 1440])
       await expect(page.locator("style[data-plugin-theme-style]")).toHaveCount(
         0,
       );
-      await expect(input).toBeVisible();
-      await hit(back);
-      await back.click();
+      await expect(header).toBeVisible();
       await expect(input).toHaveCount(0);
     } finally {
       await close(page, host);
@@ -1107,10 +1099,9 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
     await connect(page, host);
     await visit(page, host.sessionId);
     await select(page);
-    const controls = page.getByTestId("sandbox-surface-controls");
-    await controls
-      .getByRole("combobox", { name: "输入框", exact: true })
-      .selectOption("plugin:sandbox-surface-probe:input");
+    // The input page declares composer: false, so Stop lives in the header.
+    const controls = page.getByTestId("session-header");
+    await choosePluginPage(page, "Bridge input");
     await allowSandbox(page);
     const input = page.getByRole("region", {
       name: "Bridge input",
@@ -1240,10 +1231,6 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
       await expect(sandbox.locator("#story")).toContainText(
         committedThemeStory,
       );
-      const story = page
-        .locator('[data-covel-theme-part="story"]')
-        .filter({ hasText: committedThemeStory });
-      await expect(story.last()).toHaveCSS("color", "rgb(245, 234, 210)");
       expect(
         (await host.store.getSession(host.sessionId))?.completedPlayerTurns,
       ).toBe(turn + 1);
@@ -1259,51 +1246,55 @@ test("theme toggles preserve streamed public stories and an explicit failed-oper
         await expect(
           page.locator("[data-notice-host]").getByText(noticeText),
         ).toHaveCount(0);
-        const footer = page.getByTestId("story-operation-failure-notice");
-        const checkFooter = async () => {
-          await expect(footer).toHaveCount(1);
-          await expect(footer).toHaveText(noticeText);
-          await expect(footer).toBeVisible();
-          await expect(footer).toHaveAttribute("data-covel-host-controls", "");
-          await expect(footer).toHaveCSS("opacity", "1");
-          expect(
-            await footer.evaluate((element) =>
-              element.closest(
-                "[data-covel-theme-part], [data-covel-theme-scope]",
-              ),
-            ),
-          ).toBeNull();
-        };
-        await checkFooter();
-        const before = await controlStyle(footer);
-        await resetTheme(page);
-        await checkFooter();
-        await expect(footer).toHaveCSS("color", before.color);
-        await expect(footer).toHaveCSS("font", before.font);
-        await select(page);
-        await checkFooter();
-        await expect(footer).toHaveCSS("color", before.color);
-        await expect(footer).toHaveCSS("font", before.font);
         expect(actions).toHaveLength(1);
       } else
         expect(values).toContainEqual(
           expect.objectContaining({ key: "change", value: true }),
         );
-      // A successful explicit retry does not clear the original story's notice.
-      await expect(
-        page.getByTestId("story-operation-failure-notice"),
-      ).toHaveCount(1);
-      await expect(
-        page.getByTestId("story-operation-failure-notice"),
-      ).toBeVisible();
-      await expect(page.getByTestId("notice-execution-recovery")).toHaveCount(
-        0,
-      );
       await expect(
         controls.getByRole("button", { name: "停止", exact: true }),
       ).toHaveCount(0);
       await assertPrivateThemeDataAbsent(page, host, frame!);
     }
+    // The plugin page replaces the story column, so the host story and its
+    // notices are checked after leaving it with the Text toggle.
+    await page
+      .getByTestId("session-header")
+      .getByRole("button", { name: "解析视图", exact: true })
+      .click();
+    await expect(input).toHaveCount(0);
+    const story = page
+      .locator('[data-covel-theme-part="story"]')
+      .filter({ hasText: committedThemeStory });
+    await expect(story.last()).toHaveCSS("color", "rgb(245, 234, 210)");
+    const noticeText = "本回合有 1 个操作没有生效。";
+    const footer = page.getByTestId("story-operation-failure-notice");
+    const checkFooter = async () => {
+      await expect(footer).toHaveCount(1);
+      await expect(footer).toHaveText(noticeText);
+      await expect(footer).toBeVisible();
+      await expect(footer).toHaveAttribute("data-covel-host-controls", "");
+      await expect(footer).toHaveCSS("opacity", "1");
+      expect(
+        await footer.evaluate((element) =>
+          element.closest("[data-covel-theme-part], [data-covel-theme-scope]"),
+        ),
+      ).toBeNull();
+    };
+    await checkFooter();
+    const before = await controlStyle(footer);
+    await resetTheme(page);
+    await checkFooter();
+    await expect(footer).toHaveCSS("color", before.color);
+    await expect(footer).toHaveCSS("font", before.font);
+    await select(page);
+    await checkFooter();
+    await expect(footer).toHaveCSS("color", before.color);
+    await expect(footer).toHaveCSS("font", before.font);
+    // A successful explicit retry does not clear the original story's notice.
+    await expect(footer).toHaveCount(1);
+    await expect(footer).toBeVisible();
+    await expect(page.getByTestId("notice-execution-recovery")).toHaveCount(0);
     expect(fixture.calls).toEqual([
       "concealed",
       "delegate",

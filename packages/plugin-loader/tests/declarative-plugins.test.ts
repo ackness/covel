@@ -350,9 +350,9 @@ it("validates the bridge adopter without executing handlers and keeps a UI-only 
   );
   expect(ui.diagnostics).toEqual([]);
   expect(ui.slots.view).toHaveLength(2);
-  expect(ui.slots.view?.map((spec) => spec.surface)).toEqual([
-    "main",
-    "composer",
+  expect(ui.slots.view?.map((spec) => spec.composer)).toEqual([
+    undefined,
+    false,
   ]);
   expect(ui.slots.view?.[0]?.capabilities).toEqual([
     "submitAction",

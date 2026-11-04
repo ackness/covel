@@ -418,7 +418,7 @@ pnpm validate:plugin ~/.covel/plugins/declarative-notebook
 
 `contributes.data.notes.accepts` 接受 `notebook.notes@1` 的世界数据；导入仍遵守同一数据集的 schema、键和操作权限。声明式 runtime 只写自己的数据集和经过验证的角色记录；其他插件数据只能通过对方的写服务修改。角色写入使用内置 `sync-characters`，仍走普通 proposal 校验。
 
-从顶部插件视图菜单选择“Notebook page”。先拒绝读取会话，默认游戏界面仍可用；同意后页面的经典外部脚本才挂载并接收公开会话投影。返回默认视图或从视图菜单撤销授权。修改 JSON 或页面资源会改变内容身份，需要重新同意；插件启用、来源信任和代码授权都不能代替读取授权。详细边界见[插件视图](../reference/ui-panels.md#插件视图)。
+从顶部“插件页面”菜单选择“Notebook page”。先拒绝读取会话，默认游戏界面仍可用；同意后页面的经典外部脚本才挂载并接收公开会话投影。点头部的“文本”离开，或从视图菜单撤销授权。修改 JSON 或页面资源会改变内容身份，需要重新同意；插件启用、来源信任和代码授权都不能代替读取授权。详细边界见[插件视图](../reference/ui-panels.md#插件视图)。
 
 `review-note` 是对 `notebook.review@1` 的可选服务导入。只有一个独立启用、获得授权的提供方时才出现；缺席时笔记本仍可用。写服务以提供方身份暂存和提交，调用方的免审批状态不能授权其代码。见[通信方式](../reference/plugin-extensions.md)。
 

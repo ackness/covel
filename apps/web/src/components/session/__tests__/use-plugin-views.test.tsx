@@ -90,13 +90,9 @@ it("reload refetches the projection and replaces a stale page URL", async () => 
   expect(mocks.fetch).toHaveBeenCalledTimes(2);
 });
 
-it("separates composer declarations from story views and keeps a healthy region available during refresh", async () => {
-  const input = {
-    ...viewEntry.spec,
-    id: "input",
-    surface: "composer" as const,
-  };
-  const main = { ...viewEntry.spec, surface: "main" as const };
+it("lists a composer: false page with the others and keeps views available during refresh", async () => {
+  const input = { ...viewEntry.spec, id: "input", composer: false as const };
+  const main = viewEntry.spec;
   mocks.fetch.mockResolvedValueOnce({
     view: [{ pluginId: "p", specs: [main, input] }],
   });
@@ -104,11 +100,9 @@ it("separates composer declarations from story views and keeps a healthy region 
     usePluginViews("s", [sessionPlugin], "en"),
   );
   await waitFor(() => expect(result.current.status).toBe("ready"));
-  expect(result.current.views.map((entry) => entry.spec.surface)).toEqual([
-    "main",
-  ]);
-  expect(result.current.composers?.map((entry) => entry.spec.surface)).toEqual([
-    "composer",
+  expect(result.current.views.map((entry) => entry.spec.composer)).toEqual([
+    undefined,
+    false,
   ]);
   let resolve!: (value: unknown) => void;
   mocks.fetch.mockImplementationOnce(
@@ -122,7 +116,7 @@ it("separates composer declarations from story views and keeps a healthy region 
     refreshed = result.current.reload();
   });
   expect(result.current.status).toBe("ready");
-  expect(result.current.composers).toHaveLength(1);
+  expect(result.current.views).toHaveLength(2);
   await act(async () => {
     resolve({ view: [{ pluginId: "p", specs: [main, input] }] });
     await refreshed;

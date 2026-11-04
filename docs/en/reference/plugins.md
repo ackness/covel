@@ -1566,6 +1566,6 @@ A package may contain only `contributes.ui.view`, with no `entry` or runtime. Su
 
 Scene Stage declares **Stage reading** through public `contributes.ui.theme`, without automatic activation or view switching. The no-entry, zero-runtime community [Reading theme probe](../../../tests/third-party/theme-pack-probe/README.md) uses the same manifest, static validation, resource route and session picker. Workflow, strict syntax and limits are defined in [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).
 
-## Sandbox system regions
+## The input box on a page
 
-Sandbox regions keep spec paths under `contributes.ui.view`; singular surface selects main or composer. No new placement, runtime trigger or proposal kind is introduced. Own manual-runtime invocation retains approvals, proposals and commit. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer) for declarations, consent, composition and retirement.
+Plugin pages use spec paths under `contributes.ui.view`. The host input box sits below a page by default; the optional `composer: false` or an embedded `SessionComposer` hides it. No new placement, runtime trigger or proposal kind is introduced. Own manual-runtime invocation retains approvals, proposals and commit. See [the input box on a page](./ui-panels.md#the-input-box-on-a-page) for declarations, consent, composition and retirement.

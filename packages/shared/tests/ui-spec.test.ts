@@ -415,36 +415,34 @@ describe("session page capability declarations", () => {
       ),
     ).toBe(true);
   });
-  it.each(["main", "composer"])("accepts the %s session surface", (surface) => {
-    expect(pluginUiSpecIssues({ ...page, surface }, "owner", "view")).toEqual(
-      [],
-    );
-    expect(pluginUiSpecSchema.parse({ ...page, surface }).surface).toBe(
-      surface,
-    );
+  it("accepts composer: false on a view", () => {
+    expect(
+      pluginUiSpecIssues({ ...page, composer: false }, "owner", "view"),
+    ).toEqual([]);
+    expect(
+      pluginUiSpecSchema.parse({ ...page, composer: false }).composer,
+    ).toBe(false);
   });
   it.each(["right", "message", "segment"] as const)(
-    "refuses surface placement in %s",
+    "refuses composer placement in %s",
     (slot) => {
       expect(
-        pluginUiSpecIssues({ ...page, surface: "main" }, "owner", slot).map(
+        pluginUiSpecIssues({ ...page, composer: false }, "owner", slot).map(
           (issue) => issue.path,
         ),
-      ).toContain("surface");
+      ).toContain("composer");
     },
   );
-  it.each([
-    { surface: "sidebar" },
-    { surface: ["main", "composer"] },
-    { surface: "main", bridge: undefined },
-    { surface: "composer", webview: undefined, view: { component: "Text" } },
-  ])("rejects invalid surface declarations %j", (change) => {
-    expect(
-      pluginUiSpecIssues({ ...page, ...change }, "owner", "view").map(
-        (issue) => issue.path,
-      ),
-    ).toContain("surface");
-  });
+  it.each([true, "main", ["composer"]])(
+    "rejects composer: %j (only false is meaningful)",
+    (composer) => {
+      expect(
+        pluginUiSpecIssues({ ...page, composer }, "owner", "view").map(
+          (issue) => issue.path,
+        ),
+      ).toContain("composer");
+    },
+  );
 });
 
 describe("live session view widgets", () => {

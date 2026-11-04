@@ -330,7 +330,7 @@ Ordinary device-settings export/import can carry the identity; session exports, 
 
 ## Sandbox selection and consent
 
-Main/composer selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Both reuse the content/capability consent keys above; `surface` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [sandbox main view and composer](./ui-panels.md#sandbox-main-view-and-composer).
+Page selection lasts only for the current mount/session visit, without SettingsStore, session metadata or snapshot writes. Pages reuse the content/capability consent keys above; `composer` participates in the whole-spec hash. Only persisted true grants allow mounting. Revocation or cross-window refresh retires access immediately, even if saving fails. See [the input box on a page](./ui-panels.md#the-input-box-on-a-page).
 
 ### Instant text
 

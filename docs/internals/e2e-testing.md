@@ -251,7 +251,7 @@ pnpm docker:pg:down
 
 所有浏览器执行都用 `scripts/e2e-cpu-list.mjs` 读取 Linux `Cpus_allowed_list`，通过 `taskset -c` 使用前两个允许的逻辑 CPU，子服务和 Chromium 继承限制。CPU 编号不假设从零开始，只有一个时记录限制，无法解析时失败。普通扩展验收的私有包目录会被测试修改，因此始终一个 worker、零重试。
 
-只有定时和手动运行会在普通扩展之后，将延迟审批正反例与桌面/移动宽度的独立区域测试各重复三次，一个 worker、零重试。完整套件 CI 允许两次重试，HTML/list 报告单独标示 flaky 和重试；重试通过不能代替零失败的压力验证。不启用付费模型，也不能由浏览器 CI 推断原生 Windows/macOS 或真实模型已经验证。
+只有定时和手动运行会在普通扩展之后，将延迟审批正反例与桌面/移动宽度的页面测试各重复三次，一个 worker、零重试。完整套件 CI 允许两次重试，HTML/list 报告单独标示 flaky 和重试；重试通过不能代替零失败的压力验证。不启用付费模型，也不能由浏览器 CI 推断原生 Windows/macOS 或真实模型已经验证。
 
 <!-- prettier-ignore -->
 | 预算 | 本地默认 | CI |
@@ -276,7 +276,7 @@ for shard in 1 2 3 4 5 6 7 8; do
 done
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:smoke
 CI=true flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions
-CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|independent sandbox regions' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
+CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp/covel-e2e.lock taskset -c "$cpus" pnpm e2e:extensions tests/e2e/sandbox-surfaces.acceptance.ts --grep 'a delayed runtime approval|plugin pages keep the host input' --repeat-each=3 --workers=1 --retries=0 --output=tests/e2e/artifacts/extensions-stress
 ```
 
 收集时先比较不分片列表与八个 `--shard=<n>/8 --list` 的测试 ID 并集，确认两个 project 无重复、无遗漏，再检查扩展列表包含全部验收文件。不要固定历史测试总数；真实模型 opt-in 与已有条件性跳过要分别记录。
@@ -371,7 +371,7 @@ CI=true PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e/report/extensions-stress flock /tmp
 
 ## 沙箱区域验收
 
-使用 `tests/e2e/third-party-stage.config.ts` 运行 `sandbox-surfaces.acceptance.ts`，它在私有社区目录加载真实包，使用生产构建和严格宿主页 CSP，覆盖持久写入、授权、独立区域和恢复。正常流程收集并拒绝 CSP 违规，故意触发沙箱拒绝的测试单独运行。延迟审批测试通过工作室会话列表切换会话，保留同一文档中的旧异步调用，并对照当前会话成功提交的情形。所有固定端口 Playwright 命令必须以 `flock /tmp/covel-e2e.lock` 串行运行；默认 e2e 不包含 acceptance 文件。
+使用 `tests/e2e/third-party-stage.config.ts` 运行 `sandbox-surfaces.acceptance.ts`，它在私有社区目录加载真实包，使用生产构建和严格宿主页 CSP，覆盖持久写入、授权、输入框显示规则和恢复。正常流程收集并拒绝 CSP 违规，故意触发沙箱拒绝的测试单独运行。延迟审批测试通过工作室会话列表切换会话，保留同一文档中的旧异步调用，并对照当前会话成功提交的情形。所有固定端口 Playwright 命令必须以 `flock /tmp/covel-e2e.lock` 串行运行；默认 e2e 不包含 acceptance 文件。
 
 API 以 `NODE_ENV=development` 启动，但不启用 `tsx watch`，插件修改通过开发重载接口发布。清理也恢复并重新发布原声明，防止进程重启清空内存会话，或把变更后的插件状态留给后续用例。命令示例：
 
@@ -379,4 +379,4 @@ API 以 `NODE_ENV=development` 启动，但不启用 `tsx watch`，插件修改�
 flock /tmp/covel-e2e.lock pnpm exec playwright test --config tests/e2e/third-party-stage.config.ts tests/e2e/sandbox-surfaces.acceptance.ts
 ```
 
-原生 Electron 验收另需实际解包应用和一次性配置：安装同一包，测试两个区域、写入/授权/超时/异常/返回，检查本地 JS/CSS/图片、严格 CSP、两种 frame 无 Node、存储与 covelIpc，以及宿主 IPC 正常。通过正常控制重启 sidecar，验证资源端口恢复、无泄漏和空白区域。记录 OS、实际 Electron/内嵌 Node 与资源路径；Linux 或 Chromium 结果不能代替 Windows/macOS 原生运行。没有 GUI 时明确记为未运行。
+原生 Electron 验收另需实际解包应用和一次性配置：安装同一包，测试两个页面、写入/授权/超时/异常/离开页面，检查本地 JS/CSS/图片、严格 CSP、两种 frame 无 Node、存储与 covelIpc，以及宿主 IPC 正常。通过正常控制重启 sidecar，验证资源端口恢复、无泄漏和空白页面。记录 OS、实际 Electron/内嵌 Node 与资源路径；Linux 或 Chromium 结果不能代替 Windows/macOS 原生运行。没有 GUI 时明确记为未运行。

@@ -1,7 +1,7 @@
 ### Added
 
 - **Declarative live views can compose public story, pending interactions and the shared composer.** `SessionMessages` and `SessionComposer` use current-session host rendering with strict placement and props, recursive-context masking and ordinary action admission. Public choices retain current-turn numbering and keyboard selection, and required choices use the normal interaction submission path.
-- **DM Console, Relationship Graph and Codex have dedicated plugin views.** The runtime-free console shows public cast and interactions; graph and codex pages keep their existing right panels and committed data bindings. Loaded pages retain their selection and local display state during discovery refreshes and temporary request failures.
+- **DM Console is a plugin page.** The runtime-free console shows public cast and interactions and composes its own input box. The relationship graph and codex keep their right panels only; use “Expand panel” for a larger view. A loaded page keeps its local display state during discovery refreshes and temporary request failures.
 
 ### Changed
 

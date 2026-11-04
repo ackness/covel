@@ -85,39 +85,32 @@ export function PluginViewHost({
             {t("session.abortTurn")}
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={fallback}
-          aria-label={t("session.backToDefaultView")}
-        >
-          {t("session.backToDefaultView")}
-        </Button>
         {readsSession && onRevoke && (
-          <HeaderMenu label={t("session.viewPermissions")} active={false}>
-            <MenuItem
-              icon={ShieldOff}
-              label={t("session.revokeViewConsent")}
-              onSelect={() => {
-                retire.current?.();
-                onRevoke();
-              }}
-            />
-            {requestedViewGrants(entry).map((capability) => (
+          <div className="ml-auto">
+            <HeaderMenu label={t("session.viewPermissions")} active={false}>
               <MenuItem
-                key={capability}
                 icon={ShieldOff}
-                label={t("session.revokeViewCapability", {
-                  capability: t(`session.viewCapability.${capability}`),
-                })}
+                label={t("session.revokeViewConsent")}
                 onSelect={() => {
                   retire.current?.();
-                  onRevoke(capability);
+                  onRevoke();
                 }}
               />
-            ))}
-          </HeaderMenu>
+              {requestedViewGrants(entry).map((capability) => (
+                <MenuItem
+                  key={capability}
+                  icon={ShieldOff}
+                  label={t("session.revokeViewCapability", {
+                    capability: t(`session.viewCapability.${capability}`),
+                  })}
+                  onSelect={() => {
+                    retire.current?.();
+                    onRevoke(capability);
+                  }}
+                />
+              ))}
+            </HeaderMenu>
+          </div>
         )}
       </div>
       <div
