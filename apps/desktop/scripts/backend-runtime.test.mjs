@@ -13,7 +13,7 @@ import { ensureElectronBinary } from "./ensure-electron.mjs";
 
 const scripts = fileURLToPath(new URL(".", import.meta.url));
 const target = { platform: "linux", arch: "x64" };
-const eligible = { node: "24.22.0", electron: "45.0.0", ...target };
+const eligible = { node: "24.22.1", electron: "45.2.1", ...target };
 const sentinel = Buffer.from("dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX");
 const fuseWire = (state = 49, version = 1) =>
   Buffer.concat([sentinel, Buffer.from([version, 1, state])]);
@@ -89,11 +89,11 @@ test("only the reviewed Electron and embedded Node pair is accepted", async (t) 
   assert.doesNotThrow(() => f.assertSafeElectronVersions(eligible));
   for (const patch of [
     { node: undefined },
-    { node: "24.22.1" },
+    { node: "24.22.0" },
     { node: "26.12.1" },
     { electron: "44.9.3" },
-    { electron: "45.0.1" },
-    { electron: "45.0.0-beta.1" },
+    { electron: "45.2.2" },
+    { electron: "45.2.1-beta.1" },
     { electron: undefined },
   ]) {
     assert.throws(

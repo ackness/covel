@@ -5,21 +5,6 @@ packages:
 
 minimumReleaseAge: 10080
 
-# Exact security releases only; all other packages retain the seven-day delay.
-minimumReleaseAgeExclude:
-  - "undici@6.29.1 || 7.30.1 || 8.12.2"
-  - "electron@45.0.0"
-  - "fallow@3.34.0"
-  - "fallow-type-aware@3.34.0"
-  - "@fallow-cli/darwin-arm64@3.34.0"
-  - "@fallow-cli/darwin-x64@3.34.0"
-  - "@fallow-cli/linux-arm64-gnu@3.34.0"
-  - "@fallow-cli/linux-arm64-musl@3.34.0"
-  - "@fallow-cli/linux-x64-gnu@3.34.0"
-  - "@fallow-cli/linux-x64-musl@3.34.0"
-  - "@fallow-cli/win32-arm64-msvc@3.34.0"
-  - "@fallow-cli/win32-x64-msvc@3.34.0"
-
 # pnpm 11 defaults verifyDepsBeforeRun to an implicit auto-install, which is
 # actively harmful here: a `pnpm --filter <pkg> run …` that trips the check
 # reinstalls only the filtered subgraph and prunes every other package from
@@ -45,7 +30,7 @@ allowBuilds:
 # PostCSS patch / current esbuild release until upstream updates its pins.
 overrides:
   tsx: 4.23.15
-  "@tailwindcss/language-service>postcss": 8.5.30
+  "@tailwindcss/language-service>postcss": 8.5.32
   "@esbuild-kit/core-utils>esbuild": 0.28.2
   # Security patches for Ajv URI parsing and desktop plist serialization.
   "ajv>fast-uri": 3.1.9
@@ -59,11 +44,11 @@ overrides:
   # @electron/asar 3, dir-compare and glob 7: they call its default export or
   # internals that minimatch 11 removed, and 3.x has none of the
   # optimizationLevel preprocessing that the globParts advisory concerns.
-  "@electron/asar@4>minimatch": 11.0.2
-  "@electron/asar@4>glob": 14.0.2
-  "@electron/universal@2>minimatch": 11.0.2
-  "app-builder-lib>minimatch": 11.0.2
-  "filelist@1>minimatch": 11.0.2
+  "@electron/asar@4>minimatch": 11.0.3
+  "@electron/asar@4>glob": 14.0.3
+  "@electron/universal@2>minimatch": 11.0.3
+  "app-builder-lib>minimatch": 11.0.3
+  "filelist@1>minimatch": 11.0.3
   # VitePress 1.x still pins Vite 5; Vite 6.4.5 carries the dev-server and
   # launch-editor fixes and moves esbuild off the dev-server CORS bug.
   "vitepress>vite": 6.4.5
