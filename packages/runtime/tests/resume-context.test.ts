@@ -16,6 +16,7 @@ import {
 } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   createToolExecutor,
   executeTurn,
@@ -68,6 +69,7 @@ async function suspendThenAdvance(
 ) {
   expect(execution.result.runtimeResults[0]?.status).toBe("suspended");
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: turnInput.turnId, durationMs: 0 },
@@ -573,6 +575,7 @@ describe.each(["step limit", "hook stop"] as const)(
           deps,
         );
         const outcome = await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: resumed,
           completion: {

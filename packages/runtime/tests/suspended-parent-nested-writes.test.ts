@@ -24,6 +24,7 @@ import {
 import {
   applySuspensionAbandonTx,
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   executeTurn,
   planSuspensionAbandon,
@@ -196,6 +197,7 @@ async function fixture(
   };
   const execution = await executeTurn(input, runtimes, deps);
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -235,6 +237,7 @@ function commitResume(
   resumed: Awaited<ReturnType<typeof resumeSuspendedRuntime>>,
 ) {
   return commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store: f.store,
     execution: structuredClone(resumed),
     completion: {
@@ -754,6 +757,7 @@ describe("progress of a suspended parent's nested calls", () => {
       });
       expect(resumed.result.status).toBe("success");
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: f.store,
         execution: structuredClone(resumed),
         completion: {

@@ -61,6 +61,7 @@ import type {
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
+  refuseReleasedJobs,
   resumeSuspendedRuntime,
   snapshotUserSettings,
   createTurnEmitter,
@@ -449,6 +450,13 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
                 },
               }
             : {}),
+          // A resume saves no suspension that ends another turn: under the
+          // session lock the only new one is the resumed runtime's own (it
+          // cannot start a nested run that suspends), its claimed record is
+          // resolved before that is saved, and its single commit unit drops
+          // no continuation. Should one appear, the commit rolls back rather
+          // than lose the jobs that turn held back.
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           memorySystem: c.get("memorySystem"),
           imageFlowRuntimeIds: (
             await resolveMediaImageFlow(

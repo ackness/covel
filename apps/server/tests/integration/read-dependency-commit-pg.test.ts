@@ -34,6 +34,7 @@ import { createPgStore } from "@covel/store/postgres";
 import {
   classifyExecutionFaults,
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   createToolExecutor,
   PluginServiceRegistry,
@@ -330,6 +331,7 @@ describe.skipIf(!isolatedUrl)("read dependencies on real PG", () => {
       // A concurrent commit spends gold, so the list goes out of bounds.
       await storeGold(store, 3);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         eventBus,
         execution,

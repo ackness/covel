@@ -25,7 +25,11 @@ import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { commitExecution, executeTurn } from "../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "../src/index.js";
 
 const SESSION_ID = "sess-finalize";
 const TURN_ID = "turn-finalize";
@@ -1493,6 +1497,7 @@ describe("finalizeExecution — plugin.data.update", () => {
       execution: Awaited<ReturnType<typeof executeTurn>>,
     ) =>
       commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: {

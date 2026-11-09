@@ -11,7 +11,10 @@ import { createEventBus, type EventBus } from "@covel/events";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
 import { createFunctionStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { executeTurn } from "../src/execution.js";
 import {
   createProgressReporter,
@@ -449,6 +452,7 @@ describe("job status after the execution commit", () => {
     );
 
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "turn-1", durationMs: 0 },

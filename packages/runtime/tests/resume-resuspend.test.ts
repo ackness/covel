@@ -23,6 +23,7 @@ import {
   applySuspensionAbandonTx,
   classifyExecutionFaults,
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   planSuspensionAbandon,
   resumeSuspendedRuntime,
@@ -92,6 +93,7 @@ async function commitResume(
   suspension: SuspensionRecord,
 ) {
   return commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store: f.store,
     eventBus: f.eventBus,
     execution: structuredClone(execution),
@@ -127,6 +129,7 @@ async function chain(
   expect(
     (
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: f.store,
         eventBus: f.eventBus,
         execution,
@@ -293,6 +296,7 @@ describe("a function that suspends again on resume", () => {
     });
     const execution = await executeTurn(input, [asker, later], deps());
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: f.store,
       eventBus: f.eventBus,
       execution,
@@ -356,6 +360,7 @@ describe("a function that suspends again on resume", () => {
       const { deps, setFirst } = reportingDeps(f);
       const execution = await executeTurn(input, [asker], deps());
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: f.store,
         eventBus: f.eventBus,
         execution,
@@ -437,6 +442,7 @@ describe("a function that suspends again on resume", () => {
       });
       const execution = await executeTurn(input, [asker], deps());
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: f.store,
         eventBus: f.eventBus,
         execution,
@@ -451,6 +457,7 @@ describe("a function that suspends again on resume", () => {
         activeRuntimes: [asker],
       });
       const rejected = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: f.store,
         eventBus: f.eventBus,
         execution: structuredClone(resumed),
@@ -534,6 +541,7 @@ describe("a function that suspends again on resume", () => {
       });
       const execution = await executeTurn(input, [asker], deps());
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: f.store,
         eventBus: f.eventBus,
         execution,
@@ -674,6 +682,7 @@ describe("a function that suspends again on resume", () => {
       deps(),
     );
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: f.store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -714,6 +723,7 @@ describe("a function that suspends again on resume", () => {
     }));
     const execution = await executeTurn(input, [asker], deps());
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: f.store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

@@ -26,6 +26,7 @@ import type { DataStore } from "@covel/store";
 import { createPgStore } from "@covel/store/postgres";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   PluginServiceRegistry,
   createToolExecutor,
@@ -190,6 +191,7 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
     // A concurrent commit spends most of the gold.
     await setGold(session, concurrentGold);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: `${session}-turn`, durationMs: 0 },
@@ -561,6 +563,7 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
       );
       await setGold(session, 2);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: `${session}-turn`, durationMs: 0 },
@@ -634,6 +637,7 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
       deps(),
     );
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: first,
       completion: { kind: "turn", turnId: `${session}-turn`, durationMs: 0 },
@@ -658,6 +662,7 @@ describe.skipIf(!isolatedUrl)("write-service operations on real PG", () => {
           ?.calls,
       ).toBe(2);
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution: resumed,
         completion: {

@@ -10,6 +10,7 @@ import {
   executeTurn,
   resumeSuspendedRuntime,
   commitExecution,
+  refuseReleasedJobs,
   type ExecutionDeps,
 } from "../src/index.js";
 import { toolCall } from "./_helpers/agent-loop-fixture.js";
@@ -137,6 +138,7 @@ describe("delegation across suspended legs", () => {
       expect(
         (
           await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store,
             execution: first,
             completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -185,6 +187,7 @@ describe("delegation across suspended legs", () => {
         expect(
           (
             await commitExecution({
+              enqueueReleasedJobsInTx: refuseReleasedJobs,
               store,
               execution: resumed,
               completion: {
@@ -216,6 +219,7 @@ describe("delegation across suspended legs", () => {
           error: { code: "unavailable" },
         });
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: done,
           completion: {
@@ -326,6 +330,7 @@ describe("delegation across suspended legs", () => {
         };
         const first = await executeTurn(input, [main, actor], deps);
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: first,
           completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

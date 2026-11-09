@@ -18,6 +18,7 @@ import {
   PluginExtensionHost,
   PluginServiceRegistry,
   createToolExecutor,
+  refuseReleasedJobs,
 } from "@covel/runtime";
 import { ToolRegistry } from "@covel/tools";
 import {
@@ -205,6 +206,7 @@ async function fixture(
             }
           : { kind: "turn" as const, turnId, durationMs: 0 };
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       eventBus,
       hookPipeline,
@@ -321,6 +323,7 @@ async function subagentFixture(storyProvider = false) {
       },
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       eventBus,
       emitter,

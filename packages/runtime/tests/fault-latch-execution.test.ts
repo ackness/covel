@@ -7,7 +7,10 @@ import { z } from "zod";
 import { tool } from "@covel/tools";
 import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { classifyExecutionFaults } from "../src/faults/classify.js";
 import { executeTurn } from "../src/execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
@@ -137,6 +140,7 @@ describe("a function runtime whose tool's service fails", () => {
       });
       expect(execution.result.runtimeResults[0]?.fault).toBeUndefined();
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: "first", durationMs: 0 },
@@ -373,6 +377,7 @@ it.each([
             : undefined;
       expect(execution.result.runtimeResults[0]?.fault).toBe(expectedFault);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId, durationMs: 0 },
@@ -458,6 +463,7 @@ it.each(["throw", "timeout", "veto"] as const)(
       },
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       hookPipeline,
@@ -529,6 +535,7 @@ it("counts a function runtime's own deadline that cancelled a pending child agen
       { runtimeId: parent.name, status: "failed", fault: "timeout" },
     ]);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId, durationMs: 0 },
@@ -609,6 +616,7 @@ it.each(["direct", "wrapped", "plain"] as const)(
         mode === "plain" ? "runtime" : undefined,
       );
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId, durationMs: 0 },

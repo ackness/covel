@@ -62,6 +62,8 @@ const outcome = await commitExecution({
     turnId: execution.result.turnId,
     durationMs: execution.result.durationMs,
   },
+  // This host has no job queue; see the host responsibilities below.
+  enqueueReleasedJobsInTx: refuseReleasedJobs,
 });
 // Respond only after interpreting the durable commit outcome.
 return { result: execution.result, committed: outcome.status === "committed" };
@@ -76,6 +78,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - The player's identity for this turn is passed explicitly in `input.logicalTurnId`.
 - While a suspension record exists, turn counting is deferred. The last successful resume of the same logical turn is counted once, through the ledger. A failed resume cannot confirm a continuation.
 - A background execution re-checks the enabled plugin set under the commit lock. It narrows the Hook scope through `commitExecution.activePluginIds`. This parameter can only filter plugins already recorded during execution. It cannot add a plugin that was enabled later. Settings still use the snapshot taken during execution.
+- A suspended turn holds its background jobs back. A commit can end another suspended turn: a new suspension replaces an older one of the same runtime, or the run a continuation came from is dropped at commit. The jobs that turn held back are then queued in the same transaction. The host must pass `commitExecution.enqueueReleasedJobsInTx` to queue them. A host with no job queue passes `refuseReleasedJobs`, exported by `@covel/runtime`: such a commit rolls back, and no job is lost.
 
 ### When a commit does not happen
 

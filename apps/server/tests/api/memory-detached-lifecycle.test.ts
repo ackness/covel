@@ -4,6 +4,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import {
   executeTurn,
   commitExecution,
+  refuseReleasedJobs,
   PluginExtensionHost,
   PluginServiceRegistry,
   type LLMAdapter,
@@ -240,6 +241,7 @@ describe("memory detached lifecycle", () => {
     ).toBeNull();
     await raw.withLock("session", async () => {
       const result = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution: worker,
         completion: { kind: "detached", turnId: "worker" },
@@ -392,6 +394,7 @@ it("settles ten source turns in order and never publishes a timed-out late memor
       expect(execution.result.runtimeResults[0]?.status).toBe("success");
       await raw.withLock("session", async () => {
         const committed = await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "detached", turnId: `worker-${index}` },

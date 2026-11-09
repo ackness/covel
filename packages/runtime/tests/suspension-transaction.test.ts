@@ -12,6 +12,7 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -164,6 +165,7 @@ describe("function suspension transaction", () => {
       expect(
         (
           await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store,
             execution,
             completion: { kind: "turn", turnId: "t", durationMs: 0 },
@@ -233,6 +235,7 @@ describe("function suspension transaction", () => {
           throw new Error("commit rejected");
       });
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         eventBus,
         execution: resumed,

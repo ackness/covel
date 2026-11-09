@@ -12,6 +12,7 @@ import { composeStory, policies } from "./_helpers/orchestration-fixture.js";
 import {
   executeTurn,
   commitExecution,
+  refuseReleasedJobs,
   createToolExecutor,
   type ExecutionDeps,
 } from "../src/index.js";
@@ -156,6 +157,7 @@ describe("character actor composition", () => {
       expect(execution.result.runtimeResults).toHaveLength(1);
       expect(execution.result.runtimeResults[0]?.status).toBe("success");
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

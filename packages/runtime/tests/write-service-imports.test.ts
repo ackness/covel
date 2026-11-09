@@ -23,6 +23,7 @@ import {
 import { delegateTool, suspendTool, tool, ToolRegistry } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -288,6 +289,7 @@ describe("an imported write service", () => {
         ),
       ).toEqual([]);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -404,6 +406,7 @@ describe("an imported write service", () => {
       const first = await executeTurn(input, [manifest], deps(llm));
       expect(resultOf(first).status).toBe("suspended");
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution: first,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -424,6 +427,7 @@ describe("an imported write service", () => {
       });
       expect(execution.result.operations ?? []).toEqual([]);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: {
@@ -539,6 +543,7 @@ describe("an imported write service", () => {
           });
         }
         const outcome = await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -630,6 +635,7 @@ describe("an imported write service", () => {
         },
       ]);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -684,6 +690,7 @@ describe("a plugin tool that calls a write service", () => {
         resultOf(execution).operations?.map((op) => [op.status, op.reason]),
       ).toEqual([["discarded", "caller-dropped"]]);
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -846,6 +853,7 @@ describe("character actor operation ownership", () => {
               },
       });
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

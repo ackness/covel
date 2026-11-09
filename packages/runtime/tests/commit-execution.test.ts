@@ -4,6 +4,7 @@ import { createEventBus } from "@covel/events";
 import type { RuntimeResult } from "@covel/shared";
 import {
   commitExecution,
+  refuseReleasedJobs,
   type CommitExecutionArgs,
 } from "../src/commit/commit-execution.js";
 
@@ -38,6 +39,7 @@ async function fixture() {
     timestamp: "2026-09-18T00:00:00Z",
   };
   const args: CommitExecutionArgs = {
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     eventBus,
     execution: {

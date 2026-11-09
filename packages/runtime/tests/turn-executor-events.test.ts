@@ -18,7 +18,10 @@ import {
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
@@ -130,6 +133,7 @@ describe("TurnExecutor EventBus Bridge", () => {
     expect(events.find((e) => e.type === "turn.completed")).toBeUndefined();
 
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: deps.store!,
       execution: {
         result,

@@ -123,6 +123,8 @@ await commitExecution({
     turnId: result.turnId,
     durationMs: result.durationMs,
   },
+  // A host with a job queue passes its own; see the protocol page.
+  enqueueReleasedJobsInTx: refuseReleasedJobs,
 });
 ```
 

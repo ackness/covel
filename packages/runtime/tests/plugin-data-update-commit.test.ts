@@ -28,7 +28,11 @@ import {
   type DatasetSchemas,
 } from "../src/plugin-data-validation.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { commitExecution, executeTurn } from "../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "../src/index.js";
 import type { MediaOwnershipStore } from "../src/media/canonicalize-media-refs.js";
 
 const SESSION = "s";
@@ -177,6 +181,7 @@ describe("a runtime's own update at commit", () => {
     // Another commit spent the gold meanwhile.
     await seed(store, 2);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "turn", durationMs: 0 },

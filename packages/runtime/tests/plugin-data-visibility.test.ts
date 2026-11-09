@@ -26,7 +26,11 @@ import type {
   LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
 import { tool, z } from "@covel/tools";
-import { commitExecution, executeTurn } from "../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "../src/index.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { PluginDataReadObservation } from "../src/function-runtime/upstream-plugin-data.js";
 import { collectUpstreamPluginDataWrites } from "../src/function-runtime/upstream-plugin-data.js";
@@ -155,6 +159,7 @@ async function run(
     },
   );
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: "turn", durationMs: 0 },

@@ -25,6 +25,7 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
   type ExecutionDeps,
@@ -657,6 +658,7 @@ describe("sub-agent faults at execution boundaries", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

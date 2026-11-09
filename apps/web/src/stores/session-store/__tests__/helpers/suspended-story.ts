@@ -9,6 +9,7 @@ import {
   commitExecution,
   executeTurn,
   PluginServiceRegistry,
+  refuseReleasedJobs,
 } from "../../../../../../../packages/runtime/src/index.js";
 
 /** Real commit and subscription events, without HTTP or model requests. */
@@ -112,6 +113,7 @@ export async function suspendedStory(manual: boolean) {
       eventBus,
       execution,
       completion: { kind: "turn", turnId: "turn", durationMs: 0 },
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       proposalGuard: (proposal) =>
         proposal.source.pluginId === "provider" ? "Rejected change" : undefined,
     });

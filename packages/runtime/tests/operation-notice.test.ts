@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { LLMMessage, RuntimeManifest } from "@covel/shared";
 import { executeTurn } from "../src/execution.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { answer, fixture, input, runtime } from "./operation-fixture.js";
 
@@ -84,6 +87,7 @@ describe("previous-turn operation notices", () => {
         turnId: string,
       ) =>
         commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "turn", turnId, durationMs: 0 },
@@ -242,6 +246,7 @@ describe("previous-turn operation notices", () => {
       turnId: string,
     ) =>
       commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId, durationMs: 0 },

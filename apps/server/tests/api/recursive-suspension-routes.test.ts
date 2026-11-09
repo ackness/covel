@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry } from "@covel/plugin-loader";
-import { commitExecution, executeTurn } from "@covel/runtime";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "@covel/runtime";
 import type { DataStore } from "@covel/store";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
@@ -111,6 +115,7 @@ async function fixture() {
     { store, eventBus, loadRuntime, llm },
   );
   await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     eventBus,
     execution,

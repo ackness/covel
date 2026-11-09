@@ -8,7 +8,10 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import { executeTurn } from "../src/execution.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createTurnEmitter } from "../src/trace/turn-emitter.js";
 import { emptyPresentationDigest } from "../src/presentation/projection.js";
@@ -168,6 +171,7 @@ export async function setup(store: DataStore = createMemoryStore()) {
     extra: Partial<Parameters<typeof commitExecution>[0]> = {},
   ) =>
     commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       emitter,

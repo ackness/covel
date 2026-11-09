@@ -11,6 +11,7 @@ import {
 import {
   executeTurn,
   commitExecution,
+  refuseReleasedJobs,
   createToolExecutor,
 } from "../../src/index.js";
 import { loadRuntimeBundle } from "../../../test-runtime/src/runtime-loading.js";
@@ -220,6 +221,7 @@ export async function runAttributionTurn(
       deps,
     );
     const commit = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "synthetic-turn", durationMs: 1 },

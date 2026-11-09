@@ -3,6 +3,7 @@ import type { DataStore } from "@covel/store";
 import {
   commitExecution,
   executeTurn,
+  refuseReleasedJobs,
   snapshotUserSettings,
   type TurnExecutorDeps,
   type ExecutedTurn,
@@ -144,6 +145,9 @@ export async function commitDebugExecution(args: {
     eventBus: deps.eventBus,
     emitter: deps.emitter,
     ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
+    // The debug runner has no durable job queue to put jobs held back by an
+    // ended suspension on, so a commit that would release some rolls back.
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
   });
 }
 

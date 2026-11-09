@@ -25,6 +25,7 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   executeTurn,
   finalizeExecution,
@@ -113,6 +114,7 @@ async function run(
     }),
   });
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -887,6 +889,7 @@ describe("recursiveCall results at commit", () => {
         deps(store),
       );
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: turnInput.turnId, durationMs: 0 },
@@ -974,6 +977,7 @@ describe("recursiveCall results at commit", () => {
         deps(store),
       );
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution: resumed,
         completion: {

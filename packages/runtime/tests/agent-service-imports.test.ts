@@ -30,6 +30,7 @@ import type { ApprovalPipeline } from "@covel/approval";
 import { suspendTool, ToolRegistry } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -607,6 +608,7 @@ describe("an absent import", () => {
       });
       expect(resultOf(execution)?.status).toBe("success");
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -835,6 +837,7 @@ describe("imported reads and the commit", () => {
           producer.runId,
         ]);
         const outcome = await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -976,6 +979,7 @@ describe("imports in every agent entry", () => {
       const execution = await executeTurn(input, [manifest], deps(llm));
       expect(resultOf(execution)?.status).toBe("suspended");
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

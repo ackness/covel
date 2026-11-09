@@ -10,6 +10,7 @@ import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   createTurnEmitter,
   type HookPipeline,
@@ -240,6 +241,7 @@ export async function presentationFixture(
       let descriptors: readonly DeferredRuntimeJob[] =
         execution.result.deferredRuntimeJobs ?? [];
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         eventBus: events,
         emitter,

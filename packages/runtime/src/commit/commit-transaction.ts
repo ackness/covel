@@ -1,0 +1,246 @@
+/**
+ * The body of `finalizeExecution`'s single transaction: an ordered list of
+ * named steps over one shared context. The order is part of the contract,
+ * and each step's comment says why it sits where it does.
+ */
+
+import type { StoreTransaction } from "@covel/store";
+import type { SessionEvent } from "@covel/shared";
+import { assertSuspensionWritesUnchanged } from "../resume/suspension-baseline.js";
+import { storyOutputError } from "../agent-loop/story-output.js";
+import { isDimensionSnapshotSkip } from "../turn-executor/dimension-barrier.js";
+import { recordRuntimeTriggersTx } from "../trigger/trigger-ledger.js";
+import {
+  bindDimensionProvider,
+  type DimensionSettlementScope,
+} from "./dimension-finalization.js";
+import { droppedUpstream, settleDroppedInputs } from "./commit-dependencies.js";
+import { applySessionClockTx } from "./session-clock.js";
+import { saveSuspensions } from "./suspension-commit.js";
+import {
+  publishCommittedExports,
+  type ExportDecl,
+} from "./runtime-export-publish.js";
+import { settlementsOf } from "./operation-ledger.js";
+import {
+  commitUnitsInOrder,
+  registerSettlements,
+  type UnitCommitContext,
+} from "./commit-units.js";
+
+/** The context every step reads and fills. */
+export interface CommitTxContext extends UnitCommitContext {
+  /** Set by `bindSettlementScope`, before any unit commits. */
+  dimensions: DimensionSettlementScope | undefined;
+  readonly exportDecls: ReadonlyMap<string, ExportDecl>;
+  /** Whether the session clock is written (`needsSessionClockWrite`). */
+  readonly shouldWriteClock: boolean;
+}
+
+/** What the finalize hands the transaction; the rest is per transaction. */
+export type CommitRun = Omit<
+  CommitTxContext,
+  "tx" | "events" | "narrativeOwners" | "dimensions" | "scopedRetry"
+>;
+
+type CommitStep = (ctx: CommitTxContext) => Promise<void> | void;
+
+/** The transaction body, in order. A throw from any step rolls back. */
+const COMMIT_STEPS: readonly CommitStep[] = [
+  throwIfAborted,
+  checkWriteBaseline,
+  rejectUncommittableStory,
+  bindSettlementScope,
+  commitUnitsInOrder,
+  settleNarratives,
+  appendJournal,
+  runHostWrites,
+  throwIfAborted,
+  saveContinuations,
+  writeSessionClock,
+  recordTriggers,
+  publishExports,
+  settleCommitStatus,
+  throwIfAborted,
+];
+
+/** Run every step in `tx`; returns the events of the committed proposals. */
+export async function runCommitTransaction(
+  tx: StoreTransaction,
+  run: CommitRun,
+): Promise<readonly SessionEvent[]> {
+  const { executionContext } = run.args;
+  const ctx: CommitTxContext = {
+    ...run,
+    tx,
+    events: [],
+    narrativeOwners: new Map(),
+    dimensions: undefined,
+    scopedRetry:
+      executionContext.origin === "manual" &&
+      executionContext.sourceTurnId !== undefined,
+  };
+  for (const step of COMMIT_STEPS) await step(ctx);
+  return ctx.events;
+}
+
+function throwIfAborted(ctx: CommitTxContext): void {
+  ctx.args.signal?.throwIfAborted();
+}
+
+async function checkWriteBaseline(ctx: CommitTxContext): Promise<void> {
+  // A resume must not put back what a later write replaced: compare the
+  // records its buffered proposals write before anything is written.
+  await assertSuspensionWritesUnchanged(
+    ctx.tx,
+    ctx.args.sessionId,
+    ctx.args.writeBaseline ?? [],
+  );
+}
+
+function rejectUncommittableStory(ctx: CommitTxContext): void {
+  // A failed story cannot complete a player action. Optional state
+  // extractors may fail independently after a valid narrative exists.
+  // A story held back because the dimension provider failed is the same
+  // case: committing would count the turn and keep the writes of the
+  // runtimes before it, with no narrative.
+  for (const result of ctx.args.results) {
+    if (ctx.options.kindOf(result) !== "story") continue;
+    const error =
+      result.status === "failed"
+        ? `Story runtime ${result.runtimeId} failed; the action was not committed.`
+        : result.status === "success"
+          ? storyOutputError(result.output)
+          : isDimensionSnapshotSkip(result)
+            ? `Story runtime ${result.runtimeId} did not run because the dimension provider failed; the action was not committed.`
+            : undefined;
+    if (error) throw new Error(error);
+  }
+}
+
+async function bindSettlementScope(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  ctx.dimensions = await bindDimensionProvider({
+    logicalTurn: args.executionContext.logicalTurn,
+    tx: ctx.tx,
+    sessionId: args.sessionId,
+    runtimes: args.runtimes,
+  });
+}
+
+async function settleNarratives(ctx: CommitTxContext): Promise<void> {
+  // Every narrative owes a settlement, whether or not a runtime of this
+  // execution asked for its receipt.
+  ctx.events.push(
+    ...(await registerSettlements(ctx, ctx.tx, (fn) =>
+      ctx.postCommit.push(fn),
+    )),
+  );
+}
+
+async function appendJournal(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  const { runDropped } = ctx.drops.settled();
+  // A dropped runtime settles as failed: like any failed run, it adds
+  // nothing to the conversation and does not count as a trigger.
+  for (const message of args.journalMessages ?? []) {
+    if (
+      runDropped(args.journalMessageRuns?.[message.id], message.sourceRuntimeId)
+    )
+      continue;
+    await ctx.tx.appendTurnMessage(message);
+  }
+}
+
+async function runHostWrites(ctx: CommitTxContext): Promise<void> {
+  const { extraInTx } = ctx.args;
+  await extraInTx?.(ctx.tx, { droppedRuntimeIds: ctx.drops.settled().rootIds });
+}
+
+async function saveContinuations(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  const { runtimes } = args;
+  const { rootIds: droppedIds, runIds: droppedRunIds } = ctx.drops.settled();
+  const manifestByRuntime = new Map(runtimes.map((rt) => [rt.name, rt]));
+  const rootView = {
+    runtimes,
+    results: ctx.units.map((unit) => unit.root),
+    dropped: droppedIds,
+  };
+  await saveSuspensions(ctx.tx, args, (fn) => ctx.postCommit.push(fn), {
+    suspensionIds: new Set(
+      (args.suspensions ?? [])
+        .filter((suspension) => {
+          const run = args.suspensionRuns?.[suspension.id];
+          return run !== undefined && droppedRunIds.has(run);
+        })
+        .map((suspension) => suspension.id),
+    ),
+    // Like the host's own deferred jobs: none that builds on a dropped
+    // runtime, and the rest see it as failed.
+    settleJobs: (jobs) =>
+      jobs
+        .filter((job) => {
+          const target = manifestByRuntime.get(job.runtimeId);
+          return !target || !droppedUpstream(target, rootView);
+        })
+        .map((job) => settleDroppedInputs(job, droppedIds)),
+  });
+}
+
+async function writeSessionClock(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  if (ctx.shouldWriteClock) {
+    await applySessionClockTx(ctx.tx, {
+      sessionId: args.sessionId,
+      executionContext: args.executionContext,
+      update: args.sessionClock!,
+    });
+  }
+}
+
+async function recordTriggers(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  const { runDropped } = ctx.drops.settled();
+  await recordRuntimeTriggersTx(ctx.tx, {
+    sessionId: args.sessionId,
+    runtimeIds: (args.runtimeTriggers ?? []).filter(
+      (runtimeId, index) =>
+        !runDropped(args.runtimeTriggerRuns?.[index], runtimeId),
+    ),
+    now: new Date().toISOString(),
+  });
+}
+
+async function publishExports(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  const dropped = ctx.drops.settled().runs;
+  await publishCommittedExports(
+    ctx.tx,
+    args.results.filter((result) => !dropped.has(result)),
+    {
+      sessionId: args.sessionId,
+      decls: ctx.exportDecls,
+      loadOutputSchema: args.loadOutputSchema,
+      mediaStore: args.mediaStore,
+      now: args.sessionClock?.now,
+    },
+  );
+}
+
+async function settleCommitStatus(ctx: CommitTxContext): Promise<void> {
+  const { args } = ctx;
+  // Persisted results were written before commit; settle dropped ones
+  // as failed so history, retries and reloads match what was saved.
+  const failedRuntimes = ctx.drops.isolatedRuntimes();
+  const settledOperations = settlementsOf(ctx.ledger.finalized());
+  for (const turnId of args.turnIds) {
+    await ctx.tx.setTurnResultCommitStatus(
+      args.sessionId,
+      turnId,
+      "committed",
+      failedRuntimes,
+      settledOperations,
+    );
+  }
+}

@@ -67,7 +67,6 @@ rg -n "ponytail:" apps packages plugins
 | `apps/server/src/routes/api/actions.ts` | 1594 |
 | `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1496 |
 | `apps/server/src/world-data/validate-world-package.ts` | 1359 |
-| `packages/runtime/src/commit/finalize-execution.ts` | 1295 |
 | `packages/ai-provider/src/gateway.ts` | 1266 |
 | `packages/shared/src/schemas/plugin-schemas.ts` | 1246 |
 | `packages/runtime/src/turn-executor/turn-executor.ts` | 1082 |
