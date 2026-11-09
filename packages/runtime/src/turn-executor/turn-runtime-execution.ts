@@ -858,7 +858,11 @@ async function executeRuntime(
       }
     }
     if (!binding.ok) {
-      const failedUpstream = failureOf(binding.upstream);
+      // Any required input whose producer failed, not only the input that
+      // closed the gate: the declaration order must not decide.
+      const failedUpstream = binding.upstreams
+        ?.map((upstream) => failureOf(upstream))
+        .find((failed) => failed !== undefined);
       return emitGateTerminal(
         makeSkippedResult(
           manifest,

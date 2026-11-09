@@ -174,6 +174,38 @@ describe("a story the framework held back", () => {
     expect(plan).toBeFalsy();
   });
 
+  it("rejects whatever order the story declares its required inputs in", async () => {
+    // The unscheduled check closes the gate first; the failed roll declared
+    // after it still refuses the action.
+    const { committed, resultOf, session, plan } = await playTurn(
+      [
+        planner,
+        fn("teller/check", { stage: undefined, trigger: { type: "manual" } }),
+        fn("teller/roll"),
+        story({
+          inputs: {
+            check: { from: { runtime: "teller/check" } },
+            roll: { from: { runtime: "teller/roll" } },
+          },
+        }),
+      ],
+      { planner: plannerHandler, "teller/roll": failingRoll },
+    );
+    expect(resultOf("teller/check")).toBeUndefined();
+    expect(resultOf("teller/narrate")).toMatchObject({
+      status: "skipped",
+      output: {
+        skippedBy: "framework:inputBinding",
+        reason: "upstream-failed",
+        failedUpstream: "teller/roll",
+      },
+    });
+    expect(committed.status).toBe("failed");
+    expect(committed.error).toContain("because teller/roll failed");
+    expect(session?.completedPlayerTurns).toBe(0);
+    expect(plan).toBeFalsy();
+  });
+
   it("traces the failure through an upstream the framework held back too", async () => {
     const { committed, resultOf, session } = await playTurn(
       [
