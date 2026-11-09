@@ -27,7 +27,8 @@ export interface PluginExtensionExecutionScope {
   readonly locale: string;
   /**
    * The session's resolved plugin settings for this execution, keyed by plugin
-   * ID; each provider's `getOwnSettings()` reads only its own bucket. Required
+   * ID. A provider's `getOwnSettings()`, and that of every service it calls,
+   * reads only the callee's own bucket. Required
    * because extensions also run outside a turn (UI slots, the session view),
    * where no hook scope carries them: a turn passes its frozen snapshot, a
    * host route loads the session's.
@@ -71,8 +72,6 @@ export interface PluginExtensionExecution {
     input: I,
   ): Promise<ExtensionResult<O, M>>;
 }
-
-const EMPTY_SETTINGS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /** Kernel definitions only. Provider handlers live in PluginServiceRegistry. */
 export const kernelExtensionPoints: readonly ExtensionPoint<
@@ -254,19 +253,17 @@ export class PluginExtensionHost {
       return rows;
     };
     const cache = new Map<string, Promise<unknown>>();
-    const settings = deepFreeze(structuredClone(scope.settings));
     const client = this.services.createKernelClient({
       ...scope,
+      // Providers and the services they call read their own bucket of this
+      // frozen snapshot, with or without a session hook scope.
+      settings: deepFreeze(structuredClone(scope.settings)),
       extensionContext: (pluginId, signal) => {
         let providerWorld: typeof world | undefined;
-        const ownSettings = Object.hasOwn(settings, pluginId)
-          ? settings[pluginId]!
-          : EMPTY_SETTINGS;
         return {
           get world() {
             return (providerWorld ??= structuredClone(world));
           },
-          getOwnSettings: () => ownSettings,
           sessionId: scope.sessionId,
           locale: scope.locale,
           messages: pluginMessagesFor(

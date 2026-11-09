@@ -26,13 +26,15 @@ export async function loadSessionHookScope(args: {
 
 /**
  * The session's resolved plugin settings, for extension executions that run
- * outside a turn (UI slots, the session view, image flow). A turn passes its
- * own frozen snapshot instead.
+ * outside a turn (UI slots, the session view, image flow): manifest defaults,
+ * world presets and, when the request carries them, the player's values. A
+ * turn passes its own frozen snapshot instead.
  */
 export async function loadSessionPluginSettings(args: {
   readonly store: DataStore;
   readonly pluginRegistry: Pick<PluginRegistry, "get" | "getAll"> | undefined;
   readonly session: Pick<SessionRecord, "activePlugins" | "worldId" | "locale">;
+  readonly userSettings?: TurnInput["userSettings"];
 }): Promise<NonNullable<HookScope["settings"]>> {
   return (await loadSessionHookScope(args)).settings ?? {};
 }

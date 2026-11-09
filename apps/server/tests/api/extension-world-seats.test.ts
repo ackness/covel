@@ -90,7 +90,12 @@ describe("extension providers outside a turn read the stored seats", () => {
     );
     try {
       await expect(
-        resolveMediaImageFlow(store, host, undefined, "session-1"),
+        resolveMediaImageFlow({
+          store,
+          host,
+          pluginRegistry: undefined,
+          sessionId: "session-1",
+        }),
       ).resolves.toMatchObject({ entryRuntimeId: "pictures" });
       expect(seen.seats).toEqual(SEATS);
       expect(seen.current).toBe("lin");
@@ -142,6 +147,42 @@ describe("extension providers outside a turn read the stored seats", () => {
       );
       expect(seen.seats).toEqual(SEATS);
       expect(seen.current).toBe("lin");
+    } finally {
+      await store.close();
+    }
+  });
+});
+
+describe("image-flow provider settings", () => {
+  it("reads the committing execution's settings, else the session's", async () => {
+    const store = await seededStore();
+    const host = hostFor("pictures");
+    const seen: unknown[] = [];
+    host.register(
+      "pictures",
+      { point: "media.image-flow@1", id: "flow" },
+      {
+        handler: (_input, ctx) => {
+          seen.push(ctx.getOwnSettings());
+          return { entryRuntimeId: "pictures", assetRuntimeIds: ["pictures"] };
+        },
+      },
+    );
+    try {
+      const base = {
+        store,
+        host,
+        pluginRegistry: undefined,
+        sessionId: "session-1",
+      };
+      // A commit hands over the player's resolved values.
+      await resolveMediaImageFlow({
+        ...base,
+        settings: { pictures: { style: "ink" } },
+      });
+      // The standalone route has none: no registry, so no defaults either.
+      await resolveMediaImageFlow(base);
+      expect(seen).toEqual([{ style: "ink" }, {}]);
     } finally {
       await store.close();
     }

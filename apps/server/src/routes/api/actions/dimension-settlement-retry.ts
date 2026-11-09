@@ -84,6 +84,7 @@ export async function retryPendingDimensionSettlements(
           store,
           pluginRegistry,
           session,
+          userSettings: args.playerSettings,
         }),
         signal: c.req.raw.signal,
         runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
@@ -121,14 +122,15 @@ export async function retryPendingDimensionSettlements(
     const hookPipeline = c.get("hookPipeline");
     const runner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
-      resolveImageFlowRuntimeIds: async () =>
+      resolveImageFlowRuntimeIds: async (settings) =>
         (
-          await resolveMediaImageFlow(
+          await resolveMediaImageFlow({
             store,
-            c.get("pluginExtensions"),
+            host: c.get("pluginExtensions"),
             pluginRegistry,
             sessionId,
-          )
+            settings,
+          })
         )?.assetRuntimeIds,
       withSettledLock: (fn, waitBudget) =>
         withSettledSessionLock(c, sessionId, fn, waitBudget, signal),

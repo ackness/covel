@@ -127,12 +127,13 @@ export async function commitExecutedTurn(
   };
   const correctedRuns = new Set<string>();
   const imageFlowRuntimeIds = (
-    await resolveMediaImageFlow(
+    await resolveMediaImageFlow({
       store,
-      host.pluginExtensions,
-      request.pluginRegistry,
+      host: host.pluginExtensions,
+      pluginRegistry: request.pluginRegistry,
       sessionId,
-    )
+      settings: started.hookScope.settings,
+    })
   )?.assetRuntimeIds;
   // From here the commit settles the execution, whatever its outcome.
   ledger.handExecutionToCommit();

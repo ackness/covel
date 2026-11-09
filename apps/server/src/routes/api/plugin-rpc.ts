@@ -360,14 +360,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
-      resolveImageFlowRuntimeIds: async () =>
+      resolveImageFlowRuntimeIds: async (settings) =>
         (
-          await resolveMediaImageFlow(
+          await resolveMediaImageFlow({
             store,
-            c.get("pluginExtensions"),
-            c.get("pluginRegistry"),
+            host: c.get("pluginExtensions"),
+            pluginRegistry: c.get("pluginRegistry"),
             sessionId,
-          )
+            settings,
+          })
         )?.assetRuntimeIds,
       withSettledLock: (fn, waitBudget) =>
         withSettledSessionLock(c, sessionId, fn, waitBudget),

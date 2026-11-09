@@ -459,12 +459,13 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           enqueueReleasedJobsInTx: refuseReleasedJobs,
           memorySystem: c.get("memorySystem"),
           imageFlowRuntimeIds: (
-            await resolveMediaImageFlow(
+            await resolveMediaImageFlow({
               store,
-              c.get("pluginExtensions"),
+              host: c.get("pluginExtensions"),
               pluginRegistry,
               sessionId,
-            )
+              settings: hookScope.settings,
+            })
           )?.assetRuntimeIds,
           signal: c.get("requestWork")?.signal,
           completion: {

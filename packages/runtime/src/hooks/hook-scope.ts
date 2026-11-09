@@ -105,11 +105,12 @@ export function requireHookScope(operation: string): HookScope {
  * bucket — callers pass only their own `pluginId`.
  */
 export function scopedOwnSettings(
-  scope: HookScope,
+  scope: Pick<HookScope, "settings">,
   pluginId: string | undefined,
 ): Readonly<Record<string, unknown>> {
-  if (!pluginId) return EMPTY_SETTINGS;
-  return scope.settings?.[pluginId] ?? EMPTY_SETTINGS;
+  if (!pluginId || !scope.settings || !Object.hasOwn(scope.settings, pluginId))
+    return EMPTY_SETTINGS;
+  return scope.settings[pluginId] ?? EMPTY_SETTINGS;
 }
 
 /**

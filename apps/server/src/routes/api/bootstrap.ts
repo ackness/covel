@@ -717,14 +717,15 @@ async function assembleApi(
         eventDirectory,
       },
       hookPipeline,
-      resolveImageFlowRuntimeIds: async () =>
+      resolveImageFlowRuntimeIds: async (settings) =>
         (
-          await resolveMediaImageFlow(
+          await resolveMediaImageFlow({
             store,
-            extensions,
-            registry,
-            job.sessionId,
-          )
+            host: extensions,
+            pluginRegistry: registry,
+            sessionId: job.sessionId,
+            settings,
+          })
         )?.assetRuntimeIds,
     });
   };

@@ -129,6 +129,44 @@ describe("kernel extension execution", () => {
     expect(seen).toEqual({ alpha: { tone: "grim" }, beta: {} });
   });
 
+  it("hands a service called by a provider its own settings, with no hook scope", async () => {
+    // A provider outside a turn may call another plugin's service; the
+    // callee reads its own bucket of the execution's snapshot.
+    const { point, host, services, abort, readPluginData } = fixture("single");
+    services.register("inner", {
+      name: "read",
+      contract: "test.read@1",
+      input: z.unknown(),
+      output: z.object({ value: z.number() }),
+      handler: (_value, context) => {
+        const own = context.getOwnSettings();
+        expect(Object.isFrozen(own)).toBe(true);
+        return { value: Number(own.weight) };
+      },
+    });
+    host.register(
+      "alpha",
+      { point: point.id, id: "one" },
+      {
+        handler: (_value, context) =>
+          context.services.call({
+            pluginId: "inner",
+            name: "read",
+            contract: "test.read@1",
+            input: null,
+          }),
+      },
+    );
+    const execution = host.createExecution({
+      sessionId: "session",
+      locale: "en",
+      settings: { alpha: { tone: "grim" }, inner: { weight: 7 } },
+      signal: abort.signal,
+      readPluginData,
+    });
+    await expect(execution.run(point, input)).resolves.toEqual({ value: 7 });
+  });
+
   it("gives providers an empty world, seats included, when the caller has none", async () => {
     const { point, host, execution } = fixture("collect");
     host.register(

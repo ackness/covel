@@ -38,7 +38,11 @@ import {
 } from "./function-runtime/runtime-abort-boundaries.js";
 import type { TurnEmitter } from "./trace/turn-emitter.js";
 import { withGatewayTrace } from "./function-runtime/gateway-trace.js";
-import { currentOwnSettings } from "./hooks/hook-scope.js";
+import {
+  currentOwnSettings,
+  scopedOwnSettings,
+  type HookScope,
+} from "./hooks/hook-scope.js";
 import {
   providerVisibility,
   readProviderData,
@@ -137,7 +141,7 @@ export type ServiceImportResolution =
 
 type ExtensionContextFields = Pick<
   PluginExtensionContext,
-  "sessionId" | "locale" | "turnId" | "pluginData" | "getOwnSettings"
+  "sessionId" | "locale" | "turnId" | "pluginData"
 >;
 
 export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
@@ -183,6 +187,16 @@ function providerVerdict(
     : "neutral";
 }
 
+/** A provider's own settings: the caller's snapshot, else the hook scope's. */
+function ownSettingsOf(
+  caller: Pick<Caller, "settings">,
+  pluginId: string,
+): Readonly<Record<string, unknown>> {
+  return caller.settings
+    ? scopedOwnSettings(caller, pluginId)
+    : currentOwnSettings(pluginId);
+}
+
 interface Caller {
   readonly delegation?: DelegationBudget;
   /**
@@ -209,6 +223,13 @@ interface Caller {
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
+  /**
+   * Kernel only: the execution's resolved plugin settings, inherited unchanged
+   * through nested calls. An extension execution passes it because it may run
+   * outside a session hook scope (UI slots, the session view, image flow).
+   * Without it, `getOwnSettings()` reads the hook scope and throws outside one.
+   */
+  readonly settings?: HookScope["settings"];
   /** Kernel-only read scope, inherited unchanged through nested calls. */
   readonly reads?: {
     readonly locale?: string;
@@ -1150,7 +1171,7 @@ export class PluginServiceRegistry {
                   get world() {
                     return world();
                   },
-                  getOwnSettings: () => currentOwnSettings(entry.pluginId),
+                  getOwnSettings: () => ownSettingsOf(caller, entry.pluginId),
                   signal,
                   services: this.createClient(
                     {
@@ -1221,7 +1242,7 @@ export class PluginServiceRegistry {
                 get world() {
                   return world();
                 },
-                getOwnSettings: () => currentOwnSettings(entry.pluginId),
+                getOwnSettings: () => ownSettingsOf(caller, entry.pluginId),
                 signal,
                 gateway,
                 utils,
