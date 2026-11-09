@@ -3,8 +3,19 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
-import { unusedPackageExports } from "./lib/package-exports.mjs";
-import { testSourceImportErrors } from "./lib/test-source-imports.mjs";
+import {
+  sourceFiles,
+  unusedPackageExports,
+  workspaceOf,
+} from "./lib/package-exports.mjs";
+import {
+  crossWorkspaceReferences,
+  uncachedReferences,
+} from "./lib/cross-package-inputs.mjs";
+import {
+  isProductionFile,
+  testSourceImportErrors,
+} from "./lib/test-source-imports.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
@@ -72,29 +83,15 @@ const byName = new Map(
   workspaces.map((workspace) => [workspace.manifest.name, workspace]),
 );
 const errors = [];
-function walk(directory) {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    if (
-      ["node_modules", "dist", "tests", "__tests__", "fixtures"].includes(
-        entry.name,
-      )
-    )
-      return [];
-    const file = path.join(directory, entry.name);
-    return entry.isDirectory()
-      ? walk(file)
-      : /\.(?:[cm]?[jt]s|tsx)$/.test(file) && !/\.(?:test|spec)\./.test(file)
-        ? [file]
-        : [];
-  });
-}
 for (const workspace of workspaces) {
   const production =
     workspace.group === "plugins"
       ? workspace.directory
       : path.join(workspace.directory, "src");
   if (!existsSync(production)) continue;
-  for (const file of walk(production)) {
+  for (const file of sourceFiles(production).filter((item) =>
+    isProductionFile(workspace, item),
+  )) {
     const source = readFileSync(file, "utf8");
     const imports = packageImports(file, source);
     for (const { specifier, typeOnly } of imports) {
@@ -102,9 +99,7 @@ for (const workspace of workspaces) {
         errors.push(`${path.relative(root, file)}: ${specifier}: ${reason}`);
       if (specifier.startsWith(".")) {
         const target = path.resolve(path.dirname(file), specifier);
-        const owner = workspaces.find((item) =>
-          target.startsWith(`${item.directory}${path.sep}`),
-        );
+        const owner = workspaceOf(workspaces, target);
         if (owner && owner !== workspace)
           fail("cross-workspace source import; use the package's public entry");
         // Plugin modules execute as written; no compiler maps `.js` to `.ts`.
@@ -174,6 +169,19 @@ for (const workspace of workspaces) {
     }
   }
 }
+// Files another workspace loads by relative path must reach the task hash,
+// or Turbo replays a cached pass after the loaded file changed.
+const turbo = JSON.parse(readFileSync(path.join(root, "turbo.json"), "utf8"));
+const references = crossWorkspaceReferences(workspaces);
+for (const problem of uncachedReferences({
+  root,
+  turbo,
+  workspaces,
+  references,
+}))
+  errors.push(
+    `${path.relative(root, problem.file)}: ${problem.specifier}: ${problem.missing.join("/")} cache ignores ${problem.owner.manifest.name}; depend on it in package.json or list ${path.relative(root, problem.target)} as a Turbo input`,
+  );
 errors.push(
   ...unusedPackageExports(root, workspaces, {
     "@covel/plugin-handlers-utils/image-generation":
@@ -185,12 +193,14 @@ errors.push(
   }),
 );
 
-// Tests that still reach into another workspace by relative path. Each target
-// has no public or `./testing` entry on purpose; moving it behind one would
-// expose an internal or invert a dependency. Add an entry only with the same
-// kind of reason, and remove it once the test uses a package entry.
+// Tests that still reach into another workspace by relative path. None of these
+// targets can be reached through an entry: one would expose an internal, invert
+// a dependency or form a cycle. Add an entry only with the same kind of reason,
+// and remove it once the test uses a package entry.
 const mockedTransport =
   "vi.mock must name the module the package's own files import; the outbound transport has no entry of its own, and the tests stub it below the gateway.";
+const testRuntimeCycle =
+  "test-runtime depends on runtime, so runtime cannot depend on it to use @covel/test-runtime/runtime-loading; the dependency would form a cycle.";
 const testImportAllowlist = [
   {
     from: "apps/server/tests/api/memory-llm-policy.test.ts",
@@ -236,31 +246,14 @@ const testImportAllowlist = [
       "Checks the server reads key files like the desktop shell; apps publish no entries and the server must not depend on desktop.",
   },
   {
-    from: "packages/memory/tests/vector-memory.test.ts",
-    imports: [
-      "packages/ai-provider/src/adapters/http/response.js",
-      "packages/ai-provider/src/gateway-lifecycle.js",
-    ],
-    reason:
-      "Reproduces the exact error an embedding adapter throws; these adapter internals are not part of ai-provider's surface.",
-  },
-  {
     from: "packages/runtime/tests/bundled-orchestration.test.ts",
     imports: ["packages/test-runtime/src/runtime-loading.js"],
-    reason:
-      "test-runtime is a CLI without import entries and already depends on runtime; an entry would create a dependency cycle.",
+    reason: testRuntimeCycle,
   },
   {
     from: "packages/runtime/tests/helpers/narrative-attribution.ts",
     imports: ["packages/test-runtime/src/runtime-loading.js"],
-    reason:
-      "test-runtime is a CLI without import entries and already depends on runtime; an entry would create a dependency cycle.",
-  },
-  {
-    from: "plugins/char-creator/tests/character-tracker-runtime.test.js",
-    imports: ["packages/test-runtime/src/runtime-loading.ts"],
-    reason:
-      "test-runtime is a CLI without import entries; the test loads the plugin the way the CLI does.",
+    reason: testRuntimeCycle,
   },
   {
     from: "plugins/affinity/tests/haruka-relationship-authority.test.js",
@@ -275,7 +268,7 @@ const testImportAllowlist = [
       "End-to-end world check through the server's own session planning and world-data import; apps publish no entries.",
   },
 ];
-errors.push(...testSourceImportErrors(root, workspaces, testImportAllowlist));
+errors.push(...testSourceImportErrors(root, references, testImportAllowlist));
 
 if (errors.length) {
   console.error(errors.join("\n"));

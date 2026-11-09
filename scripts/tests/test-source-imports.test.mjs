@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { crossWorkspaceReferences } from "../lib/cross-package-inputs.mjs";
 import {
   isProductionFile,
   testSourceImportErrors,
@@ -32,16 +33,24 @@ function fixture(t) {
     root,
     workspaces,
     write,
-    check: (allowlist) => testSourceImportErrors(root, workspaces, allowlist),
+    check: (allowlist) =>
+      testSourceImportErrors(
+        root,
+        crossWorkspaceReferences(workspaces),
+        allowlist,
+      ),
   };
 }
 
 test("rejects relative imports and mocks into another workspace from tests", (t) => {
   const probe = fixture(t);
   probe.write(
-    "apps/server/tests/store.test.ts",
-    `import { value } from "../../../packages/store/src/internal.js";
-     vi.mock("../../../packages/store/src/internal.js");`,
+    "apps/server/tests/import.test.ts",
+    'import { value } from "../../../packages/store/src/internal.js";',
+  );
+  probe.write(
+    "apps/server/tests/mock.test.ts",
+    'vi.mock("../../../packages/store/src/internal.js");',
   );
   const errors = probe.check().sort();
   assert.equal(errors.length, 2);
@@ -55,7 +64,9 @@ test("allows package entries, own files, plugin modules and listed exceptions", 
     "apps/server/tests/ok.test.ts",
     `import { value } from "@covel/store/testing";
      import { local } from "../src/local.js";
-     import dice from "../../../plugins/dice/handler.js";`,
+     import dice from "../../../plugins/dice/handler.js";
+     // A path read at run time is the Turbo input check's concern.
+     const file = new URL("../../../packages/store/src/internal.js", import.meta.url);`,
   );
   probe.write(
     "apps/server/tests/listed.test.ts",

@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
-import { sourceFiles } from "./package-exports.mjs";
-import { packageImports } from "./package-imports.mjs";
 
 const TEST_DIRECTORIES = new Set(["tests", "__tests__", "fixtures"]);
 
@@ -16,11 +13,16 @@ export function isProductionFile(workspace, file) {
   );
 }
 
+const posix = (root, file) =>
+  path.relative(root, file).split(path.sep).join("/");
+
 /**
  * Tests, fixtures, configs and scripts of a workspace must reach another
  * `apps/*` or `packages/*` workspace through its package entries (`.` or a
  * subpath such as `./testing`), never by a relative path into its files.
- * Relative imports and `vi.mock()` paths both count.
+ * Relative imports and `vi.mock()` paths both count. `references` comes from
+ * `crossWorkspaceReferences`, so production source (checked by the boundary
+ * scan) and bare string literals are skipped here.
  *
  * Bundled plugins are exempt as targets: they publish no package entries, the
  * plugin loader reads their files by path, and tests load those modules as
@@ -31,7 +33,7 @@ export function isProductionFile(workspace, file) {
  * and each target spelled as its specifier resolves. Every pair must still
  * occur, so a stale exception fails as well.
  */
-export function testSourceImportErrors(root, workspaces, allowlist = []) {
+export function testSourceImportErrors(root, references, allowlist = []) {
   const errors = [];
   const allowed = new Map();
   for (const entry of allowlist) {
@@ -42,31 +44,20 @@ export function testSourceImportErrors(root, workspaces, allowlist = []) {
     for (const target of entry.imports ?? [])
       allowed.set(`${entry.from}\0${target}`, false);
   }
-  for (const workspace of workspaces) {
-    for (const file of sourceFiles(workspace.directory)) {
-      if (isProductionFile(workspace, file)) continue;
-      const from = path.relative(root, file).split(path.sep).join("/");
-      const imports = packageImports(file, readFileSync(file, "utf8"), {
-        mocks: true,
-      });
-      for (const { specifier, mock } of imports) {
-        if (!specifier.startsWith(".")) continue;
-        const target = path.resolve(path.dirname(file), specifier);
-        const owner = workspaces.find((item) =>
-          target.startsWith(`${item.directory}${path.sep}`),
-        );
-        if (!owner || owner === workspace || owner.group === "plugins")
-          continue;
-        const key = `${from}\0${path.relative(root, target).split(path.sep).join("/")}`;
-        if (allowed.has(key)) {
-          allowed.set(key, true);
-          continue;
-        }
-        errors.push(
-          `${from}: ${specifier}: ${mock ? "mocks" : "imports"} a file of ${owner.manifest.name} by relative path; use its public or ./testing entry`,
-        );
-      }
+  for (const reference of references) {
+    const { file, workspace, owner, target, specifier, typed, mocked } =
+      reference;
+    if (!typed && !mocked) continue;
+    if (owner.group === "plugins" || isProductionFile(workspace, file))
+      continue;
+    const key = `${posix(root, file)}\0${posix(root, target)}`;
+    if (allowed.has(key)) {
+      allowed.set(key, true);
+      continue;
     }
+    errors.push(
+      `${posix(root, file)}: ${specifier}: ${mocked ? "mocks" : "imports"} a file of ${owner.manifest.name} by relative path; use its public or ./testing entry`,
+    );
   }
   for (const [key, used] of allowed)
     if (!used)

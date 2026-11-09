@@ -970,6 +970,9 @@ importers:
       '@covel/store':
         specifier: workspace:*
         version: link:../../packages/store
+      '@covel/test-runtime':
+        specifier: workspace:*
+        version: link:../../packages/test-runtime
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
