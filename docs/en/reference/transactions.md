@@ -211,15 +211,15 @@ First, two rules before commit that apply to every backend.
 - Execution history that was already recorded is settled as failed.
 - Client input that has already been stored is outside this boundary.
 
-**The story must complete.** Completing the story is a condition for the commit. In each of the three cases below, the commit of the whole execution is refused before any buffered proposal, journal message, or player-turn count is committed:
+**The story must complete.** Completing the story is a condition for the commit. In each of the two cases below, the commit of the whole execution is refused before any buffered proposal, journal message, or player-turn count is committed:
 
 - A runtime with `outputKind: story` failed.
 - A story result succeeded, but after normalization under [Story output](./plugins.md#story-output) it has no text (no segment has text, so `narrativeOutput` is empty).
-- A dimension provider failed in the same execution, so the executor held back the story (`dimension-snapshot-unavailable`).
 
 Related rules:
 
 - When the story is skipped for another reason (its guard, or a declared gate), the execution is not refused.
+- When a dimension provider fails in the same execution, the execution is not refused. The story runs and reads the saved values frozen when the execution started; see [World Model](./world-model.md#turn-timing-and-settlement-receipts).
 - Client messages that have already been stored are not part of this transaction.
 - Only agent output accepted through `submit-output` validation and review can enter commit. Missing or rejected submissions use bounded ordinary steps for correction; exhaustion fails the story, without substituting a draft.
 - This does not retry or undo side effects that external tools have already caused.
@@ -642,7 +642,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 
-`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
+`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. Next to a successful story, a failed handler of an auxiliary plugin rejects only its own plugin's proposals; another plugin's proposal skips that handler and commits; see [Hooks](./hooks.md#auxiliary-hook-failures). `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
 
 ## World Data import
 

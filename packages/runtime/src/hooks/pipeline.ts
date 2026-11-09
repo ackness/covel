@@ -10,8 +10,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * - A handler that returns nothing made no decision: the pipeline continues.
  * - A handler that throws, times out or returns a malformed result is a failed
  *   handler. On a guard event (GUARD_HOOK_EVENTS) the pipeline fails closed and
- *   answers abort with the error message. On every other event the handler is
- *   skipped: later handlers run and earlier replacements are kept.
+ *   answers abort with the error message, except where GUARD_FAILURE_SCOPE
+ *   keeps an auxiliary plugin's failure to that plugin's own unit: the chain
+ *   then goes on and the result lists the failure in `confined`. On every
+ *   other event the handler is skipped: later handlers run and earlier
+ *   replacements are kept.
  * - All aborts/timeouts/errors emit observability events via the EventBus.
  */
 
@@ -21,9 +24,14 @@ import { describeReplacement } from "./rewrite-summary.js";
 import { z } from "zod";
 import type { EventBus } from "@covel/events";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
+import {
+  GUARD_FAILURE_SCOPE,
+  GUARD_HOOK_EVENTS,
+  HOOK_SEMANTICS,
+} from "./types.js";
 import {
   currentActivePluginIds,
+  currentStoryPluginIds,
   currentHookLocale,
   currentHookLogicalTurn,
   currentHookLogicalKey,
@@ -32,12 +40,19 @@ import {
   isHookScopeActive,
 } from "./hook-scope.js";
 import type {
+  ConfinedHookFailure,
   HookEvent,
   HookContext,
   HookHandler,
   HookRegistration,
   HookResult,
+  HookRunResult,
 } from "./types.js";
+
+/** One handler's result; a failure the pipeline went on without is named. */
+type HandlerResult<P> = HookResult<P> & {
+  readonly confinedFailure?: ConfinedHookFailure;
+};
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
@@ -219,7 +234,7 @@ export class HookPipeline {
     ctx: HookContext,
     payload: P,
     opts?: HookPipelineRunOptions,
-  ): Promise<HookResult<P>> {
+  ): Promise<HookRunResult<P>> {
     opts = {
       ...opts,
       logicalKey:
@@ -309,22 +324,28 @@ export class HookPipeline {
     payload: P,
     handlers: readonly HookRegistration<unknown>[],
     opts?: HookPipelineRunOptions,
-  ): Promise<HookResult<P>> {
+  ): Promise<HookRunResult<P>> {
     let currentPayload: P = payload;
     let hasReplace = false;
     const accumulated: Partial<P> = {};
+    const confined: ConfinedHookFailure[] = [];
+    const withConfined = <R extends HookResult<P>>(
+      result: R,
+    ): HookRunResult<P> =>
+      confined.length > 0 ? { ...result, confined } : result;
 
     for (const reg of handlers) {
-      const result = await this.invokeHandler(
+      const { confinedFailure, ...result } = await this.invokeHandler(
         event,
         ctx,
         currentPayload,
         reg,
         opts,
       );
+      if (confinedFailure) confined.push(confinedFailure);
 
       if (result.action === "abort") {
-        return result;
+        return withConfined(result);
       }
 
       if ("replace" in result && result.replace !== undefined) {
@@ -347,9 +368,9 @@ export class HookPipeline {
     }
 
     if (hasReplace) {
-      return { action: "continue", replace: accumulated };
+      return withConfined({ action: "continue", replace: accumulated });
     }
-    return { action: "continue" };
+    return withConfined({ action: "continue" });
   }
 
   private async runParallel<P>(
@@ -387,7 +408,7 @@ export class HookPipeline {
     payload: P,
     reg: HookRegistration<unknown>,
     opts?: HookPipelineRunOptions,
-  ): Promise<HookResult<P>> {
+  ): Promise<HandlerResult<P>> {
     const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const handler = reg.handler as HookHandler<P>;
 
@@ -489,12 +510,20 @@ export class HookPipeline {
           reason,
         },
       );
-      // A guard fails closed. Elsewhere the failed handler changed nothing, so
-      // the chain goes on without it and keeps what earlier handlers replaced.
-      // A cancelled execution always ends the chain.
-      return GUARD_HOOK_EVENTS.has(event) || ctx.signal?.aborted
+      // A cancelled execution always ends the chain. Elsewhere than on a
+      // guard the failed handler changed nothing, so the chain goes on without
+      // it and keeps what earlier handlers replaced. A guard fails closed,
+      // unless its failure is confined to its own plugin's unit.
+      if (ctx.signal?.aborted)
+        return { action: "abort", reason, handlerFailed: true };
+      if (!GUARD_HOOK_EVENTS.has(event)) return { action: "continue" };
+      const confinedTo = confinedOwner(event, ctx, reg);
+      return confinedTo === undefined
         ? { action: "abort", reason, handlerFailed: true }
-        : { action: "continue" };
+        : {
+            action: "continue",
+            confinedFailure: { pluginId: confinedTo, reason },
+          };
     }
 
     await this.handlerOutcome(ctx, reg, "ok", opts?.emitter, opts?.logicalKey);
@@ -547,6 +576,34 @@ export function createHookPipeline(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * The plugin a failed guard handler is confined to, when the chain goes on
+ * without it: an auxiliary plugin's handler — not the framework's, not a
+ * story plugin's — in an operation that has a story, on an event whose
+ * `GUARD_FAILURE_SCOPE` allows it. `own-subject` still fails closed for the
+ * owner's own runtime or proposal. Identity comes from `outputKind: story`,
+ * which the scope carries; never from a plugin ID.
+ */
+function confinedOwner(
+  event: HookEvent,
+  ctx: HookContext,
+  reg: HookRegistration<unknown>,
+): string | undefined {
+  const owner = reg.pluginId;
+  const stories = currentStoryPluginIds();
+  if (owner === undefined || !stories || stories.has(owner)) return undefined;
+  switch (GUARD_FAILURE_SCOPE[event]) {
+    case "own-runtimes":
+      return owner;
+    case "own-subject":
+      return ctx.pluginId !== undefined && ctx.pluginId !== owner
+        ? owner
+        : undefined;
+    default:
+      return undefined;
+  }
+}
 
 function orderHandlers(
   handlers: readonly HookRegistration<unknown>[],

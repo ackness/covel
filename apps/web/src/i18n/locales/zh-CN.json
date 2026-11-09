@@ -394,7 +394,7 @@
       "inputMissing": "缺少它需要的输入",
       "missingProvider": "没有插件提供它需要的输入",
       "inputUnusable": "它收到的输入不能用",
-      "dimensionsPaused": "世界状态更新已暂停"
+      "hookFailed": "这个插件的 Hook 出错，本回合它没有运行"
     },
     "pluginTags": {
       "costLlm": "调用模型",

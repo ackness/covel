@@ -67,22 +67,48 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 };
 
 /**
+ * What a failed guard handler stops when an auxiliary plugin owns it: one
+ * that runs no story runtime, in an execution that has a story.
+ *
+ * - `own-runtimes`: the handler judged the whole execution. Its plugin's
+ *   runtimes sit this execution out; everything else runs.
+ * - `own-subject`: the handler judged one runtime or proposal. It still fails
+ *   closed for its own plugin's; another plugin's goes on without it.
+ * - `closed`: it fails closed whatever it judged. `PreToolUse` and
+ *   `ReviewAgentOutput` are the permission and content gates: a tool call's
+ *   side effects reach outside the session and cannot be rolled back, and a
+ *   reviewer may exist to keep text from players. `PreCompaction` already
+ *   stops only this turn's history compaction.
+ *
+ * A failed handler of the story plugin, of the framework, or in an execution
+ * without a story fails closed on every guard event.
+ */
+export type GuardFailureScope = "own-runtimes" | "own-subject" | "closed";
+
+export const GUARD_FAILURE_SCOPE: Readonly<
+  Partial<Record<HookEvent, GuardFailureScope>>
+> = {
+  TurnStart: "own-runtimes",
+  PreCompaction: "closed",
+  PreRuntime: "own-subject",
+  PreToolUse: "closed",
+  ReviewAgentOutput: "closed",
+  PreStateCommit: "own-subject",
+};
+
+/**
  * Sequential events whose call site acts on `abort`: it vetoes the turn, the
  * compaction, the runtime, the tool call or the proposal. A handler of one of
  * these that throws, times out or returns a malformed result fails closed —
  * the pipeline answers `abort`, since a broken policy must not let the guarded
- * operation through. Every other sequential event only transforms its payload
- * and reads `abort` as "no change", so a failed handler there is skipped and
- * the replacements of the handlers before it are kept.
+ * operation through — within the scope `GUARD_FAILURE_SCOPE` gives it. Every
+ * other sequential event only transforms its payload and reads `abort` as
+ * "no change", so a failed handler there is skipped and the replacements of
+ * the handlers before it are kept.
  */
-export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
-  "TurnStart",
-  "PreCompaction",
-  "PreRuntime",
-  "PreToolUse",
-  "ReviewAgentOutput",
-  "PreStateCommit",
-]);
+export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set(
+  Object.keys(GUARD_FAILURE_SCOPE) as HookEvent[],
+);
 
 // ── Hook context (read-only metadata about the current hook site) ──
 
@@ -157,6 +183,22 @@ export type HookResult<P> =
       readonly reason: string;
       readonly handlerFailed?: true;
     };
+
+/** A failed guard handler of an auxiliary plugin, kept to that plugin's unit. */
+export interface ConfinedHookFailure {
+  /** The plugin that registered the failed handler. */
+  readonly pluginId: string;
+  readonly reason: string;
+}
+
+/**
+ * What `HookPipeline.run` answers: the chain's result, plus the failed guard
+ * handlers it went on without (see `GUARD_FAILURE_SCOPE`). For `TurnStart`
+ * the caller sits each listed plugin's runtimes out of the execution.
+ */
+export type HookRunResult<P> = HookResult<P> & {
+  readonly confined?: readonly ConfinedHookFailure[];
+};
 
 // ── Hook handler ─────────────────────────────────────────────────
 

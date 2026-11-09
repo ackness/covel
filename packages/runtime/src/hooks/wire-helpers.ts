@@ -32,7 +32,12 @@ import type {
 } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
 import { cloneHookData } from "./hook-data.js";
-import type { HookContext, HookEvent, HookResult } from "./types.js";
+import type {
+  HookContext,
+  HookEvent,
+  HookResult,
+  HookRunResult,
+} from "./types.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
@@ -87,7 +92,7 @@ async function runHook<P>(
   event: HookEvent,
   payload: P,
   extra?: HookCtxExtra,
-): Promise<HookResult<P> | undefined> {
+): Promise<HookRunResult<P> | undefined> {
   if (!opts.pipeline) return undefined;
   return opts.pipeline.run(event, buildHookCtx(opts, event, extra), payload, {
     eventBus: opts.eventBus,
@@ -133,10 +138,14 @@ export interface TurnStartPayload {
   readonly activeRuntimes: readonly string[];
 }
 
+/**
+ * `confined` lists the auxiliary plugins whose handler failed: their
+ * runtimes sit this execution out while the rest of it runs.
+ */
 export async function runTurnStartHook(
   opts: BaseOpts,
   payload: TurnStartPayload,
-): Promise<HookResult<TurnStartPayload>> {
+): Promise<HookRunResult<TurnStartPayload>> {
   return (await runHook(opts, "TurnStart", payload)) ?? { action: "continue" };
 }
 

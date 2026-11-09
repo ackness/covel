@@ -308,7 +308,7 @@ flowchart TB
     Keep --> End
 ```
 
-图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。
+图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。有故事的回合里，辅助插件的守卫 Hook 出错只拦住这个插件自己的 runtime 或 proposal，故事和其他插件照常运行，见[辅助插件的 Hook 失败时](../reference/hooks.md#auxiliary-hook-failures)。维度提供者的 runtime 失败也不拦住故事，见 [World Model](../reference/world-model.md#回合时序与结算回执)。
 
 **Stage 分带**（`packages/runtime/src/turn-executor/scheduling.ts` + `packages/runtime/src/schedule/` 硬性约束）：
 

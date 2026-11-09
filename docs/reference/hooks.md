@@ -11,7 +11,7 @@ Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或
 Hook 不写玩法。一条玩法规则应该放在 runtime 或工具里。
 
 > [!NOTE]
-> 事件名只在一处定义：`HOOK_EVENTS`（`packages/shared/src/types/hooks.ts`）。每个事件怎么运行写在 `HOOK_SEMANTICS` 和 `GUARD_HOOK_EVENTS`（`packages/runtime/src/hooks/types.ts`），负载在 `packages/runtime/src/hooks/wire-helpers.ts` 里构造。本页和这些表对不上时，`packages/runtime/tests/hooks-reference-doc.test.ts` 会失败。
+> 事件名只在一处定义：`HOOK_EVENTS`（`packages/shared/src/types/hooks.ts`）。每个事件怎么运行写在 `HOOK_SEMANTICS`、`GUARD_HOOK_EVENTS` 和 `GUARD_FAILURE_SCOPE`（`packages/runtime/src/hooks/types.ts`），负载在 `packages/runtime/src/hooks/wire-helpers.ts` 里构造。本页和这些表对不上时，`packages/runtime/tests/hooks-reference-doc.test.ts` 会失败。
 
 ## Declaring and registering
 
@@ -98,10 +98,41 @@ runtime 的身份只在上下文里。负载不会重复 `pluginId` 或 `runtime
 
 handler 抛出异常、超时或返回了格式不对的结果，都算这个 handler 失败。失败之后怎么办，取决于事件：
 
-- **可以拦截的事件**：失败按 `abort` 处理。一条坏掉的规则不能让它本该拦住的操作通过。
 - **其他事件**：跳过这个 handler，它之前的 handler 做出的改写保留，失败记入 trace（`hook.error`）。
+- **可以拦截的事件**：失败按 `abort` 处理，一条坏掉的规则不能让它本该拦住的操作通过。辅助插件的 handler 有例外，见下文。
 
-抛错、超时或返回无效结果，会计入注册这个 Hook 的插件的[故障熔断](./protocol.md#插件故障熔断)。主动返回 `abort` / 否决不算 Hook 故障；`PreStateCommit` 的主动否决属于 proposal 所属插件的拒绝。父执行取消不算 Hook 故障。
+只有失败适用这些规则。handler 主动返回的 `abort` 或否决，效果在任何情况下都不变。
+
+<a id="auxiliary-hook-failures"></a>
+
+### 辅助插件的 Hook 失败时
+
+**辅助插件**指没有 `outputKind: story` runtime 的插件。内核按 runtime 的 `outputKind` 认出故事插件，不看插件 ID。
+
+一个辅助插件的 Hook 出了 bug，不应该让整个回合失败。所以在有故事的执行里，辅助插件的 guard handler 失败时，只拦住这个插件自己的那一份，执行接着进行。每个事件拦住的范围如下：
+
+<!-- prettier-ignore -->
+| 事件 | 范围 | 辅助插件的 handler 失败时 |
+| --- | --- | --- |
+| `TurnStart` | `own-runtimes` | 这个插件的 runtime 在本次执行里都不运行，结果记为 `skipped`，原因是 `hook-failed`。故事和其他插件照常运行，回合照常提交。 |
+| `PreCompaction` | `closed` | 按 `abort` 处理：这一回合不压缩历史。回合照常进行。 |
+| `PreRuntime` | `own-subject` | 判的是这个插件自己的 runtime 时，跳过那个 runtime，和以前一样。判的是别的插件的 runtime 时，跳过这个 handler，那个 runtime 照常运行。 |
+| `ReviewAgentOutput` | `closed` | 按 `abort` 处理：被审查的 runtime 失败。这是内容闸门，见下。 |
+| `PreToolUse` | `closed` | 按 `abort` 处理：拒绝这一次工具调用。这是权限闸门，见下。 |
+| `PreStateCommit` | `own-subject` | 判的是这个插件自己的 proposal 时，拒绝它（`code: "hook-failed"`），按[提交单元](./transactions.md#回合级单事务)的规则丢弃这个插件的单元。判的是别的插件的 proposal 时，跳过这个 handler，那条 proposal 照常提交。 |
+
+下面三种情况不适用上表，失败一律按 `abort` 处理：
+
+- **执行里没有故事。** 手动运行、重试、后台任务和开局准备都是这样，它们整体提交或整体回滚。回合开始时，看本次执行会不会运行故事 runtime；提交时，看有没有故事 runtime 成功。
+- **handler 属于故事插件**，也就是在这个会话里有 `outputKind: story` runtime 的插件。
+- **handler 是框架自己注册的。**
+
+`PreToolUse` 和 `ReviewAgentOutput` 是安全闸门，对任何插件都失败关闭：
+
+- `PreToolUse` 管工具调用能不能执行。工具调用会发出外部请求、生成媒体，这些副作用回滚撤不回来。失败只拦住这一次调用，模型收到 `refused` 错误，可以接着做别的事。
+- `ReviewAgentOutput` 的审查可能就是为了不让玩家读到某些文字，见[压住故事草稿](#holds-drafts)。放过一个坏掉的审查，等于发布没审过的文字。
+
+失败都记入 trace（`hook.error` 或 `hook.timeout`），玩家在回合的执行状态里看到被跳过的 runtime 和原因。抛错、超时或返回无效结果，计入注册这个 Hook 的插件的[故障熔断](./protocol.md#插件故障熔断)：同一会话连续三个输入失败后，这个插件被暂停，玩家看到提示。主动返回 `abort` / 否决不算 Hook 故障；`PreStateCommit` 的主动否决属于 proposal 所属插件的拒绝。父执行取消不算 Hook 故障，也总是结束整条链。
 
 ## Events
 
@@ -144,7 +175,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 负载：`{ playerMessage, actions, activeRuntimes }`。`playerMessage` 是内核从玩家行动渲染出的文字；`actions` 是解析后的行动（每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`），没有玩家输入的执行是空数组；`activeRuntimes` 是这个会话的 runtime ID 列表。
 
-`abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。
+`abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。辅助插件的 handler 失败时，只有这个插件的 runtime 不运行，见[辅助插件的 Hook 失败时](#auxiliary-hook-failures)。
 
 ### `PreCompaction`
 
@@ -342,6 +373,7 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 
 - `abort` 拒绝这条 proposal，带上原因。
 - `replace.proposal.payload` 替换 payload。proposal 的类型、来源和 ID 保持不变。
+- handler 失败时，拒绝的范围见[辅助插件的 Hook 失败时](#auxiliary-hook-failures)。
 
 [写服务](./plugin-extensions.md#写服务)暂存的写入以提供者为来源到达：`ctx.pluginId` 是提供者，`ctx.runtimeId` 是 `service:<服务名>`，发起调用的插件不出现在 Hook 里。拒绝其中任何一条，整个操作被拒（见[事务 · 写服务的操作](./transactions.md#写服务的操作)）。
 

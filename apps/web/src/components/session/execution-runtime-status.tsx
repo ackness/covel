@@ -136,7 +136,7 @@ const SKIP_REASON_KEYS: Readonly<Record<string, string>> = {
   "input-missing": "inputMissing",
   "export-missing": "inputMissing",
   "missing-provider": "missingProvider",
-  "dimension-snapshot-unavailable": "dimensionsPaused",
+  "hook-failed": "hookFailed",
   "cardinality-conflict": "inputUnusable",
   "input-schema-invalid": "inputUnusable",
   "input-schema-incompatible": "inputUnusable",

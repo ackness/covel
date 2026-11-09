@@ -162,6 +162,27 @@ export function makeFailedResult(
 }
 
 /**
+ * Whether the execution runs a story runtime: a player turn with one active,
+ * or a manual run, retry or detached stage aimed at one.
+ */
+export function executionNarrates(
+  input: Pick<TurnInput, "manualTrigger" | "detachedStage">,
+  activeRuntimes: readonly Pick<RuntimeManifest, "name" | "outputKind">[],
+): boolean {
+  const targeted =
+    input.detachedStage?.runtimeId ?? input.manualTrigger?.runtimeId;
+  const targets = new Set(
+    input.manualTrigger?.runtimeIds ?? (targeted ? [targeted] : []),
+  );
+  const isTargeted = Boolean(input.manualTrigger || input.detachedStage);
+  return activeRuntimes.some(
+    (runtime) =>
+      runtime.outputKind === "story" &&
+      (!isTargeted || targets.has(runtime.name)),
+  );
+}
+
+/**
  * Build a framework `skipped` result (the shape the upstream gate emits). `by`
  * names the framework gate (`framework:dependencyCycle`, `framework:setupGate`)
  * and `detail` carries gate-specific diagnostics (e.g. the full cycle path).

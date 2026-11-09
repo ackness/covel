@@ -211,15 +211,15 @@ compareAndSetPluginDataBatch(
 - 之前已经记录的执行历史结算为 failed。
 - 已经持久化的客户端输入不在这条边界之内。
 
-**故事必须完成。** 故事完成是提交的前提。下面三种情况会在任何缓冲的 proposal、journal 消息或玩家回合计数提交之前，拒绝整次执行的提交：
+**故事必须完成。** 故事完成是提交的前提。下面两种情况会在任何缓冲的 proposal、journal 消息或玩家回合计数提交之前，拒绝整次执行的提交：
 
 - `outputKind: story` 的 runtime 失败了。
 - story 的结果成功了，但按[故事输出](./plugins.md#故事输出)规整后没有正文（没有一段有文字，`narrativeOutput` 为空）。
-- 维度提供者在同一次执行里失败，执行器因此扣住了故事（`dimension-snapshot-unavailable`）。
 
 相关的规则：
 
 - 故事因为其他原因被跳过（它的 guard，或声明的门控）时，不拒绝执行。
+- 维度提供者在同一次执行里失败，不拒绝执行。故事照常运行，读执行开始时冻结的已保存值，见 [World Model](./world-model.md#回合时序与结算回执)。
 - 已经持久化的客户端消息不在这个事务里。
 - agent 只有通过 `submit-output` 校验和审查的输出才可进入提交。缺失或被拒绝的提交用有限的普通步骤纠正；用尽预算仍未接受时，故事失败，不能用草稿替代。
 - 这不会重试或撤销外部工具已经产生的副作用。
@@ -642,7 +642,7 @@ await store.withTransaction(async (tx) => {
 
 `isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
 
-`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
+`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。有成功的故事时，辅助插件的 handler 失败只拒绝它自己插件的 proposal；别的插件的 proposal 跳过这个 handler，照常提交，见 [Hook](./hooks.md#auxiliary-hook-failures)。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
 
 ## World Data import
 

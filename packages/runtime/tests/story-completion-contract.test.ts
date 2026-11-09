@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { runtimeDoneTool, tool } from "@covel/tools";
 import { z } from "zod";
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import {
+  promptHistoryTransformV1,
+  sessionWorldContextV1,
+  type RuntimeManifest,
+  type RuntimeResult,
+} from "@covel/shared";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import {
@@ -231,7 +236,7 @@ describe("story completion contract", () => {
     },
   );
 
-  it("does not commit or count an action whose story was held back by a failed dimension provider", async () => {
+  it("tells and commits the story when the dimension provider fails, with dimensions paused for the turn", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     const runtimes = [
@@ -288,7 +293,12 @@ describe("story completion contract", () => {
         // The provider's extension publishes a snapshot; only its runtime fails.
         dimensionContext: frozenDimensions,
         extensionExecution: {
-          run: async () => frozenDimensions,
+          run: async (point: unknown, input: { messages?: unknown }) =>
+            point === sessionWorldContextV1
+              ? frozenDimensions
+              : point === promptHistoryTransformV1
+                ? { messages: input.messages }
+                : [],
         } as unknown as ExecutionDeps["extensionExecution"],
         llm: {
           generate: async () => {
@@ -314,15 +324,18 @@ describe("story completion contract", () => {
         }),
       },
     );
-    expect(
+    const resultOf = (runtimeId: string) =>
       execution.result.runtimeResults.find(
-        (result) => result.runtimeId === manifest.name,
-      ),
-    ).toMatchObject({
-      status: "skipped",
-      output: { reason: "dimension-snapshot-unavailable" },
+        (result) => result.runtimeId === runtimeId,
+      );
+    // The provider's failure is its own: the story still runs, on the
+    // committed values every runtime of the execution already reads.
+    expect(resultOf("dimensions/context")).toMatchObject({
+      status: "failed",
+      error: "Snapshot unavailable",
     });
-    expect(modelCalls).toBe(0);
+    expect(resultOf(manifest.name)).toMatchObject({ status: "success" });
+    expect(modelCalls).toBe(1);
 
     const committed = await commitExecution({
       enqueueReleasedJobsInTx: refuseReleasedJobs,
@@ -330,15 +343,25 @@ describe("story completion contract", () => {
       execution,
       completion: { kind: "turn", turnId: "turn-story", durationMs: 0 },
     });
-    expect(committed.status).toBe("failed");
-    expect(committed.error).toContain("dimension provider failed");
+    expect(committed.status).toBe("committed");
     expect(
       (await store.getSession("session-story"))?.completedPlayerTurns,
-    ).toBe(0);
+    ).toBe(1);
     expect(
-      await store.getPluginData("session-story", "planner", "plan", "revealed"),
-    ).toBeFalsy();
-    expect(await store.listTurnMessages("session-story")).toHaveLength(0);
+      (
+        await store.getPluginData(
+          "session-story",
+          "planner",
+          "plan",
+          "revealed",
+        )
+      )?.value,
+    ).toBe(true);
+    expect(
+      (await store.listMessages("session-story")).filter(
+        (message) => message.role === "assistant",
+      ),
+    ).toHaveLength(1);
   });
 
   it("rejects story envelopes without prose while leaving system tool output valid", () => {

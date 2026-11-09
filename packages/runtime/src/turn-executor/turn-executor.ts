@@ -50,6 +50,7 @@ import { __testOnly_parseFinalOutputEnvelope } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
+  executionNarrates,
   makeSkippedResult,
   retainPreGameRuntimes,
 } from "./turn-executor-helpers.js";
@@ -60,7 +61,11 @@ import {
   buildHookSettings,
   snapshotUserSettings,
 } from "../hooks/hook-settings.js";
-import { runWithHookScope } from "../hooks/hook-scope.js";
+import {
+  currentStoryPluginIds,
+  runWithHookScope,
+  storyPluginIdsOf,
+} from "../hooks/hook-scope.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
   type RecursiveTurnInput,
@@ -84,10 +89,7 @@ import {
   planTurnDetachment,
 } from "../schedule/turn-completion.js";
 import { DIMENSION_CONTRACT } from "@covel/shared";
-import {
-  DIMENSION_SNAPSHOT_SKIP,
-  dimensionExecutionBarrier,
-} from "./dimension-barrier.js";
+import { dimensionExecutionBarrier } from "./dimension-barrier.js";
 import {
   createWorldModelView,
   memoizeWorldModelReads,
@@ -186,8 +188,23 @@ export async function runTurnPipeline(
   };
   const subagents =
     deps.subagents ?? createSubagentRunner({ activeRuntimes, delegation });
+  // Whether the execution has a story is decided once, at the top: a nested
+  // execution commits in its parent's units, so it keeps the parent's answer.
+  // With a story, a failed guard hook of another plugin costs only that
+  // plugin's own unit (`GUARD_FAILURE_SCOPE`).
+  const storyPluginIds =
+    (options?.recursionDepth ?? 0) > 0
+      ? currentStoryPluginIds()
+      : executionNarrates(input, activeRuntimes)
+        ? storyPluginIdsOf(activeRuntimes)
+        : undefined;
+  const { storyPluginIds: _inherited, ...baseScope } = hookScope;
   return runWithHookScope(
-    { ...hookScope, locale: hookScope.locale ?? input.locale },
+    {
+      ...baseScope,
+      locale: hookScope.locale ?? input.locale,
+      ...(storyPluginIds ? { storyPluginIds } : {}),
+    },
     () =>
       executeTurnImpl(
         { ...input, userSettings },
@@ -288,6 +305,16 @@ async function executeTurnImpl(
         abortReason: tsResult.reason,
       };
     }
+    // An auxiliary plugin whose handler failed sits this execution out; the
+    // story and every other plugin go on.
+    if (tsResult.confined?.length)
+      deps = {
+        ...deps,
+        hookFailedPlugins: new Set([
+          ...(deps.hookFailedPlugins ?? []),
+          ...tsResult.confined.map((failure) => failure.pluginId),
+        ]),
+      };
   }
 
   let sessionState: LoadedTurnSessionState;
@@ -332,11 +359,7 @@ async function executeTurnImpl(
     store: deps.store,
     sessionId: input.sessionId,
     runtimes: activeRuntimes,
-    willNarrate: activeRuntimes.some(
-      (runtime) =>
-        runtime.outputKind === "story" &&
-        (!isTargeted || targetedRuntimeIds.has(runtime.name)),
-    ),
+    willNarrate: executionNarrates(input, activeRuntimes),
   });
   if (dimensionBarrier)
     return {
@@ -749,28 +772,10 @@ async function executeTurnImpl(
     triggerEvent: RuntimeInvocation["triggerEvent"],
     identity?: ParallelRuntimeIdentity,
   ): Promise<RuntimeResult> => {
-    // A provider that ran and did not publish blocks narration. One that was
-    // not scheduled (a targeted manual run or retry) only republishes
-    // committed values, which `deps.dimensionContext` already froze.
-    const providerStatus = dimensionProvider
-      ? completedResults.get(dimensionProvider.name)?.status
-      : undefined;
-    if (
-      manifest.outputKind === "story" &&
-      providerStatus !== undefined &&
-      providerStatus !== "success"
-    ) {
-      steeringReaders.settled(manifest.name);
-      return Promise.resolve(
-        makeSkippedResult(
-          manifest,
-          input,
-          DIMENSION_SNAPSHOT_SKIP.reason,
-          DIMENSION_SNAPSHOT_SKIP.by,
-          {},
-        ),
-      );
-    }
+    // A dimension provider that ran and did not publish costs only its own
+    // snapshot: the story reads the committed values that every runtime of
+    // this execution shares through `deps.dimensionContext`, which is all the
+    // provider republishes.
     return executeOneRuntime({
       manifest,
       input,

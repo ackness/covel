@@ -8,7 +8,6 @@ import type { StoreTransaction } from "@covel/store";
 import type { SessionEvent } from "@covel/shared";
 import { assertSuspensionWritesUnchanged } from "../resume/suspension-baseline.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
-import { isDimensionSnapshotSkip } from "../turn-executor/dimension-barrier.js";
 import { recordRuntimeTriggersTx } from "../trigger/trigger-ledger.js";
 import {
   bindDimensionProvider,
@@ -100,10 +99,8 @@ async function checkWriteBaseline(ctx: CommitTxContext): Promise<void> {
 
 function rejectUncommittableStory(ctx: CommitTxContext): void {
   // A failed story cannot complete a player action. Optional state
-  // extractors may fail independently after a valid narrative exists.
-  // A story held back because the dimension provider failed is the same
-  // case: committing would count the turn and keep the writes of the
-  // runtimes before it, with no narrative.
+  // extractors, the dimension provider among them, may fail independently
+  // after a valid narrative exists.
   for (const result of ctx.args.results) {
     if (ctx.options.kindOf(result) !== "story") continue;
     const error =
@@ -111,9 +108,7 @@ function rejectUncommittableStory(ctx: CommitTxContext): void {
         ? `Story runtime ${result.runtimeId} failed; the action was not committed.`
         : result.status === "success"
           ? storyOutputError(result.output)
-          : isDimensionSnapshotSkip(result)
-            ? `Story runtime ${result.runtimeId} did not run because the dimension provider failed; the action was not committed.`
-            : undefined;
+          : undefined;
     if (error) throw new Error(error);
   }
 }

@@ -464,6 +464,14 @@ async function executeRuntime(
   };
 
   try {
+    // ── Hook-failure gate ─────────────────────────────────────────
+    // This plugin's TurnStart hook failed in an execution with a story: its
+    // runtimes sit the execution out, and the rest of it goes on.
+    if (deps.hookFailedPlugins?.has(manifest.pluginId))
+      return emitGateTerminal(
+        makeSkippedResult(manifest, input, "hook-failed", "framework:hook"),
+        "hook-failed",
+      );
     if (
       input.detachedStage?.presentation !== undefined &&
       manifest.presentation === undefined

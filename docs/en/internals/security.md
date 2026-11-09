@@ -501,7 +501,9 @@ A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry
 
 - A hook with no return value means "continue".
 - When a rewriting hook fails, the rewrites that succeeded earlier are kept.
-- An exception or timeout in a security guard is still handled as "deny" (fail-closed). If every hook failure were treated as "continue", approval and commit guards could be bypassed.
+- An exception or timeout in a guard hook is handled as "deny" (fail-closed). If every hook failure were treated as "continue", approval and commit guards could be bypassed.
+- There is one exception: in an execution that has a story, a failed `TurnStart`, `PreRuntime` or `PreStateCommit` handler of an auxiliary plugin (one with no story runtime) rejects only that plugin's own runtimes or proposals, and other plugins skip the handler. These hooks are not a security boundary: the kernel checks write permissions (namespace ownership, reserved namespaces, dataset rules, the dimension provider binding) after the hooks, and a hook can only make them stricter, never looser.
+- `PreToolUse` and `ReviewAgentOutput` fail closed for every plugin: the external side effects of a tool call cannot be undone, and a review may exist to keep some text from players. Hooks of the framework and of the story plugin, and executions without a story, also always fail closed. The rules are in [Hooks](../reference/hooks.md#auxiliary-hook-failures).
 - The trace of a rewrite records only a summary of which keys were changed. It does not record the full prompt from before and after the rewrite.
 
 **Session writes.** Session changes, player actions, resuming suspensions, and action RPCs all share the live-session guard in `routes/api/session/locked-mutation.ts`.

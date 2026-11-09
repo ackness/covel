@@ -49,6 +49,13 @@ export interface HookScope {
    * `HookContext.locale`.
    */
   readonly locale?: string;
+  /**
+   * The plugins that run a story runtime, set only for an operation that has
+   * a story. It confines a failed guard hook of every other plugin to that
+   * plugin's own unit (`GUARD_FAILURE_SCOPE`); without it a failed guard
+   * hook fails closed.
+   */
+  readonly storyPluginIds?: ReadonlySet<string>;
 }
 
 const storage = new AsyncLocalStorage<HookScope>();
@@ -59,9 +66,37 @@ const EMPTY_SETTINGS: Readonly<Record<string, unknown>> = Object.freeze({});
 /** Run `fn` with the given active-plugin scope visible to the hook pipeline. */
 export function runWithHookScope<T>(scope: HookScope, fn: () => T): T {
   return storage.run(
-    { ...scope, activePluginIds: new Set(scope.activePluginIds) },
+    {
+      ...scope,
+      activePluginIds: new Set(scope.activePluginIds),
+      ...(scope.storyPluginIds
+        ? { storyPluginIds: new Set(scope.storyPluginIds) }
+        : {}),
+    },
     fn,
   );
+}
+
+/**
+ * The plugins that run a story runtime (`outputKind: story`) among
+ * `runtimes`: the ones whose failed guard hooks keep failing closed.
+ */
+export function storyPluginIdsOf(
+  runtimes: readonly {
+    readonly pluginId: string;
+    readonly outputKind?: string;
+  }[],
+): ReadonlySet<string> {
+  return new Set(
+    runtimes
+      .filter((runtime) => runtime.outputKind === "story")
+      .map((runtime) => runtime.pluginId),
+  );
+}
+
+/** The story plugins of the current operation, when it has a story. */
+export function currentStoryPluginIds(): ReadonlySet<string> | undefined {
+  return storage.getStore()?.storyPluginIds;
 }
 
 /** Active plugin ids for the current async context, or undefined if unscoped. */
