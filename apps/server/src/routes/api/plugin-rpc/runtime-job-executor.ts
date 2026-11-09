@@ -1,4 +1,4 @@
-import { planTurnDetachment } from "@covel/runtime";
+import { planTurnDetachment, type CommitIsolation } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
@@ -13,10 +13,8 @@ import type {
   RuntimeJobServices,
   createRuntimeJobCredentials,
 } from "./runtime-job-credentials.js";
-import {
-  enqueueEventFollowers,
-  type QueuedActivatedRuntimeJob,
-} from "./runtime-job-enqueue.js";
+import type { QueuedActivatedRuntimeJob } from "./runtime-job-enqueue.js";
+import { queueCommitFollowUps } from "../commit-envelope.js";
 import { settleActivatedRun } from "./runtime-response.js";
 import type { createPluginRpcRuntimeTurnRunner } from "./runtime-turn.js";
 import {
@@ -117,6 +115,7 @@ export function createRuntimeJobExecutor(deps: {
     const completeInTx = async (
       tx: StoreTransaction,
       turnResult: TurnResult,
+      isolation: CommitIsolation,
     ): Promise<void> => {
       const settlement = settleActivatedRun({
         activation: payload.activation,
@@ -124,19 +123,18 @@ export function createRuntimeJobExecutor(deps: {
         turnResult,
         ...(payload.expectFollower ? { expectFollower: true } : {}),
       });
-      followers.push(
-        ...(await enqueueEventFollowers(tx, {
-          sessionId: job.sessionId,
-          activeRuntimes,
-          followers: settlement.followers,
-          sourceTurnId: turnResult.turnId,
-          sourceRuntimeId: job.runtimeId,
-          locale: payload.locale,
-          ...(payload.userSettings
-            ? { userSettings: payload.userSettings }
-            : {}),
-        })),
-      );
+      const queued = await queueCommitFollowUps(tx, {
+        sessionId: job.sessionId,
+        activeRuntimes,
+        locale: payload.locale,
+        ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
+        sourceRuntimeId: job.runtimeId,
+        isolation,
+        results: turnResult.runtimeResults,
+        sourceTurnId: turnResult.turnId,
+        followers: settlement.followers,
+      });
+      followers.push(...queued.followerJobs);
       const result = {
         turnId: turnResult.turnId,
         executionId: turnResult.executionContext.executionId,

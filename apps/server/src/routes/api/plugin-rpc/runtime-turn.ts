@@ -12,6 +12,7 @@ import {
   executeTurn,
   buildHookSettings,
   snapshotUserSettings,
+  type CommitIsolation,
   type HookScope,
   type TurnExecutorDeps,
 } from "@covel/runtime";
@@ -166,6 +167,7 @@ export interface RunManualTurnArgs extends QueuedRunControl {
   readonly completeInTx?: (
     tx: StoreTransaction,
     result: import("@covel/shared").TurnResult,
+    isolation: CommitIsolation,
   ) => Promise<void>;
 }
 
@@ -183,6 +185,7 @@ export interface RunDeferredFollowerArgs extends QueuedRunControl {
   readonly completeInTx?: (
     tx: StoreTransaction,
     result: import("@covel/shared").TurnResult,
+    isolation: CommitIsolation,
   ) => Promise<void>;
 }
 
@@ -202,6 +205,7 @@ export interface RunDetachedStageArgs {
   readonly completeInTx: (
     tx: StoreTransaction,
     result: import("@covel/shared").TurnResult,
+    isolation: CommitIsolation,
   ) => Promise<void>;
   readonly beforeExecute?: () => Promise<void>;
   readonly executionFinished?: () => void;
@@ -343,7 +347,10 @@ export function createPluginRpcRuntimeTurnRunner(
         typeof commitExecution
       >[0]["proposalGuard"];
       readonly completionKind?: "turn" | "detached";
-      readonly extraInTx?: (tx: StoreTransaction) => Promise<void>;
+      readonly extraInTx?: (
+        tx: StoreTransaction,
+        isolation: CommitIsolation,
+      ) => Promise<void>;
     } = {},
   ): Promise<TurnCommitOutcome> {
     const turnResult = execution.result;
@@ -622,7 +629,10 @@ export function createPluginRpcRuntimeTurnRunner(
                       {
                         executionSignal,
                         ...(completeInTx
-                          ? { extraInTx: (tx) => completeInTx(tx, result) }
+                          ? {
+                              extraInTx: (tx, isolation) =>
+                                completeInTx(tx, result, isolation),
+                            }
                           : {}),
                         ...(proposalGuard ? { proposalGuard } : {}),
                         ...(opts.completionKind !== undefined
@@ -737,7 +747,10 @@ export function createPluginRpcRuntimeTurnRunner(
               processTurnResults(execution, emitter, hookScope, {
                 executionSignal,
                 ...(completeInTx
-                  ? { extraInTx: (tx) => completeInTx(tx, execution.result) }
+                  ? {
+                      extraInTx: (tx, isolation) =>
+                        completeInTx(tx, execution.result, isolation),
+                    }
                   : {}),
               }),
             );

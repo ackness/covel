@@ -69,9 +69,9 @@ import {
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
   enqueueActivatedRuntimeJob,
-  enqueueEventFollowers,
   type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
+import { queueCommitFollowUps } from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
@@ -456,6 +456,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // with `execution: 'background'` that were skipped so the user gets an
     // immediate response. They are queued as durable event jobs inside the
     // same commit transaction, so a rolled-back turn queues nothing.
+    // `queueCommitFollowUps` leaves out followers of an emitter whose writes
+    // were dropped; a sync run commits all-or-nothing, so none is today.
     const followerJobs: QueuedActivatedRuntimeJob[] = [];
     try {
       const summary = await runtimeTurnRunner.runManualTurn({
@@ -466,20 +468,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(retrySeedResults
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
-        completeInTx: async (tx, result) => {
-          followerJobs.push(
-            ...(await enqueueEventFollowers(tx, {
-              sessionId,
-              activeRuntimes,
-              followers: result.deferredFollowers ?? [],
-              sourceTurnId: result.turnId,
-              sourceRuntimeId: body.runtimeId,
-              locale: session.locale,
-              ...(userSettingsMap
-                ? { userSettings: snapshotUserSettings(userSettingsMap) }
-                : {}),
-            })),
-          );
+        completeInTx: async (tx, result, isolation) => {
+          const queued = await queueCommitFollowUps(tx, {
+            sessionId,
+            activeRuntimes,
+            locale: session.locale,
+            ...(userSettingsMap
+              ? { userSettings: snapshotUserSettings(userSettingsMap) }
+              : {}),
+            sourceRuntimeId: body.runtimeId,
+            isolation,
+            results: result.runtimeResults,
+            sourceTurnId: result.turnId,
+            followers: result.deferredFollowers ?? [],
+          });
+          followerJobs.push(...queued.followerJobs);
         },
       });
       // The runtime can report success while its proposals fail to land. A

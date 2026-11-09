@@ -48,10 +48,7 @@ import type { EventBus } from "@covel/events";
 import {
   abandonExecution,
   applyIsolatedRuntimes,
-  droppedEmitter,
-  droppedUpstream,
   executeTurn,
-  settleDroppedInputs,
   createInteractionSubmitter,
   findCommittedInteraction,
   interactionSubmissionPayload,
@@ -98,11 +95,11 @@ import {
 import { SessionLockTimeoutError } from "../../lib/session-lock.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { type RuntimeJobRecord } from "./plugin-rpc/jobs.js";
+import { type QueuedActivatedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
 import {
-  enqueueDeferredRuntimeJobs,
-  enqueueEventFollowers,
-  type QueuedActivatedRuntimeJob,
-} from "./plugin-rpc/runtime-job-enqueue.js";
+  queueCommitFollowUps,
+  queueReleasedRuntimeJobs,
+} from "./commit-envelope.js";
 import {
   readPluginUserSettings,
   loadSessionPluginUserSettings,
@@ -1541,69 +1538,47 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // queued here and announced with this turn's own.
             enqueueReleasedJobsInTx: async (tx, jobs) => {
               queuedRuntimeJobs.push(
-                ...(await enqueueDeferredRuntimeJobs(tx, {
-                  sessionId,
-                  session: effectiveSession,
-                  activeRuntimes,
-                  descriptors: jobs,
-                  locale: effectiveLocale,
-                  ...(userSettings ? { userSettings } : {}),
-                  skipInactive: true,
-                  registerCredentials: registerJobCredentials,
-                })),
+                ...(await queueReleasedRuntimeJobs(
+                  tx,
+                  {
+                    sessionId,
+                    session: effectiveSession,
+                    activeRuntimes,
+                    locale: effectiveLocale,
+                    ...(userSettings ? { userSettings } : {}),
+                    registerCredentials: registerJobCredentials,
+                  },
+                  jobs,
+                )),
               );
             },
-            extraInTx: async (tx, { droppedRuntimeIds }) => {
-              // Work derived from a runtime whose writes were dropped
-              // builds on output that never landed: queue none of it.
-              const committedView = {
-                runtimes: activeRuntimes,
-                results: result.runtimeResults,
-                dropped: droppedRuntimeIds,
-              };
-              const descriptors = (result.deferredRuntimeJobs ?? [])
-                .filter((descriptor) => {
-                  const target = activeRuntimes.find(
-                    (runtime) => runtime.name === descriptor.runtimeId,
-                  );
-                  return !target || !droppedUpstream(target, committedView);
-                })
-                .map((descriptor) =>
-                  settleDroppedInputs(descriptor, droppedRuntimeIds),
-                );
-              const followers = (result.deferredFollowers ?? []).filter(
-                (follower) =>
-                  !droppedEmitter(follower.triggerEvent.topic, committedView),
-              );
+            extraInTx: async (tx, isolation) => {
               if (playerInputWrites) {
                 await tx.commitPlayerInputMessage(playerInputWrites.message);
                 await tx.saveInteractionRecord(playerInputWrites.interaction);
               }
-              queuedRuntimeJobs.push(
-                ...(await enqueueDeferredRuntimeJobs(tx, {
-                  sessionId,
+              // Deferred stage jobs and background followers (e.g. image
+              // generation) are queued with the writes they react to, so a
+              // rolled-back turn queues none, and none derived from a
+              // runtime whose writes were dropped.
+              const queued = await queueCommitFollowUps(tx, {
+                sessionId,
+                activeRuntimes,
+                locale: effectiveLocale,
+                ...(model ? { modelOverride: model } : {}),
+                ...(userSettings ? { userSettings } : {}),
+                registerCredentials: registerJobCredentials,
+                isolation,
+                results: result.runtimeResults,
+                sourceTurnId: result.turnId,
+                deferred: {
                   session: effectiveSession,
-                  activeRuntimes,
-                  descriptors,
-                  locale: effectiveLocale,
-                  ...(model ? { modelOverride: model } : {}),
-                  ...(userSettings ? { userSettings } : {}),
-                  registerCredentials: registerJobCredentials,
-                })),
-              );
-              // Background followers (e.g. image generation) are
-              // queued with the writes they react to, so a
-              // rolled-back turn queues none.
-              followerJobs.push(
-                ...(await enqueueEventFollowers(tx, {
-                  sessionId,
-                  activeRuntimes,
-                  followers,
-                  sourceTurnId: result.turnId,
-                  locale: effectiveLocale,
-                  ...(userSettings ? { userSettings } : {}),
-                })),
-              );
+                  jobs: result.deferredRuntimeJobs ?? [],
+                },
+                followers: result.deferredFollowers ?? [],
+              });
+              queuedRuntimeJobs.push(...queued.runtimeJobs);
+              followerJobs.push(...queued.followerJobs);
               await saveInterjections(tx, control.closeInterjections());
             },
             ...(hookPipeline ? { hookPipeline } : {}),

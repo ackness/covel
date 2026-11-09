@@ -486,7 +486,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 父函数抛错、返回失败或因暂存操作后挂起而被拒绝时，递归子调用的写入不会保留。内核仍保留它们的操作记录，提交时把已经持久化的记录结算为 `discarded` / `caller-dropped`，不会留下永久的 `staged`。整次执行失败时使用上面的 `execution-failed` 原因。
 
-`extraInTx` 的第二个参数给出被丢弃的 runtime。主回合据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
+`extraInTx` 的第二个参数给出被丢弃的 runtime。每条提交路径（主回合、同步 manual RPC、后台作业）都通过服务端的 `queueCommitFollowUps`（`apps/server/src/routes/api/commit-envelope.ts`）排入后续工作，据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
 
 **PreStateCommit 在事务外运行。**
 

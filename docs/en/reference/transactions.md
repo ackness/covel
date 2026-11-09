@@ -486,7 +486,7 @@ When `commit_status` is settled, the fifth argument of `setTurnResultCommitStatu
 
 When a parent function throws, returns failure or is rejected for suspending after staging operations, its recursive children's writes are dropped. The kernel retains their operation records and settles the persisted records as `discarded` / `caller-dropped` at commit, leaving none permanently `staged`. If the whole execution fails, the reason is `execution-failed` as above.
 
-The second argument of `extraInTx` gives the dropped runtimes. The main turn uses it so it does not queue detached jobs and background event followers that depend on them. A detached job that is still queued records the dropped runtimes as `failed` in the frozen turn digest and in the upstream results.
+The second argument of `extraInTx` gives the dropped runtimes. Every commit path (the main turn, a sync manual RPC, a background job) queues its follow-up work through the server's `queueCommitFollowUps` (`apps/server/src/routes/api/commit-envelope.ts`), so it does not queue detached jobs and background event followers that depend on them. A detached job that is still queued records the dropped runtimes as `failed` in the frozen turn digest and in the upstream results.
 
 **PreStateCommit runs outside the transaction.**
 
