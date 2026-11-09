@@ -11,8 +11,8 @@ io:
         kernel: operations@1
     worldIR:
       from:
-        contract: world-ir-provider@1
-      accepts: "contract:world-ir@1"
+        contract: world-ir@2
+      required: false
 function: {}
 ---
 

@@ -1326,7 +1326,7 @@ pnpm lint
 | [story-events](../../plugins/story-events/README.md) | 隐藏剧情 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
 | [tabletop-rules](../../plugins/tabletop-rules/README.md) | 属性判定 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
 | [world-init](../../plugins/world-init/README.md) | 世界状态 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界状态，并持续维护 |
-| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir-provider@1` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
+| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir@2` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
 | [world-time](../../plugins/world-time/README.md) | 世界时间 | `core` | `world-time-evolution@1`、`world-time-context@1` | `context`、`advance` | 维护日期、时段和时间流向，按本轮故事结算时间变化 |
 
 每个插件的细节以它自己的 `PLUGIN.md` 和 README 为准。

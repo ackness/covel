@@ -1,7 +1,7 @@
 {
   "plugins/affinity/PLUGIN.md": {
-    "en": "54acad9631f719fe",
-    "zh": "e4e713488c58f86f"
+    "en": "4490d921a187eaa7",
+    "zh": "b788b576686988ba"
   },
   "plugins/char-creator/runtimes/character-tracker/RUNTIME.md": {
     "en": "7d3401a77ec5d01a",
@@ -24,8 +24,8 @@
     "zh": "5a72fbf1cd18740f"
   },
   "plugins/codex/PLUGIN.md": {
-    "en": "d3d6428e98f346ad",
-    "zh": "2fd6118f306caeaa"
+    "en": "d02a5be0ff63edbb",
+    "zh": "24482bd2cfbddd24"
   },
   "plugins/guide/PLUGIN.md": {
     "en": "790374ead3f05950",
@@ -40,8 +40,8 @@
     "zh": "36e6d8cc1dc52f67"
   },
   "plugins/npc-graph/runtimes/extractor/RUNTIME.md": {
-    "en": "f374efe553f5918e",
-    "zh": "55bb29a2147b8b5c"
+    "en": "b3a9745f5c078224",
+    "zh": "b3011c1c41509802"
   },
   "plugins/story-events/runtimes/plot/RUNTIME.md": {
     "en": "16a1f3d41c1a6feb",

@@ -21,7 +21,7 @@
 flowchart TD
   Input[Player message and optional current cast] --> Retrieve[pre-turn: deterministic graph retrieval]
   Retrieve --> Narrate[narrative-engine: story and character lookup tools]
-  Narrate --> IR[post-turn: world-ir-provider typed facts]
+  Narrate --> IR[post-turn: optional world-ir typed facts]
   IR --> Extract[post-turn: relationship extractor]
   Extract --> Commit[Graph proposals and transaction commit]
   Commit --> UI[plugin-data.changed and GraphCanvas]
@@ -42,7 +42,7 @@ flowchart TD
 
 ### 提取器：正文写完后更新图
 
-- **它读什么。** 必需的输入 `worldIR`，来自契约 `world-ir-provider@1`。那是另一个插件已经从本回合正文里整理好的结构化事实，所以提取器不用自己重读整段正文。
+- **它读什么。** 可选的输入 `worldIR`，来自契约 `world-ir@2`。那是另一个插件已经从本回合正文里整理好的结构化事实，所以提取器不用自己重读整段正文。会话没有这个提供者，或本回合抽取失败时，提取器改读对话里的本回合正文，照常更新图谱。
 - **它已经知道什么。** 已有的节点和关系在调用模型之前就放进了它的提示词（`<existing-npcs>` 和 `<existing-relations>`，各最多 60 条）。
 - **怎样才算完成。** 有变化时先调用 `upsert-npc-graph`，读取结果后单独调用 `submit-output`。没有变化时可直接提交 `{}`。业务工具本身不结束 runtime。
 - **什么不算。** 只用文字或 JSON 声称“已更新”，不会让图发生任何变化。

@@ -673,7 +673,7 @@ describe("world dataset destination enforcement", () => {
       );
       await writeFile(
         path.join(f.worldRoot, "data/world.data.yaml"),
-        "sources:\n  portraits:\n    kind: media\n    path: data/portrait.png\n    to: media\n    indexTo: contract:media-owner.assets@1\n    key: filename\n  facts:\n    kind: json\n    path: data/ir.json\n    schema: contract:world-ir@1\n    to: world:metadata.ir\n    effects: [projections]\n",
+        "sources:\n  portraits:\n    kind: media\n    path: data/portrait.png\n    to: media\n    indexTo: contract:media-owner.assets@1\n    key: filename\n  facts:\n    kind: json\n    path: data/ir.json\n    schema: contract:world-ir@2\n    to: world:metadata.ir\n    effects: [projections]\n",
       );
       const options = {
         ...f.options,

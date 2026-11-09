@@ -1,5 +1,5 @@
 ---
-version: 0.0.45
+version: 0.0.46
 displayName: Story Notes
 description: >-
   Picks out the people, relationships, events and clues from each turn, so the
@@ -11,9 +11,7 @@ author:
   url: https://github.com/ackness/covel
 license: MIT
 contracts:
-  world-ir-provider@1:
-    schema: ./schemas/world-ir.schema.json
-  world-ir@1:
+  world-ir@2:
     schema: ./schemas/world-ir.schema.json
   world-ir.vocabulary@1:
     schema: ./schemas/world-ir-vocabulary.schema.json
@@ -44,9 +42,9 @@ runtime:
     output:
       from:
         tool: submit-world-facts
-      schema: "contract:world-ir@1"
+      schema: "contract:world-ir@2"
       recordAs: world-ir-v1
-      contract: world-ir-provider@1
+      contract: world-ir@2
   agent:
     reasoning: false
     toolChoice: required

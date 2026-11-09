@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "contract:world-ir@1",
+  "$id": "contract:world-ir@2",
   "title": "Covel WorldIR v1",
   "type": "object",
   "additionalProperties": false,

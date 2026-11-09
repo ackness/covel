@@ -178,7 +178,7 @@ describe("ordinary and resumed private schema parity", () => {
       notifications: [{ message: "Ready" }],
       preGameDone: true,
     };
-    const m = manifest({ outputContract: "world-ir-provider@1" });
+    const m = manifest({ outputContract: "world-ir@2" });
     const deps = makeDeps(
       new FixedContentLLM(JSON.stringify(output)),
       undefined,
