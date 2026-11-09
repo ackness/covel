@@ -958,12 +958,18 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
       '@covel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
       '@covel/store':
         specifier: workspace:*
         version: link:../../packages/store
+      '@covel/test-runtime':
+        specifier: workspace:*
+        version: link:../../packages/test-runtime
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools

@@ -1,9 +1,9 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { packageImports } from "./package-imports.mjs";
+import { sourceFiles, workspaceOf } from "./package-exports.mjs";
+import { matcher } from "./push-scope.mjs";
 
-const SKIPPED = new Set(["node_modules", "dist", ".turbo", "coverage"]);
-const SOURCE = /\.(?:[cm]?[jt]s|tsx)$/;
 const DEPENDENCY_FIELDS = [
   "dependencies",
   "devDependencies",
@@ -11,21 +11,11 @@ const DEPENDENCY_FIELDS = [
 ];
 // `lint` type-checks imported files; `test` also reads files at run time.
 const TASKS = ["lint", "test"];
-
-function walk(directory) {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
-    SKIPPED.has(entry.name)
-      ? []
-      : entry.isDirectory()
-        ? walk(path.join(directory, entry.name))
-        : SOURCE.test(entry.name)
-          ? [path.join(directory, entry.name)]
-          : [],
-  );
-}
+// A relative path inside a string literal or module specifier.
+const RELATIVE_LITERAL = /["'`]((?:\.\.?\/)+[^"'`\n]*)["'`]/g;
 
 /** Every workspace package reachable through any dependency field. */
-export function dependencyClosure(workspace, byName) {
+function dependencyClosure(workspace, byName) {
   const seen = new Set();
   const pending = [workspace];
   while (pending.length) {
@@ -50,55 +40,50 @@ export function dependencyClosure(workspace, byName) {
  */
 export function crossWorkspaceReferences(workspaces) {
   const references = [];
-  const ownerOf = (target) =>
-    workspaces.find(
-      (item) =>
-        target === item.directory ||
-        target.startsWith(`${item.directory}${path.sep}`),
-    );
   for (const workspace of workspaces) {
-    for (const file of walk(workspace.directory)) {
+    for (const file of sourceFiles(workspace.directory)) {
       const source = readFileSync(file, "utf8");
       const seen = new Map();
-      const record = (specifier, typed) => {
+      for (const match of source.matchAll(RELATIVE_LITERAL)) {
+        const specifier = match[1];
         // Cut template literals at their first substitution.
-        const literal = specifier.split("${")[0];
-        const target = path.resolve(path.dirname(file), literal);
-        const owner = ownerOf(target);
-        if (!owner || owner === workspace) return;
-        const key = `${owner.name}\0${target}`;
-        const previous = seen.get(key);
-        if (previous) previous.typed ||= typed;
-        else {
-          const reference = {
-            file,
-            workspace,
-            owner,
-            target,
-            specifier,
-            typed,
-          };
-          seen.set(key, reference);
-          references.push(reference);
-        }
-      };
-      let imports = [];
-      try {
-        imports = packageImports(file, source);
-      } catch {
-        // Unparsable files are other checks' concern; literals still count.
+        const target = path.resolve(
+          path.dirname(file),
+          specifier.split("${")[0],
+        );
+        const owner = workspaceOf(workspaces, target);
+        if (!owner || owner === workspace) continue;
+        if (!seen.has(target))
+          seen.set(target, { file, workspace, owner, target, specifier });
       }
-      for (const { specifier } of imports)
-        if (specifier.startsWith(".")) record(specifier, true);
-      for (const match of source.matchAll(/["'`]((?:\.\.?\/)+[^"'`\n]*)["'`]/g))
-        record(match[1], false);
+      if (!seen.size) continue;
+      // A module specifier is type-checked by `lint`; a bare literal is not.
+      const imported = importedTargets(file, source);
+      for (const reference of seen.values())
+        references.push({
+          ...reference,
+          typed: imported.has(reference.target),
+        });
     }
   }
   return references;
 }
 
+function importedTargets(file, source) {
+  try {
+    return new Set(
+      packageImports(file, source)
+        .filter(({ specifier }) => specifier.startsWith("."))
+        .map(({ specifier }) => path.resolve(path.dirname(file), specifier)),
+    );
+  } catch {
+    // Unparsable files are other checks' concern; literals still count.
+    return new Set();
+  }
+}
+
 /** Turbo replaces the generic task with a `package#task` entry; no merge. */
-export function resolveTask(turbo, workspace, task) {
+function resolveTask(turbo, workspace, task) {
   return (
     turbo.tasks?.[`${workspace.manifest.name}#${task}`] ?? turbo.tasks?.[task]
   );
@@ -124,9 +109,9 @@ function declaresInput(root, workspace, definition, target) {
     // A directory is read through whatever it holds: an input must either
     // match anything inside it or be written inside it.
     return directory
-      ? path.matchesGlob(`${at}/any/file`, local) ||
+      ? matcher([local])(`${at}/any/file`) ||
           (!negated && staticPrefix(local).startsWith(`${at}/`))
-      : path.matchesGlob(at, local);
+      : matcher([local])(at);
   };
   const globs = (definition?.inputs ?? []).filter(
     (glob) => glob !== "$TURBO_DEFAULT$",

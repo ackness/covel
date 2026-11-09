@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
-import { unusedPackageExports } from "./lib/package-exports.mjs";
+import { unusedPackageExports, workspaceOf } from "./lib/package-exports.mjs";
 import {
   crossWorkspaceReferences,
   uncachedReferences,
@@ -105,9 +105,7 @@ for (const workspace of workspaces) {
         errors.push(`${path.relative(root, file)}: ${specifier}: ${reason}`);
       if (specifier.startsWith(".")) {
         const target = path.resolve(path.dirname(file), specifier);
-        const owner = workspaces.find((item) =>
-          target.startsWith(`${item.directory}${path.sep}`),
-        );
+        const owner = workspaceOf(workspaces, target);
         if (owner && owner !== workspace)
           fail("cross-workspace source import; use the package's public entry");
         // Plugin modules execute as written; no compiler maps `.js` to `.ts`.

@@ -350,43 +350,6 @@
         "$TURBO_ROOT$/apps/server/src/**",
         "$TURBO_ROOT$/apps/server/tests/helpers/**"
       ]
-    },
-    "@covel/memory#lint": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ai-provider/src/**"]
-    },
-    "@covel/memory#test": {
-      "dependsOn": ["^build"],
-      "cache": true,
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "src/**",
-        "tests/**",
-        "vitest.config.ts",
-        "$TURBO_ROOT$/vitest.base.ts",
-        "$TURBO_ROOT$/packages/ai-provider/src/**"
-      ]
-    },
-    "@covel/plugin-char-creator#lint": {
-      "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/test-runtime/src/**",
-        "$TURBO_ROOT$/packages/plugin-test-utils/src/**"
-      ]
-    },
-    "@covel/plugin-char-creator#test": {
-      "dependsOn": ["^build"],
-      "cache": true,
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "src/**",
-        "tests/**",
-        "vitest.config.ts",
-        "$TURBO_ROOT$/vitest.base.ts",
-        "$TURBO_ROOT$/packages/test-runtime/src/**",
-        "$TURBO_ROOT$/packages/plugin-test-utils/src/**"
-      ]
     }
   }
 }
