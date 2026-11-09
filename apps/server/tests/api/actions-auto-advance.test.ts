@@ -343,7 +343,7 @@ describe("committed story advancement", () => {
           events: [],
           failedProposals: [],
           operations: [],
-          topLevelNarrativeMessageIds: ["first", "second"],
+          turnStoryMessageIds: ["first", "second"],
         },
       ),
     ).toBe("ambiguous-story");

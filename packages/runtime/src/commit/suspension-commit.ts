@@ -50,6 +50,8 @@ export interface SuspensionDrops {
   readonly settleJobs: (
     jobs: readonly DeferredRuntimeJob[],
   ) => readonly DeferredRuntimeJob[];
+  /** Story messages nested runs wrote, left out of the turn's story. */
+  readonly nestedStoryMessageIds?: ReadonlySet<string>;
 }
 
 function emitCommittedSuspension(
@@ -106,6 +108,8 @@ export async function saveSuspensions(
                   continuation.withheldRuntimeJobs as readonly DeferredRuntimeJob[],
                 ),
                 runtimes,
+                false,
+                dropped.nestedStoryMessageIds,
               ),
             }
           : {}),

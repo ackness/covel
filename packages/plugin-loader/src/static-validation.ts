@@ -70,7 +70,8 @@ export function validateRuntimeDeclarations(
   const outputs = new Set<string>();
   for (const parsed of manifests) {
     // The compiled contract: a story runtime provides the story contract
-    // without naming it.
+    // without naming it. A second automatic story runtime is disabled before
+    // this check (`surplusStoryRuntimes`), so only written contracts collide.
     const contract = parsed.manifest.outputContract;
     if (!contract) continue;
     if (outputs.has(contract))

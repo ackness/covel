@@ -257,6 +257,45 @@ describe("session plugin contract resolution", () => {
     });
     expect(plan.active).toEqual(["chat"]);
   });
+  it.each([
+    [
+      "conflicts with an accepted package",
+      p("chat", {
+        provides: ["narrative-engine@2"],
+        eventTopics: ["mood.set"],
+      }),
+      "event-topic-conflict",
+    ],
+    [
+      "loses the provider it requires",
+      p("chat", { provides: ["narrative-engine@2"], requires: ["memory@1"] }),
+      "missing-provider",
+    ],
+  ])(
+    "keeps the default story provider when its replacement %s",
+    (_name, chat, code) => {
+      const plan = resolveSessionPlugins({
+        requested: ["mood", "chat"],
+        plugins: [
+          p("narrator", {
+            kind: "core",
+            provides: [{ contract: "narrative-engine@2", default: true }],
+          }),
+          p("mood", { eventTopics: ["mood.set"] }),
+          // Joins as chat's dependency, then loses its topic to mood.
+          p("memory", { provides: ["memory@1"], eventTopics: ["mood.set"] }),
+          chat,
+        ],
+      });
+      expect(plan.active).toEqual(["mood", "narrator"]);
+      expect(plan.rejected.find((entry) => entry.pluginId === "chat")).toEqual(
+        expect.objectContaining({ code }),
+      );
+      expect(plan.rejected.some((entry) => entry.pluginId === "narrator")).toBe(
+        false,
+      );
+    },
+  );
   it("ignores a written conflict on a single-provider framework contract", () => {
     const plan = resolveSessionPlugins({
       requested: ["reader", "narrator"],

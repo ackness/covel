@@ -12,6 +12,7 @@ import {
 import { frameworkContractSchemas } from "@covel/shared/contracts";
 import { discoverPlugins } from "../src/discover.js";
 import { loadRuntime, loadPluginDefinition } from "../src/load.js";
+import { validatePluginPackage } from "../src/package-validation.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -75,7 +76,10 @@ async function storyPackage(
     `---\n${JSON.stringify({ description: "Teller", ...root, runtime })}\n---\nTell the story.\n`,
   );
   for (const [name, value] of Object.entries(files))
-    await fs.writeFile(path.join(dir, name), JSON.stringify(value));
+    await fs.writeFile(
+      path.join(dir, name),
+      typeof value === "string" ? value : JSON.stringify(value),
+    );
   const [discovery] = await discoverPlugins(temp);
   if (!discovery) throw new Error("Missing fixture");
   return discovery;
@@ -114,6 +118,96 @@ describe("framework story contract", () => {
       schemaSource: "host-story",
       schema: storyOutputJsonSchema(),
     });
+  });
+  it("gives an automatic function story no output schema, so its return value is normalized", async () => {
+    const discovery = await storyPackage(
+      {
+        schedule: { stage: "narrative" },
+        io: { visibility: "story" },
+        function: { handler: "./handler.js" },
+      },
+      {},
+      {
+        "handler.js":
+          'export default async () => ({ outcome: "success", value: { narrativeOutput: "Rain." } });',
+      },
+    );
+    const definition = await loadPluginDefinition(discovery);
+    expect(definition.manifests[0]!.manifest.outputContract).toBe(
+      "narrative-engine@2",
+    );
+    const loaded = await loadRuntime(discovery, "teller");
+    expect(loaded.outputSchema).toBeUndefined();
+    expect(loaded.outputContractSchema).toEqual(storyContractSchema);
+  });
+  it("still asks a function story for a schema before it records its output", async () => {
+    const discovery = await storyPackage(
+      {
+        schedule: { stage: "narrative" },
+        io: { visibility: "story", output: { recordAs: "latest" } },
+        function: { handler: "./handler.js" },
+      },
+      {},
+      { "handler.js": "" },
+    );
+    await expect(loadPluginDefinition(discovery)).rejects.toThrow(
+      "io.output.schema is required when io.output.recordAs is declared",
+    );
+  });
+  it("keeps the first automatic story runtime of a package by runtime ID and leaves out the others", async () => {
+    const temp = await fs.realpath(
+      await fs.mkdtemp(path.join(os.tmpdir(), "story-loader-")),
+    );
+    roots.push(temp);
+    const dir = path.join(temp, "teller");
+    await fs.mkdir(dir);
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.md"),
+      "---\ndescription: Two tellers\n---\n",
+    );
+    for (const id of ["zeta", "alpha", "aside"]) {
+      await fs.mkdir(path.join(dir, "runtimes", id), { recursive: true });
+      await fs.writeFile(
+        path.join(dir, "runtimes", id, "RUNTIME.md"),
+        `---\n${JSON.stringify({
+          description: `Teller ${id}`,
+          schedule:
+            id === "aside"
+              ? { trigger: { type: "manual" } }
+              : { stage: "narrative" },
+          io: { visibility: "story" },
+        })}\n---\nTell the story.\n`,
+      );
+    }
+    const [discovery] = await discoverPlugins(temp);
+    const definition = await loadPluginDefinition(discovery!);
+    expect(
+      definition.manifests.map(({ manifest }) => [
+        manifest.name,
+        manifest.outputContract,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["teller/alpha", "narrative-engine@2"],
+        ["teller/aside", undefined],
+      ]),
+    );
+    expect(definition.manifests).toHaveLength(2);
+    expect(definition.packageManifest.plugin.provides).toEqual([
+      "narrative-engine@2",
+    ]);
+    expect(definition.disabledRuntimes).toHaveLength(1);
+    expect(definition.disabledRuntimes[0]!.message).toMatch(
+      /schedule\.trigger: teller\/zeta is a second automatically scheduled story runtime in this package, and teller\/alpha already provides narrative-engine@2/,
+    );
+    const validation = await validatePluginPackage(dir);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        severity: "error",
+        code: "runtime-disabled",
+        file: "runtimes/zeta/RUNTIME.md",
+      }),
+    );
   });
   it("accepts a package copy of the story schema and refuses a changed one", async () => {
     const story = {

@@ -11,12 +11,12 @@ import {
   type RuntimeResult,
   type TurnDigest,
 } from "@covel/shared";
-import { isPublicStoryRuntime } from "@covel/shared/contracts";
 import type { DataStore } from "@covel/store";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { mergePluginDataRows } from "../function-runtime/execution-write-buffer.js";
 import type { UpstreamPluginDataWrite } from "../function-runtime/upstream-plugin-data.js";
 import { presentationLimits, presentationNamespaces } from "./policy.js";
+import { turnStory } from "./turn-story.js";
 
 export class PresentationUnavailable extends Error {
   override readonly name = "PresentationUnavailable";
@@ -60,28 +60,24 @@ export function projectPresentationStory(
 }
 
 /**
- * The story this execution told: its one successful public story result.
- * A session may hold several story runtimes (one scheduled automatically,
- * others started by hand), but an execution that produced more than one
- * story has no single story to present.
+ * The story this execution told, decided by {@link turnStory} over its
+ * successful top-level results: the automatic story runtime's when it
+ * succeeded, otherwise the one successful public story, if only one.
  */
 export function publicStoryCandidate(
   runtimes: readonly RuntimeManifest[],
   results: readonly RuntimeResult[],
 ) {
-  const stories = results.filter(
+  const story = turnStory(
+    results.filter((result) => result.status === "success"),
     (result) =>
-      result.status === "success" &&
-      runtimes.some(
+      runtimes.find(
         (runtime) =>
           runtime.name === result.runtimeId &&
-          runtime.pluginId === result.pluginId &&
-          isPublicStoryRuntime(runtime),
+          runtime.pluginId === result.pluginId,
       ),
   );
-  return stories.length === 1
-    ? projectPresentationStory(stories[0]!.output)
-    : undefined;
+  return story ? projectPresentationStory(story.output) : undefined;
 }
 
 type ProjectionStore = Pick<

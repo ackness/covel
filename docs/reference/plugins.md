@@ -127,7 +127,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 契约是一个带版本的名字，形如 `narrative-engine@2`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
 
 - 本包提供的契约是 `provides` 加上每个 runtime 的 `io.output.contract`。自动调度的 `io.visibility: story` runtime 不写也提供 `narrative-engine@2`，见[故事输出](#故事输出)。
-- 同一个包里，两个 runtime 不能产出同一个契约（`ambiguous output contract`）。所以一个包最多有一个自动调度的故事 runtime。
+- 同一个包里，两个 runtime 不能写出同一个输出契约（`ambiguous output contract`）。一个包只有一个自动调度的故事 runtime：有多个时，runtime ID 排在最前的那个提供 `narrative-engine@2`，其余的被禁用，包的其他部分照常加载；`pnpm validate:plugin` 报告被禁用的 runtime，安装拒绝这个包。
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one`（默认）或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点、每局只有一个提供者的框架契约，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
@@ -567,9 +567,9 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 #### 框架持有的契约
 
-有几个契约的 schema 由框架持有：`narrative-engine@2`（故事输出，内核自己读取）和 `character-actor@1`（[角色委托](#character-orchestration)）。包照常提供或读取它们，但不在根 `contracts` 里声明 schema：加载器直接用框架的 schema。写了一份相同的 schema，`pnpm validate:plugin` 警告可以删掉；写了不同的 schema，包被拒绝（`framework-owned and cannot be shadowed`）。提供框架契约的 runtime 不写 `io.output.schema` 时，框架 schema 就是它的输出 schema，所以 `recordAs` 也不用另写 schema。
+有几个契约的 schema 由框架持有：`narrative-engine@2`（故事输出，内核自己读取）和 `character-actor@1`（[角色委托](#character-orchestration)）。包照常提供或读取它们，但不在根 `contracts` 里声明 schema：加载器直接用框架的 schema。写了一份相同的 schema，`pnpm validate:plugin` 警告可以删掉；写了不同的 schema，包被拒绝（`framework-owned and cannot be shadowed`）。提供框架契约的 runtime 不写 `io.output.schema` 时，框架 schema 就是它的输出 schema，所以 `recordAs` 也不用另写 schema。function 故事 runtime 例外：内核在 handler 返回之后才把返回值（包括只有 `narrativeOutput` 的返回值）整理成故事形状，所以它没有默认输出 schema，用 `recordAs` 时仍要写 `io.output.schema`。
 
-`narrative-engine@2` 每局只有一个提供者包。解析器像对待只允许一个提供者的扩展点那样互斥两个提供者（`single-provider-conflict`），玩家明确选中的替代者照常换掉默认叙事器。提供者不用写 `conflicts: [narrative-engine@2]`；写在任何包里都被忽略，`pnpm validate:plugin` 警告可以删掉。`character-actor@1` 可以有多个提供者。
+`narrative-engine@2` 每局只有一个提供者包。解析器像对待只允许一个提供者的扩展点那样互斥两个提供者（`single-provider-conflict`）：两个非默认提供者之间，请求或确认顺序靠前的那个保留。玩家明确选中的替代者照常换掉默认叙事器，但只在替代者真的被接受之后；它因冲突或缺少依赖落选时，默认叙事器照常运行。提供者不用写 `conflicts: [narrative-engine@2]`；写在任何包里都被忽略，`pnpm validate:plugin` 警告可以删掉。`character-actor@1` 可以有多个提供者。
 
 #### 契约在哪里被校验
 
@@ -1498,7 +1498,7 @@ const reply = await ctx.agents.run({
 
 agent 的 `yield: continue` 必须来自已接受且已提交的输出。拒绝、取消、提交失败和子 agent 输出不能启动下一轮；显示正文的本地动画不参与执行决定。
 
-宿主只读取已提交的顶层 `io.visibility: story` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
+宿主只读取代表这一局的已提交故事：自动调度的故事 runtime（`narrative-engine@2` 的提供者）写了故事时就是它的，同一次执行里手动或事件触发的故事不取代它；它没有写故事时，才看其余已提交的顶层 `io.visibility: story` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
 
 下一轮照常经过调度、工具、proposal 校验和提交，内联 post-turn 每轮运行。`ctx.playerActions` 是一个无文本的 `advance`，来源为 `system`；输入 digest 同样保留它。需要的故事导入仍可声明为可选，没有提供方时继续运行。玩家可停止推进；上限和阻止条件见[会话推进设置](./api.md#auto-advance)。
 
@@ -1540,7 +1540,7 @@ runtime:
 
 ### 输入与写入
 
-只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。本次执行没有或有多条成功的公开故事时，输入缺席。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
+只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。故事和[自动推进](#故事请求自动推进)读取的是同一条：自动调度的故事 runtime 成功时用它的故事；它没有成功时，本次执行恰好一条成功的顶层公开故事才算，没有或有多条时输入缺席。递归调用写的故事不算。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
 
 零预算函数在故事提交前读取公开候选；候选故事未提交时，其呈现写入也不会保留。detached 呈现读取 `PreStateCommit` 改写之后实际保存的故事，以及该次提交接受的本插件数据。作业只保存这一份版本化快照，不附带原始上游结果、玩家消息、行动或表单。快照总计最多 256 KiB，每个 namespace 最多 50 行，角色身份最多 100 个；超限整份拒绝，内联读取也一样。
 

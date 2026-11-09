@@ -245,7 +245,7 @@ export const runtimeAuthoringManifestSchema = z
             schema: z
               .string()
               .describe(
-                "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract; a story agent without one submits the story schema.",
+                "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema.",
               )
               .optional(),
             live: z
@@ -257,7 +257,7 @@ export const runtimeAuthoringManifestSchema = z
             recordAs: z
               .string()
               .describe(
-                "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract.",
+                "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one.",
               )
               .optional(),
           })

@@ -69,9 +69,9 @@ Declare scheduling with `stage` plus `needs` / `after` edges; set
 `io.visibility: story` only on a narrative provider (every other runtime is
 `system`, the default). A narrative provider returns story segments with
 speaker names. An automatically scheduled story runtime provides
-`narrative-engine@2` and submits its schema without declaring either; do not
-write `conflicts` or `contracts` for it (story output in
-`docs/reference/plugins.md`). Leave
+`narrative-engine@2` without declaring it, and a story agent submits its
+schema without `io.output.schema`; do not write `conflicts` or `contracts` for
+it (story output in `docs/reference/plugins.md`). Leave
 out fields written with their default value.
 
 Write `PLUGIN.md`, `RUNTIME.md` and `ui/*.json` in English: labels, tool

@@ -1,7 +1,7 @@
 import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import {
   frameworkContractSchemas,
-  isFrameworkContract,
+  defaultOutputSchemaContract,
 } from "@covel/shared/contracts";
 import { isDeepStrictEqual } from "node:util";
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
@@ -34,6 +34,7 @@ import { pluginLanguages } from "./plugin-languages.js";
 import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
 import {
   missingDefaultHandler,
+  surplusStoryRuntimes,
   withDerivedPackageFields,
   type PackageFileExists,
 } from "./package-defaults.js";
@@ -509,6 +510,10 @@ export async function loadPluginDefinition(
     disabledRuntimes.push(disabled);
     manifests.splice(manifests.indexOf(parsed), 1);
   }
+  for (const { parsed, disabled } of surplusStoryRuntimes(manifests)) {
+    disabledRuntimes.push(disabled);
+    manifests.splice(manifests.indexOf(parsed), 1);
+  }
   for (const disabled of disabledRuntimes)
     console.warn(`[plugin-loader] ${disabled.message}`);
   const ignoredFields = [parsedPackage, ...manifests].flatMap(
@@ -838,12 +843,9 @@ export async function loadRuntime(
     contracts,
   );
   // A framework contract the runtime provides is its output schema unless
-  // the runtime declares a narrower one.
-  const frameworkContract =
-    parsed.manifest.outputContract &&
-    isFrameworkContract(parsed.manifest.outputContract)
-      ? parsed.manifest.outputContract
-      : undefined;
+  // the runtime declares a narrower one (never a function story's: the
+  // kernel normalizes its return value into the story shape afterwards).
+  const frameworkContract = defaultOutputSchemaContract(parsed.manifest);
   const outputSchema =
     loadedOutputSchema === undefined && frameworkContract
       ? requireContractSchema(`contract:${frameworkContract}`, contracts)

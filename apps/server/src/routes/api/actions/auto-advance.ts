@@ -9,14 +9,17 @@ import {
 import type { FinalizeExecutionOutcome } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
 
-/** Only post-hook, durably committed top-level stories can request a round. */
+/**
+ * Only the post-hook, durably committed story that speaks for the turn can
+ * request a round; the commit decides which one that is.
+ */
 export async function committedAdvanceDecision(
   store: DataStore,
   sessionId: string,
   outcome: FinalizeExecutionOutcome,
 ): Promise<ExecutionAdvanceStopReason | undefined> {
   if (outcome.status !== "committed") return "execution-failed";
-  const ids = outcome.topLevelNarrativeMessageIds ?? [];
+  const ids = outcome.turnStoryMessageIds ?? [];
   if (ids.length === 0) return "no-eligible-story";
   if (ids.length !== 1) return "ambiguous-story";
   const message = await store.getMessage(sessionId, ids[0]!);

@@ -406,7 +406,7 @@
             },
             "schema": {
               "type": "string",
-              "description": "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract; a story agent without one submits the story schema."
+              "description": "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema."
             },
             "live": {
               "type": "string",
@@ -415,7 +415,7 @@
             },
             "recordAs": {
               "type": "string",
-              "description": "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract."
+              "description": "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one."
             }
           },
           "additionalProperties": false,

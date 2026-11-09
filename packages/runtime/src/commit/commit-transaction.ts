@@ -154,7 +154,10 @@ async function appendJournal(ctx: CommitTxContext): Promise<void> {
 
 async function runHostWrites(ctx: CommitTxContext): Promise<void> {
   const { extraInTx } = ctx.args;
-  await extraInTx?.(ctx.tx, { droppedRuntimeIds: ctx.drops.settled().rootIds });
+  await extraInTx?.(ctx.tx, {
+    droppedRuntimeIds: ctx.drops.settled().rootIds,
+    nestedStoryMessageIds: ctx.nestedStoryMessageIds,
+  });
 }
 
 async function saveContinuations(ctx: CommitTxContext): Promise<void> {
@@ -185,6 +188,7 @@ async function saveContinuations(ctx: CommitTxContext): Promise<void> {
           return !target || !droppedUpstream(target, rootView);
         })
         .map((job) => settleDroppedInputs(job, droppedIds)),
+    nestedStoryMessageIds: ctx.nestedStoryMessageIds,
   });
 }
 

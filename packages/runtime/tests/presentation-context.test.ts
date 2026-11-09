@@ -699,8 +699,9 @@ describe("restricted presentation context", () => {
 });
 
 describe("the story presentation reads", () => {
-  // A manual story runtime provides no contract; the execution's own
-  // successful public story is what presentation shows.
+  // A manual story runtime provides no contract. The automatic story
+  // runtime's story wins; without it, the execution's one successful public
+  // story is what presentation shows.
   const handTold: RuntimeManifest = {
     ...narrator,
     name: "tales/told",
@@ -708,6 +709,10 @@ describe("the story presentation reads", () => {
     outputContract: undefined,
     stage: undefined,
     trigger: { type: "manual" },
+  };
+  const otherHandTold: RuntimeManifest = {
+    ...handTold,
+    name: "tales/retold",
   };
   const observer: RuntimeManifest = {
     ...narrator,
@@ -717,21 +722,25 @@ describe("the story presentation reads", () => {
     outputContract: undefined,
     stage: "post-turn",
   };
+  const aside = {
+    segments: [{ kind: "narration", text: "Meanwhile, elsewhere." }],
+  } as const;
   const result = (
     runtime: RuntimeManifest,
     status: RuntimeResult["status"] = "success",
+    output: unknown = story,
   ): RuntimeResult => ({
     runId: crypto.randomUUID(),
     runtimeId: runtime.name,
     pluginId: runtime.pluginId,
     turnId: "source",
     status,
-    output: status === "success" ? story : null,
+    output: status === "success" ? (output as RuntimeResult["output"]) : null,
     toolCalls: [],
     durationMs: 0,
     timestamp: "2026-11-09T00:00:00.000Z",
   });
-  const runtimes = [narrator, handTold, observer];
+  const runtimes = [narrator, handTold, otherHandTold, observer];
 
   it.each([
     ["the narrator's story", [result(narrator), result(observer)]],
@@ -740,13 +749,20 @@ describe("the story presentation reads", () => {
       "the one story that succeeded",
       [result(narrator, "failed"), result(handTold)],
     ],
+    [
+      "the narrator's story beside one told by hand",
+      [result(handTold, "success", aside), result(narrator)],
+    ],
   ])("takes %s", (_name, results) => {
     expect(publicStoryCandidate(runtimes, results)).toEqual(story);
   });
 
   it.each([
     ["no story", [result(observer)]],
-    ["two stories", [result(narrator), result(handTold)]],
+    [
+      "two stories told by hand",
+      [result(handTold), result(otherHandTold, "success", aside)],
+    ],
   ])("has no story with %s", (_name, results) => {
     expect(publicStoryCandidate(runtimes, results)).toBeUndefined();
   });

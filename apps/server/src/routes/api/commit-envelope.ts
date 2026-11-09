@@ -106,6 +106,9 @@ export async function queueCommitFollowUps(
         activeRuntimes: args.activeRuntimes,
         descriptors,
         locale: args.locale,
+        ...(args.isolation.nestedStoryMessageIds
+          ? { nestedStoryMessageIds: args.isolation.nestedStoryMessageIds }
+          : {}),
         ...(args.modelOverride ? { modelOverride: args.modelOverride } : {}),
         ...(args.userSettings ? { userSettings: args.userSettings } : {}),
         ...(args.registerCredentials

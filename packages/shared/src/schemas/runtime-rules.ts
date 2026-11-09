@@ -22,7 +22,7 @@ import {
   isKernelExtensionContract,
   STORY_OUTPUT_CONTRACT,
 } from "../extension-points/contracts.js";
-import { isFrameworkContract } from "../framework-contracts.js";
+import { defaultOutputSchemaContract } from "../framework-contracts.js";
 import {
   defaultAgentLoop,
   defaultLoopPreset,
@@ -569,11 +569,12 @@ export function runtimeRuleIssues(
     add(at("handler"), `${name("handler")} is required for a function runtime`);
 
   // recordAs is only meaningful with a schema validating the recorded value;
-  // a framework contract the runtime provides supplies one.
+  // a framework contract the runtime provides supplies one (not to a
+  // function story runtime, whose return value is normalized afterwards).
   if (
     m.output?.recordAs !== undefined &&
     m.output.schema === undefined &&
-    !(m.outputContract !== undefined && isFrameworkContract(m.outputContract))
+    defaultOutputSchemaContract(m) === undefined
   )
     add(
       at("output", "schema"),

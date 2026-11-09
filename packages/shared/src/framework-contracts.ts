@@ -101,3 +101,22 @@ export function providesStoryContract(runtime: {
 export function isFrameworkContract(contract: string): boolean {
   return Object.hasOwn(frameworkContracts, contract);
 }
+
+/**
+ * The framework contract whose schema is a runtime's output schema when the
+ * runtime declares none; it also validates a `recordAs` export. A function
+ * story runtime gets none: the kernel turns what its handler returns (a bare
+ * `narrativeOutput` included) into the story shape afterwards, so no schema
+ * checks the return value first.
+ */
+export function defaultOutputSchemaContract(runtime: {
+  readonly outputContract?: string;
+  readonly runtimeType?: string;
+}): string | undefined {
+  const contract = runtime.outputContract;
+  if (contract === undefined || !isFrameworkContract(contract))
+    return undefined;
+  if (contract === STORY_OUTPUT_CONTRACT && runtime.runtimeType === "function")
+    return undefined;
+  return contract;
+}

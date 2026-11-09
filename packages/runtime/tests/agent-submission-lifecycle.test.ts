@@ -540,7 +540,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
             : {},
       );
       expect(outcome.status).toBe("failed");
-      expect(outcome.topLevelNarrativeMessageIds ?? []).toEqual([]);
+      expect(outcome.turnStoryMessageIds ?? []).toEqual([]);
       expect(
         outcome.events.filter((event) => event.type === "narrative.completed"),
       ).toEqual([]);
@@ -594,10 +594,10 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
       expect(execution.commit.executionContext.logicalTurn).toBe(1);
       const outcome = await f.commit(execution);
       expect(outcome.status).toBe("committed");
-      expect(outcome.topLevelNarrativeMessageIds).toHaveLength(1);
+      expect(outcome.turnStoryMessageIds).toHaveLength(1);
       const message = await f.store.getMessage(
         "session",
-        outcome.topLevelNarrativeMessageIds![0]!,
+        outcome.turnStoryMessageIds![0]!,
       );
       expect(message?.metadata).toMatchObject({ yield: "continue" });
       expect((await f.store.getSession("session"))?.completedPlayerTurns).toBe(
@@ -620,6 +620,6 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
     );
     const outcome = await f.commit(execution);
     expect(outcome.status).toBe("committed");
-    expect(outcome.topLevelNarrativeMessageIds).toHaveLength(1);
+    expect(outcome.turnStoryMessageIds).toHaveLength(1);
   });
 });

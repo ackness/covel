@@ -245,8 +245,11 @@ export interface FinalizeExecutionOutcome {
     readonly messageId: string;
     readonly count: number;
   }[];
-  /** Internal provenance receipt; only committed top-level narrative messages. */
-  readonly topLevelNarrativeMessageIds?: readonly string[];
+  /**
+   * Internal provenance receipt: the committed story messages that speak for
+   * the turn (`turnStoryCandidates`). Auto-advance follows the one there is.
+   */
+  readonly turnStoryMessageIds?: readonly string[];
   readonly status: "committed" | "failed";
   /** SessionEvents from committed proposals, flushed only on success. */
   readonly events: readonly SessionEvent[];
@@ -298,4 +301,10 @@ export interface IsolatedRuntime {
 export interface CommitIsolation {
   /** Top-level runtimes of this execution whose writes were dropped. */
   readonly droppedRuntimeIds: ReadonlySet<string>;
+  /**
+   * Story messages this execution's nested runs wrote. Deferred
+   * presentation leaves them out when it reads the turn's story, as the
+   * commit does.
+   */
+  readonly nestedStoryMessageIds?: ReadonlySet<string>;
 }

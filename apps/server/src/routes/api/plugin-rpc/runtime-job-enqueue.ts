@@ -54,6 +54,12 @@ export async function enqueueDeferredRuntimeJobs(
      * the commit — for jobs released after the turn that scheduled them.
      */
     readonly skipInactive?: boolean;
+    /**
+     * Story messages the committing execution's nested runs wrote; a
+     * presentation job reads the turn's story without them, as the commit
+     * does.
+     */
+    readonly nestedStoryMessageIds?: ReadonlySet<string>;
     /** Hand request-scoped provider services to the worker for this job. */
     readonly registerCredentials?: (
       key: {
@@ -72,6 +78,7 @@ export async function enqueueDeferredRuntimeJobs(
     args.descriptors,
     args.activeRuntimes,
     true,
+    args.nestedStoryMessageIds,
   )) {
     const target = args.activeRuntimes.find(
       (runtime) => runtime.name === descriptor.runtimeId,

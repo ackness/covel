@@ -47,8 +47,9 @@
  * - `finalize-conclusion.ts`: everything after the domain outcome is known.
  */
 
-import type { SessionEvent } from "@covel/shared";
+import type { RuntimeManifest, SessionEvent } from "@covel/shared";
 import { attachPresentationState } from "../presentation/state.js";
+import { turnStoryCandidates } from "../presentation/turn-story.js";
 import { SuspensionDataChangedError } from "../resume/suspension-baseline.js";
 import { buildHookSettings } from "../hooks/hook-settings.js";
 import { runWithHookScope, type HookScope } from "../hooks/hook-scope.js";
@@ -139,7 +140,8 @@ export async function finalizeExecution(
     const postCommit: Array<() => Promise<void>> = [];
     const operationFailureMessages: { messageId: string; count: number }[] = [];
     let committedEvents: readonly SessionEvent[] = [];
-    const topLevelNarrativeMessageIds = new Set<string>();
+    const topLevelStories = new Map<string, RuntimeManifest>();
+    const nestedStoryMessageIds = new Set<string>();
     const isolatedFailures: FailedProposal[] = [];
     // Each unit is a top-level result with the results nested under it; it
     // commits or drops as one. Dropped unit -> why its writes were dropped.
@@ -161,7 +163,8 @@ export async function finalizeExecution(
         postCommit,
         isolatedFailures,
         operationFailureMessages,
-        topLevelNarrativeMessageIds,
+        topLevelStories,
+        nestedStoryMessageIds,
         exportDecls,
         shouldWriteClock,
       };
@@ -200,12 +203,17 @@ export async function finalizeExecution(
       ...(eventBus ? { eventBus } : {}),
       ...(emitter ? { emitter } : {}),
     });
+    const turnStories = new Set(
+      turnStoryCandidates(topLevelStories, ([, runtime]) => runtime).map(
+        ([messageId]) => messageId,
+      ),
+    );
     return conclude({
       status: "committed",
       events: committedEvents,
-      topLevelNarrativeMessageIds: committedEvents.flatMap((event) =>
+      turnStoryMessageIds: committedEvents.flatMap((event) =>
         typeof event.payload.messageId === "string" &&
-        topLevelNarrativeMessageIds.has(event.payload.messageId)
+        turnStories.has(event.payload.messageId)
           ? [event.payload.messageId]
           : [],
       ),

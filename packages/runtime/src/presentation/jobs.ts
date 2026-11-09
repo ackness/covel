@@ -7,7 +7,6 @@ import {
   type RuntimeResult,
   type PresentationSnapshot,
 } from "@covel/shared";
-import { isPublicStoryRuntime } from "@covel/shared/contracts";
 import type { StoreTransaction } from "@covel/store";
 import { createPresentationBudget } from "./budget.js";
 import { presentationLimits } from "./policy.js";
@@ -19,33 +18,37 @@ import {
   takePresentationSnapshot,
   PresentationUnavailable,
 } from "./projection.js";
+import { turnStoryCandidates } from "./turn-story.js";
 
 /**
- * The public story messages a turn committed. Presentation reads a turn's
- * story only when there is exactly one; a sub-agent never writes the turn's
- * story, so its runtimes are left out.
+ * The turn's story messages, decided by {@link turnStoryCandidates} as the
+ * commit decides them; presentation reads the story only when exactly one
+ * remains. `nested` names the story messages that nested runs of the
+ * committing execution wrote: their caller speaks for them. A job read later
+ * (a retry, a released job) has no such list.
  */
-function turnStoryMessages<M extends { readonly metadata?: unknown }>(
+function turnStoryMessages<
+  M extends { readonly id: string; readonly metadata?: unknown },
+>(
   messages: readonly M[],
   runtimes: readonly RuntimeManifest[],
   turnId: string,
+  nested?: ReadonlySet<string>,
 ): M[] {
-  const storyRuntimes = new Set(
-    runtimes
-      .filter(
-        (runtime) => isPublicStoryRuntime(runtime) && !runtime.subagentOnly,
-      )
-      .map((runtime) => runtime.name),
+  return turnStoryCandidates(
+    messages.filter((message) => {
+      const metadata = message.metadata as Record<string, unknown> | undefined;
+      return (
+        metadata?.turnId === turnId &&
+        metadata.kind === "story" &&
+        !nested?.has(message.id)
+      );
+    }),
+    (message) => {
+      const runtimeId = (message.metadata as Record<string, unknown>).runtimeId;
+      return runtimes.find((runtime) => runtime.name === runtimeId);
+    },
   );
-  return messages.filter((message) => {
-    const metadata = message.metadata as Record<string, unknown> | undefined;
-    return (
-      metadata?.turnId === turnId &&
-      metadata.kind === "story" &&
-      typeof metadata.runtimeId === "string" &&
-      storyRuntimes.has(metadata.runtimeId)
-    );
-  });
 }
 
 /** Recover an inline selector from persisted public story, never retry seeds. */
@@ -171,6 +174,8 @@ export async function finalizePresentationJobs(
   jobs: readonly DeferredRuntimeJob[],
   runtimes: readonly RuntimeManifest[],
   settled = false,
+  /** Story messages the committing execution's nested runs wrote. */
+  nestedStoryMessageIds?: ReadonlySet<string>,
 ): Promise<DeferredRuntimeJob[]> {
   const finalized: DeferredRuntimeJob[] = [];
   const skipped = async (
@@ -256,6 +261,7 @@ export async function finalizePresentationJobs(
       await tx.listMessages(sessionId),
       runtimes,
       job.sourceTurnId,
+      nestedStoryMessageIds,
     );
     // An absent/rejected/ambiguous source never releases paid work.
     const message = messages.length === 1 ? messages[0] : undefined;
