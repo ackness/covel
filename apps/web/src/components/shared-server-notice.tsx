@@ -1,25 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyRound } from "lucide-react";
+import { HardDrive, KeyRound } from "lucide-react";
 import { getSharedServerInfo } from "@/services/api/health.js";
 import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
-import { useNotice } from "@/lib/notice-center.js";
+import {
+  dismissNotice,
+  getNoticeSnapshot,
+  subscribeNotices,
+  useNotice,
+} from "@/lib/notice-center.js";
 
-const DISMISSED_KEY = "covel:sharedServerNoticeDismissed";
+const NOTICE_KEY = "shared-server";
+const COLLAPSED_KEY = "covel:sharedServerNoticeCollapsed";
 
-function readDismissed(): boolean {
+function readCollapsed(): boolean {
   try {
-    return localStorage.getItem(DISMISSED_KEY) === "1";
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
   } catch {
     return false;
   }
 }
 
-function rememberDismissed(): void {
+function rememberCollapsed(): void {
   try {
-    localStorage.setItem(DISMISSED_KEY, "1");
+    localStorage.setItem(COLLAPSED_KEY, "1");
   } catch {
-    // Private windows and blocked storage: the notice returns next visit.
+    // Private windows and blocked storage: the card opens again next visit.
   }
 }
 
@@ -36,40 +42,39 @@ function sourceHref(repository: string, commit: string | undefined): string {
 }
 
 /**
- * Tells players on a shared server that keeps saves in their browser where
- * their saves and API keys go, and which open-source build serves them, as a
- * global card until it is closed. The settings page's key list links to the
- * same documentation page, so the explanation stays reachable afterwards.
- * Closing the card hides it for good, not just into the bell.
+ * Warns players on a shared server that keeps saves in their browser: use a
+ * temporary API key, and expect saves to live only in this browser. It also
+ * says which open-source build serves them. The warning never goes away for
+ * good: closing it collapses it into the bell, and later visits keep it there.
+ * The settings page's key list links to the same documentation page.
  */
 export function useSharedServerNotice(): void {
   const { t, i18n } = useTranslation();
   const [info] = useState(getSharedServerInfo);
-  const [dismissed, setDismissed] = useState(readDismissed);
+  const [startCollapsed] = useState(readCollapsed);
   const linkClass =
     "text-primary underline underline-offset-2 hover:text-primary/80";
+  const adviceClass = "flex items-start gap-1.5 font-medium";
+  const iconClass = "mt-0.5 h-3.5 w-3.5 shrink-0 text-primary";
   useNotice(
-    !info || dismissed
+    !info
       ? null
       : {
-          key: "shared-server",
+          key: NOTICE_KEY,
           kind: "card",
-          tone: "info",
+          tone: "warning",
           scope: "global",
           title: t("sharedServer.title"),
           body: t("sharedServer.body"),
-          onDismiss: () => {
-            rememberDismissed();
-            setDismissed(true);
-          },
           render: () => (
             <div className="flex flex-col gap-1 text-xs">
-              <p className="flex items-start gap-1.5 font-medium">
-                <KeyRound
-                  aria-hidden="true"
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
-                />
+              <p className={adviceClass}>
+                <KeyRound aria-hidden="true" className={iconClass} />
                 <span>{t("sharedServer.keyAdvice")}</span>
+              </p>
+              <p className={adviceClass}>
+                <HardDrive aria-hidden="true" className={iconClass} />
+                <span>{t("sharedServer.saveAdvice")}</span>
               </p>
               <p className="flex flex-wrap gap-x-4 gap-y-1">
                 <a
@@ -99,4 +104,20 @@ export function useSharedServerNotice(): void {
           ),
         },
   );
+  // Registered above in an earlier effect, so a returning player gets it
+  // straight into the bell.
+  useEffect(() => {
+    if (info && startCollapsed) dismissNotice(NOTICE_KEY);
+  }, [info, startCollapsed]);
+  // Watch the store directly: subscribing through React would re-render this
+  // producer on every refresh its own rich card triggers.
+  useEffect(() => {
+    if (!info) return undefined;
+    return subscribeNotices(() => {
+      const card = getNoticeSnapshot().cards.find(
+        (entry) => entry.notice.key === NOTICE_KEY,
+      );
+      if (card?.collapsed) rememberCollapsed();
+    });
+  }, [info]);
 }
