@@ -20,7 +20,7 @@
 
    它生成 `apps/desktop/dist/` 和 `apps/desktop/staging/`。构建过程不联网下载模型数据库：它复制仓库里提交的那份 LiteLLM 快照，并检查 staging 里有 `node_modules/@covel/ai-provider/data/model-db.json`。构建会获取并校验目标平台的 Electron 运行时。
 
-   桌面版锁定 Electron 45.0.0。后端使用安装包自身的 Electron 可执行文件，不再下载或打包额外的 Node 可执行文件和独立 Node 许可证。玩家首次启动时不需要下载运行时或安装 Node。
+   桌面版锁定 Electron 45.2.1。后端使用安装包自身的 Electron 可执行文件，不再下载或打包额外的 Node 可执行文件和独立 Node 许可证。玩家首次启动时不需要下载运行时或安装 Node。
 
 3. 调用 electron-builder 打包：
 
@@ -36,7 +36,7 @@
 
 安装包始终以 `ELECTRON_RUN_AS_NODE=1` 启动自身的 Electron 可执行文件，在独立子进程里执行后端。没有运行时选择配置、环境覆盖或备用 Node。开发模式仍使用外部管理的服务端，源码和 Docker 的 Node 26.12.1 要求保持不变。
 
-构建检查实际 Electron 可执行文件的 Electron/Node 版本、目标平台与架构以及 RunAsNode fuse，不只看 npm 包版本。实际版本必须与 `src/backend-runtime.ts` 编译内置的 `ELECTRON_VERSION`（来自桌面包依赖）和 `EMBEDDED_NODE_VERSION` 匹配；目标元数据不存放版本。RunAsNode 必须启用，不符时失败。Electron 45.0.0 的内嵌 Node 24.22.0 不能按版本号视为已经包含 Node 24.22.1 的全部修复，具体补丁和剩余边界见[运行时和 HTTP 客户端更新](./security.md#运行时和-http-客户端更新)。
+构建检查实际 Electron 可执行文件的 Electron/Node 版本、目标平台与架构以及 RunAsNode fuse，不只看 npm 包版本。实际版本必须与 `src/backend-runtime.ts` 编译内置的 `ELECTRON_VERSION`（来自桌面包依赖）和 `EMBEDDED_NODE_VERSION` 匹配；目标元数据不存放版本。RunAsNode 必须启用，不符时失败。Electron 45.2.1 内嵌 Node 24.22.1；之后的 Node 24 安全版本要随 Electron 升级重新核对，具体补丁和剩余边界见[运行时和 HTTP 客户端更新](./security.md#运行时和-http-客户端更新)。
 
 主进程和 preload bundle 与目标资源通过各自的摘要绑定；复用旧 bundle 或混用不同目标资源会被拒绝。产物检查读取实际 `app.asar` 中的入口、主进程和 preload 字节，不能用源码目录里的文件代替。摘要用于发现构建混用或损坏，不代替签名或有可信根的防篡改校验。每次受桌面管理的启动、重启和故障恢复都重新校验。升级 Electron 后必须重新构建整个安装包，并运行下文的产物校验与启动冒烟；升级本身不表示已完成各平台的运行验证或签名支持。
 

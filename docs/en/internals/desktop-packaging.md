@@ -20,7 +20,7 @@ The official GitHub Release publishes only two kinds of artifacts: macOS Apple S
 
    It generates `apps/desktop/dist/` and `apps/desktop/staging/`. The build does not download the model database over the network. It copies the LiteLLM snapshot that is committed in the repository, and it checks that `node_modules/@covel/ai-provider/data/model-db.json` exists in staging. The build acquires and verifies the target platform's Electron runtime.
 
-   Desktop pins Electron 45.0.0. The backend uses the installer's own Electron executable. No extra Node executable or standalone Node license is downloaded or packaged. Players do not need to download a runtime or install Node at first launch.
+   Desktop pins Electron 45.2.1. The backend uses the installer's own Electron executable. No extra Node executable or standalone Node license is downloaded or packaged. Players do not need to download a runtime or install Node at first launch.
 
 3. Call electron-builder to package the app:
 
@@ -36,7 +36,7 @@ The official GitHub Release publishes only two kinds of artifacts: macOS Apple S
 
 The packaged app always starts its own Electron executable with `ELECTRON_RUN_AS_NODE=1`, running the backend in a separate child process. There is no runtime-selection configuration, environment override, or fallback Node. Development mode still uses an externally managed server. Source and Docker deployments retain their Node 26.12.1 requirement.
 
-The build checks the actual Electron executable's Electron/Node versions, target platform and architecture, and RunAsNode fuse, not just its npm package version. Actual versions must match `ELECTRON_VERSION` (from the desktop package dependency) and `EMBEDDED_NODE_VERSION` compiled into `src/backend-runtime.ts`; target metadata does not store versions. RunAsNode must be enabled, and a mismatch fails. Electron 45.0.0 embeds Node 24.22.0, which must not be treated as containing every Node 24.22.1 fix based on its version. See [runtime and HTTP client updates](./security.md#runtime-and-http-client-updates) for verified patches and remaining boundaries.
+The build checks the actual Electron executable's Electron/Node versions, target platform and architecture, and RunAsNode fuse, not just its npm package version. Actual versions must match `ELECTRON_VERSION` (from the desktop package dependency) and `EMBEDDED_NODE_VERSION` compiled into `src/backend-runtime.ts`; target metadata does not store versions. RunAsNode must be enabled, and a mismatch fails. Electron 45.2.1 embeds Node 24.22.1; later Node 24 security releases must be rechecked with each Electron upgrade. See [runtime and HTTP client updates](./security.md#runtime-and-http-client-updates) for verified patches and remaining boundaries.
 
 Separate digests bind the main-process and preload bundles to target resources. Reusing an old bundle or mixing target resources is rejected. Artifact verification reads the actual entry point, main bytes, and preload bytes inside `app.asar`, not files from the source checkout. These digests detect mixed builds or damage; they do not replace signing or tamper protection backed by a trusted root. Every desktop-owned startup, restart, and crash recovery revalidates them. After upgrading Electron, rebuild the complete installer and run the artifact verification and startup smoke below. The upgrade alone does not establish platform runtime verification or signing support.
 

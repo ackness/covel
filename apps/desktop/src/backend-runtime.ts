@@ -9,7 +9,7 @@ export const BACKEND_RUNTIME_MODE = "electron";
 export const ELECTRON_VERSION = desktopPackage.devDependencies.electron;
 // Electron's Node version is an identity check, not a claim that every upstream
 // Node fix is included. Review Electron backports and Chromium dependencies on upgrade.
-export const EMBEDDED_NODE_VERSION = "24.22.0";
+export const EMBEDDED_NODE_VERSION = "24.22.1";
 export const RUNTIME_SELECTION_ID = createHash("sha256")
   .update(`desktop-electron-v1:${ELECTRON_VERSION}:${EMBEDDED_NODE_VERSION}`)
   .digest("hex");
