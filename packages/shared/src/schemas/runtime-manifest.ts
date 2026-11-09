@@ -15,6 +15,7 @@ import {
   stageSchema,
   toolsConfigSchema,
   effectsDeclSchema,
+  jsonPointerSchema,
   permissionsDeclSchema,
   pluginDataInjectDeclSchema,
   runtimeManifestInputSchema,
@@ -265,8 +266,7 @@ export const runtimeAuthoringManifestSchema = z
           .optional(),
         storyContext: z
           .strictObject({
-            select: z
-              .string()
+            select: jsonPointerSchema
               .meta({
                 description:
                   "JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output.",

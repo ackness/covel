@@ -244,7 +244,7 @@ export default async function handler(ctx) {
 ```
 
 - 这个位置可以是一段文字、`{ title, content }`，或者 `null`（本回合没什么要说）。没写标题时用包的 `displayName`。
-- agent 提供方要有 `io.output.schema` 或输出契约，说明从已校验的输出里取。
+- agent 提供方要有 `io.output.schema`、同目录的 `output.schema.json` 或输出契约，说明从已校验的输出里取。
 - 说明不合格（太长、形状不对）时只是被省略，你的 runtime 照常成功。
 - 读说明的是写了 `from: { kernel: story-context@1 }` 的 runtime，通常是叙事。内核负责排序、去重和 token 预算，读者一行输入就读到所有插件的说明。
 

@@ -193,10 +193,15 @@ describe("story-context@1 through an installed community package", () => {
           runtimeId: `${pluginId}/clock`,
           tokens: expect.any(Number),
         },
-        { title: "Omen" },
+        // The concealed provider by its display name, not its own title.
+        { title: "Story Context Probe" },
       ],
       omitted: [],
     });
-    expect(JSON.stringify(traces)).not.toContain("crow");
+    // Nothing but the display name: no source, tokens or note title.
+    const payload = traces[0]?.payload as
+      { readonly included?: readonly unknown[] } | undefined;
+    expect(payload?.included?.[1]).toEqual({ title: "Story Context Probe" });
+    expect(JSON.stringify(traces)).not.toMatch(/crow|Omen/);
   });
 });

@@ -64,10 +64,6 @@ const allowlist = new Map([
     "Consumes the current producer/consumer schema compatibility check.",
   ],
   [
-    "packages/runtime/src/turn-executor/story-context-input.ts",
-    "Reuses the JSON Pointer resolver of the schema compatibility module.",
-  ],
-  [
     "plugins/world-time/schema.js",
     "backward is a supported world-clock direction.",
   ],

@@ -249,7 +249,8 @@
       "type": "object",
       "properties": {
         "select": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(\\/([^/~]|~0|~1)*)*$"
         },
         "priority": {
           "type": "string",

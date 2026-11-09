@@ -97,8 +97,6 @@ export interface RuntimeRuleView extends PresentationRuleView {
     readonly schema?: string;
     readonly recordAs?: string;
     readonly from?: { readonly tool: string };
-    /** The authored output contract; the IR writes it as `outputContract`. */
-    readonly contract?: string;
   };
   /** The value this pre-turn runtime hands to the story (`io.storyContext`). */
   readonly storyContext?: {
@@ -387,25 +385,8 @@ function storyContextIssues(
         path,
         `${field} cannot be used by a presentation runtime; it hands notes to the story`,
       );
-    if (
-      m.runtimeType !== "function" &&
-      m.output?.schema === undefined &&
-      m.output?.contract === undefined &&
-      m.outputContract === undefined
-    )
-      add(
-        path,
-        `${field} on an agent runtime needs ${name("output", "schema")} or an output contract: the note is read from its validated output`,
-      );
-    if (
-      provider.select !== undefined &&
-      provider.select !== "" &&
-      !provider.select.startsWith("/")
-    )
-      add(
-        [...path, "select"],
-        `${name("storyContext", "select")} must be a JSON Pointer that starts with '/', or empty for the whole output`,
-      );
+    // An agent provider also needs an output schema: the loader and static
+    // validation check it, since only they see an `output.schema.json` file.
   }
   for (const input of m.storyContextInputs ?? []) {
     const path = input.path ?? at("inputs", input.name);

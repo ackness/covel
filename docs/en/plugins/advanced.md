@@ -244,7 +244,7 @@ export default async function handler(ctx) {
 ```
 
 - The value there can be text, `{ title, content }`, or `null` (nothing to say this turn). A note without a title uses the package's `displayName`.
-- An agent provider needs `io.output.schema` or an output contract, because the note comes from its validated output.
+- An agent provider needs `io.output.schema`, an `output.schema.json` beside its manifest, or an output contract, because the note comes from its validated output.
 - A note that is not valid (too long, wrong shape) is only left out; your runtime still succeeds.
 - Notes are read by a runtime with `from: { kernel: story-context@1 }`, usually the narrator. The kernel ranks, deduplicates and fits them into a token budget, so one input line gives the reader every plugin's notes.
 

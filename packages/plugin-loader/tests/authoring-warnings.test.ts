@@ -140,7 +140,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
         clock: {
           function: { handler: "../../handler.js" },
           schedule: { stage: "pre-turn" },
-          io: { storyContext: { priority: "normal", order: 0 } },
+          io: { storyContext: { select: "", priority: "normal", order: 0 } },
         },
       },
     );
@@ -151,7 +151,11 @@ describe("validate:plugin warnings for a field written with its default", () => 
         (line) =>
           line.replace(/^ {2}warning: .*?RUNTIME\.md: /, "").split(":")[0],
       ),
-    ).toEqual(["io.storyContext.priority", "io.storyContext.order"]);
+    ).toEqual([
+      "io.storyContext.select",
+      "io.storyContext.priority",
+      "io.storyContext.order",
+    ]);
   });
 
   it("compares a story agent with the story defaults", async () => {

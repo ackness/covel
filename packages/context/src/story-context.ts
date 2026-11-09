@@ -41,11 +41,18 @@ export interface StoryContextCandidate {
   readonly defaultTitle: string;
   /** The value at `select`; `undefined` when the pointer found nothing. */
   readonly value: unknown;
-  /** The provider handles hidden content: its trace rows keep the title only. */
+  /**
+   * The provider handles hidden content: its trace rows keep only the
+   * default title (and an omission reason).
+   */
   readonly concealed?: boolean;
 }
 
-/** One trace row of a note; a concealed provider's row has its title only. */
+/**
+ * One trace row of a note. A concealed provider's row has only its package's
+ * display name as the title: the note's own title is written by the provider,
+ * possibly by a model, and stays out of the trace like its text.
+ */
 export interface StoryContextTraceRow {
   readonly title: string;
   readonly pluginId?: string;
@@ -124,10 +131,13 @@ function normalize(candidate: StoryContextCandidate): Normalized {
     (typeof contribution === "string"
       ? ""
       : (contribution.title ?? "")
-    ).trim() ||
-    candidate.defaultTitle.trim() ||
-    candidate.source.pluginId;
+    ).trim() || defaultTitleOf(candidate);
   return { kind: "note", title, content };
+}
+
+/** The package's display name, or its ID without one. */
+function defaultTitleOf(candidate: StoryContextCandidate): string {
+  return candidate.defaultTitle.trim() || candidate.source.pluginId;
 }
 
 /** One note as an agent reads it inside `<story-context>`. */
@@ -160,7 +170,7 @@ export function selectStoryContext(
   ): StoryContextTraceRow =>
     candidate.concealed
       ? {
-          title,
+          title: defaultTitleOf(candidate),
           ...(extra.reason !== undefined ? { reason: extra.reason } : {}),
         }
       : {
@@ -187,11 +197,7 @@ export function selectStoryContext(
     const note = normalize(candidate);
     if (note.kind === "none") continue;
     if (note.kind === "invalid") {
-      omit(
-        candidate,
-        candidate.defaultTitle.trim() || candidate.source.pluginId,
-        "invalid",
-      );
+      omit(candidate, defaultTitleOf(candidate), "invalid");
       continue;
     }
     const tokens = options.estimator(renderStoryContextNote(note));

@@ -1697,6 +1697,7 @@
               "properties": {
                 "select": {
                   "type": "string",
+                  "pattern": "^(\\/([^/~]|~0|~1)*)*$",
                   "description": "JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output.",
                   "examples": ["/storyContext"]
                 },

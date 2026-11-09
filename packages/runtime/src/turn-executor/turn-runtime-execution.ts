@@ -35,7 +35,10 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import type { SessionContextSnapshot } from "@covel/context";
+import {
+  KERNEL_INPUT_PLUGIN_ID,
+  type SessionContextSnapshot,
+} from "@covel/context";
 import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import {
@@ -267,7 +270,12 @@ export async function executeOneRuntime(
   // A run that read upstream operations through its `operations@1` input,
   // or notes through `story-context@1`, built on results that are not
   // committed yet: it depends on them.
-  if (stage.kernelInputReads.size > 0 && commitEligibility(result) !== "none")
+  // A suspension is checked at its source commit before it is saved, so its
+  // continuation is not kept on a note or operation that did not land.
+  if (
+    stage.kernelInputReads.size > 0 &&
+    (commitEligibility(result) !== "none" || result.status === "suspended")
+  )
     attachReadDependencies(result, stage.kernelInputReads);
   return result;
 }
@@ -881,7 +889,7 @@ async function executeRuntime(
           cardinality: "one",
           value: snapshot.value,
           source: {
-            pluginId: "__kernel",
+            pluginId: KERNEL_INPUT_PLUGIN_ID,
             runtimeId: inject.from,
             resultId: executionContext.executionId,
           },
@@ -895,6 +903,7 @@ async function executeRuntime(
           activeRuntimes,
           ...(input.locale ? { locale: input.locale } : {}),
           inputWindow: storyInputWindow(deps),
+          ...(deps.estimator ? { estimator: deps.estimator } : {}),
         });
         for (const id of storyContext.producerIds)
           stage.kernelInputReads.add(id);
@@ -902,7 +911,7 @@ async function executeRuntime(
           cardinality: "one",
           value: storyContext.value,
           source: {
-            pluginId: "__kernel",
+            pluginId: KERNEL_INPUT_PLUGIN_ID,
             runtimeId: inject.from,
             resultId: executionContext.executionId,
           },
@@ -936,7 +945,7 @@ async function executeRuntime(
         cardinality: "one",
         value: freezeSnapshot(structuredClone(digest)),
         source: {
-          pluginId: "__kernel",
+          pluginId: KERNEL_INPUT_PLUGIN_ID,
           runtimeId: inject.from,
           resultId:
             input.detachedStage?.sourceExecutionId ??

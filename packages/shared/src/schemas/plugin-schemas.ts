@@ -134,7 +134,7 @@ const bindingNameSchema = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
 });
 
 /** RFC 6901 JSON Pointer (empty string = whole document). */
-const jsonPointerSchema = z.string().regex(/^(\/([^/~]|~0|~1)*)*$/, {
+export const jsonPointerSchema = z.string().regex(/^(\/([^/~]|~0|~1)*)*$/, {
   message:
     "must be an RFC 6901 JSON Pointer (empty string, or /-separated tokens with ~0/~1 escapes)",
 });
@@ -1439,7 +1439,7 @@ export const runtimeManifestInputSchema = z
      */
     storyContext: z
       .strictObject({
-        select: z.string().optional(),
+        select: jsonPointerSchema.optional(),
         priority: z.enum(storyContextPriorities).optional(),
         order: z.number().int().optional(),
         title: i18nTextLoose.optional(),

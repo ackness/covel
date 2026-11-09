@@ -83,6 +83,7 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
   );
   out.check(at("io.visibility"), io?.visibility, DEFAULT_RUNTIME_VISIBILITY);
   const storyContext = record(io?.storyContext);
+  out.check(at("io.storyContext.select"), storyContext?.select, "");
   out.check(at("io.storyContext.priority"), storyContext?.priority, "normal");
   out.check(at("io.storyContext.order"), storyContext?.order, 0);
   for (const [name, value] of Object.entries(record(io?.inputs) ?? {})) {

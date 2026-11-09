@@ -3,6 +3,7 @@ import {
   storyContextBudget,
   type StoryContextCandidate,
   type StoryContextSelection,
+  type TokenEstimator,
 } from "@covel/context";
 import {
   estimateTokens,
@@ -11,7 +12,7 @@ import {
   type RuntimeManifest,
   type RuntimeResult,
 } from "@covel/shared";
-import { resolveJsonPointer } from "../schedule/accepts-compat.js";
+import { resolveJsonPointer } from "../schedule/json-pointer.js";
 import { freezeSnapshot } from "./turn-digest.js";
 
 /**
@@ -34,6 +35,8 @@ export function buildStoryContextInput(params: {
   readonly locale?: string;
   /** Input tokens of the story model after its output reserve, when known. */
   readonly inputWindow?: number;
+  /** The execution's token estimator; the default heuristic without one. */
+  readonly estimator?: TokenEstimator;
 }): {
   readonly value: JsonValue;
   readonly producerIds: readonly string[];
@@ -66,7 +69,7 @@ export function buildStoryContextInput(params: {
   }
   const selection = selectStoryContext(candidates, {
     budgetTokens: storyContextBudget(params.inputWindow),
-    estimator: estimateTokens,
+    estimator: params.estimator ?? estimateTokens,
   });
   return {
     value: freezeSnapshot(

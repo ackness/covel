@@ -901,10 +901,10 @@ Static checks (shared by `pnpm validate:plugin`, installation and loading; error
 
 - It needs `schedule.stage: pre-turn`.
 - It cannot be used with `schedule.detached`, `schedule.background`, `schedule.subagentOnly`, `io.visibility: story` or a `presentation` runtime.
-- An agent needs `io.output.schema` or an output contract, because the note comes from its validated output. A function's note comes from the `value` its handler returns.
-- A non-empty `select` must start with `/`.
+- `select` must be an RFC 6901 JSON Pointer; an empty string is the default whole output, and `pnpm validate:plugin` suggests removing it.
+- An agent needs `io.output.schema`, an `output.schema.json` beside its manifest, or an output contract, because the note comes from its validated output. `pnpm validate:plugin`, installation and loading the runtime check this, since only they see files. A function's note comes from the `value` its handler returns.
 
-An `io.concealed` provider may use it. The text of its note reaches readers as usual, the same as with a bound contract input; the trace keeps only its title.
+An `io.concealed` provider may use it. The text of its note reaches readers as usual, the same as with a bound contract input. When the reader itself is not concealed, its `llm.calling` trace carries the full prompt, note text included, just as when a reader binds a contract input of a concealed runtime. In `story-context.selected`, this provider's entries keep only the package's display name: neither the text nor the title it wrote (which a model may have written).
 
 **Readers**
 
@@ -933,7 +933,7 @@ An `io.concealed` provider may use it. The text of its note reaches readers as u
 - It adds no scheduling edge. Providers run only in `pre-turn` and readers in later stages, so the stage barrier ensures providers finish first. A provider that fails or is skipped only means one note fewer; the reader runs as usual. This input is never required.
 - It adds a commit dependency: a reader depends on the provider of every note from this execution that it included. When a provider is discarded at commit, an auxiliary reader is discarded with it; a story or setup reader commits and records `read-dependency.kept` (see [Transactions · Turn-level single transaction](./transactions.md#turn-level-single-transaction)). Retry seeds are already committed and add no dependency.
 - When a reader suspends, this value is frozen into the suspension record with its other inputs and reused on resume.
-- The reader's trace records one `story-context.selected` event: the title, source, estimated tokens and omission reason of each included and omitted note, and the budget. Entries from an `io.concealed` provider keep only the title (and the omission reason). When the reader itself is concealed, the whole event is cleared under the concealed rules. See [Protocol](./protocol.md).
+- The reader's trace records one `story-context.selected` event: the title, source, estimated tokens and omission reason of each included and omitted note, and the budget. Entries from an `io.concealed` provider keep only the package's display name (and the omission reason). When the reader itself is concealed, the whole event is cleared under the concealed rules. See [Protocol](./protocol.md).
 
 ## Advanced fields
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   InputSlot,
   LLMMessage,
+  Proposal,
   RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
@@ -9,6 +10,7 @@ import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import type { StoryContextValue } from "@covel/plugin-handlers-utils";
 import { suspendTool, ToolRegistry } from "@covel/tools";
 import { executeTurn } from "../src/execution.js";
+import { commitExecution, refuseReleasedJobs } from "../src/index.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { buildStoryContextInput } from "../src/turn-executor/story-context-input.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
@@ -202,7 +204,8 @@ describe("story-context@1 kernel input", () => {
             runtimeId: "clock/now",
             tokens: expect.any(Number),
           },
-          { title: "Omen" },
+          // A concealed provider is traced by its package name only.
+          { title: "omen" },
         ],
         omitted: [
           {
@@ -213,7 +216,7 @@ describe("story-context@1 kernel input", () => {
           },
         ],
       });
-      expect(JSON.stringify(traces)).not.toContain("crow");
+      expect(JSON.stringify(traces)).not.toMatch(/crow|Omen/);
     } finally {
       await store.close();
     }
@@ -282,6 +285,109 @@ describe("story-context@1 kernel input", () => {
       await store.close();
     }
   });
+
+  it.each([
+    ["is dropped with a provider that did not commit", true],
+    ["is saved when its providers commit", false],
+  ] as const)(
+    "a suspended system reader's continuation %s",
+    async (_name, refuseProvider) => {
+      const { store, services } = await fixture();
+      const clock = provider("provider/clock", {});
+      const story = runtime("caller/story", { outputKind: "story" });
+      const reader = runtime("observer/reader", {
+        runtimeType: "agent",
+        stage: "post-turn",
+        input: reads,
+        tools: { builtin: ["suspend"] },
+      });
+      const tools = new ToolRegistry();
+      tools.registerBuiltin(suspendTool);
+      const toolExecutor = createToolExecutor({
+        store,
+        findTool: (name, context) => tools.find(name, context.pluginId),
+        getToolSource: (name) => tools.source(name),
+      });
+      const handlers: Record<string, FunctionHandler> = {
+        [clock.name]: async (ctx) => {
+          await ctx.pluginData!.set("clock", "now", "dusk");
+          return { outcome: "success", value: "Dusk." };
+        },
+        [story.name]: async () => ({
+          outcome: "success",
+          value: { narrativeOutput: "The gate opens." },
+        }),
+      };
+      try {
+        const execution = await executeTurn(input, [clock, story, reader], {
+          store,
+          services,
+          toolExecutor,
+          llm: {
+            generate: async () => ({
+              content: null,
+              toolCalls: [
+                {
+                  id: "ask",
+                  name: "suspend",
+                  arguments: JSON.stringify({
+                    reason: "Which gate?",
+                    fields: [{ type: "text", name: "gate", label: "Gate" }],
+                  }),
+                },
+              ],
+              finishReason: "tool_calls" as const,
+              usage: { inputTokens: 1, outputTokens: 1 },
+            }),
+          },
+          loadRuntime: async (manifest) => ({
+            manifest,
+            promptTemplate: "Note the turn.",
+            handler: handlers[manifest.name],
+          }),
+        });
+        const runOf = (name: string) =>
+          execution.commit.results.find((result) => result.runtimeId === name)!;
+        expect(runOf(reader.name).status).toBe("suspended");
+        // The suspended reader stands on the provider of the note it read.
+        expect(
+          execution.commit.readDependencies?.[runOf(reader.name).runId],
+        ).toEqual([runOf(clock.name).runId]);
+
+        const outcome = await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
+          store,
+          execution,
+          completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+          ...(refuseProvider
+            ? {
+                proposalGuard: (proposal: Proposal) =>
+                  (proposal.payload as { key?: unknown }).key === "now"
+                    ? "refused"
+                    : undefined,
+              }
+            : {}),
+        });
+        const saved = await store.listSuspensions(input.sessionId);
+        if (refuseProvider) {
+          // The story commits; the provider and the reader that stood on its
+          // note are dropped, and the continuation is never saved.
+          expect(
+            outcome.isolatedRuntimes?.map((item) => item.runtimeId).sort(),
+          ).toEqual([clock.name, reader.name].sort());
+          expect(saved).toEqual([]);
+        } else {
+          expect(outcome.isolatedRuntimes).toBeUndefined();
+          expect(saved.map((suspension) => suspension.runtimeId)).toEqual([
+            reader.name,
+          ]);
+        }
+      } finally {
+        await toolExecutor.close();
+        await store.close();
+      }
+    },
+  );
 
   it("gives an empty value and no block when nothing contributes", async () => {
     const { store, services } = await fixture();

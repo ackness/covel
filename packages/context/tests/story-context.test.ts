@@ -157,7 +157,7 @@ describe("story context selection", () => {
     });
   });
 
-  it("keeps only the titles of a concealed provider in the trace", () => {
+  it("keeps only the display name of a concealed provider in the trace", () => {
     const selection = select([
       candidate(
         "a/hidden",
@@ -169,8 +169,10 @@ describe("story context selection", () => {
       candidate("b/hidden", 1, { concealed: true }),
       candidate("c/open", "Visible."),
     ]);
+    // The provider's own title can come from a model: the trace keeps the
+    // package's display name instead.
     expect(selection.trace.included).toEqual([
-      { title: "Omen" },
+      { title: "a name" },
       {
         title: "c name",
         pluginId: "c",
@@ -181,8 +183,12 @@ describe("story context selection", () => {
     expect(selection.trace.omitted).toEqual([
       { title: "b name", reason: "invalid" },
     ]);
+    expect(JSON.stringify(selection.trace)).not.toMatch(/Omen|Secret/);
     // The reader itself still receives the note (current contract-input behaviour).
-    expect(selection.value.items[0]?.content).toBe("Secret.");
+    expect(selection.value.items[0]).toMatchObject({
+      title: "Omen",
+      content: "Secret.",
+    });
   });
 
   it("budgets the smaller of 3,000 tokens and 10% of the input window", () => {

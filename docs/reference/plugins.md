@@ -901,10 +901,10 @@ io:
 
 - 需要 `schedule.stage: pre-turn`。
 - 不能用于 `schedule.detached`、`schedule.background`、`schedule.subagentOnly`、`io.visibility: story` 和 `presentation` runtime。
-- agent 需要 `io.output.schema` 或输出契约，说明从已校验的输出里取。function 从 handler 返回的 `value` 里取。
-- `select` 不为空时必须以 `/` 开头。
+- `select` 必须是 RFC 6901 JSON Pointer；空字符串就是默认的整个输出，`pnpm validate:plugin` 会提示删掉。
+- agent 需要 `io.output.schema`、同目录的 `output.schema.json` 或输出契约，说明从已校验的输出里取。`pnpm validate:plugin`、安装和加载这个 runtime 时检查，因为只有它们看得到文件。function 从 handler 返回的 `value` 里取。
 
-`io.concealed` 的提供方可以使用。说明正文照常交给读者，和绑定契约输入时一样；trace 里只记它的标题。
+`io.concealed` 的提供方可以使用。说明正文照常交给读者，和绑定契约输入时一样。读者自己不是 concealed 时，它的 `llm.calling` trace 带完整提示词，其中就有说明正文；这和读者绑定 concealed runtime 的契约输入时相同。`story-context.selected` 里，这个提供方的条目只记包的显示名，不记正文，也不记它写的标题（标题可能由模型写出）。
 
 **读者**
 
@@ -933,7 +933,7 @@ io:
 - 不增加调度边。提供方只在 `pre-turn`，读者在更晚的阶段，阶段屏障保证提供方先结束。提供方失败或跳过，只是少一条说明，读者照常运行。这个输入永远不是必需的。
 - 增加提交依赖：读者依赖它纳入的每条本次执行的说明的提供方。提供方在提交时被丢弃，辅助读者一起丢弃；story 或 setup 读者照常提交并记 `read-dependency.kept`（见[事务 · 回合级单事务](./transactions.md#回合级单事务)）。重试种子已经提交，不增加依赖。
 - 读者挂起时，这个值和其他输入一起冻结进挂起记录，恢复时用同一份。
-- 读者的 trace 记一条 `story-context.selected`：纳入和省略的说明各自的标题、来源、估算 token 数和省略原因，以及预算。来自 `io.concealed` 提供方的条目只记标题（和省略原因）。读者本身是 concealed 时，整条按 concealed 规则清空内容。见[协议](./protocol.md)。
+- 读者的 trace 记一条 `story-context.selected`：纳入和省略的说明各自的标题、来源、估算 token 数和省略原因，以及预算。来自 `io.concealed` 提供方的条目只记包的显示名（和省略原因）。读者本身是 concealed 时，整条按 concealed 规则清空内容。见[协议](./protocol.md)。
 
 ## 高级字段
 
