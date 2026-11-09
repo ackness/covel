@@ -387,7 +387,7 @@ There are two layers of transaction boundary:
 
 Who calls it:
 
-- The three commit owners (`actions.ts`, `plugin-rpc/runtime-turn.ts`, `resume.ts`) pass the whole `{ result, commit }` returned by the public execution entry point to `commitExecution({ execution, ... })`.
+- The three commit owners (`actions/turn-commit.ts`, `plugin-rpc/runtime-turn.ts`, `resume.ts`) pass the whole `{ result, commit }` returned by the public execution entry point to `commitExecution({ execution, ... })`.
 - The commit plan records the schema, hook settings, journal, suspensions, and nested results at execution time. The host no longer reloads the schema or assembles these fields by hand.
 - If a declared export has no schema, the whole transaction fails.
 - `commitExecution` enters this boundary, and then the same host entry point coordinates notifications, snapshots, and memory scheduling.
@@ -504,7 +504,7 @@ The second argument of `extraInTx` gives the dropped runtimes. Every commit path
 
 - The current player input, and the `TurnMessage` of non-manual runtimes, are held only in an in-memory journal during execution. After all proposals pass, `finalizeExecution` appends them in the same transaction.
 - A rolled-back execution does not enter later prompts, trigger statistics, or compaction.
-- `actions.ts` also commits the REST messages mirror and the player InteractionRecord through `extraInTx`. So a page refresh and the observation surfaces do not keep a rolled-back input either.
+- `actions/turn-commit.ts` also commits the REST messages mirror and the player InteractionRecord through `extraInTx`. So a page refresh and the observation surfaces do not keep a rolled-back input either.
 - The manual and background paths keep to their own rule of "not appending to conversation history".
 
 **Settling `commit_status`.**

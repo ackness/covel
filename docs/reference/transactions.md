@@ -387,7 +387,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 谁来调用：
 
-- 三个提交拥有方（`actions.ts`、`plugin-rpc/runtime-turn.ts`、`resume.ts`）把公开执行入口返回的 `{ result, commit }` 整体交给 `commitExecution({ execution, ... })`。
+- 三个提交拥有方（`actions/turn-commit.ts`、`plugin-rpc/runtime-turn.ts`、`resume.ts`）把公开执行入口返回的 `{ result, commit }` 整体交给 `commitExecution({ execution, ... })`。
 - 提交计划记录了执行时的 schema、Hook 设置、journal、suspension 和嵌套结果。宿主不再重新加载 schema，也不手工组装这些字段。
 - 已声明的导出缺少 schema 时，整次事务失败。
 - `commitExecution` 进入这条边界，再由同一个宿主入口协调通知、快照和记忆调度。
@@ -504,7 +504,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 - 当前玩家输入，以及非 manual runtime 的 `TurnMessage`，在执行期间只缓存在内存里的 journal。所有 proposal 通过之后，才由 `finalizeExecution` 在同一个事务里 append。
 - 回滚了的执行不会进入后续的 Prompt、trigger 统计或 compaction。
-- `actions.ts` 同时通过 `extraInTx` 提交 REST messages 镜像和 player InteractionRecord。所以刷新页面和观测面也不会留下已回滚的输入。
+- `actions/turn-commit.ts` 同时通过 `extraInTx` 提交 REST messages 镜像和 player InteractionRecord。所以刷新页面和观测面也不会留下已回滚的输入。
 - manual / background 路径继续遵守各自“不追加对话历史”的约定。
 
 **`commit_status` 的结算。**
