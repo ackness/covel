@@ -96,6 +96,10 @@ keep `tailwind-lint` read-only (`--fix` can corrupt TypeScript identifiers).
 - `scripts/`: dev/check/release tooling; `scripts/tests/*.test.mjs`: Node tests
   included in `pnpm check`.
 
+The root entry of `@covel/shared` is frozen: it may lose exports but never gain
+one (`pnpm check:boundaries`); new code goes into domain-named subpath entries
+([packages](docs/internals/packages.md#shared-总入口已冻结)).
+
 Workspace packages export TS source, except `@covel/plugin-handlers-utils`, which
 exports `dist/`. Install, Turbo and server startup rebuild it. After editing SDK
 source, run `pnpm --filter @covel/plugin-handlers-utils build` before a direct

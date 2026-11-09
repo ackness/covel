@@ -69,6 +69,18 @@ Web 的 `build:e2e` 是独立的 Turbo 内容缓存任务，输出到 `dist/web-
 
 工作区使用 TypeScript 稳定版 7.0.2。Zod、作者 SDK 的 peer dependency 和带工具模板的最低版本统一为 4.6.7；它修复了 TypeScript 7.1 对递归 JSON 类型的循环推断报错。JSON 的校验、可选字段和只读语义不变。Nightly 和 tsrs 的兼容性验证不替代稳定版类型检查门禁。
 
+### shared 总入口已冻结
+
+`@covel/shared` 的根入口（`packages/shared/src/index.ts`）不再增加导出，只会缩小。新模块、新类型和新 schema 一律放进按领域命名的子入口，在 `packages/shared/package.json` 的 `exports` 里登记；老名字继续走根入口，不为迁移而批量改导入，某个包因别的原因大改时再顺手迁移。
+
+子入口的名字沿用根入口原有的分段：`protocol`（SSE 事件、API 传输 DTO）、`manifest`（插件与 runtime 清单 schema、调度 IR）、`world`（世界 schema、世界数据目标）、`llm`（槽位、模型绑定、provider 协议、请求追踪）、`env`、`theme`，以及已有的 `plugin-runtime` 等。子入口在第一个包外使用者出现时才创建，因为 `pnpm check:boundaries` 要求每个导出入口至少有一个包外消费方。同一个模块不要既经 `export *` 进根入口、又进子入口。
+
+冻结由 `scripts/check-package-boundaries.mjs` 执行（`pnpm check` 和 `pnpm check:boundaries` 都包含它）：脚本按语法读出根入口的全部导出名，展开 `export *` 指向的相对模块，与提交在仓库里的清单 `packages/shared/root-exports.baseline.txt` 比较。
+
+- 根入口多出名字，包括往已被 `export *` 转出的模块里加名字，检查失败，并提示改用子入口。
+- 根入口少了名字，检查同样失败，直到运行 `node scripts/shared-barrel-baseline.mjs --update` 把清单缩小；该命令在出现新增名字时拒绝写入。
+- 把导出移到子入口或重命名，也按“少一个、多一个”处理：先把新名字放进子入口，再从根入口删掉旧名字并更新清单。
+
 ## 宿主组合的关键边界
 
 宿主指把这些包装配起来运行的应用：server、desktop、web。

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
 import { unusedPackageExports } from "./lib/package-exports.mjs";
+import { sharedBarrelErrors } from "./lib/barrel-exports.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
@@ -179,6 +180,8 @@ errors.push(
       "Public plugin SDK entry for community entry modules.",
   }),
 );
+// The shared root entry may shrink but never grow; new code uses subpath entries.
+errors.push(...sharedBarrelErrors(root));
 
 if (errors.length) {
   console.error(errors.join("\n"));
