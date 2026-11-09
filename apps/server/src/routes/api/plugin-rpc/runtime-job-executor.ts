@@ -13,10 +13,14 @@ import type {
   RuntimeJobServices,
   createRuntimeJobCredentials,
 } from "./runtime-job-credentials.js";
-import type { QueuedActivatedRuntimeJob } from "./runtime-job-enqueue.js";
+import type {
+  QueuedActivatedRuntimeJob,
+  QueuedRuntimeJob,
+} from "./runtime-job-enqueue.js";
 import { queueCommitFollowUps } from "../commit-envelope.js";
 import { settleActivatedRun } from "./runtime-response.js";
 import type { createPluginRpcRuntimeTurnRunner } from "./runtime-turn.js";
+import { publishDeferredRuntimeJobs } from "./settled-request.js";
 import {
   runtimeJobIncarnation,
   parseActivatedRuntimeJobPayload,
@@ -88,7 +92,8 @@ export function createRuntimeJobExecutor(deps: {
   /**
    * Background manual RPC calls and event followers. A failure the runtime
    * reports in its own result still commits its writes; followers it emitted
-   * are queued in the same transaction and inherit its credentials.
+   * and stage jobs it deferred (a manually run `turnCompletion: detached`
+   * target) are queued in the same transaction and inherit its credentials.
    */
   const executeActivatedJob = async (
     job: RuntimeJobRecord,
@@ -112,6 +117,7 @@ export function createRuntimeJobExecutor(deps: {
       payload.expectedApprovalScope,
     );
     const followers: QueuedActivatedRuntimeJob[] = [];
+    const stageJobs: QueuedRuntimeJob[] = [];
     const completeInTx = async (
       tx: StoreTransaction,
       turnResult: TurnResult,
@@ -123,6 +129,14 @@ export function createRuntimeJobExecutor(deps: {
         turnResult,
         ...(payload.expectFollower ? { expectFollower: true } : {}),
       });
+      // Stage jobs are admitted under the live session the commit sees.
+      const stageDescriptors = turnResult.deferredRuntimeJobs ?? [];
+      const liveSession =
+        stageDescriptors.length > 0
+          ? await tx.getSession(job.sessionId)
+          : undefined;
+      if (stageDescriptors.length > 0 && !liveSession)
+        throw new RuntimeJobNoLongerCurrentError();
       const queued = await queueCommitFollowUps(tx, {
         sessionId: job.sessionId,
         activeRuntimes,
@@ -132,18 +146,23 @@ export function createRuntimeJobExecutor(deps: {
         isolation,
         results: turnResult.runtimeResults,
         sourceTurnId: turnResult.turnId,
+        ...(liveSession
+          ? { deferred: { session: liveSession, jobs: stageDescriptors } }
+          : {}),
         followers: settlement.followers,
       });
+      stageJobs.push(...queued.runtimeJobs);
       followers.push(...queued.followerJobs);
+      const deferredJobs = [...stageJobs, ...followers];
       const result = {
         turnId: turnResult.turnId,
         executionId: turnResult.executionContext.executionId,
         runtimeId: job.runtimeId,
         durationMs: turnResult.durationMs,
         runtimeResults: settlement.runtimeResults,
-        ...(followers.length > 0
+        ...(deferredJobs.length > 0
           ? {
-              deferredJobs: followers.map(({ job: queued }) => ({
+              deferredJobs: deferredJobs.map(({ job: queued }) => ({
                 jobId: queued.jobId,
                 runtimeId: queued.runtimeId,
               })),
@@ -214,6 +233,23 @@ export function createRuntimeJobExecutor(deps: {
         runtimeJobIncarnation(queued.job.payload) ?? "",
       );
     }
+    for (const { job: queued } of stageJobs) {
+      const expectedSessionIncarnation = runtimeJobIncarnation(queued.payload);
+      if (handoff && expectedSessionIncarnation)
+        deps.credentials?.register(
+          {
+            jobId: queued.jobId,
+            sessionId: queued.sessionId,
+            expectedSessionIncarnation,
+          },
+          requestServices,
+          queued.maxQueueMs,
+        );
+    }
+    await publishDeferredRuntimeJobs(
+      { eventBus, worker: undefined },
+      stageJobs,
+    );
   };
 
   const executeRuntimeJob =

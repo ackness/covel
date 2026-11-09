@@ -3379,7 +3379,7 @@ A successful command uses the same structure, with these extra conventions:
 
 - For a runtime that declares `io.concealed`, `output` is `null` here and in `details.runtimeResults` of a failure response.
 - If the turn is aborted, there is one more field: `abortReason`.
-- If a background follower was queued, there is one more field: `deferredJobs: [{ jobId, runtimeId }]`.
+- If a background follower was queued, there is one more field: `deferredJobs: [{ jobId, runtimeId }]`. When the named runtime declares `schedule.detached`, it does not run in this request: it is queued as a staged job, listed in `deferredJobs`, and absent from `runtimeResults`.
 
 ##### Dimension editing and recovery of pending settlements
 

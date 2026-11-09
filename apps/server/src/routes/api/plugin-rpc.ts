@@ -6,7 +6,9 @@ import {
 import { sessionEventBus } from "./session/session-events.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
+  announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
+  requestJobServices,
   withSettledSessionLock,
 } from "./plugin-rpc/settled-request.js";
 /**
@@ -70,7 +72,9 @@ import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
   enqueueActivatedRuntimeJob,
   type QueuedActivatedRuntimeJob,
+  type QueuedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
+import type { RuntimeJobCredentialKey } from "./plugin-rpc/runtime-job-credentials.js";
 import { queueCommitFollowUps } from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
@@ -454,11 +458,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     //
     // The sync turn may surface `deferredFollowers` — event-chain followers
     // with `execution: 'background'` that were skipped so the user gets an
-    // immediate response. They are queued as durable event jobs inside the
-    // same commit transaction, so a rolled-back turn queues nothing.
+    // immediate response — and `deferredRuntimeJobs`: a targeted runtime that
+    // declares `turnCompletion: detached` is deferred to the durable queue
+    // instead of running inline. Both are queued inside the same commit
+    // transaction, so a rolled-back turn queues nothing.
     // `queueCommitFollowUps` leaves out followers of an emitter whose writes
     // were dropped; a sync run commits all-or-nothing, so none is today.
     const followerJobs: QueuedActivatedRuntimeJob[] = [];
+    const runtimeJobs: QueuedRuntimeJob[] = [];
+    // Provider services handed to the stage jobs queued in the commit,
+    // discarded if that commit does not land.
+    const credentialKeys: RuntimeJobCredentialKey[] = [];
+    const jobCredentials = c.get("runtimeJobCredentials");
+    const discardCredentials = () => {
+      for (const key of credentialKeys) jobCredentials?.discard(key);
+    };
     try {
       const summary = await runtimeTurnRunner.runManualTurn({
         turnId,
@@ -469,6 +483,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
         completeInTx: async (tx, result, isolation) => {
+          const stageDescriptors = result.deferredRuntimeJobs ?? [];
           const queued = await queueCommitFollowUps(tx, {
             sessionId,
             activeRuntimes,
@@ -480,8 +495,23 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
             isolation,
             results: result.runtimeResults,
             sourceTurnId: result.turnId,
+            ...(stageDescriptors.length > 0
+              ? {
+                  deferred: {
+                    session: (await tx.getSession(sessionId)) ?? session,
+                    jobs: stageDescriptors,
+                  },
+                }
+              : {}),
+            registerCredentials: (key, maxQueueMs) => {
+              const services = requestJobServices(c);
+              if (!services || !jobCredentials) return;
+              jobCredentials.register(key, services, maxQueueMs);
+              credentialKeys.push(key);
+            },
             followers: result.deferredFollowers ?? [],
           });
+          runtimeJobs.push(...queued.runtimeJobs);
           followerJobs.push(...queued.followerJobs);
         },
       });
@@ -489,6 +519,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       // turn whose writes never committed is not a successful turn: report it
       // as an error; its follower jobs rolled back with it.
       if (!summary.commit.committed) {
+        discardCredentials();
         if (summary.commit.dimensionConflict)
           return c.json(
             errorBody("dimension-version-conflict", {
@@ -514,8 +545,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           500,
         );
       }
+      // The queued jobs own their handoffs from here.
+      credentialKeys.length = 0;
+      await announceDeferredRuntimeJobs(c, runtimeJobs);
       announceQueuedRuntimeJobs(c, followerJobs);
-      const deferredJobs = followerJobs.map(({ job }) => ({
+      const deferredJobs = [...runtimeJobs, ...followerJobs].map(({ job }) => ({
         jobId: job.jobId,
         runtimeId: job.runtimeId,
       }));
@@ -531,6 +565,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
       });
     } catch (err) {
+      discardCredentials();
       return runtimeQueueErrorResponse(c, err);
     }
   }
