@@ -462,6 +462,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             await resolveMediaImageFlow(
               store,
               c.get("pluginExtensions"),
+              pluginRegistry,
               sessionId,
             )
           )?.assetRuntimeIds,

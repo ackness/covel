@@ -365,6 +365,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           await resolveMediaImageFlow(
             store,
             c.get("pluginExtensions"),
+            c.get("pluginRegistry"),
             sessionId,
           )
         )?.assetRuntimeIds,

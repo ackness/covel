@@ -14,6 +14,7 @@ import {
   PluginServiceRegistry,
   type ServiceCallOutcome,
 } from "../src/plugin-services.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { SERVICE_IMPORT_TIMEOUT_MS } from "../src/agent-loop/service-import-tools.js";
 import { answer, fixture, input, runtime } from "./operation-fixture.js";
@@ -253,7 +254,6 @@ describe("service provider fault latch", () => {
 
   it("counts invalid provider output, but not invalid input or calls outside an execution", async () => {
     const h = await harness();
-    const outcomes: ServiceCallOutcome[] = [];
     h.services.register<unknown, unknown>("provider", {
       name: "probe",
       contract: "probe@1",
@@ -275,19 +275,24 @@ describe("service provider fault latch", () => {
         };
       });
       expect(result.execution.commit.serviceCalls?.[0]?.verdict).toBe("fault");
-      await h.services.withExecutionObserver(
-        (event) => outcomes.push(event),
-        () =>
-          h.services
-            .createClient({
-              sessionId: input.sessionId,
-              pluginId: "caller",
-              signal: new AbortController().signal,
-            })
-            .call({ ...request, input: { required: true } })
-            .catch(() => {}),
-      );
-      expect(outcomes).toEqual([]);
+      // A client created outside an execution has no collector: its faulty
+      // call is reported to nobody and never reaches a later execution.
+      await h.services
+        .createClient({
+          sessionId: input.sessionId,
+          pluginId: "caller",
+          signal: new AbortController().signal,
+        })
+        .call({ ...request, input: { required: true } })
+        .catch(() => {});
+      const later = await h.run(h.call);
+      expect(later.execution.commit.serviceCalls).toEqual([
+        {
+          providerPluginId: "provider",
+          callerRuntimeId: "caller/run",
+          verdict: "neutral",
+        },
+      ]);
     } finally {
       await h.store.close();
     }
@@ -445,6 +450,63 @@ describe("service provider fault latch", () => {
       ]);
     } finally {
       await toolExecutor.close();
+      await h.store.close();
+    }
+  });
+
+  it("reports an imported tool's call to the collector passed in deps, with no ambient observer", async () => {
+    // The collector reaches the tool's service client explicitly: a pipeline
+    // run below executeTurn still counts the call, as the provider's fault.
+    const h = await harness();
+    h.services.register<unknown, unknown>("provider", {
+      name: "probe",
+      contract: "probe@1",
+      modelFacing: true,
+      description: "Probe",
+      input: z.object({}),
+      output: z.string(),
+      handler: () => 42,
+    });
+    const outcomes: ServiceCallOutcome[] = [];
+    let calls = 0;
+    try {
+      const caller = runtime("caller/run", {
+        runtimeType: "agent",
+        outputKind: "story",
+        tools: { services: [{ contract: "probe@1", name: "probe" }] },
+      });
+      await runTurnPipeline(input, [caller], {
+        store: h.store,
+        services: h.services,
+        serviceOutcomes: (outcome) => outcomes.push(outcome),
+        toolExecutor: createToolExecutor({
+          store: h.store,
+          findTool: () => undefined,
+        }),
+        llm: {
+          generate: async () =>
+            calls++ === 0
+              ? {
+                  ...answer(),
+                  content: null,
+                  toolCalls: [{ id: "call", name: "probe", arguments: "{}" }],
+                  finishReason: "tool_calls" as const,
+                }
+              : answer(),
+        },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "Tell the story.",
+        }),
+      });
+      expect(outcomes).toEqual([
+        {
+          providerPluginId: "provider",
+          callerRuntimeId: "caller/run",
+          verdict: "fault",
+        },
+      ]);
+    } finally {
       await h.store.close();
     }
   });

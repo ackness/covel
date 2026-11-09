@@ -21,6 +21,9 @@ import {
   prepareRuntimeProposals,
   processRuntimeResult,
 } from "../src/session/session-runtime-result.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["world-init"]);
 
 const CTX = {
   sessionId: "sess-1",

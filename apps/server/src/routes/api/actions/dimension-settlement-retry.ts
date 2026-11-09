@@ -18,6 +18,7 @@ import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
+import { loadSessionPluginSettings } from "../session/hook-scope.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 import { runtimeRunsWithoutPrompt } from "./approval-preflight.js";
 
@@ -79,6 +80,11 @@ export async function retryPendingDimensionSettlements(
       .createExecution({
         sessionId,
         locale: session.locale,
+        settings: await loadSessionPluginSettings({
+          store,
+          pluginRegistry,
+          session,
+        }),
         signal: c.req.raw.signal,
         runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
           ([pluginId, entry]) =>
@@ -120,6 +126,7 @@ export async function retryPendingDimensionSettlements(
           await resolveMediaImageFlow(
             store,
             c.get("pluginExtensions"),
+            pluginRegistry,
             sessionId,
           )
         )?.assetRuntimeIds,

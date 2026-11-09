@@ -18,12 +18,23 @@ import {
 } from "@covel/shared";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
+import { deepFreeze } from "./hooks/hook-settings.js";
 
 export interface PluginExtensionExecutionScope {
   readonly emitter?: import("./trace/turn-emitter.js").TurnEmitter;
   readonly world?: import("@covel/shared").WorldModelView;
   readonly sessionId: string;
   readonly locale: string;
+  /**
+   * The session's resolved plugin settings for this execution, keyed by plugin
+   * ID; each provider's `getOwnSettings()` reads only its own bucket. Required
+   * because extensions also run outside a turn (UI slots, the session view),
+   * where no hook scope carries them: a turn passes its frozen snapshot, a
+   * host route loads the session's.
+   */
+  readonly settings: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
   readonly turnId?: string;
   readonly runtimeIdentities?: readonly {
     readonly name: string;
@@ -60,6 +71,8 @@ export interface PluginExtensionExecution {
     input: I,
   ): Promise<ExtensionResult<O, M>>;
 }
+
+const EMPTY_SETTINGS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /** Kernel definitions only. Provider handlers live in PluginServiceRegistry. */
 export const kernelExtensionPoints: readonly ExtensionPoint<
@@ -241,14 +254,19 @@ export class PluginExtensionHost {
       return rows;
     };
     const cache = new Map<string, Promise<unknown>>();
+    const settings = deepFreeze(structuredClone(scope.settings));
     const client = this.services.createKernelClient({
       ...scope,
       extensionContext: (pluginId, signal) => {
         let providerWorld: typeof world | undefined;
+        const ownSettings = Object.hasOwn(settings, pluginId)
+          ? settings[pluginId]!
+          : EMPTY_SETTINGS;
         return {
           get world() {
             return (providerWorld ??= structuredClone(world));
           },
+          getOwnSettings: () => ownSettings,
           sessionId: scope.sessionId,
           locale: scope.locale,
           messages: pluginMessagesFor(

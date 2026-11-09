@@ -4,6 +4,9 @@ import {
   runWithHookScope,
   type HookEvent,
 } from "../src/index.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope();
 
 const hook = (
   pluginId: string,

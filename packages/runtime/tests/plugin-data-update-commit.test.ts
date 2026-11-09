@@ -34,6 +34,9 @@ import {
   executeTurn,
 } from "../src/index.js";
 import type { MediaOwnershipStore } from "../src/media/canonicalize-media-refs.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope();
 
 const SESSION = "s";
 const PLUGIN = "probe";

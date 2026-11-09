@@ -718,8 +718,14 @@ async function assembleApi(
       },
       hookPipeline,
       resolveImageFlowRuntimeIds: async () =>
-        (await resolveMediaImageFlow(store, extensions, job.sessionId))
-          ?.assetRuntimeIds,
+        (
+          await resolveMediaImageFlow(
+            store,
+            extensions,
+            registry,
+            job.sessionId,
+          )
+        )?.assetRuntimeIds,
     });
   };
 
@@ -815,6 +821,7 @@ async function assembleApi(
   });
   const uiSlots = createUiSlotHost({
     store,
+    pluginRegistry: registry,
     eventBus,
     extensionHost: extensions,
     services,

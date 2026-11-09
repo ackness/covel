@@ -32,6 +32,9 @@ import {
   collectExecutionSuspensionRuns,
   collectExecutionSuspensions,
 } from "../src/suspension-artifact.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 afterEach(() => {
   vi.useRealTimers();

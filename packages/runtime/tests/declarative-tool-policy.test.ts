@@ -19,6 +19,9 @@ import {
   prepareAgentToolSurface,
   withAgentToolSurface,
 } from "../src/agent-loop/agent-tool-surface.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope();
 
 it("reviews every current framework tool explicitly, including validated character writes", () => {
   expect(Object.keys(FRAMEWORK_TOOL_CAPABILITIES).sort()).toEqual(

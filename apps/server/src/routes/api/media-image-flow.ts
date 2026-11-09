@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import { mediaImageFlowV1, type MediaImageFlow } from "@covel/shared";
 import { createWorldModelView, type PluginExtensionHost } from "@covel/runtime";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { loadSessionPluginSettings } from "./session/hook-scope.js";
 export async function resolveMediaImageFlow(
   store: DataStore,
   host: PluginExtensionHost | undefined,
+  pluginRegistry: Pick<PluginRegistry, "get" | "getAll"> | undefined,
   sessionId: string,
   signal = new AbortController().signal,
 ): Promise<MediaImageFlow | undefined> {
@@ -16,6 +19,11 @@ export async function resolveMediaImageFlow(
     .createExecution({
       sessionId,
       locale: session.locale ?? "zh-CN",
+      settings: await loadSessionPluginSettings({
+        store,
+        pluginRegistry,
+        session,
+      }),
       signal,
       world: await createWorldModelView(store, sessionId),
       readPluginData: (pluginId, namespace) =>
@@ -30,6 +38,7 @@ mediaImageFlowRoutes.get("/:id/media/image-flow", async (c) => {
   const flow = await resolveMediaImageFlow(
     c.get("store"),
     c.get("pluginExtensions"),
+    c.get("pluginRegistry"),
     guard.session.id,
     c.req.raw.signal,
   );

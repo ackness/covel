@@ -73,6 +73,7 @@ function fixture<M extends ExtensionMode>(
     host.createExecution({
       sessionId: "session",
       locale: "en",
+      settings: {},
       turnId: "turn",
       signal: abort.signal,
       readPluginData,
@@ -95,6 +96,39 @@ function fixture<M extends ExtensionMode>(
 const input = { value: 2, turnId: "turn" };
 
 describe("kernel extension execution", () => {
+  it("hands each provider its own settings from the execution, with no hook scope", async () => {
+    // UI slots and the session view run extensions outside any turn: the
+    // settings travel with the execution instead of an ambient scope.
+    const { point, host, abort, readPluginData } = fixture("collect");
+    const seen: Record<string, unknown> = {};
+    for (const pluginId of ["alpha", "beta"])
+      host.register(
+        pluginId,
+        { point: point.id, id: pluginId },
+        {
+          handler: (_value, context) => {
+            const own = context.getOwnSettings();
+            expect(Object.isFrozen(own)).toBe(true);
+            seen[pluginId] = own;
+            return { value: 1 };
+          },
+        },
+      );
+    const settings = { alpha: { tone: "grim" } };
+    const execution = host.createExecution({
+      sessionId: "session",
+      locale: "en",
+      settings,
+      turnId: "turn",
+      signal: abort.signal,
+      readPluginData,
+    });
+    // The execution owns its snapshot: a later change is not seen.
+    settings.alpha.tone = "changed";
+    await execution.run(point, input);
+    expect(seen).toEqual({ alpha: { tone: "grim" }, beta: {} });
+  });
+
   it("gives providers an empty world, seats included, when the caller has none", async () => {
     const { point, host, execution } = fixture("collect");
     host.register(
@@ -155,6 +189,7 @@ describe("kernel extension execution", () => {
       const run = host.createExecution({
         sessionId: "session",
         locale: "en",
+        settings: {},
         signal: new AbortController().signal,
         world: {
           characterSchema: null,
@@ -224,6 +259,7 @@ describe("kernel extension execution", () => {
     const execution = host.createExecution({
       sessionId: "session",
       locale: "en",
+      settings: {},
       turnId: "turn",
       signal: new AbortController().signal,
       readPluginData: async () => [],
@@ -302,6 +338,7 @@ describe("kernel extension execution", () => {
     const execution = host.createExecution({
       sessionId: "session",
       locale: "en",
+      settings: {},
       signal: new AbortController().signal,
       readPluginData: async () => [],
       emitter: { sessionId: "session", turnId: "turn", emit },
@@ -394,6 +431,7 @@ describe("kernel extension execution", () => {
     const execution = host.createExecution({
       sessionId: "session",
       locale: "en",
+      settings: {},
       turnId: "turn",
       signal: abort.signal,
       readPluginData,
@@ -656,6 +694,7 @@ describe("kernel extension execution", () => {
     const execution = host.createExecution({
       sessionId: "session",
       locale: "en",
+      settings: {},
       signal: abort.signal,
       readPluginData: async () => [],
     });
@@ -702,6 +741,7 @@ describe("kernel extension model calls", () => {
       .createExecution({
         sessionId: "session",
         locale: "en",
+        settings: {},
         turnId: "turn",
         signal: abort.signal,
         readPluginData: async () => [],

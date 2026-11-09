@@ -24,6 +24,7 @@ import {
   createBootstrapCompactorRunner,
 } from "../../src/routes/api/bootstrap/compactor.js";
 import { resolveMediaImageFlow } from "../../src/routes/api/media-image-flow.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 const AT = "2026-10-29T00:00:00.000Z";
 const SEATS: Seat[] = [
@@ -89,7 +90,7 @@ describe("extension providers outside a turn read the stored seats", () => {
     );
     try {
       await expect(
-        resolveMediaImageFlow(store, host, "session-1"),
+        resolveMediaImageFlow(store, host, undefined, "session-1"),
       ).resolves.toMatchObject({ entryRuntimeId: "pictures" });
       expect(seen.seats).toEqual(SEATS);
       expect(seen.current).toBe("lin");
@@ -136,7 +137,9 @@ describe("extension providers outside a turn read the stored seats", () => {
       createdAt: AT,
     };
     try {
-      await runner.run("session-1", "", [message], "en-US");
+      await inHookScope([], () =>
+        runner.run("session-1", "", [message], "en-US"),
+      );
       expect(seen.seats).toEqual(SEATS);
       expect(seen.current).toBe("lin");
     } finally {
