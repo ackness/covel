@@ -185,6 +185,8 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 有的测试会读自己包以外的文件。`turbo.json` 里它的 `$TURBO_ROOT$` 输入写到了哪个文件，那个文件一改它就会跑，所以这些输入要保持准确。
 
+`lint` 和 `test` 只在依赖的包、或自己写进 `inputs` 的文件变化时重新运行。测试或配置用相对路径引用另一个工作区的文件时，要么在 `package.json` 里依赖那个包（并改用包入口导入），要么在 `turbo.json` 里把文件写进该任务的 `$TURBO_ROOT$` 输入；`pnpm check:boundaries` 会拒绝两者都没有的引用，否则缓存会在被引用的代码已经变化时重放旧的通过结果。不缓存的任务不受此限。
+
 读取文档的测试也遵守这条规则：shared 的测试跟踪环境变量参考页，runtime 跟踪 Hook 参考页，plugin-loader 跟踪插件指南和 create-plugin skill。源码和文档混合修改时，相关测试缓存会失效，不必把同一组文档测试再跑一遍。
 
 下面任何一种情况，所有测试都会跑：
