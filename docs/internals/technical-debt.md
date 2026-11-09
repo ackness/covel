@@ -69,7 +69,6 @@ rg -n "ponytail:" apps packages plugins
 | `packages/ai-provider/src/gateway.ts` | 1266 |
 | `packages/shared/src/schemas/plugin-schemas.ts` | 1246 |
 | `packages/runtime/src/turn-executor/turn-executor.ts` | 1082 |
-| `apps/server/src/routes/api/bootstrap.ts` | 1028 |
 | `packages/store/src/types.ts` | 1026 |
 | `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 1025 |
 | `apps/server/src/world-data/session-import.ts` | 1009 |
