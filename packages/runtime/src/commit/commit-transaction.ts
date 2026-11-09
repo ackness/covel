@@ -9,7 +9,7 @@ import type { SessionEvent } from "@covel/shared";
 import { assertSuspensionWritesUnchanged } from "../resume/suspension-baseline.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
 import { isDimensionSnapshotSkip } from "../turn-executor/dimension-barrier.js";
-import { heldBackStoryError } from "./held-back-story.js";
+import { failedUpstreamOf } from "../turn-executor/turn-executor-helpers.js";
 import { recordRuntimeTriggersTx } from "../trigger/trigger-ledger.js";
 import {
   bindDimensionProvider,
@@ -119,16 +119,26 @@ function rejectUncommittableStory(ctx: CommitTxContext): void {
             : undefined;
     if (error) throw new Error(error);
   }
-  // So is a story a framework gate held back because a runtime it hard
-  // depends on failed. Unlike a failed story it wrote nothing, so a
-  // narrative from another story still completes the action. A story
-  // waiting on its plugin's setup, on an upstream its package chose not to
-  // run, or behind a dependency cycle commits as before; see
-  // `held-back-story.ts`.
+  // So is a story the `needs` or required-input gate held back because a
+  // runtime it hard depends on failed in this execution: the gate records
+  // that runtime as `failedUpstream`. Unlike a failed story it wrote
+  // nothing, so a narrative from another story still completes the action.
+  // Other held-back stories commit as before, and no gate records a failure
+  // for them:
+  // - an upstream its package chose not to run (trigger, cadence or guard):
+  //   rejecting would stop the clock a cadence-gated upstream waits on;
+  // - the plugin's pending setup: rejecting would discard the setup's own
+  //   writes, such as its form;
+  // - a dependency cycle, which also holds back everything after it, so a
+  //   cycle in any package would stop every turn; validation and traces
+  //   report it.
   if (stories.some((result) => result.status === "success")) return;
   for (const result of stories) {
-    const error = heldBackStoryError(result, ctx.args);
-    if (error) throw new Error(error);
+    const failed = failedUpstreamOf(result);
+    if (failed)
+      throw new Error(
+        `Story runtime ${result.runtimeId} did not run because ${failed} failed; the action was not committed.`,
+      );
   }
 }
 

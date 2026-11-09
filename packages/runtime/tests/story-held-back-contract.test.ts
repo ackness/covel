@@ -4,7 +4,9 @@ import { createMemoryStore } from "@covel/store/memory";
 import type {
   HandlerResult,
   RuntimeManifest,
+  RuntimeResult,
   SetupRuntimeState,
+  TurnInput,
 } from "@covel/shared";
 import { executeTurn } from "../src/execution.js";
 import {
@@ -61,6 +63,7 @@ async function playTurn(
   runtimes: readonly RuntimeManifest[],
   handlers: Readonly<Record<string, Handler>>,
   setupRuntimes: Record<string, SetupRuntimeState> = {},
+  turn: Partial<TurnInput> = {},
 ) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
@@ -86,6 +89,7 @@ async function playTurn(
       logicalTurnId: "logical-held-back",
       playerMessage: "Open the door.",
       origin: "player",
+      ...turn,
     },
     runtimes,
     {
@@ -349,5 +353,63 @@ describe("a story the framework held back", () => {
     expect(committed.status).toBe("committed");
     expect(session?.completedPlayerTurns).toBe(1);
     expect(plan).toBe(true);
+  });
+
+  it("records the failed runtime on every gate it passes through", async () => {
+    const { resultOf } = await playTurn(
+      [
+        fn("teller/roll"),
+        fn("teller/judge", { needs: ["teller/roll"] }),
+        story({ needs: ["teller/judge"] }),
+      ],
+      {
+        "teller/roll": failingRoll,
+        "teller/judge": () => ({ outcome: "success", value: {} }),
+      },
+    );
+    expect(resultOf("teller/judge")?.output).toMatchObject({
+      failedUpstream: "teller/roll",
+    });
+    expect(resultOf("teller/narrate")?.output).toMatchObject({
+      failedUpstream: "teller/roll",
+    });
+  });
+
+  it("does not blame an upstream that failed in the retried turn", async () => {
+    // A retry reads the source turn's results; their failures were settled
+    // with that turn, not in this execution.
+    const seed: RuntimeResult = {
+      pluginId: "teller",
+      runtimeId: "teller/roll",
+      runId: "roll-source",
+      turnId: "turn-source",
+      status: "failed",
+      output: null,
+      error: "The dice tray is empty",
+      toolCalls: [],
+      durationMs: 0,
+      timestamp: new Date().toISOString(),
+    };
+    const { committed, resultOf } = await playTurn(
+      [fn("teller/roll"), story({ needs: ["teller/roll"] })],
+      {},
+      {},
+      {
+        origin: "manual",
+        manualTrigger: {
+          runtimeId: "teller/narrate",
+          sourceTurnId: "turn-source",
+          retrySeedResults: [seed],
+        },
+      },
+    );
+    expect(resultOf("teller/narrate")).toMatchObject({
+      status: "skipped",
+      output: { skippedBy: "framework:needs" },
+    });
+    expect(resultOf("teller/narrate")?.output).not.toHaveProperty(
+      "failedUpstream",
+    );
+    expect(committed.status).toBe("committed");
   });
 });

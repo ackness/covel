@@ -85,6 +85,8 @@ export type BindingResolution =
       readonly ok: false;
       readonly skipReason: BindingSkipReason;
       readonly diagnostics: readonly SchedulingDiagnostic[];
+      /** `upstream-failed`: the producer result that did not succeed, if any. */
+      readonly upstream?: RuntimeResult;
     };
 
 export interface ResolveBindingsInput {
@@ -230,7 +232,8 @@ function providersFor(
 }
 
 type ExtractFailure =
-  | { ok: false; reason: "upstream-failed" | "input-missing" }
+  | { ok: false; reason: "upstream-failed"; upstream?: RuntimeResult }
+  | { ok: false; reason: "input-missing" }
   | {
       ok: false;
       reason: "contract-output-invalid";
@@ -249,7 +252,11 @@ function extractValue(
   // no such output and must still gate consumers; failed guards never qualify.
   const guardProvided = isGuardProvided(result);
   if (!result || (result.status !== "success" && !guardProvided)) {
-    return { ok: false, reason: "upstream-failed" };
+    return {
+      ok: false,
+      reason: "upstream-failed",
+      ...(result ? { upstream: result } : {}),
+    };
   }
   let value: unknown = result.canonicalValue
     ? result.canonicalValue.value
@@ -467,9 +474,14 @@ export async function resolveInputBindings(
         ? [...providers].sort((a, b) => compareCodeUnits(a.name, b.name))
         : providers.slice(0, 1);
     const items: { value: JsonValue; source: InputSource }[] = [];
-    const fail = (reason: BindingSkipReason) =>
+    const fail = (reason: BindingSkipReason, upstream?: RuntimeResult) =>
       required
-        ? { ok: false as const, skipReason: reason, diagnostics }
+        ? {
+            ok: false as const,
+            skipReason: reason,
+            diagnostics,
+            ...(upstream ? { upstream } : {}),
+          }
         : undefined;
     for (const provider of targets) {
       const got = extractValue(
@@ -488,7 +500,10 @@ export async function resolveInputBindings(
             provider,
           ),
         );
-        const failure = fail(got.reason);
+        const failure = fail(
+          got.reason,
+          got.reason === "upstream-failed" ? got.upstream : undefined,
+        );
         if (failure) return failure;
         continue bindings;
       }

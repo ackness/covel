@@ -186,6 +186,57 @@ export function makeSkippedResult(
   };
 }
 
+/** What a framework gate writes on the output of the runtime it held back. */
+interface GateSkipOutput {
+  readonly skipped: true;
+  readonly reason: string;
+  readonly skippedBy: string;
+  /**
+   * Set by the gates that wait on this execution's upstreams (`needs` and
+   * required inputs) when an upstream that kept them closed failed: that
+   * runtime, or the one a gate recorded on it, so the value names the
+   * original failure however many gates passed it on.
+   */
+  readonly failedUpstream?: string;
+}
+
+type ResultView = { readonly status: string; readonly output?: unknown };
+
+function gateSkipOutputOf(result: ResultView): GateSkipOutput | undefined {
+  const output = result.output as Partial<GateSkipOutput> | null | undefined;
+  // A guard skip (`skip: true`) or a PreRuntime veto (no `skippedBy`) is the
+  // plugin's or a hook's decision, not a framework gate.
+  return result.status === "skipped" &&
+    output?.skipped === true &&
+    typeof output.skippedBy === "string"
+    ? (output as GateSkipOutput)
+    : undefined;
+}
+
+/** The framework gate that held `result` back (`skippedBy`), if one did. */
+export function skippedByOf(result: ResultView): string | undefined {
+  return gateSkipOutputOf(result)?.skippedBy;
+}
+
+/** The failed runtime a framework gate recorded on `result`, if any. */
+export function failedUpstreamOf(result: ResultView): string | undefined {
+  const failed = gateSkipOutputOf(result)?.failedUpstream;
+  return typeof failed === "string" ? failed : undefined;
+}
+
+/**
+ * The failure an upstream passes on to a gate it keeps closed: its own
+ * runtime ID when it failed, or the failure a gate recorded when one held it
+ * back.
+ */
+export function failureBehind(
+  upstream: ResultView & { readonly runtimeId: string },
+): string | undefined {
+  return upstream.status === "failed"
+    ? upstream.runtimeId
+    : failedUpstreamOf(upstream);
+}
+
 /**
  * Resolve the player-authored settings bucket for a runtime, merging the
  * per-key defaults declared in `manifest.userSettings` with the values the
