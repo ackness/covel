@@ -132,7 +132,7 @@ agent 提交时，先按实际 schema 选择可省略字段。完成字段的含
 | `contributes.tools` | `PLUGIN.md`          | 这个插件注册了哪些工具      |
 | `agent.tools`       | agent runtime 的配置 | 这个 agent 可以调用哪些工具 |
 
-`agent.tools` 常用三组：`builtin` 是 Covel 自带的工具，`plugin` 是你自己的工具，`datasets` 是 Covel 为你在 `contributes.datasets` 里声明的数据集生成的读写工具（例如 `notes-get`、`notes-upsert`）。
+`agent.tools` 常用四组：`builtin` 是 Covel 自带的工具，`plugin` 是你自己的工具，`datasets` 是 Covel 为你在 `contributes.datasets` 里声明的数据集生成的读写工具（例如 `notes-get`、`notes-upsert`），`services` 是把别的插件提供给模型用的服务导入成工具（见[导入的服务工具](../reference/tools.md#导入的服务工具)）。另有 `defer` 控制哪些工具延迟加载，不是一组工具。每个字段的写法见 [runtime 字段表](../reference/schema/runtime-manifest.md#agenttools)。
 
 ```yaml
 agent:
