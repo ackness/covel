@@ -220,9 +220,13 @@ export type {
   TraceRecorder,
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
-export { commitExecution } from "./commit/commit-execution.js";
+export {
+  abandonExecution,
+  commitExecution,
+} from "./commit/commit-execution.js";
 export { maybeSweepOldTraces } from "./commit/trace-retention.js";
 export type {
+  AbandonExecutionArgs,
   CommitExecutionArgs,
   CommitExecutionOutcome,
   ExecutionCompletion,

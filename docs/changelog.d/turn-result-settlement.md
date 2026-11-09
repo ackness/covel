@@ -1,0 +1,3 @@
+### Fixed
+
+- **A background or manual run that is refused before it commits no longer leaves its record looking like a crash.** When a run is turned away after it finished but before its commit (the session was paused or ended, the approval or plugin version changed, a job's commit barrier refused it, or commit preparation failed), its `turn_results` row is now settled `failed` instead of staying `pending`, the state reserved for crashes. Hosts settle such runs with `abandonExecution` from `@covel/runtime`, and a row that already committed is never changed to `failed`. Rules: [transactions](../en/reference/transactions.md#turn-level-single-transaction).

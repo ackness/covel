@@ -548,7 +548,8 @@ function isolatedRuntimesOf(
   );
 }
 
-async function settleTurnResults(
+/** Best effort: a store failure is logged, never thrown. */
+export async function settleTurnResults(
   store: Pick<DataStore, "setTurnResultCommitStatus">,
   sessionId: string,
   turnIds: readonly string[],

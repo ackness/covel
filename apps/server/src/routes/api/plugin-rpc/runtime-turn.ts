@@ -5,7 +5,7 @@ import {
   concealedRuntimeIds,
   dimensionRecordSchema,
 } from "@covel/shared";
-import { commitExecution } from "../commit-execution.js";
+import { abandonOnThrow, commitExecution } from "../commit-execution.js";
 import {
   createTurnEmitter,
   createDetachedProposalGuard,
@@ -561,73 +561,80 @@ export function createPluginRpcRuntimeTurnRunner(
                   turnControl,
                 },
               );
-              // A player turn may hold the session lock for minutes; the
-              // queued job's execution deadline does not cover that wait.
-              opts.executionFinished?.();
-              const { result } = execution;
-              if (
-                opts.rejectSuspension === true &&
-                [
-                  ...result.runtimeResults,
-                  ...(result.nestedRuntimeResults ?? []),
-                ].some((runtimeResult) => runtimeResult.status === "suspended")
-              ) {
-                throw new Error("background runtimes cannot suspend for input");
-              }
-              const outcome = await withBackgroundSessionLock(
-                ctx.sessionLock,
-                ctx.sessionId,
-                async () => {
-                  // Minutes can pass while the generation runs, so the session state
-                  // read before it started is no longer trustworthy. Re-read under
-                  // the lock and refuse to commit into a session the player has since
-                  // paused or ended — the runtime job worker settles the throw
-                  // as a stale job.
-                  const live = await ctx.store.getSession(ctx.sessionId);
-                  if (!live) {
-                    throw new SessionNotActiveError("deleted");
-                  }
-                  if (live.status !== "active") {
-                    throw new SessionNotActiveError(live.status);
-                  }
-                  assertApprovalScope(live, runtimeId);
-                  // A development reload can replace the plugin while the
-                  // generation runs; its results belong to the old version.
-                  assertPluginVersion();
-                  if (
-                    opts.expectedSessionIncarnation &&
-                    sessionIncarnationIdentity(live) !==
-                      opts.expectedSessionIncarnation
-                  ) {
-                    throw new SessionApprovalScopeChangedError();
-                  }
-                  if (opts.beforeCommit) {
-                    await opts.beforeCommit({
-                      backgroundTurnId: result.turnId,
-                      backgroundExecutionId:
-                        result.executionContext.executionId,
-                    });
-                  }
-                  const completeInTx = opts.completeInTx;
-                  return processTurnResults(
-                    execution,
-                    emitter,
-                    hookScopeFor(live.activePlugins, userSettings),
-                    {
-                      executionSignal,
-                      ...(completeInTx
-                        ? { extraInTx: (tx) => completeInTx(tx, result) }
-                        : {}),
-                      ...(proposalGuard ? { proposalGuard } : {}),
-                      ...(opts.completionKind !== undefined
-                        ? { completionKind: opts.completionKind }
-                        : {}),
-                    },
+              return abandonOnThrow(ctx.store, execution, async () => {
+                // A player turn may hold the session lock for minutes; the
+                // queued job's execution deadline does not cover that wait.
+                opts.executionFinished?.();
+                const { result } = execution;
+                if (
+                  opts.rejectSuspension === true &&
+                  [
+                    ...result.runtimeResults,
+                    ...(result.nestedRuntimeResults ?? []),
+                  ].some(
+                    (runtimeResult) => runtimeResult.status === "suspended",
+                  )
+                ) {
+                  throw new Error(
+                    "background runtimes cannot suspend for input",
                   );
-                },
-                executionSignal,
-              );
-              return { turnResult: result, commit: outcome };
+                }
+                const outcome = await withBackgroundSessionLock(
+                  ctx.sessionLock,
+                  ctx.sessionId,
+                  async () => {
+                    // Minutes can pass while the generation runs, so the
+                    // session state read before it started is no longer
+                    // trustworthy. Re-read under the lock and refuse to
+                    // commit into a session the player has since paused or
+                    // ended — the runtime job worker settles the throw as a
+                    // stale job, and `abandonOnThrow` its record.
+                    const live = await ctx.store.getSession(ctx.sessionId);
+                    if (!live) {
+                      throw new SessionNotActiveError("deleted");
+                    }
+                    if (live.status !== "active") {
+                      throw new SessionNotActiveError(live.status);
+                    }
+                    assertApprovalScope(live, runtimeId);
+                    // A development reload can replace the plugin while the
+                    // generation runs; its results belong to the old version.
+                    assertPluginVersion();
+                    if (
+                      opts.expectedSessionIncarnation &&
+                      sessionIncarnationIdentity(live) !==
+                        opts.expectedSessionIncarnation
+                    ) {
+                      throw new SessionApprovalScopeChangedError();
+                    }
+                    if (opts.beforeCommit) {
+                      await opts.beforeCommit({
+                        backgroundTurnId: result.turnId,
+                        backgroundExecutionId:
+                          result.executionContext.executionId,
+                      });
+                    }
+                    const completeInTx = opts.completeInTx;
+                    return processTurnResults(
+                      execution,
+                      emitter,
+                      hookScopeFor(live.activePlugins, userSettings),
+                      {
+                        executionSignal,
+                        ...(completeInTx
+                          ? { extraInTx: (tx) => completeInTx(tx, result) }
+                          : {}),
+                        ...(proposalGuard ? { proposalGuard } : {}),
+                        ...(opts.completionKind !== undefined
+                          ? { completionKind: opts.completionKind }
+                          : {}),
+                      },
+                    );
+                  },
+                  executionSignal,
+                );
+                return { turnResult: result, commit: outcome };
+              });
             },
             needsSettle && !settleTimedOut
               ? async () => {
@@ -726,16 +733,13 @@ export function createPluginRpcRuntimeTurnRunner(
               },
             );
             const completeInTx = args.completeInTx;
-            const outcome = await processTurnResults(
-              execution,
-              emitter,
-              hookScope,
-              {
+            const outcome = await abandonOnThrow(ctx.store, execution, () =>
+              processTurnResults(execution, emitter, hookScope, {
                 executionSignal,
                 ...(completeInTx
                   ? { extraInTx: (tx) => completeInTx(tx, execution.result) }
                   : {}),
-              },
+              }),
             );
             return { result: execution.result, commit: outcome };
           }),

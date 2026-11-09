@@ -1,4 +1,9 @@
-import { commitExecution as commitRuntimeExecution } from "@covel/runtime";
+import {
+  abandonExecution,
+  commitExecution as commitRuntimeExecution,
+  type AbandonExecutionArgs,
+  type PreparedExecution,
+} from "@covel/runtime";
 import { recordExecutionFaults } from "./plugin-faults.js";
 import type { MemorySystem } from "@covel/memory";
 
@@ -32,4 +37,23 @@ export async function commitExecution(
     scheduleMemoryIngest(args.memorySystem, args.execution.commit.sessionId);
   }
   return outcome;
+}
+
+/**
+ * Run the host steps between a prepared execution and its commit. A throw on
+ * the way (a refusal, a commit barrier, failed commit setup) abandons the
+ * execution, so its record settles `failed` instead of lingering `pending`;
+ * once `commitExecution` has it, the commit settles it instead.
+ */
+export async function abandonOnThrow<T>(
+  store: AbandonExecutionArgs["store"],
+  execution: PreparedExecution,
+  steps: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await steps();
+  } catch (error) {
+    await abandonExecution({ execution, store });
+    throw error;
+  }
 }

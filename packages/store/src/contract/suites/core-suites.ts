@@ -707,6 +707,63 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       });
     });
 
+    it.each([false, true])(
+      "never settles a committed row as failed (with operations: %s)",
+      async (withOperations) => {
+        const operation = {
+          id: "op-1",
+          contract: "bank.pay@1",
+          providerPluginId: "bank",
+          service: "pay",
+          invokedBy: { pluginId: "shop", runtimeId: "shop/buy" },
+          seq: 1,
+          status: "committed",
+          summary: "{}",
+        };
+        const results = [
+          {
+            runtimeId: "story",
+            status: "success",
+            output: { text: "kept" },
+            operations: [operation],
+          },
+        ];
+        // Two attempts of one job share the turn id: one committed, one
+        // abandoned before its commit.
+        const committed = makeTurnResult({
+          turnId: "turn-x",
+          commitStatus: "committed",
+          runtimeResults: results,
+        });
+        const abandoned = makeTurnResult({
+          turnId: "turn-x",
+          runtimeResults: results,
+          createdAt: ts(1),
+        });
+        await store.saveTurnResult(committed);
+        await store.saveTurnResult(abandoned);
+
+        await store.setTurnResultCommitStatus(
+          "sess-1",
+          "turn-x",
+          "failed",
+          withOperations ? [{ runtimeId: "story", error: "late" }] : [],
+          withOperations
+            ? [{ id: "op-1", status: "discarded", reason: "execution-failed" }]
+            : [],
+        );
+
+        const byId = new Map(
+          (await store.listTurnResults("sess-1")).map((row) => [row.id, row]),
+        );
+        expect(byId.get(committed.id)).toMatchObject({
+          commitStatus: "committed",
+          runtimeResults: results,
+        });
+        expect(byId.get(abandoned.id)?.commitStatus).toBe("failed");
+      },
+    );
+
     it("leaves rows without operations unchanged when operations are settled", async () => {
       const results = [
         { runtimeId: "story", status: "success", output: { text: "kept" } },

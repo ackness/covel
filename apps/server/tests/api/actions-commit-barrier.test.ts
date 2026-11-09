@@ -27,7 +27,11 @@ import {
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
-import { createHookPipeline } from "@covel/runtime";
+import {
+  createHookPipeline,
+  PluginExtensionHost,
+  PluginServiceRegistry,
+} from "@covel/runtime";
 
 const SESSION_ID = "sess-barrier";
 const RUNTIME_ID = "fake-narrator";
@@ -102,8 +106,10 @@ describe("POST /api/actions — turn commit barrier", () => {
   let app: Hono;
   let busEvents: Parameters<Parameters<EventBus["onEmit"]>[0]>[0][];
   let hookPipeline: ReturnType<typeof createHookPipeline>;
+  let extensions: PluginExtensionHost | undefined;
 
   beforeEach(async () => {
+    extensions = undefined;
     store = createMemoryStore();
     registry = createPluginRegistry();
     registry.register(makeEntry(makeFakeLoadedRuntime({ name: RUNTIME_ID })));
@@ -164,6 +170,7 @@ describe("POST /api/actions — turn commit barrier", () => {
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);
       c.set("hookPipeline", hookPipeline);
+      if (extensions) c.set("pluginExtensions", extensions);
       await next();
     });
     app.route("/api/actions", actionRoutes);
@@ -430,6 +437,41 @@ describe("POST /api/actions — turn commit barrier", () => {
     expect(rows.some((r) => r.type === "proposal.committed")).toBe(true);
     expect(rows.some((r) => r.type === "turn.started")).toBe(true);
     expect(rows.some((r) => r.type === "turn.completed")).toBe(true);
+  });
+
+  it("settles a turn that fails between its execution and commit as failed", async () => {
+    // The commit's image-flow lookup is the one extension execution that
+    // names no turn; the executor's own execution still works.
+    class ImageFlowFailure extends PluginExtensionHost {
+      override createExecution(
+        scope: Parameters<PluginExtensionHost["createExecution"]>[0],
+      ) {
+        if (scope.turnId === undefined)
+          throw new Error("image flow unavailable");
+        return super.createExecution(scope);
+      }
+    }
+    extensions = new ImageFlowFailure(
+      new PluginServiceRegistry({
+        list: async () => [RUNTIME_ID],
+        ensure: async () => {},
+      }),
+    );
+
+    const envelopes = await runTurn();
+
+    expect(envelopes.map((e) => e.type)).toContain("error.occurred");
+    const traces = await store.listTraceEvents(SESSION_ID);
+    expect(
+      traces.find((row) => row.type === "turn.failed")?.payload,
+    ).toMatchObject({ error: "image flow unavailable" });
+    expect(traces.map((row) => row.type)).toContain("runtime.completed");
+    expect(
+      (await store.listTurnResults(SESSION_ID)).map((row) => row.commitStatus),
+    ).toEqual(["failed"]);
+    expect(busEvents.map((event) => event.type)).not.toContain(
+      "turn.completed",
+    );
   });
 });
 

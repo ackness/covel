@@ -219,6 +219,11 @@ export interface RuntimeRecordStore {
    * a row still `pending` afterwards is a crash signature, which is otherwise
    * indistinguishable from a successful turn. No-op when the turn has no row.
    *
+   * A `committed` row is final: settling the turn `failed` leaves it, its
+   * runtime results and operations unchanged. A late failure report, such as
+   * an attempt abandoned after another one with the same turn id committed,
+   * must not misreport durable work.
+   *
    * `failedRuntimes` settles those entries of `runtimeResults` as `failed`
    * with their `error`: a committed execution may still drop an optional
    * runtime's writes, and its recorded result must not read as success.
