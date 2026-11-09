@@ -1,9 +1,19 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { SharedServerInfo } from "@/services/api/health.js";
 import { NoticeHost } from "../ui/notice-host.js";
-import { resetNoticeCenter } from "@/lib/notice-center.js";
+import {
+  getNoticeSnapshot,
+  resetNoticeCenter,
+  restoreNotice,
+} from "@/lib/notice-center.js";
 import { useSharedServerNotice } from "../shared-server-notice.js";
 
 function SharedServerNotice() {
@@ -36,7 +46,13 @@ it("stays hidden on a server that is not shared", () => {
   expect(document.querySelector("[data-notice-host]")).toBeNull();
 });
 
-it("explains where saves and keys go and links the docs and the running source", () => {
+function sharedCard() {
+  return getNoticeSnapshot().cards.find(
+    (card) => card.notice.key === "shared-server",
+  );
+}
+
+it("warns about keys and saves and links the docs and the running source", () => {
   server.info = {
     repository: "https://github.com/ackness/covel",
     commit: "c1e2867d9abcdef",
@@ -47,6 +63,10 @@ it("explains where saves and keys go and links the docs and the running source",
     screen.getByText(/Create a temporary API key just for this trial/)
       .textContent,
   ).toContain("delete or rotate the key at your provider");
+  expect(
+    screen.getByText(/Your saves live only in this browser/).textContent,
+  ).toContain("exports the chat log only");
+  expect(sharedCard()?.notice.tone).toBe("warning");
   expect(
     screen
       .getByRole("link", { name: "How your data and keys are handled" })
@@ -73,13 +93,25 @@ it("links the Chinese docs for a Chinese reader and omits an unknown source", as
   expect(screen.queryByText(/源代码/)).toBeNull();
 });
 
-it("stays dismissed for this browser", () => {
+it("collapses into the bell instead of going away, and stays there next visit", () => {
   server.info = {};
   const first = render(<SharedServerNotice />);
-  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  fireEvent.click(screen.getByRole("button", { name: "Hide for now" }));
   expect(screen.queryByText("This is a public Covel trial")).toBeNull();
+  expect(sharedCard()?.collapsed).toBe(true);
   first.unmount();
+  expect(sharedCard()).toBeUndefined();
 
   render(<SharedServerNotice />);
   expect(screen.queryByText("This is a public Covel trial")).toBeNull();
+  expect(sharedCard()?.collapsed).toBe(true);
+  act(() => restoreNotice("shared-server"));
+  expect(screen.getByText("This is a public Covel trial")).toBeTruthy();
+});
+
+it("opens on a first visit even if an older build dismissed it", () => {
+  server.info = {};
+  localStorage.setItem("covel:sharedServerNoticeDismissed", "1");
+  render(<SharedServerNotice />);
+  expect(screen.getByText("This is a public Covel trial")).toBeTruthy();
 });

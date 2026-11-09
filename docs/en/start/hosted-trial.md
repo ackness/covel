@@ -6,9 +6,9 @@ If you use the desktop app, or a web app you deployed for your own use, your dat
 
 ## How to recognize a trial
 
-A trial opens with a notice card at the top right of the page: "This is a public Covel trial". The card has two links: one, "How your data and keys are handled", leads to this page; the other leads to the version of the source code the site is running (present only when the operator configured the source address).
+A trial opens with a warning card at the top right of the page: "This is a public Covel trial". It reminds you of two things: use a temporary API key, and your saves live only in this browser because the trial cannot export a full save. The card also has two links: one, "How your data and keys are handled", leads to this page; the other leads to the version of the source code the site is running (present only when the operator configured the source address).
 
-After you dismiss the notice, it no longer appears in this browser. In **Settings → Models → Providers & keys**, the place where you enter each provider's key still links to this page.
+Closing the card only collapses it into the notification bell at the top right; later visits in this browser keep it there, and selecting it shows the card again. In **Settings → Models → Providers & keys**, the place where you enter each provider's key still links to this page.
 
 ## Where your data lives
 
@@ -28,7 +28,7 @@ The server does restart: every deploy of a new version restarts it. A trial on a
 
 A session's save is at most 64 MiB. The page warns you when it gets close to that; then carry the story on in a new session.
 
-A trial cannot export or import a full save yet. Do not keep important progress here; to play for the long term, use the [desktop app](./install.md).
+A trial cannot export or import a full save yet. "Export save" in the session menu saves the chat log as a text file only, and it cannot be loaded back to continue playing. Do not keep important progress here; to play for the long term, use the [desktop app](./install.md).
 
 ## How your API keys are used
 
@@ -113,7 +113,7 @@ For the full rules, see [Security boundaries](../internals/security.md#local-mod
 | Images generated earlier are gone                                                      | The server restarted, and the images were only in server memory. The save itself is not lost                                                                                                                             |
 | Saves are gone after switching browser or device                                       | Saves exist only in the browser you used before                                                                                                                                                                          |
 | A warning says the save is near the browser's size limit                               | A session's save is at most 64 MiB. Carry on in a new session                                                                                                                                                            |
-| No trial notice card at the top right                                                  | You dismissed it, or this is not a trial. Where you enter keys in **Settings → Models → Providers & keys**, there is still a link to this page                                                                            |
+| No trial notice card at the top right                                                  | You dismissed it, or this is not a trial. Where you enter keys in **Settings → Models → Providers & keys**, there is still a link to this page                                                                           |
 | An admin action asks for the operator token                                            | The trial keeps the shared world catalog, community plugins, diagnostics and server settings for the operator                                                                                                            |
 | A local model reports "no relay was connected for this request"                        | The page has just opened and is not connected yet, or the network dropped. Keep the page open, wait a few seconds and try again                                                                                          |
 | A local model reports "your browser could not reach …"                                 | The model server is not running, or it does not accept cross-origin requests from the trial (see step 2 of [How to set it up](#how-to-set-it-up)), or the browser was not allowed to access your device or local network |

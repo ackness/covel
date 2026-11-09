@@ -2692,14 +2692,15 @@
   },
   "sharedServer": {
     "title": "This is a public Covel trial",
-    "body": "Your saves and API keys are kept in your browser. The server holds only the temporary copies it needs in memory and never writes your keys to disk, a database or its logs. This is a trial: the server may restart at any time, and clearing this site's data in your browser deletes your saves.",
+    "body": "Your saves and API keys are kept in your browser. The server holds only the temporary copies it needs in memory and never writes your keys to disk, a database or its logs. This is a trial: the server may restart at any time.",
     "learnMore": "How your data and keys are handled",
     "source": "Source code (open source, deployed automatically)",
     "sourceAt": "Source code: running {{commit}} (open source, deployed automatically)",
     "localEndpoint": "This public server only calls public HTTPS addresses; use an address that starts with https://. A model on your computer or local network can use 127.0.0.1, localhost or a LAN address, which your browser relays.",
     "localRelay": "This address is on your computer or local network, so your browser relays the model requests: keep the page open while you play, and let the model server accept {{origin}} through CORS (for Ollama, set OLLAMA_ORIGINS={{origin}}). Your browser may ask whether this site may access your device or local network.",
     "localHttp": "Browsers do not let this HTTPS page reach a plain-http address on your local network. Serve the model over HTTPS on your network, or forward it on this computer through 127.0.0.1 or localhost.",
-    "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish."
+    "keyAdvice": "Create a temporary API key just for this trial, ideally with a spending limit. We do our best to protect your data, but please delete or rotate the key at your provider when you finish.",
+    "saveAdvice": "Your saves live only in this browser, and the trial cannot export or import a full save; \"Export save\" in the menu exports the chat log only. Clearing this site's data, switching browsers or using a private window loses them, so play anything you want to keep in the desktop app."
   },
   "orchestration": {
     "clearPolicy": "Clear selection",
