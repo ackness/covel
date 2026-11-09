@@ -10,6 +10,8 @@
   "devDependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
+    "@covel/plugin-test-utils": "workspace:*",
+    "@covel/runtime": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
     "typescript": "^7.0.2",

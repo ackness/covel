@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
 import { unusedPackageExports } from "./lib/package-exports.mjs";
+import { testSourceImportErrors } from "./lib/test-source-imports.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
@@ -154,6 +155,10 @@ for (const workspace of workspaces) {
         !Object.hasOwn(target.manifest.exports, entry)
       )
         fail("entry is not exported by the package");
+      if (entry === "./testing" && name !== workspace.manifest.name)
+        fail(
+          "the ./testing entry is for tests; production source must not import it",
+        );
       if (
         workspace.group === "packages" &&
         name !== workspace.manifest.name &&
@@ -179,6 +184,98 @@ errors.push(
       "Public plugin SDK entry for community entry modules.",
   }),
 );
+
+// Tests that still reach into another workspace by relative path. Each target
+// has no public or `./testing` entry on purpose; moving it behind one would
+// expose an internal or invert a dependency. Add an entry only with the same
+// kind of reason, and remove it once the test uses a package entry.
+const mockedTransport =
+  "vi.mock must name the module the package's own files import; the outbound transport has no entry of its own, and the tests stub it below the gateway.";
+const testImportAllowlist = [
+  {
+    from: "apps/server/tests/api/memory-llm-policy.test.ts",
+    imports: ["packages/ai-provider/src/outbound-network.js"],
+    reason: mockedTransport,
+  },
+  {
+    from: "apps/server/tests/api/reasoning-overrides.test.ts",
+    imports: ["packages/ai-provider/src/outbound-network.js"],
+    reason: mockedTransport,
+  },
+  {
+    from: "apps/server/tests/bootstrap/llm-request-observation.test.ts",
+    imports: [
+      "packages/ai-provider/src/outbound-network.js",
+      "packages/runtime/src/retry/llm-retry.js",
+      "packages/runtime/src/retry/retry-common.js",
+    ],
+    reason: `${mockedTransport} The retry loop is runtime-internal; the test drives it against a real gateway to observe request traces.`,
+  },
+  {
+    from: "apps/server/tests/integration/pg-runtime-export-failure.test.ts",
+    imports: ["packages/runtime/src/commit/runtime-export-publish.js"],
+    reason:
+      "Runtime-internal export publisher, driven directly to inject one failing PostgreSQL INSERT after finalization.",
+  },
+  {
+    from: "apps/server/tests/api/delegation-privacy.test.ts",
+    imports: ["packages/runtime/tests/_helpers/actor-agent-composition.js"],
+    reason:
+      "Runtime test scenario shared with runtime's own suite; it depends on runtime-internal modules and test fixtures that have no entry.",
+  },
+  {
+    from: "apps/server/tests/integration/read-baseline-commit-pg.test.ts",
+    imports: ["packages/runtime/tests/helpers/selfdata-baseline-suite.js"],
+    reason:
+      "Runtime suite rerun against PostgreSQL; it depends on runtime-internal modules and test fixtures that have no entry.",
+  },
+  {
+    from: "apps/server/tests/api/config-api.test.ts",
+    imports: ["apps/desktop/src/env-files.js"],
+    reason:
+      "Checks the server reads key files like the desktop shell; apps publish no entries and the server must not depend on desktop.",
+  },
+  {
+    from: "packages/memory/tests/vector-memory.test.ts",
+    imports: [
+      "packages/ai-provider/src/adapters/http/response.js",
+      "packages/ai-provider/src/gateway-lifecycle.js",
+    ],
+    reason:
+      "Reproduces the exact error an embedding adapter throws; these adapter internals are not part of ai-provider's surface.",
+  },
+  {
+    from: "packages/runtime/tests/bundled-orchestration.test.ts",
+    imports: ["packages/test-runtime/src/runtime-loading.js"],
+    reason:
+      "test-runtime is a CLI without import entries and already depends on runtime; an entry would create a dependency cycle.",
+  },
+  {
+    from: "packages/runtime/tests/helpers/narrative-attribution.ts",
+    imports: ["packages/test-runtime/src/runtime-loading.js"],
+    reason:
+      "test-runtime is a CLI without import entries and already depends on runtime; an entry would create a dependency cycle.",
+  },
+  {
+    from: "plugins/char-creator/tests/character-tracker-runtime.test.js",
+    imports: ["packages/test-runtime/src/runtime-loading.ts"],
+    reason:
+      "test-runtime is a CLI without import entries; the test loads the plugin the way the CLI does.",
+  },
+  {
+    from: "plugins/affinity/tests/haruka-relationship-authority.test.js",
+    imports: [
+      "apps/server/src/config/plugin-packs.ts",
+      "apps/server/src/routes/api/session/plugins.ts",
+      "apps/server/src/world-data/requirements.ts",
+      "apps/server/src/world-seed-loader.ts",
+      "apps/server/tests/helpers/world-data-import.ts",
+    ],
+    reason:
+      "End-to-end world check through the server's own session planning and world-data import; apps publish no entries.",
+  },
+];
+errors.push(...testSourceImportErrors(root, workspaces, testImportAllowlist));
 
 if (errors.length) {
   console.error(errors.join("\n"));

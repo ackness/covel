@@ -8,7 +8,7 @@ import type {
   RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
-import { makeSession } from "../../store/src/contract/test-fixtures.js";
+import { makeSession } from "@covel/store/testing";
 import {
   finalizeExecution,
   type FinalizeExecutionArgs,

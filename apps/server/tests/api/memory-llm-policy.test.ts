@@ -3,9 +3,9 @@ import {
   createGateway,
   createPresetRegistry,
   createProviderRegistry,
+  outboundFetch,
 } from "@covel/ai-provider";
 import { createPluginRuntimeGateway } from "@covel/runtime";
-import { outboundFetch } from "../../../../packages/ai-provider/src/outbound-network.js";
 import extractMemory from "../../../../plugins/memory/server/extract.js";
 
 vi.mock("../../../../packages/ai-provider/src/outbound-network.js", () => ({
