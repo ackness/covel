@@ -29,7 +29,7 @@ cp -r {{pluginName}}/ ~/.covel/plugins/
 
 这个插件不需要安装依赖，也没有 `package.json`：handler 是普通 ES module，宿主按 ES module 加载它，运行所需的上下文由框架注入。`handler.js` 里的 `PluginFunctionHandler` JSDoc 标注只描述 `ctx` 与返回值的形状，类型来自 Covel 仓库内的 `@covel/plugin-handlers-utils`。
 
-在 Covel 仓库根目录做静态校验（只检查声明，不执行 entry）：
+在 Covel 仓库根目录做静态校验（只检查声明，不执行 entry）。这个模板没有入口代码；以后加了 `server/index.js` 或其他 `entry`，每次增删注册后先运行 `pnpm plugin:extract <插件目录>` 同步 `contributes`，这是固定步骤：
 
 ```bash
 pnpm validate:plugin <插件目录>

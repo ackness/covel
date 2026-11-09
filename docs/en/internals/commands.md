@@ -89,7 +89,9 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 
 `pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]` generates a plugin from `templates/`. By default it is generated into the user plugin directory. With `--with-tools`, it is generated under the repository's `plugins/` instead. This option cannot be used together with `-t` or `-r`.
 
-`pnpm plugin:extract` executes entry code with your permissions and is meant for your own package. By default it writes declarations and lists changed keys; `--check` writes nothing and lists added and removed names per key, exiting 1 on drift and 0 when in sync. `--json` emits the extraction result and drift. Extraction errors exit 1; invalid arguments exit 2. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the scope and localized-file rules. `pnpm validate:plugin` remains static and never executes the entry.
+`pnpm plugin:extract` executes entry code with your permissions and is meant for your own package. By default it writes declarations and lists changed keys; `--check` writes nothing and lists added and removed names per key, exiting 1 on drift and 0 when in sync. `--json` emits the extraction result and drift. Extraction errors exit 1; invalid arguments exit 2. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the scope and localized-file rules. `pnpm validate:plugin` remains static and never executes the entry. It also syncs `extensions`: added and dropped by `<point>/<id>`, with the options of kept entries preserved.
+
+`pnpm check:manifests` first validates every bundled plugin statically, then runs `plugin:extract --check` on every bundled plugin with an entry in one process. Bundled plugins are trusted repository code that the server tests already load, so executing the entries here adds no trust surface; `validate:plugin` itself is unchanged. When declarations and registrations disagree, it lists the differences per key and prints the fix command, `pnpm plugin:extract plugins/<id>`.
 
 Further reading: for collections, see [Collections](../ship/collections.md). For the translation tools, see [i18n](../reference/i18n.md).
 
@@ -120,7 +122,8 @@ pnpm check:push --full  # every suite; --base <ref> measures from another branch
 
 ```bash
 pnpm check:oxlint     # Oxlint; a warning fails it
-pnpm check:manifests  # pnpm validate:plugin on every bundled plugin
+pnpm check:manifests  # pnpm validate:plugin on every bundled plugin (static), then plugin:extract --check on
+                      # every bundled plugin with an entry (executes the trusted bundled entries)
 pnpm check:schemas    # the generated schema reference matches the Zod schemas (fix with pnpm schemas:generate)
 pnpm check:changelog  # the fragments in docs/changelog.d/ are well formed
 pnpm check:scripts    # scripts/tests/*.test.mjs under node --test

@@ -27,9 +27,18 @@ export const EXTRACTED_KINDS = [
   "forms",
   "wires",
   "hooks",
+  "extensions",
 ] as const;
 type Kind = (typeof EXTRACTED_KINDS)[number];
 type Contributions = NonNullable<PluginManifest["contributes"]>;
+/** `<point>/<id>`, or the object form that carries options such as `slot`. */
+export type ExtensionContribution =
+  | string
+  | {
+      readonly point: string;
+      readonly id: string;
+      readonly [k: string]: unknown;
+    };
 export interface ExtractedDeclarations {
   readonly tools: readonly string[];
   readonly actions: readonly string[];
@@ -45,8 +54,11 @@ export interface ExtractedDeclarations {
         readonly holdsDrafts?: true;
       }
   )[];
-  /** Recorded registrations; declaration-only extension metadata is never rewritten. */
-  readonly extensions: readonly string[];
+  /**
+   * Recorded registrations. Authored entries that are still registered keep
+   * their written form and options; only new IDs are added, as `<point>/<id>`.
+   */
+  readonly extensions: readonly ExtensionContribution[];
   /** Commands have no registration API; report the authored metadata. */
   readonly commands: NonNullable<Contributions["commands"]>;
   readonly localizedContributes: readonly string[];
@@ -60,6 +72,13 @@ interface DeclarationDrift {
 function names(values: readonly unknown[], key: Kind): string[] {
   return values.map((value) => {
     if (key !== "hooks" && typeof value === "string") return value;
+    if (key === "extensions") {
+      const extension = pluginManifestSchema.shape.contributes
+        .unwrap()
+        .shape.extensions.unwrap()
+        .element.parse(value);
+      return `${extension.point}/${extension.id}`;
+    }
     if (key === "services") {
       const service = serviceContributionSchema.parse(value);
       const markers = [
@@ -185,7 +204,7 @@ function delimiters(token: CST.BlockMap | CST.FlowCollection): void {
 }
 
 /**
- * Rewrite only the six registration lists. The Document API supplies typed
+ * Rewrite only the seven registration lists. The Document API supplies typed
  * nodes and rendering; its source tokens keep every untouched byte intact.
  */
 export function rewriteContributes(

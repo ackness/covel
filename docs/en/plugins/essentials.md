@@ -23,7 +23,7 @@ For all the fields, see the [plugin field reference](../reference/plugins.md).
 
 ## The minimal loop
 
-Each time you change a plugin, follow three steps: generate (only once), validate, and run offline.
+Each time you change a plugin, follow three steps: generate (only once), validate, and run offline. A plugin with entry code adds one step before validation: sync its declarations, described in [where to declare what my code registers](#where-to-declare-what-my-code-registers).
 
 For a plugin you write for yourself or for the community, put it in the user plugin directory. It needs no dependency install:
 
@@ -118,8 +118,21 @@ contributes:
       description: Emitted after a note is saved.
 ```
 
+### After changing the entry, sync the declarations
+
+`PLUGIN.md` is the single source of truth: installation approval, the capability snapshot and approval-free trusted-source grants all read these declarations before any code runs, so they cannot be generated from code at load time. Syncing goes from code to manifest with your own command; do not hand-edit these seven lists:
+
+```bash
+pnpm plugin:extract <plugin directory>           # rewrite contributes from the entry's registrations
+pnpm plugin:extract <plugin directory> --check   # write nothing; exit 1 on drift
+```
+
+Run it after every added or removed `registerTool`, `registerRpc`, `registerService`, `on`, `registerFormValidator`, `registerWires` or `provideExtension`, then validate and run offline. It writes `tools`, `actions`, `services`, `forms`, `wires`, `hooks` and `extensions`; for `extensions` it only adds and drops IDs and keeps the options (`order`, `slot`, ...) of entries that stay. Command metadata in `commands` and declaration-only fields such as `events` and `prompt` stay yours to maintain. See [Plugins with local code](./local-code.md#4-write-the-entry-file) for the details.
+
+For bundled plugins, `pnpm check:manifests` inside `pnpm check` enforces this: it executes each bundled entry, compares the declarations, and prints the differences with the fix command. The load-time check in both directions remains the last gate, and its errors name the same fix command.
+
 > [!NOTE]
-> The validation command only reads files. It does not run the entry file. So it cannot find "declared but never registered in code". That error appears only when the plugin loads. You can catch it early with [offline runs](./testing.md).
+> The validation command only reads files and does not run the entry file, so it cannot find "declared but never registered in code". The sync command and [offline runs](./testing.md) catch that error early; otherwise it appears only when the plugin loads.
 
 ## Which tools the model can use
 

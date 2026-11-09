@@ -7,6 +7,13 @@ import {
 import type { PluginAPI } from "./plugin-api.js";
 
 type Contributions = NonNullable<PluginManifest["contributes"]>;
+/**
+ * Appended to load errors where registrations and `contributes` disagree. A
+ * plain string: the host never runs the command, authors do.
+ */
+export const REGISTRATION_SYNC_HINT =
+  "Sync PLUGIN.md with the entry: pnpm plugin:extract <plugin-dir>";
+
 /** Verify the declaration boundary before the staged batch becomes visible. */
 export function enforcePluginRegistrationContract(
   api: PluginAPI,
@@ -56,8 +63,11 @@ export function enforcePluginRegistrationContract(
   const record = (kind: string, id: string) => {
     const key = `${kind}:${id}`;
     const count = (seen.get(key) ?? 0) + 1;
-    if (count > (expected.get(key) ?? 0))
-      throw invalid(`Undeclared or duplicate registration: ${key}`);
+    const allowed = expected.get(key) ?? 0;
+    if (count > allowed)
+      throw invalid(
+        `Undeclared or duplicate registration: ${key}${allowed === 0 ? `. ${REGISTRATION_SYNC_HINT}` : ""}`,
+      );
     seen.set(key, count);
   };
   return {
@@ -96,7 +106,9 @@ export function enforcePluginRegistrationContract(
         api.on(event, handler, options);
         const key = `${event}:${options?.enforce ?? "normal"}`;
         if (!expectedHooks.has(key))
-          throw invalid(`Undeclared registration: hook:${key}`);
+          throw invalid(
+            `Undeclared registration: hook:${key}. ${REGISTRATION_SYNC_HINT}`,
+          );
         seenHooks.add(key);
       },
       registerWires(wires) {
@@ -126,11 +138,15 @@ export function enforcePluginRegistrationContract(
     validate() {
       for (const key of expectedHooks) {
         if (!seenHooks.has(key))
-          throw invalid(`Missing registration: hook:${key}`);
+          throw invalid(
+            `Missing registration: hook:${key}. ${REGISTRATION_SYNC_HINT}`,
+          );
       }
       for (const [key, count] of expected) {
         if (seen.get(key) !== count)
-          throw invalid(`Missing registration: ${key}`);
+          throw invalid(
+            `Missing registration: ${key}. ${REGISTRATION_SYNC_HINT}`,
+          );
       }
       for (const command of declarations.commands ?? []) {
         if (!declarations.actions?.includes(command.action))
