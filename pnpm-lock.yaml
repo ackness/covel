@@ -922,9 +922,15 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
@@ -1101,6 +1107,12 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
