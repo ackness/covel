@@ -11,7 +11,6 @@
 import {
   createTraceRecorder,
   createTurnEmitter,
-  snapshotUserSettings,
   type HookScope,
   type TraceRecorder,
   type TurnEmitter,
@@ -22,8 +21,10 @@ import type {
   MessageRecord,
   SessionRecord,
 } from "@covel/store";
-import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
-import { buildSessionHookScope } from "../session/hook-scope.js";
+import {
+  executionHookScope,
+  loadExecutionUserSettings,
+} from "../execution-context.js";
 import { recoveryAction } from "./execution-recovery.js";
 import { actionRequestOf, storedActions } from "./submit-actions.js";
 import type { PreparedTurn } from "./turn-preparation.js";
@@ -259,26 +260,18 @@ export async function startPreparedTurn(
   // player input, execution, proposal commits, lifecycle sync, and the
   // final automatic snapshot. For PG-backed deployments it uses
   // `pg_advisory_lock`; memory/sqlite use the in-process chain lock.
-  // Resolve plugin userSettings for this turn: world-authored defaults
-  // (WorldRecord.metadata.pluginSettings) merged under the player's
-  // per-session overrides (X-Plugin-User-Settings header). The runtime's
-  // resolveUserSettings fills any still-missing declared key from the
-  // manifest default. Without this the scheduled loop only ever saw
-  // manifest defaults — player + world tuning were silently dropped on the
-  // main route (only plugin-rpc read the header).
-  const userSettings = snapshotUserSettings(
-    await loadSessionPluginUserSettings(
-      store,
-      effectiveSession,
-      request.playerSettings,
-    ),
+  // The player's per-session settings (X-Plugin-User-Settings header) over
+  // the world's authored defaults, snapshotted for this turn.
+  const userSettings = await loadExecutionUserSettings(
+    store,
+    effectiveSession,
+    request.playerSettings,
   );
 
-  const hookScope = buildSessionHookScope({
+  const hookScope = executionHookScope({
     pluginRegistry,
-    activePluginIds: effectiveSession.activePlugins,
+    session: effectiveSession,
     userSettings,
-    locale: effectiveSession.locale,
   });
 
   const turnInput = {

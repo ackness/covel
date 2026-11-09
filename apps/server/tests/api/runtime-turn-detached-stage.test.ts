@@ -525,6 +525,96 @@ describe("plugin RPC detached-stage runner", () => {
     },
   );
 
+  it.each(["manual", "background", "detached-stage"] as const)(
+    "gives hooks the session's content locale during a %s run",
+    async (mode) => {
+      const pipeline = createHookPipeline();
+      const seen: Array<{ event: string; locale: string | undefined }> = [];
+      for (const event of [
+        "TurnStart",
+        "PreStateCommit",
+        "PostStateCommit",
+      ] as const) {
+        pipeline.register({
+          id: `locale:${event}`,
+          event,
+          pluginId: PLUGIN_ID,
+          handler: async (ctx) => {
+            seen.push({ event, locale: ctx.locale });
+            return { action: "continue" };
+          },
+        });
+      }
+      const target =
+        mode === "detached-stage"
+          ? manifest()
+          : {
+              ...manifest(),
+              stage: undefined,
+              trigger: { type: "manual" as const },
+              inputs: undefined,
+              needs: undefined,
+              turnCompletion: undefined,
+            };
+      const registry = createPluginRegistry();
+      registry.register({
+        id: PLUGIN_ID,
+        summary: {
+          id: PLUGIN_ID,
+          name: PLUGIN_ID,
+          description: "fixture",
+          kind: "plugin",
+          runtimeCount: 2,
+        },
+        manifests: [producerManifest(), target].map((manifest) => ({
+          runtime: manifest.runtimeType === "function" ? { function: {} } : {},
+          manifest,
+          promptTemplate: "",
+          rawFrontmatter: {},
+        })),
+        loadedRuntimes: new Map(),
+        status: "registered",
+      });
+      registry.syncSessionActivations(SESSION_ID, [PLUGIN_ID]);
+      const { runner, session } = await setup(
+        async () => ({
+          outcome: "success",
+          value: {},
+          effects: {
+            pluginData: [{ namespace: "tracks", key: "locale", value: {} }],
+          },
+        }),
+        pipeline,
+        target,
+        // The run's input carries another locale than the stored session's
+        // ("zh-CN"): hooks take the session's.
+        { pluginRegistry: registry, session: { locale: "en" } },
+      );
+      const outcome =
+        mode === "detached-stage"
+          ? await runner.runDetachedStage({
+              descriptor: descriptor(),
+              backgroundTurnId: "locale-turn",
+              expectedSessionIncarnation: sessionIncarnationIdentity(session),
+              beforeCommit: async () => {},
+              completeInTx: async () => {},
+            })
+          : await runner.runManualTurn({
+              turnId: "locale-turn",
+              runtimeId: RUNTIME_ID,
+              detached: mode === "background",
+              retrySeedResults: [sourceResult()],
+            });
+      expect(outcome.commit.committed).toBe(true);
+      expect(seen).toEqual(
+        ["TurnStart", "PreStateCommit", "PostStateCommit"].map((event) => ({
+          event,
+          locale: "zh-CN",
+        })),
+      );
+    },
+  );
+
   it("rehydrates frozen inputs, commits output, and does not complete a player turn", async () => {
     const handler: FunctionHandler = async (ctx) => {
       const narrative = ctx.inputs?.narrative as { value?: string } | undefined;

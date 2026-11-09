@@ -3,7 +3,6 @@ import type { Context } from "hono";
 import {
   createWorldModelView,
   pendingDimensionSettlements,
-  snapshotUserSettings,
 } from "@covel/runtime";
 import { pluginRuntimeManifests } from "@covel/plugin-loader";
 import {
@@ -12,7 +11,10 @@ import {
   type TurnInput,
 } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
-import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
+import {
+  loadExecutionUserSettings,
+  syncLiveSessionRuntimes,
+} from "../execution-context.js";
 import { resolveMediaImageFlow } from "../media-image-flow.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
@@ -51,20 +53,7 @@ export async function retryPendingDimensionSettlements(
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   try {
-    const activeRuntimes = await withSettledSessionLock(
-      c,
-      sessionId,
-      async () => {
-        const live = await store.getSession(sessionId);
-        pluginRegistry.syncSessionActivations(
-          sessionId,
-          live?.activePlugins ?? [],
-        );
-        return pluginRegistry.getActiveRuntimes(sessionId);
-      },
-      undefined,
-      signal,
-    );
+    const activeRuntimes = await syncLiveSessionRuntimes(c, sessionId, signal);
     const pending = await pendingDimensionSettlements({
       store,
       sessionId,
@@ -145,7 +134,7 @@ export async function retryPendingDimensionSettlements(
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
-    const userSettings = await loadSessionPluginUserSettings(
+    const userSettings = await loadExecutionUserSettings(
       store,
       session,
       args.playerSettings,
@@ -166,9 +155,7 @@ export async function retryPendingDimensionSettlements(
           : []) as RuntimeResult[],
         sourceTurnId: receipt.sourceTurnId,
         ...(signal ? { executionSignal: signal } : {}),
-        ...(userSettings
-          ? { userSettings: snapshotUserSettings(userSettings) }
-          : {}),
+        ...(userSettings ? { userSettings } : {}),
       });
       const failed = summary.runtimeResults.find(
         (result) => result.status === "failed",

@@ -39,7 +39,11 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
-import { buildSessionHookScope } from "../session/hook-scope.js";
+import {
+  SessionNotActiveError,
+  executionHookScope,
+  requireActiveSession,
+} from "../execution-context.js";
 import { RuntimeJobQueueFullError, listSettlingRuntimeJobs } from "./jobs.js";
 import {
   heldJobsRelease,
@@ -54,13 +58,6 @@ export class SessionApprovalScopeChangedError extends Error {
   }
 }
 
-export class SessionNotActiveError extends Error {
-  constructor(readonly status: string) {
-    super(`session is ${status}; runtime execution refused`);
-    this.name = "SessionNotActiveError";
-  }
-}
-
 /** Check the accepted approval scope against the live row under the lock. */
 export async function requireLiveScope(
   store: Pick<DataStore, "getSession">,
@@ -68,9 +65,7 @@ export async function requireLiveScope(
   pluginId: string,
   approvalScope: string,
 ): Promise<SessionRecord> {
-  const live = await store.getSession(sessionId);
-  if (!live) throw new SessionNotActiveError("deleted");
-  if (live.status !== "active") throw new SessionNotActiveError(live.status);
+  const live = await requireActiveSession(store, sessionId);
   if (sessionApprovalScope(live, pluginId) !== approvalScope)
     throw new SessionApprovalScopeChangedError();
   return live;
@@ -305,35 +300,32 @@ export function createPluginRpcRuntimeTurnRunner(
     }
   }
 
+  /** The live session, still active and under the accepted approval scope. */
   async function requireLiveApprovedSession(
     runtimeId: string,
   ): Promise<SessionRecord> {
-    const live = await ctx.store.getSession(ctx.sessionId);
-    if (!live) {
-      throw new SessionNotActiveError("deleted");
-    }
-    if (live.status !== "active") {
-      throw new SessionNotActiveError(live.status);
-    }
+    const live = await requireActiveSession(ctx.store, ctx.sessionId);
     assertApprovalScope(live, runtimeId);
     return live;
   }
 
   function hookScopeFor(
-    activePluginIds: readonly string[],
-    userSettings: Parameters<typeof snapshotUserSettings>[0],
+    live: SessionRecord,
+    userSettings: TurnInput["userSettings"],
   ): HookScope {
+    // A runner built without a registry (tests) scopes hooks to its runtimes.
     if (!ctx.pluginRegistry) {
       return {
         activePluginIds: new Set(
           activeRuntimes().map((runtime) => runtime.pluginId),
         ),
         settings: buildHookSettings(activeRuntimes(), userSettings),
+        locale: live.locale,
       };
     }
-    return buildSessionHookScope({
+    return executionHookScope({
       pluginRegistry: ctx.pluginRegistry,
-      activePluginIds,
+      session: live,
       userSettings,
     });
   }
@@ -554,7 +546,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   assertPluginVersion();
                   await opts.beforeExecute?.();
                   executionSignal?.throwIfAborted();
-                  return hookScopeFor(live.activePlugins, userSettings);
+                  return hookScopeFor(live, userSettings);
                 },
                 executionSignal,
               );
@@ -601,14 +593,7 @@ export function createPluginRpcRuntimeTurnRunner(
                     // commit into a session the player has since paused or
                     // ended — the runtime job worker settles the throw as a
                     // stale job, and `abandonOnThrow` its record.
-                    const live = await ctx.store.getSession(ctx.sessionId);
-                    if (!live) {
-                      throw new SessionNotActiveError("deleted");
-                    }
-                    if (live.status !== "active") {
-                      throw new SessionNotActiveError(live.status);
-                    }
-                    assertApprovalScope(live, runtimeId);
+                    const live = await requireLiveApprovedSession(runtimeId);
                     // A development reload can replace the plugin while the
                     // generation runs; its results belong to the old version.
                     assertPluginVersion();
@@ -630,7 +615,7 @@ export function createPluginRpcRuntimeTurnRunner(
                     return processTurnResults(
                       execution,
                       emitter,
-                      hookScopeFor(live.activePlugins, userSettings),
+                      hookScopeFor(live, userSettings),
                       {
                         executionSignal,
                         ...(completeInTx
@@ -706,8 +691,14 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    const userSettings = snapshotUserSettings(turnInput.userSettings);
-    const executionInput = { ...turnInput, userSettings };
+    // `runDetached` snapshots the settings itself; only the locked run takes
+    // its snapshot here.
+    const executionInput: TurnInput = args.detached
+      ? turnInput
+      : {
+          ...turnInput,
+          userSettings: snapshotUserSettings(turnInput.userSettings),
+        };
 
     // Background mode has already returned 202 to the client and detached from
     // the request, and the only manual runtime that uses it is a media
@@ -732,7 +723,7 @@ export function createPluginRpcRuntimeTurnRunner(
         )(() =>
           withSnapshot(async () => {
             const live = await requireLiveApprovedSession(args.runtimeId);
-            const hookScope = hookScopeFor(live.activePlugins, userSettings);
+            const hookScope = hookScopeFor(live, executionInput.userSettings);
             executionSignal?.throwIfAborted();
             const execution = await executeTurn(
               executionInput,
