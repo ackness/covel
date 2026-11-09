@@ -64,7 +64,6 @@ Below are the non-test source files over 800 lines. 800 lines is only the thresh
 <!-- prettier-ignore -->
 | File | Lines |
 | --- | ---: |
-| `apps/server/src/routes/api/actions.ts` | 1594 |
 | `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1496 |
 | `apps/server/src/world-data/validate-world-package.ts` | 1359 |
 | `packages/ai-provider/src/gateway.ts` | 1266 |

@@ -64,7 +64,6 @@ rg -n "ponytail:" apps packages plugins
 <!-- prettier-ignore -->
 | File | Lines |
 | --- | ---: |
-| `apps/server/src/routes/api/actions.ts` | 1594 |
 | `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1496 |
 | `apps/server/src/world-data/validate-world-package.ts` | 1359 |
 | `packages/ai-provider/src/gateway.ts` | 1266 |
