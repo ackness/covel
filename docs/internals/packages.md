@@ -127,6 +127,7 @@ await commitExecution({
 ```
 
 - 恢复执行同样把整个 `execution` 交给 `commitExecution`，完成策略选 `kind: "resume"`。
+- 拿到执行之后决定不提交（例如提交前发现会话已暂停），就调用 `abandonExecution({ execution, store })`。否则这次执行的 `turn_results` 行一直停在 `pending`，看起来像崩溃。
 - 提交事务，以及提交之后的通知、快照、记忆调度，分别遵守[事务契约](../reference/transactions.md)。
 
 > [!WARNING]

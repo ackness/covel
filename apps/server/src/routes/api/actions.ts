@@ -46,6 +46,7 @@ import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import {
+  abandonExecution,
   applyIsolatedRuntimes,
   droppedEmitter,
   droppedUpstream,
@@ -60,6 +61,7 @@ import {
   FormRejectedError,
   FormValidatorFailedError,
   snapshotUserSettings,
+  type ExecutedTurn,
   type PreparedInteractionSubmission,
 } from "@covel/runtime";
 import {
@@ -606,6 +608,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // but before settlement is a known failure, not a crash, so the row must
     // not be left `pending` forever.
     let commitStatusSettled = false;
+    // The current turn's execution until it reaches the commit, which then
+    // settles it; the outer catch abandons one that never got there.
+    let uncommittedExecution: ExecutedTurn | undefined;
     let hasStartedTurn = false;
     let requestStarted = false;
     let currentRetryScope: RuntimeRetryScope | undefined;
@@ -857,6 +862,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       let turnOrigin = turnArgs.origin;
       if (!turnArgs.generated) currentTurnId = turnArgs.turnId;
       commitStatusSettled = false;
+      uncommittedExecution = undefined;
       hasStartedTurn = false;
       roundReported = false;
       roundResync = false;
@@ -1394,6 +1400,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // Player mid-turn steering + abort.
             turnControl,
           });
+          uncommittedExecution = execution;
 
           const { result } = execution;
           const hookPipeline = c.get("hookPipeline");
@@ -1448,6 +1455,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             }
           };
           const correctedRuns = new Set<string>();
+          const imageFlowRuntimeIds = (
+            await resolveMediaImageFlow(
+              store,
+              c.get("pluginExtensions"),
+              sessionId,
+            )
+          )?.assetRuntimeIds;
+          // From here the commit settles the execution, whatever its outcome.
+          uncommittedExecution = undefined;
           const outcome = await commitExecution({
             onRuntimeCorrection: (type, payload) => {
               if (typeof payload.runId === "string")
@@ -1461,13 +1477,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               );
             },
             memorySystem: c.get("memorySystem"),
-            imageFlowRuntimeIds: (
-              await resolveMediaImageFlow(
-                store,
-                c.get("pluginExtensions"),
-                sessionId,
-              )
-            )?.assetRuntimeIds,
+            imageFlowRuntimeIds,
             completion: {
               kind: "turn",
               turnId: result.turnId,
@@ -1853,14 +1863,19 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       };
       const message = err instanceof Error ? err.message : String(err);
       // A known failure must not leave the execution artifact `pending` —
-      // that state is reserved for crashes. No-op when the turn never
-      // persisted a row (error before/inside execution). Best-effort: the
-      // stream error event below matters more than this bookkeeping write.
+      // that state is reserved for crashes. An execution that never reached
+      // the commit is abandoned; without one in hand (execution threw, or the
+      // commit threw before settling) the row alone settles, a no-op when the
+      // turn persisted none. Best-effort, never throwing: the stream error
+      // event below matters more than this bookkeeping write.
       if (hasStartedTurn && !commitStatusSettled) {
         commitStatusSettled = true;
-        await store
-          .setTurnResultCommitStatus(sessionId, currentTurnId, "failed")
-          .catch(() => {});
+        if (uncommittedExecution)
+          await abandonExecution({ execution: uncommittedExecution, store });
+        else
+          await store
+            .setTurnResultCommitStatus(sessionId, currentTurnId, "failed")
+            .catch(() => {});
       }
       if (hasStartedTurn && !priorOutcome) {
         await store

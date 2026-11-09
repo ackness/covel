@@ -174,9 +174,17 @@ export function createSqlRuntimeRecords(
       failedRuntimes: readonly FailedRuntimeResult[] = [],
       settledOperations: readonly OperationSettlement[] = [],
     ): Promise<void> {
+      // A committed row is final; a late failure leaves it as it is. The
+      // condition sits in every UPDATE so a concurrent commit cannot slip
+      // between a read and the write.
+      const settleable =
+        status === "failed"
+          ? ne(turnResults.commitStatus, "committed")
+          : undefined;
       const where = and(
         eq(turnResults.sessionId, sessionId),
         eq(turnResults.turnId, turnId),
+        settleable,
       )!;
       if (failedRuntimes.length === 0 && settledOperations.length === 0) {
         await runner.update(turnResults, { commitStatus: status }, where);
@@ -196,7 +204,7 @@ export function createSqlRuntimeRecords(
               settledOperations,
             ),
           }),
-          eq(turnResults.id, row.id),
+          and(eq(turnResults.id, row.id), settleable)!,
         );
       }
     },

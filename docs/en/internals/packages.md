@@ -127,6 +127,7 @@ await commitExecution({
 ```
 
 - Resumed executions also pass the whole `execution` to `commitExecution`. The completion policy uses `kind: "resume"`.
+- A host that decides not to commit an execution it already has (for example, it finds the session paused just before the commit) calls `abandonExecution({ execution, store })`. Otherwise the execution's `turn_results` rows stay `pending` and look like a crash.
 - The commit transaction, and the notifications, snapshots, and memory scheduling after the commit, each follow the [transaction contract](../reference/transactions.md).
 
 > [!WARNING]

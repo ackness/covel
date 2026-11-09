@@ -10,6 +10,7 @@ import type {
   RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 
@@ -107,6 +108,35 @@ function descriptor(): DeferredRuntimeJob {
     sourceExecutionStartedAt: "2026-09-03T00:00:00.000Z",
     pluginVersion: "1.0.0",
     upstreamResults: [sourceResult()],
+  };
+}
+
+async function commitStatuses(
+  store: DataStore,
+  turnId: string,
+): Promise<string[]> {
+  return (await store.listTurnResults(SESSION_ID))
+    .filter((row) => row.turnId === turnId)
+    .map((row) => row.commitStatus);
+}
+
+function manualManifest(): RuntimeManifest {
+  return {
+    ...manifest(),
+    stage: undefined,
+    trigger: { type: "manual" },
+    inputs: undefined,
+    needs: undefined,
+    turnCompletion: undefined,
+  };
+}
+
+const FOLLOWER_TOPIC = "detached-runner.settle";
+
+function followerManifest(): RuntimeManifest {
+  return {
+    ...manualManifest(),
+    trigger: { type: "event", topic: FOLLOWER_TOPIC },
   };
 }
 
@@ -687,6 +717,10 @@ describe("plugin RPC detached-stage runner", () => {
     await expect(
       store.getPluginData(SESSION_ID, PLUGIN_ID, "tracks", "old"),
     ).resolves.toBeNull();
+    // A known refusal, not a crash: the record does not stay `pending`.
+    expect(await commitStatuses(store, "background-turn-reloaded")).toEqual([
+      "failed",
+    ]);
   });
 
   it("rejects an undeclared effect before any domain proposal commits", async () => {
@@ -716,4 +750,118 @@ describe("plugin RPC detached-stage runner", () => {
       store.listPluginData(SESSION_ID, PLUGIN_ID, "undeclared"),
     ).resolves.toEqual([]);
   });
+
+  type RefusedMode = "manual" | "background" | "follower" | "detached-stage";
+
+  function manifestFor(mode: RefusedMode): RuntimeManifest {
+    return mode === "detached-stage"
+      ? manifest()
+      : mode === "follower"
+        ? followerManifest()
+        : manualManifest();
+  }
+
+  function runIn(
+    mode: RefusedMode,
+    f: Awaited<ReturnType<typeof setup>>,
+    turnId: string,
+    beforeCommit: () => Promise<void> = async () => {},
+  ): Promise<unknown> {
+    switch (mode) {
+      case "detached-stage":
+        return f.runner.runDetachedStage({
+          descriptor: descriptor(),
+          backgroundTurnId: turnId,
+          expectedSessionIncarnation: sessionIncarnationIdentity(f.session),
+          beforeCommit,
+          completeInTx: async () => {},
+        });
+      case "follower":
+        return f.runner.runDeferredFollowerTurn({
+          followerTurnId: turnId,
+          runtimeId: RUNTIME_ID,
+          triggerEvent: { topic: FOLLOWER_TOPIC, data: {} },
+          beforeCommit,
+        });
+      default:
+        return f.runner.runManualTurn({
+          turnId,
+          runtimeId: RUNTIME_ID,
+          detached: mode === "background",
+          beforeCommit,
+        });
+    }
+  }
+
+  const writeTrack: FunctionHandler = async () => ({
+    outcome: "success",
+    value: {},
+    effects: {
+      pluginData: [{ namespace: "tracks", key: "refused", value: {} }],
+    },
+  });
+
+  it.each(["manual", "background", "follower", "detached-stage"] as const)(
+    "settles a %s record failed when commit setup throws before the commit",
+    async (mode) => {
+      const f = await setup(writeTrack, undefined, manifestFor(mode), {
+        resolveImageFlowRuntimeIds: async () => {
+          throw new Error("image flow unavailable");
+        },
+      });
+
+      await expect(runIn(mode, f, "setup-refused")).rejects.toThrow(
+        "image flow unavailable",
+      );
+
+      expect(await commitStatuses(f.store, "setup-refused")).toEqual([
+        "failed",
+      ]);
+      await expect(
+        f.store.listPluginData(SESSION_ID, PLUGIN_ID, "tracks"),
+      ).resolves.toEqual([]);
+    },
+  );
+
+  it.each(["background", "follower", "detached-stage"] as const)(
+    "settles a %s record failed when the session pauses during execution",
+    async (mode) => {
+      const f: Awaited<ReturnType<typeof setup>> = await setup(
+        async (ctx) => {
+          await f.store.updateSession(SESSION_ID, { status: "paused" });
+          return writeTrack(ctx);
+        },
+        undefined,
+        manifestFor(mode),
+      );
+
+      await expect(runIn(mode, f, "paused-refused")).rejects.toMatchObject({
+        name: "SessionNotActiveError",
+      });
+
+      expect(await commitStatuses(f.store, "paused-refused")).toEqual([
+        "failed",
+      ]);
+      await expect(
+        f.store.listPluginData(SESSION_ID, PLUGIN_ID, "tracks"),
+      ).resolves.toEqual([]);
+    },
+  );
+
+  it.each(["background", "follower", "detached-stage"] as const)(
+    "settles a %s record failed when the job's commit barrier refuses it",
+    async (mode) => {
+      const f = await setup(writeTrack, undefined, manifestFor(mode));
+
+      await expect(
+        runIn(mode, f, "barrier-refused", async () => {
+          throw new Error("runtime job is no longer running");
+        }),
+      ).rejects.toThrow("runtime job is no longer running");
+
+      expect(await commitStatuses(f.store, "barrier-refused")).toEqual([
+        "failed",
+      ]);
+    },
+  );
 });

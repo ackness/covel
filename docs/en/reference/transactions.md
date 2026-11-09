@@ -510,6 +510,8 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 **Settling `commit_status`.**
 
 - On success, `turn_results.commit_status` is settled to `committed` in the same transaction. On rollback, it is settled to `failed` outside the transaction, and idempotently.
+- A host that gives up an execution after it returned and before handing it to `commitExecution` (the session was paused or ended, the approval or plugin version changed, a job's commit barrier refused it, or commit preparation failed) calls `abandonExecution`: the execution's rows are settled to `failed`, and the presentation of each job it would have queued is marked unavailable. Once the execution has been handed to `commitExecution` it does nothing, and the commit owns the settlement.
+- `committed` is final: settling the row to `failed` afterwards leaves it unchanged. When two attempts of one job share a `turnId`, a late abandonment does not turn the attempt that committed into a failure.
 - Nested recursiveCall results reuse the top-level `turnId`. So one settlement of the top-level `[turnId]` covers all the nested rows.
 - The `committed` settlement also changes the records of dropped runtimes in `runtimeResults` to `failed`, and writes the reason. History, retries, and refreshes all see the results that were actually stored. Any job they reported is also closed as `failed`.
 - The same settlement writes the final status of each write-service operation by ID (see [Operation records](#operation-records)).

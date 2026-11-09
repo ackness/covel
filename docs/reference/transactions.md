@@ -510,6 +510,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 **`commit_status` 的结算。**
 
 - 成功时，`turn_results.commit_status` 在同一个事务里结算为 `committed`。回滚时，在事务外幂等地结算为 `failed`。
+- 宿主拿到执行之后、交给 `commitExecution` 之前放弃它（会话已暂停或结束、授权或插件版本变了、作业的提交屏障拒绝、提交前的准备出错），就调用 `abandonExecution`：这次执行的行结算为 `failed`，它本该排入的作业的呈现记为不可用。执行已经交给 `commitExecution` 时它什么也不做，结算归提交。
+- `committed` 是终态：再结算为 `failed` 不改变这一行。同一个作业的两次尝试共用 `turnId` 时，晚到的放弃不会把已经提交的那次改成失败。
 - 嵌套的 recursiveCall 复用顶层的 `turnId`。所以对顶层 `[turnId]` 的一次结算就覆盖了所有嵌套的行。
 - `committed` 结算同时把被丢弃 runtime 在 `runtimeResults` 里的记录改成 `failed`，并写入原因。历史、重试和刷新看到的都是实际保存的结果。它们上报的 job 也收尾为 `failed`。
 - 同一次结算按 ID 写入每个写服务操作的最终状态（见[操作记录](#操作记录)）。

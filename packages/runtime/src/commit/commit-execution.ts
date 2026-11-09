@@ -1,6 +1,7 @@
 import type { ExecutionCommitPlan, PreparedExecution } from "../execution.js";
 import { unavailablePresentationJob } from "../presentation/jobs.js";
-import { currentTraceRetention } from "@covel/shared";
+import { currentTraceRetention, type DeferredRuntimeJob } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import {
   deleteExpiredTraceEvents,
   maybeSweepOldTraces,
@@ -11,9 +12,25 @@ import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
 import {
   applyIsolatedRuntimes,
   finalizeExecution,
+  settleTurnResults,
   type FinalizeExecutionArgs,
   type FinalizeExecutionOutcome,
 } from "./finalize-execution.js";
+
+/** Executions handed to `commitExecution` or abandoned: settled by their owner. */
+const settlementClaimed = new WeakSet<PreparedExecution>();
+
+/** Jobs an uncommitted execution would have queued, whose presentation never comes. */
+function presentationJobsOf(
+  execution: PreparedExecution,
+): DeferredRuntimeJob[] {
+  const result = execution.result;
+  if (!("runtimeResults" in result)) return [];
+  return [
+    ...(result.deferredRuntimeJobs ?? []),
+    ...(result.withheldRuntimeJobs ?? []),
+  ].filter((job) => job.presentation);
+}
 
 /** The caller owns the session lock and execution/continuation claim. */
 export type ExecutionCompletion =
@@ -60,6 +77,8 @@ export async function commitExecution(
   args: CommitExecutionArgs,
 ): Promise<CommitExecutionOutcome> {
   const plan = args.execution.commit;
+  // From here on the commit settles the execution, whatever its outcome.
+  settlementClaimed.add(args.execution);
   const outcome = await finalizeExecution({
     ...args,
     ...plan,
@@ -100,16 +119,8 @@ export async function commitExecution(
     console.warn("[commit-execution] outcome delivery failed:", error);
   }
   if (outcome.status !== "committed") {
-    const result = args.execution.result;
-    if ("runtimeResults" in result) {
-      for (const job of [
-        ...(result.deferredRuntimeJobs ?? []),
-        ...(result.withheldRuntimeJobs ?? []),
-      ]) {
-        if (job.presentation)
-          await unavailablePresentationJob(args.store, plan.sessionId, job);
-      }
-    }
+    for (const job of presentationJobsOf(args.execution))
+      await unavailablePresentationJob(args.store, plan.sessionId, job);
     return { ...outcome, snapshotFailed: false };
   }
 
@@ -191,4 +202,39 @@ export async function commitExecution(
     }
   }
   return { ...outcome, snapshotFailed };
+}
+
+export interface AbandonExecutionArgs {
+  readonly execution: PreparedExecution;
+  readonly store: Pick<DataStore, "setTurnResultCommitStatus"> &
+    Parameters<typeof unavailablePresentationJob>[0];
+}
+
+/**
+ * Host exit for a prepared execution it will not commit: a refusal after the
+ * execution returned (session paused, approval or plugin version changed, a
+ * commit barrier) or a throw before `commitExecution`. Its persisted turn
+ * results settle `failed` instead of lingering `pending`, the crash signature,
+ * and the jobs it would have queued report their presentation unavailable.
+ *
+ * Once the execution reached `commitExecution` this is a no-op: the commit owns
+ * its settlement, committed or not. Best effort; never throws.
+ */
+export async function abandonExecution(
+  args: AbandonExecutionArgs,
+): Promise<void> {
+  if (settlementClaimed.has(args.execution)) return;
+  settlementClaimed.add(args.execution);
+  const { sessionId, turnIds } = args.execution.commit;
+  await settleTurnResults(args.store, sessionId, turnIds, "failed");
+  for (const job of presentationJobsOf(args.execution)) {
+    try {
+      await unavailablePresentationJob(args.store, sessionId, job);
+    } catch (error) {
+      console.warn(
+        `[commit-execution] presentation of abandoned job ${job.jobId} was not settled:`,
+        error,
+      );
+    }
+  }
 }

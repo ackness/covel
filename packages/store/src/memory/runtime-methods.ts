@@ -67,7 +67,12 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     ) {
       for (let i = 0; i < state.turnResults.length; i += 1) {
         const row = state.turnResults[i]!;
-        if (row.sessionId === sessionId && row.turnId === turnId) {
+        if (
+          row.sessionId === sessionId &&
+          row.turnId === turnId &&
+          // A committed row is final; a late failure leaves it as it is.
+          !(status === "failed" && row.commitStatus === "committed")
+        ) {
           state.turnResults[i] = {
             ...row,
             commitStatus: status,
