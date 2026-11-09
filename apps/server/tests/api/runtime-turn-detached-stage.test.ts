@@ -18,6 +18,7 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createSettledSessionLock } from "../../src/routes/api/plugin-rpc/settled-session-lock.js";
 import {
   createRuntimeJob,
+  listRuntimeJobs,
   listSettlingRuntimeJobs,
   transitionRuntimeJob,
 } from "../../src/routes/api/plugin-rpc/jobs.js";
@@ -30,6 +31,11 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "../../src/routes/api/session/session-guard.js";
+import {
+  NO_FOLLOW_UPS,
+  queueFollowUpsWith,
+  refuseFollowUps,
+} from "../../src/routes/api/commit-envelope.js";
 
 const SESSION_ID = "detached-runner-session";
 const PLUGIN_ID = "detached-runner";
@@ -250,6 +256,7 @@ describe("plugin RPC detached-stage runner", () => {
       pollIntervalMs: 1,
     });
     const execution = f.runner.runManualTurn({
+      followUps: refuseFollowUps,
       turnId: "manual-raced",
       runtimeId: RUNTIME_ID,
       detached: true,
@@ -332,6 +339,7 @@ describe("plugin RPC detached-stage runner", () => {
       maxSettleWaitMs: 10,
     });
     const result = await f.runner.runManualTurn({
+      followUps: refuseFollowUps,
       turnId: "manual-timeout",
       runtimeId: RUNTIME_ID,
       detached: true,
@@ -435,6 +443,7 @@ describe("plugin RPC detached-stage runner", () => {
         },
       );
       const result = await f.runner.runManualTurn({
+        followUps: refuseFollowUps,
         turnId: `snapshot-${detached}`,
         runtimeId: RUNTIME_ID,
         detached,
@@ -498,6 +507,7 @@ describe("plugin RPC detached-stage runner", () => {
       const outcome =
         mode === "detached-stage"
           ? await runner.runDetachedStage({
+              followUps: refuseFollowUps,
               descriptor: descriptor(),
               backgroundTurnId: "settings-turn",
               userSettings,
@@ -506,6 +516,7 @@ describe("plugin RPC detached-stage runner", () => {
               completeInTx: async () => {},
             })
           : await runner.runManualTurn({
+              followUps: refuseFollowUps,
               turnId: "settings-turn",
               runtimeId: RUNTIME_ID,
               userSettings,
@@ -593,6 +604,7 @@ describe("plugin RPC detached-stage runner", () => {
       const outcome =
         mode === "detached-stage"
           ? await runner.runDetachedStage({
+              followUps: refuseFollowUps,
               descriptor: descriptor(),
               backgroundTurnId: "locale-turn",
               expectedSessionIncarnation: sessionIncarnationIdentity(session),
@@ -600,6 +612,7 @@ describe("plugin RPC detached-stage runner", () => {
               completeInTx: async () => {},
             })
           : await runner.runManualTurn({
+              followUps: refuseFollowUps,
               turnId: "locale-turn",
               runtimeId: RUNTIME_ID,
               detached: mode === "background",
@@ -614,6 +627,50 @@ describe("plugin RPC detached-stage runner", () => {
       );
     },
   );
+
+  it("rolls back a run whose follow-up work its caller refuses, and queues it otherwise", async () => {
+    const handler = vi.fn<FunctionHandler>(async () => ({
+      outcome: "success",
+      value: {},
+    }));
+    // A manual run of a detached runtime defers it to a stage job.
+    const target = { ...manifest(), inputs: undefined, needs: undefined };
+    const f = await setup(handler, undefined, target);
+
+    const refused = await f.runner.runManualTurn({
+      turnId: "refused-turn",
+      runtimeId: RUNTIME_ID,
+      followUps: refuseFollowUps,
+    });
+    expect(refused.commit).toMatchObject({
+      committed: false,
+      error: expect.stringContaining("the host has no follow-up queue"),
+      followUps: NO_FOLLOW_UPS,
+    });
+    await expect(
+      listRuntimeJobs(f.store, { sessionId: SESSION_ID }),
+    ).resolves.toEqual([]);
+
+    const queued = await f.runner.runManualTurn({
+      turnId: "queued-turn",
+      runtimeId: RUNTIME_ID,
+      followUps: queueFollowUpsWith({
+        sessionId: SESSION_ID,
+        activeRuntimes: [producerManifest(), target],
+        locale: "zh-CN",
+      }),
+    });
+    expect(queued.commit.committed).toBe(true);
+    expect(
+      queued.commit.followUps.runtimeJobs.map(({ job }) => job.runtimeId),
+    ).toEqual([RUNTIME_ID]);
+    await expect(
+      listRuntimeJobs(f.store, { sessionId: SESSION_ID }),
+    ).resolves.toMatchObject([
+      { runtimeId: RUNTIME_ID, origin: { activation: "stage" } },
+    ]);
+    expect(handler).not.toHaveBeenCalled();
+  });
 
   it("rehydrates frozen inputs, commits output, and does not complete a player turn", async () => {
     const handler: FunctionHandler = async (ctx) => {
@@ -644,6 +701,7 @@ describe("plugin RPC detached-stage runner", () => {
     const beforeCommit = vi.fn(async () => {});
 
     const outcome = await runner.runDetachedStage({
+      followUps: refuseFollowUps,
       descriptor: descriptor(),
       backgroundTurnId: "background-turn",
       expectedSessionIncarnation: sessionIncarnationIdentity(session),
@@ -709,6 +767,7 @@ describe("plugin RPC detached-stage runner", () => {
       const outcome =
         mode === "detached-stage"
           ? await runner.runDetachedStage({
+              followUps: refuseFollowUps,
               descriptor: descriptor(),
               backgroundTurnId: "cancel-at-commit",
               executionSignal: abort.signal,
@@ -717,6 +776,7 @@ describe("plugin RPC detached-stage runner", () => {
               completeInTx: async () => {},
             })
           : await runner.runManualTurn({
+              followUps: refuseFollowUps,
               turnId: "cancel-at-commit",
               runtimeId: RUNTIME_ID,
               detached: mode === "background",
@@ -762,6 +822,7 @@ describe("plugin RPC detached-stage runner", () => {
       },
     );
     const outcome = await runner.runManualTurn({
+      followUps: refuseFollowUps,
       turnId: "close-after-commit",
       runtimeId: RUNTIME_ID,
       detached: true,
@@ -796,6 +857,7 @@ describe("plugin RPC detached-stage runner", () => {
 
     await expect(
       runner.runDetachedStage({
+        followUps: refuseFollowUps,
         descriptor: descriptor(),
         backgroundTurnId: "background-turn-reloaded",
         expectedSessionIncarnation: sessionIncarnationIdentity(session),
@@ -825,6 +887,7 @@ describe("plugin RPC detached-stage runner", () => {
     }));
 
     const outcome = await runner.runDetachedStage({
+      followUps: refuseFollowUps,
       descriptor: descriptor(),
       backgroundTurnId: "background-turn-guarded",
       expectedSessionIncarnation: sessionIncarnationIdentity(session),
@@ -860,6 +923,7 @@ describe("plugin RPC detached-stage runner", () => {
     switch (mode) {
       case "detached-stage":
         return f.runner.runDetachedStage({
+          followUps: refuseFollowUps,
           descriptor: descriptor(),
           backgroundTurnId: turnId,
           expectedSessionIncarnation: sessionIncarnationIdentity(f.session),
@@ -868,6 +932,7 @@ describe("plugin RPC detached-stage runner", () => {
         });
       case "follower":
         return f.runner.runDeferredFollowerTurn({
+          followUps: refuseFollowUps,
           followerTurnId: turnId,
           runtimeId: RUNTIME_ID,
           triggerEvent: { topic: FOLLOWER_TOPIC, data: {} },
@@ -875,6 +940,7 @@ describe("plugin RPC detached-stage runner", () => {
         });
       default:
         return f.runner.runManualTurn({
+          followUps: refuseFollowUps,
           turnId,
           runtimeId: RUNTIME_ID,
           detached: mode === "background",

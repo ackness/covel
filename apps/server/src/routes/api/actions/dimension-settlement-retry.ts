@@ -15,6 +15,7 @@ import {
   loadExecutionUserSettings,
   syncLiveSessionRuntimes,
 } from "../execution-context.js";
+import { refuseFollowUps } from "../commit-envelope.js";
 import { resolveMediaImageFlow } from "../media-image-flow.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
@@ -156,6 +157,9 @@ export async function retryPendingDimensionSettlements(
         sourceTurnId: receipt.sourceTurnId,
         ...(signal ? { executionSignal: signal } : {}),
         ...(userSettings ? { userSettings } : {}),
+        // A retry from its source turn is a scoped recovery: it detaches no
+        // runtime and fans out no event, so it derives no follow-up work.
+        followUps: refuseFollowUps,
       });
       const failed = summary.runtimeResults.find(
         (result) => result.status === "failed",

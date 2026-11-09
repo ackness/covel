@@ -1,8 +1,8 @@
-import { planTurnDetachment, type CommitIsolation } from "@covel/runtime";
+import { planTurnDetachment } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
-import type { DataStore, StoreTransaction } from "@covel/store";
+import type { DataStore } from "@covel/store";
 import { withRequestLlmOptions } from "../../../request-llm-context.js";
 import {
   sessionApprovalScope,
@@ -15,12 +15,16 @@ import {
   type RuntimeJobServices,
 } from "./runtime-job-credentials.js";
 import { deferredJobRefs } from "./runtime-job-enqueue.js";
+import { queueFollowUpsWith, refuseFollowUps } from "../commit-envelope.js";
 import {
-  queueCommitFollowUps,
-  type QueuedCommitFollowUps,
-} from "../commit-envelope.js";
+  requireActiveSession,
+  syncSessionRuntimes,
+} from "../execution-context.js";
 import { settleActivatedRun } from "./runtime-response.js";
-import type { createPluginRpcRuntimeTurnRunner } from "./runtime-turn.js";
+import type {
+  RunCommitSteps,
+  createPluginRpcRuntimeTurnRunner,
+} from "./runtime-turn.js";
 import { publishDeferredRuntimeJobs } from "./settled-request.js";
 import {
   runtimeJobIncarnation,
@@ -64,7 +68,11 @@ export function createRuntimeJobExecutor(deps: {
 ) => RuntimeJobExecutor {
   const { store, eventBus, registry } = deps;
   const createJobRunner = deps.createRunner;
-  /** Re-check what the job was admitted under before spending provider work. */
+  /**
+   * Re-check what the job was admitted under before spending provider work.
+   * This read takes no session lock (a foreground turn may hold it for
+   * minutes); the commit re-checks the session under the lock.
+   */
   const admitJob = async (
     job: RuntimeJobRecord,
     expected: {
@@ -72,10 +80,8 @@ export function createRuntimeJobExecutor(deps: {
       readonly expectedApprovalScope: string;
     },
   ): Promise<readonly RuntimeManifest[]> => {
-    const live = await store.getSession(job.sessionId);
+    const live = await requireActiveSession(store, job.sessionId);
     if (
-      !live ||
-      live.status !== "active" ||
       sessionIncarnationIdentity(live) !==
         expected.expectedSessionIncarnation ||
       sessionApprovalScope(live, job.pluginId) !==
@@ -83,8 +89,7 @@ export function createRuntimeJobExecutor(deps: {
     ) {
       throw new RuntimeJobNoLongerCurrentError();
     }
-    registry.syncSessionActivations(job.sessionId, live.activePlugins);
-    return registry.getActiveRuntimes(job.sessionId);
+    return syncSessionRuntimes(registry, job.sessionId, live.activePlugins);
   };
 
   /**
@@ -119,47 +124,46 @@ export function createRuntimeJobExecutor(deps: {
       handoff ? deps.credentials : undefined,
       () => requestServices,
     );
-    // What the landed commit queued; a retried transaction replaces it.
-    let queued: QueuedCommitFollowUps = { runtimeJobs: [], followerJobs: [] };
-    const completeInTx = async (
-      tx: StoreTransaction,
-      turnResult: TurnResult,
-      isolation: CommitIsolation,
-    ): Promise<void> => {
-      const settlement = settleActivatedRun({
+    const settle = (turnResult: TurnResult) =>
+      settleActivatedRun({
         activation: payload.activation,
         runtimeId: job.runtimeId,
         turnResult,
         ...(payload.expectFollower ? { expectFollower: true } : {}),
       });
-      queued = await queueCommitFollowUps(tx, {
-        sessionId: job.sessionId,
-        activeRuntimes,
-        locale: payload.locale,
-        ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
-        credentials,
-        sourceRuntimeId: job.runtimeId,
-        isolation,
-        results: turnResult.runtimeResults,
-        sourceTurnId: turnResult.turnId,
-        deferredJobs: turnResult.deferredRuntimeJobs ?? [],
-        followers: settlement.followers,
-      });
-      const deferredJobs = deferredJobRefs([
-        ...queued.runtimeJobs,
-        ...queued.followerJobs,
-      ]);
-      const result = {
-        turnId: turnResult.turnId,
-        executionId: turnResult.executionContext.executionId,
-        runtimeId: job.runtimeId,
-        durationMs: turnResult.durationMs,
-        runtimeResults: settlement.runtimeResults,
-        ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
-      };
-      if (settlement.failure)
-        await control.failInTx(tx, { ...settlement.failure, result });
-      else await control.completeInTx(tx, result);
+    const commitSteps: RunCommitSteps = {
+      // Followers chain only off a run that did not fail.
+      followUps: queueFollowUpsWith(
+        {
+          sessionId: job.sessionId,
+          activeRuntimes,
+          locale: payload.locale,
+          ...(payload.userSettings
+            ? { userSettings: payload.userSettings }
+            : {}),
+          credentials,
+          sourceRuntimeId: job.runtimeId,
+        },
+        (turnResult) => settle(turnResult).followers,
+      ),
+      completeInTx: async (tx, turnResult, _isolation, queued) => {
+        const settlement = settle(turnResult);
+        const deferredJobs = deferredJobRefs([
+          ...queued.runtimeJobs,
+          ...queued.followerJobs,
+        ]);
+        const result = {
+          turnId: turnResult.turnId,
+          executionId: turnResult.executionContext.executionId,
+          runtimeId: job.runtimeId,
+          durationMs: turnResult.durationMs,
+          runtimeResults: settlement.runtimeResults,
+          ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
+        };
+        if (settlement.failure)
+          await control.failInTx(tx, { ...settlement.failure, result });
+        else await control.completeInTx(tx, result);
+      },
     };
     const queuedRun = {
       executionSignal: control.signal,
@@ -171,7 +175,7 @@ export function createRuntimeJobExecutor(deps: {
       beforeExecute: control.assertCurrent,
       executionFinished: control.executionFinished,
       beforeCommit: control.beforeCommit,
-      completeInTx,
+      ...commitSteps,
       ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
     };
     const retrySeedResults = payload.retryFromTurnId
@@ -214,8 +218,9 @@ export function createRuntimeJobExecutor(deps: {
       credentials.discard();
       throw new Error(commit.error ?? "runtime job proposals did not commit");
     }
-    credentials.handOff(queued.followerJobs);
-    for (const follower of queued.followerJobs)
+    const { followUps } = commit;
+    credentials.handOff(followUps.followerJobs);
+    for (const follower of followUps.followerJobs)
       publishRuntimeJobStatusEvent(
         eventBus,
         follower.status,
@@ -223,7 +228,7 @@ export function createRuntimeJobExecutor(deps: {
       );
     await publishDeferredRuntimeJobs(
       { eventBus, worker: undefined },
-      queued.runtimeJobs,
+      followUps.runtimeJobs,
     );
   };
 
@@ -288,6 +293,9 @@ export function createRuntimeJobExecutor(deps: {
         ...(payload.runtimeModelOverrides
           ? { runtimeModelOverrides: payload.runtimeModelOverrides }
           : {}),
+        // A detached stage derives no follow-up work: it detaches nothing
+        // further, and its commit refuses the events followers chain from.
+        followUps: refuseFollowUps,
         completeInTx: async (tx, turnResult) => {
           const runtimeResult = turnResult.runtimeResults.find(
             (result) => result.runtimeId === job.runtimeId,

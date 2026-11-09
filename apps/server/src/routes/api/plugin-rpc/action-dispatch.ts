@@ -7,7 +7,6 @@ import {
   hasServerCodeGrant,
 } from "../approval-verdict.js";
 import { sessionEventBus } from "../session/session-events.js";
-import { withSettledExecutionLock } from "./settled-request.js";
 import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
@@ -34,6 +33,7 @@ import { errorBody } from "../../../api-error.js";
 import {
   readExecutionSession,
   syncSessionRuntimes,
+  withSettledExecutionLock,
 } from "../execution-context.js";
 import {
   resolveSessionPluginSet,

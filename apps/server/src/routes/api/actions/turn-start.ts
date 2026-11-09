@@ -21,10 +21,8 @@ import type {
   MessageRecord,
   SessionRecord,
 } from "@covel/store";
-import {
-  executionHookScope,
-  loadExecutionUserSettings,
-} from "../execution-context.js";
+import { loadExecutionUserSettings } from "../execution-context.js";
+import { buildSessionHookScope } from "../session/hook-scope.js";
 import { recoveryAction } from "./execution-recovery.js";
 import { actionRequestOf, storedActions } from "./submit-actions.js";
 import type { PreparedTurn } from "./turn-preparation.js";
@@ -268,7 +266,7 @@ export async function startPreparedTurn(
     request.playerSettings,
   );
 
-  const hookScope = executionHookScope({
+  const hookScope = buildSessionHookScope({
     pluginRegistry,
     session: effectiveSession,
     userSettings,

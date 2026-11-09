@@ -1,12 +1,15 @@
 /**
  * Follow-up work queued inside an execution's commit transaction.
  *
- * Every host path that commits an execution queues the work it derived (the
- * detached stage jobs it deferred and the background event followers it
- * emitted) in the same transaction as its writes, so a rolled-back commit
- * queues nothing. Work derived from a runtime whose writes were dropped at
- * commit builds on output that never landed, so none of it is queued. That
- * rule lives here, for every path, instead of in each route.
+ * Every host path that commits an execution's result settles the work it
+ * derived (the detached stage jobs it deferred and the background event
+ * followers it emitted) in the same transaction as its writes, so a
+ * rolled-back commit queues nothing. A path queues that work, or, when its
+ * runs cannot derive any, refuses it, so a commit that unexpectedly derived
+ * some rolls back instead of losing it. Work derived from a runtime whose
+ * writes were dropped at commit builds on output that never landed, so none
+ * of it is queued. Those rules live here, for every path, instead of in each
+ * route.
  *
  * Route-specific writes in the same transaction (the player's input message,
  * interjections) stay with their route.
@@ -18,7 +21,11 @@ import {
   settleDroppedInputs,
   type CommitIsolation,
 } from "@covel/runtime";
-import type { DeferredRuntimeJob, RuntimeManifest } from "@covel/shared";
+import type {
+  DeferredRuntimeJob,
+  RuntimeManifest,
+  TurnResult,
+} from "@covel/shared";
 import type { SessionRecord, StoreTransaction } from "@covel/store";
 import type { JobCredentialHandoff } from "./plugin-rpc/runtime-job-credentials.js";
 import {
@@ -52,25 +59,88 @@ export interface CommitEnqueueContext {
 
 export type EventFollower = FollowerEnqueueArgs["followers"][number];
 
-export interface CommitFollowUps extends CommitEnqueueContext {
-  /** Which runtimes' writes the commit dropped. */
-  readonly isolation: CommitIsolation;
-  /** The execution's runtime results, as executed. */
-  readonly results: Parameters<typeof droppedEmitter>[1]["results"];
+/** The parts of an execution's result its follow-up work comes from. */
+export interface FollowUpSource {
   /** The execution's turn, named by its followers as their source. */
-  readonly sourceTurnId: string;
+  readonly turnId: string;
+  /** The execution's runtime results, as executed. */
+  readonly runtimeResults: Parameters<typeof droppedEmitter>[1]["results"];
   /**
    * Detached stage jobs the execution deferred. They are admitted under the
    * session as the commit transaction reads it.
    */
-  readonly deferredJobs: readonly DeferredRuntimeJob[];
+  readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
   /** Background event followers the execution emitted. */
-  readonly followers: readonly EventFollower[];
+  readonly deferredFollowers?: readonly EventFollower[];
+}
+
+export interface CommitFollowUps extends CommitEnqueueContext {
+  /** Which runtimes' writes the commit dropped. */
+  readonly isolation: CommitIsolation;
+  /** The committed execution's result. */
+  readonly turnResult: FollowUpSource;
+  /**
+   * The followers to queue when not all the result emitted: none after an
+   * activation that failed, which chains no followers.
+   */
+  readonly followers?: readonly EventFollower[];
 }
 
 export interface QueuedCommitFollowUps {
   readonly runtimeJobs: readonly QueuedRuntimeJob[];
   readonly followerJobs: readonly QueuedRuntimeJob[];
+}
+
+/** What a commit that queued nothing queued. */
+export const NO_FOLLOW_UPS: QueuedCommitFollowUps = Object.freeze({
+  runtimeJobs: [],
+  followerJobs: [],
+});
+
+/**
+ * Settles, inside a commit transaction, the follow-up work the committed
+ * execution's result derived, and returns what it queued for announcement
+ * after the commit. Every commit of an execution's result takes one: a host
+ * queues the work ({@link queueFollowUpsWith}), or, where its runs derive
+ * none, refuses it ({@link refuseFollowUps}).
+ */
+export type CommitFollowUpQueue = (
+  tx: StoreTransaction,
+  turnResult: TurnResult,
+  isolation: CommitIsolation,
+) => Promise<QueuedCommitFollowUps>;
+
+/**
+ * The follow-up queue of a host whose runs derive no follow-up work. A commit
+ * whose result derived some rolls back instead of losing it.
+ */
+export const refuseFollowUps: CommitFollowUpQueue = async (_tx, turnResult) => {
+  if (
+    (turnResult.deferredRuntimeJobs?.length ?? 0) > 0 ||
+    (turnResult.deferredFollowers?.length ?? 0) > 0
+  ) {
+    throw new Error(
+      "cannot queue the detached jobs or event followers this commit derived: the host has no follow-up queue",
+    );
+  }
+  return NO_FOLLOW_UPS;
+};
+
+/**
+ * The follow-up queue of a host that queues, under `context`, the work every
+ * committed result derived. `followers` narrows the followers to queue.
+ */
+export function queueFollowUpsWith(
+  context: CommitEnqueueContext,
+  followers?: (turnResult: TurnResult) => readonly EventFollower[],
+): CommitFollowUpQueue {
+  return (tx, turnResult, isolation) =>
+    queueCommitFollowUps(tx, {
+      ...context,
+      isolation,
+      turnResult,
+      ...(followers ? { followers: followers(turnResult) } : {}),
+    });
 }
 
 /** The session a commit queues detached jobs under is gone. */
@@ -100,18 +170,19 @@ export async function queueCommitFollowUps(
   // Jobs carry the incarnation, approval scope and runtime model overrides
   // of the session the commit lands in. Read before filtering, so whether a
   // commit with detached jobs fails does not depend on which were dropped.
+  const deferredJobs = args.turnResult.deferredRuntimeJobs ?? [];
   let session: SessionRecord | undefined;
-  if (args.deferredJobs.length > 0) {
+  if (deferredJobs.length > 0) {
     session = (await tx.getSession(args.sessionId)) ?? undefined;
     if (!session) throw new CommitSessionGoneError(args.sessionId);
   }
   const dropped = args.isolation.droppedRuntimeIds;
   const committedView = {
     runtimes: args.activeRuntimes,
-    results: args.results,
+    results: args.turnResult.runtimeResults,
     dropped,
   };
-  const descriptors = args.deferredJobs
+  const descriptors = deferredJobs
     .filter((descriptor) => {
       const target = args.activeRuntimes.find(
         (runtime) => runtime.name === descriptor.runtimeId,
@@ -119,7 +190,11 @@ export async function queueCommitFollowUps(
       return !target || !droppedUpstream(target, committedView);
     })
     .map((descriptor) => settleDroppedInputs(descriptor, dropped));
-  const followers = args.followers.filter(
+  const followers = (
+    args.followers ??
+    args.turnResult.deferredFollowers ??
+    []
+  ).filter(
     (follower) => !droppedEmitter(follower.triggerEvent.topic, committedView),
   );
   const runtimeJobs = session
@@ -138,7 +213,7 @@ export async function queueCommitFollowUps(
     sessionId: args.sessionId,
     activeRuntimes: args.activeRuntimes,
     followers,
-    sourceTurnId: args.sourceTurnId,
+    sourceTurnId: args.turnResult.turnId,
     ...(args.sourceRuntimeId ? { sourceRuntimeId: args.sourceRuntimeId } : {}),
     locale: args.locale,
     ...(args.userSettings ? { userSettings: args.userSettings } : {}),

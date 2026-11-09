@@ -6,7 +6,6 @@ import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
   announceDeferredRuntimeJobs,
   requestCredentialHandoff,
-  withSettledExecutionLock,
 } from "./plugin-rpc/settled-request.js";
 import { type QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
 import { queueReleasedRuntimeJobs } from "./commit-envelope.js";
@@ -86,11 +85,12 @@ import {
 } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
+import { buildSessionHookScope } from "./session/hook-scope.js";
 import {
-  executionHookScope,
   loadExecutionUserSettings,
   readExecutionSession,
   syncSessionRuntimes,
+  withSettledExecutionLock,
 } from "./execution-context.js";
 import {
   maybeSweepExpiredSuspensions,
@@ -328,7 +328,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         liveSession,
         decodedUserSettings.settings,
       );
-      const hookScope = executionHookScope({
+      const hookScope = buildSessionHookScope({
         pluginRegistry,
         session: liveSession,
         userSettings,

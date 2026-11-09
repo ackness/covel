@@ -41,14 +41,19 @@ import {
 } from "../session/session-guard.js";
 import {
   SessionNotActiveError,
-  executionHookScope,
   requireActiveSession,
 } from "../execution-context.js";
+import { buildSessionHookScope } from "../session/hook-scope.js";
 import { RuntimeJobQueueFullError, listSettlingRuntimeJobs } from "./jobs.js";
 import {
   heldJobsRelease,
   type SuspensionAbandonDeps,
 } from "../suspension-abandon.js";
+import {
+  NO_FOLLOW_UPS,
+  type CommitFollowUpQueue,
+  type QueuedCommitFollowUps,
+} from "../commit-envelope.js";
 import type { SettleWaitBudget } from "./settled-session-lock.js";
 
 export class SessionApprovalScopeChangedError extends Error {
@@ -124,6 +129,31 @@ export interface PluginRpcRuntimeTurnContext {
  * Durable-worker hooks for a queued run: admission and commit barriers, and a
  * write that settles the job in the same transaction as the domain commit.
  */
+/**
+ * What a run's commit does in its transaction: settle the follow-up work its
+ * result derived, then whatever else the caller commits with it (a queued
+ * job's own completion), seeing what was queued.
+ */
+export interface RunCommitSteps {
+  /**
+   * Required, so that no commit loses follow-up work: a caller queues it or,
+   * where its runs derive none, refuses it.
+   */
+  readonly followUps: CommitFollowUpQueue;
+  readonly completeInTx?: (
+    tx: StoreTransaction,
+    result: import("@covel/shared").TurnResult,
+    isolation: CommitIsolation,
+    queued: QueuedCommitFollowUps,
+  ) => Promise<void>;
+}
+
+/** A run's commit outcome and the follow-up work it queued. */
+export interface RunCommitOutcome extends TurnCommitOutcome {
+  /** What the commit queued, to announce after it; nothing unless it landed. */
+  readonly followUps: QueuedCommitFollowUps;
+}
+
 export interface QueuedRunControl {
   readonly expectedSessionIncarnation?: string;
   /** The plugin version the job was admitted under; checked again at commit. */
@@ -137,7 +167,7 @@ export interface QueuedRunControl {
   }) => Promise<void>;
 }
 
-export interface RunManualTurnArgs extends QueuedRunControl {
+export interface RunManualTurnArgs extends QueuedRunControl, RunCommitSteps {
   readonly executionSignal?: AbortSignal;
   readonly turnId: string;
   readonly runtimeId: string;
@@ -149,6 +179,10 @@ export interface RunManualTurnArgs extends QueuedRunControl {
    */
   readonly retrySeedResults?: readonly RuntimeResult[];
   readonly sourceTurnId?: string;
+  /**
+   * The player's plugin settings. Every run snapshots them once, as it builds
+   * its turn input, so the execution and its hooks read one frozen copy.
+   */
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
@@ -159,15 +193,10 @@ export interface RunManualTurnArgs extends QueuedRunControl {
    * and are short enough that holding the lock throughout costs nothing.
    */
   readonly detached?: boolean;
-  /** Runs inside the commit transaction, in both modes. */
-  readonly completeInTx?: (
-    tx: StoreTransaction,
-    result: import("@covel/shared").TurnResult,
-    isolation: CommitIsolation,
-  ) => Promise<void>;
 }
 
-export interface RunDeferredFollowerArgs extends QueuedRunControl {
+export interface RunDeferredFollowerArgs
+  extends QueuedRunControl, RunCommitSteps {
   readonly executionSignal?: AbortSignal;
   readonly followerTurnId: string;
   readonly runtimeId: string;
@@ -178,14 +207,9 @@ export interface RunDeferredFollowerArgs extends QueuedRunControl {
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
-  readonly completeInTx?: (
-    tx: StoreTransaction,
-    result: import("@covel/shared").TurnResult,
-    isolation: CommitIsolation,
-  ) => Promise<void>;
 }
 
-export interface RunDetachedStageArgs {
+export interface RunDetachedStageArgs extends RunCommitSteps {
   readonly descriptor: DeferredRuntimeJob;
   readonly backgroundTurnId: string;
   readonly expectedSessionIncarnation: string;
@@ -198,11 +222,7 @@ export interface RunDetachedStageArgs {
     readonly backgroundTurnId: string;
     readonly backgroundExecutionId: string;
   }) => Promise<void>;
-  readonly completeInTx: (
-    tx: StoreTransaction,
-    result: import("@covel/shared").TurnResult,
-    isolation: CommitIsolation,
-  ) => Promise<void>;
+  readonly completeInTx: NonNullable<RunCommitSteps["completeInTx"]>;
   readonly beforeExecute?: () => Promise<void>;
   readonly executionFinished?: () => void;
   readonly executionSignal?: AbortSignal;
@@ -224,6 +244,14 @@ export function backgroundRuntimeLockId(
   return `background-runtime:${JSON.stringify([sessionId, runtimeId])}`;
 }
 
+/** Only the commit steps of a run's arguments. */
+function commitStepsOf(steps: RunCommitSteps): RunCommitSteps {
+  return {
+    followUps: steps.followUps,
+    ...(steps.completeInTx ? { completeInTx: steps.completeInTx } : {}),
+  };
+}
+
 function queuedRunOptions(control: QueuedRunControl): QueuedRunControl {
   return {
     ...(control.expectedSessionIncarnation
@@ -243,14 +271,16 @@ function queuedRunOptions(control: QueuedRunControl): QueuedRunControl {
 export function createPluginRpcRuntimeTurnRunner(
   ctx: PluginRpcRuntimeTurnContext,
 ): {
-  runManualTurn(args: RunManualTurnArgs): Promise<ManualTurnSummary>;
+  runManualTurn(
+    args: RunManualTurnArgs,
+  ): Promise<ManualTurnSummary & { readonly commit: RunCommitOutcome }>;
   runDeferredFollowerTurn(args: RunDeferredFollowerArgs): Promise<{
     readonly turnResult: import("@covel/shared").TurnResult;
-    readonly commit: TurnCommitOutcome;
+    readonly commit: RunCommitOutcome;
   }>;
   runDetachedStage(args: RunDetachedStageArgs): Promise<{
     readonly turnResult: import("@covel/shared").TurnResult;
-    readonly commit: TurnCommitOutcome;
+    readonly commit: RunCommitOutcome;
   }>;
 } {
   function activeRuntimes(): readonly RuntimeManifest[] {
@@ -323,7 +353,7 @@ export function createPluginRpcRuntimeTurnRunner(
         locale: live.locale,
       };
     }
-    return executionHookScope({
+    return buildSessionHookScope({
       pluginRegistry: ctx.pluginRegistry,
       session: live,
       userSettings,
@@ -340,16 +370,16 @@ export function createPluginRpcRuntimeTurnRunner(
         typeof commitExecution
       >[0]["proposalGuard"];
       readonly completionKind?: "turn" | "detached";
-      readonly extraInTx?: (
-        tx: StoreTransaction,
-        isolation: CommitIsolation,
-      ) => Promise<void>;
-    } = {},
-  ): Promise<TurnCommitOutcome> {
+      readonly commitSteps: RunCommitSteps;
+    },
+  ): Promise<RunCommitOutcome> {
     const turnResult = execution.result;
     const release = ctx.heldJobs
       ? heldJobsRelease(ctx.heldJobs, ctx.sessionId)
       : undefined;
+    const { followUps, completeInTx } = opts.commitSteps;
+    // What the landed transaction queued; a retried one replaces it.
+    let queued = NO_FOLLOW_UPS;
     const outcome = await commitExecution({
       // Runners built without `heldJobs` are the background job worker, whose
       // runs reject suspension before commit, and the dimension-settlement
@@ -387,7 +417,10 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
-      ...(opts.extraInTx ? { extraInTx: opts.extraInTx } : {}),
+      extraInTx: async (tx, isolation) => {
+        queued = await followUps(tx, turnResult, isolation);
+        await completeInTx?.(tx, turnResult, isolation, queued);
+      },
       ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
       // MediaRef canonicalization / ownership for published export values.
       ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
@@ -427,6 +460,7 @@ export function createPluginRpcRuntimeTurnRunner(
       failedProposalCount: outcome.failedProposals.length,
       snapshotFailed: outcome.snapshotFailed,
       ...(outcome.error ? { error: outcome.error } : {}),
+      followUps: committed ? queued : NO_FOLLOW_UPS,
     };
   }
 
@@ -470,14 +504,12 @@ export function createPluginRpcRuntimeTurnRunner(
         typeof commitExecution
       >[0]["proposalGuard"];
       readonly completionKind?: "turn" | "detached";
-      readonly completeInTx?: RunDetachedStageArgs["completeInTx"];
-    } = {},
+      readonly commitSteps: RunCommitSteps;
+    },
   ): Promise<{
     readonly turnResult: import("@covel/shared").TurnResult;
-    readonly commit: TurnCommitOutcome;
+    readonly commit: RunCommitOutcome;
   }> {
-    const userSettings = snapshotUserSettings(turnInput.userSettings);
-    const executionInput = { ...turnInput, userSettings };
     const turnControl = executionControl(opts.executionSignal);
     const executionSignal = turnControl?.executionSignal;
     const waitBudget: SettleWaitBudget = {
@@ -546,25 +578,19 @@ export function createPluginRpcRuntimeTurnRunner(
                   assertPluginVersion();
                   await opts.beforeExecute?.();
                   executionSignal?.throwIfAborted();
-                  return hookScopeFor(live, userSettings);
+                  return hookScopeFor(live, turnInput.userSettings);
                 },
                 executionSignal,
               );
-              const execution = await executeTurn(
-                executionInput,
-                activeRuntimes(),
-                {
-                  ...ctx.deps,
-                  hookScope: executionScope,
-                  store: ctx.store,
-                  eventBus: ctx.eventBus,
-                  emitter,
-                  ...(ctx.hookPipeline
-                    ? { hookPipeline: ctx.hookPipeline }
-                    : {}),
-                  turnControl,
-                },
-              );
+              const execution = await executeTurn(turnInput, activeRuntimes(), {
+                ...ctx.deps,
+                hookScope: executionScope,
+                store: ctx.store,
+                eventBus: ctx.eventBus,
+                emitter,
+                ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+                turnControl,
+              });
               return abandonOnThrow(ctx.store, execution, async () => {
                 // A player turn may hold the session lock for minutes; the
                 // queued job's execution deadline does not cover that wait.
@@ -611,19 +637,13 @@ export function createPluginRpcRuntimeTurnRunner(
                           result.executionContext.executionId,
                       });
                     }
-                    const completeInTx = opts.completeInTx;
                     return processTurnResults(
                       execution,
                       emitter,
-                      hookScopeFor(live, userSettings),
+                      hookScopeFor(live, turnInput.userSettings),
                       {
                         executionSignal,
-                        ...(completeInTx
-                          ? {
-                              extraInTx: (tx, isolation) =>
-                                completeInTx(tx, result, isolation),
-                            }
-                          : {}),
+                        commitSteps: opts.commitSteps,
                         ...(proposalGuard ? { proposalGuard } : {}),
                         ...(opts.completionKind !== undefined
                           ? { completionKind: opts.completionKind }
@@ -658,7 +678,7 @@ export function createPluginRpcRuntimeTurnRunner(
 
   async function runManualTurn(
     args: RunManualTurnArgs,
-  ): Promise<ManualTurnSummary> {
+  ): Promise<ManualTurnSummary & { readonly commit: RunCommitOutcome }> {
     const emitter = createTurnEmitter({
       store: ctx.store,
       eventBus: ctx.eventBus,
@@ -687,18 +707,9 @@ export function createPluginRpcRuntimeTurnRunner(
         ? { runtimeModelOverrides: ctx.session.runtimeModelOverrides }
         : {}),
       ...(args.userSettings && Object.keys(args.userSettings).length > 0
-        ? { userSettings: args.userSettings }
+        ? { userSettings: snapshotUserSettings(args.userSettings) }
         : {}),
     };
-
-    // `runDetached` snapshots the settings itself; only the locked run takes
-    // its snapshot here.
-    const executionInput: TurnInput = args.detached
-      ? turnInput
-      : {
-          ...turnInput,
-          userSettings: snapshotUserSettings(turnInput.userSettings),
-        };
 
     // Background mode has already returned 202 to the client and detached from
     // the request, and the only manual runtime that uses it is a media
@@ -708,10 +719,10 @@ export function createPluginRpcRuntimeTurnRunner(
     const turnControl = executionControl(args.executionSignal);
     const executionSignal = turnControl?.executionSignal;
     const { result, commit } = args.detached
-      ? await runDetached(args.runtimeId, executionInput, emitter, {
+      ? await runDetached(args.runtimeId, turnInput, emitter, {
           executionSignal: args.executionSignal,
           ...queuedRunOptions(args),
-          ...(args.completeInTx ? { completeInTx: args.completeInTx } : {}),
+          commitSteps: commitStepsOf(args),
           rejectSuspension: true,
         }).then((r) => ({
           result: r.turnResult,
@@ -723,31 +734,21 @@ export function createPluginRpcRuntimeTurnRunner(
         )(() =>
           withSnapshot(async () => {
             const live = await requireLiveApprovedSession(args.runtimeId);
-            const hookScope = hookScopeFor(live, executionInput.userSettings);
+            const hookScope = hookScopeFor(live, turnInput.userSettings);
             executionSignal?.throwIfAborted();
-            const execution = await executeTurn(
-              executionInput,
-              activeRuntimes(),
-              {
-                ...ctx.deps,
-                hookScope,
-                turnControl,
-                store: ctx.store,
-                eventBus: ctx.eventBus,
-                emitter,
-                ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-              },
-            );
-            const completeInTx = args.completeInTx;
+            const execution = await executeTurn(turnInput, activeRuntimes(), {
+              ...ctx.deps,
+              hookScope,
+              turnControl,
+              store: ctx.store,
+              eventBus: ctx.eventBus,
+              emitter,
+              ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+            });
             const outcome = await abandonOnThrow(ctx.store, execution, () =>
               processTurnResults(execution, emitter, hookScope, {
                 executionSignal,
-                ...(completeInTx
-                  ? {
-                      extraInTx: (tx, isolation) =>
-                        completeInTx(tx, execution.result, isolation),
-                    }
-                  : {}),
+                commitSteps: commitStepsOf(args),
               }),
             );
             return { result: execution.result, commit: outcome };
@@ -775,7 +776,7 @@ export function createPluginRpcRuntimeTurnRunner(
     args: RunDeferredFollowerArgs,
   ): Promise<{
     readonly turnResult: import("@covel/shared").TurnResult;
-    readonly commit: TurnCommitOutcome;
+    readonly commit: RunCommitOutcome;
   }> {
     const emitter = createTurnEmitter({
       store: ctx.store,
@@ -799,21 +800,21 @@ export function createPluginRpcRuntimeTurnRunner(
         ? { runtimeModelOverrides: ctx.session.runtimeModelOverrides }
         : {}),
       ...(args.userSettings && Object.keys(args.userSettings).length > 0
-        ? { userSettings: args.userSettings }
+        ? { userSettings: snapshotUserSettings(args.userSettings) }
         : {}),
     };
 
     return runDetached(args.runtimeId, turnInput, emitter, {
       executionSignal: args.executionSignal,
       ...queuedRunOptions(args),
-      ...(args.completeInTx ? { completeInTx: args.completeInTx } : {}),
+      commitSteps: commitStepsOf(args),
       rejectSuspension: true,
     });
   }
 
   async function runDetachedStage(args: RunDetachedStageArgs): Promise<{
     readonly turnResult: import("@covel/shared").TurnResult;
-    readonly commit: TurnCommitOutcome;
+    readonly commit: RunCommitOutcome;
   }> {
     const emitter = createTurnEmitter({
       store: ctx.store,
@@ -853,7 +854,9 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(args.runtimeModelOverrides
         ? { runtimeModelOverrides: args.runtimeModelOverrides }
         : {}),
-      ...(args.userSettings ? { userSettings: args.userSettings } : {}),
+      ...(args.userSettings
+        ? { userSettings: snapshotUserSettings(args.userSettings) }
+        : {}),
     };
     return runDetached(args.descriptor.runtimeId, turnInput, emitter, {
       expectedSessionIncarnation: args.expectedSessionIncarnation,
@@ -861,7 +864,7 @@ export function createPluginRpcRuntimeTurnRunner(
         ? { expectedPluginVersion: args.descriptor.pluginVersion }
         : {}),
       beforeCommit: args.beforeCommit,
-      completeInTx: args.completeInTx,
+      commitSteps: commitStepsOf(args),
       ...(args.beforeExecute ? { beforeExecute: args.beforeExecute } : {}),
       ...(args.executionFinished
         ? { executionFinished: args.executionFinished }

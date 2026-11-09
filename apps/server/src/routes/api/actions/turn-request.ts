@@ -26,9 +26,11 @@ import {
   announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
   requestCredentialHandoff,
-  withSettledExecutionLock,
 } from "../plugin-rpc/settled-request.js";
-import { readExecutionSession } from "../execution-context.js";
+import {
+  readExecutionSession,
+  withSettledExecutionLock,
+} from "../execution-context.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 import { entryRejection } from "./action-rejection.js";
 import type { ActionStream } from "./action-stream.js";

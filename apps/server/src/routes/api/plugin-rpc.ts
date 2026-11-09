@@ -73,10 +73,7 @@ import {
   deferredJobRefs,
   enqueueActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import {
-  queueCommitFollowUps,
-  type QueuedCommitFollowUps,
-} from "./commit-envelope.js";
+import { queueFollowUpsWith } from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
@@ -453,10 +450,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // declares `turnCompletion: detached` is deferred to the durable queue
     // instead of running inline. Both are queued inside the same commit
     // transaction, so a rolled-back turn queues nothing.
-    // `queueCommitFollowUps` leaves out followers of an emitter whose writes
-    // were dropped; a sync run commits all-or-nothing, so none is today.
-    // What the landed commit queued; a retried transaction replaces it.
-    let queued: QueuedCommitFollowUps = { runtimeJobs: [], followerJobs: [] };
+    // The queue leaves out followers of an emitter whose writes were dropped;
+    // a sync run commits all-or-nothing, so none is today.
     let summary;
     try {
       summary = await runtimeTurnRunner.runManualTurn({
@@ -467,21 +462,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(retrySeedResults
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
-        completeInTx: async (tx, result, isolation) => {
-          queued = await queueCommitFollowUps(tx, {
-            sessionId,
-            activeRuntimes,
-            locale: session.locale,
-            ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
-            credentials,
-            sourceRuntimeId: body.runtimeId,
-            isolation,
-            results: result.runtimeResults,
-            sourceTurnId: result.turnId,
-            deferredJobs: result.deferredRuntimeJobs ?? [],
-            followers: result.deferredFollowers ?? [],
-          });
-        },
+        followUps: queueFollowUpsWith({
+          sessionId,
+          activeRuntimes,
+          locale: session.locale,
+          ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+          credentials,
+          sourceRuntimeId: body.runtimeId,
+        }),
       });
     } catch (err) {
       credentials.discard();
@@ -516,11 +504,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         500,
       );
     }
-    await announceDeferredRuntimeJobs(c, queued.runtimeJobs);
-    announceQueuedRuntimeJobs(c, queued.followerJobs);
+    const { followUps } = summary.commit;
+    await announceDeferredRuntimeJobs(c, followUps.runtimeJobs);
+    announceQueuedRuntimeJobs(c, followUps.followerJobs);
     const deferredJobs = deferredJobRefs([
-      ...queued.runtimeJobs,
-      ...queued.followerJobs,
+      ...followUps.runtimeJobs,
+      ...followUps.followerJobs,
     ]);
     return c.json({
       status: "ok",

@@ -15,13 +15,14 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   SessionNotActiveError,
-  executionHookScope,
   loadExecutionUserSettings,
   readExecutionSession,
   requireActiveSession,
   syncLiveSessionRuntimes,
   syncSessionRuntimes,
+  withSettledExecutionLock,
 } from "../../src/routes/api/execution-context.js";
+import { buildSessionHookScope } from "../../src/routes/api/session/hook-scope.js";
 
 const SESSION_ID = "execution-context-session";
 const PLUGIN_ID = "context-plugin";
@@ -198,23 +199,6 @@ describe("readExecutionSession", () => {
     });
   });
 
-  it("admits the statuses the caller allows", async () => {
-    const store = createMemoryStore();
-    const accepted = sessionRecord({ status: "paused" });
-    await store.createSession(accepted);
-
-    const live = await inRequest(store, registryWithPlugin(), (c) =>
-      readExecutionSession(c, {
-        store,
-        sessionId: SESSION_ID,
-        expectedSession: accepted,
-        allowedStatuses: ["active", "paused"],
-      }),
-    );
-
-    expect(live).toMatchObject({ status: "paused" });
-  });
-
   it("stops before reading once the signal is aborted", async () => {
     const store = createMemoryStore();
     const accepted = sessionRecord();
@@ -300,6 +284,31 @@ describe("syncLiveSessionRuntimes", () => {
   });
 });
 
+describe("withSettledExecutionLock", () => {
+  it("runs with the registry synced from the session read under the lock", async () => {
+    const store = createMemoryStore();
+    const registry = registryWithPlugin();
+    await store.createSession(sessionRecord());
+
+    const seen = await inRequest(store, registry, (c) =>
+      withSettledExecutionLock(c, SESSION_ID, async () =>
+        registry.getActivePlugins(SESSION_ID),
+      ),
+    );
+    expect(seen).toEqual([PLUGIN_ID]);
+
+    // A session deleted meanwhile runs with no plugins, not the stale view.
+    await store.deleteSession(SESSION_ID);
+    await expect(
+      inRequest(store, registry, (c) =>
+        withSettledExecutionLock(c, SESSION_ID, async () =>
+          registry.getActivePlugins(SESSION_ID),
+        ),
+      ),
+    ).resolves.toEqual([]);
+  });
+});
+
 describe("loadExecutionUserSettings", () => {
   const world = {
     metadata: {
@@ -329,9 +338,9 @@ describe("loadExecutionUserSettings", () => {
   });
 });
 
-describe("executionHookScope", () => {
+describe("buildSessionHookScope", () => {
   it("scopes hooks to the session's runnable plugins, settings and locale", () => {
-    const scope = executionHookScope({
+    const scope = buildSessionHookScope({
       pluginRegistry: registryWithPlugin(),
       session: { activePlugins: [PLUGIN_ID, "not-installed"], locale: "zh-CN" },
       userSettings: { [PLUGIN_ID]: { tone: "player" } },
