@@ -7,6 +7,7 @@ import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { PostLLMResponsePayload } from "../src/hooks/wire-helpers.js";
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 
 const responseIsContent = (response: LLMResponse) =>
   !response.toolCalls.some((call) => call.name === "submit-output");
@@ -33,7 +34,7 @@ const submitted = (content: string): LLMResponse => ({
     {
       id: "submit",
       name: "submit-output",
-      arguments: JSON.stringify({ narrativeOutput: content }),
+      arguments: JSON.stringify({ segments: narrationSegments(content) }),
     },
   ],
   finishReason: "tool_calls",

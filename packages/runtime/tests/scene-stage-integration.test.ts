@@ -1,3 +1,4 @@
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 /**
  * Integration test for `plugins/scene-stage` — the first real consumer of
  * the unified event emission layer (E): an emitter emits `scene.set`, the
@@ -73,7 +74,9 @@ class SceneSetLLM implements LLMAdapter {
         {
           id: "final",
           name: "submit-output",
-          arguments: JSON.stringify({ narrativeOutput: "scene noted." }),
+          arguments: JSON.stringify({
+            segments: narrationSegments("scene noted."),
+          }),
         },
       ],
       finishReason: "tool_calls" as const,

@@ -48,37 +48,26 @@ async function expectNarrativeBinding(pluginsDir: string, pluginId: string) {
   const providerId = "fixture-story";
   const providerRoot = path.join(pluginsDir, providerId);
   await mkdir(providerRoot);
-  // The directory names the plugin; its output contract is what it provides.
+  // The directory names the plugin. Its story runtime is scheduled
+  // automatically, so it provides narrative-engine@2 without naming it.
   await writeFile(
     path.join(providerRoot, "PLUGIN.md"),
     `---
 version: 1.0.0
 description: Provides one narrative for the generated analyst.
-contracts:
-  narrative-engine@2:
-    schema: ./output.json
 runtime:
   schedule:
     stage: narrative
   io:
-    output:
-      contract: narrative-engine@2
+    visibility: story
   function: {}
 ---
 `,
   );
   await writeFile(
-    path.join(providerRoot, "output.json"),
-    JSON.stringify({
-      type: "object",
-      required: ["narrativeOutput"],
-      properties: { narrativeOutput: { type: "string" } },
-    }),
-  );
-  await writeFile(
     path.join(providerRoot, "handler.js"),
     `export default async function () {
-      return { outcome: "success", value: { narrativeOutput: ${JSON.stringify(narrative)} } };
+      return { outcome: "success", value: { segments: [{ kind: "narration", text: ${JSON.stringify(narrative)} }] } };
     }`,
   );
   const store = createMemoryStore();

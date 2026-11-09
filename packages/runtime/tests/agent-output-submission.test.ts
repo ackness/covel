@@ -4,6 +4,7 @@ import { runWithHookScope } from "../src/hooks/hook-scope.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import {
   manifest,
+  narrationSegments,
   prose,
   queuedLLM,
   runLoop,
@@ -440,7 +441,9 @@ describe("submission terminal boundaries", () => {
         },
       }),
     });
-    const llm = queuedLLM([submit({ narrativeOutput: "A valid story." })]);
+    const llm = queuedLLM([
+      submit({ segments: narrationSegments("A valid story.") }),
+    ]);
     const result = await runRuntime({
       llm,
       manifest: manifest({ outputKind: "story" }),

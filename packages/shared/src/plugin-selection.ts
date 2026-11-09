@@ -5,6 +5,7 @@ import {
   INVALID_KERNEL_CONFLICT,
   kernelConflictMessage,
 } from "./extension-points/contracts.js";
+import { isSingleProviderContract } from "./framework-contracts.js";
 import type { PluginRuntimeSummary } from "./types/plugin-api.js";
 import type { PluginManifest } from "./types/plugin-manifest.js";
 
@@ -99,6 +100,14 @@ const contracts = (plugin: SessionPluginCandidate): string[] => [
       : []),
   ]),
 ];
+/**
+ * The written conflicts that still decide something. A conflict with a
+ * single-provider framework contract is implied by the contract itself.
+ */
+const writtenConflicts = (plugin: SessionPluginCandidate): string[] =>
+  (plugin.conflicts ?? []).filter(
+    (contract) => !isSingleProviderContract(contract),
+  );
 const isDefault = (plugin: SessionPluginCandidate, contract: string) =>
   plugin.provides?.some(
     (p) => typeof p !== "string" && p.contract === contract && p.default,
@@ -335,8 +344,8 @@ export function resolveSessionPlugins(args: {
     const conflict = accepted.find((other) => {
       const q = registry.get(other)!;
       return (
-        (p.conflicts ?? []).some((c) => contracts(q).includes(c)) ||
-        (q.conflicts ?? []).some((c) => contracts(p).includes(c))
+        writtenConflicts(p).some((c) => contracts(q).includes(c)) ||
+        writtenConflicts(q).some((c) => contracts(p).includes(c))
       );
     });
     if (conflict) {
@@ -359,6 +368,25 @@ export function resolveSessionPlugins(args: {
         id,
         "single-provider-conflict",
         `Single extension point already provided by ${duplicate}`,
+      );
+      continue;
+    }
+    // A framework contract with one provider per session excludes a second
+    // provider package the way a `single` extension point does.
+    const taken = contracts(p)
+      .filter(isSingleProviderContract)
+      .flatMap((contract) => {
+        const holder = accepted.find((other) =>
+          contracts(registry.get(other)!).includes(contract),
+        );
+        return holder ? [{ contract, holder }] : [];
+      })[0];
+    if (taken) {
+      reject(
+        id,
+        "single-provider-conflict",
+        `${taken.contract} admits one provider per session and ${taken.holder} already provides it`,
+        [taken.holder],
       );
       continue;
     }

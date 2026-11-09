@@ -23,7 +23,7 @@
 
 ## 故事段落
 
-输出声明 `io.output.schema: contract:narrative-engine@2`，模型只通过 `submit-output` 提交 JSON 故事段落（`segments`：`narration`、`dialogue`、`action`，对白和动作带说话者名字），并在 `cues.present` 列出在场角色。地点变化时填写 `cues.scene`，氛围变化时填写 `cues.mood`，遵循上下文提供的情绪列表；未变化的提示省略。框架把段落文字用空行连接成 `narrativeOutput`，提交时把说话者名字解析成角色，舞台名牌直接读取段落的说话者。提交时在循环内校验格式与故事约束；格式出错时按输出修复预算限次请求模型改正。纠正后仍不合法就失败，即使含有正文也不能提交。检查已验证的提交值时逐段读取段落文字。
+故事 runtime 自动提供 `narrative-engine@2`，不用声明输出契约或 schema；模型只通过 `submit-output` 提交 JSON 故事段落（`segments`：`narration`、`dialogue`、`action`，对白和动作带说话者名字），并在 `cues.present` 列出在场角色。地点变化时填写 `cues.scene`，氛围变化时填写 `cues.mood`，遵循上下文提供的情绪列表；未变化的提示省略。框架把段落文字用空行连接成 `narrativeOutput`，提交时把说话者名字解析成角色，舞台名牌直接读取段落的说话者。提交时在循环内校验格式与故事约束；格式出错时按输出修复预算限次请求模型改正。纠正后仍不合法就失败，即使含有正文也不能提交。检查已验证的提交值时逐段读取段落文字。
 
 ## 开发
 

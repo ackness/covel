@@ -2,12 +2,12 @@ import { createTurnEmitter } from "../trace/turn-emitter.js";
 import {
   presentationSnapshotSchema,
   presentationCompletionSchema,
-  STORY_OUTPUT_CONTRACT,
   type DeferredRuntimeJob,
   type RuntimeManifest,
   type RuntimeResult,
   type PresentationSnapshot,
 } from "@covel/shared";
+import { isPublicStoryRuntime } from "@covel/shared/contracts";
 import type { StoreTransaction } from "@covel/store";
 import { createPresentationBudget } from "./budget.js";
 import { presentationLimits } from "./policy.js";
@@ -19,6 +19,34 @@ import {
   takePresentationSnapshot,
   PresentationUnavailable,
 } from "./projection.js";
+
+/**
+ * The public story messages a turn committed. Presentation reads a turn's
+ * story only when there is exactly one; a sub-agent never writes the turn's
+ * story, so its runtimes are left out.
+ */
+function turnStoryMessages<M extends { readonly metadata?: unknown }>(
+  messages: readonly M[],
+  runtimes: readonly RuntimeManifest[],
+  turnId: string,
+): M[] {
+  const storyRuntimes = new Set(
+    runtimes
+      .filter(
+        (runtime) => isPublicStoryRuntime(runtime) && !runtime.subagentOnly,
+      )
+      .map((runtime) => runtime.name),
+  );
+  return messages.filter((message) => {
+    const metadata = message.metadata as Record<string, unknown> | undefined;
+    return (
+      metadata?.turnId === turnId &&
+      metadata.kind === "story" &&
+      typeof metadata.runtimeId === "string" &&
+      storyRuntimes.has(metadata.runtimeId)
+    );
+  });
+}
 
 /** Recover an inline selector from persisted public story, never retry seeds. */
 export async function capturePresentationRecovery(
@@ -62,21 +90,11 @@ export async function capturePresentationRecovery(
         parsed.data.status === "failed",
     );
   if (!terminal?.success) return undefined;
-  const providers = runtimes.filter(
-    (runtime) =>
-      runtime.outputKind === "story" &&
-      !runtime.concealed &&
-      runtime.outputContract === STORY_OUTPUT_CONTRACT,
+  const messages = turnStoryMessages(
+    await store.listMessages(sessionId),
+    runtimes,
+    source.turnId,
   );
-  if (providers.length !== 1) return undefined;
-  const messages = (await store.listMessages(sessionId)).filter((message) => {
-    const metadata = message.metadata as Record<string, unknown> | undefined;
-    return (
-      metadata?.turnId === source.turnId &&
-      metadata?.runtimeId === providers[0]!.name &&
-      metadata?.kind === "story"
-    );
-  });
   if (messages.length !== 1) return undefined;
   const story = projectPresentationStory(messages[0]!.metadata);
   if (!story) return undefined;
@@ -234,24 +252,11 @@ export async function finalizePresentationJobs(
       else if (settled) await skipped(job, "unavailable");
       continue;
     }
-    const providers = runtimes.filter(
-      (runtime) =>
-        runtime.outputKind === "story" &&
-        !runtime.concealed &&
-        runtime.outputContract === STORY_OUTPUT_CONTRACT,
+    const messages = turnStoryMessages(
+      await tx.listMessages(sessionId),
+      runtimes,
+      job.sourceTurnId,
     );
-    const provider = providers.length === 1 ? providers[0] : undefined;
-    const messages = provider
-      ? (await tx.listMessages(sessionId)).filter((message) => {
-          const metadata = message.metadata as
-            Record<string, unknown> | undefined;
-          return (
-            metadata?.turnId === job.sourceTurnId &&
-            metadata?.runtimeId === provider.name &&
-            metadata?.kind === "story"
-          );
-        })
-      : [];
     // An absent/rejected/ambiguous source never releases paid work.
     const message = messages.length === 1 ? messages[0] : undefined;
     const story = message

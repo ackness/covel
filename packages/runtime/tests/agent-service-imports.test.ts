@@ -1,4 +1,4 @@
-import { toolCall } from "./_helpers/agent-loop-fixture.js";
+import { narrationSegments, toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * An agent imports another plugin's model-facing service as a tool
  * (`tools.services`). At run start the kernel binds the import to the one
@@ -113,7 +113,7 @@ function text(content: string): LLMResponse {
       {
         id: "final",
         name: "submit-output",
-        arguments: JSON.stringify({ narrativeOutput: content }),
+        arguments: JSON.stringify({ segments: narrationSegments(content) }),
       },
     ],
     finishReason: "tool_calls" as const,

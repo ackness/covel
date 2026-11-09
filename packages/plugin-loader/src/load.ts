@@ -1,8 +1,8 @@
 import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import {
   frameworkContractSchemas,
-  CHARACTER_ACTOR_CONTRACT,
-} from "@covel/shared";
+  isFrameworkContract,
+} from "@covel/shared/contracts";
 import { isDeepStrictEqual } from "node:util";
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import {
@@ -837,10 +837,16 @@ export async function loadRuntime(
     parsed.manifest.output?.schema,
     contracts,
   );
+  // A framework contract the runtime provides is its output schema unless
+  // the runtime declares a narrower one.
+  const frameworkContract =
+    parsed.manifest.outputContract &&
+    isFrameworkContract(parsed.manifest.outputContract)
+      ? parsed.manifest.outputContract
+      : undefined;
   const outputSchema =
-    loadedOutputSchema === undefined &&
-    parsed.manifest.outputContract === CHARACTER_ACTOR_CONTRACT
-      ? requireContractSchema(`contract:${CHARACTER_ACTOR_CONTRACT}`, contracts)
+    loadedOutputSchema === undefined && frameworkContract
+      ? requireContractSchema(`contract:${frameworkContract}`, contracts)
       : loadedOutputSchema;
   const outputContractSchema = parsed.manifest.outputContract
     ? contracts[parsed.manifest.outputContract]

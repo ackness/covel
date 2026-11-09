@@ -1,4 +1,4 @@
-import { manifest, submitted } from "./_helpers/agent-loop-fixture.js";
+import { manifest, storySubmitted } from "./_helpers/agent-loop-fixture.js";
 /** Runtime lifecycle observer failures cannot discard accepted output. */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -30,7 +30,7 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
 // ── Mock LLM ─────────────────────────────────────────────────────
 
 class MockLLM implements LLMAdapter {
-  response: LLMResponse = submitted("Narrative output text.");
+  response: LLMResponse = storySubmitted("Narrative output text.");
 
   async generate(): Promise<LLMResponse> {
     return this.response;
@@ -39,7 +39,7 @@ class MockLLM implements LLMAdapter {
 
 class StreamingMockLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
-    return submitted("fallback");
+    return storySubmitted("fallback");
   }
 
   async *stream(): AsyncGenerator<LLMStreamEvent> {
@@ -47,7 +47,7 @@ class StreamingMockLLM implements LLMAdapter {
     yield { type: "text-delta" as const, textDelta: "world" };
     yield {
       type: "tool-call" as const,
-      ...submitted("Hello world").toolCalls[0]!,
+      ...storySubmitted("Hello world").toolCalls[0]!,
     };
     yield { type: "done" as const, finishReason: "tool_calls" };
   }

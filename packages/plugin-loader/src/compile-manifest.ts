@@ -7,7 +7,9 @@ import {
   runtimeManifestInputSchema,
   resolveI18nText,
   serviceImportName,
+  STORY_OUTPUT_CONTRACT,
 } from "@covel/shared";
+import { providesStoryContract } from "@covel/shared/contracts";
 import type {
   PluginManifest,
   RuntimeAuthoringManifest,
@@ -192,7 +194,17 @@ export function compileRuntimeManifest(
       inputs[name] = { ...rest, from: compileSource(binding.from) };
     }
   }
-  const contract = runtime.io?.output?.contract;
+  // The automatically scheduled story runtime provides the story contract
+  // without naming it; the manifest rules refuse any other contract on it.
+  const contract =
+    runtime.io?.output?.contract ??
+    (providesStoryContract({
+      visibility,
+      triggerType: trigger?.type,
+      subagentOnly,
+    })
+      ? STORY_OUTPUT_CONTRACT
+      : undefined);
   const output = runtime.io?.output;
   const parsed = runtimeManifestInputSchema.parse({
     ...(runtime.presentation

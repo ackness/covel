@@ -84,6 +84,7 @@ The root `requires` can list extension points or UI slots. This means "someone i
 - Writing the name of a kernel contract only in the root `provides` does not satisfy another plugin's dependency.
 - Client-side preselection and server-side activation use the same rules. A provider that has no authorization, or that is explicitly excluded, is not added automatically.
 - `conflicts` cannot reference kernel extension points or specific slots. Both the author validation and a direct call to the session resolver return `invalid-conflict`.
+- A framework contract with one provider per session (`narrative-engine@2`) is exclusive on its own, like a `single` extension point (`single-provider-conflict`); writing it in `conflicts` is ignored.
 - Mutual exclusion for `single` is guaranteed by the mode itself. `collect` and `pipeline` allow several implementations to coexist.
 
 ## What a handler can get

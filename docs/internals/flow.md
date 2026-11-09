@@ -331,7 +331,7 @@ flowchart TB
 - 明确排除对 core 插件也有效。
 - 缺少依赖时，先选唯一的普通提供者，再考虑唯一的默认提供者。
 - 玩家明确换掉默认提供者，这一步在冲突检测之前处理。
-- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single），这个组合会被拒绝。
+- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single）或框架契约（`narrative-engine@2`），这个组合会被拒绝。写在 `conflicts` 里的单提供者框架契约被忽略。
 - 普通的输出契约可以有多个提供者，消费者用 `cardinality: one | all` 说明自己要一个还是全部。
 - 启用和停用之后的明确选择保存在 `session.metadata.pluginSelection`。推荐列表本身不会自动启用插件。
 

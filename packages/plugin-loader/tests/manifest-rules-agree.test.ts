@@ -104,6 +104,33 @@ const unrunnable = [
     },
     field: "io.inputs.prose",
   },
+  {
+    name: "a manual story runtime naming the story contract",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { trigger: { type: "manual" } },
+      io: { visibility: "story", output: { contract: "narrative-engine@2" } },
+    },
+    field: "io.output.contract",
+  },
+  {
+    name: "a system runtime naming the story contract",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "narrative" },
+      io: { output: { contract: "narrative-engine@2" } },
+    },
+    field: "io.output.contract",
+  },
+  {
+    name: "a story runtime naming another contract",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "narrative" },
+      io: { visibility: "story", output: { contract: "notes@1" } },
+    },
+    field: "io.output.contract",
+  },
 ];
 
 describe("a runtime that can never run", () => {

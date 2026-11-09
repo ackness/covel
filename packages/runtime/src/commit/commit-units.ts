@@ -12,11 +12,8 @@
  */
 
 import type { StoreTransaction } from "@covel/store";
-import {
-  STORY_OUTPUT_CONTRACT,
-  type Proposal,
-  type SessionEvent,
-} from "@covel/shared";
+import type { Proposal, SessionEvent } from "@covel/shared";
+import { isPublicStoryRuntime } from "@covel/shared/contracts";
 import { createDisplayMessageBuffer } from "./display-message-buffer.js";
 import {
   checkPendingReadBaselines,
@@ -327,33 +324,19 @@ async function commitUnit(
         runtime.name === member.runtimeId &&
         runtime.pluginId === member.pluginId,
     );
-    if (manifest?.outputKind === "story" && !manifest.concealed) {
-      for (const event of memberEvents) {
-        if (
-          event.type === "narrative.completed" &&
-          event.payload.kind === "story" &&
-          typeof event.payload.messageId === "string"
-        )
-          narrativeOwners.set(event.payload.messageId, member);
-      }
-    }
-    if (
-      member === unit.root &&
-      runtimes.some(
-        (runtime) =>
-          runtime.name === member.runtimeId &&
-          runtime.pluginId === member.pluginId &&
-          runtime.outputKind === "story" &&
-          runtime.outputContract === STORY_OUTPUT_CONTRACT,
-      )
-    ) {
-      for (const event of memberEvents)
-        if (
-          event.type === "narrative.completed" &&
-          event.payload.kind === "story" &&
-          typeof event.payload.messageId === "string"
-        )
+    if (!manifest || !isPublicStoryRuntime(manifest)) continue;
+    for (const event of memberEvents) {
+      if (
+        event.type === "narrative.completed" &&
+        event.payload.kind === "story" &&
+        typeof event.payload.messageId === "string"
+      ) {
+        narrativeOwners.set(event.payload.messageId, member);
+        // Only a top-level story speaks for the turn (auto-advance,
+        // presentation); nested story output belongs to its caller.
+        if (member === unit.root)
           topLevelNarrativeMessageIds.add(event.payload.messageId);
+      }
     }
   }
   return committed;

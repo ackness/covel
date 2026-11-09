@@ -114,10 +114,10 @@ The ID of this package is its directory name, `example`; its entry is `server/in
 | `kind` | `core` (added to every game by default) or `plugin` (the value when left out; added only when chosen). |
 | `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in Getting ready; they do not determine runtime scheduling. Covel works out the `ui:*` and `cost:*` tags; authors write only the others, such as `mode:*`. See [Derived tags](#derived-tags). |
 | `author`, `license` | Author information, shown only for display. See [Author information](#author-information). |
-| `provides` | Contracts that no runtime outputs (for example, ones a service provides), or contracts to mark as `{contract, default: true}`. The `io.output.contract` of each runtime is added on its own; do not write it. |
+| `provides` | Contracts that no runtime outputs (for example, ones a service provides), or contracts to mark as `{contract, default: true}`. The `io.output.contract` of each runtime (including the `narrative-engine@2` an automatically scheduled story runtime provides) is added on its own; do not write it. |
 | `requires` | Required contracts. The resolver adds a provider for each one. A contract that a runtime refers to but `requires` does not list is optional. |
-| `conflicts` | Makes the package mutually exclusive with other plugins that provide these contracts. |
-| `contracts` | Schema declarations for contracts, as `{contractId: {schema: ./path.json}}`. Contracts received by a `contributes.data` namespace do not need to be listed here. |
+| `conflicts` | Makes the package mutually exclusive with other plugins that provide these contracts. A [framework contract](#framework-contracts) with one provider per session is exclusive on its own; a conflict written on it is ignored. |
+| `contracts` | Schema declarations for contracts, as `{contractId: {schema: ./path.json}}`. Contracts received by a `contributes.data` namespace and [framework contracts](#framework-contracts) do not need to be listed here. |
 | `entry` | The path, relative to the package root, of the module that does the registration. When left out, `server/index.js` is used if it exists. |
 | `contributes` | Package-level contributions. See [contributes fields](#contributes-fields). |
 | `runtime` | An optional declaration of a single runtime. |
@@ -126,10 +126,10 @@ Root fields that are rarely needed, such as `covel` and `homepage`, are in [Adva
 
 A contract is a versioned name, such as `narrative-engine@2`. Plugins find each other through it, not through plugin IDs. A few rules:
 
-- The contracts this package provides are `provides` plus the `io.output.contract` of each runtime.
-- Within one package, two runtimes cannot produce the same contract (`ambiguous output contract`).
+- The contracts this package provides are `provides` plus the `io.output.contract` of each runtime. An automatically scheduled `io.visibility: story` runtime provides `narrative-engine@2` without writing it; see [Story output](#story-output).
+- Within one package, two runtimes cannot produce the same contract (`ambiguous output contract`). So a package has at most one automatically scheduled story runtime.
 - Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` (the default) or `all`.
-- Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
+- Only an extension point that allows one provider, a framework contract with one provider per session, and an explicit `conflicts` entry get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
 
 Getting ready groups the plugins by whether they call a model, that is by the derived `cost:*` tag. A plugin without that tag goes under its first tag (the tags the author writes come before the derived ones), and one with no tags under “Untagged”. A derived tag shows as words ("Calls a model", "Player actions"), and a tag the author wrote shows as written. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
@@ -239,6 +239,8 @@ Covel works out the fields below when they are left out. When one is written wit
 | The runtime type | A function runtime when there is a `function` block; otherwise an agent |
 | `function.handler` | `./handler.js` next to the manifest |
 | `provides` | The `io.output.contract` of each runtime |
+| A story runtime's `io.output.contract` | `narrative-engine@2` when it is scheduled automatically; a manual, event or sub-agent story runtime has no output contract |
+| An agent's `io.output.schema` | The schema of its output contract when that is a framework contract; a story agent without a schema uses the story schema, see [submission schema](#default-output-schema) |
 | `ui:*` and `cost:*` in `tags` | Worked out from the package; see [Derived tags](#derived-tags) |
 | `contributes.data.*.authoring.source.key` | `id`; `filename` for a media directory |
 | The format of `contributes.data.*.authoring.source` | Worked out from `path`: `.yaml`/`.yml`, `.json`, or a media directory without an extension |
@@ -447,9 +449,11 @@ A draft is display only: the host does not validate it, it never enters traces o
 
 The actual model must support tools. Strict and non-strict submissions use the same host validation, preserving optional properties and open objects. See [tool submission capabilities](./slots.md#tool-submission-capabilities) for target checks, same-tag fallback and strict profiles. Submission steps prefer a named `submit-output` choice, narrowed to `required` or `auto` when thinking capabilities require it; the player's reasoning choice is never disabled to force submission.
 
+<a id="default-output-schema"></a>
+
 Without an output schema, the host supplies an object default:
 
-- Story agent: required nonblank `narrativeOutput: string`, optional `yield: user | continue`.
+- Story agent: the schema of [Story output](#story-output), which is the `narrative-engine@2` schema: required `segments`, optional `cues` and `yield`. A submission with only `narrativeOutput` is asked to use segments instead.
 - System agent: an open object with optional `narrativeOutput: string`, `completion: done | pending`, `preGameDone: boolean`, and other business fields. `{}` means no business output. Declare a schema for typed downstream output.
 
 **Completion fields.** The first advertised `submit-output` description and default system schema explain these rules. Follow the actual schema’s required fields and allowed values. When optional, omit `preGameDone` outside setup and omit `completion` when no completion signal is needed. `preGameDone: false` means setup is still waiting, not “this is not setup.” Use `completion: "pending"` while waiting and `"done"` when finished. If both fields are present, only `false + "pending"` or `true + "done"` are valid. The host still rejects contradictions; acceptance cannot complete setup early or confirm persistence.
@@ -474,7 +478,7 @@ agent:
 
 Business tools still validate domain constraints such as coverage. Valid JSON alone does not prove a complete task. See the [submission tool](./tools.md#submit-output).
 
-Narrator and Chat Storyteller keep the `narrative-engine@2` `segments/cues/yield` payload and deliver it through final submission. Register `createNarrativeReview` on `ReviewAgentOutput`. It checks validated segments or default `narrativeOutput` and returns correction only; it cannot rewrite a response or add effects. Preparation chatter never becomes story content.
+Narrator and Chat Storyteller keep the `narrative-engine@2` `segments/cues/yield` payload and deliver it through final submission. Register `createNarrativeReview` on `ReviewAgentOutput`. It checks validated segments and returns correction only; it cannot rewrite a response or add effects. Preparation chatter never becomes story content.
 
 Suggestions, fact extraction, event planning, time advancement and world initialization first complete their required business tool, then submit its canonical result. They declare the business tool as their output source, so the host validates and reviews the canonical result. Correct only the submission, without repeating successful writes. Affinity, codex and graph agents may submit `{}` without writing on no-change turns; character tracking still syncs an empty batch and dimension tracking still settles `updates: []`. World initialization’s canonical result must include `preGameDone: true`; character form preparation submits `preGameDone: false` while waiting for the player to fill the form.
 
@@ -559,6 +563,14 @@ When you publish a runtime's output contract, declare the public schema of the c
 - A replacement plugin provides a contract through the `io.output.contract` of its own runtime (`provides` includes it on its own). Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
 
+<a id="framework-contracts"></a>
+
+#### Framework-owned contracts
+
+The framework owns the schema of a few contracts: `narrative-engine@2` (story output, which the kernel reads itself) and `character-actor@1` ([character delegation](#character-orchestration)). Packages provide or read them as usual but do not declare their schema in root `contracts`: the loader uses the framework's schema. An identical copy gets a `pnpm validate:plugin` warning that it can be removed; a different schema rejects the package (`framework-owned and cannot be shadowed`). A runtime that provides a framework contract and writes no `io.output.schema` uses the framework schema as its output schema, so `recordAs` needs no separate schema either.
+
+A session has one provider package of `narrative-engine@2`. The resolver keeps two providers apart the way it does for an extension point that allows one provider (`single-provider-conflict`), and a replacement the player picks still replaces the default narrator. Providers do not write `conflicts: [narrative-engine@2]`; written in any package it is ignored, and `pnpm validate:plugin` warns that it can be removed. `character-actor@1` can have several providers.
+
 #### Where contracts are validated
 
 - The kernel validates a published contract at the boundary where a runtime's final output is produced. A failed result cannot commit domain effects, and it cannot write to `recordAs`.
@@ -584,7 +596,11 @@ The output of an `outputKind: story` runtime is normalized as described in [Stor
 
 #### Story output
 
-The kernel owns the shape of a story. It is the same for every `outputKind: story` runtime: agents, functions, and stories that a guard returns early. The current contract is `narrative-engine@2`:
+The kernel owns the shape of a story. It is the same for every `outputKind: story` runtime: agents, functions, and stories that a guard returns early. The current contract is `narrative-engine@2`, and the framework owns its schema (see [Framework-owned contracts](#framework-contracts)):
+
+- An automatically scheduled story runtime provides `narrative-engine@2` without writing `io.output.contract` or `io.output.schema`. Writing `narrative-engine@2` gets a `pnpm validate:plugin` warning that it can be removed; writing another contract disables the runtime.
+- A manual, event or sub-agent story runtime still writes a story when it is started, but provides no contract, does not compete with the narrator for the session's story, and cannot write `io.output.contract` (doing so disables the runtime).
+- A story agent without a schema submits this shape too; see [Without an output schema](#default-output-schema).
 
 | Field      | Type                                    | Meaning                                                                                                           |
 | ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -1482,7 +1498,7 @@ Development data: discard unresolved suspensions that already delegated before b
 
 An agent’s `yield: continue` must come from accepted, committed output. Rejection, cancellation, failed commit and child output cannot start another round. Local text reveal does not participate in execution decisions.
 
-The host reads only committed top-level stories with `io.visibility: story` and `io.output.contract: narrative-engine@2`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
+The host reads only committed top-level stories with `io.visibility: story`. Exactly one such story must still have `yield: continue` after commit Hooks to request another round. No story, multiple stories or an omitted `yield` returns control to the player. Sub-agent and recursive outputs do not decide advancement. A failed attached operation does not undo the saved story or independently prevent advancement.
 
 Each new round uses normal scheduling, tools, proposal validation and commit; inline post-turn work runs each round. `ctx.playerActions` contains one textless `advance` with source `system`; the input digest retains it too. Story imports can remain optional and execution proceeds without a provider. Players can stop advancement; see [session advancement settings](./api.md#auto-advance) for limits and blocking conditions.
 
@@ -1524,7 +1540,7 @@ The example package's `art.schema.json` defines its asset format; `handler.js` s
 
 ### Inputs and writes
 
-Only an optional (`required: false`), untransformed, turn-scoped `narrative-engine@2` input is permitted. Missing or ambiguous public story providers leave the input absent. The host copies validated `segments` and `cues` only, excluding business extras, concealed / non-story / failed results, tools, intent, reasoning, continuations, operations and summaries.
+Only an optional (`required: false`), untransformed, turn-scoped `narrative-engine@2` input is permitted. When the execution has no successful public story, or more than one, the input is absent. The host copies validated `segments` and `cues` only, excluding business extras, concealed / non-story / failed results, tools, intent, reasoning, continuations, operations and summaries.
 
 Zero-budget functions read a public candidate before story commit; their writes cannot survive rejection of that story. Detached presentation reads the actual story saved after `PreStateCommit` rewrites and accepted owning-plugin data from that commit. Its versioned snapshot contains no raw upstream result, player message, action or form. Snapshots are limited to 256 KiB total, 50 rows per namespace and 100 character identities; exceeding a bound refuses the whole snapshot, including inline materialization.
 

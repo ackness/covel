@@ -189,7 +189,7 @@ There are two more fields that control order only: `schedule.needs` requires the
 > [!IMPORTANT]
 > A reference across plugins may only use a capability name. Writing another plugin's runtime name (for example `other-plugin/some-runtime`) in `needs`, `after` or `io.inputs` makes the manifest fail to load. Runtimes inside the same plugin can refer to each other by runtime name.
 
-One capability can have several providers. `cardinality: one` (the default) means "only one is needed", and `cardinality: all` means "all of them are needed". To make your plugin mutually exclusive with other plugins that provide a capability, write `conflicts` in `PLUGIN.md`.
+One capability can have several providers. `cardinality: one` (the default) means "only one is needed", and `cardinality: all` means "all of them are needed". To make your plugin mutually exclusive with other plugins that provide a capability, write `conflicts` in `PLUGIN.md`. The story contract `narrative-engine@2` has one provider per session, so story plugins exclude each other without it.
 
 Runtimes triggered by an event can also be ordered. Among the runtimes triggered by the same event, `needs` and `after` still apply, and runtimes without a dependency still run at the same time. A dependency does not trigger a runtime that no event matched. Runtimes that run in the background cannot be ordered this way. To pass work along, send a follow-up event, or read the output the other side has already saved.
 

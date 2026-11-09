@@ -1,4 +1,7 @@
-import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
+import {
+  narrationSegments,
+  suspendedLoopState,
+} from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "@covel/ai-provider";
 import { createEventBus } from "@covel/events";
@@ -265,7 +268,9 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                   replace: {
                     result: {
                       ...result,
-                      output: { narrativeOutput: "Rewritten story" },
+                      output: {
+                        segments: narrationSegments("Rewritten story"),
+                      },
                     },
                   },
                 };
@@ -349,7 +354,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                       id: "final",
                       name: "submit-output",
                       arguments: JSON.stringify({
-                        narrativeOutput: "Original story",
+                        segments: narrationSegments("Original story"),
                       }),
                     },
                   ],

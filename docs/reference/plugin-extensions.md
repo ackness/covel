@@ -848,7 +848,7 @@ trace 事件不含原始错误。自己的片段或槽位没有出现时，作�
 
 ## 回合策略与角色表演契约
 
-框架提供 schema，插件提供行为：`turn-policy@1` 是只读服务，`character-actor@1` 是只供委托的 agent runtime。它们不是内核扩展点。故事必须在任一提供方缺失时仍可运行，不能把它们放进故事包的 `requires`、必需契约输入或 `needs`。
+框架提供 schema，插件提供行为：`turn-policy@1` 是只读服务，`character-actor@1` 是只供委托的 agent runtime。它们不是内核扩展点。框架持有 schema 的契约还有故事输出 `narrative-engine@2`，包不在根 `contracts` 里声明这些 schema，见[框架持有的契约](./plugins.md#framework-contracts)。故事必须在任一提供方缺失时仍可运行，不能把它们放进故事包的 `requires`、必需契约输入或 `needs`。
 
 SDK 导出 `TURN_POLICY_CONTRACT`、`CHARACTER_ACTOR_CONTRACT`，以及 `turnPolicyRequestSchema`、`turnPolicyInputSchema`、`turnPolicyOutputSchema`、`characterActorInputSchema`、`characterActorOutputSchema`；同名的 `…JsonSchema()` 导出 draft-7 JSON Schema，类型名分别是 `TurnPolicyRequest`、`TurnPolicyInput`、`TurnPolicyOutput`、`CharacterActorInput`、`CharacterActorOutput`。`@covel/shared` 重导出同一份 schema。对象严格校验，不接受额外字段。
 

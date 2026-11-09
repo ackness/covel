@@ -1,4 +1,4 @@
-import { submitted } from "./_helpers/agent-loop-fixture.js";
+import { storySubmitted } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type {
@@ -66,7 +66,7 @@ describe("terminal domain boundaries", () => {
       });
       const streamedText = "The door is red.";
       const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-        ...submitted("The door is blue."),
+        ...storySubmitted("The door is blue."),
       }));
       const turn = await runTurnPipeline(input, [story], {
         store,
@@ -128,7 +128,7 @@ describe("terminal domain boundaries", () => {
       execute: async () => ({ found: true }),
     });
     const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
-      ...submitted("The door is blue."),
+      ...storySubmitted("The door is blue."),
     }));
     const turn = await runTurnPipeline(input, [story], {
       store,

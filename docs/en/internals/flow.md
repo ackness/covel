@@ -330,7 +330,7 @@ Ordering rules for the main loop:
 - An explicit exclusion also works for core plugins.
 - If a dependency is missing, the kernel first picks the only regular provider. Then it considers the only default provider.
 - When the player explicitly swaps the default provider, this is handled before conflict detection.
-- A `conflicts` clash, or two plugins that compete for an extension point that allows only one provider (single), rejects that combination.
+- A `conflicts` clash, or two plugins that compete for an extension point that allows only one provider (single) or for a framework contract with one provider (`narrative-engine@2`), rejects that combination. A single-provider framework contract written in `conflicts` is ignored.
 - A normal output contract can have several providers. A consumer says whether it wants one or all with `cardinality: one | all`.
 - Explicit choices made when enabling and disabling are saved in `session.metadata.pluginSelection`. A recommendation list does not enable plugins by itself.
 

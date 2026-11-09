@@ -3,7 +3,6 @@ import {
   currentCharacterOf,
   primarySeat,
   resolveCharacter,
-  STORY_OUTPUT_CONTRACT,
   presentationSnapshotSchema,
   presentationStorySchema,
   type PresentationSnapshot,
@@ -12,6 +11,7 @@ import {
   type RuntimeResult,
   type TurnDigest,
 } from "@covel/shared";
+import { isPublicStoryRuntime } from "@covel/shared/contracts";
 import type { DataStore } from "@covel/store";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { mergePluginDataRows } from "../function-runtime/execution-write-buffer.js";
@@ -59,24 +59,29 @@ export function projectPresentationStory(
   return parsed.success ? deepFreeze(parsed.data) : undefined;
 }
 
+/**
+ * The story this execution told: its one successful public story result.
+ * A session may hold several story runtimes (one scheduled automatically,
+ * others started by hand), but an execution that produced more than one
+ * story has no single story to present.
+ */
 export function publicStoryCandidate(
   runtimes: readonly RuntimeManifest[],
   results: readonly RuntimeResult[],
 ) {
-  const providers = runtimes.filter(
-    (runtime) =>
-      runtime.outputKind === "story" &&
-      !runtime.concealed &&
-      runtime.outputContract === STORY_OUTPUT_CONTRACT,
-  );
-  if (providers.length !== 1) return undefined;
-  const result = results.find(
+  const stories = results.filter(
     (result) =>
-      result.runtimeId === providers[0]!.name &&
-      result.pluginId === providers[0]!.pluginId &&
-      result.status === "success",
+      result.status === "success" &&
+      runtimes.some(
+        (runtime) =>
+          runtime.name === result.runtimeId &&
+          runtime.pluginId === result.pluginId &&
+          isPublicStoryRuntime(runtime),
+      ),
   );
-  return result ? projectPresentationStory(result.output) : undefined;
+  return stories.length === 1
+    ? projectPresentationStory(stories[0]!.output)
+    : undefined;
 }
 
 type ProjectionStore = Pick<

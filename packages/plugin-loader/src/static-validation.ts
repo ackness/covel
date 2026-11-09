@@ -1,4 +1,5 @@
 import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
+import { frameworkContractSchemas } from "@covel/shared/contracts";
 import type { PluginThemeFiles } from "./theme-files.js";
 import type { MessageCatalog } from "./locale-messages.js";
 import { compilePluginTheme } from "./plugin-themes.js";
@@ -68,7 +69,9 @@ export function validateRuntimeDeclarations(
   // contract gets one runtime's output, so two runtimes cannot share one.
   const outputs = new Set<string>();
   for (const parsed of manifests) {
-    const contract = parsed.runtime?.io?.output?.contract;
+    // The compiled contract: a story runtime provides the story contract
+    // without naming it.
+    const contract = parsed.manifest.outputContract;
     if (!contract) continue;
     if (outputs.has(contract))
       throw new Error(
@@ -222,6 +225,9 @@ export function validatePluginFiles(
     );
     if (document !== undefined) contractSchemas[contract] = document;
   }
+  // The loader resolves a framework contract to its own schema, whatever a
+  // package declares (a different one is refused when the package loads).
+  Object.assign(contractSchemas, frameworkContractSchemas);
   for (const [namespace, declaration] of Object.entries(
     plugin.contributes?.data ?? {},
   ))

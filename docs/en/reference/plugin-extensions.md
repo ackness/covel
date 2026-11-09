@@ -848,7 +848,7 @@ A host caller can pass `onProviderError` in the scope of `createExecution`. When
 
 ## Turn policy and character actor contracts
 
-The framework owns the schemas; plugins supply behavior. `turn-policy@1` is a read service and `character-actor@1` is a delegated agent runtime. Neither is a kernel extension point. Stories remain runnable without either provider: do not put them in a story package's `requires`, required contract inputs or `needs`.
+The framework owns the schemas; plugins supply behavior. `turn-policy@1` is a read service and `character-actor@1` is a delegated agent runtime. Neither is a kernel extension point. The framework also owns the schema of the story output `narrative-engine@2`; packages do not declare these schemas in root `contracts`. See [Framework-owned contracts](./plugins.md#framework-contracts). Stories remain runnable without either provider: do not put them in a story package's `requires`, required contract inputs or `needs`.
 
 The SDK exports `TURN_POLICY_CONTRACT`, `CHARACTER_ACTOR_CONTRACT`, and `turnPolicyRequestSchema`, `turnPolicyInputSchema`, `turnPolicyOutputSchema`, `characterActorInputSchema`, `characterActorOutputSchema`. Matching `…JsonSchema()` functions export draft-7 JSON Schema. The types are `TurnPolicyRequest`, `TurnPolicyInput`, `TurnPolicyOutput`, `CharacterActorInput`, `CharacterActorOutput`. `@covel/shared` re-exports the same schemas. Objects are strict and reject extra fields.
 

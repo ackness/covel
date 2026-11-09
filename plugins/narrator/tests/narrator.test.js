@@ -56,6 +56,7 @@ describe(`${PLUGIN_ID} package`, () => {
   );
   let definition;
   let manifest;
+  let loaded;
   let english;
   let chinese;
 
@@ -64,7 +65,8 @@ describe(`${PLUGIN_ID} package`, () => {
     const discovery = discoveries.find((item) => item.id === PLUGIN_ID);
     definition = await loadPluginDefinition(discovery);
     manifest = definition.manifests[0].manifest;
-    english = (await loadRuntime(discovery, manifest.name)).promptTemplate;
+    loaded = await loadRuntime(discovery, manifest.name);
+    english = loaded.promptTemplate;
     // The variant holds only translated text: its body follows the frontmatter.
     chinese = readFileSync(path.join(PLUGIN_DIR, "PLUGIN.zh.md"), "utf8")
       .split(/^---$/m)
@@ -84,22 +86,20 @@ describe(`${PLUGIN_ID} package`, () => {
         typeof item === "string" ? item : item.contract,
       ),
     ).toContain("narrative-engine@2");
-    // Two engines in one session would both write the turn.
-    expect(definition.packageManifest.plugin.conflicts).toContain(
+    // A session admits one story provider; the framework derives the
+    // conflict, so the package does not write one.
+    expect(definition.packageManifest.plugin.conflicts ?? []).not.toContain(
       "narrative-engine@2",
     );
+    expect(definition.packageManifest.plugin.contracts).toBeUndefined();
   });
 
   it("asks for story segments through its output schema", () => {
+    // An automatically scheduled story runtime provides the story contract
+    // and submits its framework-owned schema without declaring either.
     expect(manifest.outputContract).toBe("narrative-engine@2");
-    expect(manifest.output?.schema).toBe("contract:narrative-engine@2");
-    const schema = JSON.parse(
-      readFileSync(
-        path.join(PLUGIN_DIR, "schemas/narrative-engine.schema.json"),
-        "utf8",
-      ),
-    );
-    expect(schema.required).toEqual(["segments"]);
+    expect(manifest.output?.schema).toBeUndefined();
+    expect(loaded.outputContractSchema.required).toEqual(["segments"]);
   });
 
   it("offers the five perspectives, character second person by default", () => {
@@ -227,10 +227,6 @@ describe(`${PLUGIN_ID} package`, () => {
             select: "/checkContext",
             required: false,
           },
-        },
-        output: {
-          contract: "narrative-engine@2",
-          schema: "contract:narrative-engine@2",
         },
         visibility: "story",
       },

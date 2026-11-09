@@ -7,7 +7,9 @@ import {
   characterActorOutputJsonSchema,
   runtimeAuthoringManifestSchema,
   serviceContributionSchema,
+  storyOutputJsonSchema,
 } from "@covel/shared";
+import { frameworkContractSchemas } from "@covel/shared/contracts";
 import { discoverPlugins } from "../src/discover.js";
 import { loadRuntime, loadPluginDefinition } from "../src/load.js";
 
@@ -56,6 +58,93 @@ async function fixture(schema?: string, shadow?: boolean) {
   if (!discovery) throw new Error("Missing fixture");
   return discovery;
 }
+/** A package with one inline runtime and, optionally, extra files. */
+async function storyPackage(
+  runtime: Record<string, unknown>,
+  root: Record<string, unknown> = {},
+  files: Record<string, unknown> = {},
+) {
+  const temp = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "story-loader-")),
+  );
+  roots.push(temp);
+  const dir = path.join(temp, "teller");
+  await fs.mkdir(dir);
+  await fs.writeFile(
+    path.join(dir, "PLUGIN.md"),
+    `---\n${JSON.stringify({ description: "Teller", ...root, runtime })}\n---\nTell the story.\n`,
+  );
+  for (const [name, value] of Object.entries(files))
+    await fs.writeFile(path.join(dir, name), JSON.stringify(value));
+  const [discovery] = await discoverPlugins(temp);
+  if (!discovery) throw new Error("Missing fixture");
+  return discovery;
+}
+const storyContractSchema = frameworkContractSchemas["narrative-engine@2"]!;
+describe("framework story contract", () => {
+  it("lets an automatic story agent provide the story contract without naming it", async () => {
+    const discovery = await storyPackage({
+      schedule: { stage: "narrative" },
+      io: { visibility: "story" },
+    });
+    const definition = await loadPluginDefinition(discovery);
+    expect(definition.manifests[0]!.manifest.outputContract).toBe(
+      "narrative-engine@2",
+    );
+    expect(definition.packageManifest.plugin.provides).toEqual([
+      "narrative-engine@2",
+    ]);
+    const loaded = await loadRuntime(discovery, "teller");
+    expect(loaded.outputContractSchema).toEqual(storyContractSchema);
+    expect(resolveAgentOutput(loaded)).toMatchObject({
+      schemaSource: "loaded",
+      schema: storyContractSchema,
+    });
+  });
+  it("gives a manual story agent the story schema but no contract", async () => {
+    const discovery = await storyPackage({
+      schedule: { trigger: { type: "manual" } },
+      io: { visibility: "story" },
+    });
+    const definition = await loadPluginDefinition(discovery);
+    expect(definition.manifests[0]!.manifest.outputContract).toBeUndefined();
+    expect(definition.packageManifest.plugin.provides).toBeUndefined();
+    const loaded = await loadRuntime(discovery, "teller");
+    expect(resolveAgentOutput(loaded)).toMatchObject({
+      schemaSource: "host-story",
+      schema: storyOutputJsonSchema(),
+    });
+  });
+  it("accepts a package copy of the story schema and refuses a changed one", async () => {
+    const story = {
+      schedule: { stage: "narrative" },
+      io: { visibility: "story" },
+    };
+    const root = {
+      contracts: { "narrative-engine@2": { schema: "story.json" } },
+    };
+    const copy: Record<string, unknown> = {
+      $id: "contract:narrative-engine@2",
+      ...storyOutputJsonSchema(),
+    };
+    const accepted = await storyPackage(story, root, { "story.json": copy });
+    expect(
+      (await loadRuntime(accepted, "teller")).outputContractSchema,
+    ).toEqual(storyContractSchema);
+    const changed = await storyPackage(story, root, {
+      "story.json": {
+        ...copy,
+        properties: {
+          ...(copy.properties as Record<string, unknown>),
+          extra: { type: "string" },
+        },
+      },
+    });
+    await expect(loadPluginDefinition(changed)).rejects.toThrow(
+      /framework-owned/,
+    );
+  });
+});
 describe("framework actor contract", () => {
   it.each([undefined, "contract:character-actor@1"])(
     "loads the canonical schema with declaration %s",

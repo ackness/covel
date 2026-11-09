@@ -22,6 +22,8 @@ import {
   makeExecutor,
   manifest,
   markTool,
+  narrationSegments,
+  storySubmitted,
   submitted,
   queuedLLM,
   runLoop,
@@ -120,13 +122,13 @@ describe("resolveLoopProfile", () => {
 describe("the loop core under a profile", () => {
   it("a story buffers provider text and accepts only the complete submission", async () => {
     const llm: LLMAdapter = {
-      generate: async () => submitted("fallback"),
+      generate: async () => storySubmitted("fallback"),
       stream: async function* () {
         yield { type: "text-delta" as const, textDelta: "Once " };
         yield { type: "text-delta" as const, textDelta: "upon" };
         yield {
           type: "tool-call" as const,
-          ...submitted("Once upon").toolCalls[0]!,
+          ...storySubmitted("Once upon").toolCalls[0]!,
         };
         yield {
           type: "done" as const,
@@ -141,13 +143,15 @@ describe("the loop core under a profile", () => {
       deps: { toolExecutor: undefined },
     });
 
-    expect(result.acceptedOutput?.narrativeOutput).toBe("Once upon");
+    expect(result.acceptedOutput?.segments).toEqual(
+      narrationSegments("Once upon"),
+    );
     expect(result.stop).toEqual({ reason: "completed" });
   });
 
   it("(ii) a story with steering: false leaves the queue undrained", async () => {
     const drainSteering = vi.fn(() => ["turn left"]);
-    const llm = queuedLLM([submitted("The road forks.")]);
+    const llm = queuedLLM([storySubmitted("The road forks.")]);
     const result = await runLoop({
       llm,
       manifest: story({ loopProfile: { steering: false } }),
@@ -155,7 +159,9 @@ describe("the loop core under a profile", () => {
     });
     expect(drainSteering).not.toHaveBeenCalled();
     expect(llm.requests).toHaveLength(1);
-    expect(result.acceptedOutput?.narrativeOutput).toBe("The road forks.");
+    expect(result.acceptedOutput?.segments).toEqual(
+      narrationSegments("The road forks."),
+    );
   });
 
   it("(iii) a story with fallback: fail throws loop-detected on the second detection", async () => {
@@ -230,7 +236,7 @@ describe("the loop core under a profile", () => {
   it("a story rejects a submission cut at the provider output limit", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const cut: LLMResponse = {
-      ...submitted("The fog rolls"),
+      ...storySubmitted("The fog rolls"),
       finishReason: "length",
     };
     const error = await thrownBy(
@@ -250,6 +256,8 @@ describe("the deadline reserve (vi)", () => {
     readonly stepMs: number;
     readonly finalMs: number;
     readonly step: (n: number) => LLMResponse;
+    /** The finalizer's submission; a system agent's host default otherwise. */
+    readonly final?: (content: string) => LLMResponse;
   }) {
     let now = 1_000_000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
@@ -260,7 +268,7 @@ describe("the deadline reserve (vi)", () => {
         return opts.step(n++);
       }
       now += opts.finalMs;
-      return submitted("The answer, written in time.");
+      return (opts.final ?? submitted)("The answer, written in time.");
     });
     return llm;
   }
@@ -320,6 +328,7 @@ describe("the deadline reserve (vi)", () => {
         toolSteps = n + 1;
         return toolCall("mark", { note: `n${n}` }, `tc-${n}`, "scratch");
       },
+      final: (content) => storySubmitted(content),
     });
     let delivered = false;
     const drainSteering = vi.fn(() => {

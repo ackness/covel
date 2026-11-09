@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { STORY_OUTPUT_CONTRACT } from "../extension-points/contracts.js";
+import { providesStoryContract } from "../framework-contracts.js";
 import { presentationSchema } from "./presentation.js";
 import {
   AUTHORING_RULE_FIELD_PATHS,
@@ -237,12 +239,14 @@ export const runtimeAuthoringManifestSchema = z
               .optional(),
             contract: contractIdSchema
               .describe(
-                "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.",
+                "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. An automatically scheduled story runtime provides `narrative-engine@2` without it; other story runtimes cannot write it.",
               )
               .optional(),
             schema: z
               .string()
-              .describe("Private schema that validates the runtime's output.")
+              .describe(
+                "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract; a story agent without one submits the story schema.",
+              )
               .optional(),
             live: z
               .enum(["off", "units", "text"])
@@ -253,7 +257,7 @@ export const runtimeAuthoringManifestSchema = z
             recordAs: z
               .string()
               .describe(
-                "Export key under which the output is persisted for later executions. Requires `schema`.",
+                "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract.",
               )
               .optional(),
           })
@@ -591,6 +595,15 @@ export const runtimeAuthoringManifestSchema = z
         requireToolUse: value.agent?.completion?.require === "tool-use",
         visibility: value.io?.visibility,
         output: value.io?.output,
+        outputContract:
+          value.io?.output?.contract ??
+          (providesStoryContract({
+            visibility: value.io?.visibility,
+            triggerType: value.schedule?.trigger?.type,
+            subagentOnly: value.schedule?.subagentOnly,
+          })
+            ? STORY_OUTPUT_CONTRACT
+            : undefined),
         ...(value.agent ? { loop: authoredLoopView(value.agent.loop) } : {}),
         operationsInputs: inputs
           .filter(

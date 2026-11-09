@@ -31,7 +31,9 @@ import {
   makeExecutor,
   manifest,
   markTool,
+  narrationSegments,
   queuedLLM,
+  storySubmitted,
   submitted,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
@@ -348,7 +350,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
       }),
     );
     const candidate = {
-      narrativeOutput: "The gate opens.",
+      segments: narrationSegments("The gate opens."),
       pluginData: [{ namespace: "loop", key: "forged", value: true }],
       events: [{ topic: "forged", data: {} }],
       notifications: [{ message: "MODEL-FORGED" }],
@@ -394,9 +396,12 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
         replace: { correction: "Try again." },
       }),
     });
-    const first = await f.start([submitted("first"), toolCall("suspend", ASK)]);
+    const first = await f.start([
+      storySubmitted("first"),
+      toolCall("suspend", ASK),
+    ]);
     const resumed = await f.resume(first, [
-      submitted("second"),
+      storySubmitted("second"),
       toolCall("suspend", ASK),
     ]);
     expect(resumed.execution.result.status).toBe("suspended");
@@ -413,7 +418,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
     expect(second.pendingContinuation.lifecycle.runId).not.toBe(
       first.pendingContinuation.lifecycle.runId,
     );
-    const last = await f.resume(second, [submitted("third")], {
+    const last = await f.resume(second, [storySubmitted("third")], {
       loopProfile: { corrections: { review: 10 } },
     });
     expect(last.requests).toHaveLength(1);
@@ -437,7 +442,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
       steps: 1,
       maxSteps: 1,
     });
-    const resumed = await f.resume(saved, [submitted("Final answer.")], {
+    const resumed = await f.resume(saved, [storySubmitted("Final answer.")], {
       maxSteps: 100,
     });
     expect(resumed.requests).toHaveLength(1);
@@ -468,7 +473,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
           : {};
       const resumed = await f.resume(
         saved,
-        [submitted("Never")],
+        [storySubmitted("Never")],
         change === "version" ? { version: "2.0.0" } : {},
         loaded,
       );
@@ -514,7 +519,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
         f.deps([
           toolCall("mark", { note: "lost" }),
           toolCall("submit-output", {
-            narrativeOutput: "Continue.",
+            segments: narrationSegments("Continue."),
             yield: "continue",
           }),
         ]),
@@ -581,7 +586,7 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
         [story],
         f.deps([
           toolCall("submit-output", {
-            narrativeOutput: "Saved story.",
+            segments: narrationSegments("Saved story."),
             yield: "continue",
           }),
         ]),
@@ -599,5 +604,22 @@ describe.each(backends)("agent submission lifecycle on %s", (_name, create) => {
         origin === "player" ? 1 : 0,
       );
     }
+  });
+
+  it("reads a top-level story by its output kind, without an output contract", async () => {
+    // The kernel decides by output kind; a story runtime that names no
+    // contract still speaks for the execution that ran it.
+    const f = await fixture(create, { tools: undefined });
+    expect(f.rt.outputContract).toBeUndefined();
+    const execution = await executeTurn(
+      f.input,
+      [f.rt],
+      f.deps([
+        storySubmitted("A story without a contract.", { yield: "continue" }),
+      ]),
+    );
+    const outcome = await f.commit(execution);
+    expect(outcome.status).toBe("committed");
+    expect(outcome.topLevelNarrativeMessageIds).toHaveLength(1);
   });
 });

@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { storyOutputJsonSchema } from "@covel/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
 import { discoverPluginAt } from "../src/discover.js";
@@ -140,10 +141,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
         narrator: {
           ...agent,
           schedule: { stage: "narrative" },
-          io: {
-            visibility: "story",
-            output: { contract: "narrative-engine@2" },
-          },
+          io: { visibility: "story" },
           agent: {
             model: "story",
             // A system agent's defaults are not a story agent's.
@@ -161,6 +159,49 @@ describe("validate:plugin warnings for a field written with its default", () => 
     expect(warnings.join("\n")).not.toContain("agent.loop.timeoutMs");
   });
 
+  it("names the story contract and schema the framework works out", async () => {
+    const dir = await plugin(
+      {
+        version: "1.0.0",
+        conflicts: ["narrative-engine@2"],
+        contracts: { "narrative-engine@2": { schema: "./story.json" } },
+      },
+      {
+        teller: {
+          ...agent,
+          schedule: { stage: "narrative" },
+          io: {
+            visibility: "story",
+            output: {
+              contract: "narrative-engine@2",
+              schema: "contract:narrative-engine@2",
+            },
+          },
+        },
+      },
+    );
+    await writeFile(
+      path.join(dir, "story.json"),
+      JSON.stringify(storyOutputJsonSchema()),
+    );
+    const { status, warnings } = await validate(dir);
+    expect(status).toBe(0);
+    const fields = warnings.map(
+      (line) =>
+        line
+          .replace(/^ {2}warning: .*?(PLUGIN|RUNTIME)\.md: /, "")
+          .split(":")[0],
+    );
+    expect(fields.sort()).toEqual(
+      [
+        "conflicts[0]",
+        "contracts.narrative-engine@2",
+        "io.output.contract",
+        "io.output.schema",
+      ].sort(),
+    );
+  });
+
   it("compares loop behaviour keys with the profile they override", async () => {
     const dir = await plugin(
       { version: "1.0.0" },
@@ -168,10 +209,7 @@ describe("validate:plugin warnings for a field written with its default", () => 
         narrator: {
           ...agent,
           schedule: { stage: "narrative" },
-          io: {
-            visibility: "story",
-            output: { contract: "narrative-engine@2" },
-          },
+          io: { visibility: "story" },
           agent: {
             loop: {
               profile: "story",

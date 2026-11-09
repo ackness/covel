@@ -225,6 +225,49 @@ describe("session plugin contract resolution", () => {
     expect(plan.active).toEqual(["b"]);
     expect(plan.rejected[0]?.code).toBe("single-provider-conflict");
   });
+  it("admits one story provider per session without a written conflict", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["chat", "probe"],
+      plugins: [
+        p("chat", { provides: ["narrative-engine@2"] }),
+        p("probe", { provides: ["narrative-engine@2"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["chat"]);
+    expect(plan.rejected).toEqual([
+      {
+        pluginId: "probe",
+        code: "single-provider-conflict",
+        reason:
+          "narrative-engine@2 admits one provider per session and chat already provides it",
+        candidates: ["chat"],
+      },
+    ]);
+  });
+  it("lets a requested story provider replace the default one", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["chat"],
+      plugins: [
+        p("narrator", {
+          kind: "core",
+          provides: [{ contract: "narrative-engine@2", default: true }],
+        }),
+        p("chat", { provides: ["narrative-engine@2"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["chat"]);
+  });
+  it("ignores a written conflict on a single-provider framework contract", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["reader", "narrator"],
+      plugins: [
+        p("reader", { conflicts: ["narrative-engine@2"] }),
+        p("narrator", { provides: ["narrative-engine@2"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["reader", "narrator"]);
+    expect(plan.rejected).toEqual([]);
+  });
   it("keeps one declarer of an event topic and names both plugins", () => {
     const plugins = [
       p("stage", { eventTopics: ["scene.set", "stage.direction"] }),

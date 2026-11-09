@@ -177,7 +177,8 @@ See: [collections](../ship/collections.md), [plugin installation](./plugin-insta
 A versioned ID, such as `narrative-engine@2`, that says what ability a plugin provides or needs.
 
 - The root `PLUGIN.md` lists the contracts it needs and cannot coexist with in `requires` and `conflicts`, and the contracts no runtime outputs in `provides`.
-- A runtime publishes a contract with `io.output.contract`, and reads one with `from: { contract }`.
+- A runtime publishes a contract with `io.output.contract`, and reads one with `from: { contract }`. An automatically scheduled story runtime provides `narrative-engine@2` without writing it.
+- The framework owns the schema of a few contracts (`narrative-engine@2`, `character-actor@1`); packages do not declare them. `narrative-engine@2` has one provider per session.
 - The kernel finds providers by contract and never hard-codes a plugin ID. So plugins that provide the same contract can replace each other.
 - Only the current version is supported. An incompatible change gets a new ID (`@2`).
 

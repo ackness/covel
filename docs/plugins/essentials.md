@@ -189,7 +189,7 @@ runtime:
 > [!IMPORTANT]
 > 跨插件的引用只能写能力名。`needs`、`after`、`io.inputs` 里写别的插件的 runtime 名（例如 `other-plugin/some-runtime`）会让清单加载失败。同一个插件内部的 runtime 之间可以直接用 runtime 名。
 
-同一项能力可以有几个提供者。`cardinality: one`（默认）表示“只要一个”，`cardinality: all` 表示“全都要”。想和提供某项能力的其他插件互斥，在 `PLUGIN.md` 写 `conflicts`。
+同一项能力可以有几个提供者。`cardinality: one`（默认）表示“只要一个”，`cardinality: all` 表示“全都要”。想和提供某项能力的其他插件互斥，在 `PLUGIN.md` 写 `conflicts`。故事 `narrative-engine@2` 一局只有一个提供者，叙事插件之间自动互斥，不用写。
 
 由事件触发的 runtime 也可以排先后：同一个事件触发的几个 runtime 之间，`needs` 和 `after` 照常生效，没有依赖的仍然同时运行。依赖不会替你触发一个没有被事件匹配到的 runtime。后台运行的 runtime 之间不能这样排序，要接力就发一个后续事件，或者读对方已经保存的输出。
 

@@ -1,4 +1,4 @@
-import { submitted, toolCall } from "./_helpers/agent-loop-fixture.js";
+import { storySubmitted, toolCall } from "./_helpers/agent-loop-fixture.js";
 /** Request validation failures produce one paired error trace, without resending history. */
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
@@ -60,7 +60,7 @@ describe("turn-executor message.completed trace emission", () => {
       },
       async generate() {
         return {
-          ...submitted(narrative),
+          ...storySubmitted(narrative),
           usage: { inputTokens: 10, outputTokens: 20 },
         };
       },
