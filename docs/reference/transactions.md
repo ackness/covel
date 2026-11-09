@@ -649,7 +649,7 @@ await store.withTransaction(async (tx) => {
 
 `isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
 
-`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。有成功的故事时，辅助插件的 handler 失败只拒绝它自己插件的 proposal；别的插件的 proposal 跳过这个 handler，照常提交，见 [Hook](./hooks.md#auxiliary-hook-failures)。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
+`FailedProposal.code: "hook-failed"` 表示 `PreStateCommit` 因 handler 抛错、超时或无效结果而失败，不是主动否决。只计 Hook 所属插件的故障，不能把 proposal 所属插件算成被主动拒绝。handler 失败拒绝它判的那条 proposal，不论它属于哪个插件；有成功的故事时，这条 proposal 所在的单元单独丢弃，除非单元里有故事，见 [Hook](./hooks.md#auxiliary-hook-failures)。`dimension-version-conflict`、`conflict` 和 `suspension-data-changed` 也不计入[熔断](./protocol.md#插件故障熔断)。
 
 ## World Data import
 

@@ -649,7 +649,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 
-`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. Next to a successful story, a failed handler of an auxiliary plugin rejects only its own plugin's proposals; another plugin's proposal skips that handler and commits; see [Hooks](./hooks.md#auxiliary-hook-failures). `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
+`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. A failed handler rejects the proposal it judged, whichever plugin owns it; next to a successful story, that proposal's unit drops alone unless it holds the story; see [Hooks](./hooks.md#auxiliary-hook-failures). `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
 
 ## World Data import
 

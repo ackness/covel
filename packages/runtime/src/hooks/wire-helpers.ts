@@ -92,11 +92,13 @@ async function runHook<P>(
   event: HookEvent,
   payload: P,
   extra?: HookCtxExtra,
+  confinable?: (pluginId: string) => boolean,
 ): Promise<HookRunResult<P> | undefined> {
   if (!opts.pipeline) return undefined;
   return opts.pipeline.run(event, buildHookCtx(opts, event, extra), payload, {
     eventBus: opts.eventBus,
     emitter: opts.emitter,
+    ...(confinable ? { confinable } : {}),
   });
 }
 
@@ -139,14 +141,19 @@ export interface TurnStartPayload {
 }
 
 /**
- * `confined` lists the auxiliary plugins whose handler failed: their
- * runtimes sit this execution out while the rest of it runs.
+ * `confinable` names the plugins whose failed handler may sit the execution
+ * out instead of failing it; `confined` lists the ones that did, and the
+ * caller skips their runtimes or, when it cannot, fails the execution.
  */
 export async function runTurnStartHook(
-  opts: BaseOpts,
+  opts: BaseOpts & { readonly confinable?: (pluginId: string) => boolean },
   payload: TurnStartPayload,
 ): Promise<HookRunResult<TurnStartPayload>> {
-  return (await runHook(opts, "TurnStart", payload)) ?? { action: "continue" };
+  return (
+    (await runHook(opts, "TurnStart", payload, undefined, opts.confinable)) ?? {
+      action: "continue",
+    }
+  );
 }
 
 // ── TurnStop ─────────────────────────────────────────────────────

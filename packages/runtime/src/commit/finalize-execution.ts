@@ -11,8 +11,7 @@
  * `recursiveCall` results — commits inside a SINGLE `store.withTransaction`.
  * Normalization and PreStateCommit hooks run before it opens, so plugin hook
  * code never holds the store's write gate. A rejected proposal (a handler
- * returning `{ committed: false }`, a PreStateCommit veto or failure, or a
- * guard reject)
+ * returning `{ committed: false }`, a PreStateCommit veto or a guard reject)
  * rolls back the whole execution, except for optional runtimes next to a
  * committed story: each of those commits in its own savepoint and a rejection
  * drops only its writes, plus the writes of every runtime that hard-depends on
@@ -52,11 +51,7 @@ import type { SessionEvent } from "@covel/shared";
 import { attachPresentationState } from "../presentation/state.js";
 import { SuspensionDataChangedError } from "../resume/suspension-baseline.js";
 import { buildHookSettings } from "../hooks/hook-settings.js";
-import {
-  runWithHookScope,
-  storyPluginIdsOf,
-  type HookScope,
-} from "../hooks/hook-scope.js";
+import { runWithHookScope, type HookScope } from "../hooks/hook-scope.js";
 import type { FailedProposal } from "../session/session-runtime-result.js";
 import { needsSessionClockWrite } from "./session-clock.js";
 import { exportDeclsOf } from "./runtime-export-publish.js";
@@ -137,10 +132,6 @@ export async function finalizeExecution(
       executionContext.executionId,
     settings: args.hookSettings ?? buildHookSettings(runtimes, undefined),
     locale: args.hookLocale,
-    // Next to a committed story, a failed PreStateCommit hook of another
-    // plugin costs only that plugin's own proposals. Without one, the
-    // execution stays all-or-nothing and a failed hook fails closed.
-    ...(policy.hasStory ? { storyPluginIds: storyPluginIdsOf(runtimes) } : {}),
   };
   return runWithHookScope(scope, async () => {
     // Externally-visible fan-out is buffered while the transaction is open and

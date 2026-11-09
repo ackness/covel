@@ -286,7 +286,7 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 
 **一个回合内，读到的值不变。** 玩家同时手改，或者 tracker 提出了修改，都不会让这一回合读到的值变化。下一次执行重新读取已保存的值。
 
-- `dimension-context` 在这次执行里运行了、但没成功时，只暂停这一回合的维度快照：读 `world.dimensions@1` 的 runtime 拿不到这个输入。叙事照常运行和保存，回合照常计数。叙事读的是执行开始时冻结的已保存值，也就是 `dimension-context` 本来要发布的那一份，不是过时的数据，所以提示词里不需要另加“维度不可用”的说明。玩家在回合的执行状态里看到它失败，可以单独重试。结算义务和 tracker 照常。
+- `dimension-context` 在这次执行里运行了、但没成功时，只暂停这一回合的维度快照：读 `world.dimensions@1` 的 runtime 拿不到这个输入。叙事照常运行和保存，回合照常计数；除非故事把 `world.dimensions@1` 当作必需输入，硬依赖失败的提供者，这时按故事失败拒绝提交，见[事务](./transactions.md#backend-implementations)。叙事读的是执行开始时冻结的已保存值，也就是 `dimension-context` 本来要发布的那一份，不是过时的数据，所以提示词里不需要另加“维度不可用”的说明。玩家在回合的执行状态里看到它失败，可以单独重试。结算义务和 tracker 照常。
 - `dimension-context` 没有被安排运行时（指定只跑叙事的手动运行，或重试），叙事直接使用执行开始时已保存的值。
 - 叙事不能反过来依赖回合后才运行的 tracker 的输出。`recordAs` 导出也不能代替保存下来的值。
 - 提示词里放的是有长度预算的摘要，需要时再查询，不会默认展开所有大表。

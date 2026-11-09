@@ -162,8 +162,10 @@ export function makeFailedResult(
 }
 
 /**
- * Whether the execution runs a story runtime: a player turn with one active,
- * or a manual run, retry or detached stage aimed at one.
+ * Whether the execution may run a story runtime, before the session phase
+ * and the scheduled set are known: a player turn with one active, or a
+ * manual run, retry or detached stage aimed at one. Trigger, cadence,
+ * PreSchedule and a pending setup can still leave it without a story.
  */
 export function executionNarrates(
   input: Pick<TurnInput, "manualTrigger" | "detachedStage">,
@@ -207,6 +209,16 @@ export function makeSkippedResult(
   };
 }
 
+/**
+ * How the framework marks a runtime it skipped because a hook failed: a
+ * PreRuntime handler failed judging it, or its plugin's TurnStart handler
+ * failed and the plugin sits the execution out. A fault, not a decision.
+ */
+export const HOOK_FAILURE_SKIP = {
+  reason: "hook-failed",
+  by: "framework:hook",
+} as const;
+
 /** What a framework gate writes on the output of the runtime it held back. */
 interface GateSkipOutput {
   readonly skipped: true;
@@ -214,9 +226,9 @@ interface GateSkipOutput {
   readonly skippedBy: string;
   /**
    * Set by the gates that wait on this execution's upstreams (`needs` and
-   * required inputs) when an upstream that kept them closed failed: that
-   * runtime, or the one a gate recorded on it, so the value names the
-   * original failure however many gates passed it on.
+   * required inputs) when an upstream that kept them closed failed, or a
+   * failed hook skipped it: that runtime, or the one a gate recorded on it,
+   * so the value names the original failure however many gates passed it on.
    */
   readonly failedUpstream?: string;
 }
@@ -226,7 +238,8 @@ type ResultView = { readonly status: string; readonly output?: unknown };
 function gateSkipOutputOf(result: ResultView): GateSkipOutput | undefined {
   const output = result.output as Partial<GateSkipOutput> | null | undefined;
   // A guard skip (`skip: true`) or a PreRuntime veto (no `skippedBy`) is the
-  // plugin's or a hook's decision, not a framework gate.
+  // plugin's or a hook's decision, not a framework gate. A PreRuntime
+  // handler that failed is not a decision: it is `HOOK_FAILURE_SKIP`.
   return result.status === "skipped" &&
     output?.skipped === true &&
     typeof output.skippedBy === "string"
@@ -247,13 +260,14 @@ export function failedUpstreamOf(result: ResultView): string | undefined {
 
 /**
  * The failure an upstream passes on to a gate it keeps closed: its own
- * runtime ID when it failed, or the failure a gate recorded when one held it
- * back.
+ * runtime ID when it failed or a failed hook skipped it, or the failure a
+ * gate recorded when one held it back.
  */
 export function failureBehind(
   upstream: ResultView & { readonly runtimeId: string },
 ): string | undefined {
-  return upstream.status === "failed"
+  return upstream.status === "failed" ||
+    skippedByOf(upstream) === HOOK_FAILURE_SKIP.by
     ? upstream.runtimeId
     : failedUpstreamOf(upstream);
 }

@@ -236,7 +236,7 @@ describe("story completion contract", () => {
     },
   );
 
-  it("tells and commits the story when the dimension provider fails, with dimensions paused for the turn", async () => {
+  async function failedProviderTurn(story: RuntimeManifest) {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     const runtimes = [
@@ -257,7 +257,7 @@ describe("story completion contract", () => {
         outputKind: "system",
         trigger: { type: "auto" },
       },
-      { ...manifest, trigger: { type: "auto" } },
+      { ...story, trigger: { type: "auto" } },
     ] as RuntimeManifest[];
     await store.createSession({
       locale: "en-US",
@@ -324,44 +324,72 @@ describe("story completion contract", () => {
         }),
       },
     );
-    const resultOf = (runtimeId: string) =>
-      execution.result.runtimeResults.find(
-        (result) => result.runtimeId === runtimeId,
-      );
-    // The provider's failure is its own: the story still runs, on the
-    // committed values every runtime of the execution already reads.
-    expect(resultOf("dimensions/context")).toMatchObject({
-      status: "failed",
-      error: "Snapshot unavailable",
-    });
-    expect(resultOf(manifest.name)).toMatchObject({ status: "success" });
-    expect(modelCalls).toBe(1);
-
     const committed = await commitExecution({
       enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "turn-story", durationMs: 0 },
     });
-    expect(committed.status).toBe("committed");
+    return {
+      store,
+      committed,
+      modelCalls,
+      resultOf: (runtimeId: string) =>
+        execution.result.runtimeResults.find(
+          (result) => result.runtimeId === runtimeId,
+        ),
+      revealed: async () =>
+        (
+          await store.getPluginData(
+            "session-story",
+            "planner",
+            "plan",
+            "revealed",
+          )
+        )?.value,
+      turns: async () =>
+        (await store.getSession("session-story"))?.completedPlayerTurns,
+    };
+  }
+
+  it("tells and commits the story when the dimension provider fails, with dimensions paused for the turn", async () => {
+    const turn = await failedProviderTurn(manifest);
+    // The provider's failure is its own: the story still runs, on the
+    // committed values every runtime of the execution already reads.
+    expect(turn.resultOf("dimensions/context")).toMatchObject({
+      status: "failed",
+      error: "Snapshot unavailable",
+    });
+    expect(turn.resultOf(manifest.name)).toMatchObject({ status: "success" });
+    expect(turn.modelCalls).toBe(1);
+    expect(turn.committed.status).toBe("committed");
+    expect(await turn.turns()).toBe(1);
+    expect(await turn.revealed()).toBe(true);
     expect(
-      (await store.getSession("session-story"))?.completedPlayerTurns,
-    ).toBe(1);
-    expect(
-      (
-        await store.getPluginData(
-          "session-story",
-          "planner",
-          "plan",
-          "revealed",
-        )
-      )?.value,
-    ).toBe(true);
-    expect(
-      (await store.listMessages("session-story")).filter(
+      (await turn.store.listMessages("session-story")).filter(
         (message) => message.role === "assistant",
       ),
     ).toHaveLength(1);
+  });
+
+  it("refuses the action when the story requires the dimensions from the failed provider", async () => {
+    // Binding `world.dimensions@1` as a required input is a hard dependency.
+    const turn = await failedProviderTurn({
+      ...manifest,
+      inputs: { dimensions: { from: { capability: "world.dimensions@1" } } },
+    });
+    expect(turn.resultOf(manifest.name)).toMatchObject({
+      status: "skipped",
+      output: {
+        skippedBy: "framework:inputBinding",
+        failedUpstream: "dimensions/context",
+      },
+    });
+    expect(turn.modelCalls).toBe(0);
+    expect(turn.committed.status).toBe("failed");
+    expect(turn.committed.error).toContain("because dimensions/context failed");
+    expect(await turn.turns()).toBe(0);
+    expect(await turn.revealed()).toBeUndefined();
   });
 
   it("rejects story envelopes without prose while leaving system tool output valid", () => {

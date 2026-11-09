@@ -10,11 +10,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * - A handler that returns nothing made no decision: the pipeline continues.
  * - A handler that throws, times out or returns a malformed result is a failed
  *   handler. On a guard event (GUARD_HOOK_EVENTS) the pipeline fails closed and
- *   answers abort with the error message, except where GUARD_FAILURE_SCOPE
- *   keeps an auxiliary plugin's failure to that plugin's own unit: the chain
- *   then goes on and the result lists the failure in `confined`. On every
- *   other event the handler is skipped: later handlers run and earlier
- *   replacements are kept.
+ *   answers abort with the error message, unless the caller confines a
+ *   plugin's TurnStart failure (`confinable`): the chain then goes on and the
+ *   result lists the failure in `confined`. On every other event the handler
+ *   is skipped: later handlers run and earlier replacements are kept.
  * - All aborts/timeouts/errors emit observability events via the EventBus.
  */
 
@@ -31,7 +30,6 @@ import {
 } from "./types.js";
 import {
   currentActivePluginIds,
-  currentStoryPluginIds,
   currentHookLocale,
   currentHookLogicalTurn,
   currentHookLogicalKey,
@@ -74,6 +72,14 @@ interface HookPipelineRunOptions {
   readonly logicalKey?: string;
   readonly eventBus?: EventBus;
   readonly emitter?: TurnEmitter;
+  /**
+   * On an `own-runtimes` event (`GUARD_FAILURE_SCOPE`), the plugins whose
+   * failed handler the caller sits out of the operation instead of failing
+   * it: the chain goes on and the result lists them in `confined`. A caller
+   * that passes it must act on `confined`. A framework hook is never
+   * confined.
+   */
+  readonly confinable?: (pluginId: string) => boolean;
 }
 
 export interface HookHandlerOutcome {
@@ -513,11 +519,11 @@ export class HookPipeline {
       // A cancelled execution always ends the chain. Elsewhere than on a
       // guard the failed handler changed nothing, so the chain goes on without
       // it and keeps what earlier handlers replaced. A guard fails closed,
-      // unless its failure is confined to its own plugin's unit.
+      // unless the caller confines the failure to the handler's plugin.
       if (ctx.signal?.aborted)
         return { action: "abort", reason, handlerFailed: true };
       if (!GUARD_HOOK_EVENTS.has(event)) return { action: "continue" };
-      const confinedTo = confinedOwner(event, ctx, reg);
+      const confinedTo = confinedOwner(event, reg, opts);
       return confinedTo === undefined
         ? { action: "abort", reason, handlerFailed: true }
         : {
@@ -579,30 +585,20 @@ export function createHookPipeline(
 
 /**
  * The plugin a failed guard handler is confined to, when the chain goes on
- * without it: an auxiliary plugin's handler — not the framework's, not a
- * story plugin's — in an operation that has a story, on an event whose
- * `GUARD_FAILURE_SCOPE` allows it. `own-subject` still fails closed for the
- * owner's own runtime or proposal. Identity comes from `outputKind: story`,
- * which the scope carries; never from a plugin ID.
+ * without it: a plugin's handler on an `own-runtimes` event, which the caller
+ * offered to confine. Every other failure fails closed.
  */
 function confinedOwner(
   event: HookEvent,
-  ctx: HookContext,
   reg: HookRegistration<unknown>,
+  opts: HookPipelineRunOptions | undefined,
 ): string | undefined {
   const owner = reg.pluginId;
-  const stories = currentStoryPluginIds();
-  if (owner === undefined || !stories || stories.has(owner)) return undefined;
-  switch (GUARD_FAILURE_SCOPE[event]) {
-    case "own-runtimes":
-      return owner;
-    case "own-subject":
-      return ctx.pluginId !== undefined && ctx.pluginId !== owner
-        ? owner
-        : undefined;
-    default:
-      return undefined;
-  }
+  return owner !== undefined &&
+    GUARD_FAILURE_SCOPE[event] === "own-runtimes" &&
+    opts?.confinable?.(owner) === true
+    ? owner
+    : undefined;
 }
 
 function orderHandlers(

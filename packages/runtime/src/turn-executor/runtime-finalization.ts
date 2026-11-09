@@ -30,6 +30,7 @@ import {
   reportRuntimeResult,
 } from "../trace/runtime-telemetry.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import { HOOK_FAILURE_SKIP } from "./turn-executor-helpers.js";
 import { guardProvidedValue, isGuardProvided } from "./guard-output.js";
 import {
   getTurnExecutionSignal,
@@ -111,7 +112,15 @@ export async function runRuntimePreHook(
     runId,
     turnId: input.turnId,
     status: "skipped",
-    output: { skipped: true, reason: hook.reason },
+    // A failed handler is a fault, not a veto: the runtime stays skipped,
+    // and a story held back by it is refused rather than committed empty.
+    output: hook.handlerFailed
+      ? {
+          skipped: true,
+          reason: HOOK_FAILURE_SKIP.reason,
+          skippedBy: HOOK_FAILURE_SKIP.by,
+        }
+      : { skipped: true, reason: hook.reason },
     toolCalls: [],
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),

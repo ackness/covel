@@ -67,33 +67,37 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 };
 
 /**
- * What a failed guard handler stops when an auxiliary plugin owns it: one
- * that runs no story runtime, in an execution that has a story.
+ * What a failed guard handler stops: one that throws, times out or returns
+ * an invalid result. A failure never lets through what the handler judged.
  *
- * - `own-runtimes`: the handler judged the whole execution. Its plugin's
- *   runtimes sit this execution out; everything else runs.
- * - `own-subject`: the handler judged one runtime or proposal. It still fails
- *   closed for its own plugin's; another plugin's goes on without it.
- * - `closed`: it fails closed whatever it judged. `PreToolUse` and
- *   `ReviewAgentOutput` are the permission and content gates: a tool call's
- *   side effects reach outside the session and cannot be rolled back, and a
- *   reviewer may exist to keep text from players. `PreCompaction` already
- *   stops only this turn's history compaction.
+ * - `closed`: the guarded operation does not happen. TurnStart aside, that
+ *   is one unit: the compaction, the runtime (skipped with `hook-failed`),
+ *   the tool call, the reviewed output, or the proposal (rejected with
+ *   `hook-failed`). What a skipped runtime or a rejected proposal then
+ *   costs follows the commit rules: next to a committed story, a unit that
+ *   holds no story drops alone, and a story that hard-depends on a skipped
+ *   runtime is refused.
+ * - `own-runtimes`: TurnStart judges the whole execution, so a failure fails
+ *   it, unless the caller confines it (`confinable` on the pipeline run):
+ *   then the handler's plugin sits the execution out, its runtimes skipped
+ *   with `hook-failed`, and the chain goes on. The turn executor confines
+ *   only a plugin without a story runtime that has runtimes scheduled in an
+ *   execution with a story; a plugin of hooks alone may exist only to gate
+ *   input, so its failure fails the execution.
  *
- * A failed handler of the story plugin, of the framework, or in an execution
- * without a story fails closed on every guard event.
+ * A framework hook's failure always fails closed.
  */
-export type GuardFailureScope = "own-runtimes" | "own-subject" | "closed";
+export type GuardFailureScope = "own-runtimes" | "closed";
 
 export const GUARD_FAILURE_SCOPE: Readonly<
   Partial<Record<HookEvent, GuardFailureScope>>
 > = {
   TurnStart: "own-runtimes",
   PreCompaction: "closed",
-  PreRuntime: "own-subject",
+  PreRuntime: "closed",
   PreToolUse: "closed",
   ReviewAgentOutput: "closed",
-  PreStateCommit: "own-subject",
+  PreStateCommit: "closed",
 };
 
 /**
@@ -184,7 +188,7 @@ export type HookResult<P> =
       readonly handlerFailed?: true;
     };
 
-/** A failed guard handler of an auxiliary plugin, kept to that plugin's unit. */
+/** A failed TurnStart handler whose plugin sits the execution out. */
 export interface ConfinedHookFailure {
   /** The plugin that registered the failed handler. */
   readonly pluginId: string;
@@ -192,9 +196,9 @@ export interface ConfinedHookFailure {
 }
 
 /**
- * What `HookPipeline.run` answers: the chain's result, plus the failed guard
- * handlers it went on without (see `GUARD_FAILURE_SCOPE`). For `TurnStart`
- * the caller sits each listed plugin's runtimes out of the execution.
+ * What `HookPipeline.run` answers: the chain's result, plus the failed
+ * handlers it went on without because the caller confined them (see
+ * `GUARD_FAILURE_SCOPE`). The caller sits each listed plugin out.
  */
 export type HookRunResult<P> = HookResult<P> & {
   readonly confined?: readonly ConfinedHookFailure[];

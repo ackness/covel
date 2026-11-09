@@ -132,8 +132,16 @@ export interface SubagentSettledEvent {
 }
 
 export interface SubagentRunner {
-  /** Targets eligible in this execution's frozen, provider-resolved registry. */
-  availableTargets(caller: SubagentCaller): readonly SubagentTarget[];
+  /**
+   * Targets eligible in this execution's frozen, provider-resolved registry.
+   * `sittingOut` names the plugins whose TurnStart hook failed this
+   * execution (`TurnExecutorDeps.hookFailedPlugins`): their providers are
+   * not offered.
+   */
+  availableTargets(
+    caller: SubagentCaller,
+    sittingOut?: ReadonlySet<string>,
+  ): readonly SubagentTarget[];
   privateTargetKind(
     request: unknown,
     caller: Pick<SubagentCaller, "pluginId">,
@@ -193,7 +201,7 @@ export function createSubagentRunner(
   let budget = options.delegation;
   let loadingBudget: Promise<DelegationBudget> | undefined;
   const runner: SubagentRunner = {
-    availableTargets(caller) {
+    availableTargets(caller, sittingOut) {
       if (caller.depth >= SUBAGENT_MAX_DEPTH) return [];
       const candidates = new Map<string, SubagentTarget>();
       for (const provider of options.activeRuntimes) {
@@ -215,6 +223,7 @@ export function createSubagentRunner(
               options.pausedRuntimes ?? [],
               target,
               caller,
+              sittingOut,
             )
           ),
       );
@@ -353,6 +362,7 @@ export function createSubagentRunner(
         options.pausedRuntimes ?? [],
         parsed.target,
         args.caller,
+        args.deps.hookFailedPlugins,
       );
       if ("code" in target)
         return refuse(target.code, target.message, target.provider);
@@ -537,13 +547,15 @@ function parseRequest(raw: unknown): ParsedRequest | string {
  * `{ runtimeId }` names a sub-agent runtime of the caller's own package;
  * `{ contract }` names the one active sub-agent provider of a contract.
  * `activeRuntimes` is already provider-resolved, so a default provider has
- * yielded to an explicit one.
+ * yielded to an explicit one. A provider whose plugin sits the execution out
+ * (`sittingOut`) is refused like a paused one.
  */
 function resolveTarget(
   activeRuntimes: readonly RuntimeManifest[],
   pausedRuntimes: readonly RuntimeManifest[],
   target: ParsedRequest["target"],
   caller: SubagentCaller,
+  sittingOut?: ReadonlySet<string>,
 ):
   | { readonly provider: RuntimeManifest }
   | {
@@ -560,17 +572,24 @@ function resolveTarget(
       provider.runtimeType !== "function" &&
       provider.presentation === undefined,
   );
+  const named =
+    "runtimeId" in target
+      ? `The sub-agent runtime "${target.runtimeId}"`
+      : `The sub-agent provider for contract "${target.contract}"`;
   const resolved = ({ provider, paused }: (typeof providers)[number]) =>
     paused
       ? {
           code: "unavailable" as const,
-          message:
-            "runtimeId" in target
-              ? `The sub-agent runtime "${target.runtimeId}" is paused in this session after repeated errors`
-              : `The sub-agent provider for contract "${target.contract}" is paused in this session after repeated errors`,
+          message: `${named} is paused in this session after repeated errors`,
           provider,
         }
-      : { provider };
+      : sittingOut?.has(provider.pluginId)
+        ? {
+            code: "unavailable" as const,
+            message: `${named} sits this turn out because a hook of its plugin failed`,
+            provider,
+          }
+        : { provider };
   if ("runtimeId" in target) {
     const provider = providers.find(
       ({ provider }) =>

@@ -307,7 +307,7 @@ flowchart TB
     Keep --> End
 ```
 
-The boxes that carry hook names in the diagram (`TurnStart`, `PreRuntime`, `PreLLMCall`, and so on) are the points where a plugin can attach a handler. The full list is in the [Hook reference](../reference/hooks.md). In a turn with a story, a failing guard hook of an auxiliary plugin stops only that plugin's own runtimes or proposals, and the story and the other plugins run; see [When an auxiliary plugin's hook fails](../reference/hooks.md#auxiliary-hook-failures). A failing dimension provider runtime does not stop the story either; see [World Model](../reference/world-model.md#turn-timing-and-settlement-receipts).
+The boxes that carry hook names in the diagram (`TurnStart`, `PreRuntime`, `PreLLMCall`, and so on) are the points where a plugin can attach a handler. The full list is in the [Hook reference](../reference/hooks.md). A failing guard hook stops only what it judged: one runtime or one proposal. A failing `TurnStart` handler of a plugin without a story runtime can make that plugin sit a turn with a story out, and the story and the other plugins run; see [When a guard handler fails](../reference/hooks.md#auxiliary-hook-failures). A failing dimension provider runtime does not stop the story either; see [World Model](../reference/world-model.md#turn-timing-and-settlement-receipts).
 
 **Stage bands** (fixed rules in `packages/runtime/src/turn-executor/scheduling.ts` and `packages/runtime/src/schedule/`):
 

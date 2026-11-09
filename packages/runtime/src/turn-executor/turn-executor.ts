@@ -61,11 +61,8 @@ import {
   buildHookSettings,
   snapshotUserSettings,
 } from "../hooks/hook-settings.js";
-import {
-  currentStoryPluginIds,
-  runWithHookScope,
-  storyPluginIdsOf,
-} from "../hooks/hook-scope.js";
+import { runWithHookScope } from "../hooks/hook-scope.js";
+import type { ConfinedHookFailure } from "../hooks/types.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
   type RecursiveTurnInput,
@@ -188,23 +185,8 @@ export async function runTurnPipeline(
   };
   const subagents =
     deps.subagents ?? createSubagentRunner({ activeRuntimes, delegation });
-  // Whether the execution has a story is decided once, at the top: a nested
-  // execution commits in its parent's units, so it keeps the parent's answer.
-  // With a story, a failed guard hook of another plugin costs only that
-  // plugin's own unit (`GUARD_FAILURE_SCOPE`).
-  const storyPluginIds =
-    (options?.recursionDepth ?? 0) > 0
-      ? currentStoryPluginIds()
-      : executionNarrates(input, activeRuntimes)
-        ? storyPluginIdsOf(activeRuntimes)
-        : undefined;
-  const { storyPluginIds: _inherited, ...baseScope } = hookScope;
   return runWithHookScope(
-    {
-      ...baseScope,
-      locale: hookScope.locale ?? input.locale,
-      ...(storyPluginIds ? { storyPluginIds } : {}),
-    },
+    { ...hookScope, locale: hookScope.locale ?? input.locale },
     () =>
       executeTurnImpl(
         { ...input, userSettings },
@@ -278,6 +260,29 @@ async function executeTurnImpl(
   });
 
   // ── TurnStart hook ───────────────────────────────────
+  // A failed handler fails the execution, unless its plugin can sit it out:
+  // one without a story runtime, with runtimes scheduled in an execution
+  // that has a story. Phase and scheduled set come later, so the top
+  // execution confines provisionally whenever a story may run, and settles
+  // it below; a nested one confines only a plugin already sitting out.
+  const alreadySittingOut = deps.hookFailedPlugins;
+  const mayNarrate =
+    recursionDepth === 0 && executionNarrates(input, activeRuntimes);
+  const storyPlugins = new Set(
+    activeRuntimes
+      .filter((runtime) => runtime.outputKind === "story")
+      .map((runtime) => runtime.pluginId),
+  );
+  let sittingOut: readonly ConfinedHookFailure[] = [];
+  const failClosed = (failure: ConfinedHookFailure): TurnResult => ({
+    turnId: input.turnId,
+    sessionId: input.sessionId,
+    runtimeResults: [],
+    executionContext,
+    durationMs: Date.now() - startTime,
+    timestamp: new Date().toISOString(),
+    abortReason: failure.reason,
+  });
   {
     const tsResult = await runTurnStartHook(
       {
@@ -287,6 +292,11 @@ async function executeTurnImpl(
         turnId: input.turnId,
         eventBus: deps.eventBus,
         emitter: deps.emitter,
+        confinable: (pluginId) =>
+          alreadySittingOut?.has(pluginId) === true ||
+          (mayNarrate &&
+            !storyPlugins.has(pluginId) &&
+            activeRuntimes.some((runtime) => runtime.pluginId === pluginId)),
       },
       {
         playerMessage: input.playerMessage,
@@ -305,14 +315,17 @@ async function executeTurnImpl(
         abortReason: tsResult.reason,
       };
     }
-    // An auxiliary plugin whose handler failed sits this execution out; the
-    // story and every other plugin go on.
-    if (tsResult.confined?.length)
+    // A plugin whose handler failed sits this execution out; the story and
+    // every other plugin go on.
+    sittingOut = (tsResult.confined ?? []).filter(
+      (failure) => !alreadySittingOut?.has(failure.pluginId),
+    );
+    if (sittingOut.length > 0)
       deps = {
         ...deps,
         hookFailedPlugins: new Set([
-          ...(deps.hookFailedPlugins ?? []),
-          ...tsResult.confined.map((failure) => failure.pluginId),
+          ...(alreadySittingOut ?? []),
+          ...sittingOut.map((failure) => failure.pluginId),
         ]),
       };
   }
@@ -402,6 +415,9 @@ async function executeTurnImpl(
     activeRuntimes,
     sessionState.phase,
   );
+  // Setup runs no story, so a TurnStart failure confined above fails the
+  // execution before setup writes anything.
+  if (isPreGamePending && sittingOut[0]) return failClosed(sittingOut[0]);
   // Single owner of setup-completion state for this execution: the setup-band
   // mirror frozen at execution start (drives setup scheduling by
   // pending/blocked rather than turn cadence, the attempt-ledger generation,
@@ -556,6 +572,22 @@ async function executeTurnImpl(
     triggered: scheduledRuntimes,
     isPreGamePending,
   });
+  // Settle the TurnStart failures confined above against what really runs,
+  // after trigger, cadence and PreSchedule: a plugin sits out only when a
+  // story is scheduled and so is one of its own runtimes. Otherwise its
+  // failure fails the execution before any runtime starts.
+  if (sittingOut.length > 0) {
+    const scheduled = scheduledGroups.flatMap((group) => group.runtimes);
+    const narrates = scheduled.some(
+      (runtime) => runtime.outputKind === "story",
+    );
+    const unconfined = sittingOut.find(
+      (failure) =>
+        !narrates ||
+        !scheduled.some((runtime) => runtime.pluginId === failure.pluginId),
+    );
+    if (unconfined) return failClosed(unconfined);
+  }
 
   // Same-layer effects hazard policy (01 §7): derive read/write sets for each
   // parallel group and check pairs. Default `warn` keeps the groups parallel and

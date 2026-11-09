@@ -44,6 +44,7 @@ import {
 import { canonicalizeMediaRefs } from "../media/canonicalize-media-refs.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
+  HOOK_FAILURE_SKIP,
   failureBehind,
   makeFailedResult,
   makeSkippedResult,
@@ -479,8 +480,13 @@ async function executeRuntime(
     // runtimes sit the execution out, and the rest of it goes on.
     if (deps.hookFailedPlugins?.has(manifest.pluginId))
       return emitGateTerminal(
-        makeSkippedResult(manifest, input, "hook-failed", "framework:hook"),
-        "hook-failed",
+        makeSkippedResult(
+          manifest,
+          input,
+          HOOK_FAILURE_SKIP.reason,
+          HOOK_FAILURE_SKIP.by,
+        ),
+        HOOK_FAILURE_SKIP.reason,
       );
     if (
       input.detachedStage?.presentation !== undefined &&

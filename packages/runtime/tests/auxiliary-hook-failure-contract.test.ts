@@ -1,12 +1,14 @@
 /**
- * A failing hook of an auxiliary plugin — one that runs no story runtime —
- * costs only that plugin's own unit when the execution has a story. Hooks
- * that decide (a veto) and the story plugin's own hooks keep their effect,
- * and the security gates stay fail-closed for everyone.
+ * A failed guard hook never lets through what it judged. Only a TurnStart
+ * failure of a plugin that runs no story can cost less than the whole turn:
+ * when a story and some of that plugin's runtimes are scheduled, the plugin
+ * sits the turn out and the rest goes on. Every other failure stops the unit
+ * it judged — the runtime, the proposal — and the commit rules decide what
+ * that costs; a story it held back is refused, not committed empty.
  */
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
@@ -14,7 +16,6 @@ import {
 } from "../src/commit/commit-execution.js";
 import { executeTurn } from "../src/execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { runWithHookScope } from "../src/hooks/hook-scope.js";
 import {
   GUARD_FAILURE_SCOPE,
   GUARD_HOOK_EVENTS,
@@ -23,6 +24,7 @@ import {
 } from "../src/hooks/types.js";
 
 const SESSION = "session";
+const HOOK_FAILED = { reason: "hook-failed", skippedBy: "framework:hook" };
 const story: RuntimeManifest = {
   pluginId: "teller",
   name: "teller/story",
@@ -36,9 +38,10 @@ const notes: RuntimeManifest = {
   pluginId: "aux",
   name: "aux/notes",
   description: "Keep notes",
-  stage: "post-turn",
+  stage: "pre-turn",
   runtimeType: "function",
   outputKind: "system",
+  outputContract: "notes@1",
   trigger: { type: "auto" },
 };
 const log: RuntimeManifest = {
@@ -50,7 +53,6 @@ const log: RuntimeManifest = {
   outputKind: "system",
   trigger: { type: "auto" },
 };
-const runtimes = [story, notes, log];
 const handlers: Record<string, FunctionHandler> = {
   [story.name]: async () => ({
     outcome: "success",
@@ -71,21 +73,34 @@ const handlers: Record<string, FunctionHandler> = {
   }),
 };
 
+interface Hook {
+  readonly pluginId: string;
+  readonly event: HookEvent;
+  readonly handler: HookHandler;
+}
+
 async function play(
-  hooks: readonly {
-    readonly pluginId: string;
-    readonly event: HookEvent;
-    readonly handler: HookHandler;
-  }[],
+  hooks: readonly Hook[],
+  options: {
+    readonly runtimes?: readonly RuntimeManifest[];
+    readonly handlers?: Readonly<Record<string, FunctionHandler>>;
+    readonly phase?: "setup" | "playing";
+    readonly input?: Partial<TurnInput>;
+  } = {},
 ) {
+  const runtimes = options.runtimes ?? [story, notes, log];
   const store = createMemoryStore();
   const now = new Date().toISOString();
+  const activePluginIds = new Set([
+    ...runtimes.map((runtime) => runtime.pluginId),
+    ...hooks.map((hook) => hook.pluginId),
+  ]);
   await store.createSession({
     id: SESSION,
     locale: "en-US",
     status: "active",
-    phase: "playing",
-    activePlugins: runtimes.map((runtime) => runtime.pluginId),
+    phase: options.phase ?? "playing",
+    activePlugins: [...activePluginIds],
     setupRuntimes: {},
     seats: [
       { id: "main", controller: "human", role: "player", characters: "auto" },
@@ -106,6 +121,8 @@ async function play(
       timeoutMs: 50,
       ...hook,
     });
+  const runs: string[] = [];
+  const allHandlers = { ...handlers, ...options.handlers };
   const execution = await executeTurn(
     {
       sessionId: SESSION,
@@ -113,18 +130,20 @@ async function play(
       logicalTurnId: "logical-turn",
       playerMessage: "Climb the stairs.",
       origin: "player",
+      ...options.input,
     },
     runtimes,
     {
       store,
       hookPipeline,
-      hookScope: {
-        activePluginIds: new Set(runtimes.map((runtime) => runtime.pluginId)),
-      },
+      hookScope: { activePluginIds },
       loadRuntime: async (manifest) => ({
         manifest,
         promptTemplate: "",
-        handler: handlers[manifest.name],
+        handler: async (ctx) => {
+          runs.push(manifest.name);
+          return allHandlers[manifest.name]!(ctx);
+        },
       }),
       llm: {
         generate: async () => {
@@ -143,11 +162,11 @@ async function play(
   const saved = async (pluginId: string, namespace: string, key: string) =>
     (await store.getPluginData(SESSION, pluginId, namespace, key))?.value;
   return {
-    store,
     execution,
     outcome,
     faults,
-    statusOf: (runtimeId: string) =>
+    runs,
+    resultOf: (runtimeId: string) =>
       execution.result.runtimeResults.find(
         (result) => result.runtimeId === runtimeId,
       ),
@@ -165,24 +184,31 @@ const broken: HookHandler = async () => {
   throw new Error("hook bug");
 };
 const hangs: HookHandler = () => new Promise(() => {});
+const brokenFor =
+  (pluginId: string): HookHandler =>
+  async (ctx) => {
+    if (ctx.pluginId === pluginId) throw new Error("hook bug");
+    return { action: "continue" };
+  };
 
-describe("an auxiliary plugin's failing TurnStart hook", () => {
+describe("a failing TurnStart hook of a plugin without a story runtime", () => {
   it.each([
     ["throws", broken],
     ["times out", hangs],
   ])(
-    "%s: its own runtimes sit the turn out, and the turn commits",
+    "%s: its runtimes sit the turn out, and the turn commits",
     async (_label, handler) => {
       const turn = await play([
         { pluginId: "aux", event: "TurnStart", handler },
       ]);
       expect(turn.execution.result.abortReason).toBeUndefined();
-      expect(turn.statusOf(notes.name)).toMatchObject({
+      expect(turn.resultOf(notes.name)).toMatchObject({
         status: "skipped",
-        output: { reason: "hook-failed" },
+        output: HOOK_FAILED,
       });
-      expect(turn.statusOf(story.name)?.status).toBe("success");
-      expect(turn.statusOf(log.name)?.status).toBe("success");
+      expect(turn.runs).not.toContain(notes.name);
+      expect(turn.resultOf(story.name)?.status).toBe("success");
+      expect(turn.resultOf(log.name)?.status).toBe("success");
       expect(turn.outcome.status).toBe("committed");
       expect(await turn.turns()).toBe(1);
       expect(await turn.saved.story()).toBe(true);
@@ -206,12 +232,112 @@ describe("an auxiliary plugin's failing TurnStart hook", () => {
     expect(turn.outcome.status).toBe("failed");
     expect(await turn.turns()).toBe(0);
   });
+
+  it("ends the turn when the plugin has hooks alone, which may gate input", async () => {
+    const turn = await play([
+      { pluginId: "gate", event: "TurnStart", handler: broken },
+    ]);
+    expect(turn.execution.result.abortReason).toBe("hook bug");
+    expect(turn.runs).toEqual([]);
+    expect(turn.outcome.status).toBe("failed");
+    expect(await turn.turns()).toBe(0);
+  });
+
+  it("ends the turn when none of the plugin's runtimes is scheduled", async () => {
+    const turn = await play(
+      [{ pluginId: "aux", event: "TurnStart", handler: broken }],
+      {
+        runtimes: [story, { ...notes, trigger: { type: "manual" } }, log],
+      },
+    );
+    expect(turn.execution.result.abortReason).toBe("hook bug");
+    expect(turn.runs).toEqual([]);
+    expect(turn.outcome.status).toBe("failed");
+  });
+
+  it("ends the turn when PreSchedule leaves no story scheduled", async () => {
+    const turn = await play([
+      { pluginId: "aux", event: "TurnStart", handler: broken },
+      {
+        pluginId: "other",
+        event: "PreSchedule",
+        handler: async (_ctx, payload) => ({
+          action: "continue",
+          replace: {
+            triggered: (
+              payload as { triggered: readonly RuntimeManifest[] }
+            ).triggered.filter((runtime) => runtime.outputKind !== "story"),
+          },
+        }),
+      },
+    ]);
+    expect(turn.execution.result.abortReason).toBe("hook bug");
+    expect(turn.runs).toEqual([]);
+  });
+
+  it("ends the turn in the setup phase, where no story runs", async () => {
+    const init: RuntimeManifest = {
+      ...notes,
+      name: "aux/init",
+      stage: "setup",
+      outputContract: undefined,
+    };
+    const turn = await play(
+      [{ pluginId: "aux", event: "TurnStart", handler: broken }],
+      {
+        phase: "setup",
+        runtimes: [story, notes, init],
+        handlers: {
+          [init.name]: async () => ({ outcome: "success", value: {} }),
+        },
+      },
+    );
+    expect(turn.execution.result.abortReason).toBe("hook bug");
+    expect(turn.runs).toEqual([]);
+    expect(turn.outcome.status).toBe("failed");
+  });
+
+  it("ends a manual run aimed at a runtime that is not a story", async () => {
+    const turn = await play(
+      [{ pluginId: "aux", event: "TurnStart", handler: broken }],
+      {
+        input: {
+          playerMessage: "",
+          origin: "manual",
+          manualTrigger: { runtimeId: log.name },
+        },
+      },
+    );
+    expect(turn.execution.result.abortReason).toBe("hook bug");
+    expect(turn.runs).toEqual([]);
+  });
+
+  it("refuses the turn when the story needs one of the plugin's runtimes", async () => {
+    const turn = await play(
+      [{ pluginId: "aux", event: "TurnStart", handler: broken }],
+      {
+        runtimes: [
+          { ...story, needs: [{ capability: "notes@1" }] },
+          notes,
+          log,
+        ],
+      },
+    );
+    expect(turn.resultOf(story.name)).toMatchObject({
+      status: "skipped",
+      output: { skippedBy: "framework:needs", failedUpstream: notes.name },
+    });
+    expect(turn.outcome.status).toBe("failed");
+    expect(turn.outcome.error).toContain(`because ${notes.name} failed`);
+    expect(await turn.turns()).toBe(0);
+    expect(await turn.saved.log()).toBeUndefined();
+  });
 });
 
-describe("an auxiliary plugin's failing PreStateCommit hook", () => {
-  it("drops its own proposals and lets the rest commit", async () => {
+describe("a failing PreStateCommit hook", () => {
+  it("rejects a proposal of a plugin without a story, which drops alone", async () => {
     const turn = await play([
-      { pluginId: "aux", event: "PreStateCommit", handler: broken },
+      { pluginId: "aux", event: "PreStateCommit", handler: brokenFor("aux") },
     ]);
     expect(turn.outcome.status).toBe("committed");
     expect(turn.outcome.failedProposals).toMatchObject([
@@ -224,8 +350,83 @@ describe("an auxiliary plugin's failing PreStateCommit hook", () => {
     expect(await turn.saved.story()).toBe(true);
     expect(await turn.saved.log()).toBe(1);
     expect(await turn.saved.notes()).toBeUndefined();
-    expect(turn.faults.length).toBeGreaterThan(0);
     expect(new Set(turn.faults)).toEqual(new Set(["aux"]));
+  });
+
+  it("rejects another plugin's write that crashes it, rather than letting it through", async () => {
+    // The subject writes a value the guard does not expect, so the guard
+    // throws reading it. Skipping the guard would commit that write.
+    const turn = await play(
+      [
+        {
+          pluginId: "aux",
+          event: "PreStateCommit",
+          handler: async (_ctx, payload) => {
+            const { proposal } = payload as {
+              proposal: { type: string; payload: { value: unknown } };
+            };
+            if (proposal.type !== "plugin.data") return { action: "continue" };
+            if ((proposal.payload.value as { limit: number }).limit > 3)
+              return { action: "abort", reason: "Over the limit." };
+            return { action: "continue" };
+          },
+        },
+      ],
+      {
+        handlers: {
+          [story.name]: async () => ({
+            outcome: "success",
+            value: { narrativeOutput: "The lamp lights the stairs." },
+            effects: {
+              pluginData: [
+                { namespace: "story", key: "seen", value: { limit: 0 } },
+              ],
+            },
+          }),
+          [notes.name]: async () => ({
+            outcome: "success",
+            value: {},
+            effects: {
+              pluginData: [
+                { namespace: "notes", key: "k", value: { limit: 1 } },
+              ],
+            },
+          }),
+          [log.name]: async () => ({
+            outcome: "success",
+            value: {},
+            effects: {
+              pluginData: [{ namespace: "log", key: "k", value: null }],
+            },
+          }),
+        },
+      },
+    );
+    expect(turn.outcome.status).toBe("committed");
+    expect(turn.outcome.failedProposals).toMatchObject([
+      { code: "hook-failed", proposal: { source: { pluginId: "other" } } },
+    ]);
+    expect(turn.outcome.isolatedRuntimes).toMatchObject([
+      { runtimeId: log.name, cause: "rejected" },
+    ]);
+    expect(await turn.saved.log()).toBeUndefined();
+    expect(await turn.saved.notes()).toEqual({ limit: 1 });
+    expect(await turn.saved.story()).toEqual({ limit: 0 });
+    expect(await turn.turns()).toBe(1);
+  });
+
+  it("fails the turn when it fails on the story's proposal", async () => {
+    const turn = await play([
+      {
+        pluginId: "aux",
+        event: "PreStateCommit",
+        handler: brokenFor("teller"),
+      },
+    ]);
+    expect(turn.outcome.status).toBe("failed");
+    expect(await turn.turns()).toBe(0);
+    expect(await turn.saved.story()).toBeUndefined();
+    expect(await turn.saved.log()).toBeUndefined();
   });
 
   it("still rejects the story's write when it vetoes it", async () => {
@@ -245,17 +446,53 @@ describe("an auxiliary plugin's failing PreStateCommit hook", () => {
   });
 });
 
-describe("an auxiliary plugin's failing PreRuntime hook", () => {
-  it("skips its own runtime and lets the story and the others run", async () => {
+describe("a failing PreRuntime hook", () => {
+  it("skips the runtime it failed on, of any plugin, and the rest runs", async () => {
     const turn = await play([
-      { pluginId: "aux", event: "PreRuntime", handler: broken },
+      { pluginId: "aux", event: "PreRuntime", handler: brokenFor("other") },
     ]);
-    expect(turn.statusOf(notes.name)?.status).toBe("skipped");
-    expect(turn.statusOf(story.name)?.status).toBe("success");
-    expect(turn.statusOf(log.name)?.status).toBe("success");
+    expect(turn.resultOf(log.name)).toMatchObject({
+      status: "skipped",
+      output: HOOK_FAILED,
+    });
+    expect(turn.runs).not.toContain(log.name);
+    expect(turn.resultOf(story.name)?.status).toBe("success");
+    expect(turn.resultOf(notes.name)?.status).toBe("success");
     expect(turn.outcome.status).toBe("committed");
     expect(await turn.saved.story()).toBe(true);
-    expect(await turn.saved.log()).toBe(1);
+    expect(await turn.saved.notes()).toBe(1);
+    expect(await turn.saved.log()).toBeUndefined();
+  });
+
+  it("refuses the turn when it fails on the story", async () => {
+    const turn = await play([
+      { pluginId: "aux", event: "PreRuntime", handler: brokenFor("teller") },
+    ]);
+    expect(turn.resultOf(story.name)).toMatchObject({
+      status: "skipped",
+      output: HOOK_FAILED,
+    });
+    expect(turn.outcome.status).toBe("failed");
+    expect(turn.outcome.error).toContain("because a hook failed");
+    expect(await turn.turns()).toBe(0);
+  });
+
+  it("still lets a veto skip the story without refusing the turn", async () => {
+    const turn = await play([
+      {
+        pluginId: "aux",
+        event: "PreRuntime",
+        handler: async (ctx) =>
+          ctx.pluginId === "teller"
+            ? { action: "abort", reason: "Quiet turn." }
+            : { action: "continue" },
+      },
+    ]);
+    expect(turn.resultOf(story.name)).toMatchObject({
+      status: "skipped",
+      output: { reason: "Quiet turn." },
+    });
+    expect(turn.outcome.status).toBe("committed");
   });
 });
 
@@ -281,33 +518,22 @@ describe("a failing hook of the story plugin itself", () => {
 
   it("skips the runtime it judged at PreRuntime, as before", async () => {
     const turn = await play([
-      {
-        pluginId: "teller",
-        event: "PreRuntime",
-        handler: async (ctx) => {
-          if (ctx.pluginId === "aux") throw new Error("hook bug");
-          return { action: "continue" };
-        },
-      },
+      { pluginId: "teller", event: "PreRuntime", handler: brokenFor("aux") },
     ]);
-    expect(turn.statusOf(notes.name)?.status).toBe("skipped");
-    expect(turn.statusOf(story.name)?.status).toBe("success");
+    expect(turn.resultOf(notes.name)).toMatchObject({
+      status: "skipped",
+      output: HOOK_FAILED,
+    });
+    expect(turn.resultOf(story.name)?.status).toBe("success");
   });
 });
 
 describe("the per-event rule for a failed guard handler", () => {
-  const ctx = (event: HookEvent, pluginId?: string) => ({
-    event,
-    sessionId: SESSION,
-    turnId: "turn",
-    ...(pluginId ? { pluginId, runtimeId: `${pluginId}/run` } : {}),
-  });
   async function failOnce(
     event: HookEvent,
     options: {
       readonly owner?: string;
-      readonly subject?: string;
-      readonly storyPluginIds?: ReadonlySet<string>;
+      readonly confinable?: (pluginId: string) => boolean;
     },
   ) {
     const pipeline = createHookPipeline();
@@ -317,17 +543,20 @@ describe("the per-event rule for a failed guard handler", () => {
       ...(options.owner ? { pluginId: options.owner } : {}),
       handler: broken,
     });
-    return runWithHookScope(
+    return pipeline.run(
+      event,
       {
-        activePluginIds: new Set(["teller", "aux", "other"]),
-        ...(options.storyPluginIds
-          ? { storyPluginIds: options.storyPluginIds }
-          : {}),
+        event,
+        sessionId: SESSION,
+        turnId: "turn",
+        pluginId: "other",
+        runtimeId: "other/log",
       },
-      () => pipeline.run(event, ctx(event, options.subject), {}),
+      {},
+      options.confinable ? { confinable: options.confinable } : {},
     );
   }
-  const withStory = new Set(["teller"]);
+  const always = () => true;
 
   it("covers exactly the guard events", () => {
     expect(new Set(Object.keys(GUARD_FAILURE_SCOPE))).toEqual(
@@ -335,63 +564,42 @@ describe("the per-event rule for a failed guard handler", () => {
     );
   });
 
-  it.each(["PreToolUse", "ReviewAgentOutput", "PreCompaction"] as const)(
-    "%s fails closed for an auxiliary plugin, whatever it judged",
+  it.each(Object.keys(GUARD_FAILURE_SCOPE) as HookEvent[])(
+    "%s fails closed unless the caller confines the failure",
     async (event) => {
-      const result = await failOnce(event, {
-        owner: "aux",
-        subject: "teller",
-        storyPluginIds: withStory,
+      expect(await failOnce(event, { owner: "aux" })).toMatchObject({
+        action: "abort",
+        handlerFailed: true,
       });
-      expect(result).toMatchObject({ action: "abort", handlerFailed: true });
-    },
-  );
-
-  it.each(["PreRuntime", "PreStateCommit"] as const)(
-    "%s fails closed for the owner's own subject and is skipped for another's",
-    async (event) => {
       expect(
-        await failOnce(event, {
-          owner: "aux",
-          subject: "aux",
-          storyPluginIds: withStory,
-        }),
+        await failOnce(event, { owner: "aux", confinable: () => false }),
       ).toMatchObject({ action: "abort", handlerFailed: true });
-      const other = await failOnce(event, {
-        owner: "aux",
-        subject: "teller",
-        storyPluginIds: withStory,
-      });
-      expect(other.action).toBe("continue");
-      expect(other).toMatchObject({
-        confined: [{ pluginId: "aux", reason: "hook bug" }],
+      // A framework hook is never confined.
+      expect(await failOnce(event, { confinable: always })).toMatchObject({
+        action: "abort",
+        handlerFailed: true,
       });
     },
   );
 
-  it("TurnStart reports the owner whose runtimes sit the turn out", async () => {
+  it.each(
+    (Object.keys(GUARD_FAILURE_SCOPE) as HookEvent[]).filter(
+      (event) => GUARD_FAILURE_SCOPE[event] === "closed",
+    ),
+  )("%s fails closed even when the caller offers to confine", async (event) => {
+    expect(
+      await failOnce(event, { owner: "aux", confinable: always }),
+    ).toMatchObject({ action: "abort", handlerFailed: true });
+  });
+
+  it("TurnStart goes on without a failure the caller confines, and names it", async () => {
     const result = await failOnce("TurnStart", {
       owner: "aux",
-      storyPluginIds: withStory,
+      confinable: (pluginId) => pluginId === "aux",
     });
     expect(result).toMatchObject({
       action: "continue",
       confined: [{ pluginId: "aux", reason: "hook bug" }],
     });
   });
-
-  it.each(Object.keys(GUARD_FAILURE_SCOPE) as HookEvent[])(
-    "%s fails closed without a story, for the story plugin and for a framework hook",
-    async (event) => {
-      for (const options of [
-        { owner: "aux", subject: "teller" },
-        { owner: "teller", subject: "aux", storyPluginIds: withStory },
-        { subject: "aux", storyPluginIds: withStory },
-      ])
-        expect(await failOnce(event, options)).toMatchObject({
-          action: "abort",
-          handlerFailed: true,
-        });
-    },
-  );
 });

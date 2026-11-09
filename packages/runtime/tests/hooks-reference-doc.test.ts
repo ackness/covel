@@ -41,9 +41,7 @@ it.each(pages.map((text, index) => [index === 0 ? "zh" : "en", text]))(
   "the %s hooks reference gives each guard event its failure scope",
   (_language, text) => {
     const rows = [
-      ...text.matchAll(
-        /^\| `(\w+)` \| `(own-runtimes|own-subject|closed)` \|/gm,
-      ),
+      ...text.matchAll(/^\| `(\w+)` \| `(own-runtimes|closed)` \|/gm),
     ].map(([, name, scope]) => [name, scope]);
     expect(rows).toEqual(
       HOOK_EVENTS.filter((name) => GUARD_HOOK_EVENTS.has(name)).map((name) => [

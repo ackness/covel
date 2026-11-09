@@ -99,40 +99,41 @@ Events whose Guard column says `yes` are the "events that can be intercepted".
 If a handler throws an error, times out, or returns a result in the wrong format, that counts as a failure of that handler. What happens next depends on the event:
 
 - **Other events**: the handler is skipped. Any rewrites made by earlier handlers are kept, and the failure is recorded in the trace (`hook.error`).
-- **Events that can be intercepted**: a failure is treated as `abort`, so a broken rule cannot let through an operation that it was supposed to block. A handler of an auxiliary plugin has exceptions, described below.
+- **Events that can be intercepted**: a failure never lets through what the handler judged, so a broken rule cannot let through an operation that it was supposed to block. It is treated as `abort` for that operation; `TurnStart` has one exception, described below.
 
 These rules apply only to failures. An `abort` or veto that a handler returns on purpose always has the same effect.
 
 <a id="auxiliary-hook-failures"></a>
 
-### When an auxiliary plugin's hook fails
+### When a guard handler fails
 
-An **auxiliary plugin** is a plugin with no `outputKind: story` runtime. The kernel recognizes the story plugin by its runtimes' `outputKind`, never by plugin ID.
-
-A bug in one auxiliary plugin's hook should not fail the whole turn. So in an execution that has a story, when a guard handler of an auxiliary plugin fails, it stops only that plugin's own part, and the execution goes on. What each event stops:
+A failure stops what the handler judged, and nothing else. What it stops on each event:
 
 <!-- prettier-ignore -->
-| Event | Scope | When an auxiliary plugin's handler fails |
+| Event | Scope | When a handler fails |
 | --- | --- | --- |
-| `TurnStart` | `own-runtimes` | None of this plugin's runtimes run in this execution; their results are `skipped` with the reason `hook-failed`. The story and the other plugins run, and the turn commits. |
-| `PreCompaction` | `closed` | Treated as `abort`: history is not compacted this turn. The turn goes on. |
-| `PreRuntime` | `own-subject` | When it judged one of this plugin's own runtimes, that runtime is skipped, as before. When it judged another plugin's runtime, the handler is skipped and that runtime runs. |
-| `ReviewAgentOutput` | `closed` | Treated as `abort`: the reviewed runtime fails. This is the content gate; see below. |
-| `PreToolUse` | `closed` | Treated as `abort`: this one tool call is refused. This is the permission gate; see below. |
-| `PreStateCommit` | `own-subject` | When it judged one of this plugin's own proposals, the proposal is rejected (`code: "hook-failed"`) and the plugin's unit is dropped by the [commit unit](./transactions.md#turn-level-single-transaction) rules. When it judged another plugin's proposal, the handler is skipped and that proposal commits. |
+| `TurnStart` | `own-runtimes` | The execution stops, as after `abort`, unless the handler's plugin can sit it out; see below. |
+| `PreCompaction` | `closed` | History is not compacted this turn. The turn goes on. |
+| `PreRuntime` | `closed` | The runtime it judged is skipped with the reason `hook-failed`, whichever plugin owns that runtime. |
+| `ReviewAgentOutput` | `closed` | The reviewed runtime fails. This is the content gate: a review may exist precisely to keep some text from players; see [Holding story drafts](#holds-drafts). |
+| `PreToolUse` | `closed` | This one tool call is refused; the model gets a `refused` error and can do something else. This is the permission gate: tool calls send external requests and generate media, and a rollback cannot undo those side effects. |
+| `PreStateCommit` | `closed` | The proposal it judged is rejected with `code: "hook-failed"`, whichever plugin owns that proposal. |
 
-In three cases the table does not apply, and every failure is treated as `abort`:
+What a skipped runtime or a rejected proposal then costs follows the [commit unit](./transactions.md#turn-level-single-transaction) rules. Next to a successful story, the unit of another runtime drops alone and the turn commits; a rejected story proposal fails the whole execution. A story skipped because a hook failed, or held back because a runtime it hard-depends on was, is refused like a failed story instead of committing a turn without a narrative; see [Transactions](./transactions.md#backend-implementations).
 
-- **The execution has no story.** Manual runs, retries, background jobs and setup are like this; they commit or roll back as a whole. At the start of the turn, the question is whether this execution will run a story runtime; at commit, whether a story runtime succeeded.
-- **The handler belongs to the story plugin**, a plugin with an `outputKind: story` runtime in this session.
-- **The handler is registered by the framework.**
+**Sitting a turn out.** When a plugin's `TurnStart` handler fails, the execution goes on without that plugin instead of stopping, when all of these hold:
 
-`PreToolUse` and `ReviewAgentOutput` are safety gates and fail closed for every plugin:
+- The handler belongs to a plugin, not to the framework, and that plugin has no `outputKind: story` runtime. The kernel recognizes a story plugin by its runtimes' `outputKind`, never by plugin ID.
+- The execution runs a story: once trigger conditions, cadence and `PreSchedule` have chosen the runtimes, one of them is a story runtime. Setup runs none, and neither does a manual run or retry aimed at another runtime.
+- At least one of the plugin's own runtimes is among those chosen. A plugin made of hooks alone may exist only to gate input, so its failure stops the execution.
 
-- `PreToolUse` decides whether a tool call may run. Tool calls send external requests and generate media, and a rollback cannot undo those side effects. A failure stops only this one call; the model gets a `refused` error and can do something else.
-- A `ReviewAgentOutput` review may exist precisely to keep some text from players; see [Holding story drafts](#holds-drafts). Letting a broken review through would publish unreviewed text.
+The kernel can check the last two only after the session phase is loaded and the runtimes are chosen, so the execution goes on until then and stops before any runtime starts when they do not hold.
 
-Every failure is recorded in the trace (`hook.error` or `hook.timeout`), and the player sees skipped runtimes and their reason in the turn's run status. Throws, timeouts and malformed results count toward the registering plugin's [fault latch](./protocol.md#plugin-fault-latch): after three consecutive failed inputs in a session, the plugin is paused and the player sees a notice. A deliberate `abort` / veto is not a Hook fault; a deliberate `PreStateCommit` veto is a rejection of the proposal owner. Parent cancellation is not a Hook fault, and it always ends the chain.
+A plugin that sits out loses its runtimes for this execution: their results are `skipped` with the reason `hook-failed`, its sub-agents refuse calls, and a story that hard-depends on one of its runtimes is refused. Its turn-level veto does not apply to that turn. A plugin that must stop the whole turn when its own check breaks should catch its errors and return `abort`. A timeout cannot be caught, so it is always handled this way; a hook that must work as a hard gate should stay fast.
+
+A nested execution (`recursiveCall`) keeps out the plugins that sit its parent out; any other `TurnStart` failure in it stops it.
+
+Every failure is recorded in the trace (`hook.error` or `hook.timeout`). The player sees skipped runtimes and their reason in the turn's run status, and a stopped or refused turn as an error. Throws, timeouts and malformed results count toward the registering plugin's [fault latch](./protocol.md#plugin-fault-latch): after three consecutive failed inputs in a session, the plugin is paused and the player sees a notice. A deliberate `abort` / veto is not a Hook fault; a deliberate `PreStateCommit` veto is a rejection of the proposal owner. Parent cancellation is not a Hook fault, and it always ends the chain.
 
 ## Events
 
@@ -175,7 +176,7 @@ Fires at the start of each execution, before any runtime is selected. A player t
 
 Payload: `{ playerMessage, actions, activeRuntimes }`. `playerMessage` is the text the kernel renders from the player's actions; `actions` is the resolved actions (each `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`), an empty array for an execution without player input; `activeRuntimes` is the list of runtime IDs for this session.
 
-`abort` ends this execution, and no runtime runs. `reason` is returned to the client as the reason the turn was stopped. When an auxiliary plugin's handler fails, only that plugin's runtimes do not run; see [When an auxiliary plugin's hook fails](#auxiliary-hook-failures).
+`abort` ends this execution, and no runtime runs. `reason` is returned to the client as the reason the turn was stopped. A failed handler ends it too, unless its plugin can sit the execution out; see [When a guard handler fails](#auxiliary-hook-failures).
 
 ### `PreCompaction`
 
@@ -210,7 +211,7 @@ Fires once before a runtime starts, before its guard, its agent loop, or its fun
 
 Payload: `{ manifest, input }`, the manifest of this runtime and the turn input.
 
-`abort` skips this runtime. Its result status is `skipped`, with the reason. This event does not read `replace`.
+`abort` skips this runtime. Its result status is `skipped`, with the reason. A failed handler skips it with the reason `hook-failed`. This event does not read `replace`.
 
 ### `PostContextAssembly`
 
@@ -373,7 +374,7 @@ Payload: `{ proposal }`.
 
 - `abort` rejects this proposal, with the reason.
 - `replace.proposal.payload` replaces the payload. The proposal's type, source, and ID stay the same.
-- When a handler fails, what is rejected is described in [When an auxiliary plugin's hook fails](#auxiliary-hook-failures).
+- A failed handler rejects this proposal with `code: "hook-failed"`; see [When a guard handler fails](#auxiliary-hook-failures).
 
 The writes a [write service](./plugin-extensions.md#write-services) staged arrive with the provider as their source: `ctx.pluginId` is the provider and `ctx.runtimeId` is `service:<service name>`; the calling plugin does not appear in the hook. Rejecting any one of them rejects the whole operation (see [Transactions · Write-service operations](./transactions.md#write-service-operations)).
 

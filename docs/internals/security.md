@@ -502,8 +502,8 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 没有返回值的 hook 表示继续。
 - 改写类 hook 失败时，之前成功的改写保留。
 - 守卫类 hook 的异常和超时按“拒绝”处理（fail-closed）。如果把所有 hook 故障都当成“继续”，就会绕过批准和提交守卫。
-- 例外只有一种：有故事的执行里，辅助插件（没有故事 runtime 的插件）的 `TurnStart`、`PreRuntime` 或 `PreStateCommit` 失败，只拒绝这个插件自己的 runtime 或 proposal，别的插件跳过这个 handler。这些 Hook 不是安全边界：写入的权限检查（命名空间归属、保留命名空间、数据集规则、维度提供者绑定）由内核在 Hook 之后执行，Hook 只能更严，不能放宽。
-- `PreToolUse` 和 `ReviewAgentOutput` 对任何插件都 fail-closed：工具调用的外部副作用撤不回来，审查可能就是为了不让玩家读到某些文字。框架和故事插件的 Hook、没有故事的执行，也一律 fail-closed。规则见 [Hook](../reference/hooks.md#auxiliary-hook-failures)。
+- 失败绝不放过 Hook 判的那件事，所以插件没法靠弄崩别的插件的守卫（比如写一个守卫没料到的值）让写入或 runtime 通过。`PreRuntime` 跳过 runtime，`PreStateCommit` 拒绝 proposal，`PreToolUse` 拒绝调用，`ReviewAgentOutput` 让被审查的 runtime 失败；回合因此丢掉什么，由提交单元的规则决定。
+- 例外只有一种：没有故事 runtime 的插件的 `TurnStart` handler，而这次执行里排上了故事，也排上了这个插件的 runtime。它失败时，这个插件退出这次执行：它的 runtime 和子代理不运行，回合其余部分照常进行。它对整个回合的否决在这一回合不起作用，所以自己出错时必须结束整个回合的插件，要自己捕获错误并返回 `abort`。超时捕获不了，要当硬闸门用的 Hook 应当保持快速。只有 Hook 的插件、框架或故事插件的 Hook、没有故事的执行，一律 fail-closed。规则见 [Hook](../reference/hooks.md#auxiliary-hook-failures)。
 - 改写的 trace 只记录改了哪些 key 的摘要，不记录改写前后的完整提示词。
 
 **会话写入。** 会话变更、玩家操作、恢复挂起和操作 RPC，共用 `routes/api/session/locked-mutation.ts` 里的存活会话守卫。
