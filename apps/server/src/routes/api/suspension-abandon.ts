@@ -34,10 +34,11 @@ import {
   type RuntimeManifest,
   type TurnInput,
 } from "@covel/shared";
+import type { QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
 import {
-  enqueueDeferredRuntimeJobs,
-  type QueuedRuntimeJob,
-} from "./plugin-rpc/runtime-job-enqueue.js";
+  queueReleasedRuntimeJobs,
+  type CommitEnqueueContext,
+} from "./commit-envelope.js";
 import {
   publishDeferredRuntimeJobs,
   requestJobServices,
@@ -54,9 +55,7 @@ export interface SuspensionAbandonDeps {
   readonly eventBus?: EventBus;
   readonly worker?: Pick<RuntimeJobWorker, "wake">;
   /** Request-scoped provider credentials for the jobs this releases. */
-  readonly registerCredentials?: Parameters<
-    typeof enqueueDeferredRuntimeJobs
-  >[1]["registerCredentials"];
+  readonly registerCredentials?: CommitEnqueueContext["registerCredentials"];
   /** Player settings sent with the request, merged over the world's. */
   readonly playerSettings?: TurnInput["userSettings"];
 }
@@ -117,19 +116,20 @@ export function heldJobsRelease(
         deps.playerSettings,
       );
       queued.push(
-        ...(await enqueueDeferredRuntimeJobs(tx, {
-          sessionId: session.id,
-          session,
-          activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
-          descriptors: jobs,
-          locale: session.locale ?? DEFAULT_LOCALE,
-          ...(userSettings ? { userSettings } : {}),
-          // A runtime switched off since the turn has no job to run.
-          skipInactive: true,
-          ...(deps.registerCredentials
-            ? { registerCredentials: deps.registerCredentials }
-            : {}),
-        })),
+        ...(await queueReleasedRuntimeJobs(
+          tx,
+          {
+            sessionId: session.id,
+            session,
+            activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
+            locale: session.locale ?? DEFAULT_LOCALE,
+            ...(userSettings ? { userSettings } : {}),
+            ...(deps.registerCredentials
+              ? { registerCredentials: deps.registerCredentials }
+              : {}),
+          },
+          jobs,
+        )),
       );
     },
     publish: async () => {

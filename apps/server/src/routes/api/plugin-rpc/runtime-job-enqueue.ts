@@ -34,10 +34,10 @@ export interface QueuedRuntimeJob {
 }
 
 /**
- * Persist staged detached jobs inside the caller's commit transaction. Used by
- * the action that scheduled them and by the final resume of a suspended turn,
- * which releases the jobs that turn withheld. Job ids come from the source
- * execution.
+ * Persist staged detached jobs inside the caller's commit transaction. Commit
+ * paths reach it through `commit-envelope.ts`: for the jobs an execution
+ * deferred, and for the jobs a suspended turn withheld once that turn ends.
+ * Job ids come from the source execution.
  */
 export async function enqueueDeferredRuntimeJobs(
   tx: StoreTransaction,

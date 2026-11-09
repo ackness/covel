@@ -8,10 +8,8 @@ import {
   announceDeferredRuntimeJobs,
   withSettledExecutionLock,
 } from "./plugin-rpc/settled-request.js";
-import {
-  enqueueDeferredRuntimeJobs,
-  type QueuedRuntimeJob,
-} from "./plugin-rpc/runtime-job-enqueue.js";
+import { type QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
+import { queueReleasedRuntimeJobs } from "./commit-envelope.js";
 /**
  * Resume route — resumes a suspended runtime.
  *
@@ -427,24 +425,26 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             ? {
                 extraInTx: async (tx: StoreTransaction) => {
                   queuedRuntimeJobs.push(
-                    ...(await enqueueDeferredRuntimeJobs(tx, {
-                      sessionId,
-                      session: liveSession,
-                      activeRuntimes,
-                      descriptors: releasedJobs,
-                      locale: liveSession.locale ?? DEFAULT_LOCALE,
-                      ...(userSettings ? { userSettings } : {}),
-                      skipInactive: true,
-                      registerCredentials: (key, maxQueueMs) => {
-                        const services = requestJobServices(c);
-                        if (services)
-                          c.get("runtimeJobCredentials")?.register(
-                            key,
-                            services,
-                            maxQueueMs,
-                          );
+                    ...(await queueReleasedRuntimeJobs(
+                      tx,
+                      {
+                        sessionId,
+                        session: liveSession,
+                        activeRuntimes,
+                        locale: liveSession.locale ?? DEFAULT_LOCALE,
+                        ...(userSettings ? { userSettings } : {}),
+                        registerCredentials: (key, maxQueueMs) => {
+                          const services = requestJobServices(c);
+                          if (services)
+                            c.get("runtimeJobCredentials")?.register(
+                              key,
+                              services,
+                              maxQueueMs,
+                            );
+                        },
                       },
-                    })),
+                      releasedJobs,
+                    )),
                   );
                 },
               }
