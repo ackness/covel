@@ -41,8 +41,9 @@ import {
 } from "./commit-envelope.js";
 import {
   publishDeferredRuntimeJobs,
-  requestJobServices,
+  requestCredentialHandoff,
 } from "./plugin-rpc/settled-request.js";
+import type { JobCredentialHandoff } from "./plugin-rpc/runtime-job-credentials.js";
 import type { RuntimeJobWorker } from "./plugin-rpc/runtime-job-worker.js";
 import { loadSessionPluginUserSettings } from "./plugin-user-settings.js";
 
@@ -54,16 +55,20 @@ export interface SuspensionAbandonDeps {
   >;
   readonly eventBus?: EventBus;
   readonly worker?: Pick<RuntimeJobWorker, "wake">;
-  /** Request-scoped provider credentials for the jobs this releases. */
-  readonly registerCredentials?: CommitEnqueueContext["registerCredentials"];
+  /** Hands request-scoped provider services to the jobs this releases. */
+  readonly credentials?: CommitEnqueueContext["credentials"];
   /** Player settings sent with the request, merged over the world's. */
   readonly playerSettings?: TurnInput["userSettings"];
 }
 
-/** The abandon dependencies of a request. */
+/**
+ * The abandon dependencies of a request. A request whose commit also queues
+ * other jobs passes its own hand-off, so one withdrawal covers them all.
+ */
 export function requestSuspensionAbandonDeps(
   c: Context,
   playerSettings?: TurnInput["userSettings"],
+  credentials: JobCredentialHandoff = requestCredentialHandoff(c),
 ): SuspensionAbandonDeps {
   const eventBus = c.get("eventBus");
   const worker = c.get("runtimeJobWorker");
@@ -73,11 +78,7 @@ export function requestSuspensionAbandonDeps(
     ...(eventBus ? { eventBus } : {}),
     ...(worker ? { worker } : {}),
     ...(playerSettings ? { playerSettings } : {}),
-    registerCredentials: (key, maxQueueMs) => {
-      const services = requestJobServices(c);
-      if (services)
-        c.get("runtimeJobCredentials")?.register(key, services, maxQueueMs);
-    },
+    credentials,
   };
 }
 
@@ -124,9 +125,7 @@ export function heldJobsRelease(
             activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
             locale: session.locale ?? DEFAULT_LOCALE,
             ...(userSettings ? { userSettings } : {}),
-            ...(deps.registerCredentials
-              ? { registerCredentials: deps.registerCredentials }
-              : {}),
+            ...(deps.credentials ? { credentials: deps.credentials } : {}),
           },
           jobs,
         )),

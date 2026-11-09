@@ -1,6 +1,10 @@
 import { publicIncarnationTag } from "../session/session-guard.js";
 import type { Context } from "hono";
-import type { RuntimeJobServices } from "./runtime-job-credentials.js";
+import {
+  createJobCredentialHandoff,
+  type JobCredentialHandoff,
+  type RuntimeJobServices,
+} from "./runtime-job-credentials.js";
 import {
   withAbortableLock,
   type SettleWaitBudget,
@@ -13,10 +17,7 @@ import {
   runtimeJobIncarnation,
   type RuntimeJobWorker,
 } from "./runtime-job-worker.js";
-import type {
-  QueuedActivatedRuntimeJob,
-  QueuedRuntimeJob,
-} from "./runtime-job-enqueue.js";
+import type { QueuedRuntimeJob } from "./runtime-job-enqueue.js";
 import {
   checkSessionOwner,
   sessionIncarnationIdentity,
@@ -34,6 +35,13 @@ export function requestJobServices(c: Context): RuntimeJobServices | undefined {
     gateway: c.get("pluginGateway"),
     compactor: c.get("compactorRunner"),
   };
+}
+
+/** This request's hand-off of its provider services to the jobs it queues. */
+export function requestCredentialHandoff(c: Context): JobCredentialHandoff {
+  return createJobCredentialHandoff(c.get("runtimeJobCredentials"), () =>
+    requestJobServices(c),
+  );
 }
 
 /**
@@ -153,13 +161,11 @@ export async function withSettledExecutionLock<T>(
  */
 export function announceQueuedRuntimeJobs(
   c: Context,
-  queued: readonly QueuedActivatedRuntimeJob[],
+  queued: readonly QueuedRuntimeJob[],
 ): void {
   if (queued.length === 0) return;
-  const services = requestJobServices(c);
-  for (const { credentialKey, status, job } of queued) {
-    if (services)
-      c.get("runtimeJobCredentials")?.register(credentialKey, services);
+  requestCredentialHandoff(c).handOff(queued);
+  for (const { status, job } of queued) {
     publishRuntimeJobStatusEvent(
       c.get("eventBus"),
       status,

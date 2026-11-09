@@ -20,10 +20,10 @@ import {
 } from "@covel/runtime";
 import type { DeferredRuntimeJob, RuntimeManifest } from "@covel/shared";
 import type { SessionRecord, StoreTransaction } from "@covel/store";
+import type { JobCredentialHandoff } from "./plugin-rpc/runtime-job-credentials.js";
 import {
   enqueueDeferredRuntimeJobs,
   enqueueEventFollowers,
-  type QueuedActivatedRuntimeJob,
   type QueuedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
 
@@ -41,8 +41,11 @@ export interface CommitEnqueueContext {
     FollowerEnqueueArgs["userSettings"];
   /** The request's story model override, carried by deferred stage jobs. */
   readonly modelOverride?: string;
-  /** Hand request-scoped provider services to the worker for a stage job. */
-  readonly registerCredentials?: DeferredEnqueueArgs["registerCredentials"];
+  /**
+   * Hands the queuing owner's provider services to each stage job inside the
+   * transaction; event followers are handed theirs once the commit landed.
+   */
+  readonly credentials?: Pick<JobCredentialHandoff, "register">;
   /** The runtime a manual or event activation ran, named by its followers. */
   readonly sourceRuntimeId?: string;
 }
@@ -56,18 +59,28 @@ export interface CommitFollowUps extends CommitEnqueueContext {
   readonly results: Parameters<typeof droppedEmitter>[1]["results"];
   /** The execution's turn, named by its followers as their source. */
   readonly sourceTurnId: string;
-  /** Detached stage jobs the execution deferred, with its admitting session. */
-  readonly deferred?: {
-    readonly session: SessionRecord;
-    readonly jobs: readonly DeferredRuntimeJob[];
-  };
+  /**
+   * Detached stage jobs the execution deferred. They are admitted under the
+   * session as the commit transaction reads it.
+   */
+  readonly deferredJobs: readonly DeferredRuntimeJob[];
   /** Background event followers the execution emitted. */
-  readonly followers?: readonly EventFollower[];
+  readonly followers: readonly EventFollower[];
 }
 
 export interface QueuedCommitFollowUps {
   readonly runtimeJobs: readonly QueuedRuntimeJob[];
-  readonly followerJobs: readonly QueuedActivatedRuntimeJob[];
+  readonly followerJobs: readonly QueuedRuntimeJob[];
+}
+
+/** The session a commit queues detached jobs under is gone. */
+export class CommitSessionGoneError extends Error {
+  constructor(sessionId: string) {
+    super(
+      `Session ${sessionId} is gone; its commit cannot queue detached jobs`,
+    );
+    this.name = "CommitSessionGoneError";
+  }
 }
 
 /**
@@ -77,18 +90,28 @@ export interface QueuedCommitFollowUps {
  * the others see dropped runtimes as failed in their frozen inputs. A
  * follower whose trigger event only dropped runtimes emitted is not queued.
  * Returns what was queued, for the caller to announce after the commit.
+ * Throws {@link CommitSessionGoneError}, failing the commit, when there are
+ * detached jobs to queue and the session is gone.
  */
 export async function queueCommitFollowUps(
   tx: StoreTransaction,
   args: CommitFollowUps,
 ): Promise<QueuedCommitFollowUps> {
+  // Jobs carry the incarnation, approval scope and runtime model overrides
+  // of the session the commit lands in. Read before filtering, so whether a
+  // commit with detached jobs fails does not depend on which were dropped.
+  let session: SessionRecord | undefined;
+  if (args.deferredJobs.length > 0) {
+    session = (await tx.getSession(args.sessionId)) ?? undefined;
+    if (!session) throw new CommitSessionGoneError(args.sessionId);
+  }
   const dropped = args.isolation.droppedRuntimeIds;
   const committedView = {
     runtimes: args.activeRuntimes,
     results: args.results,
     dropped,
   };
-  const descriptors = (args.deferred?.jobs ?? [])
+  const descriptors = args.deferredJobs
     .filter((descriptor) => {
       const target = args.activeRuntimes.find(
         (runtime) => runtime.name === descriptor.runtimeId,
@@ -96,21 +119,19 @@ export async function queueCommitFollowUps(
       return !target || !droppedUpstream(target, committedView);
     })
     .map((descriptor) => settleDroppedInputs(descriptor, dropped));
-  const followers = (args.followers ?? []).filter(
+  const followers = args.followers.filter(
     (follower) => !droppedEmitter(follower.triggerEvent.topic, committedView),
   );
-  const runtimeJobs = args.deferred
+  const runtimeJobs = session
     ? await enqueueDeferredRuntimeJobs(tx, {
         sessionId: args.sessionId,
-        session: args.deferred.session,
+        session,
         activeRuntimes: args.activeRuntimes,
         descriptors,
         locale: args.locale,
         ...(args.modelOverride ? { modelOverride: args.modelOverride } : {}),
         ...(args.userSettings ? { userSettings: args.userSettings } : {}),
-        ...(args.registerCredentials
-          ? { registerCredentials: args.registerCredentials }
-          : {}),
+        ...(args.credentials ? { credentials: args.credentials } : {}),
       })
     : [];
   const followerJobs = await enqueueEventFollowers(tx, {
@@ -146,8 +167,6 @@ export async function queueReleasedRuntimeJobs(
     locale: context.locale,
     ...(context.userSettings ? { userSettings: context.userSettings } : {}),
     skipInactive: true,
-    ...(context.registerCredentials
-      ? { registerCredentials: context.registerCredentials }
-      : {}),
+    ...(context.credentials ? { credentials: context.credentials } : {}),
   });
 }
