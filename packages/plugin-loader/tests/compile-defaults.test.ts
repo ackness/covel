@@ -42,6 +42,72 @@ describe("defaults the compiler fills in", () => {
       );
   });
 
+  it("compiles a story context provider with the display name as its default title", () => {
+    const manifest = compileRuntimeManifest(
+      { ...plugin, displayName: { en: "Clock", zh: "时钟" } },
+      {
+        function: {},
+        schedule: { stage: "pre-turn" },
+        io: { storyContext: { select: "/note", priority: "high" } },
+      },
+      "probe/clock",
+    );
+    expect(manifest.storyContext).toEqual({
+      select: "/note",
+      priority: "high",
+      title: { en: "Clock", zh: "时钟" },
+    });
+    expect(
+      compile({ function: {}, schedule: { stage: "pre-turn" } }),
+    ).not.toHaveProperty("storyContext");
+  });
+
+  it("compiles a story context reader without adding a dependency", () => {
+    const manifest = compile({
+      schedule: { stage: "narrative" },
+      io: {
+        inputs: { context: { from: { kernel: "story-context@1" } } },
+        visibility: "story",
+      },
+    });
+    expect(manifest.input?.inject).toEqual([
+      { kind: "kernel", from: "story-context@1", name: "context" },
+    ]);
+    expect(manifest.needs ?? []).toEqual([]);
+    expect(manifest.after ?? []).toEqual([]);
+  });
+
+  it("rejects compiled story context rules at their IR fields", () => {
+    const provider = compile({
+      function: {},
+      schedule: { stage: "pre-turn" },
+      io: { storyContext: {} },
+    });
+    const late = runtimeManifestInputSchema.safeParse({
+      ...provider,
+      stage: "narrative",
+    });
+    expect(late.success).toBe(false);
+    if (!late.success)
+      expect(late.error.issues).toContainEqual(
+        expect.objectContaining({ path: ["storyContext"] }),
+      );
+    const reader = compile({
+      function: {},
+      schedule: { stage: "narrative" },
+      io: { inputs: { context: { from: { kernel: "story-context@1" } } } },
+    });
+    const early = runtimeManifestInputSchema.safeParse({
+      ...reader,
+      stage: "pre-turn",
+    });
+    expect(early.success).toBe(false);
+    if (!early.success)
+      expect(early.error.issues).toContainEqual(
+        expect.objectContaining({ path: ["input", "inject", 0] }),
+      );
+  });
+
   it("makes a runtime without a visibility a system runtime", () => {
     const manifest = compile({
       function: { handler: "./handler.js" },

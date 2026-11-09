@@ -150,7 +150,7 @@ export interface RuntimeExportInjectDecl {
 
 export interface KernelInjectDecl {
   readonly kind: "kernel";
-  readonly from: "turn-digest@1" | "operations@1";
+  readonly from: "turn-digest@1" | "operations@1" | "story-context@1";
   readonly name: string;
 }
 
@@ -624,6 +624,19 @@ export interface RuntimeManifest {
    * player-facing execution history; status, timing, and usage remain.
    */
   readonly concealed?: boolean;
+  /**
+   * A pre-turn runtime hands the value at `select` (a JSON Pointer into its
+   * validated output; the whole output when omitted) to the story of the same
+   * turn, as one note of the `story-context@1` kernel input. `priority`
+   * (default `normal`) and `order` (default `0`) rank the note; `title` is
+   * the package's display name, the note's default title.
+   */
+  readonly storyContext?: {
+    readonly select?: string;
+    readonly priority?: import("@covel/plugin-handlers-utils").StoryContextPriority;
+    readonly order?: number;
+    readonly title?: import("./world.js").I18nText;
+  };
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   /**

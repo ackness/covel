@@ -6327,6 +6327,7 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `plugin.fault.cleared` | 插件故障 | 正常运行或玩家重新启用清零；投递方式同上 |
 | `context.pruned` | 系统 | 提示词预算裁剪，只进 trace（`/debug`）。负载含 `runtimeId`、`pluginId`、`prunedMessageCount`；循环请求还报告 `truncatedToolResultCount`、`truncatedSummaryCount`、`elidedToolResultCount`、`collapsedStepCount`。后两项是本次请求应用的累计账本计数，包含重放；任一计数非零就发事件 |
 | `context.compaction.failed` | 系统 | 历史压缩失败和原因；只进 trace（`/debug` 用） |
+| `story-context.selected` | 系统 | `story-context@1` 读者收到和被省略的说明：标题、来源、估算 token、省略原因和预算；concealed 提供方只记标题。只进 trace（`/debug`），见[内核输入 `story-context@1`](./plugins.md#story-context) |
 | `commit.fanout.failed` | 系统 | 回合已提交，但部分提交后的事件没能发布；只进 trace，订阅流同时收到 `system.reset` |
 | `error.occurred` | 系统 | 执行错误 |
 

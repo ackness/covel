@@ -323,6 +323,7 @@ flowchart TB
 - 同一个阶段里，顺序由 `needs`、`after` 和 `inputs` 绑定推导出的依赖图决定。
 - 互不依赖的 runtime 并行；并列时用 `name` 做稳定的先后。
 - 依赖成环的 runtime 和它的下游，本回合记为 `skipped: dependency-cycle`，不会退回成任意顺序执行。
+- 内核输入不加依赖边。`operations@1` 和 `story-context@1` 在读者绑定输入时，从已经结束的结果里收集；`story-context@1` 的提供方只在 `pre-turn`，读者在更晚的阶段，阶段屏障保证提供方先结束。读者依赖它读到的提供方，规则见[内核输入 `story-context@1`](../reference/plugins.md#story-context)。
 
 **Proposal 类型**（全部过 commit chain，源自 `packages/shared/src/types/proposal.ts` 的 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update`、`character.schema.set`、`character.upsert`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
 
@@ -616,14 +617,15 @@ plugins/my-plugin/
 
 插件之间通过带版本的契约和宿主提供的能力协作。一个插件不能读取另一个插件的私有 namespace。
 
-| 需求             | 接口                                                  | 边界                                                                      |
-| ---------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| 本轮上游输出     | `io.inputs`，`from: { contract: narrative-engine@2 }` | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。 |
-| 强依赖与顺序     | `schedule.needs` / `schedule.after`                   | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。              |
-| 已提交导出       | `io.inputs` 的 `scope: committed`                     | 读取显式导出，不扫描其他插件存储。                                        |
-| 查询业务能力     | `ctx.services.discover/call`                          | 使用 service contract 与 provider 身份，不绑定私有表。                    |
-| 提示词、历史、UI | 声明并注册 extension point                            | collect、pipeline 或 single 决定组合方式和竞争规则。                      |
-| 世界角色         | 只读 `ctx.world` 与领域 proposal                      | schema 和角色由内核验证、提交；插件没有角色镜像。                         |
+| 需求                 | 接口                                                                              | 边界                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 本轮上游输出         | `io.inputs`，`from: { contract: narrative-engine@2 }`                             | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。               |
+| 交给故事的本回合说明 | `pre-turn` runtime 的 `io.storyContext`，读者 `from: { kernel: story-context@1 }` | 内核排序、去重、按预算整条省略；不加调度边，靠阶段屏障；agent 读 `<story-context>` 块。 |
+| 强依赖与顺序         | `schedule.needs` / `schedule.after`                                               | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。                            |
+| 已提交导出           | `io.inputs` 的 `scope: committed`                                                 | 读取显式导出，不扫描其他插件存储。                                                      |
+| 查询业务能力         | `ctx.services.discover/call`                                                      | 使用 service contract 与 provider 身份，不绑定私有表。                                  |
+| 提示词、历史、UI     | 声明并注册 extension point                                                        | collect、pipeline 或 single 决定组合方式和竞争规则。                                    |
+| 世界角色             | 只读 `ctx.world` 与领域 proposal                                                  | schema 和角色由内核验证、提交；插件没有角色镜像。                                       |
 
 例子：一个 `post-turn` 的 runtime 想读本回合的正文。
 

@@ -112,6 +112,8 @@ The input and every output are validated against the extension point's schema. T
 > [!TIP]
 > An extension point is not a way for plugins to call each other. To send a request to another plugin and get a result back, use a public service contract. To read the results of an upstream runtime in the same turn, use the runtime's `io.inputs`. For how to choose, and the transaction boundaries of each, see [Plugin extension boundaries and communication](./plugin-extensions.md#choose-a-way-to-communicate).
 
+A `prompt.segment@1` provider gets only `{ turnId, playerMessage }` and cannot see the results of other runtimes this turn: the extension context is frozen when the execution is created. To hand something worked out this turn (a check result, an event that just fired, the time of day) to the story, declare `io.storyContext` on a `pre-turn` runtime and have the narrator read the kernel input [`story-context@1`](./plugins.md#story-context). Declarative packages can do this too.
+
 ## The two fields of the prompt segment `prompt.segment@1`
 
 ### `volatility`

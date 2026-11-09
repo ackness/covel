@@ -20,6 +20,21 @@ export {
 
 export { selectPromptSegments } from "./extension-segments.js";
 
+// ── Story context (`story-context@1`) ───────────────────────────
+export {
+  KERNEL_INPUT_PLUGIN_ID,
+  isStoryContextSlot,
+  renderStoryContextBlock,
+  renderStoryContextNote,
+  selectStoryContext,
+  storyContextBudget,
+} from "./story-context.js";
+export type {
+  StoryContextCandidate,
+  StoryContextSelection,
+  StoryContextTraceRow,
+} from "./story-context.js";
+
 // ── Token Budget ────────────────────────────────────────────────
 export {
   DEFAULT_PROTECT_LAST_USER_TURNS,

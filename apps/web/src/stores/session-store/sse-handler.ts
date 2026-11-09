@@ -665,6 +665,8 @@ export function createSseEventHandler(
       case "utils.fetch.responded":
       // Prompt-budget prune trace: /debug reads it from trace_events.
       case "context.pruned":
+      // Story-context selection trace: /debug reads it from trace_events.
+      case "story-context.selected":
         break;
       case "job-status.updated": {
         const jobId = runtimeJobCorrelationId(payload);

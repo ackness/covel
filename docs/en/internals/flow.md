@@ -322,6 +322,7 @@ Ordering rules for the main loop:
 - Inside one stage, the order is set by the dependency graph built from `needs`, `after`, and `inputs` bindings.
 - Runtimes that do not depend on each other run in parallel. When they tie, `name` gives a stable order.
 - A runtime in a dependency cycle, and everything downstream of it, is marked `skipped: dependency-cycle` for this turn. It does not fall back to running in an arbitrary order.
+- Kernel inputs add no dependency edges. `operations@1` and `story-context@1` are collected from finished results when the reader's inputs are bound; `story-context@1` providers run only in `pre-turn` and readers in a later stage, so the stage barrier ensures providers finish first. A reader depends on the providers it read; see [the kernel input `story-context@1`](../reference/plugins.md#story-context).
 
 **Proposal types** (all go through the commit chain, defined by `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`): `narrative.append`, `interaction.request`, `event.emit`, `ui.render`, `asset.generate`, `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update`, `character.schema.set`, `character.upsert`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
 
@@ -615,14 +616,15 @@ For all the fields, see the [plugin reference](../reference/plugins.md).
 
 Plugins work together through versioned contracts and the capabilities that the host provides. A plugin cannot read the private namespace of another plugin.
 
-| Need                           | Interface                                             | Boundary                                                                                                   |
-| ------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| This turn's upstream output    | `io.inputs`, `from: { contract: narrative-engine@2 }` | An agent gets a typed input data block. A function uses `ctx.inputs`. The source information is kept.      |
-| Hard dependencies and order    | `schedule.needs` / `schedule.after`                   | `needs` sets the order and gates it. `after` only sets the order. Turn input bindings also form DAG edges. |
-| Committed exports              | `scope: committed` in `io.inputs`                     | Reads explicit exports. It does not scan other plugins' storage.                                           |
-| Querying a business capability | `ctx.services.discover/call`                          | Uses a service contract and the provider's identity. It is not bound to a private table.                   |
-| Prompts, history, UI           | Declare and register an extension point               | `collect`, `pipeline`, or `single` decides how they combine and how they compete.                          |
-| World characters               | Read-only `ctx.world` and domain proposals            | The kernel validates and commits the schema and characters. Plugins have no copy of the characters.        |
+| Need                            | Interface                                                                                      | Boundary                                                                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| This turn's upstream output     | `io.inputs`, `from: { contract: narrative-engine@2 }`                                          | An agent gets a typed input data block. A function uses `ctx.inputs`. The source information is kept.                                                                   |
+| This turn's notes for the story | `io.storyContext` on a `pre-turn` runtime; the reader uses `from: { kernel: story-context@1 }` | The kernel ranks, deduplicates and leaves out whole notes over the budget. No scheduling edge; the stage barrier orders it. An agent reads the `<story-context>` block. |
+| Hard dependencies and order     | `schedule.needs` / `schedule.after`                                                            | `needs` sets the order and gates it. `after` only sets the order. Turn input bindings also form DAG edges.                                                              |
+| Committed exports               | `scope: committed` in `io.inputs`                                                              | Reads explicit exports. It does not scan other plugins' storage.                                                                                                        |
+| Querying a business capability  | `ctx.services.discover/call`                                                                   | Uses a service contract and the provider's identity. It is not bound to a private table.                                                                                |
+| Prompts, history, UI            | Declare and register an extension point                                                        | `collect`, `pipeline`, or `single` decides how they combine and how they compete.                                                                                       |
+| World characters                | Read-only `ctx.world` and domain proposals                                                     | The kernel validates and commits the schema and characters. Plugins have no copy of the characters.                                                                     |
 
 Example: a `post-turn` runtime wants to read this turn's story text.
 

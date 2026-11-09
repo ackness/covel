@@ -112,6 +112,8 @@ export default function (covel) {
 > [!TIP]
 > 扩展点不是插件之间互相调用的途径。要向另一个插件发请求并拿回结果，用公开的服务契约。要读同一回合里上游 runtime 的结果，用 runtime 的 `io.inputs`。怎么选、各自的事务边界，见[插件扩展边界与通信](./plugin-extensions.md#选择通信方式)。
 
+`prompt.segment@1` 的提供者只拿到 `{ turnId, playerMessage }`，看不到本回合其他 runtime 的结果：扩展上下文在执行创建时冻结。要把本回合算出的内容（检定结果、刚触发的事件、此刻的时间）交给故事，在 `pre-turn` runtime 上声明 `io.storyContext`，叙事读内核输入 [`story-context@1`](./plugins.md#story-context)。声明式包也能这样做。
+
 ## 提示词片段 `prompt.segment@1` 的两个字段
 
 ### `volatility`

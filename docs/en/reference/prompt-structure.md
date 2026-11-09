@@ -148,7 +148,8 @@ Extension segments are first filtered by `audience`. Then they are sorted by `vo
 
 Content that changes every turn is not put in the system prompt. It is combined into one system message, which comes after the history and before the current player input. It contains:
 
-- This turn's data blocks: `io.selfData` and injected blocks, `<runtime-inputs>`, `<runtime-exports>`, and `<runtime-activation>` for event-triggered or manually triggered activations (with their payload). Activations that run within a stage are the same every turn, so they stay in the system prompt.
+- This turn's data blocks: `io.selfData` and injected blocks, `<runtime-inputs>`, `<story-context>`, `<runtime-exports>`, and `<runtime-activation>` for event-triggered or manually triggered activations (with their payload). Activations that run within a stage are the same every turn, so they stay in the system prompt.
+- `<story-context>` appears only for a runtime that reads the kernel input [`story-context@1`](./plugins.md#story-context), and only when this turn has notes. The block starts with a paragraph written by the kernel, then one `<note title="…">…</note>` per note; titles and text are XML-escaped and carry no plugin or runtime IDs. This input no longer appears in the `<runtime-inputs>` JSON.
 - Extension segments with `position: system` and `volatility: turn`, such as memory blocks and `<world-dimensions>`.
 
 **The reason is the provider's prefix cache.** In one request, only the part that is identical to the previous request from the very first byte can hit the cache. If the data blocks are in the system prompt, the system prompt is different every turn. Then the whole history after it cannot hit the cache, and the longer the session, the more is wasted. Once they are moved out, the system prompt stays the same from turn to turn, and the cache can cover the history up to the previous turn.
@@ -255,7 +256,7 @@ api.provideExtension("prompt.segment@1", "status", {
 });
 ```
 
-- The provider gets the locale of the current execution, a read-only view of the world, and the ability to access its own data.
+- The provider gets the locale of the current execution, a read-only view of the world, and the ability to access its own data. It cannot see the results of other runtimes this turn. Content worked out this turn for the story goes through [`story-context@1`](./plugins.md#story-context).
 - Within one execution, the same extension point input reuses the result. A provider cannot return different content based on "which runtime is calling it".
 - `providerPluginId` is added by the host. A plugin cannot fake its ownership.
 
@@ -281,7 +282,7 @@ api.provideExtension("prompt.segment@1", "status", {
 - If the `systemPrompt` returned by a hook does not start with it, the framework puts it back at the very front. So a trimming hook that returns only its own body does not need to remove it, and it cannot remove it.
 - `frameworkHead` is an internal assembly field. It is not exposed in the Hook payload or accepted as a replacement.
 - Without this segment, the model would not know what language the session uses.
-- The raw localized `promptTemplate`, the resolved `inputSlots`, and the character summary that a hook receives are read-only sources. Hooks cannot replace them.
+- The raw localized `promptTemplate`, the resolved `inputSlots` (including the `story-context@1` slot), and the character summary that a hook receives are read-only sources. Hooks cannot replace them.
 - When a runtime is suspended, its input slots are frozen into the continuation. On resume, the same inputs are used.
 
 ### Default LLM request settings for runtimes
@@ -449,6 +450,7 @@ Budget trimming runs only when there is an estimator and a context budget. Budge
 
 - **The response schema is counted twice.** The bridge layer writes it into the system prompt. The Responses and Gemini protocols also send it again as a native field. The budget stage does not know which protocol will finally be used.
 - **Protected content.** The current user turn (including the turn context before it, this turn's story text, and the ending hint) and the summary envelope are protected during ordinary history trimming. A tool call and its result must be kept as a pair.
+- **Story notes have their own budget.** `<story-context>` is protected in the turn context and takes no part in the trimming above. The kernel already limits it to `min(3000, 10% of the story purpose's input window)` estimated tokens when it binds the input; notes that do not fit are left out whole. See [the kernel input `story-context@1`](./plugins.md#story-context).
 - **Trimming order.** Replay the per-run ledger first. When estimated input exceeds the input limit (context window minus response reserve), elide old tool results, keeping the newest two complete tool groups. If needed, collapse older groups, keeping the newest group with its reasoning and provider continuation. Work oldest first toward 70% of the input limit. Then apply the existing history pruning, followed by head/tail truncation of tool results and compacted-history envelopes. A request under the limit only replays the ledger. Finalizer requests use the same overflow trigger and 70% stopping condition; emergency mode only makes the newest tool groups eligible too. Canonical messages and stored records stay unchanged.
 - **Frozen digests.** Each collapse event inserts one system message with a localized header and one line per tool call: tool name, arguments preview (at most 120 characters), and `ok` with summary (at most 80 characters) or `failed` with error code. The digest is deterministic, without a model call, IDs or timestamps. Elision replaces only `data` in a JSON envelope, preserving `summary`, `error` and `staged`; other string results become a localized omission marker. Non-string results stay unchanged. Only complete, correctly ordered call/result groups qualify. The ledger identifies groups by call IDs, tool names, arguments and result content, independently of their position in the request. The ledger only grows; when hooks remove or rewrite groups, missing or ambiguous elisions and frozen digests are silently skipped instead of applied to another call reusing the ID. Resume starts a new ledger.
 - **Still over the limit.** Return `context-overflow` before sending to the provider. With a complete tool group and the normal finalizer conditions met, try at most one reserve request offering only `submit-output`, eliding results or collapsing steps as needed, including the newest group. Another overflow keeps the original error; cancellation, refusal and provider errors retain their own attribution. Invalid token limits still throw a configuration error.
@@ -507,7 +509,7 @@ Putting stable content first keeps the same prefix. `volatility` decides three t
 
 ## 6. External templates and localization
 
-- The shared `prompts/server` holds the templates for world generation and lore repair.
+- The shared `prompts/server` holds the templates for world generation and lore repair, and the explanatory text of framework blocks, such as `operation-notice` for `<operations-not-applied>` and `story-context` for `<story-context>`.
 - The templates for history summaries are kept by `plugins/history-compaction/prompts/server`. The plugin loads them through `createPromptLoader(root)` from the SDK. Like a plugin body, they exist only in English and Simplified Chinese; see [i18n](./i18n.md).
 - Changing `COVEL_PROMPTS_DIR` replaces only the default shared prompt root. It does not take over a plugin's own directory.
 
@@ -539,6 +541,7 @@ Tool definitions and error messages remain in English. Business content can use 
 - `packages/runtime/src/turn-executor/session-state.ts`: loading the canonical history and projecting extensions.
 - `packages/runtime/src/agent-loop/turn-agent-runtime.ts`: collecting extension segments, the compaction barrier, and the agent context.
 - `packages/context/src/prompt-assembler.ts`, `extension-segments.ts`: segment assembly, audience filtering, and sorting.
+- `packages/context/src/story-context.ts`, `packages/runtime/src/turn-executor/story-context-input.ts`: ranking, deduplication, budget and rendering of `story-context@1`.
 - `packages/context/src/prompt-serialization.ts`: system segments and cache markers.
 - `packages/runtime/src/commit/commit-ui.ts`, `packages/runtime/src/agent-loop/picture-attachments.ts`: image description rows, and reading image bytes and their limits.
 - `packages/context/src/history-budget.ts`: compaction admission and atomic persistence.

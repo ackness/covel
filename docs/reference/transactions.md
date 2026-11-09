@@ -447,6 +447,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - story 或 setup 单元不因读取依赖丢弃。每个被丢弃的上游在同一个事务里写一条 `read-dependency.kept` trace，载荷是 `runtimeId`、`runId`、`producerRuntimeId`、`producerRunId` 和 `reason`。
 - 生产者总是排在读者前面。依赖指向提交顺序更靠后的 run 是内核错误，只记警告并忽略。
 - 写服务的操作也是生产者：提供者的 runtime 读到某个操作暂存的写入时，或任何 runtime 通过内核输入 `operations@1` 读到某个操作时，依赖记的是操作的 ID。操作排在它的调用方单元的位置；它失败、被撤回或调用方单元被丢弃时算作没有提交。辅助读者一起丢弃，错误是 `read data of <契约> that did not commit`；story 或 setup 读者照常提交，`read-dependency.kept` 的载荷用 `producerOperationId` 和 `producerContract` 代替 run 的两个字段。
+- [`story-context@1`](./plugins.md#story-context) 的提供方也是生产者：读者纳入某条本次执行的说明时，依赖记提供方的 run，丢弃和保留的规则与上面相同。重试种子已经提交，不记依赖。
 
 挂起也在源执行的提交时检查读取依赖，即使没有领域写入。生产者被丢弃时，辅助读者的 continuation 不保存、不发出可恢复的 `turn.suspended`；缓冲和嵌套写入不能留待恢复。它的进度作业、扣住的 detached 作业和回合计数走已有的丢弃结算。story/setup 的保护与 trace 规则照常适用。保存下来的 continuation 不带依赖图，恢复时源生产者已经结算。
 

@@ -148,7 +148,8 @@ messages
 
 每回合都会变的内容不放在 system prompt 里。它们合成一条 system 消息，排在历史之后、当前玩家输入之前。里面有：
 
-- 本回合的数据块：`io.selfData` 和注入块、`<runtime-inputs>`、`<runtime-exports>`，以及事件触发或手动触发的 `<runtime-activation>`（带载荷）。阶段内运行的 activation 每回合相同，留在 system prompt。
+- 本回合的数据块：`io.selfData` 和注入块、`<runtime-inputs>`、`<story-context>`、`<runtime-exports>`，以及事件触发或手动触发的 `<runtime-activation>`（带载荷）。阶段内运行的 activation 每回合相同，留在 system prompt。
+- `<story-context>` 只出现在读内核输入 [`story-context@1`](./plugins.md#story-context) 的 runtime 里，而且本回合有说明时才有。块里先是内核写的一段说明，然后每条一个 `<note title="…">…</note>`，标题和正文都按 XML 转义，不带插件 ID 和 runtime ID。这个输入不再出现在 `<runtime-inputs>` 的 JSON 里。
 - `position: system` 且 `volatility: turn` 的扩展段，如记忆块和 `<world-dimensions>`。
 
 **原因是服务商的前缀缓存。** 一次请求里，只有从第一个字节起和之前的请求相同的部分才能命中缓存。数据块放在 system prompt 里时，system prompt 每回合都不同，排在它后面的整段历史就无法命中，会话越长浪费越多。把它们移出去之后，system prompt 逐回合保持不变，缓存可以一直覆盖到上一回合的历史。
@@ -255,7 +256,7 @@ api.provideExtension("prompt.segment@1", "status", {
 });
 ```
 
-- 提供者拿到当前执行的 locale、只读的世界视图，以及访问自身数据的能力。
+- 提供者拿到当前执行的 locale、只读的世界视图，以及访问自身数据的能力，看不到本回合其他 runtime 的结果。本回合算出、要交给故事的内容走 [`story-context@1`](./plugins.md#story-context)。
 - 同一次执行里，相同的扩展点输入会复用结果。提供者不能根据“是哪个 runtime 在调用它”返回不同的内容。
 - `providerPluginId` 由宿主添加，插件不能伪造归属。
 
@@ -281,7 +282,7 @@ api.provideExtension("prompt.segment@1", "status", {
 - hook 返回的 `systemPrompt` 如果不以它开头，框架会把它补回最前面。所以只返回自己正文的裁剪型 hook 不需要去掉它，也去不掉它。
 - `frameworkHead` 是装配内部字段，不在 Hook payload 里，也不接受 Hook 替换。
 - 少了这段，模型就不知道会话用什么语言。
-- hook 收到的原始本地化 `promptTemplate`、已解析的 `inputSlots` 和角色摘要是只读的来源，不接受 hook 替换。
+- hook 收到的原始本地化 `promptTemplate`、已解析的 `inputSlots`（包括 `story-context@1` 的槽）和角色摘要是只读的来源，不接受 hook 替换。
 - runtime 挂起时，输入槽冻结进 continuation，恢复时使用同一份输入。
 
 ### Runtime LLM 请求默认值
@@ -449,6 +450,7 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 
 - **响应 schema 按两份计。** 桥接层把它写进 system prompt，Responses 和 Gemini 协议还会作为原生字段再发一次，而预算阶段不知道最终走哪种协议。
 - **受保护的内容。** 当前用户回合（包括它前面的回合上下文、本回合正文和结尾提示）和摘要信封，在普通的历史裁剪里受保护。工具调用和它的结果必须成对保留。
+- **故事说明有自己的预算。** `<story-context>` 在回合上下文里受保护，不参加上面的裁剪。内核在绑定输入时就把它限制在 `min(3000, story 用途输入窗口的 10%)` 个估算 token 以内，放不下的说明整条省略，见[内核输入 `story-context@1`](./plugins.md#story-context)。
 - **裁剪顺序。** 先重放本次运行的账本。估算输入超过输入上限（上下文窗口减去回答预留）时，先省略旧工具结果，保留最新两个完整工具组；还需缩减时，把旧组变成摘要，保留最新一组及其思考和 provider continuation。从旧到新处理，目标是输入上限的 70%。随后沿用历史裁剪，再对工具结果和压缩历史信封做首尾截断。请求未超限时只重放账本。收尾请求也遵守同样的超限触发条件和 70% 停止条件；紧急模式只把最新工具组也纳入可裁剪范围。原始对话和存储记录不变。
 - **冻结摘要。** 每次折叠插入一条 system 消息，含本地化标题，每次工具调用占一行：工具名、参数预览（最多 120 字符）、`ok` 和摘要（最多 80 字符），或 `failed` 和错误码。摘要确定性生成，不调用模型，不含 ID 和时间戳。省略只替换 JSON 信封的 `data`，保留 `summary`、`error`、`staged`；其他字符串结果换成本地化省略标记，非字符串保持原样。只处理完整、顺序正确的调用与结果组。账本通过调用 ID、工具名、参数和结果内容识别工具组，不依赖组在请求中的位置。账本只增加；Hook 移除或改写组后，缺失或无法唯一匹配的省略记录与冻结摘要会被静默跳过，不会套用到另一条复用 ID 的调用。恢复挂起时重新建立账本。
 - **仍然超限。** 向服务商发请求之前返回 `context-overflow`。已有完整工具组且通常收尾条件满足时，最多再试一次仅提供 `submit-output` 的收尾请求，按预算省略结果或压缩步骤，最新一组也可处理。仍然超限保留原错误；取消、拒绝和供应商错误保留各自归因。无效 token 限制仍抛出配置错误。
@@ -507,7 +509,7 @@ pnpm prompt:prefix apps/server/data/covel.db --json
 
 ## 6. 外置模板与本地化
 
-- 共享的 `prompts/server` 保存世界生成和 lore 修复的模板。
+- 共享的 `prompts/server` 保存世界生成和 lore 修复的模板，以及框架块的说明文字，例如 `<operations-not-applied>` 的 `operation-notice` 和 `<story-context>` 的 `story-context`。
 - 历史摘要的模板由 `plugins/history-compaction/prompts/server` 持有，插件通过 SDK 的 `createPromptLoader(root)` 加载。它和插件正文一样只有 English 和简体中文两份，见 [i18n](./i18n.md)。
 - 修改 `COVEL_PROMPTS_DIR` 只替换默认的共享 prompt 根目录，不会接管插件自己的目录。
 
@@ -539,6 +541,7 @@ pnpm prompt:prefix apps/server/data/covel.db --json
 - `packages/runtime/src/turn-executor/session-state.ts`：canonical 历史加载与扩展投影。
 - `packages/runtime/src/agent-loop/turn-agent-runtime.ts`：扩展段收集、压缩屏障和 agent context。
 - `packages/context/src/prompt-assembler.ts`、`extension-segments.ts`：段组装、受众过滤与排序。
+- `packages/context/src/story-context.ts`、`packages/runtime/src/turn-executor/story-context-input.ts`：`story-context@1` 的排序、去重、预算与渲染。
 - `packages/context/src/prompt-serialization.ts`：system 段和缓存标记。
 - `packages/runtime/src/commit/commit-ui.ts`、`packages/runtime/src/agent-loop/picture-attachments.ts`：图片说明行，图片字节的读取与上限。
 - `packages/context/src/history-budget.ts`：压缩准入与原子持久化。
