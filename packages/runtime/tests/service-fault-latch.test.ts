@@ -4,7 +4,10 @@ import { z } from "zod";
 import { ToolError, type RuntimeManifest } from "@covel/shared";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import { executeTurn } from "../src/execution.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { createPluginFaultLatch } from "../src/faults/plugin-fault-latch.js";
 import { classifyExecutionFaults } from "../src/faults/classify.js";
 import {
@@ -58,6 +61,7 @@ async function harness() {
       }),
     });
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: abort
         ? {
@@ -371,6 +375,7 @@ describe("service provider fault latch", () => {
         },
       );
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store: h.store,
         execution,
         completion: { kind: "turn", turnId, durationMs: 0 },

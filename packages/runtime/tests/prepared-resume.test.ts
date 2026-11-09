@@ -6,6 +6,7 @@ import {
   ABANDONED_SETUP_ATTEMPT_ERROR,
   applySuspensionAbandonTx,
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   executeTurn,
   planSuspensionAbandon,
@@ -89,6 +90,7 @@ async function suspendedFixture(nested = false) {
     deps,
   );
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -140,6 +142,7 @@ describe("prepared resume host API", () => {
     const resumed = await resumeSuspendedRuntime(stored, {}, child, deps);
     expect(resumed.result.status).toBe("success");
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: completion(stale),
@@ -183,6 +186,7 @@ describe("prepared resume host API", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: structuredClone(resumed),
           completion: completion(suspension),
@@ -213,6 +217,7 @@ describe("prepared resume host API", () => {
     expect(resumed.result.status).toBe("failed");
     const before = await store.listTurnMessages(input.sessionId);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: completion(suspension),
@@ -280,6 +285,7 @@ describe("prepared resume host API", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: resumed,
           completion: completion(suspension),
@@ -355,6 +361,7 @@ describe("resumed setup runtime", () => {
       deps,
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -378,6 +385,7 @@ describe("resumed setup runtime", () => {
     expect((await store.getSession(input.sessionId))?.phase).toBe("setup");
 
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: completion(suspension),
@@ -409,6 +417,7 @@ describe("resumed setup runtime", () => {
       activeRuntimes: [setup, other],
     });
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: completion(suspension),
@@ -423,6 +432,7 @@ describe("resumed setup runtime", () => {
     const { store, deps, suspension } = await suspendedSetup();
     const resumed = await resumeSuspendedRuntime(suspension, {}, setup, deps);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: completion(suspension),
@@ -490,6 +500,7 @@ describe("a setup runtime's suspension that ends without an answer (F-188)", () 
       deps,
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -581,6 +592,7 @@ describe("a setup runtime's suspension that ends without an answer (F-188)", () 
       deps,
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: again,
       completion: { kind: "turn", turnId: "player-turn-2", durationMs: 0 },

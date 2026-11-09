@@ -19,6 +19,7 @@ import type {
 import { suspendTool } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   createTraceRecorder,
   createTurnEmitter,
@@ -129,6 +130,7 @@ async function fixture(
     extra: Partial<Parameters<typeof commitExecution>[0]> = {},
   ) =>
     commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       eventBus,
       emitter,

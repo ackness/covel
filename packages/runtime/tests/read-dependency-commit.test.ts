@@ -25,7 +25,11 @@ import type {
   FunctionHandler,
   FunctionHandlerContext,
 } from "@covel/shared/plugin-runtime";
-import { commitExecution, executeTurn } from "../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "../src/index.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 
@@ -194,6 +198,7 @@ async function run(
   });
   await options.beforeCommit?.(store);
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

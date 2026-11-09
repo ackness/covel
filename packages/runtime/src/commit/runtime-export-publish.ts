@@ -12,18 +12,25 @@
  * "success" but whose value fails the schema keeps its success outcome — only
  * the export is withheld, with an `export-schema-invalid` diagnostic (docs 02
  * §4.3). No per-export failure (schema-invalid, revision race, store error) is
- * allowed to roll back an otherwise-committed execution, so every branch here
- * swallows and continues.
+ * allowed to roll back an otherwise-committed execution, so every branch of
+ * the publisher swallows and continues. Only a declared export with no schema
+ * to check it against fails the commit (`publishCommittedExports`), so a
+ * declared export is never dropped silently.
  */
 
 import { createHash } from "node:crypto";
 import type {
   JsonValue,
   RuntimeExportRecord,
+  RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
-import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
+import {
+  canonicalizeMediaRefs,
+  type MediaCanonicalization,
+  type MediaOwnershipStore,
+} from "../media/canonicalize-media-refs.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -228,4 +235,82 @@ export async function publishExecutionExports(
       );
     }
   }
+}
+
+/**
+ * Each runtime's `recordAs` declaration, by runtime id. Resolved
+ * independently of optional host services: missing schema dependencies must
+ * never silently disable a declared export.
+ */
+export function exportDeclsOf(
+  runtimes: readonly RuntimeManifest[],
+): ReadonlyMap<string, ExportDecl> {
+  const exportDeclByRuntime = new Map<string, ExportDecl>();
+  for (const rt of runtimes) {
+    const recordAs = rt.output?.recordAs;
+    if (!recordAs) continue;
+    exportDeclByRuntime.set(rt.name, {
+      recordAs,
+      pluginId: rt.pluginId,
+      pluginVersion: rt.version ?? "0.0.0",
+    });
+  }
+  return exportDeclByRuntime;
+}
+
+/**
+ * Publish the exports of an execution's committed results, inside its commit
+ * transaction. Unlike a failure of one export, which never rolls back, a
+ * successful result with a declared export and no output schema loader, or no
+ * schema, fails the commit instead of dropping the export.
+ */
+export async function publishCommittedExports(
+  sink: ExportSink,
+  committedResults: readonly PublishableResult[],
+  context: {
+    readonly sessionId: string;
+    readonly decls: ReadonlyMap<string, ExportDecl>;
+    readonly loadOutputSchema?: (
+      runtimeId: string,
+    ) => Promise<Schema | undefined>;
+    readonly mediaStore?: MediaOwnershipStore;
+    /** The commit's session-clock time; the current time when absent. */
+    readonly now?: string;
+  },
+): Promise<void> {
+  const { sessionId, decls: exportDeclByRuntime } = context;
+  const exportedResults = committedResults.filter(
+    (result) =>
+      result.status === "success" && exportDeclByRuntime.has(result.runtimeId),
+  );
+  if (exportedResults.length === 0) return;
+  if (!context.loadOutputSchema) {
+    throw new Error(
+      "Cannot commit declared runtime exports without an output schema loader",
+    );
+  }
+  const schemas = new Map<string, Readonly<Record<string, unknown>>>();
+  for (const result of exportedResults) {
+    const schema = await context.loadOutputSchema(result.runtimeId);
+    if (!schema)
+      throw new Error(
+        `Missing output schema for runtime export ${result.runtimeId}`,
+      );
+    schemas.set(result.runtimeId, schema);
+  }
+  const mediaStore = context.mediaStore;
+  await publishExecutionExports({
+    sink,
+    sessionId,
+    results: committedResults,
+    declFor: (runtimeId) => exportDeclByRuntime.get(runtimeId),
+    loadOutputSchema: async (runtimeId) => schemas.get(runtimeId),
+    committedAt: context.now ?? new Date().toISOString(),
+    ...(mediaStore
+      ? {
+          canonicalize: (value) =>
+            canonicalizeMediaRefs(value, { store: mediaStore, sessionId }),
+        }
+      : {}),
+  });
 }

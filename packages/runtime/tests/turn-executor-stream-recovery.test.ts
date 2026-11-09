@@ -10,6 +10,7 @@ import type {
 } from "@covel/shared";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   createTurnEmitter,
   executeTurn,
@@ -76,6 +77,7 @@ async function fixture() {
     rollback = false,
   ) =>
     commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       eventBus,
       emitter,

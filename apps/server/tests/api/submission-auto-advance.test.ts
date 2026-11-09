@@ -5,6 +5,7 @@ import type { DataStore } from "@covel/store";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   executeTurn,
 } from "@covel/runtime";
@@ -141,6 +142,7 @@ describe.each([
       },
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "turn", durationMs: 0 },

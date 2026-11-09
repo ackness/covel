@@ -31,6 +31,7 @@ import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import { suspendTool, ToolRegistry, validateOutput } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -273,6 +274,7 @@ async function fixture(
   };
   const commit = (execution: Awaited<ReturnType<typeof executeTurn>>) =>
     commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -1017,6 +1019,7 @@ describe("dataset tools and the execution", () => {
         writerRun,
       ]);
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

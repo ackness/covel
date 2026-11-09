@@ -12,6 +12,7 @@ import { suspendTool } from "@covel/tools";
 import {
   applySuspensionAbandonTx,
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   planSuspensionAbandon,
   resumeSuspendedRuntime,
@@ -124,6 +125,7 @@ async function suspendedAgent() {
   expect(
     (
       await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -167,6 +169,7 @@ describe("progress of a nested agent that suspends", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: structuredClone(resumed),
           completion: {

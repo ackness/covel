@@ -4,6 +4,7 @@ import { createEventBus } from "@covel/events";
 import { PLAYER_ABORT_REASON, type RuntimeManifest } from "@covel/shared";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   finalizeExecution,
 } from "../src/index.js";
@@ -62,6 +63,7 @@ describe("execution-level abort commit boundary", () => {
       const extraInTx = vi.fn();
       const withTransaction = vi.spyOn(store, "withTransaction");
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         eventBus,
         execution: structuredClone(execution),
@@ -132,6 +134,7 @@ describe("execution-level abort commit boundary", () => {
       expect(execution.commit.results[0]?.pendingProposals).toHaveLength(1);
       const extraInTx = vi.fn();
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         eventBus,
         execution,

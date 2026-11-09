@@ -23,7 +23,11 @@ import {
   z,
   type ToolModule,
 } from "@covel/tools";
-import { executeTurn, commitExecution } from "../../src/index.js";
+import {
+  executeTurn,
+  commitExecution,
+  refuseReleasedJobs,
+} from "../../src/index.js";
 import type { ExecutionDeps } from "../../src/execution.js";
 import { createToolExecutor } from "../../src/agent-loop/tool-executor.js";
 import { createCommitPipeline } from "../../src/session/session-kernel.js";
@@ -208,9 +212,9 @@ export async function fixture(
       execution.commit.readDependencies?.[resultOf(runtime).runId] ?? [];
     const commit = (
       proposalGuard?: (p: Proposal) => string | undefined,
-      enqueueReleasedJobsInTx?: Parameters<
+      enqueueReleasedJobsInTx: Parameters<
         typeof commitExecution
-      >[0]["enqueueReleasedJobsInTx"],
+      >[0]["enqueueReleasedJobsInTx"] = refuseReleasedJobs,
     ) =>
       commitExecution({
         store,
@@ -222,7 +226,7 @@ export async function fixture(
           turnId: options.input?.turnId ?? input.turnId,
           durationMs: 0,
         },
-        ...(enqueueReleasedJobsInTx ? { enqueueReleasedJobsInTx } : {}),
+        enqueueReleasedJobsInTx,
         ...(proposalGuard ? { proposalGuard } : {}),
       });
     return { execution, deps, results, resultOf, edges, commit };

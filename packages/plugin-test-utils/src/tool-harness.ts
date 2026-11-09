@@ -11,6 +11,7 @@ import {
   commitExecution,
   createToolExecutor,
   executeTurn,
+  refuseReleasedJobs,
   type ToolCallContext,
 } from "@covel/runtime";
 import {
@@ -191,6 +192,9 @@ async function executeAndCommitResults(
     store,
     execution,
     completion: { kind: "detached", turnId: context.turnId },
+    // A tool test commits one tool call and has no job queue, so a commit
+    // that would release jobs held back by a suspension rolls back.
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
   });
   if (executionError) throw executionError;
   if (outcome.status !== "committed") {

@@ -223,6 +223,7 @@ export type {
 export {
   abandonExecution,
   commitExecution,
+  refuseReleasedJobs,
 } from "./commit/commit-execution.js";
 export { maybeSweepOldTraces } from "./commit/trace-retention.js";
 export type {

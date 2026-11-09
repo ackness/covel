@@ -15,6 +15,7 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
   createTraceRecorder,
@@ -205,6 +206,7 @@ async function fixture(
     deps,
   );
   const initial = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     eventBus,
     execution,
@@ -260,6 +262,7 @@ async function fixture(
     rollback = false,
   ) =>
     commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       ...(rollback
         ? {
             extraInTx: async () => {
@@ -705,6 +708,7 @@ describe.each(backends)("saved recursive lifecycle on %s", (_name, create) => {
     const f = await fixture(create);
     const delivery = vi.fn().mockRejectedValueOnce(new Error("disconnected"));
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: f.store,
       eventBus: f.eventBus,
       execution: await f.resume(),

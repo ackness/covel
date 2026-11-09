@@ -8,6 +8,7 @@ import {
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -156,6 +157,7 @@ describe("detached jobs of a suspended turn", () => {
       execution.result.withheldRuntimeJobs?.map((job) => job.runtimeId),
     ).toEqual([memory.name]);
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

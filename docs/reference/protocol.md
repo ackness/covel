@@ -62,6 +62,8 @@ const outcome = await commitExecution({
     turnId: execution.result.turnId,
     durationMs: execution.result.durationMs,
   },
+  // This host has no job queue; see the host responsibilities below.
+  enqueueReleasedJobsInTx: refuseReleasedJobs,
 });
 // Respond only after interpreting the durable commit outcome.
 return { result: execution.result, committed: outcome.status === "committed" };
@@ -76,6 +78,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - 玩家这一回合的身份通过 `input.logicalTurnId` 明确传入。
 - 有暂停记录时，回合计数推迟。同一个逻辑回合的最后一次成功恢复，通过 ledger 计数一次。失败的恢复不能确认 continuation。
 - 后台执行在提交锁里重新检查启用的插件集合，并通过 `commitExecution.activePluginIds` 缩小 Hook 的范围。这个参数只能过滤执行时已经记下的插件，不能加入后来才启用的插件。设置仍然用执行时的快照。
+- 暂停的回合会扣下它的后台作业。一次提交可能结束另一个暂停的回合：新的暂停替换了同一个 runtime 较早的一条，或者某个 continuation 所在的运行在提交时被丢弃。这时那个回合扣下的作业要在同一个事务里排队。宿主必须传 `commitExecution.enqueueReleasedJobsInTx` 来排队。没有作业队列的宿主传 `@covel/runtime` 导出的 `refuseReleasedJobs`，这样的提交会回滚，作业不会丢。
 
 ### 什么时候不提交
 

@@ -11,6 +11,7 @@ import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   applySuspensionAbandonTx,
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   planSuspensionAbandon,
   resumeSuspendedRuntime,
@@ -146,6 +147,7 @@ async function suspendedTurn(
     makeDeps(store),
   );
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: turn, durationMs: 0 },
@@ -268,9 +270,9 @@ describe("suspension basis", () => {
 describe("one pending suspension per runtime", () => {
   async function suspendAgain(
     store: DataStore,
-    enqueueReleasedJobsInTx?: Parameters<
+    enqueueReleasedJobsInTx: Parameters<
       typeof commitExecution
-    >[0]["enqueueReleasedJobsInTx"],
+    >[0]["enqueueReleasedJobsInTx"] = refuseReleasedJobs,
   ) {
     const execution = await executeTurn(
       {
@@ -288,7 +290,7 @@ describe("one pending suspension per runtime", () => {
       store,
       execution,
       completion: { kind: "turn", turnId: "manual-2", durationMs: 0 },
-      ...(enqueueReleasedJobsInTx ? { enqueueReleasedJobsInTx } : {}),
+      enqueueReleasedJobsInTx,
     });
   }
 
@@ -501,6 +503,7 @@ describe("resuming a suspension", () => {
     );
     expect(resumed.result.status).toBe("success");
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: {
@@ -565,6 +568,7 @@ describe("resuming after what it writes changed (F-016)", () => {
       runDeps(store),
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: `manual-${key}`, durationMs: 0 },
@@ -610,6 +614,7 @@ describe("resuming after what it writes changed (F-016)", () => {
     );
     expect(execution.result.runtimeResults[0]?.status).toBe("success");
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "detached", turnId: "job-turn" },
@@ -631,6 +636,7 @@ describe("resuming after what it writes changed (F-016)", () => {
     );
     expect(resumed.result.status).toBe("success");
     return commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: resumed,
       completion: {

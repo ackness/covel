@@ -48,11 +48,34 @@ export type ExecutionCompletion =
     }
   | { readonly kind: "detached"; readonly turnId: string };
 
+/** Queues held-back jobs in the commit transaction. */
+type ReleasedJobsQueue = NonNullable<
+  FinalizeExecutionArgs["enqueueReleasedJobsInTx"]
+>;
+
+/**
+ * The released-job queue of a host that has none. A commit that would release
+ * held-back jobs rolls back instead of losing them.
+ */
+export const refuseReleasedJobs: ReleasedJobsQueue = async () => {
+  throw new Error(
+    "cannot queue the jobs held back by a suspension this commit ends: the host has no released-job queue",
+  );
+};
+
 export interface CommitExecutionArgs extends Omit<
   FinalizeExecutionArgs,
-  keyof ExecutionCommitPlan | "loadOutputSchema"
+  keyof ExecutionCommitPlan | "loadOutputSchema" | "enqueueReleasedJobsInTx"
 > {
   readonly execution: PreparedExecution;
+  /**
+   * Queues, in the commit transaction, the detached jobs held back by the
+   * turn of a suspension this commit ends: an older suspension of the same
+   * runtime that a new one replaces, or a continuation whose run was dropped
+   * at commit. Every host decides: one that has no way to queue them passes
+   * `refuseReleasedJobs`, and says why.
+   */
+  readonly enqueueReleasedJobsInTx: ReleasedJobsQueue;
   /** Restrict a detached commit to plugins still active under the session lock. */
   readonly activePluginIds?: ReadonlySet<string>;
   readonly completion: ExecutionCompletion;

@@ -9,6 +9,7 @@ import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import {
   classifyExecutionFaults,
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
   PluginServiceRegistry,
@@ -186,6 +187,7 @@ for (const backend of ["memory", "sqlite", "postgres"] as const) {
               plans.map((execution, index) =>
                 (index === 0 ? lockA : lockB).withLock(sessionId, () =>
                   commitExecution({
+                    enqueueReleasedJobsInTx: refuseReleasedJobs,
                     store: index === 0 ? firstStore : secondStore,
                     execution: {
                       ...execution,
@@ -384,6 +386,7 @@ for (const backend of ["memory", "sqlite", "postgres"] as const) {
             pending: Parameters<typeof commitExecution>[0]["execution"],
           ) =>
             commitExecution({
+              enqueueReleasedJobsInTx: refuseReleasedJobs,
               store,
               execution: pending,
               completion: { kind: "turn", turnId: "source", durationMs: 0 },

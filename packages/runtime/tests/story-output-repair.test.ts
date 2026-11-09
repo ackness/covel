@@ -8,7 +8,10 @@ import {
 } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { executeTurn } from "../src/execution.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { settleAgentLoop } from "../src/agent-loop/settle-agent-loop.js";
 
 import { submissionSyntaxProblems } from "../src/agent-loop/output-format-diagnostics.js";
@@ -141,6 +144,7 @@ async function commitStory(replies: LLMResponse[], streaming = false) {
     },
   );
   const committed = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

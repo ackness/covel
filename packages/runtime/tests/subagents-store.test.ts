@@ -35,6 +35,7 @@ import {
 } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createToolExecutor,
   createTurnEmitter,
   executeTurn,
@@ -286,6 +287,7 @@ describe("sub-agents at commit", () => {
       }),
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -358,6 +360,7 @@ describe("sub-agents at commit", () => {
       deps({ store, llm, runtimes: [director, guard] }),
     );
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -512,6 +515,7 @@ describe("sub-agents after resume", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -533,6 +537,7 @@ describe("sub-agents after resume", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution: resumed,
           completion: {
@@ -609,6 +614,7 @@ describe("sub-agents after resume", () => {
     );
     expect(execution.result.runtimeResults[0]?.status).toBe("suspended");
     await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

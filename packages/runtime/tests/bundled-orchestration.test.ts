@@ -29,6 +29,7 @@ import {
   enforcePluginRegistrationContract,
   executeTurn,
   commitExecution,
+  refuseReleasedJobs,
   createToolExecutor,
   createTurnEmitter,
 } from "../src/index.js";
@@ -600,6 +601,7 @@ describe("bundled orchestration", () => {
         expect(
           (
             await commitExecution({
+              enqueueReleasedJobsInTx: refuseReleasedJobs,
               store,
               execution,
               completion: { kind: "turn", turnId: "beat", durationMs: 0 },

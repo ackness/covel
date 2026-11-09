@@ -27,6 +27,7 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 import {
   classifyExecutionFaults,
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -250,6 +251,7 @@ async function run(scenario: Scenario) {
       ) as never;
   }
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution: scenario.abortReason
       ? {
@@ -1274,6 +1276,7 @@ describe("where write services cannot be called", () => {
       { runtimeId: worker.name, status: "success" },
     ]);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: f.store,
       execution,
       completion: {
@@ -1346,6 +1349,7 @@ describe("where write services cannot be called", () => {
     expect(calls).toBe(2);
     expect(execution.result.status).toBe("success");
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store: f.store,
       execution,
       completion: {

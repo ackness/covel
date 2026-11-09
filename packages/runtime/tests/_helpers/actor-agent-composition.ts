@@ -20,6 +20,7 @@ import {
 import {
   executeTurn,
   commitExecution,
+  refuseReleasedJobs,
   createToolExecutor,
   createTurnEmitter,
 } from "../../src/index.js";
@@ -393,6 +394,7 @@ export async function assertPrivateActorComposition({
   expect(actorCalls).toBe((compacted ? 4 : 2) * (batch ? 2 : 1));
   expect(childReads).toBe((compacted ? 2 : 1) * (batch ? 2 : 1));
   const committed = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     eventBus,
     execution,

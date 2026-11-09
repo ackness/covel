@@ -16,7 +16,11 @@ import type {
   PluginServiceContext,
 } from "@covel/shared/plugin-runtime";
 import type { PluginServiceContext as SdkServiceContext } from "@covel/plugin-handlers-utils/plugin-api";
-import { commitExecution, executeTurn } from "../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "../src/index.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { readDependenciesOf } from "../src/read-dependencies.js";
 import { createPluginDataVisibility } from "../src/function-runtime/upstream-plugin-data.js";
@@ -262,6 +266,7 @@ describe("read-service context", () => {
         },
       );
       const outcome = await commitExecution({
+        enqueueReleasedJobsInTx: refuseReleasedJobs,
         store,
         execution,
         completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
@@ -358,6 +363,7 @@ describe("read-service context", () => {
       resultOf(second.name).runId,
     ]);
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

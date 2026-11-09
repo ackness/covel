@@ -10,7 +10,10 @@ import {
   executeTurn as executePreparedTurn,
   type ExecutionDeps,
 } from "../src/execution.js";
-import { commitExecution } from "../src/commit/commit-execution.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+} from "../src/commit/commit-execution.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -322,6 +325,7 @@ describe("story completion contract", () => {
     expect(modelCalls).toBe(0);
 
     const committed = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "turn-story", durationMs: 0 },

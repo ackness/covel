@@ -10,6 +10,7 @@ import {
   executeTurn,
   resumeSuspendedRuntime,
   commitExecution,
+  refuseReleasedJobs,
   finalizeExecution,
 } from "../src/index.js";
 
@@ -109,6 +110,7 @@ describe("prepared execution host API", () => {
     expect(await store.listPluginData("s", "probe", "notes")).toEqual([]);
     const loadedCount = loadRuntime.mock.calls.length;
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution: structuredClone({ ...execution }),
       completion: {
@@ -255,6 +257,7 @@ describe("prepared execution host API", () => {
       }),
     });
     const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       store,
       execution,
       completion: { kind: "turn", turnId: "t", durationMs: 0 },

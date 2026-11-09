@@ -17,6 +17,7 @@ import { PluginServiceRegistry } from "../src/plugin-services.js";
 import {
   executeTurn,
   commitExecution,
+  refuseReleasedJobs,
   finalizePresentationJobs,
 } from "../src/index.js";
 
@@ -348,6 +349,7 @@ describe("public orchestration guide", () => {
       expect(
         (
           await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store,
             execution,
             completion: { kind: "turn", turnId: "turn", durationMs: 0 },

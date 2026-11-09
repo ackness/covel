@@ -14,6 +14,7 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -530,6 +531,7 @@ describe("context on resume", () => {
     expect(
       (
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           execution,
           completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },

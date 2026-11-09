@@ -11,6 +11,7 @@ import {
   createDetachedProposalGuard,
   executeTurn,
   buildHookSettings,
+  refuseReleasedJobs,
   snapshotUserSettings,
   type CommitIsolation,
   type HookScope,
@@ -358,7 +359,11 @@ export function createPluginRpcRuntimeTurnRunner(
       ? heldJobsRelease(ctx.heldJobs, ctx.sessionId)
       : undefined;
     const outcome = await commitExecution({
-      ...(release ? { enqueueReleasedJobsInTx: release.enqueueInTx } : {}),
+      // Runners built without `heldJobs` are the background job worker, whose
+      // runs reject suspension before commit, and the dimension-settlement
+      // retry. A commit of theirs that would release held-back jobs rolls
+      // back instead of losing them.
+      enqueueReleasedJobsInTx: release?.enqueueInTx ?? refuseReleasedJobs,
       memorySystem: ctx.memorySystem,
       imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(),
       signal: opts.executionSignal,

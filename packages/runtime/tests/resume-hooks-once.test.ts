@@ -16,6 +16,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { suspendTool } from "@covel/tools";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   createTraceRecorder,
   executeTurn,
@@ -129,6 +130,7 @@ describe.each(["agent", "function"] as const)(
       try {
         const execution = await executeTurn(input, [runtime], deps());
         await commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store,
           eventBus,
           execution,
@@ -148,6 +150,7 @@ describe.each(["agent", "function"] as const)(
             leg === 2 ? "success" : "suspended",
           );
           const outcome = await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store,
             eventBus,
             execution: resumed,

@@ -3,7 +3,11 @@ import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type { RuntimeManifest } from "@covel/shared";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
-import { commitExecution, executeTurn } from "../../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  executeTurn,
+} from "../../src/index.js";
 
 const opened: DataStore[] = [];
 afterEach(async () => {
@@ -82,6 +86,7 @@ export async function readBaselineFixture(
     extra: Partial<Parameters<typeof commitExecution>[0]> = {},
   ) =>
     commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
       ...extra,
       store,
       execution,

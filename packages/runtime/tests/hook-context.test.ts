@@ -3,6 +3,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { HOOK_EVENTS, type RuntimeManifest } from "@covel/shared";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   executeTurn,
 } from "../src/index.js";
@@ -153,6 +154,7 @@ it("gives every hook the session locale, and the runtime identity in the context
     },
   );
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     hookPipeline,

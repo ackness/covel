@@ -8,6 +8,7 @@ import { tool, z, withPendingProposals } from "@covel/tools";
 import {
   applySuspensionAbandonTx,
   commitExecution,
+  refuseReleasedJobs,
   planSuspensionAbandon,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -517,6 +518,7 @@ describe("world read lifecycle", () => {
       expect(
         (
           await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store: f.store,
             eventBus: f.eventBus,
             execution: resumed,

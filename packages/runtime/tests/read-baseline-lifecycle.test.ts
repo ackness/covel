@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { commitExecution, resumeSuspendedRuntime } from "../src/index.js";
+import {
+  commitExecution,
+  refuseReleasedJobs,
+  resumeSuspendedRuntime,
+} from "../src/index.js";
 import type { FunctionHandler } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
 import { suspendTool, tool, z } from "@covel/tools";
@@ -95,6 +99,7 @@ describe("pending read-derived calculations", () => {
         saved: SuspensionRecord,
       ) =>
         commitExecution({
+          enqueueReleasedJobsInTx: refuseReleasedJobs,
           store: f.store,
           execution,
           completion: {

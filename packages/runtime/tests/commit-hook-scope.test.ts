@@ -3,6 +3,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { RuntimeManifest } from "@covel/shared";
 import {
   commitExecution,
+  refuseReleasedJobs,
   createHookPipeline,
   executeTurn,
 } from "../src/index.js";
@@ -112,6 +113,7 @@ it("only retains still-active execution hooks at commit and preserves their capt
   expect([...execution.commit.activePluginIds!]).toEqual(["a", "b"]);
   expect(observed).toEqual([]);
   const outcome = await commitExecution({
+    enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     hookPipeline,

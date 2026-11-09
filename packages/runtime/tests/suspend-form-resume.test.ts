@@ -6,6 +6,7 @@ import { suspendTool, suspendFieldsToResumeSchema } from "@covel/tools";
 import type { FormField } from "@covel/plugin-handlers-utils";
 import {
   commitExecution,
+  refuseReleasedJobs,
   executeTurn,
   resumeSuspendedRuntime,
 } from "../src/index.js";
@@ -85,6 +86,7 @@ describe.each(["form", "raw sentinel"])("suspension from a %s", (kind) => {
       expect(
         (
           await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store,
             eventBus,
             execution,
@@ -107,6 +109,7 @@ describe.each(["form", "raw sentinel"])("suspension from a %s", (kind) => {
       expect(
         (
           await commitExecution({
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
             store,
             eventBus,
             execution: resumed,
