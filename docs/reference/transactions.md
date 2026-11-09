@@ -211,15 +211,22 @@ compareAndSetPluginDataBatch(
 - 之前已经记录的执行历史结算为 failed。
 - 已经持久化的客户端输入不在这条边界之内。
 
-**故事必须完成。** 故事完成是提交的前提。下面两种情况会在任何缓冲的 proposal、journal 消息或玩家回合计数提交之前，拒绝整次执行的提交：
+**故事必须完成。** 故事完成是提交的前提。下面三种情况会在任何缓冲的 proposal、journal 消息或玩家回合计数提交之前，拒绝整次执行的提交：
 
 - `outputKind: story` 的 runtime 失败了。
 - story 的结果成功了，但按[故事输出](./plugins.md#故事输出)规整后没有正文（没有一段有文字，`narrativeOutput` 为空）。
+- 故事因为一个故障没有运行，而本次执行没有别的故事成功。故障指下面两种：
+  - 故事硬依赖的 runtime（`needs`，或 `required` 不是 `false` 的输入）在本次执行里失败了，或者因为 Hook 出错被跳过（`hook-failed`），框架因此没有运行故事。只看真正挡住门控的上游：依赖一个契约且只要求一个提供者（`cardinality: one`）时，只要有一个提供者成功，别的提供者失败也不算。硬依赖的上游自己也这样被扣住时，沿它的依赖一直追到出故障的那个 runtime。错误信息写出是谁，例如 `Story runtime teller/narrate did not run because teller/roll failed; the action was not committed.`
+  - 一个 `PreRuntime` handler 判断故事时出错（抛错、超时或返回无效结果），故事因此以 `hook-failed` 跳过。
 
 相关的规则：
 
-- 故事因为其他原因被跳过（它的 guard，或声明的门控）时，不拒绝执行。
-- 维度提供者在同一次执行里失败，不拒绝执行。故事照常运行，读执行开始时冻结的已保存值，见 [World Model](./world-model.md#回合时序与结算回执)。
+- 故事因为别的原因没有运行时，不拒绝执行。例如：
+  - 它自己的 guard 跳过了它，或者 `PreRuntime` Hook 主动否决了它。
+  - 它硬依赖的上游这次没有排上（触发条件或节奏不满足），或者上游自己跳过了。这是包自己的决定，和故事的 guard 跳过它一样。拒绝的话回合数也会停住，按节奏运行的上游就永远等不到自己的回合。
+  - 它所在插件的 setup 还没完成（`setup-incomplete`）。这次执行要提交 setup 自己的写入，比如给玩家的表单。
+  - 它处在依赖环里，或者排在依赖环之后（`dependency-cycle`）。调度器会扣住环之后的一切，`after` 边也算在内，所以拒绝的话，任何一个包里的环都会让每一回合停下。环由校验和 trace 告诉作者。
+- 维度提供者在同一次执行里失败，不拒绝执行。故事照常运行，读执行开始时冻结的已保存值，见 [World Model](./world-model.md#回合时序与结算回执)。只有故事用 `required` 不是 `false` 的输入读 `world.dimensions@1` 时，它硬依赖失败的提供者，按上面的规则拒绝。
 - 已经持久化的客户端消息不在这个事务里。
 - agent 只有通过 `submit-output` 校验和审查的输出才可进入提交。缺失或被拒绝的提交用有限的普通步骤纠正；用尽预算仍未接受时，故事失败，不能用草稿替代。
 - 这不会重试或撤销外部工具已经产生的副作用。
