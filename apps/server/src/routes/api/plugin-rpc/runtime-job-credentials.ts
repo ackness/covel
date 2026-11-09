@@ -116,3 +116,66 @@ export function createRuntimeJobCredentials(
     },
   };
 }
+
+export type RuntimeJobCredentials = ReturnType<
+  typeof createRuntimeJobCredentials
+>;
+
+/** A queued job, as a credential hand-off names it. */
+export interface CredentialHandoffJob {
+  readonly job: { readonly maxQueueMs?: number };
+  readonly credentialKey: RuntimeJobCredentialKey;
+}
+
+/**
+ * One owner's hand-off of its provider services to the jobs it queues: a
+ * request's, or a request-run job's for the jobs its commit queues.
+ *
+ * A commit registers the stage jobs it queues inside its transaction, so the
+ * worker never claims one without them, and withdraws them when the commit
+ * does not land. Jobs announced once their commit landed (event followers)
+ * are handed off then. A job keeps the services for at most its queue time.
+ */
+export interface JobCredentialHandoff {
+  /** Hand services to a job queued in the open transaction; tracked. */
+  register(queued: CredentialHandoffJob): void;
+  /** Hand services to jobs whose commit landed. */
+  handOff(queued: readonly CredentialHandoffJob[]): void;
+  /** Withdraw what `register` handed over, except to `keepJobIds`. */
+  discard(keepJobIds?: ReadonlySet<string>): void;
+  /** The jobs `register` handed services to and has not withdrawn. */
+  readonly keys: readonly RuntimeJobCredentialKey[];
+}
+
+/**
+ * Hand-off of `services` through `credentials`. Neither may be available
+ * (no worker, or a request without its own provider keys); then nothing is
+ * handed over and the worker runs the jobs with server services, if any.
+ */
+export function createJobCredentialHandoff(
+  credentials: Pick<RuntimeJobCredentials, "register" | "discard"> | undefined,
+  services: () => RuntimeJobServices | undefined,
+): JobCredentialHandoff {
+  const keys: RuntimeJobCredentialKey[] = [];
+  const give = (queued: CredentialHandoffJob): boolean => {
+    const provided = credentials ? services() : undefined;
+    if (!credentials || !provided) return false;
+    credentials.register(queued.credentialKey, provided, queued.job.maxQueueMs);
+    return true;
+  };
+  return {
+    register(queued) {
+      if (give(queued)) keys.push(queued.credentialKey);
+    },
+    handOff(queued) {
+      for (const job of queued) give(job);
+    },
+    discard(keepJobIds) {
+      const kept = keys.filter((key) => keepJobIds?.has(key.jobId));
+      for (const key of keys)
+        if (!keepJobIds?.has(key.jobId)) credentials?.discard(key);
+      keys.splice(0, keys.length, ...kept);
+    },
+    keys,
+  };
+}

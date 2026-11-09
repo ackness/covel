@@ -8,7 +8,7 @@ import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
   announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
-  requestJobServices,
+  requestCredentialHandoff,
   withSettledSessionLock,
 } from "./plugin-rpc/settled-request.js";
 /**
@@ -70,12 +70,13 @@ import {
 } from "./plugin-user-settings.js";
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
+  deferredJobRefs,
   enqueueActivatedRuntimeJob,
-  type QueuedActivatedRuntimeJob,
-  type QueuedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import type { RuntimeJobCredentialKey } from "./plugin-rpc/runtime-job-credentials.js";
-import { queueCommitFollowUps } from "./commit-envelope.js";
+import {
+  queueCommitFollowUps,
+  type QueuedCommitFollowUps,
+} from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
@@ -361,6 +362,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
 
     const turnId = crypto.randomUUID();
+    // Provider services this request hands to the jobs its commit queues,
+    // withdrawn if that commit does not land.
+    const credentials = requestCredentialHandoff(c);
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
@@ -392,7 +396,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       ),
       deps: buildTurnExecutorDeps(c),
       ...(hookPipeline ? { hookPipeline } : {}),
-      heldJobs: requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
+      heldJobs: requestSuspensionAbandonDeps(
+        c,
+        decodedUserSettings.settings,
+        credentials,
+      ),
     });
 
     const mode: "sync" | "background" = target.execution ?? "sync";
@@ -464,17 +472,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // transaction, so a rolled-back turn queues nothing.
     // `queueCommitFollowUps` leaves out followers of an emitter whose writes
     // were dropped; a sync run commits all-or-nothing, so none is today.
-    const followerJobs: QueuedActivatedRuntimeJob[] = [];
-    const runtimeJobs: QueuedRuntimeJob[] = [];
-    // Provider services handed to the stage jobs queued in the commit,
-    // discarded if that commit does not land.
-    const credentialKeys: RuntimeJobCredentialKey[] = [];
-    const jobCredentials = c.get("runtimeJobCredentials");
-    const discardCredentials = () => {
-      for (const key of credentialKeys) jobCredentials?.discard(key);
-    };
+    // What the landed commit queued; a retried transaction replaces it.
+    let queued: QueuedCommitFollowUps = { runtimeJobs: [], followerJobs: [] };
+    let summary;
     try {
-      const summary = await runtimeTurnRunner.runManualTurn({
+      summary = await runtimeTurnRunner.runManualTurn({
         turnId,
         runtimeId: body.runtimeId,
         ...(body.payload !== undefined ? { payload: body.payload } : {}),
@@ -483,91 +485,73 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
         completeInTx: async (tx, result, isolation) => {
-          const stageDescriptors = result.deferredRuntimeJobs ?? [];
-          const queued = await queueCommitFollowUps(tx, {
+          queued = await queueCommitFollowUps(tx, {
             sessionId,
             activeRuntimes,
             locale: session.locale,
             ...(userSettingsMap
               ? { userSettings: snapshotUserSettings(userSettingsMap) }
               : {}),
+            credentials,
             sourceRuntimeId: body.runtimeId,
             isolation,
             results: result.runtimeResults,
             sourceTurnId: result.turnId,
-            ...(stageDescriptors.length > 0
-              ? {
-                  deferred: {
-                    session: (await tx.getSession(sessionId)) ?? session,
-                    jobs: stageDescriptors,
-                  },
-                }
-              : {}),
-            registerCredentials: (key, maxQueueMs) => {
-              const services = requestJobServices(c);
-              if (!services || !jobCredentials) return;
-              jobCredentials.register(key, services, maxQueueMs);
-              credentialKeys.push(key);
-            },
+            deferredJobs: result.deferredRuntimeJobs ?? [],
             followers: result.deferredFollowers ?? [],
           });
-          runtimeJobs.push(...queued.runtimeJobs);
-          followerJobs.push(...queued.followerJobs);
         },
       });
-      // The runtime can report success while its proposals fail to land. A
-      // turn whose writes never committed is not a successful turn: report it
-      // as an error; its follower jobs rolled back with it.
-      if (!summary.commit.committed) {
-        discardCredentials();
-        if (summary.commit.dimensionConflict)
-          return c.json(
-            errorBody("dimension-version-conflict", {
-              code: "dimension-version-conflict",
-              details: {
-                currentVersions:
-                  summary.commit.dimensionConflict.currentVersions,
-              },
-            }),
-            409,
-          );
-        return c.json(
-          errorBody(commitFailureMessage(summary.commit), {
-            code: "turn_commit_failed",
-            details: {
-              turnId: summary.turnId,
-              runtimeResults: concealResultSummaries(
-                summary.runtimeResults,
-                registeredConcealedRuntimeIds(pluginRegistry),
-              ),
-            },
-          }),
-          500,
-        );
-      }
-      // The queued jobs own their handoffs from here.
-      credentialKeys.length = 0;
-      await announceDeferredRuntimeJobs(c, runtimeJobs);
-      announceQueuedRuntimeJobs(c, followerJobs);
-      const deferredJobs = [...runtimeJobs, ...followerJobs].map(({ job }) => ({
-        jobId: job.jobId,
-        runtimeId: job.runtimeId,
-      }));
-      return c.json({
-        status: "ok",
-        turnId: summary.turnId,
-        runtimeResults: concealResultSummaries(
-          summary.runtimeResults,
-          registeredConcealedRuntimeIds(pluginRegistry),
-        ),
-        durationMs: summary.durationMs,
-        ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
-        ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
-      });
     } catch (err) {
-      discardCredentials();
+      credentials.discard();
       return runtimeQueueErrorResponse(c, err);
     }
+    // The runtime can report success while its proposals fail to land. A
+    // turn whose writes never committed is not a successful turn: report it
+    // as an error; its follower jobs rolled back with it.
+    if (!summary.commit.committed) {
+      credentials.discard();
+      if (summary.commit.dimensionConflict)
+        return c.json(
+          errorBody("dimension-version-conflict", {
+            code: "dimension-version-conflict",
+            details: {
+              currentVersions: summary.commit.dimensionConflict.currentVersions,
+            },
+          }),
+          409,
+        );
+      return c.json(
+        errorBody(commitFailureMessage(summary.commit), {
+          code: "turn_commit_failed",
+          details: {
+            turnId: summary.turnId,
+            runtimeResults: concealResultSummaries(
+              summary.runtimeResults,
+              registeredConcealedRuntimeIds(pluginRegistry),
+            ),
+          },
+        }),
+        500,
+      );
+    }
+    await announceDeferredRuntimeJobs(c, queued.runtimeJobs);
+    announceQueuedRuntimeJobs(c, queued.followerJobs);
+    const deferredJobs = deferredJobRefs([
+      ...queued.runtimeJobs,
+      ...queued.followerJobs,
+    ]);
+    return c.json({
+      status: "ok",
+      turnId: summary.turnId,
+      runtimeResults: concealResultSummaries(
+        summary.runtimeResults,
+        registeredConcealedRuntimeIds(pluginRegistry),
+      ),
+      durationMs: summary.durationMs,
+      ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
+      ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
+    });
   }
 
   return dispatchPluginAction(

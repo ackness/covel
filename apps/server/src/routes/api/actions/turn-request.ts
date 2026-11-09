@@ -20,15 +20,12 @@ import type { TurnInput, ValidatedActionRequest } from "@covel/shared";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
 import { logRequestError } from "../../../api-error.js";
 import { preflightFormApprovals } from "../plugin-rpc/form-approvals.js";
-import type {
-  QueuedActivatedRuntimeJob,
-  QueuedRuntimeJob,
-} from "../plugin-rpc/runtime-job-enqueue.js";
-import type { RuntimeJobServices } from "../plugin-rpc/runtime-job-credentials.js";
+import type { QueuedRuntimeJob } from "../plugin-rpc/runtime-job-enqueue.js";
+import type { JobCredentialHandoff } from "../plugin-rpc/runtime-job-credentials.js";
 import {
   announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
-  requestJobServices,
+  requestCredentialHandoff,
   withSettledExecutionLock,
 } from "../plugin-rpc/settled-request.js";
 import { readLockedSession } from "../session/locked-mutation.js";
@@ -63,20 +60,17 @@ export interface TurnHost {
   readonly hookPipeline: HookPipeline | undefined;
   readonly memorySystem: MemorySystem | undefined;
   readonly pluginExtensions: PluginExtensionHost | undefined;
-  /** Provider services a queued job may take from this request. */
-  jobServices(): RuntimeJobServices | undefined;
-  readonly jobCredentials:
-    | Pick<
-        NonNullable<ContextVariableMap["runtimeJobCredentials"]>,
-        "register" | "discard"
-      >
-    | undefined;
+  /**
+   * The request's provider services, handed to the stage jobs its turns'
+   * commits queue; the request withdraws them from jobs not left queued.
+   */
+  readonly credentials: JobCredentialHandoff;
   /** After the commit that queued them: publish and wake the worker. */
   announceDeferredJobs(
     queued: readonly QueuedRuntimeJob[],
     write: (payload: Record<string, unknown>) => Promise<void>,
   ): Promise<void>;
-  announceQueuedJobs(queued: readonly QueuedActivatedRuntimeJob[]): void;
+  announceQueuedJobs(queued: readonly QueuedRuntimeJob[]): void;
   /** Run under the session lock once earlier work settled; `stop` ends the wait. */
   withSettledLock<T>(run: () => Promise<T>, stop: AbortSignal): Promise<T>;
   /** Run under the session lock without waiting for earlier work to settle. */
@@ -180,10 +174,7 @@ export function createTurnHost(
     get pluginExtensions() {
       return c.get("pluginExtensions");
     },
-    jobServices: () => requestJobServices(c),
-    get jobCredentials() {
-      return c.get("runtimeJobCredentials");
-    },
+    credentials: requestCredentialHandoff(c),
     announceDeferredJobs: (queued, write) =>
       announceDeferredRuntimeJobs(c, queued, write),
     announceQueuedJobs: (queued) => announceQueuedRuntimeJobs(c, queued),

@@ -261,15 +261,14 @@ export async function releaseActionRequest(
   control.release();
   stream.stopForwarding();
   try {
-    if (ledger.credentialKeys.length > 0) {
-      const queuedIds = new Set(
-        (await listRuntimeJobs(store, { sessionId, statuses: ["queued"] })).map(
-          (job) => job.jobId,
+    if (host.credentials.keys.length > 0)
+      host.credentials.discard(
+        new Set(
+          (
+            await listRuntimeJobs(store, { sessionId, statuses: ["queued"] })
+          ).map((job) => job.jobId),
         ),
       );
-      for (const key of ledger.credentialKeys)
-        if (!queuedIds.has(key.jobId)) host.jobCredentials?.discard(key);
-    }
   } catch (error) {
     // A transient read failure must not leak the turn lock. Handoffs have a TTL.
     console.warn("[actions] credential handoff cleanup failed", error);
