@@ -69,19 +69,18 @@ rg -n "ponytail:" apps packages plugins
 | `packages/runtime/src/plugin-services.ts` | 1355 |
 | `packages/ai-provider/src/gateway.ts` | 1314 |
 | `apps/server/src/world-data/validate-world-package.ts` | 1295 |
-| `apps/web/src/stores/session-store/actions.ts` | 1281 |
 | `packages/runtime/src/agent-loop/subagent-runner.ts` | 1180 |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 1176 |
 | `packages/runtime/src/turn-executor/turn-executor.ts` | 1167 |
 | `apps/server/src/world-data/session-import.ts` | 1165 |
-| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 1145 |
 | `packages/plugin-handlers-utils/src/plugin-api.ts` | 1092 |
 | `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 1071 |
+| `apps/web/src/stores/session-store/actions.ts` | 1058 |
 | `packages/store/src/types.ts` | 1045 |
-| `apps/server/src/routes/api/bootstrap.ts` | 1037 |
 | `packages/create/src/create-world.ts` | 1032 |
 | `packages/plugin-loader/src/load.ts` | 1001 |
-| `packages/shared/src/types/protocol.ts` | 996 |
 | `packages/settings/src/store.ts` | 996 |
+| `packages/shared/src/types/protocol.ts` | 996 |
 | `packages/events/src/event-bus.ts` | 995 |
 | `apps/web/src/components/session/game-view.tsx` | 989 |
 | `apps/server/src/world-data/session-import/planning.ts` | 975 |
@@ -91,7 +90,7 @@ rg -n "ponytail:" apps packages plugins
 | `packages/runtime/src/agent-loop/tool-executor.ts` | 915 |
 | `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 907 |
 | `apps/web/src/components/session/session-prep-screen.tsx` | 899 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 888 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 882 |
 | `apps/server/src/routes/api/plugin-rpc/jobs.ts` | 867 |
 | `packages/runtime/src/interaction/interaction-submission.ts` | 863 |
 | `packages/runtime/src/retry/llm-retry.ts` | 859 |
@@ -100,5 +99,6 @@ rg -n "ponytail:" apps packages plugins
 | `apps/web/src/services/data-service/local.ts` | 825 |
 | `apps/desktop/src/main.ts` | 820 |
 | `packages/runtime/src/hooks/wire-helpers.ts` | 809 |
+| `apps/web/src/stores/session-store/sse-event-routes.ts` | 806 |
 
 这份清单跟着当前源码里的注释走。历史上的数量和行号不是当前的契约。
