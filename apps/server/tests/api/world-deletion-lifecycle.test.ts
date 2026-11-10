@@ -19,7 +19,7 @@ import {
   makeSession,
   makeSnapshot,
   makeWorld,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { worldRoutes } from "../../src/routes/api/worlds.js";

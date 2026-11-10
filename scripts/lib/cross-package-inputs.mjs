@@ -36,7 +36,9 @@ function dependencyClosure(workspace, byName) {
  * Files in another workspace that a source file loads by relative path:
  * module specifiers (type-checked by `lint`, executed by `test`) and string
  * literals such as `new URL("../../plugins/x", import.meta.url)` (`test` only).
- * Paths assembled from several literals are not seen.
+ * `typed` marks module specifiers; `mocked` marks paths only given to
+ * `vi.mock()` and its siblings. Paths assembled from several literals are not
+ * seen.
  */
 export function crossWorkspaceReferences(workspaces) {
   const references = [];
@@ -57,29 +59,36 @@ export function crossWorkspaceReferences(workspaces) {
           seen.set(target, { file, workspace, owner, target, specifier });
       }
       if (!seen.size) continue;
-      // A module specifier is type-checked by `lint`; a bare literal is not.
-      const imported = importedTargets(file, source);
+      // A module specifier is type-checked by `lint`; a bare literal or a
+      // `vi.mock()` path is not.
+      const loaded = loadedTargets(file, source);
       for (const reference of seen.values())
         references.push({
           ...reference,
-          typed: imported.has(reference.target),
+          typed: loaded.get(reference.target) === "import",
+          mocked: loaded.get(reference.target) === "mock",
         });
     }
   }
   return references;
 }
 
-function importedTargets(file, source) {
+/** Relative targets a file imports (`"import"`) or only mocks (`"mock"`). */
+function loadedTargets(file, source) {
+  const targets = new Map();
   try {
-    return new Set(
-      packageImports(file, source)
-        .filter(({ specifier }) => specifier.startsWith("."))
-        .map(({ specifier }) => path.resolve(path.dirname(file), specifier)),
-    );
+    for (const { specifier, mock } of packageImports(file, source, {
+      mocks: true,
+    })) {
+      if (!specifier.startsWith(".")) continue;
+      const target = path.resolve(path.dirname(file), specifier);
+      if (!mock) targets.set(target, "import");
+      else if (!targets.has(target)) targets.set(target, "mock");
+    }
   } catch {
     // Unparsable files are other checks' concern; literals still count.
-    return new Set();
   }
+  return targets;
 }
 
 /** Turbo replaces the generic task with a `package#task` entry; no merge. */

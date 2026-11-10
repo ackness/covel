@@ -18,7 +18,7 @@ import {
   makeSnapshot,
   makeSnapshotPayload,
   makeWorld,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 import {
   createInProcessSessionLock,
   type SessionLock,

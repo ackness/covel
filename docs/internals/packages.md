@@ -193,9 +193,13 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 
 `pnpm check:boundaries` 检查生产源码的公开入口、依赖声明和包的方向。它还要求 `packages/*` 的每个导出入口有包外的源码使用者（包括测试、脚手架和脚本），或者在检查脚本中写明保留理由。需要新的跨包依赖时，连同这一页的责任划分一起评审。它还检查测试和配置用相对路径引用其他工作区文件时，Turbo 的 `lint` / `test` 缓存是否覆盖这些文件（见[命令](./commands.md)）。
 
+测试同样只经包入口使用别的工作区。一个包要给别的工作区的测试提供 fixture 或辅助函数时，在 `package.json` 的 `exports` 里加 `./testing` 子入口，指向 `src/testing.ts`，由它重新导出这些辅助函数，并注明只供测试使用。例如 `@covel/store/testing` 提供跨后端契约测试用的记录构造函数，`@covel/ai-provider/testing` 提供在测试之间重置出站代理状态的函数。导入它的测试包把这个包列为依赖（测试专用时列为开发依赖）。`./testing` 入口同样要有包外的使用者，生产源码不能导入它。只能被测试用到的内部实现不要放进 `./testing`。
+
+`pnpm check:boundaries` 也扫描测试、fixture、配置和脚本：它们不能用相对路径导入或 `vi.mock()` 另一个 `apps/*`、`packages/*` 工作区的文件。内置插件不在此列，因为插件没有包入口，测试按路径加载插件模块。剩下的例外写在检查脚本的允许列表里，每条注明理由，例如 mock 包内部的出站传输模块，或者 `runtime` 测试导入会造成依赖环的 `test-runtime`。不再出现的条目会让检查失败，所以列表只会缩小。
+
 独立运行 `pnpm check:boundaries` 时也会测试它的解析器；完整的 `pnpm check` 直接运行边界扫描，再由 `check:scripts` 运行解析器测试，避免重复执行。
 
-`test-runtime` 只提供 CLI，不提供包导入入口。用 `pnpm test:runtime` 运行 runtime cases；`pnpm plugin:extract <dir>` 在作者本机执行入口工厂，记录注册并同步声明，纯文本改写由 `plugin-loader` 负责。
+`test-runtime` 主要提供 CLI。它唯一的导入入口 `@covel/test-runtime/runtime-loading` 让插件测试按 CLI 的方式加载 runtime；`runtime` 自己的测试不能依赖它，否则会形成依赖环。用 `pnpm test:runtime` 运行 runtime cases；`pnpm plugin:extract <dir>` 在作者本机执行入口工厂，记录注册并同步声明，纯文本改写由 `plugin-loader` 负责。
 
 网页端从 SettingsStore 读取主题和明暗偏好，经主题解析后，通过 appearance 辅助函数应用实际显示值。回退显示不改写已保存的偏好。
 

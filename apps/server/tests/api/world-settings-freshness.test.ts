@@ -3,7 +3,7 @@ import { createPluginRegistry } from "@covel/plugin-loader";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
-import { makeWorld } from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeWorld } from "@covel/store/testing";
 import {
   buildSessionHookScope,
   loadSessionHookScope,

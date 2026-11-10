@@ -4,7 +4,7 @@ import {
   shortIdBatch,
   getPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { buildContext } from "../../../packages/context/src/index.ts";
+import { buildContext } from "@covel/context";
 import register from "../server/index.js";
 
 function handler() {

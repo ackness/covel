@@ -81,7 +81,7 @@
     "release:prepare": "node ./scripts/release-prepare.mjs",
     "release:preflight": "node ./scripts/release-preflight.mjs",
     "preinstall": "node ./scripts/require-pnpm.mjs",
-    "check:boundaries": "node --test scripts/tests/package-imports.test.mjs && node scripts/check-package-boundaries.mjs"
+    "check:boundaries": "node --test scripts/tests/package-imports.test.mjs scripts/tests/test-source-imports.test.mjs && node scripts/check-package-boundaries.mjs"
   },
   "packageManager": "pnpm@12.14.0",
   "engines": {

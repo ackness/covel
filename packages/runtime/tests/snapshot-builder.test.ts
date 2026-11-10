@@ -6,10 +6,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import {
-  makeCharacter,
-  makeSession,
-} from "../../store/src/contract/test-fixtures.js";
+import { makeCharacter, makeSession } from "@covel/store/testing";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
 import { decodePageCursor } from "@covel/shared";
 import { buildSessionSnapshot } from "../src/snapshot/snapshot-builder.js";
