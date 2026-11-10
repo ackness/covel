@@ -16,6 +16,7 @@ import {
 } from "../src/commit/commit-execution.js";
 import { executeTurn } from "../src/execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { runWithHookScope } from "../src/hooks/hook-scope.js";
 import {
   GUARD_FAILURE_SCOPE,
   GUARD_HOOK_EVENTS,
@@ -543,17 +544,21 @@ describe("the per-event rule for a failed guard handler", () => {
       ...(options.owner ? { pluginId: options.owner } : {}),
       handler: broken,
     });
-    return pipeline.run(
-      event,
-      {
-        event,
-        sessionId: SESSION,
-        turnId: "turn",
-        pluginId: "other",
-        runtimeId: "other/log",
-      },
-      {},
-      options.confinable ? { confinable: options.confinable } : {},
+    return runWithHookScope(
+      { activePluginIds: new Set(options.owner ? [options.owner] : []) },
+      () =>
+        pipeline.run(
+          event,
+          {
+            event,
+            sessionId: SESSION,
+            turnId: "turn",
+            pluginId: "other",
+            runtimeId: "other/log",
+          },
+          {},
+          options.confinable ? { confinable: options.confinable } : {},
+        ),
     );
   }
   const always = () => true;
