@@ -100,12 +100,18 @@ describe.skipIf(!database)("PostgreSQL advancement", () => {
       expect(
         stream.filter((event) => event.type === "execution.completed"),
       ).toHaveLength(1);
+      // A detached observer may still hold the PG lock after the SSE closes.
+      await expect
+        .poll(() => f.status(), { timeout: 10_000 })
+        .toMatchObject({ state: "completed" });
+      expect((await reader.getSession(f.sessionId))?.completedPlayerTurns).toBe(
+        5,
+      );
       expect(
         (await reader.listMessages(f.sessionId)).filter(
           (row) => row.role === "assistant",
         ),
       ).toHaveLength(3);
-      expect(await f.status()).toMatchObject({ state: "completed" });
     } finally {
       release.resolve();
       await f.close();
