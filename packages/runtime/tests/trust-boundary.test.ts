@@ -23,6 +23,9 @@ import { processRuntimeResult } from "../src/session/session-runtime-result.js";
 import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runPreScheduleHook } from "../src/hooks/wire-helpers.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["a", "b", "framework", "narrator", "p"]);
 
 const ATTACKER_SESSION = "sess-victim";
 

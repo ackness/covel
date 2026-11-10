@@ -38,7 +38,11 @@ import {
 } from "./function-runtime/runtime-abort-boundaries.js";
 import type { TurnEmitter } from "./trace/turn-emitter.js";
 import { withGatewayTrace } from "./function-runtime/gateway-trace.js";
-import { currentOwnSettings } from "./hooks/hook-scope.js";
+import {
+  currentOwnSettings,
+  scopedOwnSettings,
+  type HookScope,
+} from "./hooks/hook-scope.js";
 import {
   providerVisibility,
   readProviderData,
@@ -183,10 +187,31 @@ function providerVerdict(
     : "neutral";
 }
 
+/** A provider's own settings: the caller's snapshot, else the hook scope's. */
+function ownSettingsOf(
+  caller: Pick<Caller, "settings">,
+  pluginId: string,
+): Readonly<Record<string, unknown>> {
+  return caller.settings
+    ? scopedOwnSettings(caller, pluginId)
+    : currentOwnSettings(pluginId);
+}
+
 interface Caller {
   readonly delegation?: DelegationBudget;
-  /** Kernel-only execution collector; inherited by nested service clients. */
+  /**
+   * Kernel-only execution collector; inherited by nested service clients.
+   * Passed explicitly by every client the kernel creates for an execution;
+   * without it the call's outcome is not counted by the fault latch.
+   */
   readonly onSettled?: (outcome: ServiceCallOutcome) => void;
+  /**
+   * Kernel only: the client serves a kernel-generated import tool (an imported
+   * service the model called), so a provider's own timeout on its direct
+   * call counts as the provider's fault. Plugin tools choose their own
+   * deadlines and leave it unset.
+   */
+  readonly imported?: boolean;
   /** Host-owned trace destination; never exposed in the plugin context. */
   readonly emitter?: TurnEmitter;
   readonly sessionId: string;
@@ -198,6 +223,13 @@ interface Caller {
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
+  /**
+   * Kernel only: the execution's resolved plugin settings, inherited unchanged
+   * through nested calls. An extension execution passes it because it may run
+   * outside a session hook scope (UI slots, the session view, image flow).
+   * Without it, `getOwnSettings()` reads the hook scope and throws outside one.
+   */
+  readonly settings?: HookScope["settings"];
   /** Kernel-only read scope, inherited unchanged through nested calls. */
   readonly reads?: {
     readonly locale?: string;
@@ -465,38 +497,11 @@ function modelFacingSchema(
 
 /** Scoped to one host instance; activation owns registration disposal. */
 export class PluginServiceRegistry {
-  private readonly executionObservers = new AsyncLocalStorage<
-    (outcome: ServiceCallOutcome) => void
-  >();
-  private readonly importedCalls = new AsyncLocalStorage<boolean>();
-
-  /** Bind execution collection without exposing the observer to plugin code. */
-  withExecutionObserver<T>(
-    observer: (outcome: ServiceCallOutcome) => void,
-    run: () => T,
-  ): T {
-    return this.executionObservers.run(observer, run);
-  }
-
-  executionObserver(): ((outcome: ServiceCallOutcome) => void) | undefined {
-    return this.executionObservers.getStore();
-  }
-
-  /** Generated tools are kernel service imports; plugin tools choose their own deadlines. */
-  observeToolCalls(
-    inner: import("./agent-loop/tool-executor.js").ToolExecutor,
-  ): import("./agent-loop/tool-executor.js").ToolExecutor {
-    return {
-      getToolInfo: (name, context) => inner.getToolInfo(name, context),
-      execute: (call, context) =>
-        this.importedCalls.run(
-          context.generatedTools?.has(call.name) === true,
-          () => inner.execute(call, context),
-        ),
-    };
-  }
-
   private readonly entries = new Map<string, Entry>();
+  /**
+   * An execution's frozen registrations. Absent means the live ones, which is
+   * correct outside an execution (diagnostics, registration, test harnesses).
+   */
   private readonly snapshots = new AsyncLocalStorage<Map<string, Entry>>();
   private readEntries(): ReadonlyMap<string, Entry> {
     return this.snapshots.getStore() ?? this.entries;
@@ -881,8 +886,7 @@ export class PluginServiceRegistry {
         let errorCode: PluginServiceCallEvent["errorCode"] = "invalid-options";
         let outcome: PluginServiceCallEvent["outcome"] = "success";
         let verdict: ServiceCallOutcome["verdict"] = "clean";
-        const imported =
-          path.length === 0 && this.importedCalls.getStore() === true;
+        const imported = path.length === 0 && caller.imported === true;
         let extension: PluginServiceCallEvent["extension"];
         let target = {
           providerPluginId: "<unavailable>",
@@ -1167,7 +1171,7 @@ export class PluginServiceRegistry {
                   get world() {
                     return world();
                   },
-                  getOwnSettings: () => currentOwnSettings(entry.pluginId),
+                  getOwnSettings: () => ownSettingsOf(caller, entry.pluginId),
                   signal,
                   services: this.createClient(
                     {
@@ -1238,7 +1242,7 @@ export class PluginServiceRegistry {
                 get world() {
                   return world();
                 },
-                getOwnSettings: () => currentOwnSettings(entry.pluginId),
+                getOwnSettings: () => ownSettingsOf(caller, entry.pluginId),
                 signal,
                 gateway,
                 utils,

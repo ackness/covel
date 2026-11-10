@@ -138,6 +138,13 @@ export interface ToolCallContext {
    */
   readonly generatedTools?: ReadonlyMap<string, ToolModule>;
   /**
+   * Kernel only: the execution's service-call collector, handed to the
+   * service client of each invocation so the fault latch counts its calls.
+   */
+  readonly serviceOutcomes?: (
+    outcome: import("../plugin-services.js").ServiceCallOutcome,
+  ) => void;
+  /**
    * Kernel only: the calling run's operation stage. Each invocation gets a
    * child of it: the write-service operations a tool stages count only when
    * the tool succeeds. Without it, write services answer `unavailable`.
@@ -600,6 +607,8 @@ export function createToolExecutor(
           config.store,
           call.toolCallId,
           datasetReadPolicy(tool, params),
+          // A generated tool is a kernel service import, resolved first.
+          context.generatedTools?.has(call.name) === true,
         );
         // Capture authority before any asynchronous trace work.
         await emitToolCalling(context, call, toolSource, approvalStatus);

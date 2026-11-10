@@ -17,6 +17,7 @@ import {
 } from "../../src/routes/api/session/session-events.js";
 import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 import { drain, makeApp } from "./sse-test-utils.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
 
 function session(): SessionRecord {
   return {
@@ -101,6 +102,7 @@ describe("F-201 subscription incarnation admission", () => {
     });
     const host = createUiSlotHost({
       store: wrapped,
+      pluginRegistry: createPluginRegistry(),
       eventBus: bus,
       services,
       extensionHost: new PluginExtensionHost(services, [uiSlotV1]),

@@ -17,6 +17,9 @@ import {
   attachSuspensionArtifact,
   collectExecutionSuspensions,
 } from "../src/suspension-artifact.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["other-plugin", "probe"]);
 
 const now = "2026-09-19T00:00:00.000Z";
 const context = {

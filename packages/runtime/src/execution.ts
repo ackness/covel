@@ -128,9 +128,6 @@ function captureSchemas(deps: ExecutionDeps) {
     datasetSchemas,
     deps: {
       ...deps,
-      ...(deps.services && deps.toolExecutor
-        ? { toolExecutor: deps.services.observeToolCalls(deps.toolExecutor) }
-        : {}),
       loadRuntime: async (
         ...args: Parameters<TurnExecutorDeps["loadRuntime"]>
       ) => {
@@ -225,10 +222,6 @@ export async function executeTurn(
     serviceCalls.push(outcome);
     deps.serviceOutcomes?.(outcome);
   };
-  const observeServices = <T>(run: () => T): T =>
-    deps.services
-      ? deps.services.withExecutionObserver(serviceOutcomes, run)
-      : run();
   const delegation =
     deps.delegation ??
     (await createDelegationBudget(input.sessionId, deps.store));
@@ -269,19 +262,17 @@ export async function executeTurn(
       : buildHookSettings(runtimes, userSettings),
     locale: deps.hookScope?.locale ?? input.locale,
   };
-  const turn = await observeServices(() =>
-    runTurnPipeline(
-      { ...input, userSettings },
-      runtimes,
-      {
-        ...captured.deps,
-        hookScope,
-        subagents,
-        operationScope,
-        serviceOutcomes,
-      },
-      options,
-    ),
+  const turn = await runTurnPipeline(
+    { ...input, userSettings },
+    runtimes,
+    {
+      ...captured.deps,
+      hookScope,
+      subagents,
+      operationScope,
+      serviceOutcomes,
+    },
+    options,
   );
   // Each top-level result commits as one unit with everything nested under
   // it, children before their parent; finalize settles units in order, so
@@ -457,10 +448,6 @@ export async function resumeSuspendedRuntime(
     serviceCalls.push(outcome);
     deps.serviceOutcomes?.(outcome);
   };
-  const observeServices = <T>(run: () => T): T =>
-    deps.services
-      ? deps.services.withExecutionObserver(serviceOutcomes, run)
-      : run();
   const delegation =
     deps.delegation ??
     (await createDelegationBudget(
@@ -507,21 +494,19 @@ export async function resumeSuspendedRuntime(
   const progressAttemptId = crypto.randomUUID();
   let result: RuntimeResult;
   try {
-    result = await observeServices(() =>
-      runWithHookScope(hookScope, () =>
-        resumeRuntimePipeline(
-          suspension,
-          resumeData,
-          manifest,
-          {
-            ...captured.deps,
-            hookScope,
-            subagents,
-            serviceOutcomes,
-            progressAttemptId,
-          },
-          { ...options, userSettings },
-        ),
+    result = await runWithHookScope(hookScope, () =>
+      resumeRuntimePipeline(
+        suspension,
+        resumeData,
+        manifest,
+        {
+          ...captured.deps,
+          hookScope,
+          subagents,
+          serviceOutcomes,
+          progressAttemptId,
+        },
+        { ...options, userSettings },
       ),
     );
   } catch (error) {

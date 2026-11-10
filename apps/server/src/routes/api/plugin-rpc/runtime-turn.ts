@@ -97,9 +97,10 @@ export interface PluginRpcRuntimeTurnContext {
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly sessionLock: SessionLock;
-  readonly resolveImageFlowRuntimeIds?: () => Promise<
-    readonly string[] | undefined
-  >;
+  /** Receives the committing execution's resolved settings. */
+  readonly resolveImageFlowRuntimeIds?: (
+    settings: HookScope["settings"],
+  ) => Promise<readonly string[] | undefined>;
   readonly withSettledLock?: <T>(
     fn: () => Promise<T>,
     waitBudget?: SettleWaitBudget,
@@ -387,7 +388,9 @@ export function createPluginRpcRuntimeTurnRunner(
       // back instead of losing them.
       enqueueReleasedJobsInTx: release?.enqueueInTx ?? refuseReleasedJobs,
       memorySystem: ctx.memorySystem,
-      imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(),
+      imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(
+        hookScope.settings,
+      ),
       signal: opts.executionSignal,
       completion:
         opts.completionKind === "detached"

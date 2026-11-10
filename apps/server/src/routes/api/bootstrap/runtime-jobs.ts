@@ -140,9 +140,16 @@ export function createBootstrapRuntimeJobs(args: {
         eventDirectory,
       },
       hookPipeline,
-      resolveImageFlowRuntimeIds: async () =>
-        (await resolveMediaImageFlow(store, extensions, job.sessionId))
-          ?.assetRuntimeIds,
+      resolveImageFlowRuntimeIds: async (settings) =>
+        (
+          await resolveMediaImageFlow({
+            store,
+            host: extensions,
+            pluginRegistry: registry,
+            sessionId: job.sessionId,
+            settings,
+          })
+        )?.assetRuntimeIds,
     });
   };
 

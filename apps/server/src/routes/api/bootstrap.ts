@@ -92,6 +92,7 @@ export async function bootstrapApi(
     // Subscribes to the event bus, after the runtime-job worker.
     const uiSlots = createUiSlotHost({
       store,
+      pluginRegistry: registry,
       eventBus,
       extensionHost: host.extensions,
       services: host.services,

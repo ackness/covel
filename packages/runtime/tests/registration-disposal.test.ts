@@ -1,6 +1,9 @@
 import { expect, it, vi } from "vitest";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { createPluginRpcRegistry } from "../src/rpc/rpc-registry.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope();
 
 it("disposes only the registered hook instance even when ids are reused", async () => {
   const pipeline = createHookPipeline();

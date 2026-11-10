@@ -22,6 +22,19 @@ import type {
   HookSemantic,
 } from "../src/hooks/types.js";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope([
+  "bad-owner",
+  "filtered",
+  "ok-owner",
+  "p",
+  "plugin-a",
+  "plugin-b",
+  "plugin-narrator",
+  "plugin-x",
+  "slow-owner",
+]);
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -182,7 +195,12 @@ describe("HookPipeline", () => {
 
       expect(handler).toHaveBeenCalledOnce();
       expect(handler).toHaveBeenCalledWith(
-        { ...ctx, signal: expect.any(AbortSignal) },
+        {
+          ...ctx,
+          signal: expect.any(AbortSignal),
+          activePluginIds: expect.any(Set),
+          getOwnSettings: expect.any(Function),
+        },
         payload,
       );
     });

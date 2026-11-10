@@ -21,6 +21,9 @@ import {
   toolCall,
   type LoopRunOptions,
 } from "./_helpers/agent-loop-fixture.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["plug"]);
 
 interface Row {
   readonly type: string;
