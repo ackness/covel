@@ -106,12 +106,17 @@ function declaresInput(root, workspace, definition, target) {
     const base = rooted ? root : workspace.directory;
     const local = rooted ? pattern.slice("$TURBO_ROOT$/".length) : pattern;
     const at = relative(base);
-    // A directory is read through whatever it holds: an input must either
-    // match anything inside it or be written inside it.
-    return directory
-      ? matcher([local])(`${at}/any/file`) ||
-          (!negated && staticPrefix(local).startsWith(`${at}/`))
-      : matcher([local])(at);
+    if (!directory) return matcher([local])(at);
+    // Directory reads include future descendants, so only a recursive glob
+    // covering the directory itself can cover the entire read.
+    if (!negated)
+      return (
+        (local === "**" || local.endsWith("/**")) && matcher([local])(`${at}/`)
+      );
+    // An exclusion that may overlap any descendant leaves part of the read
+    // unhashed. Be conservative when its wildcard suffix cannot prove disjointness.
+    const prefix = staticPrefix(local);
+    return prefix.startsWith(`${at}/`) || `${at}/`.startsWith(prefix);
   };
   const globs = (definition?.inputs ?? []).filter(
     (glob) => glob !== "$TURBO_DEFAULT$",

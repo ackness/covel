@@ -135,7 +135,51 @@ test("declared inputs cover files, directories and exclude negations", () => {
           "!$TURBO_ROOT$/plugins/codex/ui/**",
         ]),
       ),
-      [["web", "codex", "lint/test"]],
+      [
+        ["web", "codex", "lint/test"],
+        ["web", "codex", "test"],
+      ],
+    );
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("directory reads require all descendants, including future files, to be hashed", () => {
+  const f = fixture(
+    { "apps/web": { name: "web" }, "plugins/codex": { name: "codex" } },
+    {
+      "apps/web/src/panel.test.ts":
+        'const dir = new URL("../../../plugins/codex/", import.meta.url);',
+      "plugins/codex/ui/panel.json": "{}",
+    },
+  );
+  const check = (...inputs) => problems(f, { tasks: { test: { inputs } } });
+  try {
+    for (const input of [
+      "$TURBO_ROOT$/plugins/codex/ui/**",
+      "$TURBO_ROOT$/plugins/codex/*.json",
+      "$TURBO_ROOT$/plugins/codex/*",
+      "$TURBO_ROOT$/plugins/codex/any/**",
+      "$TURBO_ROOT$/plugins/codex/ui/panel.json",
+    ])
+      assert.deepEqual(check(input), [["web", "codex", "test"]], input);
+    for (const input of [
+      "$TURBO_ROOT$/plugins/codex/**",
+      "$TURBO_ROOT$/plugins/*/**",
+      "$TURBO_ROOT$/plugins/**",
+    ])
+      assert.deepEqual(check(input), [], input);
+    assert.deepEqual(
+      check(
+        "$TURBO_ROOT$/plugins/codex/**",
+        "!$TURBO_ROOT$/plugins/codex/future/**",
+      ),
+      [["web", "codex", "test"]],
+    );
+    assert.deepEqual(
+      check("$TURBO_ROOT$/plugins/codex/**", "!$TURBO_ROOT$/plugins/other/**"),
+      [],
     );
   } finally {
     rmSync(f.root, { recursive: true, force: true });

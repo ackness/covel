@@ -99,13 +99,11 @@ it("requires an appearance contribution and bounds manifest declarations", () =>
   ).toBe(false);
 });
 it("uses tokens already present in the framework styles", () => {
-  const source = ["index.css", "styles/layout.css"]
-    .map((name) =>
-      readFileSync(
-        new URL(`../../../apps/web/src/${name}`, import.meta.url),
-        "utf8",
-      ),
-    )
+  const source = [
+    new URL("../../../apps/web/src/index.css", import.meta.url),
+    new URL("../../../apps/web/src/styles/layout.css", import.meta.url),
+  ]
+    .map((file) => readFileSync(file, "utf8"))
     .join("\n");
   for (const token of PLUGIN_THEME_TOKENS)
     expect(source, token).toContain(token);
