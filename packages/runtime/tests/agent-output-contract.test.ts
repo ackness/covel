@@ -93,15 +93,27 @@ describe("generated output contract", () => {
       manifest: { ...manifest, outputKind: "story" },
       promptTemplate: "",
     });
-    expect(validateOutput({ narrativeOutput: "  " }, story.schema).valid).toBe(
-      false,
-    );
+    expect(story.schemaSource).toBe("host-story");
+    // The kernel owns the story shape: segments are required.
+    expect(
+      validateOutput({ narrativeOutput: "A door opens." }, story.schema).valid,
+    ).toBe(false);
+    expect(validateOutput({ segments: [] }, story.schema).valid).toBe(false);
     expect(
       validateOutput(
-        { narrativeOutput: "A door opens.", yield: "user" },
+        {
+          segments: [{ kind: "narration", text: "A door opens." }],
+          yield: "user",
+        },
         story.schema,
       ).valid,
     ).toBe(true);
+    expect(
+      validateOutput(
+        { segments: [{ kind: "shout", text: "Who goes there?" }] },
+        story.schema,
+      ).valid,
+    ).toBe(false);
   });
 
   it("keeps concurrent runtimes' schemas isolated and frozen", async () => {

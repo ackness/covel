@@ -1,4 +1,7 @@
-import { submittedOutput } from "../helpers/output-submission.js";
+import {
+  narrationSegments,
+  submittedOutput,
+} from "../helpers/output-submission.js";
 /**
  * Tests for the suspend/resume API routes.
  *
@@ -216,7 +219,7 @@ function makeDefaultLLM() {
   return {
     generate: async () =>
       submittedOutput(
-        { narrativeOutput: "Resume complete." },
+        { segments: narrationSegments("Resume complete.") },
         { inputTokens: 5, outputTokens: 5 },
       ),
   };
@@ -779,7 +782,7 @@ describe("Resume Routes", () => {
             };
           }
           return submittedOutput(
-            { narrativeOutput: "done" },
+            { segments: narrationSegments("done") },
             { inputTokens: 1, outputTokens: 1 },
           );
         },
@@ -1192,7 +1195,7 @@ describe("Resume Routes", () => {
                       usage: { inputTokens: 5, outputTokens: 5 },
                     }
                   : submittedOutput(
-                      { narrativeOutput: "Resume complete." },
+                      { segments: narrationSegments("Resume complete.") },
                       { inputTokens: 5, outputTokens: 5 },
                     ),
             },
@@ -2064,7 +2067,7 @@ describe("Resume Routes", () => {
         const generate = vi.fn(async () => {
           await store.setPluginData(row("stage", { step: "manual" }));
           return submittedOutput(
-            { narrativeOutput: "Resume complete." },
+            { segments: narrationSegments("Resume complete.") },
             { inputTokens: 5, outputTokens: 5 },
           );
         });

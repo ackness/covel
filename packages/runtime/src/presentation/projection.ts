@@ -3,7 +3,6 @@ import {
   currentCharacterOf,
   primarySeat,
   resolveCharacter,
-  STORY_OUTPUT_CONTRACT,
   presentationSnapshotSchema,
   presentationStorySchema,
   type PresentationSnapshot,
@@ -17,6 +16,7 @@ import { deepFreeze } from "../hooks/hook-settings.js";
 import { mergePluginDataRows } from "../function-runtime/execution-write-buffer.js";
 import type { UpstreamPluginDataWrite } from "../function-runtime/upstream-plugin-data.js";
 import { presentationLimits, presentationNamespaces } from "./policy.js";
+import { turnStory } from "./turn-story.js";
 
 export class PresentationUnavailable extends Error {
   override readonly name = "PresentationUnavailable";
@@ -59,24 +59,25 @@ export function projectPresentationStory(
   return parsed.success ? deepFreeze(parsed.data) : undefined;
 }
 
+/**
+ * The story this execution told, decided by {@link turnStory} over its
+ * successful top-level results: the automatic story runtime's when it
+ * succeeded, otherwise the one successful public story, if only one.
+ */
 export function publicStoryCandidate(
   runtimes: readonly RuntimeManifest[],
   results: readonly RuntimeResult[],
 ) {
-  const providers = runtimes.filter(
-    (runtime) =>
-      runtime.outputKind === "story" &&
-      !runtime.concealed &&
-      runtime.outputContract === STORY_OUTPUT_CONTRACT,
-  );
-  if (providers.length !== 1) return undefined;
-  const result = results.find(
+  const story = turnStory(
+    results.filter((result) => result.status === "success"),
     (result) =>
-      result.runtimeId === providers[0]!.name &&
-      result.pluginId === providers[0]!.pluginId &&
-      result.status === "success",
+      runtimes.find(
+        (runtime) =>
+          runtime.name === result.runtimeId &&
+          runtime.pluginId === result.pluginId,
+      ),
   );
-  return result ? projectPresentationStory(result.output) : undefined;
+  return story ? projectPresentationStory(story.output) : undefined;
 }
 
 type ProjectionStore = Pick<

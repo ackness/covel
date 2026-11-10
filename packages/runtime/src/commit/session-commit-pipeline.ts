@@ -117,6 +117,7 @@ export async function runPreStateCommitHook(
 }
 
 export interface CommitPipelineOptions {
+  readonly storySource?: import("./commit-narrative.js").StoryMessageSource;
   /**
    * The caller already ran {@link runPreStateCommitHook} for every proposal,
    * outside its transaction. PostStateCommit still runs after commit.
@@ -137,6 +138,7 @@ export function createCommitPipeline(
   options: CommitPipelineOptions = {},
 ): CommitPipeline {
   const handlerOptions = {
+    ...(options.storySource ? { storySource: options.storySource } : {}),
     ...(options.datasetPolicy ? { datasetPolicy: options.datasetPolicy } : {}),
     ...(options.mediaStore ? { mediaStore: options.mediaStore } : {}),
   };

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 import { attachRuntimeJournal } from "../src/execution-journal.js";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMMessage } from "@covel/shared";
@@ -135,9 +136,11 @@ async function conversations(
               {
                 id: "final",
                 name: "submit-output",
-                arguments: JSON.stringify({
-                  narrativeOutput: name === "narrator" ? narrative : "noted",
-                }),
+                arguments: JSON.stringify(
+                  name === "narrator"
+                    ? { segments: narrationSegments(narrative) }
+                    : { narrativeOutput: "noted" },
+                ),
               },
             ],
             finishReason: "tool_calls" as const,
@@ -228,10 +231,14 @@ describe("story text of the current execution in the conversation", () => {
   it("fails a call that cannot hold this turn's story instead of sending it without", async () => {
     // The story is closed by a user-role cue. A budget that protects only the
     // last user message would drop the story, and the call would go out blind.
+    // A segment holds at most 4000 characters, so the story is three paragraphs.
     const sent = await conversations(
       [narrator, observer()],
       {},
-      { narrative: "x".repeat(9_000), maxInputTokens: 8_000 },
+      {
+        narrative: Array(3).fill("x".repeat(3_000)).join("\n\n"),
+        maxInputTokens: 8_000,
+      },
     );
 
     expect(sent.result("narrator")?.status).toBe("success");

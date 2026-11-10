@@ -22,6 +22,10 @@ import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
+import {
+  narrationSegments,
+  storySubmitted,
+} from "./_helpers/agent-loop-fixture.js";
 
 // Prime a store with one prior player message so turnNumber >= 1 and
 // main-loop priority runtimes survive the Pre-Game band filter.
@@ -365,12 +369,14 @@ describe("Turn executor hook wire-in", () => {
   describe("PostRuntime hook replace", () => {
     it("rewrites the RuntimeResult when PostRuntime returns replace (sequential)", async () => {
       const llm = new SimpleMockLLM();
+      // A story agent submits its story as segments.
+      llm.nextResponse(storySubmitted("default response"));
       const pipeline = createHookPipeline();
       const emitter = makeEmitterSpy();
       const manifest = makeManifest({ outputKind: "story" });
 
       const rewrittenOutput = {
-        narrativeOutput: "rewritten by hook",
+        segments: narrationSegments("rewritten by hook"),
         _hookModified: true,
       };
 

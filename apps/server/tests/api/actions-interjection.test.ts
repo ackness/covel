@@ -1,4 +1,7 @@
-import { submittedOutput } from "../helpers/output-submission.js";
+import {
+  narrationSegments,
+  submittedOutput,
+} from "../helpers/output-submission.js";
 /**
  * POST /api/actions × steer — a mid-turn interjection follows its turn's
  * transaction (audit F-023).
@@ -84,7 +87,7 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
         duringFirstCall = undefined;
         await hook?.();
         return submittedOutput(
-          { narrativeOutput: `Narration ${prompts.length}.` },
+          { segments: narrationSegments(`Narration ${prompts.length}.`) },
           { inputTokens: 1, outputTokens: 1 },
         );
       },

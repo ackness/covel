@@ -19,7 +19,11 @@ import {
   TURN_POLICY_CONTRACT,
   FRAMEWORK_TOOL_NAMES,
 } from "@covel/plugin-handlers-utils";
-import { isKernelExtensionContract } from "../extension-points/contracts.js";
+import {
+  isKernelExtensionContract,
+  STORY_OUTPUT_CONTRACT,
+} from "../extension-points/contracts.js";
+import { defaultOutputSchemaContract } from "../framework-contracts.js";
 import {
   defaultAgentLoop,
   defaultLoopPreset,
@@ -542,6 +546,36 @@ export function runtimeRuleIssues(
       "runtime",
     );
 
+  // A story runtime's output is the kernel's story shape. The automatically
+  // scheduled one provides the story contract without naming it; a manual or
+  // event story runtime provides no contract, so it never replaces a default
+  // narrator or competes for the turn's story. No other runtime provides it.
+  if (
+    m.outputContract === STORY_OUTPUT_CONTRACT &&
+    (m.visibility ?? "system") !== "story" &&
+    !m.presentation
+  )
+    add(
+      at("outputContract"),
+      `only a runtime with ${name("visibility")} 'story' provides ${STORY_OUTPUT_CONTRACT}; make it a story runtime or remove ${name("outputContract")}`,
+      "runtime",
+    );
+  if (m.visibility === "story" && m.outputContract !== undefined) {
+    const triggerType = m.subagentOnly ? "manual" : (m.trigger?.type ?? "auto");
+    if (triggerType !== "auto")
+      add(
+        at("outputContract"),
+        `a ${triggerType} story runtime provides no output contract; only an automatically scheduled story runtime provides ${STORY_OUTPUT_CONTRACT}. Remove ${name("outputContract")}`,
+        "runtime",
+      );
+    else if (m.outputContract !== STORY_OUTPUT_CONTRACT)
+      add(
+        at("outputContract"),
+        `a story runtime provides ${STORY_OUTPUT_CONTRACT}, the story shape the kernel owns; remove ${name("outputContract")}`,
+        "runtime",
+      );
+  }
+
   if (m.defaultProvider && !m.outputContract)
     add(
       at("defaultProvider"),
@@ -617,8 +651,14 @@ export function runtimeRuleIssues(
   if (m.runtimeType === "function" && !m.handler?.trim())
     add(at("handler"), `${name("handler")} is required for a function runtime`);
 
-  // recordAs is only meaningful with a schema validating the recorded value.
-  if (m.output?.recordAs !== undefined && m.output.schema === undefined)
+  // recordAs is only meaningful with a schema validating the recorded value;
+  // a framework contract the runtime provides supplies one (not to a
+  // function story runtime, whose return value is normalized afterwards).
+  if (
+    m.output?.recordAs !== undefined &&
+    m.output.schema === undefined &&
+    defaultOutputSchemaContract(m) === undefined
+  )
     add(
       at("output", "schema"),
       `${name("output", "schema")} is required when ${name("output", "recordAs")} is declared`,

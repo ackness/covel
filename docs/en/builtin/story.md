@@ -13,7 +13,7 @@ This page explains how the story is written, how you get suggestions after it, a
 
 ## Pick a way to tell the story
 
-`narrator` and `chat-mode-narrator` do the same job: they write the next part of the story based on your action. They cannot be on at the same time. Pick one.
+`narrator` and `chat-mode-narrator` do the same job: they write the next part of the story based on your action. A session has one storytelling plugin, so they cannot be on at the same time. Pick one.
 
 |                 | Storyteller (`narrator`)                                      | Chat Storyteller (`chat-mode-narrator`)                                  |
 | --------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |

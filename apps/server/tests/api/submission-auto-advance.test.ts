@@ -68,7 +68,10 @@ describe.each([
           replace: {
             result: {
               ...(payload as { result: RuntimeResult }).result,
-              output: { narrativeOutput: " " },
+              output: {
+                segments: [{ kind: "narration", text: " " }],
+                narrativeOutput: " ",
+              },
             },
           },
         }),
@@ -130,7 +133,12 @@ describe.each([
                 id: "submission",
                 name: "submit-output",
                 arguments: JSON.stringify({
-                  narrativeOutput: mode === "invalid" ? " " : "The gate opens.",
+                  segments: [
+                    {
+                      kind: "narration",
+                      text: mode === "invalid" ? " " : "The gate opens.",
+                    },
+                  ],
                   yield: "continue",
                 }),
               },

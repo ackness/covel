@@ -245,8 +245,11 @@ export interface FinalizeExecutionOutcome {
     readonly messageId: string;
     readonly count: number;
   }[];
-  /** Internal provenance receipt; only committed top-level narrative messages. */
-  readonly topLevelNarrativeMessageIds?: readonly string[];
+  /**
+   * Internal provenance receipt: the committed story messages that speak for
+   * the turn (`turnStoryCandidates`). Auto-advance follows the one there is.
+   */
+  readonly turnStoryMessageIds?: readonly string[];
   readonly status: "committed" | "failed";
   /** SessionEvents from committed proposals, flushed only on success. */
   readonly events: readonly SessionEvent[];

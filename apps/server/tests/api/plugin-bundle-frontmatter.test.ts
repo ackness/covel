@@ -35,6 +35,22 @@ describe("installation uses the shared manifest readers", () => {
     },
   );
 
+  it("refuses a second automatic story runtime, as loading leaves it out", () => {
+    const story = (id: string) =>
+      entry(
+        `runtimes/${id}/RUNTIME.md`,
+        `---\ndescription: Teller ${id}\nschedule: { stage: narrative }\nio: { visibility: story }\n---\nTell the story.\n`,
+      );
+    expect(() =>
+      validatePluginBundle([...root, story("one")], new Set()),
+    ).not.toThrow();
+    expect(() =>
+      validatePluginBundle([...root, story("two"), story("one")], new Set()),
+    ).toThrow(
+      "probe/two is a second automatically scheduled story runtime in this package, and probe/one already provides narrative-engine@2",
+    );
+  });
+
   it("allows shared code outside runtimes/", () => {
     expect(() =>
       validatePluginBundle(

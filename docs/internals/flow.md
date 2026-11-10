@@ -215,6 +215,7 @@ stateDiagram-v2
   - 玩家在界面上重试或放弃一个准备 runtime。
   - 执行记录。`turn_results` 和各 runtime 的输出在提交之前写入，`turn_results` 先记为 `pending`，提交之后再结算成 `committed` 或 `failed`。
 - `turn.suspended` 只在提交之后发出。
+- 每条已提交的故事消息在 `metadata.storySource` 保存内核回执：执行、run、插件和 runtime 的 ID，以及 `scope: top-level | nested`。延后呈现和选择器重试都读取这份持久身份，挂起释放后也一样；不会按 runtime ID 或缺失回执推断顶层身份。
 - 保存挂起记录时，同一个 runtime 还在等待的旧挂起项在同一个事务里作废。恢复的提交事务先核对挂起时记下的记录内容，有变化就什么都不写。
 - 恢复的 runtime 可以再次挂起。这次提交先把旧挂起项标为已处理，再保存新的；新挂起项接着同一次执行，不算放弃旧的。规则见[再次挂起](../reference/api.md#再次挂起)。
 - function 挂起时，成功的递归子调用及其所有后代随 continuation 保存。它们的计算结果保持成功，领域写入、日志、trigger 和输出导出暂不提交；最后一次恢复成功时按子先父后的顺序提交同一个原子单元，不重跑保存的 handler 或 Hook。再次挂起只转移保存的工作。
@@ -332,7 +333,7 @@ flowchart TB
 - 明确排除对 core 插件也有效。
 - 缺少依赖时，先选唯一的普通提供者，再考虑唯一的默认提供者。
 - 玩家明确换掉默认提供者，这一步在冲突检测之前处理。
-- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single），这个组合会被拒绝。
+- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single）或框架契约（`narrative-engine@2`），这个组合会被拒绝。写在 `conflicts` 里的单提供者框架契约被忽略。
 - 普通的输出契约可以有多个提供者，消费者用 `cardinality: one | all` 说明自己要一个还是全部。
 - 启用和停用之后的明确选择保存在 `session.metadata.pluginSelection`。推荐列表本身不会自动启用插件。
 

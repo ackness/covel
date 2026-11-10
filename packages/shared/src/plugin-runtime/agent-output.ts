@@ -1,3 +1,4 @@
+import { storyOutputJsonSchema } from "@covel/plugin-handlers-utils";
 import type { RuntimeManifest } from "../types/plugin.js";
 import type { LoadedRuntime } from "./loaded-runtime.js";
 
@@ -89,14 +90,9 @@ function freezeJson<T>(value: T): T {
   return value;
 }
 
-const storySchema = {
-  type: "object",
-  properties: {
-    narrativeOutput: { type: "string", pattern: "\\S" },
-    yield: { type: "string", enum: ["user", "continue"] },
-  },
-  required: ["narrativeOutput"],
-};
+// A story agent with no declared schema submits the story shape every story
+// runtime returns: segments, optional cues and `yield`.
+const storySchema = storyOutputJsonSchema();
 const systemSchema = {
   type: "object",
   properties: {

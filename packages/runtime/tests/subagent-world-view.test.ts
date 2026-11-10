@@ -9,7 +9,12 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { submitted, toolCall, latch } from "./_helpers/agent-loop-fixture.js";
+import {
+  storySubmitted,
+  submitted,
+  toolCall,
+  latch,
+} from "./_helpers/agent-loop-fixture.js";
 import {
   fixture,
   fn,
@@ -899,7 +904,7 @@ describe("sub-agent world snapshots", () => {
             generate: async (request) => {
               if (request.tools?.some((t) => t.name === "delegate-batch"))
                 return request.messages.some((m) => m.role === "tool")
-                  ? submitted("The story continues.")
+                  ? storySubmitted("The story continues.")
                   : toolCall("delegate-batch", {
                       requests: [{ target, brief: "Constant safe brief" }],
                     });

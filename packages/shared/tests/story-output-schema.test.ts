@@ -1,17 +1,12 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { storyOutputJsonSchema, storyOutputSchema } from "../src/index.js";
+import {
+  frameworkContracts,
+  frameworkContractSchemas,
+  isSingleProviderContract,
+} from "../src/framework-contracts.js";
 
-const pluginsRoot = path.resolve(import.meta.dirname, "../../../plugins");
-const contractFile = (pluginId: string) =>
-  JSON.parse(
-    readFileSync(
-      path.join(pluginsRoot, pluginId, "schemas/narrative-engine.schema.json"),
-      "utf8",
-    ),
-  ) as Record<string, unknown>;
-const withoutIdentity = (schema: Record<string, unknown>) => {
+const withoutIdentity = (schema: Readonly<Record<string, unknown>>) => {
   const { $id: _id, title: _title, ...rest } = schema;
   return rest;
 };
@@ -48,22 +43,20 @@ describe("story output schema", () => {
     expect(properties).not.toHaveProperty("narrativeOutput");
   });
 
-  it.each(["narrator", "chat-mode-narrator"])(
-    "the %s contract file equals the schema apart from $id and title",
-    (pluginId) => {
-      const file = contractFile(pluginId);
-      expect(file.$id).toBe("contract:narrative-engine@2");
-      expect(withoutIdentity(file)).toEqual(storyOutputJsonSchema());
-    },
-  );
+  it("is the schema of the framework-owned story contract", () => {
+    const schema = frameworkContractSchemas["narrative-engine@2"]!;
+    expect(schema.$id).toBe("contract:narrative-engine@2");
+    expect(withoutIdentity(schema)).toEqual(storyOutputJsonSchema());
+    expect(frameworkContracts["narrative-engine@2"]).toMatchObject({
+      providers: "single",
+      kernel: true,
+    });
+  });
 
-  it("notices a property added to a contract file", () => {
-    const file = contractFile("narrator");
-    const properties = file.properties as Record<string, unknown>;
-    const changed = {
-      ...file,
-      properties: { ...properties, extra: { type: "string" } },
-    };
-    expect(withoutIdentity(changed)).not.toEqual(storyOutputJsonSchema());
+  it("admits one story provider per session and many character actors", () => {
+    expect(isSingleProviderContract("narrative-engine@2")).toBe(true);
+    expect(isSingleProviderContract("character-actor@1")).toBe(false);
+    expect(isSingleProviderContract("graph-rag@1")).toBe(false);
+    expect(isSingleProviderContract("toString")).toBe(false);
   });
 });

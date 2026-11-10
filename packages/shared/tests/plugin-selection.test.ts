@@ -225,6 +225,186 @@ describe("session plugin contract resolution", () => {
     expect(plan.active).toEqual(["b"]);
     expect(plan.rejected[0]?.code).toBe("single-provider-conflict");
   });
+  it("admits one story provider per session without a written conflict", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["chat", "probe"],
+      plugins: [
+        p("chat", { provides: ["narrative-engine@2"] }),
+        p("probe", { provides: ["narrative-engine@2"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["chat"]);
+    expect(plan.rejected).toEqual([
+      {
+        pluginId: "probe",
+        code: "single-provider-conflict",
+        reason:
+          "narrative-engine@2 admits one provider per session and chat already provides it",
+        candidates: ["chat"],
+      },
+    ]);
+  });
+  it("lets a requested story provider replace the default one", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["chat"],
+      plugins: [
+        p("narrator", {
+          kind: "core",
+          provides: [{ contract: "narrative-engine@2", default: true }],
+        }),
+        p("chat", { provides: ["narrative-engine@2"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["chat"]);
+  });
+  it.each([
+    [
+      "conflicts with an accepted package",
+      p("chat", {
+        provides: ["narrative-engine@2"],
+        eventTopics: ["mood.set"],
+      }),
+      "event-topic-conflict",
+    ],
+    [
+      "loses the provider it requires",
+      p("chat", { provides: ["narrative-engine@2"], requires: ["memory@1"] }),
+      "missing-provider",
+    ],
+  ])(
+    "keeps the default story provider when its replacement %s",
+    (_name, chat, code) => {
+      const plan = resolveSessionPlugins({
+        requested: ["mood", "chat"],
+        plugins: [
+          p("narrator", {
+            kind: "core",
+            provides: [{ contract: "narrative-engine@2", default: true }],
+          }),
+          p("mood", { eventTopics: ["mood.set"] }),
+          // Joins as chat's dependency, then loses its topic to mood.
+          p("memory", { provides: ["memory@1"], eventTopics: ["mood.set"] }),
+          chat,
+        ],
+      });
+      expect(plan.active).toEqual(["mood", "narrator"]);
+      expect(plan.rejected.find((entry) => entry.pluginId === "chat")).toEqual(
+        expect.objectContaining({ code }),
+      );
+      expect(plan.rejected.some((entry) => entry.pluginId === "narrator")).toBe(
+        false,
+      );
+    },
+  );
+  it("ignores a written conflict on a single-provider framework contract", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["reader", "narrator"],
+      plugins: [
+        p("reader", { conflicts: ["narrative-engine@2"] }),
+        p("narrator", { provides: ["narrative-engine@2"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["reader", "narrator"]);
+    expect(plan.rejected).toEqual([]);
+  });
+  it.each([
+    ["story-memory", "fallback-story", "replacement-memory"],
+    ["fallback-story", "story-memory", "replacement-memory"],
+    ["replacement-memory", "fallback-story", "story-memory"],
+  ])("settles overlapping default replacements in order %j", (...requested) => {
+    const plugins = [
+      p("story-memory", {
+        provides: [
+          "narrative-engine@2",
+          { contract: "memory@1", default: true },
+        ],
+      }),
+      p("fallback-story", {
+        provides: [{ contract: "narrative-engine@2", default: true }],
+        eventTopics: ["mood.set"],
+      }),
+      p("replacement-memory", {
+        provides: ["memory@1"],
+        requires: ["narrative-engine@2"],
+        eventTopics: ["mood.set"],
+      }),
+      p("reader", { requires: ["memory@1"] }),
+    ];
+    for (const fixed of [false, true]) {
+      const plan = resolveSessionPlugins({
+        requested: [...requested, "reader"],
+        plugins,
+        fixed,
+        requiredContracts: ["narrative-engine@2"],
+      });
+      expect(plan.active).toEqual(["story-memory", "reader"]);
+      expect(plan.unmet).toEqual([]);
+      expect(plan.rejected).toEqual([
+        expect.objectContaining({
+          pluginId: "replacement-memory",
+          code: "missing-provider",
+          contract: "narrative-engine@2",
+        }),
+        expect.objectContaining({
+          pluginId: "fallback-story",
+          code: "default-replaced",
+        }),
+      ]);
+    }
+  });
+  it("settles packages that each replace a default contract of the other", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["story-memory", "memory-story"],
+      plugins: [
+        p("story-memory", {
+          provides: [
+            "narrative-engine@2",
+            { contract: "memory@1", default: true },
+          ],
+        }),
+        p("memory-story", {
+          provides: [
+            "memory@1",
+            { contract: "narrative-engine@2", default: true },
+          ],
+        }),
+      ],
+    });
+    expect(plan.active).toEqual(["story-memory"]);
+    expect(plan.rejected[0]).toMatchObject({
+      pluginId: "memory-story",
+      code: "default-replaced",
+    });
+  });
+  it.each(["narrative-engine@2", "story@1"])(
+    "settles a replacement chain before removing the default %s provider",
+    (contract) => {
+      const plan = resolveSessionPlugins({
+        requested: ["default-story", "story-memory", "memory-art", "art"],
+        plugins: [
+          p("default-story", { provides: [{ contract, default: true }] }),
+          p("story-memory", {
+            provides: [contract, { contract: "memory@1", default: true }],
+          }),
+          p("memory-art", {
+            provides: ["memory@1", { contract: "art@1", default: true }],
+          }),
+          p("art", { provides: ["art@1"] }),
+        ],
+      });
+      expect(plan.active).toEqual(["story-memory", "art"]);
+      expect(plan.rejected).toEqual([
+        expect.objectContaining({
+          pluginId: "memory-art",
+          code: "default-replaced",
+        }),
+        expect.objectContaining({
+          pluginId: "default-story",
+          code: "default-replaced",
+        }),
+      ]);
+    },
+  );
   it("keeps one declarer of an event topic and names both plugins", () => {
     const plugins = [
       p("stage", { eventTopics: ["scene.set", "stage.direction"] }),

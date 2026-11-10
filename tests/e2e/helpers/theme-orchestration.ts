@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHookPipeline } from "../../../packages/runtime/src/index.js";
@@ -31,19 +31,10 @@ export async function startThemeOrchestrationHost() {
   await mkdir(provider);
   for (const id of ["story", "secret"])
     await mkdir(join(plugin, "runtimes", id), { recursive: true });
-  await cp(
-    resolve(
-      import.meta.dirname,
-      "../../../plugins/narrator/schemas/narrative-engine.schema.json",
-    ),
-    join(plugin, "narrative-engine.schema.json"),
-  );
   await writeFile(
     join(plugin, "PLUGIN.md"),
     `---
 description: Scripted story with private planning and a write operation
-contracts:
-  narrative-engine@2: { schema: ./narrative-engine.schema.json }
 ---
 `,
   );
@@ -78,7 +69,7 @@ contributes:
     `---
 description: Public story with one private actor and one operation
 schedule: { stage: narrative }
-io: { visibility: story, output: { contract: narrative-engine@2, schema: "contract:narrative-engine@2" } }
+io: { visibility: story }
 agent:
   tools:
     builtin: [delegate]
@@ -229,6 +220,8 @@ Private theme planning.
     const host = await startStageRenderHost({
       plugins: ["character-agent"],
       fixturePlugins: [sandboxThemeFixture, plugin, provider],
+      // The fixture's own story runtime is the session's one narrative engine.
+      storyProbe: false,
       llmAdapter,
       perRequestMiddleware: [
         async (c, next) => {
@@ -237,11 +230,6 @@ Private theme planning.
         },
       ],
     });
-    const disabled = await host.app.request(
-      `/api/sessions/${host.sessionId}/plugins/story-probe`,
-      { method: "DELETE" },
-    );
-    if (!disabled.ok) throw new Error(await disabled.text());
     return {
       host,
       calls,

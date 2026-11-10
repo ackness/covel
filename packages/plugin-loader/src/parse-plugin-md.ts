@@ -15,6 +15,7 @@ import {
   resolveI18nText,
   STORY_OUTPUT_CONTRACT,
 } from "@covel/shared";
+import { providesStoryContract } from "@covel/shared/contracts";
 import type { PluginManifest, PluginManifestInput } from "@covel/shared";
 import type {
   DisabledRuntime,
@@ -179,8 +180,22 @@ function disabledRuntime(
   issues: readonly ManifestIssue[],
   runtime: unknown,
 ): DisabledRuntime {
-  const io = (runtime as { io?: { output?: { contract?: unknown } } })?.io;
-  const contract = io?.output?.contract;
+  const raw = runtime as
+    | {
+        io?: { output?: { contract?: unknown }; visibility?: unknown };
+        schedule?: { trigger?: { type?: unknown }; subagentOnly?: unknown };
+      }
+    | undefined;
+  const io = raw?.io;
+  const contract =
+    io?.output?.contract ??
+    (providesStoryContract({
+      visibility: io?.visibility,
+      triggerType: raw?.schedule?.trigger?.type,
+      subagentOnly: raw?.schedule?.subagentOnly,
+    })
+      ? STORY_OUTPUT_CONTRACT
+      : undefined);
   return {
     sourcePath: filePath,
     message: issues

@@ -158,7 +158,7 @@ describe("function and guard stories", () => {
       };
       const value = structured
         ? { ...written, cues: { present: ["阿雅"], scene: "旧港" } }
-        : { narrativeOutput: "雨停了。\n\n「走吧。」" };
+        : { segments: written.segments };
       const result = (
         await runTurnPipeline(turn, [agent], {
           store: createMemoryStore(),
@@ -191,9 +191,9 @@ describe("function and guard stories", () => {
       expect(result?.output).toMatchObject({
         narrativeOutput: "雨停了。\n\n「走吧。」",
       });
+      expect(result?.output).toMatchObject({ segments: written.segments });
       if (structured)
         expect(result?.output).toMatchObject({
-          segments: written.segments,
           cues: { present: ["阿雅"], scene: "旧港" },
         });
     },
