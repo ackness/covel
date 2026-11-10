@@ -301,10 +301,4 @@ export interface IsolatedRuntime {
 export interface CommitIsolation {
   /** Top-level runtimes of this execution whose writes were dropped. */
   readonly droppedRuntimeIds: ReadonlySet<string>;
-  /**
-   * Story messages this execution's nested runs wrote. Deferred
-   * presentation leaves them out when it reads the turn's story, as the
-   * commit does.
-   */
-  readonly nestedStoryMessageIds?: ReadonlySet<string>;
 }

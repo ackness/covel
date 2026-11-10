@@ -569,7 +569,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 有几个契约的 schema 由框架持有：`narrative-engine@2`（故事输出，内核自己读取）和 `character-actor@1`（[角色委托](#character-orchestration)）。包照常提供或读取它们，但不在根 `contracts` 里声明 schema：加载器直接用框架的 schema。写了一份相同的 schema，`pnpm validate:plugin` 警告可以删掉；写了不同的 schema，包被拒绝（`framework-owned and cannot be shadowed`）。提供框架契约的 runtime 不写 `io.output.schema` 时，框架 schema 就是它的输出 schema，所以 `recordAs` 也不用另写 schema。function 故事 runtime 例外：内核在 handler 返回之后才把返回值（包括只有 `narrativeOutput` 的返回值）整理成故事形状，所以它没有默认输出 schema，用 `recordAs` 时仍要写 `io.output.schema`。
 
-`narrative-engine@2` 每局只有一个提供者包。解析器像对待只允许一个提供者的扩展点那样互斥两个提供者（`single-provider-conflict`）：两个非默认提供者之间，请求或确认顺序靠前的那个保留。玩家明确选中的替代者照常换掉默认叙事器，但只在替代者真的被接受之后；它因冲突或缺少依赖落选时，默认叙事器照常运行。提供者不用写 `conflicts: [narrative-engine@2]`；写在任何包里都被忽略，`pnpm validate:plugin` 警告可以删掉。`character-actor@1` 可以有多个提供者。
+`narrative-engine@2` 每局只有一个提供者包。解析器像对待只允许一个提供者的扩展点那样互斥两个提供者（`single-provider-conflict`）：两个非默认提供者之间，请求或确认顺序靠前的那个保留。玩家明确选中的替代者照常换掉默认叙事器，但要等冲突和依赖选择稳定之后；替代者在选择中失去所需提供者时，解析器会重新考虑默认提供者，再确认最终组合。提供者不用写 `conflicts: [narrative-engine@2]`；写在任何包里都被忽略，`pnpm validate:plugin` 警告可以删掉。`character-actor@1` 可以有多个提供者。
 
 #### 契约在哪里被校验
 
@@ -1540,7 +1540,7 @@ runtime:
 
 ### 输入与写入
 
-只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。故事和[自动推进](#故事请求自动推进)读取的是同一条：自动调度的故事 runtime 成功时用它的故事；它没有成功时，本次执行恰好一条成功的顶层公开故事才算，没有或有多条时输入缺席。递归调用写的故事不算。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
+只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。故事和[自动推进](#故事请求自动推进)读取的是同一条：自动调度的故事 runtime 成功时用它的故事；它没有成功时，本次执行恰好一条成功的顶层公开故事才算，没有或有多条时输入缺席。递归调用写的故事不算，挂起回合释放呈现作业或重试失败的选择器时也一样。同一 runtime 的每次调用分别保留身份，嵌套调用不会挤掉它的顶层故事。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
 
 零预算函数在故事提交前读取公开候选；候选故事未提交时，其呈现写入也不会保留。detached 呈现读取 `PreStateCommit` 改写之后实际保存的故事，以及该次提交接受的本插件数据。作业只保存这一份版本化快照，不附带原始上游结果、玩家消息、行动或表单。快照总计最多 256 KiB，每个 namespace 最多 50 行，角色身份最多 100 个；超限整份拒绝，内联读取也一样。
 

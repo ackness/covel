@@ -141,7 +141,6 @@ export async function finalizeExecution(
     const operationFailureMessages: { messageId: string; count: number }[] = [];
     let committedEvents: readonly SessionEvent[] = [];
     const topLevelStories = new Map<string, RuntimeManifest>();
-    const nestedStoryMessageIds = new Set<string>();
     const isolatedFailures: FailedProposal[] = [];
     // Each unit is a top-level result with the results nested under it; it
     // commits or drops as one. Dropped unit -> why its writes were dropped.
@@ -164,7 +163,6 @@ export async function finalizeExecution(
         isolatedFailures,
         operationFailureMessages,
         topLevelStories,
-        nestedStoryMessageIds,
         exportDecls,
         shouldWriteClock,
       };

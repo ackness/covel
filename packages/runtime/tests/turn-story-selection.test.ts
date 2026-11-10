@@ -48,14 +48,13 @@ async function runAndCommit(
   );
   let jobs: readonly DeferredRuntimeJob[] = [];
   const outcome = await f.commit(execution, {
-    extraInTx: async (tx, isolation) => {
+    extraInTx: async (tx) => {
       jobs = await finalizePresentationJobs(
         tx,
         "session",
         execution.result.deferredRuntimeJobs ?? [],
         runtimes,
         true,
-        isolation.nestedStoryMessageIds,
       );
     },
   });

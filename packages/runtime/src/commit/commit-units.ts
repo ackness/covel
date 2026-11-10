@@ -151,8 +151,6 @@ export interface UnitCommitContext extends PreparedCommit {
   readonly operationFailureMessages: { messageId: string; count: number }[];
   /** Public story messages top-level runs wrote, with each one's runtime. */
   readonly topLevelStories: Map<string, RuntimeManifest>;
-  /** Public story messages nested runs wrote; their caller speaks for them. */
-  readonly nestedStoryMessageIds: Set<string>;
   readonly tx: StoreTransaction;
   /** Events of the committed proposals, in commit order. */
   readonly events: SessionEvent[];
@@ -208,6 +206,7 @@ async function commitResult(
   result: FinalizableResult,
   sink: StoreTransaction,
   defer: DeferPostCommit,
+  scope: "top-level" | "nested",
 ): Promise<readonly SessionEvent[]> {
   const { args, dimensions } = ctx;
   const { sessionId } = args;
@@ -270,13 +269,16 @@ async function commitResult(
   const failed = [...failedProposals];
   const commitBatch = async (batch: readonly Proposal[]): Promise<void> => {
     if (batch.length === 0) return;
-    const out = await commitPreparedProposals(
-      batch,
-      sink,
-      sessionId,
-      result,
-      ctx.options.forResult(result, defer),
-    );
+    const out = await commitPreparedProposals(batch, sink, sessionId, result, {
+      ...ctx.options.forResult(result, defer),
+      storySource: {
+        executionId: args.executionContext.executionId,
+        runId: result.runId,
+        pluginId: result.pluginId,
+        runtimeId: result.runtimeId,
+        scope,
+      },
+    });
     committed.push(...out.events);
     failed.push(...out.failedProposals);
   };
@@ -316,12 +318,18 @@ async function commitUnit(
   sink: StoreTransaction,
   defer: DeferPostCommit,
 ): Promise<readonly SessionEvent[]> {
-  const { args, narrativeOwners, topLevelStories, nestedStoryMessageIds } = ctx;
+  const { args, narrativeOwners, topLevelStories } = ctx;
   const { runtimes } = args;
   const committed: SessionEvent[] = [];
   for (const member of unit.members) {
     args.signal?.throwIfAborted();
-    const memberEvents = await commitResult(ctx, member, sink, defer);
+    const memberEvents = await commitResult(
+      ctx,
+      member,
+      sink,
+      defer,
+      member === unit.root ? "top-level" : "nested",
+    );
     committed.push(...memberEvents);
     const manifest = runtimes.find(
       (runtime) =>
@@ -340,7 +348,6 @@ async function commitUnit(
         // presentation); nested story output belongs to its caller.
         if (member === unit.root)
           topLevelStories.set(event.payload.messageId, manifest);
-        else nestedStoryMessageIds.add(event.payload.messageId);
       }
     }
   }

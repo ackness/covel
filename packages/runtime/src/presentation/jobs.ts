@@ -19,13 +19,13 @@ import {
   PresentationUnavailable,
 } from "./projection.js";
 import { turnStoryCandidates } from "./turn-story.js";
+import { storyMessageSourceSchema } from "../commit/commit-narrative.js";
 
 /**
  * The turn's story messages, decided by {@link turnStoryCandidates} as the
  * commit decides them; presentation reads the story only when exactly one
- * remains. `nested` names the story messages that nested runs of the
- * committing execution wrote: their caller speaks for them. A job read later
- * (a retry, a released job) has no such list.
+ * remains. The persisted kernel receipt distinguishes top-level and nested
+ * calls even after a suspension, release or retry has lost the live results.
  */
 function turnStoryMessages<
   M extends { readonly id: string; readonly metadata?: unknown },
@@ -33,22 +33,24 @@ function turnStoryMessages<
   messages: readonly M[],
   runtimes: readonly RuntimeManifest[],
   turnId: string,
-  nested?: ReadonlySet<string>,
 ): M[] {
-  return turnStoryCandidates(
-    messages.filter((message) => {
-      const metadata = message.metadata as Record<string, unknown> | undefined;
-      return (
-        metadata?.turnId === turnId &&
-        metadata.kind === "story" &&
-        !nested?.has(message.id)
-      );
-    }),
-    (message) => {
-      const runtimeId = (message.metadata as Record<string, unknown>).runtimeId;
-      return runtimes.find((runtime) => runtime.name === runtimeId);
-    },
-  );
+  const candidates = messages.flatMap((message) => {
+    const metadata = message.metadata as Record<string, unknown> | undefined;
+    const source = storyMessageSourceSchema.safeParse(metadata?.storySource);
+    return source.success &&
+      metadata?.turnId === turnId &&
+      metadata.kind === "story" &&
+      source.data.scope === "top-level"
+      ? [{ message, source: source.data }]
+      : [];
+  });
+  return turnStoryCandidates(candidates, ({ source }) =>
+    runtimes.find(
+      (runtime) =>
+        runtime.name === source.runtimeId &&
+        runtime.pluginId === source.pluginId,
+    ),
+  ).map(({ message }) => message);
 }
 
 /** Recover an inline selector from persisted public story, never retry seeds. */
@@ -174,8 +176,6 @@ export async function finalizePresentationJobs(
   jobs: readonly DeferredRuntimeJob[],
   runtimes: readonly RuntimeManifest[],
   settled = false,
-  /** Story messages the committing execution's nested runs wrote. */
-  nestedStoryMessageIds?: ReadonlySet<string>,
 ): Promise<DeferredRuntimeJob[]> {
   const finalized: DeferredRuntimeJob[] = [];
   const skipped = async (
@@ -261,7 +261,6 @@ export async function finalizePresentationJobs(
       await tx.listMessages(sessionId),
       runtimes,
       job.sourceTurnId,
-      nestedStoryMessageIds,
     );
     // An absent/rejected/ambiguous source never releases paid work.
     const message = messages.length === 1 ? messages[0] : undefined;

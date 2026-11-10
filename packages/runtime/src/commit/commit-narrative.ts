@@ -11,6 +11,17 @@ import {
 import { makeEvent } from "../session/session-kernel-helpers.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
+import { z } from "zod";
+
+/** Kernel receipt: a runtime may tell stories both nested and at top level. */
+export const storyMessageSourceSchema = z.object({
+  executionId: z.string(),
+  runId: z.string(),
+  pluginId: z.string(),
+  runtimeId: z.string(),
+  scope: z.enum(["top-level", "nested"]),
+});
+export type StoryMessageSource = z.infer<typeof storyMessageSourceSchema>;
 
 type StoryCharacter = {
   readonly id: string;
@@ -88,6 +99,7 @@ function resolveStory(
 
 export function createNarrativeCommitHandlers(
   store: KernelStore,
+  source?: StoryMessageSource,
 ): Pick<CommitHandlerMap, "narrative.append"> {
   async function commitNarrative(
     proposal: ProposalFor<"narrative.append">,
@@ -113,6 +125,7 @@ export function createNarrativeCommitHandlers(
         kind,
         ...(story
           ? {
+              ...(source ? { storySource: source } : {}),
               segments: story.segments,
               presentCharacterIds: story.presentCharacterIds,
               ...(story.cues ? { cues: story.cues } : {}),
