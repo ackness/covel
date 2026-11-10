@@ -136,6 +136,8 @@ Getting ready groups the plugins by whether they call a model, that is by the de
 
 ### contributes fields
 
+`contributes` is a security artifact, not documentation: the capability snapshot, approval-free grants and declarative admission all read it without executing code, so the manifest stays the single source of truth and is never generated from the entry at install or load time. After changing entry code, authors sync the manifest to the registrations with `pnpm plugin:extract <plugin directory>`; `pnpm check:manifests` enforces it for bundled plugins, and the load-time check in both directions (its errors name this command) is the backstop.
+
 <!-- prettier-ignore -->
 | `contributes` field | Registration or resource it maps to |
 | --- | --- |

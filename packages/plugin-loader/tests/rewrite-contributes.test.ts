@@ -33,7 +33,12 @@ contributes:
 runtime: { agent: { history: { maxTurns: 2 } } }
 ---
 \n# Body  \n\nKeep --- and CRLF\r\nbyte-identical.\n`;
-    const extracted = { ...empty, tools: ["keep", "new"], actions: ["after"] };
+    const extracted = {
+      ...empty,
+      tools: ["keep", "new"],
+      actions: ["after"],
+      extensions: [{ point: "ui.slot@1", id: "summary", order: 10 }],
+    };
     const result = rewriteContributes(original, extracted);
     expect(result.changed).toEqual(["tools", "actions"]);
     expect(result.text).toBe(
@@ -300,13 +305,52 @@ contributes:
     expect(rewriteContributes(result.text, extracted).drift).toEqual([]);
   });
 
-  it("leaves extension and command metadata untouched", () => {
+  it("adds and drops extensions by ID, keeping the options of those that stay", () => {
+    const original = `---
+contributes:
+  extensions:
+    - { point: ui.slot@1, id: summary, slot: session.summary@1, order: 10 } # Keep
+    - prompt.segment@1/old
+  commands: [{name: open, action: open}]
+---
+`;
+    const kept = {
+      point: "ui.slot@1",
+      id: "summary",
+      slot: "session.summary@1",
+      order: 10,
+    };
+    const extracted = {
+      ...empty,
+      extensions: [kept, "prompt.segment@1/new"],
+    };
+    const result = rewriteContributes(original, extracted);
+    expect(result.changed).toEqual(["extensions"]);
+    expect(result.drift).toEqual([
+      {
+        key: "extensions",
+        added: ["prompt.segment@1/new"],
+        removed: ["prompt.segment@1/old"],
+      },
+    ]);
+    expect(result.text).toContain(
+      "{ point: ui.slot@1, id: summary, slot: session.summary@1, order: 10 } # Keep",
+    );
+    expect(result.text).toContain("commands: [{name: open, action: open}]");
+    expect(readPlainYamlFrontmatter(result.text).data.contributes).toEqual({
+      extensions: [kept, "prompt.segment@1/new"],
+      commands: [{ name: "open", action: "open" }],
+    });
+    expect(rewriteContributes(result.text, extracted).changed).toEqual([]);
+  });
+
+  it("leaves command metadata untouched", () => {
     const original =
       "---\ncontributes:\n  extensions: [ui.slot@1/summary]\n  commands: [{name: open, action: open}]\n---\n";
     expect(
       rewriteContributes(original, {
         ...empty,
-        extensions: ["prompt.segment@1/new"],
+        extensions: ["ui.slot@1/summary"],
       }).text,
     ).toBe(original);
   });

@@ -27,7 +27,7 @@
 4. 提示词定稿后新增 `PLUGIN.zh.md`（frontmatter 留空，正文写简体中文译文）。内置插件必须同时提供两种语言；之后在仓库根目录运行 `pnpm prompts:lock` 记录这一对，`pnpm check:prompts` 会在两份不同步时报错。
 5. 在 Covel 仓库根目录运行 `pnpm install`，让模板的 `workspace:*` 依赖从根 workspace 解析。
 6. 在 Covel 仓库根目录运行 `pnpm --filter @covel/plugin-{{pluginName}} lint` 和 `pnpm --filter @covel/plugin-{{pluginName}} test`。`checkJs` 通过公开 SDK 的 `PluginAPI` / `PluginToolkit` 检查入口和工具实现。
-7. 用 `pnpm validate:plugin plugins/{{pluginName}}` 做静态校验（只检查声明，不执行 entry）。`entry` 中的注册必须与 `contributes` 双向一致：未声明的注册和未实现的声明都会让插件加载失败。
+7. 每次增删 `server/index.js` 里的注册后，运行 `pnpm plugin:extract plugins/{{pluginName}}`，把 `contributes`（`tools`、`actions`、`services`、`forms`、`wires`、`hooks`、`extensions`）同步到入口；这是固定步骤，`pnpm check` 里的 `pnpm check:manifests` 会对内置插件执行 `--check`。`entry` 中的注册必须与 `contributes` 双向一致，否则插件加载失败，错误里会给出这条命令。然后用 `pnpm validate:plugin plugins/{{pluginName}}` 做静态校验（只检查声明，不执行 entry）。
 8. 用 `pnpm test:runtime -- {{pluginName}} --plugins-dir <plugins-dir> --pretty` 跑 `tests/runtime-cases.json`，验证 manifest、工具调用和 plugin-data 写入。
 9. 作为内置插件提交前运行 `pnpm check`（含 manifest、i18n 与 README 检查），并在 `docs/reference/plugins.md` 同步说明。
 
