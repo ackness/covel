@@ -11,6 +11,7 @@ import {
   makeExecutor,
   manifest,
   markTool,
+  narrationSegments,
 } from "./_helpers/agent-loop-fixture.js";
 
 const input: TurnInput = {
@@ -110,7 +111,9 @@ const shape = (events: readonly OutputDraftEvent[]) =>
 describe("story drafts in a turn", () => {
   it("shows the story as the model writes it, then accepts it", async () => {
     const { execution, events } = await run([
-      submission(JSON.stringify({ narrativeOutput: "Whole story." })),
+      submission(
+        JSON.stringify({ segments: narrationSegments("Whole story.") }),
+      ),
     ]);
     expect(execution.result.runtimeResults[0]?.status).toBe("success");
     expect(shape(events)).toEqual([
@@ -128,8 +131,14 @@ describe("story drafts in a turn", () => {
   it("retracts a rejected submission before the corrected one shows", async () => {
     const { execution, events } = await run([
       // Blank story text fails the story schema.
-      submission(JSON.stringify({ narrativeOutput: " " }), "first"),
-      submission(JSON.stringify({ narrativeOutput: "Fixed." }), "second"),
+      submission(
+        JSON.stringify({ segments: [{ kind: "narration", text: " " }] }),
+        "first",
+      ),
+      submission(
+        JSON.stringify({ segments: narrationSegments("Fixed.") }),
+        "second",
+      ),
     ]);
     expect(execution.result.runtimeResults[0]?.status).toBe("success");
     expect(shape(events)).toEqual([
@@ -146,10 +155,13 @@ describe("story drafts in a turn", () => {
     const { execution, events } = await run(
       [
         [
-          ...submission(JSON.stringify({ narrativeOutput: "Never." })).slice(
+          ...submission(
+            JSON.stringify({ segments: narrationSegments("Dusk") }),
+          ).slice(
             0,
-            // The text has arrived, its closing quote has not.
-            5,
+            // The text has arrived, its closing quote has not: nine fragments
+            // cover the 41-character JSON prefix and the four-letter text.
+            9,
           ),
           new Error("not retriable"),
         ],
@@ -161,14 +173,14 @@ describe("story drafts in a turn", () => {
     expect(shape(events).at(-1)).toMatch(/^output\.retracted /);
     expect(events[0]).toMatchObject({
       type: "output.draft",
-      payload: { partial: { text: "Never" } },
+      payload: { partial: { text: "Dusk" } },
     });
-    expect(shape(events)).not.toContain("output.accepted Never.");
+    expect(shape(events)).not.toContain("output.accepted Dusk");
   });
 
   it("shows nothing for a runtime that turned drafts off", async () => {
     const { events } = await run(
-      [submission(JSON.stringify({ narrativeOutput: "Quiet." }))],
+      [submission(JSON.stringify({ segments: narrationSegments("Quiet.") }))],
       { output: { live: "off" } },
     );
     expect(events).toEqual([]);
@@ -196,7 +208,7 @@ describe("a review that holds story drafts", () => {
     };
   }
   const story = (text: string, id: string) =>
-    submission(JSON.stringify({ narrativeOutput: text }), id);
+    submission(JSON.stringify({ segments: narrationSegments(text) }), id);
 
   it("shows the story only once the review accepts it", async () => {
     const { execution, events } = await run(

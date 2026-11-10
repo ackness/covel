@@ -22,15 +22,52 @@ import {
   type RuntimeJobTriggerEvent,
   type StagedRuntimeJobPayload,
 } from "./runtime-job-worker.js";
-import type { RuntimeJobCredentialKey } from "./runtime-job-credentials.js";
+import type {
+  JobCredentialHandoff,
+  RuntimeJobCredentialKey,
+} from "./runtime-job-credentials.js";
 import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
 
+/** A job queued in the caller's transaction, announced once it commits. */
 export interface QueuedRuntimeJob {
   readonly job: RuntimeJobRecord;
   readonly status: JobStatusRecord;
+  /** Names the job's request-scoped provider services in the hand-off. */
+  readonly credentialKey: RuntimeJobCredentialKey;
+}
+
+/** How a response or job result names the jobs a commit queued. */
+export function deferredJobRefs(
+  queued: readonly QueuedRuntimeJob[],
+): { readonly jobId: string; readonly runtimeId: string }[] {
+  return queued.map(({ job }) => ({
+    jobId: job.jobId,
+    runtimeId: job.runtimeId,
+  }));
+}
+
+async function appendQueuedStatus(
+  tx: StoreTransaction,
+  job: RuntimeJobRecord,
+  expectedSessionIncarnation: string,
+  label: string,
+): Promise<QueuedRuntimeJob> {
+  const status = makeRuntimeJobStatusRecord(job, 0);
+  if (!(await tx.appendJobStatus(status))) {
+    throw new Error(`could not append queued status for ${label} ${job.jobId}`);
+  }
+  return {
+    job,
+    status,
+    credentialKey: {
+      jobId: job.jobId,
+      sessionId: job.sessionId,
+      expectedSessionIncarnation,
+    },
+  };
 }
 
 /**
@@ -54,15 +91,8 @@ export async function enqueueDeferredRuntimeJobs(
      * the commit — for jobs released after the turn that scheduled them.
      */
     readonly skipInactive?: boolean;
-    /** Hand request-scoped provider services to the worker for this job. */
-    readonly registerCredentials?: (
-      key: {
-        readonly jobId: string;
-        readonly sessionId: string;
-        readonly expectedSessionIncarnation: string;
-      },
-      maxQueueMs: number | undefined,
-    ) => void;
+    /** Hands request-scoped provider services to each job as it is queued. */
+    readonly credentials?: Pick<JobCredentialHandoff, "register">;
   },
 ): Promise<readonly QueuedRuntimeJob[]> {
   const queued: QueuedRuntimeJob[] = [];
@@ -134,21 +164,14 @@ export async function enqueueDeferredRuntimeJobs(
       await unavailablePresentationJob(tx, args.sessionId, descriptor);
       continue;
     }
-    const status = makeRuntimeJobStatusRecord(job, 0);
-    if (!(await tx.appendJobStatus(status))) {
-      throw new Error(
-        `could not append queued status for detached runtime job ${job.jobId}`,
-      );
-    }
-    queued.push({ job, status });
-    args.registerCredentials?.(
-      {
-        jobId: job.jobId,
-        sessionId: args.sessionId,
-        expectedSessionIncarnation: jobPayload.expectedSessionIncarnation,
-      },
-      policy.maxQueueMs,
+    const queuedJob = await appendQueuedStatus(
+      tx,
+      job,
+      jobPayload.expectedSessionIncarnation,
+      "detached runtime job",
     );
+    queued.push(queuedJob);
+    args.credentials?.register(queuedJob);
   }
   return queued;
 }
@@ -178,9 +201,7 @@ export async function enqueueActivatedRuntimeJob(
     readonly jobId?: string;
     readonly turnId?: string;
   },
-): Promise<
-  QueuedRuntimeJob & { readonly credentialKey: RuntimeJobCredentialKey }
-> {
+): Promise<QueuedRuntimeJob> {
   const jobId = args.jobId ?? crypto.randomUUID();
   const jobPayload: ActivatedRuntimeJobPayload = {
     schemaVersion: 1,
@@ -213,24 +234,13 @@ export async function enqueueActivatedRuntimeJob(
     },
     payload: jobPayload,
   });
-  const status = makeRuntimeJobStatusRecord(job, 0);
-  if (!(await tx.appendJobStatus(status))) {
-    throw new Error(`could not append queued status for runtime job ${jobId}`);
-  }
-  return {
+  return appendQueuedStatus(
+    tx,
     job,
-    status,
-    credentialKey: {
-      jobId,
-      sessionId: args.sessionId,
-      expectedSessionIncarnation: jobPayload.expectedSessionIncarnation,
-    },
-  };
+    jobPayload.expectedSessionIncarnation,
+    "runtime job",
+  );
 }
-
-export type QueuedActivatedRuntimeJob = Awaited<
-  ReturnType<typeof enqueueActivatedRuntimeJob>
->;
 
 /**
  * Queue the background followers an execution emitted, inside its commit
@@ -252,11 +262,11 @@ export async function enqueueEventFollowers(
     readonly locale: string | undefined;
     readonly userSettings?: ActivatedRuntimeJobPayload["userSettings"];
   },
-): Promise<QueuedActivatedRuntimeJob[]> {
+): Promise<QueuedRuntimeJob[]> {
   if (args.followers.length === 0) return [];
   const session = await tx.getSession(args.sessionId);
   if (!session) throw new Error(`Session not found: ${args.sessionId}`);
-  const queued: QueuedActivatedRuntimeJob[] = [];
+  const queued: QueuedRuntimeJob[] = [];
   for (const follower of args.followers) {
     if (
       !args.activeRuntimes.some(

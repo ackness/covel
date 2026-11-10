@@ -63,7 +63,14 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 
 CLI 把首个失败阶段的错误写入 stderr，把已收集的警告写入 stdout；有错误的包也会显示这些警告。有错误时退出码为 `1`，只有警告时为 `0`，未提供路径参数或传入不支持的选项时为 `2`。应用内可以查看其他可独立检查的错误，见[应用内校验](../reference/plugin-installation.md#应用内校验)。
 
-它不做的事：不运行入口文件、guard 和函数。所以“声明了一个工具，但代码里没有注册”它查不出来。这要靠下面两种测试。
+它不做的事：不运行入口文件、guard 和函数。所以“声明了一个工具，但代码里没有注册”它查不出来。带入口代码的插件在校验前先同步声明：
+
+```bash
+pnpm plugin:extract ~/.covel/plugins/my-plugin          # 按入口的注册改写 contributes
+pnpm plugin:extract ~/.covel/plugins/my-plugin --check  # 不写文件，有漂移时退出 1，适合 CI
+```
+
+这是改完入口后的固定步骤，不是可选项：它在你自己的机器上执行入口工厂，记录注册，不调用任何处理函数。仓库里的内置插件由 `pnpm check` 里的 `pnpm check:manifests` 强制同步；不同步时加载会失败，错误里附这条命令。详见[带本地代码的插件](./local-code.md#4-写入口文件)。
 
 执行分类可以从文件和声明静态推导，无需运行入口；CLI 不打印分类或执行检查诊断。校验通过不等于获得声明式准入证明，也不授予代码执行权限，见[声明式插件](../reference/plugin-installation.md#声明式插件)。
 
@@ -277,6 +284,7 @@ it("writes one note", async () => {
 | `MockLLM`                                                              | 假模型。记录每次调用；支持一个默认回复和一串按顺序使用的回复               |
 | `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult`           | 少写一些测试数据。`makeTurnInput` 默认带 `locale: "zh-CN"`，和真实游戏一致 |
 | `expectAssetGenerated`                                                 | 断言结果的 `effects.assetGenerations` 里有一个合法的媒体引用               |
+| `storyContextSlot(items, omitted?)` | 造一个 [`story-context@1`](../reference/plugins.md#story-context) 读者的输入槽，放进 `ctx.inputs`。条目按给出的顺序，`priority` 默认 `normal` |
 
 `makeRandom().int(min, max)` 与宿主共用参数检查，范围错误抛相同的 `RangeError`，无论游戏是否设置种子。检查规则见 [`ctx.random`](../reference/plugins.md#随机数ctxrandom)。
 

@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  CHARACTER_ACTOR_CONTRACT,
-  characterActorOutputJsonSchema,
-  storySegmentSchema,
-} from "@covel/plugin-handlers-utils";
+import { storySegmentSchema } from "@covel/plugin-handlers-utils";
 
 export const turnPolicySelectionSchema = z.strictObject({
   pluginId: z.string().min(1),
@@ -33,13 +29,6 @@ export function normalizeOrchestrationSettings(
     maxSubagentCalls: settings.maxSubagentCalls ?? 16,
   };
 }
-
-/** Schema ownership does not make a plugin provider a required kernel extension. */
-export const frameworkContractSchemas: Readonly<
-  Record<string, Readonly<Record<string, unknown>>>
-> = Object.freeze({
-  [CHARACTER_ACTOR_CONTRACT]: characterActorOutputJsonSchema(),
-});
 
 export interface DelegationSnapshot {
   readonly scopeId: string;

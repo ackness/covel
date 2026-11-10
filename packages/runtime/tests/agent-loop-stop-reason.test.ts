@@ -32,6 +32,8 @@ import {
   manifest,
   markTool,
   prose,
+  narrationSegments,
+  storySubmitted,
   submitted,
   queuedLLM,
   runLoop,
@@ -40,6 +42,9 @@ import {
   scriptedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["plug"]);
 
 async function thrownBy(run: Promise<unknown>): Promise<unknown> {
   try {
@@ -223,7 +228,7 @@ describe("the step limit (E5)", () => {
     const llm = scriptedLLM((params) =>
       params.tools?.some((tool) => tool.name !== "submit-output")
         ? toolCall("mark", { note: `n${n}` }, `tc-${n++}`, "Looking up...")
-        : submitted("The fog closes over the pier."),
+        : storySubmitted("The fog closes over the pier."),
     );
     const result = await runLoop({
       llm,
@@ -231,8 +236,8 @@ describe("the step limit (E5)", () => {
       maxSteps: 2,
     });
     expect(result.stop).toEqual({ reason: "max-steps", finalizer: true });
-    expect(result.acceptedOutput?.narrativeOutput).toBe(
-      "The fog closes over the pier.",
+    expect(result.acceptedOutput?.segments).toEqual(
+      narrationSegments("The fog closes over the pier."),
     );
     expect(llm.requests.at(-1)?.messages.at(-1)?.content).toContain(
       "submit-output",
@@ -493,7 +498,7 @@ describe("thrown exits (E8–E11)", () => {
         llm: scriptedLLM((params) =>
           params.tools?.some((tool) => tool.name !== "submit-output")
             ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-            : submitted("The fog closes over the pier."),
+            : storySubmitted("The fog closes over the pier."),
         ),
         manifest: manifest({ outputKind: "story" }),
         maxSteps: 20,

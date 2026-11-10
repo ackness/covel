@@ -41,6 +41,7 @@ import { registerSessionPluginRoutes } from "../../src/routes/api/session/plugin
 import type { SessionRouteEnv } from "../../src/routes/api/session/route-env.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createPluginServiceAdmission } from "../../src/routes/api/bootstrap/plugin-service-admission.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 const runtime: RuntimeManifest = {
   pluginId: "p",
@@ -696,15 +697,17 @@ describe("host plugin fault boundary", () => {
       },
     });
     for (const turnId of ["one", "two", "three"])
-      await f.hookPipeline.run(
-        "PreStateCommit",
-        {
-          event: "PreStateCommit",
-          sessionId: "s",
-          turnId,
-          pluginId: "innocent",
-        },
-        {},
+      await inHookScope(["p", "innocent"], () =>
+        f.hookPipeline.run(
+          "PreStateCommit",
+          {
+            event: "PreStateCommit",
+            sessionId: "s",
+            turnId,
+            pluginId: "innocent",
+          },
+          {},
+        ),
       );
     expect(f.host.latch.isLatched("s", "p")).toBe(true);
     expect(f.host.latch.isLatched("s", "innocent")).toBe(false);

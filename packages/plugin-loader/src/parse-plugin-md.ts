@@ -13,7 +13,9 @@ import {
   pluginManifestSchema,
   runtimeAuthoringManifestSchema,
   resolveI18nText,
+  STORY_OUTPUT_CONTRACT,
 } from "@covel/shared";
+import { providesStoryContract } from "@covel/shared/contracts";
 import type { PluginManifest, PluginManifestInput } from "@covel/shared";
 import type {
   DisabledRuntime,
@@ -148,13 +150,13 @@ function compileDeclaredRuntime(
   filePath: string,
 ) {
   try {
-    if (runtime.presentation && plugin.requires?.includes("narrative-engine@2"))
+    if (runtime.presentation && plugin.requires?.includes(STORY_OUTPUT_CONTRACT))
       throw Object.assign(new Error("invalid presentation requirement"), {
         issues: [
           {
             path: ["requires"],
             message:
-              "presentation story inputs must remain optional; remove narrative-engine@2 from package requires",
+              `presentation story inputs must remain optional; remove ${STORY_OUTPUT_CONTRACT} from package requires`,
           },
         ],
       });
@@ -178,8 +180,22 @@ function disabledRuntime(
   issues: readonly ManifestIssue[],
   runtime: unknown,
 ): DisabledRuntime {
-  const io = (runtime as { io?: { output?: { contract?: unknown } } })?.io;
-  const contract = io?.output?.contract;
+  const raw = runtime as
+    | {
+        io?: { output?: { contract?: unknown }; visibility?: unknown };
+        schedule?: { trigger?: { type?: unknown }; subagentOnly?: unknown };
+      }
+    | undefined;
+  const io = raw?.io;
+  const contract =
+    io?.output?.contract ??
+    (providesStoryContract({
+      visibility: io?.visibility,
+      triggerType: raw?.schedule?.trigger?.type,
+      subagentOnly: raw?.schedule?.subagentOnly,
+    })
+      ? STORY_OUTPUT_CONTRACT
+      : undefined);
   return {
     sourcePath: filePath,
     message: issues

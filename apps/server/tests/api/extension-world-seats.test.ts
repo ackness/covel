@@ -18,12 +18,13 @@ import {
 } from "@covel/shared";
 import type { DataStore, TurnMessageRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { makeSession } from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeSession } from "@covel/store/testing";
 import {
   CompactionFailureTracker,
   createBootstrapCompactorRunner,
 } from "../../src/routes/api/bootstrap/compactor.js";
 import { resolveMediaImageFlow } from "../../src/routes/api/media-image-flow.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 const AT = "2026-10-29T00:00:00.000Z";
 const SEATS: Seat[] = [
@@ -89,7 +90,12 @@ describe("extension providers outside a turn read the stored seats", () => {
     );
     try {
       await expect(
-        resolveMediaImageFlow(store, host, "session-1"),
+        resolveMediaImageFlow({
+          store,
+          host,
+          pluginRegistry: undefined,
+          sessionId: "session-1",
+        }),
       ).resolves.toMatchObject({ entryRuntimeId: "pictures" });
       expect(seen.seats).toEqual(SEATS);
       expect(seen.current).toBe("lin");
@@ -136,9 +142,47 @@ describe("extension providers outside a turn read the stored seats", () => {
       createdAt: AT,
     };
     try {
-      await runner.run("session-1", "", [message], "en-US");
+      await inHookScope([], () =>
+        runner.run("session-1", "", [message], "en-US"),
+      );
       expect(seen.seats).toEqual(SEATS);
       expect(seen.current).toBe("lin");
+    } finally {
+      await store.close();
+    }
+  });
+});
+
+describe("image-flow provider settings", () => {
+  it("reads the committing execution's settings, else the session's", async () => {
+    const store = await seededStore();
+    const host = hostFor("pictures");
+    const seen: unknown[] = [];
+    host.register(
+      "pictures",
+      { point: "media.image-flow@1", id: "flow" },
+      {
+        handler: (_input, ctx) => {
+          seen.push(ctx.getOwnSettings());
+          return { entryRuntimeId: "pictures", assetRuntimeIds: ["pictures"] };
+        },
+      },
+    );
+    try {
+      const base = {
+        store,
+        host,
+        pluginRegistry: undefined,
+        sessionId: "session-1",
+      };
+      // A commit hands over the player's resolved values.
+      await resolveMediaImageFlow({
+        ...base,
+        settings: { pictures: { style: "ink" } },
+      });
+      // The standalone route has none: no registry, so no defaults either.
+      await resolveMediaImageFlow(base);
+      expect(seen).toEqual([{ style: "ink" }, {}]);
     } finally {
       await store.close();
     }

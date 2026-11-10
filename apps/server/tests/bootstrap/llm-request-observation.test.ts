@@ -3,6 +3,7 @@ import {
   createGateway,
   createPresetRegistry,
   createProviderRegistry,
+  outboundFetch,
   type PresetConfig,
   type ProviderProtocol,
 } from "@covel/ai-provider";
@@ -17,7 +18,6 @@ import {
   streamLLMWithRetry,
 } from "../../../../packages/runtime/src/retry/llm-retry.js";
 import { buildRetryPolicy } from "../../../../packages/runtime/src/retry/retry-common.js";
-import { outboundFetch } from "../../../../packages/ai-provider/src/outbound-network.js";
 
 vi.mock("../../../../packages/ai-provider/src/outbound-network.js", () => ({
   outboundFetch: vi.fn(),

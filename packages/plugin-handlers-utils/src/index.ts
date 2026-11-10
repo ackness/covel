@@ -535,6 +535,7 @@ export type TokenEstimator = (text: string) => number;
 
 export * from "./action-schemas.js";
 export * from "./story-schemas.js";
+export * from "./story-context.js";
 export * from "./orchestration-contracts.js";
 
 export * from "./presentation.js";

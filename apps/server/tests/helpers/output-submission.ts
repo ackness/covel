@@ -18,6 +18,32 @@ export function submittedOutput(
   };
 }
 
+/** One narration segment per paragraph of `text`. */
+export function narrationSegments(text: string) {
+  return text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => ({ kind: "narration" as const, text: paragraph }));
+}
+
+/**
+ * A story submission in the story schema every story agent submits: the
+ * paragraphs of `text` as narration segments, plus `extra` fields such as
+ * `yield`. The committed `narrativeOutput` is the paragraphs joined by blank
+ * lines.
+ */
+export function submittedStory(
+  text: string,
+  extra: Record<string, unknown> = {},
+  usage?: LLMResponse["usage"],
+): LLMResponse {
+  return submittedOutput(
+    { segments: narrationSegments(text), ...extra },
+    usage,
+  );
+}
+
 /** Follow tool IDs through the actual transcript, including reused IDs. */
 export function completedBusinessOutput(
   messages: readonly LLMMessage[],

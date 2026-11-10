@@ -501,7 +501,9 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 
 - 没有返回值的 hook 表示继续。
 - 改写类 hook 失败时，之前成功的改写保留。
-- 安全守卫的异常和超时仍然按“拒绝”处理（fail-closed）。如果把所有 hook 故障都当成“继续”，就会绕过批准和提交守卫。
+- 守卫类 hook 的异常和超时按“拒绝”处理（fail-closed）。如果把所有 hook 故障都当成“继续”，就会绕过批准和提交守卫。
+- 失败绝不放过 Hook 判的那件事，所以插件没法靠弄崩别的插件的守卫（比如写一个守卫没料到的值）让写入或 runtime 通过。`PreRuntime` 跳过 runtime，`PreStateCommit` 拒绝 proposal，`PreToolUse` 拒绝调用，`ReviewAgentOutput` 让被审查的 runtime 失败；回合因此丢掉什么，由提交单元的规则决定。
+- 例外只有一种：没有故事 runtime 的插件的 `TurnStart` handler，而这次执行里排上了故事，也排上了这个插件的 runtime。它失败时，这个插件退出这次执行：它的 runtime 和子代理不运行，回合其余部分照常进行。它对整个回合的否决在这一回合不起作用，所以自己出错时必须结束整个回合的插件，要自己捕获错误并返回 `abort`。超时捕获不了，要当硬闸门用的 Hook 应当保持快速。只有 Hook 的插件、框架或故事插件的 Hook、没有故事的执行，一律 fail-closed。规则见 [Hook](../reference/hooks.md#auxiliary-hook-failures)。
 - 改写的 trace 只记录改了哪些 key 的摘要，不记录改写前后的完整提示词。
 
 **会话写入。** 会话变更、玩家操作、恢复挂起和操作 RPC，共用 `routes/api/session/locked-mutation.ts` 里的存活会话守卫。
@@ -535,7 +537,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | Write origin | CORS 只能阻止页面读取响应；“简单”的跨站请求（表单提交、`text/plain` 的 `fetch`）仍然会执行处理函数。带 `Origin` 的 `POST` / `PUT` / `PATCH` / `DELETE`，除非这个源在 CORS 白名单上，或者它的主机就是请求发往的主机（`Host`，在代理后面是 `X-Forwarded-Host`），否则在进入任何路由之前就以 `403 origin_not_allowed` 拒绝。不带 `Origin` 的请求是非浏览器客户端，放行。这不是身份验证；DNS 重绑定由上面的 Host name 检查挡住。另在 CORS 前，`/api` 和 `/api/*` 的所有方法拒绝去空格、不区分大小写的 `Origin: null`，以及嵌入目标（`iframe`、`frame`、`embed`、`object`），返回 `403 foreign_request_refused`，不带 CORS 允许头。不检查 Sec-Fetch-Site，也不限制插件资源和 frame 路由。 | `apps/server/src/middleware/origin-guard.ts`、`apps/server/src/middleware/foreign-request-guard.ts` |
 | Rate limiting | `rateLimiter()` 和 `singleFlight()`；`RATE_LIMIT_RPM` 只设置 `GET /api/events/stream` 的额度（每个 IP 每分钟，默认 60）；其余路由的额度写死在各路由里，例如媒体上传 10、`POST /api/actions` 30、读取会话状态 120（每分钟）。每个客户端地址对每条具体路径有一份额度，对每个路由模板（`/api/sessions/:id/state`）还有第二份，是前者的八倍。这样每个会话有自己的额度，而轮换路径参数会停在较大的那一份上。计数表最多保存 10,000 条，先淘汰时间窗最早的 | `apps/server/src/middleware/rate-limit.ts` |
 | Raw config files | `GET` / `PUT /api/config/raw*` 以文本形式读写 `llm.toml`（桌面模式下还有 `config.toml`）。它们共用安装守卫：托管档位要 operator token，桌面壳下要桌面令牌，生产环境要 `COVEL_INSTALL_API_ENABLED=1`。文件名是一份固定名单，从不取自请求里的路径；`keys.env` 不在名单上。文本只有被服务端自己的解析器接受之后才会写入。`llm.toml` 的解析和校验错误只给行号、列号和键名，不含 `${VAR}` 替换后的值，所以拒绝信息、日志和设置页都不会带出密钥 | `apps/server/src/routes/raw-config-api.ts` |
-| Error sanitization | 生产环境下 `app.onError` 返回 `"Internal server error"`；堆栈和路径只进 `console.error`。开发环境返回 `err.message` | `routes/api/bootstrap.ts`, `app.ts` |
+| Error sanitization | 生产环境下 `app.onError` 返回 `"Internal server error"`；堆栈和路径只进 `console.error`。开发环境返回 `err.message` | `routes/api/bootstrap/api-routes.ts`, `app.ts` |
 
 **失败响应里的错误信息。** 恢复挂起失败，以及快照和分支的意外失败，在完成必要的清理之后，都经过标准的错误分类器（`apps/server/src/api-error.ts`、`routes/api/resume.ts`、`routes/api/snapshots.ts`）。
 

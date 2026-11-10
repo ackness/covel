@@ -55,6 +55,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
 | Slot | 槽位 | In the settings UI it is called "AI role". |
 | Stop reason | 结束原因 | How an agent tool loop ended (`RuntimeResult.stop.reason`). |
+| Story context | 故事说明 | The notes a `pre-turn` runtime hands to this turn's story through `io.storyContext`; readers get them through the kernel input `story-context@1`, and the kernel ranks, deduplicates and fits them into a budget. See [the kernel input `story-context@1`](./plugins.md#story-context). |
 | Story-attached operation | 故事附带的操作 | An operation in the commit unit of the story or setup: each gets its own savepoint, and when it fails only it is dropped while the story commits. |
 | Story draft | 故事草稿 | The part of a story runtime's output written before the commit, shown for display only; not output and never stored. |
 | Story segment | 故事段落 | One part of a story output: narration, dialogue or action. Called just "segment" (段落) when the context is clear. |
@@ -177,7 +178,8 @@ See: [collections](../ship/collections.md), [plugin installation](./plugin-insta
 A versioned ID, such as `narrative-engine@2`, that says what ability a plugin provides or needs.
 
 - The root `PLUGIN.md` lists the contracts it needs and cannot coexist with in `requires` and `conflicts`, and the contracts no runtime outputs in `provides`.
-- A runtime publishes a contract with `io.output.contract`, and reads one with `from: { contract }`.
+- A runtime publishes a contract with `io.output.contract`, and reads one with `from: { contract }`. An automatically scheduled story runtime provides `narrative-engine@2` without writing it.
+- The framework owns the schema of a few contracts (`narrative-engine@2`, `character-actor@1`); packages do not declare them. `narrative-engine@2` has one provider per session.
 - The kernel finds providers by contract and never hard-codes a plugin ID. So plugins that provide the same contract can replace each other.
 - Only the current version is supported. An incompatible change gets a new ID (`@2`).
 
@@ -393,6 +395,12 @@ How an agent runtime's tool loop ended, for example `completed` (the model gave 
 It is written to `RuntimeResult.stop` and to the `stopReason` of the runtime lifecycle events. Function runtimes have no stop reason.
 
 See: [the protocol reference's stop reasons](./protocol.md#stop-reasons), [turn pipeline](../internals/flow.md).
+
+## Story context
+
+Notes for this turn's story, such as a check result, a hidden event that just fired, or the world time right now. A `pre-turn` runtime names in `io.storyContext` which value of its output is its note; a reader writes one line, `from: { kernel: story-context@1 }`, and gets all of this turn's notes. The kernel ranks them by priority and `order`, drops repeated text, and leaves out whole notes that do not fit the budget. An agent reads them in the `<story-context>` block; a function reads `ctx.inputs`.
+
+See: [Plugin reference: the kernel input `story-context@1`](./plugins.md#story-context).
 
 ## Story draft
 

@@ -5,6 +5,7 @@ import {
   INVALID_KERNEL_CONFLICT,
   kernelConflictMessage,
 } from "./extension-points/contracts.js";
+import { isSingleProviderContract } from "./framework-contracts.js";
 import type { PluginRuntimeSummary } from "./types/plugin-api.js";
 import type { PluginManifest } from "./types/plugin-manifest.js";
 
@@ -99,6 +100,14 @@ const contracts = (plugin: SessionPluginCandidate): string[] => [
       : []),
   ]),
 ];
+/**
+ * The written conflicts that still decide something. A conflict with a
+ * single-provider framework contract is implied by the contract itself.
+ */
+const writtenConflicts = (plugin: SessionPluginCandidate): string[] =>
+  (plugin.conflicts ?? []).filter(
+    (contract) => !isSingleProviderContract(contract),
+  );
 const isDefault = (plugin: SessionPluginCandidate, contract: string) =>
   plugin.provides?.some(
     (p) => typeof p !== "string" && p.contract === contract && p.default,
@@ -309,41 +318,24 @@ export function resolveSessionPlugins(args: {
       }
     }
   }
-  for (const id of [...active]) {
-    const p = registry.get(id)!;
-    const replaced = (p.provides ?? []).find(
-      (provided) =>
-        typeof provided !== "string" &&
-        provided.default &&
-        [...active].some(
-          (other) =>
-            other !== id &&
-            contracts(registry.get(other)!).includes(provided.contract) &&
-            !isDefault(registry.get(other)!, provided.contract),
-        ),
-    );
-    if (replaced)
-      reject(id, "default-replaced", `A non-default provider replaces ${id}`);
-  }
-  // Explicit requests precede dependencies; ties retain stable request/catalog order.
-  const ordered = [...active].sort(
-    (a, b) => Number(!requested.has(a)) - Number(!requested.has(b)),
-  );
   const accepted: string[] = [];
-  for (const id of ordered) {
+  /** Accept `id` unless it collides with a package accepted before it. */
+  const admit = (id: string) => {
     const p = registry.get(id)!;
-    const conflict = accepted.find((other) => {
+    // A package pruned since it was accepted no longer holds anything.
+    const held = accepted.filter((other) => active.has(other));
+    const conflict = held.find((other) => {
       const q = registry.get(other)!;
       return (
-        (p.conflicts ?? []).some((c) => contracts(q).includes(c)) ||
-        (q.conflicts ?? []).some((c) => contracts(p).includes(c))
+        writtenConflicts(p).some((c) => contracts(q).includes(c)) ||
+        writtenConflicts(q).some((c) => contracts(p).includes(c))
       );
     });
     if (conflict) {
       reject(id, "conflict", `Conflicts with ${conflict}`);
-      continue;
+      return;
     }
-    const duplicate = accepted.find((other) =>
+    const duplicate = held.find((other) =>
       p.extensions?.some(
         (extension) =>
           singlePoints.has(extension.point) &&
@@ -360,11 +352,30 @@ export function resolveSessionPlugins(args: {
         "single-provider-conflict",
         `Single extension point already provided by ${duplicate}`,
       );
-      continue;
+      return;
+    }
+    // A framework contract with one provider per session excludes a second
+    // provider package the way a `single` extension point does.
+    const taken = contracts(p)
+      .filter(isSingleProviderContract)
+      .flatMap((contract) => {
+        const holder = held.find((other) =>
+          contracts(registry.get(other)!).includes(contract),
+        );
+        return holder ? [{ contract, holder }] : [];
+      })[0];
+    if (taken) {
+      reject(
+        id,
+        "single-provider-conflict",
+        `${taken.contract} admits one provider per session and ${taken.holder} already provides it`,
+        [taken.holder],
+      );
+      return;
     }
     // A topic names one payload contract for every emitter and subscriber of
     // the session, so two declarations of it cannot both be in force.
-    const topicOwner = accepted.find((other) =>
+    const topicOwner = held.find((other) =>
       p.eventTopics?.some((topic) =>
         registry.get(other)!.eventTopics?.includes(topic),
       ),
@@ -379,41 +390,135 @@ export function resolveSessionPlugins(args: {
         `Event topic "${topic}" is declared by both ${topicOwner} and ${id}; a session can have one of them`,
         [topicOwner],
       );
-      continue;
+      return;
     }
     accepted.push(id);
-  }
-  // Provider removals can invalidate a transitive consumer. Never re-add an excluded
-  // or conflict loser to repair the graph; report all resulting rejections instead.
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const id of [...active]) {
-      const missing = registry
-        .get(id)!
-        .requires?.find(
-          (required) =>
-            ![...active].some((candidate) =>
-              contracts(registry.get(candidate)!).includes(required),
-            ),
-        );
-      if (missing) {
-        const pending = args.plugins.filter(
-          (provider) =>
-            contracts(provider).includes(missing) &&
-            rejected.get(provider.id)?.code === "approval-required",
-        );
-        reject(
-          id,
-          pending.length ? "approval-required" : "missing-provider",
-          `Required contract ${missing} has no active provider`,
-          pending.map((provider) => provider.id),
-          undefined,
-          missing,
-        );
-        changed = true;
+  };
+  const candidates = [...active];
+  const automaticCandidates = [...autoAdded];
+  const admissionRejections = new Map(rejected);
+  // Conflict and replacement decisions are tentative until requirements hold.
+  // Each failed round removes at least one unsupported candidate, then admits
+  // the remaining candidates again with their defaults still available.
+  const unsupported = new Map<string, PluginResolutionRejection>();
+  const pruneUnprovided = (replacements: ReadonlySet<string> = new Set()) => {
+    // Drop one failed candidate, then reconsider admission. In particular, a
+    // failed replacement must restore its default before judging consumers
+    // that lost another contract the default also provided.
+    // Find the entire failure chain without changing admission. A replacement
+    // can lose a required provider indirectly; removing its consumers first
+    // would make their rejection permanent before the default returns.
+    const viable = new Set(active);
+    const failures: { id: string; contract: string }[] = [];
+    while (true) {
+      const wave = [...viable].flatMap((id) => {
+        const contract = registry
+          .get(id)!
+          .requires?.find(
+            (required) =>
+              ![...viable].some((candidate) =>
+                contracts(registry.get(candidate)!).includes(required),
+              ),
+          );
+        return contract ? [{ id, contract }] : [];
+      });
+      if (!wave.length) break;
+      for (const failure of wave) {
+        viable.delete(failure.id);
+        failures.push(failure);
       }
     }
+    const failed =
+      failures.find(({ id }) => replacements.has(id)) ??
+      failures.find(
+        ({ contract }) =>
+          !candidates.some(
+            (id) =>
+              !unsupported.has(id) &&
+              contracts(registry.get(id)!).includes(contract),
+          ),
+      ) ??
+      failures[0];
+    if (failed) {
+      const { id, contract: missing } = failed;
+      const pending = args.plugins.filter(
+        (provider) =>
+          contracts(provider).includes(missing) &&
+          rejected.get(provider.id)?.code === "approval-required",
+      );
+      reject(
+        id,
+        pending.length ? "approval-required" : "missing-provider",
+        `Required contract ${missing} has no active provider`,
+        pending.map((provider) => provider.id),
+        undefined,
+        missing,
+      );
+      unsupported.set(id, rejected.get(id)!);
+    }
+  };
+  // Explicit requests precede dependencies; ties retain stable request/catalog order.
+  // A default that may be replaced waits until its replacements are settled.
+  const ordered = candidates.sort(
+    (a, b) => Number(!requested.has(a)) - Number(!requested.has(b)),
+  );
+  while (true) {
+    active.clear();
+    for (const id of candidates) if (!unsupported.has(id)) active.add(id);
+    autoAdded.clear();
+    for (const id of automaticCandidates) if (active.has(id)) autoAdded.add(id);
+    rejected.clear();
+    for (const [id, rejection] of [...admissionRejections, ...unsupported])
+      rejected.set(id, rejection);
+    accepted.length = 0;
+    const replacers = new Map<string, string[]>();
+    for (const id of active) {
+      const others = (registry.get(id)!.provides ?? []).flatMap((provided) =>
+        typeof provided !== "string" && provided.default
+          ? [...active].filter(
+              (other) =>
+                other !== id &&
+                contracts(registry.get(other)!).includes(provided.contract) &&
+                !isDefault(registry.get(other)!, provided.contract),
+            )
+          : [],
+      );
+      if (others.length) replacers.set(id, others);
+    }
+    const before = unsupported.size;
+    for (const id of ordered)
+      if (active.has(id) && !replacers.has(id)) admit(id);
+    pruneUnprovided();
+    if (unsupported.size > before) continue;
+    const pending = new Set(
+      ordered.filter((id) => active.has(id) && replacers.has(id)),
+    );
+    const replacements = new Set<string>();
+    while (pending.size > 0) {
+      const waiting = [...pending];
+      // Settle replacement chains from their end. In a cycle, stable request
+      // order chooses the first package to hold its contracts.
+      const id =
+        waiting.find((candidate) =>
+          replacers.get(candidate)!.every((other) => !pending.has(other)),
+        ) ?? waiting[0]!;
+      pending.delete(id);
+      const others = replacers.get(id);
+      if (!others) continue;
+      const replacement = others.find(
+        (other) => active.has(other) && accepted.includes(other),
+      );
+      if (replacement) {
+        replacements.add(replacement);
+        reject(
+          id,
+          "default-replaced",
+          `A non-default provider (${replacement}) replaces ${id}`,
+        );
+      } else admit(id);
+    }
+    pruneUnprovided(replacements);
+    if (unsupported.size === before) break;
   }
   // A provider added only for the world has no requesting plugin; without this
   // seed it would be pruned as an orphaned dependency.

@@ -103,6 +103,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `selfData`      | list of object          | no       | Own plugin data inlined into the agent prompt.                                                                                                                                                                                                                     |
 | `payloadSchema` | string                  | no       | Schema that validates the activation payload.                                                                                                                                                                                                                      |
 | `output`        | object                  | no       | What the runtime produces.                                                                                                                                                                                                                                         |
+| `storyContext`  | object                  | no       | Hands one value of this runtime's output to the story of the same turn as a note of the `story-context@1` kernel input. Only on stage `pre-turn`.                                                                                                                  |
 | `visibility`    | `"story"` or `"system"` | no       | Output kind the kernel dispatches on: `story` for the main narrative provider, `system` for every other runtime. Defaults to `system`.                                                                                                                             |
 | `concealed`     | boolean                 | no       | `true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results, and text it returns is not written to the conversation. Not allowed with `visibility: story`. |
 
@@ -132,9 +133,9 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.inputs.*.from` (form 3 of 3)
 
-| Field    | Type                                  | Required | Description                                                                      |
-| -------- | ------------------------------------- | -------- | -------------------------------------------------------------------------------- |
-| `kernel` | `"turn-digest@1"` or `"operations@1"` | yes      | Kernel input: the turn digest or staged operations from completed upstream runs. |
+| Field    | Type                                                         | Required | Description                                                                                                                      |
+| -------- | ------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `kernel` | `"turn-digest@1"` or `"operations@1"` or `"story-context@1"` | yes      | Kernel input: the turn digest, staged operations from completed upstream runs, or the notes pre-turn runtimes hand to the story. |
 
 ## `io.selfData[]`
 
@@ -148,19 +149,27 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.output`
 
-| Field      | Type                             | Required | Description                                                                                                                                                                                                                                              |
-| ---------- | -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object                           | no       | Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract.                                                                                                  |
-| `contract` | string                           | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.                                                                                                                                                     |
-| `schema`   | string                           | no       | Private schema that validates the runtime's output.                                                                                                                                                                                                      |
-| `live`     | `"off"` or `"units"` or `"text"` | no       | How a story shows while the model writes it: `units` shows each paragraph or line once it is complete, `text` shows it as it is typed, `off` waits for the commit. Story runtimes only. Defaults to `units`; players can choose a more cautious setting. |
-| `recordAs` | string                           | no       | Export key under which the output is persisted for later executions. Requires `schema`.                                                                                                                                                                  |
+| Field      | Type                             | Required | Description                                                                                                                                                                                                                                               |
+| ---------- | -------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `from`     | object                           | no       | Submit the latest successful result of this own or builtin business tool by calling submit-output with {}. Requires a loaded output schema or contract.                                                                                                   |
+| `contract` | string                           | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. An automatically scheduled story runtime provides `narrative-engine@2` without it; other story runtimes cannot write it.                             |
+| `schema`   | string                           | no       | Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema. |
+| `live`     | `"off"` or `"units"` or `"text"` | no       | How a story shows while the model writes it: `units` shows each paragraph or line once it is complete, `text` shows it as it is typed, `off` waits for the commit. Story runtimes only. Defaults to `units`; players can choose a more cautious setting.  |
+| `recordAs` | string                           | no       | Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one.                                                                       |
 
 ## `io.output.from`
 
 | Field  | Type   | Required | Description                                                                                              |
 | ------ | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
 | `tool` | string | yes      | Name of the allowlisted own or builtin business tool whose latest successful public result is submitted. |
+
+## `io.storyContext`
+
+| Field      | Type                              | Required | Description                                                                                                                                                                                       |
+| ---------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `select`   | string                            | no       | JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output. Example: `"/storyContext"`. |
+| `priority` | `"high"` or `"normal"` or `"low"` | no       | Ranking tier: `high` notes come first and are the last to be left out. Defaults to `normal`.                                                                                                      |
+| `order`    | integer                           | no       | Order within a tier, ascending; ties go by package and runtime ID. Defaults to `0`.                                                                                                               |
 
 ## `agent`
 

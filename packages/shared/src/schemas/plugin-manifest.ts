@@ -433,7 +433,7 @@ export const pluginManifestSchema = z.strictObject({
       }),
     )
     .describe(
-      "Contracts whose other providers cannot be active together with this package. Plugin contracts only.",
+      "Contracts whose other providers cannot be active together with this package. Plugin contracts only. A framework contract with one provider per session, such as `narrative-engine@2`, is exclusive on its own and ignored here.",
     )
     .optional(),
   contracts: z
@@ -447,7 +447,7 @@ export const pluginManifestSchema = z.strictObject({
       }),
     )
     .describe(
-      "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace.",
+      "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. Framework contracts such as `narrative-engine@2` and `character-actor@1` need none either; a different schema for one is refused.",
     )
     .optional(),
   entry: pluginEntryPathSchema.optional(),

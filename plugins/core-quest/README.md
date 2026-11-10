@@ -15,7 +15,7 @@
 
 ## 数据与行为
 
-- 读取本轮 WorldIR；抽取失败的回合不运行。只有 `accepted` 事件能新建任务；`progressed` / `completed` / `failed` 必须对上已有任务（规范化后同名，或唯一的包含关系匹配），对不上就忽略，避免改写过的任务名生成重复任务。新目标取自 `objectives`，本轮完成的目标取自 `completedObjectives`。事件的固定字段由 `world-ir` 约定并校验。
+- 以可选输入读取本轮 WorldIR（`world-ir@2`）。会话没有这个提供者或本回合抽取失败时，log 以 `skipped` 结束，不改任务；预置任务照常显示。只有 `accepted` 事件能新建任务；`progressed` / `completed` / `failed` 必须对上已有任务（规范化后同名，或唯一的包含关系匹配），对不上就忽略，避免改写过的任务名生成重复任务。新目标取自 `objectives`，本轮完成的目标取自 `completedObjectives`。事件的固定字段由 `world-ir` 约定并校验。
 - 任务写入 `plugin_data[core-quest][quests]`，按 `name` 去重合并：已有任务只推进（目标按稳定 `id`、规范化文本、保守语义兜底依次匹配；命中后保留原文并更新勾选），不存在则创建。
 - 世界包可经 `worldData` 向 `quests` namespace 预置主线 / 支线任务，按同名合并推进；它们也会出现在 vocabulary 里。
 - 本回合变更摘要（新任务 / 推进 / 完成 / 失败）写入 `message` namespace，驱动消息块。

@@ -1,4 +1,7 @@
-import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
+import {
+  narrationSegments,
+  suspendedLoopState,
+} from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "@covel/ai-provider";
 import { createEventBus } from "@covel/events";
@@ -14,6 +17,9 @@ import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 describe.each(["agent", "function"] as const)(
   "%s suspension terminal",
@@ -265,7 +271,9 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                   replace: {
                     result: {
                       ...result,
-                      output: { narrativeOutput: "Rewritten story" },
+                      output: {
+                        segments: narrationSegments("Rewritten story"),
+                      },
                     },
                   },
                 };
@@ -349,7 +357,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                       id: "final",
                       name: "submit-output",
                       arguments: JSON.stringify({
-                        narrativeOutput: "Original story",
+                        segments: narrationSegments("Original story"),
                       }),
                     },
                   ],

@@ -55,6 +55,7 @@
 | Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
 | Slot | 槽位 | 设置界面里叫“AI 分工”。 |
 | Stop reason | 结束原因 | agent 工具循环怎样结束（`RuntimeResult.stop.reason`）。 |
+| Story context | 故事说明 | `pre-turn` runtime 用 `io.storyContext` 交给本回合故事的说明，读者通过内核输入 `story-context@1` 读到；内核排序、去重、按预算省略。见[内核输入 `story-context@1`](./plugins.md#story-context)。 |
 | Story-attached operation | 故事附带的操作 | 故事或 setup 所在提交单元里的操作：各自一个 savepoint，失败只丢它自己，故事照常提交。 |
 | Story draft | 故事草稿 | 故事 runtime 提交前已经写出的部分，只用来显示；不是输出，不保存。 |
 | Story segment | 故事段落 | 故事输出里的一段：旁白、对白或动作。上下文清楚时简称“段落”。 |
@@ -177,7 +178,8 @@
 一个带版本号的 ID，例如 `narrative-engine@2`，用来说明一个插件提供什么能力，或者需要什么能力。
 
 - 根 `PLUGIN.md` 用 `requires`、`conflicts` 列出需要和不能共存的契约，用 `provides` 列出不由 runtime 输出的契约。
-- runtime 用 `io.output.contract` 发布一个契约（插件因此提供它），用 `from: { contract }` 读取一个契约。
+- runtime 用 `io.output.contract` 发布一个契约（插件因此提供它），用 `from: { contract }` 读取一个契约。自动调度的故事 runtime 不写也提供 `narrative-engine@2`。
+- 框架持有几个契约的 schema（`narrative-engine@2`、`character-actor@1`），包不声明它们；`narrative-engine@2` 每局只有一个提供者。
 - 内核按契约找提供者，从不写死某个插件 ID。所以提供同一个契约的插件可以互相替换。
 - 只支持当前版本。不兼容的改动要换一个新 ID（`@2`）。
 
@@ -391,6 +393,12 @@ agent runtime 的工具循环怎样结束，例如 `completed`（模型给出了
 它写在 `RuntimeResult.stop` 和 runtime 生命周期事件的 `stopReason` 里。函数 runtime 没有结束原因。
 
 详见：[协议参考的结束原因](./protocol.md#stop-reasons)、[回合管线](../internals/flow.md)。
+
+## Story context
+
+本回合给故事看的说明，例如检定结果、刚触发的隐藏事件、此刻的世界时间。`pre-turn` runtime 在 `io.storyContext` 里指出自己输出里的哪个值是说明；读者写一行 `from: { kernel: story-context@1 }`，就读到本回合的全部说明。内核按优先级和 `order` 排序，去掉重复的正文，放不下预算的整条省略。agent 在 `<story-context>` 块里读到它，function 读 `ctx.inputs`。
+
+详见：[插件参考：内核输入 `story-context@1`](./plugins.md#story-context)。
 
 ## Story draft
 

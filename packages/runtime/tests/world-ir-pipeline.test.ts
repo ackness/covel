@@ -150,8 +150,8 @@ async function runPipeline(worldIrContent: string, tamper = false) {
     trigger: { type: "auto" },
     inputs: {
       worldIR: {
-        from: { capability: "world-ir-provider@1", cardinality: "one" },
-        accepts: "contract:world-ir@1",
+        from: { capability: "world-ir@2", cardinality: "one" },
+        accepts: "contract:world-ir@2",
         required: true,
       },
     },

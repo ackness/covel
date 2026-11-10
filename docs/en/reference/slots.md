@@ -239,6 +239,7 @@ For one call, the role is chosen in this order:
 
 Extra rules:
 
+- The request's `modelOverride` applies only to story agents and takes precedence over their session `runtimeModelOverrides`. Other agents and functions do not read this request override.
 - A plugin only says which role it wants. It cannot choose a provider, model, address, or protocol. Which model is used, and where the request goes, is decided by the model settings of the player (or the operator), so the player's keys only go to addresses in those settings. An `llm.toml` in a plugin's directory is not read, and `pnpm validate:plugin` warns when it finds one.
 - If a text role such as `fast` or `memory` is not defined, it falls back to the first text role. That role also reads the UI binding, parameters, and capabilities of the current request. The prep screen and the session's plugin list show this as "`fast` is not set up; uses …". A role that is defined but cannot be used (for example, its key is missing) does not fall back and is still shown as unavailable.
 - AI world creation and revision use the `story` role by default. The API `model` field can select another role or preset. Every part, retry, and repair uses that selection and reads the current request's UI binding. Undefined text roles follow the fallback above.

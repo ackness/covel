@@ -26,7 +26,7 @@ it("loads the acceptance fixture with host prose and character-child contracts",
   expect(resolveAgentOutput(prose)).toMatchObject({
     toolName: "submit-output",
     schemaSource: "host-story",
-    schema: { required: ["narrativeOutput"] },
+    schema: { required: ["segments"] },
   });
   expect(prose.manifest.trigger).toEqual({ type: "manual" });
   const actor = await loadRuntime(

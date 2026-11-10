@@ -1,4 +1,4 @@
-import { toolCall } from "./_helpers/agent-loop-fixture.js";
+import { narrationSegments, toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * An agent imports another plugin's write service as a tool. A call stages
  * one operation and answers with the staged notice; the operation counts
@@ -114,7 +114,7 @@ function text(content: string): LLMResponse {
       {
         id: "final",
         name: "submit-output",
-        arguments: JSON.stringify({ narrativeOutput: content }),
+        arguments: JSON.stringify({ segments: narrationSegments(content) }),
       },
     ],
     finishReason: "tool_calls" as const,

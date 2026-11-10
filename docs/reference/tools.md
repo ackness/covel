@@ -53,7 +53,7 @@
 | advance-world-time | local | world-time | auto-allow | 结算本回合世界时间：提交已抵达的目标时间或时长，工具计算历法差值；随机模式只交原因，随故事提交 | 默认 |
 | dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema | `readOnly`, `idempotent`, `concurrencySafe` |
 | update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 | `idempotent` |
-| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` | `stagesWrites: false`, `idempotent` |
+| submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@2` | `stagesWrites: false`, `idempotent` |
 | sync-codex-entries | local | codex | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目 | 默认 |
 | generate-guide | local | guide | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复 | 默认 |
 | upsert-npc-graph | local | npc-graph | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID） | 默认 |
@@ -1449,7 +1449,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 **所属**: world-ir (`plugins/world-ir/tools/submit-world-facts.js`)
 
-模型用工具参数提交本回合的完整事实，即一份 `contract:world-ir@1`。完整的数据形状见 [world-data.md · WorldIR 与插件投影](./world-data.md#worldir-与插件投影)。
+模型用工具参数提交本回合的完整事实，即一份 `contract:world-ir@2`。完整的数据形状见 [world-data.md · WorldIR 与插件投影](./world-data.md#worldir-与插件投影)。
 
 | 参数                                               | 必需 | 描述                                                              |
 | -------------------------------------------------- | ---- | ----------------------------------------------------------------- |
@@ -1461,7 +1461,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 工具声明 `{stagesWrites:false, idempotent:true}`。补全后的引用校验失败报 `invalid-input`，提示在 `entities` 中声明每个引用的 id 后重试。
 
-工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。公共模型视图的 `data.facts` 是最终提交的规范事实；`data.entityReferences` 索引事实实体的业务身份，让普通模型投影保留必要的语义 ID，即使实体还没有入边。索引不属于最终输出，也不包含存储行元数据。`completion.afterTools: [submit-world-facts]` 要求先成功抽取，再用 `{}` 调用 `submit-output`。`io.output.from.tool: submit-world-facts` 直接采用规范事实，无需复制模型视图；修正最终提交不重复抽取，`contract:world-ir@1` 的业务形状保持不变。
+工具移除评估字段后返回补全并校验的事实，不产生持久化 proposal。公共模型视图的 `data.facts` 是最终提交的规范事实；`data.entityReferences` 索引事实实体的业务身份，让普通模型投影保留必要的语义 ID，即使实体还没有入边。索引不属于最终输出，也不包含存储行元数据。`completion.afterTools: [submit-world-facts]` 要求先成功抽取，再用 `{}` 调用 `submit-output`。`io.output.from.tool: submit-world-facts` 直接采用规范事实，无需复制模型视图；修正最终提交不重复抽取，`contract:world-ir@2` 的业务形状保持不变。
 
 #### 逐目标评估
 
@@ -1469,7 +1469,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 工具逐项检查覆盖、重复项、原文名称、引文是否出自当前正文，以及评估与 `quest_change.completedObjectives` 是否一致。判断为达成却只提交普通互动，会被退回；计划、部分、失败或未核实的目标不能同时写为完成。词表列出的目标仍有既非达成、也非已无必要（`superseded`）的项时，不能把任务标为完成。可能被消费者解析为词表已有项的任务简称和目标改写会被拒绝，包括有歧义的目标匹配；必须用词表原文。这种比对只拒绝别名，不推断目标完成。没有词表目标时可省略或传空数组。词表是有界上下文，不是完整任务账本：覆盖校验只约束实际提供的任务和目标；未列出的内容沿用原有 WorldIR 与消费者校验。
 
-评估在返回前移除，公开 `world-ir@1` 形状不变，工具不写任务数据。是否达成仍是模型的语义判断；原文引文和覆盖校验不能证明这个判断必然正确。
+评估在返回前移除，公开 `world-ir@2` 形状不变，工具不写任务数据。是否达成仍是模型的语义判断；原文引文和覆盖校验不能证明这个判断必然正确。
 
 #### 自动修正的机械性失误
 

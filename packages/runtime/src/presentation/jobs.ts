@@ -18,6 +18,40 @@ import {
   takePresentationSnapshot,
   PresentationUnavailable,
 } from "./projection.js";
+import { turnStoryCandidates } from "./turn-story.js";
+import { storyMessageSourceSchema } from "../commit/commit-narrative.js";
+
+/**
+ * The turn's story messages, decided by {@link turnStoryCandidates} as the
+ * commit decides them; presentation reads the story only when exactly one
+ * remains. The persisted kernel receipt distinguishes top-level and nested
+ * calls even after a suspension, release or retry has lost the live results.
+ */
+function turnStoryMessages<
+  M extends { readonly id: string; readonly metadata?: unknown },
+>(
+  messages: readonly M[],
+  runtimes: readonly RuntimeManifest[],
+  turnId: string,
+): M[] {
+  const candidates = messages.flatMap((message) => {
+    const metadata = message.metadata as Record<string, unknown> | undefined;
+    const source = storyMessageSourceSchema.safeParse(metadata?.storySource);
+    return source.success &&
+      metadata?.turnId === turnId &&
+      metadata.kind === "story" &&
+      source.data.scope === "top-level"
+      ? [{ message, source: source.data }]
+      : [];
+  });
+  return turnStoryCandidates(candidates, ({ source }) =>
+    runtimes.find(
+      (runtime) =>
+        runtime.name === source.runtimeId &&
+        runtime.pluginId === source.pluginId,
+    ),
+  ).map(({ message }) => message);
+}
 
 /** Recover an inline selector from persisted public story, never retry seeds. */
 export async function capturePresentationRecovery(
@@ -61,21 +95,11 @@ export async function capturePresentationRecovery(
         parsed.data.status === "failed",
     );
   if (!terminal?.success) return undefined;
-  const providers = runtimes.filter(
-    (runtime) =>
-      runtime.outputKind === "story" &&
-      !runtime.concealed &&
-      runtime.outputContract === "narrative-engine@2",
+  const messages = turnStoryMessages(
+    await store.listMessages(sessionId),
+    runtimes,
+    source.turnId,
   );
-  if (providers.length !== 1) return undefined;
-  const messages = (await store.listMessages(sessionId)).filter((message) => {
-    const metadata = message.metadata as Record<string, unknown> | undefined;
-    return (
-      metadata?.turnId === source.turnId &&
-      metadata?.runtimeId === providers[0]!.name &&
-      metadata?.kind === "story"
-    );
-  });
   if (messages.length !== 1) return undefined;
   const story = projectPresentationStory(messages[0]!.metadata);
   if (!story) return undefined;
@@ -233,24 +257,11 @@ export async function finalizePresentationJobs(
       else if (settled) await skipped(job, "unavailable");
       continue;
     }
-    const providers = runtimes.filter(
-      (runtime) =>
-        runtime.outputKind === "story" &&
-        !runtime.concealed &&
-        runtime.outputContract === "narrative-engine@2",
+    const messages = turnStoryMessages(
+      await tx.listMessages(sessionId),
+      runtimes,
+      job.sourceTurnId,
     );
-    const provider = providers.length === 1 ? providers[0] : undefined;
-    const messages = provider
-      ? (await tx.listMessages(sessionId)).filter((message) => {
-          const metadata = message.metadata as
-            Record<string, unknown> | undefined;
-          return (
-            metadata?.turnId === job.sourceTurnId &&
-            metadata?.runtimeId === provider.name &&
-            metadata?.kind === "story"
-          );
-        })
-      : [];
     // An absent/rejected/ambiguous source never releases paid work.
     const message = messages.length === 1 ? messages[0] : undefined;
     const story = message

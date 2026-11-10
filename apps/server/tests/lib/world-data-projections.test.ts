@@ -1,7 +1,7 @@
 import { access, mkdtemp, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildImportPlan } from "../../src/world-data/session-import/planning.js";
 import type { OrderedWorldDataSource } from "../../src/world-data/types.js";
 import {
@@ -383,26 +383,32 @@ export default ({ value }) => ({
       namespaces: ["facts"],
     });
 
-    const plan = await buildImportPlan({
-      sessionId: "sess-1",
-      worldId: "world-1",
-      sources: [await makeSource(VALID_WORLD_IR)],
-      now: NOW,
-      deps: {
-        activePlugins: ["changing-handler"],
-        registry: registry([plugin]),
-      },
-    });
+    // Freeze the parent deadline so slow worker startup cannot mask provenance.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const plan = await buildImportPlan({
+        sessionId: "sess-1",
+        worldId: "world-1",
+        sources: [await makeSource(VALID_WORLD_IR)],
+        now: NOW,
+        deps: {
+          activePlugins: ["changing-handler"],
+          registry: registry([plugin]),
+        },
+      });
 
-    expect(plan.writes).toEqual([]);
-    expect(plan.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          level: "warning",
-          message: expect.stringContaining("changed during execution"),
-        }),
-      ]),
-    );
+      expect(plan.writes).toEqual([]);
+      expect(plan.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            level: "warning",
+            message: expect.stringContaining("changed during execution"),
+          }),
+        ]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("bounds handler time, output bytes, and projected item count", async () => {

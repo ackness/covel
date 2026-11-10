@@ -3,14 +3,14 @@ import { z } from "zod";
 import { createMemoryStore } from "@covel/store/memory";
 import type { HandlerResult, RuntimeManifest, Session } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { createEventBus } from "../../../../../../../packages/events/src/index.js";
+import { createEventBus } from "@covel/events";
 import {
   buildSessionSnapshot,
   commitExecution,
   executeTurn,
   PluginServiceRegistry,
   refuseReleasedJobs,
-} from "../../../../../../../packages/runtime/src/index.js";
+} from "@covel/runtime";
 
 /** Real commit and subscription events, without HTTP or model requests. */
 export async function suspendedStory(manual: boolean) {

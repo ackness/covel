@@ -16,8 +16,14 @@ import {
   defaultLoopPreset,
   LOOP_PRESETS,
   type LoopPresetId,
+  STORY_OUTPUT_CONTRACT,
   type RuntimeVisibility,
 } from "@covel/shared";
+import {
+  frameworkContracts,
+  isSingleProviderContract,
+  providesStoryContract,
+} from "@covel/shared/contracts";
 import { composerFieldWarnings } from "./action-kinds.js";
 import { isDerivedTag } from "./package-defaults.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
@@ -52,6 +58,9 @@ class Findings {
   shorter(field: string, advice: string): void {
     this.messages.push(`${this.file}: ${field}: ${advice}; it means the same`);
   }
+  redundant(field: string, reason: string): void {
+    this.messages.push(`${this.file}: ${field}: ${reason}; remove it`);
+  }
 }
 
 /** Whether `value` has exactly these keys, given or not. */
@@ -82,6 +91,24 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
     DEFAULT_FUNCTION_HANDLER,
   );
   out.check(at("io.visibility"), io?.visibility, DEFAULT_RUNTIME_VISIBILITY);
+  const storyContext = record(io?.storyContext);
+  out.check(at("io.storyContext.select"), storyContext?.select, "");
+  out.check(at("io.storyContext.priority"), storyContext?.priority, "normal");
+  out.check(at("io.storyContext.order"), storyContext?.order, 0);
+  const output = record(io?.output);
+  if (
+    output?.contract === STORY_OUTPUT_CONTRACT &&
+    providesStoryContract({
+      visibility: io?.visibility,
+      triggerType: record(schedule?.trigger)?.type,
+      subagentOnly: schedule?.subagentOnly,
+    })
+  )
+    out.derived(
+      at("io.output.contract"),
+      output.contract,
+      "a story runtime scheduled automatically",
+    );
   for (const [name, value] of Object.entries(record(io?.inputs) ?? {})) {
     const binding = record(value);
     out.check(
@@ -101,6 +128,12 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
   const visibility: RuntimeVisibility =
     io?.visibility === "story" ? "story" : DEFAULT_RUNTIME_VISIBILITY;
   const agent = record(runtime.agent);
+  if (visibility === "story")
+    out.check(
+      at("io.output.schema"),
+      output?.schema,
+      `contract:${STORY_OUTPUT_CONTRACT}`,
+    );
   out.check(at("agent.model"), agent?.model, defaultAgentModel(visibility));
   out.check(at("agent.reasoning"), agent?.reasoning, true);
   const loop = record(agent?.loop);
@@ -163,7 +196,19 @@ export function authoringWarnings(
       plugin.derived(
         `provides[${index}]`,
         entry,
-        "the io.output.contract of a runtime",
+        "the output contract of a runtime",
+      );
+  for (const [index, entry] of list(raw.conflicts).entries())
+    if (typeof entry === "string" && isSingleProviderContract(entry))
+      plugin.redundant(
+        `conflicts[${index}]`,
+        `${JSON.stringify(entry)} admits one provider per session without it, and a written conflict on it is ignored`,
+      );
+  for (const contract of Object.keys(record(raw.contracts) ?? {}))
+    if (Object.hasOwn(frameworkContracts, contract))
+      plugin.redundant(
+        `contracts.${contract}`,
+        "the framework owns this contract's schema",
       );
   const contributes = record(raw.contributes);
   for (const [index, value] of list(contributes?.hooks).entries()) {

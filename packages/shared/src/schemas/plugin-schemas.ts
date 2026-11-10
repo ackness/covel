@@ -5,7 +5,11 @@ import { MAX_PLUGIN_THEMES, pluginThemePathSchema } from "./plugin-theme.js";
  * These schemas are used by @covel/plugin-loader to validate parsed YAML.
  */
 
-import { DATA_OP_KINDS } from "@covel/plugin-handlers-utils";
+import {
+  DATA_OP_KINDS,
+  STORY_CONTEXT_INPUT,
+  storyContextPriorities,
+} from "@covel/plugin-handlers-utils";
 import { z } from "zod";
 import { compiledPresentationSchema } from "./presentation.js";
 import { DATASET_TOOL_KINDS, datasetToolsIssues } from "./dataset-tools.js";
@@ -130,7 +134,7 @@ const bindingNameSchema = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
 });
 
 /** RFC 6901 JSON Pointer (empty string = whole document). */
-const jsonPointerSchema = z.string().regex(/^(\/([^/~]|~0|~1)*)*$/, {
+export const jsonPointerSchema = z.string().regex(/^(\/([^/~]|~0|~1)*)*$/, {
   message:
     "must be an RFC 6901 JSON Pointer (empty string, or /-separated tokens with ~0/~1 escapes)",
 });
@@ -309,7 +313,7 @@ export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
   runtimeExportInjectDeclSchema,
   z.strictObject({
     kind: z.literal("kernel"),
-    from: z.enum(["turn-digest@1", "operations@1"]),
+    from: z.enum(["turn-digest@1", "operations@1", STORY_CONTEXT_INPUT]),
     name: bindingNameSchema,
   }),
 ]);
@@ -1168,6 +1172,7 @@ interface ManifestCrossFieldView {
   readonly concealed?: boolean;
   readonly advertiseEvents?: boolean;
   readonly input?: z.infer<typeof inputConfigSchema>;
+  readonly storyContext?: RuntimeRuleView["storyContext"];
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   readonly runtimeType?: string;
@@ -1249,6 +1254,11 @@ function addIrRuleIssues(
       serviceImports: tools?.services,
       operationsInputs: m.input?.inject?.flatMap((inject, index) =>
         inject.kind === "kernel" && inject.from === "operations@1"
+          ? [{ name: inject.name, path: ["input", "inject", index] }]
+          : [],
+      ),
+      storyContextInputs: m.input?.inject?.flatMap((inject, index) =>
+        inject.kind === "kernel" && inject.from === STORY_CONTEXT_INPUT
           ? [{ name: inject.name, path: ["input", "inject", index] }]
           : [],
       ),
@@ -1422,6 +1432,19 @@ export const runtimeManifestInputSchema = z
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
     outputKind: outputKindSchema.optional(),
     concealed: z.boolean().optional(),
+    /**
+     * The value of this pre-turn runtime's output handed to the story as a
+     * `story-context@1` note. `title` is the package's display name, copied
+     * by the loader as the note's default title.
+     */
+    storyContext: z
+      .strictObject({
+        select: jsonPointerSchema.optional(),
+        priority: z.enum(storyContextPriorities).optional(),
+        order: z.number().int().optional(),
+        title: i18nTextLoose.optional(),
+      })
+      .optional(),
     outputContract: z.string().min(1).optional(),
     defaultProvider: z.boolean().optional(),
     /**

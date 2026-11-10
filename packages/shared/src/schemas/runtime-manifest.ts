@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { STORY_OUTPUT_CONTRACT } from "../extension-points/contracts.js";
+import { providesStoryContract } from "../framework-contracts.js";
 import { presentationSchema } from "./presentation.js";
 import {
   AUTHORING_RULE_FIELD_PATHS,
@@ -15,6 +17,7 @@ import {
   stageSchema,
   toolsConfigSchema,
   effectsDeclSchema,
+  jsonPointerSchema,
   permissionsDeclSchema,
   pluginDataInjectDeclSchema,
   runtimeManifestInputSchema,
@@ -23,6 +26,10 @@ import {
   AGENT_LOOP_DEFAULTS,
   DEFAULT_FUNCTION_HANDLER,
 } from "./runtime-defaults.js";
+import {
+  STORY_CONTEXT_INPUT,
+  storyContextPriorities,
+} from "@covel/plugin-handlers-utils";
 
 const loopDefault = (field: "timeoutMs" | "callTimeoutMs" | "maxRetries") =>
   `Defaults to ${AGENT_LOOP_DEFAULTS.system[field]}; ${AGENT_LOOP_DEFAULTS.story[field]} with \`io.visibility: story\`.`;
@@ -92,9 +99,9 @@ const sourceSchema = z.union([
   runtimeSourceSchema,
   z.strictObject({
     kernel: z
-      .enum(["turn-digest@1", "operations@1"])
+      .enum(["turn-digest@1", "operations@1", "story-context@1"])
       .describe(
-        "Kernel input: the turn digest or staged operations from completed upstream runs.",
+        "Kernel input: the turn digest, staged operations from completed upstream runs, or the notes pre-turn runtimes hand to the story.",
       ),
   }),
 ]);
@@ -237,12 +244,14 @@ export const runtimeAuthoringManifestSchema = z
               .optional(),
             contract: contractIdSchema
               .describe(
-                "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.",
+                "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. An automatically scheduled story runtime provides `narrative-engine@2` without it; other story runtimes cannot write it.",
               )
               .optional(),
             schema: z
               .string()
-              .describe("Private schema that validates the runtime's output.")
+              .describe(
+                "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema.",
+              )
               .optional(),
             live: z
               .enum(["off", "units", "text"])
@@ -253,11 +262,38 @@ export const runtimeAuthoringManifestSchema = z
             recordAs: z
               .string()
               .describe(
-                "Export key under which the output is persisted for later executions. Requires `schema`.",
+                "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one.",
               )
               .optional(),
           })
           .describe("What the runtime produces.")
+          .optional(),
+        storyContext: z
+          .strictObject({
+            select: jsonPointerSchema
+              .meta({
+                description:
+                  "JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output.",
+                examples: ["/storyContext"],
+              })
+              .optional(),
+            priority: z
+              .enum(storyContextPriorities)
+              .describe(
+                "Ranking tier: `high` notes come first and are the last to be left out. Defaults to `normal`.",
+              )
+              .optional(),
+            order: z
+              .number()
+              .int()
+              .describe(
+                "Order within a tier, ascending; ties go by package and runtime ID. Defaults to `0`.",
+              )
+              .optional(),
+          })
+          .describe(
+            "Hands one value of this runtime's output to the story of the same turn as a note of the `story-context@1` kernel input. Only on stage `pre-turn`.",
+          )
           .optional(),
         visibility: z
           .enum(["story", "system"])
@@ -591,12 +627,29 @@ export const runtimeAuthoringManifestSchema = z
         requireToolUse: value.agent?.completion?.require === "tool-use",
         visibility: value.io?.visibility,
         output: value.io?.output,
+        outputContract:
+          value.io?.output?.contract ??
+          (providesStoryContract({
+            visibility: value.io?.visibility,
+            triggerType: value.schedule?.trigger?.type,
+            subagentOnly: value.schedule?.subagentOnly,
+          })
+            ? STORY_OUTPUT_CONTRACT
+            : undefined),
         ...(value.agent ? { loop: authoredLoopView(value.agent.loop) } : {}),
         operationsInputs: inputs
           .filter(
             ([, binding]) =>
               "kernel" in binding.from &&
               binding.from.kernel === "operations@1",
+          )
+          .map(([name]) => ({ name })),
+        storyContext: value.io?.storyContext,
+        storyContextInputs: inputs
+          .filter(
+            ([, binding]) =>
+              "kernel" in binding.from &&
+              binding.from.kernel === STORY_CONTEXT_INPUT,
           )
           .map(([name]) => ({ name })),
         turnInputs: inputs

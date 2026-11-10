@@ -1,0 +1,6 @@
+{
+  "name": "story-context-probe",
+  "private": true,
+  "type": "module",
+  "description": "Standalone third-party package for Covel story-context@1 tests"
+}

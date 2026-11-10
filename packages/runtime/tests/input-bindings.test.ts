@@ -13,7 +13,7 @@ import type {
 } from "@covel/shared";
 import {
   WORLD_IR_V1_JSON_SCHEMA,
-  WORLD_IR_V1_SCHEMA_URI,
+  WORLD_IR_SCHEMA_URI,
 } from "../../../plugins/world-ir/schemas/world-ir.js";
 import {
   deriveActivation,
@@ -23,8 +23,8 @@ import {
 import {
   checkAcceptsCompatibility,
   projectSchemaBySelect,
-  resolveJsonPointer,
 } from "../src/schedule/accepts-compat.js";
+import { resolveJsonPointer } from "../src/schedule/json-pointer.js";
 import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 
 type Schema = Readonly<Record<string, unknown>>;
@@ -752,7 +752,7 @@ describe("resolveInputBindings — accepts double layer", () => {
           inputs: {
             worldIR: {
               from: { capability: "prov" },
-              accepts: WORLD_IR_V1_SCHEMA_URI,
+              accepts: WORLD_IR_SCHEMA_URI,
             },
           },
         }),

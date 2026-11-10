@@ -22,6 +22,7 @@ import {
 import { createRequestLedger } from "../../src/routes/api/actions/request-ledger.js";
 import { announceSettledTurn } from "../../src/routes/api/actions/turn-announcement.js";
 import type { CommittedTurn } from "../../src/routes/api/actions/turn-commit.js";
+import { createJobCredentialHandoff } from "../../src/routes/api/plugin-rpc/runtime-job-credentials.js";
 import { prepareLockedTurn } from "../../src/routes/api/actions/turn-preparation.js";
 import type {
   ActionTurnRequest,
@@ -58,8 +59,7 @@ function fakeHost(overrides: Partial<TurnHost> = {}): TurnHost {
     hookPipeline: undefined,
     memorySystem: undefined,
     pluginExtensions: undefined,
-    jobServices: () => undefined,
-    jobCredentials: undefined,
+    credentials: createJobCredentialHandoff(undefined, () => undefined),
     announceDeferredJobs: async () => {},
     announceQueuedJobs: () => {},
     withSettledLock: (run) => run(),

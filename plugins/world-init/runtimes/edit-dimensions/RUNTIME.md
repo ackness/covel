@@ -10,7 +10,7 @@ io:
       select: /narrativeOutput
       required: false
     worldIR:
-      from: { contract: world-ir-provider@1 }
+      from: { contract: world-ir@2 }
       required: false
 function: {}
 ---

@@ -110,12 +110,18 @@ When you choose `pg`, the data is shared, and some coordination between processe
 | `steer` / `abort` for an active turn | Works on the execution handle the current process holds | Still valid only inside the process |
 | Background job `_runtime_jobs` | Whether a job survives depends on the storage backend | Claimed through CAS and a renewable lease |
 | Media binary data | Decided by the separate `MEDIA_BACKEND` | `mirror` stores it in PG; files in a local media backend are not shared automatically |
+| Plugin and world package files | On the local disk | Each instance has its own local disk, and package files are not synced |
+| Player-supplied keys (BYOK) handed to background jobs | A handoff table inside the process | Held only by the instance that received the request; not available when another instance claims the job |
+| Request rate limiting | Counted inside the process | Each instance counts on its own, with nothing shared |
 
 Details for the PostgreSQL column:
 
 - **Event delivery**: if `LISTEN/NOTIFY` fails to start, the server refuses to start. It does not quietly fall back to broadcasting inside the process.
 - **`steer` / `abort`**: the request must reach the instance that is running that turn. If it reaches another instance, it returns `409`, even when the database shows the turn as running.
 - **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. When an instance shuts down normally, tasks it has not committed go back to the queue and the next worker runs them again. When an instance crashes, tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
+- **Plugin and world package files**: the package files are written to the local disk of the instance that handled the install request. Installing, updating and development hot reload (`POST /api/plugins/:id/reload`) do not notify other instances, and Covel does not copy the package files to them. A world's record goes into the shared database, but its package directory exists only on the instance that installed it. Which plugins a session has enabled is stored in the database, and at the start of each turn an instance realigns its own activation state with that record. This aligns only which plugins are enabled. It does not fill in missing package files. When an instance does not have a plugin installed, it skips that plugin: its features are missing on that instance, and the turn goes on. In a multi-instance deployment you must distribute the same plugin and world directories to every instance yourself. Installing a plugin needs a backend restart anyway, so restart the instances one by one.
+- **Player-supplied keys**: keys that arrive with a request stay in the memory of the process that received it. They are never written to the database. When a background job is queued, that process keeps a short-lived handoff record for it (5 minutes by default), so the job can run with that request's keys. If another instance claims the job, it finds no handoff record and uses only the keys configured on the server. If the server has no usable key either, that instance does not claim the job, and it stays in the queue.
+- **Request rate limiting**: the limiter is a sliding window inside the process. It counts per IP and per path each minute, and resets when the instance restarts. Each instance counts separately, so one player can get about the single-instance limit times the number of instances. A deployment that needs a global limit should apply it at the load balancer or reverse proxy. For how the source IP is decided, see `TRUSTED_PROXY_IPS` in [Environment variables](./env-registry.md).
 
 So a deployment that must control the current turn reliably should use a single instance. Or it must make sure that an action and its `steer` / `abort` requests are routed to the same instance. When an instance exits, its execution handle in memory cannot move elsewhere. The database is shared, but that does not mean another instance can take over a turn that is running.
 
@@ -3379,7 +3385,7 @@ A successful command uses the same structure, with these extra conventions:
 
 - For a runtime that declares `io.concealed`, `output` is `null` here and in `details.runtimeResults` of a failure response.
 - If the turn is aborted, there is one more field: `abortReason`.
-- If a background follower was queued, there is one more field: `deferredJobs: [{ jobId, runtimeId }]`.
+- If a background follower was queued, there is one more field: `deferredJobs: [{ jobId, runtimeId }]`. When the named runtime declares `schedule.detached`, it does not run in this request: it is queued as a staged job, listed in `deferredJobs`, and absent from `runtimeResults`.
 
 ##### Dimension editing and recovery of pending settlements
 
@@ -6329,6 +6335,7 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 | `plugin.fault.cleared` | Plugin faults | Clears the count after a clean run or player re-enable; same delivery as above |
 | `context.pruned` | System | Prompt-budget trimming; trace only (`/debug`). Payload has `runtimeId`, `pluginId`, `prunedMessageCount`; loop requests also report `truncatedToolResultCount`, `truncatedSummaryCount`, `elidedToolResultCount`, `collapsedStepCount`. The last two are cumulative decisions applied to this request, including ledger replay; any non-zero count emits the event |
 | `context.compaction.failed` | System | History compaction failed, with the reason; only goes to the trace (used by `/debug`) |
+| `story-context.selected` | System | The notes a `story-context@1` reader received and left out: titles, sources, estimated tokens, omission reasons and the budget; a concealed provider keeps only its package's display name. Trace only (`/debug`); see [the kernel input `story-context@1`](./plugins.md#story-context) |
 | `commit.fanout.failed` | System | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
 | `error.occurred` | System | An execution error |
 

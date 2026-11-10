@@ -198,9 +198,9 @@ async function handleCharacterCreation(page: Page) {
 
 /**
  * Keep this live spec focused on the contract it asserts. Mistport's default
- * pack deliberately enables expensive retrieval, codex, memory, and character
- * tracking runtimes; those have their own coverage and can push three external
- * model rounds beyond the browser-test budget.
+ * pack deliberately enables expensive retrieval, codex, fact extraction,
+ * memory and character tracking runtimes; those have their own coverage and
+ * can push three external model rounds beyond the browser-test budget.
  */
 async function keepFocusedGuidePluginSet(page: Page) {
   await page
@@ -210,6 +210,7 @@ async function keepFocusedGuidePluginSet(page: Page) {
   const unrelatedOptionalPlugins = [
     "codex",
     "npc-graph",
+    "world-ir",
     "memory",
     "living-world-rules",
     "character-blueprint",

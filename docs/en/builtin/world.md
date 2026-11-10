@@ -155,7 +155,7 @@ When a named place, person, item, skill, legend or monster first appears in the 
 
 **What you will see**: the "Almanac" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
 
-**When it is on**: optional. The Classic Story pack includes it. It needs "Story Notes", which is turned on together with it.
+**When it is on**: optional. The Classic Story pack includes it. With "Story Notes" on, it reads the sorted facts; without it, it reads this turn's story directly and records as usual.
 
 **Notes**
 
@@ -173,7 +173,7 @@ Records relationships between people, groups and factions. It checks existing no
 
 **What you will see**: the "Relationships" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.
 
-**When it is on**: optional. The Classic Story pack includes it, and Dialogue recommends it. It needs "Story Notes", which is turned on together with it.
+**When it is on**: optional. The Classic Story pack includes it, and Dialogue recommends it. With "Story Notes" on, it reads the sorted facts; without it, it reads this turn's story directly and records as usual.
 
 **Notes**
 
@@ -187,9 +187,9 @@ World initialization, time advancement and fact extraction use validated tool re
 
 You cannot see this plugin, and it has no panel. After each turn ends, it sorts out the people, relationships, events and clues from that turn into a list. It passes the list to the codex, relationship graph, quest log, inventory and similar plugins. This way, each plugin does not have to read the story again on its own.
 
-If you use any of these plugins, keep this one on. If you turn it off, the plugins that depend on it get no facts, and they cannot be turned on. It adds one model call per turn. If you want to save money, remove it together with the plugins that depend on it. The "Budget" pack is the simplest choice.
+If you use these plugins, it is best to keep this one on. Turning it off removes only its own work, and the other plugins still work: the codex, relationship graph and affinity read this turn's story directly instead. The quest log no longer records or advances quests from the story, and the bag no longer adds item changes from the story; changes the storyteller makes with the bag tools, and actions in the panel, still apply. It adds one model call per turn. If you want to save money, you can turn it off.
 
-**When it is on**: optional. When you turn on a plugin that depends on it, it is turned on automatically. You do not need to select it separately.
+**When it is on**: optional. The Classic Story pack includes it, Dialogue and Game Master recommend it, and Harukaze Academy requests it in its own plan. Turning on a plugin that reads it does not turn it on.
 
 Extraction also sees changes already made through tools this turn. When the story shows one, it records the event. The item name and quantity match the tool request exactly. It does not invent events for changes absent from the story. Bag skips changes its tool already handled, while other plugins can still read those events.
 

@@ -215,6 +215,7 @@ stateDiagram-v2
   - 玩家在界面上重试或放弃一个准备 runtime。
   - 执行记录。`turn_results` 和各 runtime 的输出在提交之前写入，`turn_results` 先记为 `pending`，提交之后再结算成 `committed` 或 `failed`。
 - `turn.suspended` 只在提交之后发出。
+- 每条已提交的故事消息在 `metadata.storySource` 保存内核回执：执行、run、插件和 runtime 的 ID，以及 `scope: top-level | nested`。延后呈现和选择器重试都读取这份持久身份，挂起释放后也一样；不会按 runtime ID 或缺失回执推断顶层身份。
 - 保存挂起记录时，同一个 runtime 还在等待的旧挂起项在同一个事务里作废。恢复的提交事务先核对挂起时记下的记录内容，有变化就什么都不写。
 - 恢复的 runtime 可以再次挂起。这次提交先把旧挂起项标为已处理，再保存新的；新挂起项接着同一次执行，不算放弃旧的。规则见[再次挂起](../reference/api.md#再次挂起)。
 - function 挂起时，成功的递归子调用及其所有后代随 continuation 保存。它们的计算结果保持成功，领域写入、日志、trigger 和输出导出暂不提交；最后一次恢复成功时按子先父后的顺序提交同一个原子单元，不重跑保存的 handler 或 Hook。再次挂起只转移保存的工作。
@@ -308,7 +309,7 @@ flowchart TB
     Keep --> End
 ```
 
-图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。
+图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。守卫 Hook 出错只拦住它判的那件事：一个 runtime 或一条 proposal。没有故事 runtime 的插件，`TurnStart` handler 出错时可以退出有故事的回合，故事和其他插件照常运行，见 [guard handler 失败时](../reference/hooks.md#auxiliary-hook-failures)。维度提供者的 runtime 失败也不拦住故事，见 [World Model](../reference/world-model.md#回合时序与结算回执)。
 
 **Stage 分带**（`packages/runtime/src/turn-executor/scheduling.ts` + `packages/runtime/src/schedule/` 硬性约束）：
 
@@ -323,6 +324,7 @@ flowchart TB
 - 同一个阶段里，顺序由 `needs`、`after` 和 `inputs` 绑定推导出的依赖图决定。
 - 互不依赖的 runtime 并行；并列时用 `name` 做稳定的先后。
 - 依赖成环的 runtime 和它的下游，本回合记为 `skipped: dependency-cycle`，不会退回成任意顺序执行。
+- 内核输入不加依赖边。`operations@1` 和 `story-context@1` 在读者绑定输入时，从已经结束的结果里收集；`story-context@1` 的提供方只在 `pre-turn`，读者在更晚的阶段，阶段屏障保证提供方先结束。读者依赖它读到的提供方，规则见[内核输入 `story-context@1`](../reference/plugins.md#story-context)。
 
 **Proposal 类型**（全部过 commit chain，源自 `packages/shared/src/types/proposal.ts` 的 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update`、`character.schema.set`、`character.upsert`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
 
@@ -331,7 +333,7 @@ flowchart TB
 - 明确排除对 core 插件也有效。
 - 缺少依赖时，先选唯一的普通提供者，再考虑唯一的默认提供者。
 - 玩家明确换掉默认提供者，这一步在冲突检测之前处理。
-- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single），这个组合会被拒绝。
+- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single）或框架契约（`narrative-engine@2`），这个组合会被拒绝。写在 `conflicts` 里的单提供者框架契约被忽略。
 - 普通的输出契约可以有多个提供者，消费者用 `cardinality: one | all` 说明自己要一个还是全部。
 - 启用和停用之后的明确选择保存在 `session.metadata.pluginSelection`。推荐列表本身不会自动启用插件。
 
@@ -373,6 +375,8 @@ flowchart LR
 - 用 `recordAs` 导出结果；
 - 能发出事件：它的 `tools.builtin` 列了 `emit-event`，或者声明了 `advertiseEvents: true`；
 - 直接修改角色、状态或交互。
+
+**手动点名时。** 插件 RPC 点名运行一个声明了 `schedule.detached` 的 runtime，它同样通过上面的检查后变成作业，不在这次执行里运行：同步模式在这次手动运行的提交事务里入队，并在响应的 `deferredJobs` 里列出；后台模式在 manual 作业的提交事务里入队，并记在它的 `result.deferredJobs` 里。玩家回合、同步 manual RPC 和后台作业都通过 `queueCommitFollowUps` 排入这些作业，没有一条提交路径会把它丢掉。
 
 **回合里有挂起时。** 回合里有 runtime 挂起时，这些作业先不入队，随挂起项一起保存，回合也先不计数。结束这个回合的那个出口把作业入队、给回合计数：最后一个挂起项恢复成功，或者它被放弃、过期、因过时而作废。恢复后又挂起时，作业转给新的挂起项，回合仍不计数；整条挂起链只在结束时计一次。规则见[挂起与回合计数](../reference/api.md#挂起与回合计数)。
 
@@ -616,14 +620,15 @@ plugins/my-plugin/
 
 插件之间通过带版本的契约和宿主提供的能力协作。一个插件不能读取另一个插件的私有 namespace。
 
-| 需求             | 接口                                                  | 边界                                                                      |
-| ---------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| 本轮上游输出     | `io.inputs`，`from: { contract: narrative-engine@2 }` | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。 |
-| 强依赖与顺序     | `schedule.needs` / `schedule.after`                   | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。              |
-| 已提交导出       | `io.inputs` 的 `scope: committed`                     | 读取显式导出，不扫描其他插件存储。                                        |
-| 查询业务能力     | `ctx.services.discover/call`                          | 使用 service contract 与 provider 身份，不绑定私有表。                    |
-| 提示词、历史、UI | 声明并注册 extension point                            | collect、pipeline 或 single 决定组合方式和竞争规则。                      |
-| 世界角色         | 只读 `ctx.world` 与领域 proposal                      | schema 和角色由内核验证、提交；插件没有角色镜像。                         |
+| 需求                 | 接口                                                                              | 边界                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 本轮上游输出         | `io.inputs`，`from: { contract: narrative-engine@2 }`                             | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。               |
+| 交给故事的本回合说明 | `pre-turn` runtime 的 `io.storyContext`，读者 `from: { kernel: story-context@1 }` | 内核排序、去重、按预算整条省略；不加调度边，靠阶段屏障；agent 读 `<story-context>` 块。 |
+| 强依赖与顺序         | `schedule.needs` / `schedule.after`                                               | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。                            |
+| 已提交导出           | `io.inputs` 的 `scope: committed`                                                 | 读取显式导出，不扫描其他插件存储。                                                      |
+| 查询业务能力         | `ctx.services.discover/call`                                                      | 使用 service contract 与 provider 身份，不绑定私有表。                                  |
+| 提示词、历史、UI     | 声明并注册 extension point                                                        | collect、pipeline 或 single 决定组合方式和竞争规则。                                    |
+| 世界角色             | 只读 `ctx.world` 与领域 proposal                                                  | schema 和角色由内核验证、提交；插件没有角色镜像。                                       |
 
 例子：一个 `post-turn` 的 runtime 想读本回合的正文。
 

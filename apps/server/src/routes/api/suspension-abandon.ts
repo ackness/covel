@@ -41,10 +41,12 @@ import {
 } from "./commit-envelope.js";
 import {
   publishDeferredRuntimeJobs,
-  requestJobServices,
+  requestCredentialHandoff,
 } from "./plugin-rpc/settled-request.js";
+import type { JobCredentialHandoff } from "./plugin-rpc/runtime-job-credentials.js";
 import type { RuntimeJobWorker } from "./plugin-rpc/runtime-job-worker.js";
 import { loadSessionPluginUserSettings } from "./plugin-user-settings.js";
+import { syncSessionRuntimes } from "./execution-context.js";
 
 export interface SuspensionAbandonDeps {
   readonly store: DataStore;
@@ -54,16 +56,20 @@ export interface SuspensionAbandonDeps {
   >;
   readonly eventBus?: EventBus;
   readonly worker?: Pick<RuntimeJobWorker, "wake">;
-  /** Request-scoped provider credentials for the jobs this releases. */
-  readonly registerCredentials?: CommitEnqueueContext["registerCredentials"];
+  /** Hands request-scoped provider services to the jobs this releases. */
+  readonly credentials?: CommitEnqueueContext["credentials"];
   /** Player settings sent with the request, merged over the world's. */
   readonly playerSettings?: TurnInput["userSettings"];
 }
 
-/** The abandon dependencies of a request. */
+/**
+ * The abandon dependencies of a request. A request whose commit also queues
+ * other jobs passes its own hand-off, so one withdrawal covers them all.
+ */
 export function requestSuspensionAbandonDeps(
   c: Context,
   playerSettings?: TurnInput["userSettings"],
+  credentials: JobCredentialHandoff = requestCredentialHandoff(c),
 ): SuspensionAbandonDeps {
   const eventBus = c.get("eventBus");
   const worker = c.get("runtimeJobWorker");
@@ -73,11 +79,7 @@ export function requestSuspensionAbandonDeps(
     ...(eventBus ? { eventBus } : {}),
     ...(worker ? { worker } : {}),
     ...(playerSettings ? { playerSettings } : {}),
-    registerCredentials: (key, maxQueueMs) => {
-      const services = requestJobServices(c);
-      if (services)
-        c.get("runtimeJobCredentials")?.register(key, services, maxQueueMs);
-    },
+    credentials,
   };
 }
 
@@ -106,7 +108,8 @@ export function heldJobsRelease(
       if (jobs.length === 0) return;
       const session = await tx.getSession(sessionId);
       if (!session) return;
-      deps.pluginRegistry.syncSessionActivations(
+      const activeRuntimes = syncSessionRuntimes(
+        deps.pluginRegistry,
         session.id,
         session.activePlugins,
       );
@@ -121,12 +124,10 @@ export function heldJobsRelease(
           {
             sessionId: session.id,
             session,
-            activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
+            activeRuntimes,
             locale: session.locale ?? DEFAULT_LOCALE,
             ...(userSettings ? { userSettings } : {}),
-            ...(deps.registerCredentials
-              ? { registerCredentials: deps.registerCredentials }
-              : {}),
+            ...(deps.credentials ? { credentials: deps.credentials } : {}),
           },
           jobs,
         )),
@@ -149,10 +150,11 @@ async function activeManifest(
 ): Promise<RuntimeManifest | undefined> {
   const session = await deps.store.getSession(suspension.sessionId);
   if (!session) return undefined;
-  deps.pluginRegistry.syncSessionActivations(session.id, session.activePlugins);
-  return deps.pluginRegistry
-    .getActiveRuntimes(session.id)
-    .find((runtime) => runtime.name === suspension.runtimeId);
+  return syncSessionRuntimes(
+    deps.pluginRegistry,
+    session.id,
+    session.activePlugins,
+  ).find((runtime) => runtime.name === suspension.runtimeId);
 }
 
 /**

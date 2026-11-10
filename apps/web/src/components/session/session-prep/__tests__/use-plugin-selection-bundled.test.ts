@@ -9,6 +9,7 @@ import {
   PluginSummary,
   WorldPluginPlan,
 } from "@covel/shared";
+import { providesStoryContract } from "@covel/shared/contracts";
 import { usePluginSelection } from "../use-plugin-selection.js";
 import * as api from "@/services/api.js";
 
@@ -44,7 +45,8 @@ const contractOf = (entry: unknown) =>
 const PLUGINS = bundled("plugins").map((id) => {
   const manifest = frontmatter("plugins", id, "PLUGIN.md");
   // As the loader works them out: a package provides what it writes, then
-  // each runtime's output contract.
+  // each runtime's output contract, which an automatically scheduled story
+  // runtime has without writing it.
   const runtimeDir = path.join(ROOT, "plugins", id, "runtimes");
   const runtimes = [
     manifest.runtime,
@@ -58,7 +60,15 @@ const PLUGINS = bundled("plugins").map((id) => {
   ].filter(Boolean);
   const provides: unknown[] = list(manifest.provides);
   for (const runtime of runtimes) {
-    const contract = runtime.io?.output?.contract;
+    const contract =
+      runtime.io?.output?.contract ??
+      (providesStoryContract({
+        visibility: runtime.io?.visibility,
+        triggerType: runtime.schedule?.trigger?.type,
+        subagentOnly: runtime.schedule?.subagentOnly,
+      })
+        ? "narrative-engine@2"
+        : undefined);
     if (contract && !provides.map(contractOf).includes(contract))
       provides.push(contract);
   }

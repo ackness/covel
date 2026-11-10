@@ -210,7 +210,7 @@
         "type": "string",
         "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
       },
-      "description": "Contracts whose other providers cannot be active together with this package. Plugin contracts only."
+      "description": "Contracts whose other providers cannot be active together with this package. Plugin contracts only. A framework contract with one provider per session, such as `narrative-engine@2`, is exclusive on its own and ignored here."
     },
     "contracts": {
       "type": "object",
@@ -230,7 +230,7 @@
         "required": ["schema"],
         "additionalProperties": false
       },
-      "description": "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace."
+      "description": "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. Framework contracts such as `narrative-engine@2` and `character-actor@1` need none either; a different schema for one is refused."
     },
     "entry": {
       "type": "string",
@@ -1560,8 +1560,12 @@
                         "properties": {
                           "kernel": {
                             "type": "string",
-                            "enum": ["turn-digest@1", "operations@1"],
-                            "description": "Kernel input: the turn digest or staged operations from completed upstream runs."
+                            "enum": [
+                              "turn-digest@1",
+                              "operations@1",
+                              "story-context@1"
+                            ],
+                            "description": "Kernel input: the turn digest, staged operations from completed upstream runs, or the notes pre-turn runtimes hand to the story."
                           }
                         },
                         "required": ["kernel"],
@@ -1669,11 +1673,11 @@
                 "contract": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                  "description": "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it."
+                  "description": "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. An automatically scheduled story runtime provides `narrative-engine@2` without it; other story runtimes cannot write it."
                 },
                 "schema": {
                   "type": "string",
-                  "description": "Private schema that validates the runtime's output."
+                  "description": "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema."
                 },
                 "live": {
                   "type": "string",
@@ -1682,11 +1686,35 @@
                 },
                 "recordAs": {
                   "type": "string",
-                  "description": "Export key under which the output is persisted for later executions. Requires `schema`."
+                  "description": "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one."
                 }
               },
               "additionalProperties": false,
               "description": "What the runtime produces."
+            },
+            "storyContext": {
+              "type": "object",
+              "properties": {
+                "select": {
+                  "type": "string",
+                  "pattern": "^(\\/([^/~]|~0|~1)*)*$",
+                  "description": "JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output.",
+                  "examples": ["/storyContext"]
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": ["high", "normal", "low"],
+                  "description": "Ranking tier: `high` notes come first and are the last to be left out. Defaults to `normal`."
+                },
+                "order": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Order within a tier, ascending; ties go by package and runtime ID. Defaults to `0`."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Hands one value of this runtime's output to the story of the same turn as a note of the `story-context@1` kernel input. Only on stage `pre-turn`."
             },
             "visibility": {
               "type": "string",

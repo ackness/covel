@@ -52,7 +52,7 @@ const strings = (value) =>
     : [];
 
 /**
- * @param {unknown} worldIR  `contract:world-ir@1` value
+ * @param {unknown} worldIR  `contract:world-ir@2` value
  * @param {readonly string[]} knownQuestNames  names already in the quest log
  * @returns {Array<{ name: string, description?: string, status?: string, objectives?: Array<{ text: string, done?: boolean }>, giver?: string, reward?: string }>}
  */

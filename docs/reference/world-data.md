@@ -967,7 +967,7 @@ ZIP 安装与 AI 文件写回共用包预检，不读取本地覆盖。生成、
 
 这一节面向插件作者。世界作者通常用不到它。
 
-`contract:world-ir@1` 是 `world-ir` 插件发布的一种中立格式，用来描述世界里的事实。它让世界作者或上游的抽取步骤只维护一份世界事实，再由各插件把同一份输入转换成自己的数据。
+`contract:world-ir@2` 是 `world-ir` 插件发布的一种中立格式，用来描述世界里的事实。游玩中的抽取 runtime 也以同一个 ID 作为输出契约，所以作者只需记住这一个。它让世界作者或上游的抽取步骤只维护一份世界事实，再由各插件把同一份输入转换成自己的数据。
 
 v1 的顶层和每类记录都拒绝未知字段。插件专用的内容只能放在 `attributes` 里：
 
@@ -1002,7 +1002,7 @@ sources:
   worldIr:
     kind: yaml
     path: data/world.ir.yaml
-    schema: contract:world-ir@1
+    schema: contract:world-ir@2
     to: world:metadata.worldIr
     effects:
       - projections
@@ -1056,14 +1056,14 @@ handler 的返回值：
 
 **发现接口。** 开发工具和 Agent 可以通过 `GET /api/framework/capabilities` 发现 `projections` effect 和契约 URI 的写法，再通过 `GET /api/plugins/:id` 读取每个插件汇总后的 `worldProjections`。这些接口只返回声明信息，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
 
-**静态数据和游玩中的抽取**使用同一个 `contract:world-ir@1`，但执行方式不同：
+**静态数据和游玩中的抽取**使用同一个 `contract:world-ir@2`，但执行方式不同：
 
 - 静态世界数据走上面的 handler。
-- 游玩中，`world-ir` agent 把叙事输出（`narrative-engine@2`）抽取一次，`codex`、`core-quest/log`、`affinity`、`inventory/ledger` 和 `npc-graph/extractor` 并行读取这一份结果。
+- 游玩中，`world-ir` agent 把叙事输出（`narrative-engine@2`）抽取一次，`codex`、`core-quest/log`、`affinity`、`inventory/ledger` 和 `npc-graph/extractor` 并行读取这一份结果。它们都以 `required: false` 绑定 `world-ir@2`，不写进包的 `requires`：会话里有提供者时排在它之后读取，没有时照常运行。
   - 任务和物品是只读固定字段的 function runtime，不调用模型。
   - 好感仍由 agent 判断，字段见 [tools.md · submit-world-facts](./tools.md#submit-world-facts)。
   - `inventory/vocabulary` 与 `core-quest/vocabulary` 在 pre-turn 通过 `world-ir.vocabulary@1` 公布已追踪的物品名、任务名和未完成的目标，抽取时沿用同样的名称，并通过[逐目标评估](./tools.md#逐目标评估)检查覆盖与任务事件的一致性。
-- 这次共享的抽取失败时，依赖它的 runtime 被跳过，不影响本回合叙事成功提交。
+- 会话没有选 `world-ir`，或这次共享的抽取失败时，这些 runtime 拿不到输入：`codex`、`affinity` 和 `npc-graph/extractor` 改读对话里的本回合正文；`core-quest/log` 和 `inventory/ledger` 以 `skipped` 结束，不改任务和背包。本回合叙事照常提交。
 - 需要自动维护维度的会话，这时仍然留下 `pending-settlement`。失败或跳过不能当成“维度没有变化”；恢复完成之前会阻止下一次叙事。
 
 ## 世界角色 Schema

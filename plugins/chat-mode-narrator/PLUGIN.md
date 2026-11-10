@@ -1,5 +1,5 @@
 ---
-version: 0.0.46
+version: 0.0.47
 displayName: Chat Storyteller
 description: >-
   Tells the story as a conversation, with characters talking to each other and
@@ -12,11 +12,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-conflicts:
-  - narrative-engine@2
-contracts:
-  narrative-engine@2:
-    schema: ./schemas/narrative-engine.schema.json
 contributes:
   extensions:
     - prompt.segment@1/character-sheets

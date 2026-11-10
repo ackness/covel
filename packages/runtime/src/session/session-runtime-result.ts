@@ -71,6 +71,8 @@ export interface CommittableRuntimeResult {
 }
 
 export interface RuntimeCommitOptions {
+  /** Kernel-owned call identity attached after proposal hooks and validation. */
+  readonly storySource?: import("../commit/commit-narrative.js").StoryMessageSource;
   readonly readScopes?: readonly import("@covel/shared").ProposalReadScope[];
   readonly signal?: AbortSignal;
   readonly hookPipeline?: HookPipeline;
@@ -464,6 +466,7 @@ async function persistProposals(
     opts?.signal,
     {
       preStateCommitApplied,
+      ...(opts?.storySource ? { storySource: opts.storySource } : {}),
       ...(opts?.mediaStore ? { mediaStore: opts.mediaStore } : {}),
       ...(opts?.datasetPolicy ? { datasetPolicy: opts.datasetPolicy } : {}),
     },

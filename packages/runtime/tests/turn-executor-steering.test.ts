@@ -11,6 +11,7 @@ import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { trackSteeringReaders } from "../src/turn-executor/turn-control.js";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 
 const narrator = {
   name: "narrator",
@@ -45,7 +46,9 @@ const prose: LLMResponse = {
     {
       id: "final",
       name: "submit-output",
-      arguments: JSON.stringify({ narrativeOutput: "The door opens." }),
+      arguments: JSON.stringify({
+        segments: narrationSegments("The door opens."),
+      }),
     },
   ],
   finishReason: "tool_calls" as const,

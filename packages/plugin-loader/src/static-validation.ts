@@ -1,4 +1,5 @@
 import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
+import { frameworkContractSchemas } from "@covel/shared/contracts";
 import type { PluginThemeFiles } from "./theme-files.js";
 import type { MessageCatalog } from "./locale-messages.js";
 import { compilePluginTheme } from "./plugin-themes.js";
@@ -23,6 +24,7 @@ import {
   isSchemaObject,
 } from "./action-kinds.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
+import { storyContextSchemaError } from "./story-context-schema.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
 export function pluginImportReferences(
@@ -68,7 +70,10 @@ export function validateRuntimeDeclarations(
   // contract gets one runtime's output, so two runtimes cannot share one.
   const outputs = new Set<string>();
   for (const parsed of manifests) {
-    const contract = parsed.runtime?.io?.output?.contract;
+    // The compiled contract: a story runtime provides the story contract
+    // without naming it. A second automatic story runtime is disabled before
+    // this check (`surplusStoryRuntimes`), so only written contracts collide.
+    const contract = parsed.manifest.outputContract;
     if (!contract) continue;
     if (outputs.has(contract))
       throw new Error(
@@ -222,6 +227,9 @@ export function validatePluginFiles(
     );
     if (document !== undefined) contractSchemas[contract] = document;
   }
+  // The loader resolves a framework contract to its own schema, whatever a
+  // package declares (a different one is refused when the package loads).
+  Object.assign(contractSchemas, frameworkContractSchemas);
   for (const [namespace, declaration] of Object.entries(
     plugin.contributes?.data ?? {},
   ))
@@ -407,6 +415,12 @@ export function validatePluginFiles(
       throw new Error(
         `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
       );
+    const storyContextError = storyContextSchemaError(
+      runtime,
+      parsed.sourcePath,
+      outputSchema,
+    );
+    if (storyContextError) throw new Error(storyContextError);
     if (runtime.runtimeType !== "function" && outputSchema !== undefined) {
       try {
         assertAgentOutputObjectSchema(outputSchema);

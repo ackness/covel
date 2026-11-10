@@ -67,22 +67,52 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 };
 
 /**
+ * What a failed guard handler stops: one that throws, times out or returns
+ * an invalid result. A failure never lets through what the handler judged.
+ *
+ * - `closed`: the guarded operation does not happen. TurnStart aside, that
+ *   is one unit: the compaction, the runtime (skipped with `hook-failed`),
+ *   the tool call, the reviewed output, or the proposal (rejected with
+ *   `hook-failed`). What a skipped runtime or a rejected proposal then
+ *   costs follows the commit rules: next to a committed story, a unit that
+ *   holds no story drops alone, and a story that hard-depends on a skipped
+ *   runtime is refused.
+ * - `own-runtimes`: TurnStart judges the whole execution, so a failure fails
+ *   it, unless the caller confines it (`confinable` on the pipeline run):
+ *   then the handler's plugin sits the execution out, its runtimes skipped
+ *   with `hook-failed`, and the chain goes on. The turn executor confines
+ *   only a plugin without a story runtime that has runtimes scheduled in an
+ *   execution with a story; a plugin of hooks alone may exist only to gate
+ *   input, so its failure fails the execution.
+ *
+ * A framework hook's failure always fails closed.
+ */
+export type GuardFailureScope = "own-runtimes" | "closed";
+
+export const GUARD_FAILURE_SCOPE: Readonly<
+  Partial<Record<HookEvent, GuardFailureScope>>
+> = {
+  TurnStart: "own-runtimes",
+  PreCompaction: "closed",
+  PreRuntime: "closed",
+  PreToolUse: "closed",
+  ReviewAgentOutput: "closed",
+  PreStateCommit: "closed",
+};
+
+/**
  * Sequential events whose call site acts on `abort`: it vetoes the turn, the
  * compaction, the runtime, the tool call or the proposal. A handler of one of
  * these that throws, times out or returns a malformed result fails closed —
  * the pipeline answers `abort`, since a broken policy must not let the guarded
- * operation through. Every other sequential event only transforms its payload
- * and reads `abort` as "no change", so a failed handler there is skipped and
- * the replacements of the handlers before it are kept.
+ * operation through — within the scope `GUARD_FAILURE_SCOPE` gives it. Every
+ * other sequential event only transforms its payload and reads `abort` as
+ * "no change", so a failed handler there is skipped and the replacements of
+ * the handlers before it are kept.
  */
-export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
-  "TurnStart",
-  "PreCompaction",
-  "PreRuntime",
-  "PreToolUse",
-  "ReviewAgentOutput",
-  "PreStateCommit",
-]);
+export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set(
+  Object.keys(GUARD_FAILURE_SCOPE) as HookEvent[],
+);
 
 // ── Hook context (read-only metadata about the current hook site) ──
 
@@ -95,7 +125,7 @@ export interface HookContext {
   readonly turnId: string;
   /**
    * The session's content locale. The pipeline fills it from the session
-   * hook scope; absent only for a direct `pipeline.run` with no scope.
+   * hook scope; absent only when the scope carries no locale.
    */
   readonly locale?: string;
   /** Frozen logical number of the originating input, when run in an execution. */
@@ -131,9 +161,10 @@ export interface HookContext {
    * - Scoped to the handler's own plugin only — no cross-plugin reads.
    * - Returns `{}` for framework / global hooks (no `pluginId`), or when the
    *   plugin declared no settings, or when the scope carries no settings.
-   * - Absent (`undefined`) when invoked outside an active hook scope (e.g.
-   *   direct `pipeline.run` unit calls) — handlers should use
-   *   `ctx.getOwnSettings?.() ?? {}`.
+   * - Always set on the context a handler receives: the pipeline refuses to
+   *   run outside a hook scope (`MissingHookScopeError`). It stays optional
+   *   in the type because callers build the context without it, so
+   *   `ctx.getOwnSettings?.() ?? {}` keeps working.
    */
   readonly getOwnSettings?: () => Readonly<Record<string, unknown>>;
 }
@@ -157,6 +188,22 @@ export type HookResult<P> =
       readonly reason: string;
       readonly handlerFailed?: true;
     };
+
+/** A failed TurnStart handler whose plugin sits the execution out. */
+export interface ConfinedHookFailure {
+  /** The plugin that registered the failed handler. */
+  readonly pluginId: string;
+  readonly reason: string;
+}
+
+/**
+ * What `HookPipeline.run` answers: the chain's result, plus the failed
+ * handlers it went on without because the caller confined them (see
+ * `GUARD_FAILURE_SCOPE`). The caller sits each listed plugin out.
+ */
+export type HookRunResult<P> = HookResult<P> & {
+  readonly confined?: readonly ConfinedHookFailure[];
+};
 
 // ── Hook handler ─────────────────────────────────────────────────
 

@@ -214,6 +214,7 @@ Details to remember:
   - The player retrying or waiving a setup runtime in the UI.
   - The execution record. `turn_results` and each runtime's output are written before the commit; `turn_results` starts as `pending` and is settled to `committed` or `failed` after the commit.
 - `turn.suspended` is sent only after the commit.
+- Each committed story message carries a kernel receipt in `metadata.storySource`: execution, run, plugin and runtime IDs, plus `scope: top-level | nested`. Deferred presentation and selector recovery read this persisted identity, including after suspension release; they never infer top-level status from the runtime ID or a missing receipt.
 - When a suspension record is saved, an older item of the same runtime that still waits is voided in the same transaction. A resume's commit transaction first checks the record contents noted at the suspension, and writes nothing when one changed.
 - A resumed runtime can suspend again. That commit first marks the old suspended item handled, then saves the new one; the new item continues the same execution and does not abandon the old one. The rules are in [Suspending again](../reference/api.md#suspending-again).
 - When a function suspends, its successful recursive children and all their descendants are saved with the continuation. Their computation results remain successful while domain writes, journal rows, triggers and output exports wait. The final successful resume commits one atomic unit, children before parent, without rerunning saved handlers or Hooks. Another suspension only transfers the saved work.
@@ -307,7 +308,7 @@ flowchart TB
     Keep --> End
 ```
 
-The boxes that carry hook names in the diagram (`TurnStart`, `PreRuntime`, `PreLLMCall`, and so on) are the points where a plugin can attach a handler. The full list is in the [Hook reference](../reference/hooks.md).
+The boxes that carry hook names in the diagram (`TurnStart`, `PreRuntime`, `PreLLMCall`, and so on) are the points where a plugin can attach a handler. The full list is in the [Hook reference](../reference/hooks.md). A failing guard hook stops only what it judged: one runtime or one proposal. A failing `TurnStart` handler of a plugin without a story runtime can make that plugin sit a turn with a story out, and the story and the other plugins run; see [When a guard handler fails](../reference/hooks.md#auxiliary-hook-failures). A failing dimension provider runtime does not stop the story either; see [World Model](../reference/world-model.md#turn-timing-and-settlement-receipts).
 
 **Stage bands** (fixed rules in `packages/runtime/src/turn-executor/scheduling.ts` and `packages/runtime/src/schedule/`):
 
@@ -322,6 +323,7 @@ Ordering rules for the main loop:
 - Inside one stage, the order is set by the dependency graph built from `needs`, `after`, and `inputs` bindings.
 - Runtimes that do not depend on each other run in parallel. When they tie, `name` gives a stable order.
 - A runtime in a dependency cycle, and everything downstream of it, is marked `skipped: dependency-cycle` for this turn. It does not fall back to running in an arbitrary order.
+- Kernel inputs add no dependency edges. `operations@1` and `story-context@1` are collected from finished results when the reader's inputs are bound; `story-context@1` providers run only in `pre-turn` and readers in a later stage, so the stage barrier ensures providers finish first. A reader depends on the providers it read; see [the kernel input `story-context@1`](../reference/plugins.md#story-context).
 
 **Proposal types** (all go through the commit chain, defined by `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`): `narrative.append`, `interaction.request`, `event.emit`, `ui.render`, `asset.generate`, `plugin.data` / `plugin.data.batch` / `plugin.data.delete` / `plugin.data.update`, `character.schema.set`, `character.upsert`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
 
@@ -330,7 +332,7 @@ Ordering rules for the main loop:
 - An explicit exclusion also works for core plugins.
 - If a dependency is missing, the kernel first picks the only regular provider. Then it considers the only default provider.
 - When the player explicitly swaps the default provider, this is handled before conflict detection.
-- A `conflicts` clash, or two plugins that compete for an extension point that allows only one provider (single), rejects that combination.
+- A `conflicts` clash, or two plugins that compete for an extension point that allows only one provider (single) or for a framework contract with one provider (`narrative-engine@2`), rejects that combination. A single-provider framework contract written in `conflicts` is ignored.
 - A normal output contract can have several providers. A consumer says whether it wants one or all with `cardinality: one | all`.
 - Explicit choices made when enabling and disabling are saved in `session.metadata.pluginSelection`. A recommendation list does not enable plugins by itself.
 
@@ -372,6 +374,8 @@ flowchart LR
 - Its result is exported with `recordAs`;
 - It can emit events: its `tools.builtin` lists `emit-event`, or it declares `advertiseEvents: true`;
 - It changes characters, state, or interactions directly.
+
+**When a plugin RPC names it.** When a plugin RPC runs a runtime that declares `schedule.detached` by name, it also becomes a job once it passes the checks above, and does not run in that execution: in sync mode it is queued in the commit transaction of the manual run and listed in the response's `deferredJobs`; in background mode it is queued in the manual job's commit transaction and recorded in its `result.deferredJobs`. Player turns, sync manual RPCs and background jobs all queue these jobs through `queueCommitFollowUps`, so no commit path drops them.
 
 **When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. When a resume suspends again, the jobs move to the new suspended item and the turn is still not counted; a whole chain of suspensions counts once, when it ends. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
 
@@ -615,14 +619,15 @@ For all the fields, see the [plugin reference](../reference/plugins.md).
 
 Plugins work together through versioned contracts and the capabilities that the host provides. A plugin cannot read the private namespace of another plugin.
 
-| Need                           | Interface                                             | Boundary                                                                                                   |
-| ------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| This turn's upstream output    | `io.inputs`, `from: { contract: narrative-engine@2 }` | An agent gets a typed input data block. A function uses `ctx.inputs`. The source information is kept.      |
-| Hard dependencies and order    | `schedule.needs` / `schedule.after`                   | `needs` sets the order and gates it. `after` only sets the order. Turn input bindings also form DAG edges. |
-| Committed exports              | `scope: committed` in `io.inputs`                     | Reads explicit exports. It does not scan other plugins' storage.                                           |
-| Querying a business capability | `ctx.services.discover/call`                          | Uses a service contract and the provider's identity. It is not bound to a private table.                   |
-| Prompts, history, UI           | Declare and register an extension point               | `collect`, `pipeline`, or `single` decides how they combine and how they compete.                          |
-| World characters               | Read-only `ctx.world` and domain proposals            | The kernel validates and commits the schema and characters. Plugins have no copy of the characters.        |
+| Need                            | Interface                                                                                      | Boundary                                                                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| This turn's upstream output     | `io.inputs`, `from: { contract: narrative-engine@2 }`                                          | An agent gets a typed input data block. A function uses `ctx.inputs`. The source information is kept.                                                                   |
+| This turn's notes for the story | `io.storyContext` on a `pre-turn` runtime; the reader uses `from: { kernel: story-context@1 }` | The kernel ranks, deduplicates and leaves out whole notes over the budget. No scheduling edge; the stage barrier orders it. An agent reads the `<story-context>` block. |
+| Hard dependencies and order     | `schedule.needs` / `schedule.after`                                                            | `needs` sets the order and gates it. `after` only sets the order. Turn input bindings also form DAG edges.                                                              |
+| Committed exports               | `scope: committed` in `io.inputs`                                                              | Reads explicit exports. It does not scan other plugins' storage.                                                                                                        |
+| Querying a business capability  | `ctx.services.discover/call`                                                                   | Uses a service contract and the provider's identity. It is not bound to a private table.                                                                                |
+| Prompts, history, UI            | Declare and register an extension point                                                        | `collect`, `pipeline`, or `single` decides how they combine and how they compete.                                                                                       |
+| World characters                | Read-only `ctx.world` and domain proposals                                                     | The kernel validates and commits the schema and characters. Plugins have no copy of the characters.                                                                     |
 
 Example: a `post-turn` runtime wants to read this turn's story text.
 

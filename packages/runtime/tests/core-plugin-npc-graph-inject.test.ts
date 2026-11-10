@@ -1,3 +1,4 @@
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 import { createFunctionStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
 import { describe, expect, it } from "vitest";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
@@ -31,7 +32,9 @@ class CapturingLLM implements LLMAdapter {
         {
           id: "final",
           name: "submit-output",
-          arguments: '{"narrativeOutput":"你记起了图谱中的关系。"}',
+          arguments: JSON.stringify({
+            segments: narrationSegments("你记起了图谱中的关系。"),
+          }),
         },
       ],
       finishReason: "tool_calls" as const,

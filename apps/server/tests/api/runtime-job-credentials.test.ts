@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter } from "@covel/runtime";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
-import { createRuntimeJobCredentials } from "../../src/routes/api/plugin-rpc/runtime-job-credentials.js";
+import {
+  createJobCredentialHandoff,
+  createRuntimeJobCredentials,
+} from "../../src/routes/api/plugin-rpc/runtime-job-credentials.js";
 
 const key = {
   jobId: "job",
@@ -56,5 +59,50 @@ describe("runtime job request services", () => {
     expect(credentials.peek(other)).toBe(services);
     credentials.clear();
     expect(credentials.size).toBe(0);
+  });
+});
+
+describe("job credential hand-off", () => {
+  const queued = (jobId: string, maxQueueMs?: number) => ({
+    job: maxQueueMs === undefined ? {} : { maxQueueMs },
+    credentialKey: { ...key, jobId },
+  });
+
+  it("registers for each job's queue time and withdraws all but the kept jobs", () => {
+    vi.useFakeTimers();
+    const credentials = createRuntimeJobCredentials({ defaultTtlMs: 100 });
+    const handoff = createJobCredentialHandoff(credentials, () => services);
+    handoff.register(queued("stage", 10));
+    handoff.register(queued("kept"));
+    handoff.handOff([queued("follower")]);
+    // Only jobs registered inside a transaction are tracked for withdrawal.
+    expect(handoff.keys.map(({ jobId }) => jobId)).toEqual(["stage", "kept"]);
+    vi.advanceTimersByTime(11);
+    expect(credentials.peek({ ...key, jobId: "stage" })).toBeUndefined();
+    expect(credentials.peek({ ...key, jobId: "kept" })).toBe(services);
+
+    handoff.discard(new Set(["kept"]));
+    expect(credentials.peek({ ...key, jobId: "kept" })).toBe(services);
+    expect(credentials.peek({ ...key, jobId: "follower" })).toBe(services);
+    expect(handoff.keys.map(({ jobId }) => jobId)).toEqual(["kept"]);
+    handoff.discard();
+    expect(credentials.peek({ ...key, jobId: "kept" })).toBeUndefined();
+    expect(handoff.keys).toEqual([]);
+  });
+
+  it("hands nothing over without services or a credential store", () => {
+    const credentials = createRuntimeJobCredentials();
+    const withoutServices = createJobCredentialHandoff(
+      credentials,
+      () => undefined,
+    );
+    withoutServices.register(queued("stage"));
+    withoutServices.handOff([queued("follower")]);
+    expect(withoutServices.keys).toEqual([]);
+    expect(credentials.size).toBe(0);
+
+    const withoutStore = createJobCredentialHandoff(undefined, () => services);
+    withoutStore.register(queued("stage"));
+    expect(withoutStore.keys).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import {
   provideHostModules,
   readPlainYamlFrontmatter,
   EXTRACTED_KINDS,
+  type ExtensionContribution,
   type ExtractedDeclarations,
 } from "@covel/plugin-loader";
 import {
@@ -61,7 +62,7 @@ export async function extractDeclarations(
       .optional()
       .parse(variant.data.contributes);
     if (
-      [...EXTRACTED_KINDS, "extensions", "commands"].some(
+      [...EXTRACTED_KINDS, "commands"].some(
         (key) => contributes && Object.hasOwn(contributes, key),
       )
     )
@@ -95,7 +96,7 @@ export async function extractDeclarations(
   const forms: string[] = [];
   const wires: string[] = [];
   const hooks: ExtractedDeclarations["hooks"][number][] = [];
-  const extensions: string[] = [];
+  const registeredExtensions: string[] = [];
   const record = (list: string[], value: string) => {
     const name = z.string().min(1).parse(value);
     if (!list.includes(name)) list.push(name);
@@ -193,7 +194,7 @@ export async function extractDeclarations(
       if (!hooks.some((old) => key(old) === key(hook))) hooks.push(hook);
     },
     provideExtension(point, id) {
-      record(extensions, `${point}/${id}`);
+      record(registeredExtensions, `${point}/${id}`);
     },
   };
   // Match runtime-loading's lexical and real-path containment and host imports.
@@ -251,6 +252,34 @@ export async function extractDeclarations(
     throw cleanupError;
   }
   if (entryFailed) throw entryError;
+  // Authored entries that are still registered keep their form and options
+  // (`slot`, `order`, ...); only IDs are added or dropped.
+  const extensionKey = (value: unknown): string | undefined => {
+    if (typeof value === "string") return value;
+    if (!value || typeof value !== "object") return undefined;
+    const { point, id } = value as Record<string, unknown>;
+    return typeof point === "string" && typeof id === "string"
+      ? `${point}/${id}`
+      : undefined;
+  };
+  const extensions: ExtensionContribution[] = [];
+  const kept = new Set<string>();
+  for (const value of z
+    .array(z.unknown())
+    .optional()
+    .parse(authored?.extensions) ?? []) {
+    const key = extensionKey(value);
+    if (
+      key === undefined ||
+      !registeredExtensions.includes(key) ||
+      kept.has(key)
+    )
+      continue;
+    kept.add(key);
+    extensions.push(value as ExtensionContribution);
+  }
+  for (const key of registeredExtensions)
+    if (!kept.has(key)) extensions.push(key);
   const fields = pluginManifestSchema.shape.contributes.unwrap().shape;
   for (const [key, values] of Object.entries({
     tools,

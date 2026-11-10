@@ -9,6 +9,7 @@ import {
   type PluginExtensionContext,
 } from "@covel/shared";
 import { createUiSlotHost, type UiSlotHost } from "../../src/ui-slots/host.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
 const disposables: UiSlotHost[] = [];
 afterEach(async () => {
   await Promise.all(disposables.splice(0).map((host) => host.close()));
@@ -40,6 +41,7 @@ async function fixture(
     ensure: async () => {},
   });
   const extensionHost = new PluginExtensionHost(services, [uiSlotV1]);
+  const pluginRegistry = createPluginRegistry();
   const eventBus = createEventBus(undefined, {
     requireSessionIncarnation: true,
     strictEmissions: true,
@@ -54,6 +56,7 @@ async function fixture(
   });
   const host = createUiSlotHost({
     store,
+    pluginRegistry,
     eventBus,
     services,
     extensionHost,

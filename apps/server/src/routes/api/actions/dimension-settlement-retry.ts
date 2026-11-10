@@ -3,7 +3,6 @@ import type { Context } from "hono";
 import {
   createWorldModelView,
   pendingDimensionSettlements,
-  snapshotUserSettings,
 } from "@covel/runtime";
 import { pluginRuntimeManifests } from "@covel/plugin-loader";
 import {
@@ -12,12 +11,17 @@ import {
   type TurnInput,
 } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
-import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
+import {
+  loadExecutionUserSettings,
+  syncLiveSessionRuntimes,
+} from "../execution-context.js";
+import { refuseFollowUps } from "../commit-envelope.js";
 import { resolveMediaImageFlow } from "../media-image-flow.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
+import { loadSessionPluginSettings } from "../session/hook-scope.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 import { runtimeRunsWithoutPrompt } from "./approval-preflight.js";
 
@@ -51,20 +55,7 @@ export async function retryPendingDimensionSettlements(
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   try {
-    const activeRuntimes = await withSettledSessionLock(
-      c,
-      sessionId,
-      async () => {
-        const live = await store.getSession(sessionId);
-        pluginRegistry.syncSessionActivations(
-          sessionId,
-          live?.activePlugins ?? [],
-        );
-        return pluginRegistry.getActiveRuntimes(sessionId);
-      },
-      undefined,
-      signal,
-    );
+    const activeRuntimes = await syncLiveSessionRuntimes(c, sessionId, signal);
     const pending = await pendingDimensionSettlements({
       store,
       sessionId,
@@ -79,6 +70,12 @@ export async function retryPendingDimensionSettlements(
       .createExecution({
         sessionId,
         locale: session.locale,
+        settings: await loadSessionPluginSettings({
+          store,
+          pluginRegistry,
+          session,
+          userSettings: args.playerSettings,
+        }),
         signal: c.req.raw.signal,
         runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
           ([pluginId, entry]) =>
@@ -115,13 +112,15 @@ export async function retryPendingDimensionSettlements(
     const hookPipeline = c.get("hookPipeline");
     const runner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
-      resolveImageFlowRuntimeIds: async () =>
+      resolveImageFlowRuntimeIds: async (settings) =>
         (
-          await resolveMediaImageFlow(
+          await resolveMediaImageFlow({
             store,
-            c.get("pluginExtensions"),
+            host: c.get("pluginExtensions"),
+            pluginRegistry,
             sessionId,
-          )
+            settings,
+          })
         )?.assetRuntimeIds,
       withSettledLock: (fn, waitBudget) =>
         withSettledSessionLock(c, sessionId, fn, waitBudget, signal),
@@ -145,7 +144,7 @@ export async function retryPendingDimensionSettlements(
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
-    const userSettings = await loadSessionPluginUserSettings(
+    const userSettings = await loadExecutionUserSettings(
       store,
       session,
       args.playerSettings,
@@ -166,9 +165,10 @@ export async function retryPendingDimensionSettlements(
           : []) as RuntimeResult[],
         sourceTurnId: receipt.sourceTurnId,
         ...(signal ? { executionSignal: signal } : {}),
-        ...(userSettings
-          ? { userSettings: snapshotUserSettings(userSettings) }
-          : {}),
+        ...(userSettings ? { userSettings } : {}),
+        // A retry from its source turn is a scoped recovery: it detaches no
+        // runtime and fans out no event, so it derives no follow-up work.
+        followUps: refuseFollowUps,
       });
       const failed = summary.runtimeResults.find(
         (result) => result.status === "failed",

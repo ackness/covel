@@ -6,6 +6,7 @@ import {
   type TurnInput,
   type LLMResponse,
 } from "@covel/shared";
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 
 export const input: TurnInput = {
@@ -15,13 +16,14 @@ export const input: TurnInput = {
   playerMessage: "Continue",
   locale: "en-US",
 };
+/** A story agent's submission: the story as segments. */
 export const answer = (content = "The story continues."): LLMResponse => ({
   content: null,
   toolCalls: [
     {
       id: "final",
       name: "submit-output",
-      arguments: JSON.stringify({ narrativeOutput: content }),
+      arguments: JSON.stringify({ segments: narrationSegments(content) }),
     },
   ],
   finishReason: "tool_calls" as const,

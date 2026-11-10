@@ -434,7 +434,7 @@
       "inputMissing": "An input it needs is missing",
       "missingProvider": "No plugin provides an input it needs",
       "inputUnusable": "The input it received could not be used",
-      "dimensionsPaused": "World state updates are paused"
+      "hookFailed": "A plugin hook failed, so it did not run this turn"
     },
     "pluginTags": {
       "costLlm": "Calls a model",

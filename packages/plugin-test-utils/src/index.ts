@@ -4,6 +4,7 @@ export {
   makeTurnInput,
   makeTriggerContext,
   makeRuntimeResult,
+  storyContextSlot,
 } from "./factories.js";
 export {
   makeManualFunctionContext,

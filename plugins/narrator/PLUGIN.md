@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.44
+version: 0.0.45
 displayName: Storyteller
 description: >-
   Continues the story after each of your actions, with scenes, reactions and
@@ -15,11 +15,6 @@ license: MIT
 provides:
   - contract: narrative-engine@2
     default: true
-conflicts:
-  - narrative-engine@2
-contracts:
-  narrative-engine@2:
-    schema: ./schemas/narrative-engine.schema.json
 contributes:
   extensions:
     - prompt.segment@1/character-sheets
@@ -112,9 +107,6 @@ runtime:
           contract: action-check@1
         select: /checkContext
         required: false
-    output:
-      contract: narrative-engine@2
-      schema: contract:narrative-engine@2
     visibility: story
   agent:
     tools:

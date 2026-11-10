@@ -215,7 +215,7 @@ describe("advancement execution boundaries", () => {
         );
         await writeFile(
           join(root, "runtimes", "child", "RUNTIME.md"),
-          "---\ndescription: Child probe\nschedule: { trigger: { type: manual } }\nio: { visibility: story, output: { contract: narrative-engine@2 } }\nfunction: {}\n---\n",
+          "---\ndescription: Child probe\nschedule: { trigger: { type: manual } }\nio: { visibility: story }\nfunction: {}\n---\n",
         );
         await writeFile(
           join(root, "runtimes", "child", "handler.js"),

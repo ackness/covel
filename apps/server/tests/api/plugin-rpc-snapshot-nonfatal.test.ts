@@ -17,6 +17,7 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
+import { refuseFollowUps } from "../../src/routes/api/commit-envelope.js";
 
 const SESSION_ID = "sess-snap-nonfatal";
 const PLUGIN_ID = "demo";
@@ -92,6 +93,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
     });
 
     const summary = await runner.runManualTurn({
+      followUps: refuseFollowUps,
       turnId: "turn-snap-1",
       runtimeId: RUNTIME_ID,
     });
@@ -169,6 +171,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       });
 
       const run = runner.runManualTurn({
+        followUps: refuseFollowUps,
         turnId: `turn-suspended-${_mode}`,
         runtimeId: RUNTIME_ID,
         ...(detached ? { detached: true } : {}),

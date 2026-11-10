@@ -4,7 +4,10 @@
  * checks, and the access table every route asks.
  */
 
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import { PERSONAL_PROVIDER_HOST_POLICY } from "@covel/ai-provider";
@@ -13,6 +16,7 @@ import {
   HOST_ACTIONS,
   bindWarnings,
   deriveHostProfile,
+  desktopHome,
   hostProfileMiddleware,
   hostProfileOf,
   requireAccess,
@@ -427,5 +431,40 @@ describe("deriveHostProfile", () => {
         storeBackend: "sqlite",
       }).form,
     ).toBe("hosted");
+  });
+});
+
+describe("desktopHome", () => {
+  const homes: string[] = [];
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    for (const home of homes.splice(0)) rmSync(home, { recursive: true });
+  });
+  const fakeUserHome = () => {
+    const home = mkdtempSync(join(tmpdir(), "covel-user-home-"));
+    homes.push(home);
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    return home;
+  };
+
+  it("is null without the desktop shell, even when COVEL_HOME is set", () => {
+    expect(desktopHome(envFor({ COVEL_HOME: "/tmp/covel-home" }))).toBeNull();
+  });
+
+  it("uses COVEL_HOME under the desktop shell", () => {
+    expect(
+      desktopHome(
+        envFor({ COVEL_DESKTOP_REST: "1", COVEL_HOME: "/tmp/covel-home" }),
+      ),
+    ).toBe("/tmp/covel-home");
+  });
+
+  it("falls back to an existing ~/.covel under the desktop shell", () => {
+    const home = fakeUserHome();
+    const env = envFor({ COVEL_DESKTOP_REST: "1" });
+    expect(desktopHome(env)).toBeNull();
+    mkdirSync(join(home, ".covel"));
+    expect(desktopHome(env)).toBe(join(home, ".covel"));
   });
 });

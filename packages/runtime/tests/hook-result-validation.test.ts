@@ -3,6 +3,9 @@ import { createEventBus } from "@covel/events";
 import type { SubscriptionEvent } from "@covel/shared";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookResult } from "../src/hooks/types.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 const invalidResults: Array<[string, unknown]> = [
   ["null", null],

@@ -331,9 +331,14 @@ describe("segmented story repair", () => {
     expect(result.status).toBe("success");
   });
 
-  it("accepts submitted narrativeOutput from a runtime with the host default schema", async () => {
+  it("accepts submitted segments from a runtime with the host default story schema", async () => {
     const llm = queuedLLM([
-      json({ narrativeOutput: "雨停了。\n\n她转身离开。" }),
+      json({
+        segments: [
+          { kind: "narration", text: "雨停了。" },
+          { kind: "narration", text: "她转身离开。" },
+        ],
+      }),
     ]);
     const runtime = story({ output: undefined });
     const { result } = await run({
@@ -344,10 +349,36 @@ describe("segmented story repair", () => {
     expect(llm.requests).toHaveLength(1);
     expect(llm.requests[0]?.responseFormat).toBeUndefined();
     expect(result.output).toMatchObject({
+      narrativeOutput: "雨停了。\n\n她转身离开。",
       segments: [
         { kind: "narration", text: "雨停了。" },
         { kind: "narration", text: "她转身离开。" },
       ],
+    });
+  });
+
+  it("repairs a narrativeOutput-only submission from a runtime with the host default story schema", async () => {
+    const llm = queuedLLM([
+      json({ narrativeOutput: "雨停了。\n\n她转身离开。" }),
+      json({ segments: [{ kind: "narration", text: "雨停了。" }] }),
+    ]);
+    const runtime = story({ output: undefined });
+    const { loop, result } = await run({
+      llm,
+      runtime,
+      loaded: { manifest: runtime, promptTemplate: "Write the story." },
+    });
+    expect(llm.requests).toHaveLength(2);
+    expect(loop.collectedToolCalls[0]?.output).toMatchObject({
+      error: { code: "invalid-output" },
+    });
+    expect(JSON.stringify(loop.collectedToolCalls[0]?.output)).toContain(
+      "required property 'segments'",
+    );
+    expect(result.status).toBe("success");
+    expect(result.output).toMatchObject({
+      narrativeOutput: "雨停了。",
+      segments: [{ kind: "narration", text: "雨停了。" }],
     });
   });
 

@@ -144,6 +144,9 @@ export function createRuntimeTools(options: {
             emittedEventTopics: events.map((event) => event.topic),
             emitter: deps.emitter,
             ...(deps.services ? { services: deps.services } : {}),
+            ...(deps.serviceOutcomes
+              ? { serviceOutcomes: deps.serviceOutcomes }
+              : {}),
             ...(options.operations ? { operations: options.operations } : {}),
           },
         );

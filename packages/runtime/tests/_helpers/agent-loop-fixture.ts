@@ -148,6 +148,31 @@ export function submitted(content: string): LLMResponse {
   return toolCall("submit-output", { narrativeOutput: content }, "submit");
 }
 
+/** One narration segment per paragraph of `content`. */
+export function narrationSegments(content: string) {
+  return content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((text) => ({ kind: "narration" as const, text }));
+}
+
+/**
+ * A successful story submission under the host default story schema: the
+ * story as segments. Its committed `narrativeOutput` is the paragraphs of
+ * `content` joined by blank lines.
+ */
+export function storySubmitted(
+  content: string,
+  extra: Readonly<Record<string, unknown>> = {},
+): LLMResponse {
+  return toolCall(
+    "submit-output",
+    { segments: narrationSegments(content), ...extra },
+    "submit",
+  );
+}
+
 export function toolCall(
   name: string,
   args: Record<string, unknown>,

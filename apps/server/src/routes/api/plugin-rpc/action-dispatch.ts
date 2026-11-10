@@ -7,7 +7,6 @@ import {
   hasServerCodeGrant,
 } from "../approval-verdict.js";
 import { sessionEventBus } from "../session/session-events.js";
-import { withSettledExecutionLock } from "./settled-request.js";
 import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
@@ -31,7 +30,11 @@ import {
 } from "../session/commands.js";
 import { runTracedCommand } from "./command-trace.js";
 import { errorBody } from "../../../api-error.js";
-import { readLockedSession } from "../session/locked-mutation.js";
+import {
+  readExecutionSession,
+  syncSessionRuntimes,
+  withSettledExecutionLock,
+} from "../execution-context.js";
 import {
   resolveSessionPluginSet,
   sessionPluginIds,
@@ -228,12 +231,10 @@ export async function dispatchPluginAction(
       // community code: disable/revoke/delete+recreate may have rotated it
       // while this request waited. Do not evaluate twice on the normal path —
       // that would consume a one-time grant twice.
-      const liveSession = await readLockedSession({
-        c,
+      const liveSession = await readExecutionSession(c, {
         store,
         sessionId,
         expectedSession: session,
-        allowedStatuses: ["active"],
       });
       if (liveSession instanceof Response) return liveSession;
       if (
@@ -286,12 +287,11 @@ export async function dispatchPluginAction(
           );
         }
         liveInvocation = parsed.invocation;
-        const pluginRegistry = c.get("pluginRegistry");
-        pluginRegistry.syncSessionActivations(
+        activeRuntimes = syncSessionRuntimes(
+          c.get("pluginRegistry"),
           sessionId,
           liveSession.activePlugins ?? [],
         );
-        activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
       }
       const environment = liveCommand
         ? buildCommandEnvironment({
@@ -363,15 +363,14 @@ export async function dispatchPluginAction(
       // immutable pre-execution snapshot above.
       const postSession = await store.getSession(sessionId);
       if (!postSession) return { dispatched };
-      const pluginRegistry = c.get("pluginRegistry");
-      pluginRegistry.syncSessionActivations(
-        sessionId,
-        postSession.activePlugins ?? [],
-      );
       const postEnvironment = buildCommandEnvironment({
         command: liveCommand,
         session: postSession,
-        activeRuntimes: pluginRegistry.getActiveRuntimes(sessionId),
+        activeRuntimes: syncSessionRuntimes(
+          c.get("pluginRegistry"),
+          sessionId,
+          postSession.activePlugins ?? [],
+        ),
         resolveModel: c.get("resolveModel"),
       });
       return { dispatched, environment: postEnvironment };

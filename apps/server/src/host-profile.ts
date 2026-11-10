@@ -9,6 +9,8 @@
  * trace retention ask the profile; none of them reads those variables.
  * `@covel/ai-provider` gets its part as a parameter
  * (`configureProviderHostPolicy`).
+ * The desktop shell's config and file routes find their directory through
+ * {@link desktopHome}, which owns the `COVEL_DESKTOP_REST` decision.
  *
  * Forms:
  *
@@ -38,6 +40,9 @@
  */
 
 import { createHash, timingSafeEqual } from "node:crypto";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Context, MiddlewareHandler } from "hono";
 import { readRuntimeEnv, type DeploymentTier } from "@covel/shared";
 import type { ProviderHostPolicy } from "@covel/ai-provider";
@@ -429,6 +434,26 @@ export function resolveHostProfile(
     );
   }
   return profile;
+}
+
+/**
+ * The desktop shell's home directory, or null when this server was not
+ * started by the desktop shell. Writing `keys.env`, mutating `data_root`,
+ * editing raw config files and firing platform `open` commands are
+ * privileged and live only under this home.
+ *
+ * Only `COVEL_DESKTOP_REST=1` enables them. `COVEL_HOME` then selects the
+ * directory; without it an existing `~/.covel` is used. `COVEL_HOME` alone
+ * grants no administration capability, so a shared-backend deployment that
+ * happens to have `~/.covel/` on disk (a bundled docker image, an admin home
+ * directory) cannot reach these endpoints. Read per call, like the
+ * environment, so a home created after start is picked up.
+ */
+export function desktopHome(env: RuntimeEnv = readRuntimeEnv()): string | null {
+  if (!env.desktopRest) return null;
+  if (env.covelHome) return env.covelHome;
+  const candidate = join(homedir(), ".covel");
+  return existsSync(candidate) ? candidate : null;
 }
 
 /** Put the start's profile into every request's context. */

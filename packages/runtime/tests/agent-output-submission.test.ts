@@ -4,6 +4,7 @@ import { runWithHookScope } from "../src/hooks/hook-scope.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import {
   manifest,
+  narrationSegments,
   prose,
   queuedLLM,
   runLoop,
@@ -14,6 +15,9 @@ import {
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createTurnEmitter } from "../src/trace/turn-emitter.js";
 import type { ReviewAgentOutputPayload } from "../src/hooks/wire-helpers.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["reviewer"]);
 
 const submit = (value: Record<string, unknown>, id = "submit") =>
   toolCall("submit-output", value, id);
@@ -440,7 +444,9 @@ describe("submission terminal boundaries", () => {
         },
       }),
     });
-    const llm = queuedLLM([submit({ narrativeOutput: "A valid story." })]);
+    const llm = queuedLLM([
+      submit({ segments: narrationSegments("A valid story.") }),
+    ]);
     const result = await runRuntime({
       llm,
       manifest: manifest({ outputKind: "story" }),

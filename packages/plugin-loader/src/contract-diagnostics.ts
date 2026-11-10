@@ -1,7 +1,5 @@
-import {
-  frameworkContractSchemas,
-  isKernelExtensionContract,
-} from "@covel/shared";
+import { isKernelExtensionContract } from "@covel/shared";
+import { frameworkContractSchemas } from "@covel/shared/contracts";
 import { pluginRuntimeManifests } from "./declarations.js";
 import type { PluginRegistryEntry } from "./types.js";
 

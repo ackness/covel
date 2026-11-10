@@ -99,6 +99,7 @@ describe("extension declaration publication", () => {
         .createExecution({
           sessionId: "session",
           locale: "zh-CN",
+          settings: {},
           signal: new AbortController().signal,
           readPluginData: async () => [],
         })
