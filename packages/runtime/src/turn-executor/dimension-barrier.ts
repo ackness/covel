@@ -6,6 +6,7 @@ import {
   type RuntimeManifest,
 } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
+import { skippedByOf } from "./turn-executor-helpers.js";
 
 /** How the executor marks a story held back because the provider did not publish. */
 export const DIMENSION_SNAPSHOT_SKIP = {
@@ -17,11 +18,7 @@ export function isDimensionSnapshotSkip(result: {
   readonly status: string;
   readonly output?: unknown;
 }): boolean {
-  const output = result.output as { skippedBy?: unknown } | null | undefined;
-  return (
-    result.status === "skipped" &&
-    output?.skippedBy === DIMENSION_SNAPSHOT_SKIP.by
-  );
+  return skippedByOf(result) === DIMENSION_SNAPSHOT_SKIP.by;
 }
 
 /** The session's unsettled narratives, oldest first, with their provider. */
