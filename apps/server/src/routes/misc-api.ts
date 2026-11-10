@@ -21,12 +21,12 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { envOverriddenProviders } from "../lib/env-key-overrides.js";
-import { resolveCovelHome } from "./config-api.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
 import { checkSessionOwner } from "./api/session/session-guard.js";
 import {
   accessGuard,
   allowsAccess,
+  desktopHome,
   hostProfileOf,
   requireAccess,
 } from "../host-profile.js";
@@ -202,7 +202,7 @@ export function createMiscApiRoutes(
       ...(canReadDiagnostics ? { source: ai.configSource } : {}),
       // Providers whose saved key (Settings) is shadowed by the environment.
       ...(canReadDiagnostics
-        ? { envKeyOverrides: envOverriddenProviders(resolveCovelHome()) }
+        ? { envKeyOverrides: envOverriddenProviders(desktopHome()) }
         : {}),
       // Reload failures preserve the last valid active configuration.
       ...(canReadDiagnostics && ai.lastLoadError
