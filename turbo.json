@@ -54,7 +54,9 @@
         "$TURBO_ROOT$/.env",
         "$TURBO_ROOT$/.env.local",
         "$TURBO_ROOT$/.env.production",
-        "$TURBO_ROOT$/.env.production.local"
+        "$TURBO_ROOT$/.env.production.local",
+        "$TURBO_ROOT$/plugins/*/ui/**",
+        "$TURBO_ROOT$/plugins/*/runtimes/*/ui/**"
       ]
     },
     "@covel/web#build:e2e": {
@@ -129,6 +131,7 @@
       "dependsOn": ["@covel/shared#build"]
     },
     "@covel/context#test": {
+      "dependsOn": ["^build"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/vitest.base.ts",
@@ -136,6 +139,7 @@
       ]
     },
     "@covel/create#test": {
+      "dependsOn": ["^build"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/vitest.base.ts",
@@ -143,6 +147,7 @@
       ]
     },
     "@covel/store#test": {
+      "dependsOn": ["^build"],
       "cache": false,
       "passThroughEnv": ["DATABASE_URL", "COVEL_REQUIRE_PG_TESTS"]
     },
@@ -151,7 +156,9 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/vitest.base.ts",
-        "$TURBO_ROOT$/docs/reference/env-registry.md"
+        "$TURBO_ROOT$/docs/reference/env-registry.md",
+        "$TURBO_ROOT$/apps/web/src/index.css",
+        "$TURBO_ROOT$/apps/web/src/styles/**"
       ]
     },
     "@covel/plugin-loader#test": {
@@ -168,7 +175,8 @@
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",
-        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**"
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**",
+        "$TURBO_ROOT$/plugins/scene-stage/**"
       ]
     },
     "@covel/runtime#test": {
@@ -184,7 +192,8 @@
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",
-        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**"
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**",
+        "$TURBO_ROOT$/packages/test-runtime/src/**"
       ]
     },
     "@covel/server#test": {
@@ -231,7 +240,12 @@
       "dependsOn": ["^build", "build"]
     },
     "@covel/web#lint": {
-      "dependsOn": ["^build", "generate:routes"]
+      "dependsOn": ["^build", "generate:routes"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/plugins/*/ui/**",
+        "$TURBO_ROOT$/plugins/*/runtimes/*/ui/**"
+      ]
     },
     "@covel/web#test": {
       "dependsOn": ["^build", "generate:routes"],
@@ -241,11 +255,101 @@
         "src/**",
         "tests/**",
         "vitest.config.ts",
-        "$TURBO_ROOT$/vitest.base.ts"
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/*/ui/**",
+        "$TURBO_ROOT$/plugins/*/runtimes/*/ui/**"
       ]
     },
     "clean": {
       "cache": false
+    },
+    "@covel/runtime#lint": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/plugins/*/*.md",
+        "$TURBO_ROOT$/plugins/*/*.js",
+        "$TURBO_ROOT$/plugins/*/package.json",
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**",
+        "$TURBO_ROOT$/packages/test-runtime/src/**"
+      ]
+    },
+    "@covel/server#lint": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/plugins/*/*.md",
+        "$TURBO_ROOT$/plugins/*/*.js",
+        "$TURBO_ROOT$/plugins/*/package.json",
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**",
+        "$TURBO_ROOT$/apps/desktop/src/**"
+      ]
+    },
+    "@covel/ai-provider#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/narrator/schemas/**"
+      ]
+    },
+    "@covel/plugin-codex#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/world-ir/schemas/**"
+      ]
+    },
+    "@covel/plugin-core-quest#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/world-ir/schemas/**"
+      ]
+    },
+    "@covel/plugin-inventory#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/world-ir/schemas/**"
+      ]
+    },
+    "@covel/plugin-affinity#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/world-ir/schemas/**",
+        "$TURBO_ROOT$/plugins/story-events/lib/**",
+        "$TURBO_ROOT$/plugins/char-creator/runtimes/**",
+        "$TURBO_ROOT$/plugins/world-init/guard.js",
+        "$TURBO_ROOT$/plugins/world-init/runtimes/**",
+        "$TURBO_ROOT$/apps/server/src/**",
+        "$TURBO_ROOT$/apps/server/tests/helpers/**"
+      ]
     }
   }
 }

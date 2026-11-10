@@ -81,7 +81,7 @@ function escape(text) {
   return text.replace(/[.+?^${}()|[\]\\*]/g, "\\$&");
 }
 
-function matcher(globs) {
+export function matcher(globs) {
   const patterns = globs.map(toRegExp);
   return (file) => patterns.some((pattern) => pattern.test(file));
 }

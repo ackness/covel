@@ -211,15 +211,20 @@ First, two rules before commit that apply to every backend.
 - Execution history that was already recorded is settled as failed.
 - Client input that has already been stored is outside this boundary.
 
-**The story must complete.** Completing the story is a condition for the commit. In each of the three cases below, the commit of the whole execution is refused before any buffered proposal, journal message, or player-turn count is committed:
+**The story must complete.** Completing the story is a condition for the commit. In each of the four cases below, the commit of the whole execution is refused before any buffered proposal, journal message, or player-turn count is committed:
 
 - A runtime with `outputKind: story` failed.
 - A story result succeeded, but after normalization under [Story output](./plugins.md#story-output) it has no text (no segment has text, so `narrativeOutput` is empty).
 - A dimension provider failed in the same execution, so the executor held back the story (`dimension-snapshot-unavailable`).
+- A runtime the story hard-depends on (`needs`, or an input whose `required` is not `false`) failed in this execution, so the framework did not run the story, and no other story in the execution succeeded. Only the upstreams that really kept the gate closed count: when the story depends on a contract and needs only one provider (`cardinality: one`), one provider that succeeded is enough, and another provider's failure does not count. When a hard upstream was itself held back the same way, the check follows its dependencies back to the runtime that failed. The error names it, for example `Story runtime teller/narrate did not run because teller/roll failed; the action was not committed.`
 
 Related rules:
 
-- When the story is skipped for another reason (its guard, or a declared gate), the execution is not refused.
+- When the story does not run for another reason, the execution is not refused. For example:
+  - Its own guard, or a `PreRuntime` hook, skipped it.
+  - A hard upstream was not scheduled this time (its trigger or cadence did not match), or skipped itself. That is the package's own decision, like the story's guard skipping it. Refusing would also stop the turn count, so an upstream that runs on a cadence would never reach its turn.
+  - Its plugin's setup is not finished yet (`setup-incomplete`). This execution has to commit the setup's own writes, such as the form for the player.
+  - It is in a dependency cycle, or comes after one (`dependency-cycle`). The scheduler holds back everything after a cycle, `after` edges included, so refusing would let a cycle in any package stop every turn. Validation and traces tell the author about the cycle.
 - Client messages that have already been stored are not part of this transaction.
 - Only agent output accepted through `submit-output` validation and review can enter commit. Missing or rejected submissions use bounded ordinary steps for correction; exhaustion fails the story, without substituting a draft.
 - This does not retry or undo side effects that external tools have already caused.
