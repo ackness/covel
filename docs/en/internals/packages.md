@@ -69,6 +69,18 @@ Security updates to the Fallow development dependency cover the analyzer, its ty
 
 The workspace uses stable TypeScript 7.0.2. Zod consumers, the author SDK peer dependency, and the tools scaffold share a minimum of 4.6.7, which fixes circular inference errors for recursive JSON types in TypeScript 7.1. JSON validation, optional fields, and readonly semantics are unchanged. Compatibility checks with nightly compilers and tsrs do not replace the stable compiler gate.
 
+### The shared root entry is frozen
+
+The root entry of `@covel/shared` (`packages/shared/src/index.ts`) no longer grows; it can only shrink. New modules, types and schemas go into domain-named subpath entries registered in `exports` of `packages/shared/package.json`. Existing names keep their root import; do not bulk-migrate imports, and move a package's imports only when it is being reworked for another reason.
+
+Subpath names follow the root entry's existing sections: `protocol` (SSE events, API transport DTOs), `manifest` (plugin and runtime manifest schemas, scheduling IR), `world` (world schemas, world-data targets), `llm` (slots, model bindings, provider protocol, request tracing), `env` and `theme`, next to the existing `plugin-runtime` and others. Create a subpath entry when its first outside consumer arrives, because `pnpm check:boundaries` requires every exported entry to have a consumer outside the package. Do not re-export one module through `export *` from both the root and a subpath.
+
+`scripts/check-package-boundaries.mjs` enforces the freeze (both `pnpm check` and `pnpm check:boundaries` run it). It reads every export name of the root entry from syntax, expands relative modules behind `export *`, and compares them with the committed list `packages/shared/root-exports.baseline.txt`.
+
+- A name the root entry gained, including one added to a module it already re-exports with `export *`, fails the check and points to the subpath entries.
+- A name the root entry lost also fails until `node scripts/shared-barrel-baseline.mjs --update` shrinks the list; that command refuses to write when a new name is present.
+- Moving an export to a subpath entry or renaming it counts as one removed and one added name: put the new name in the subpath entry, then delete the old root export and update the list.
+
 ## Key boundaries when the host combines packages
 
 The host is an application that assembles these packages and runs them: the server, the desktop app, and the web app.
