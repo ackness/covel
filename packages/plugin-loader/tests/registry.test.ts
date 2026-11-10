@@ -251,7 +251,7 @@ describe("PluginRegistry", () => {
       const entry = makeEntry("world-projector", {
         worldProjections: {
           facts: {
-            from: "contract:world-ir@1",
+            from: "contract:world-ir@2",
             handler: "server/project-facts.js",
             outputs: { facts: { namespace: "facts", key: "id" } },
           },

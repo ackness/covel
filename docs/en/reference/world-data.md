@@ -967,7 +967,7 @@ ZIP installation and AI file write-back share package preflight, without local o
 
 This section is for plugin authors. World authors usually do not need it.
 
-`contract:world-ir@1` is a neutral format published by the `world-ir` plugin, used to describe the facts of a world. It lets a world author, or an upstream extraction step, maintain one set of world facts. Each plugin then turns that same input into its own data.
+`contract:world-ir@2` is a neutral format published by the `world-ir` plugin, used to describe the facts of a world. The extraction runtime that runs during play uses the same ID as its output contract, so authors need only this one. It lets a world author, or an upstream extraction step, maintain one set of world facts. Each plugin then turns that same input into its own data.
 
 In v1, the top level and each kind of record reject unknown fields. Plugin-specific content can go only in `attributes`:
 
@@ -1002,7 +1002,7 @@ sources:
   worldIr:
     kind: yaml
     path: data/world.ir.yaml
-    schema: contract:world-ir@1
+    schema: contract:world-ir@2
     to: world:metadata.worldIr
     effects:
       - projections
@@ -1056,14 +1056,14 @@ Execution limits:
 
 **Discovery.** Development tools and agents can find out how to write the `projections` effect and the contract URI through `GET /api/framework/capabilities`. They can then read each plugin's combined `worldProjections` through `GET /api/plugins/:id`. These APIs return only declaration information. They do not expose plugin root paths or handler paths, and they cannot call a handler directly.
 
-**Static data and extraction during play** use the same `contract:world-ir@1`, but they run in different ways:
+**Static data and extraction during play** use the same `contract:world-ir@2`, but they run in different ways:
 
 - Static world data uses the handlers described above.
-- During play, the `world-ir` agent extracts facts from the narrative output (`narrative-engine@2`) once. Then `codex`, `core-quest/log`, `affinity`, `inventory/ledger` and `npc-graph/extractor` read that one result in parallel.
+- During play, the `world-ir` agent extracts facts from the narrative output (`narrative-engine@2`) once. Then `codex`, `core-quest/log`, `affinity`, `inventory/ledger` and `npc-graph/extractor` read that one result in parallel. Each binds `world-ir@2` with `required: false` and does not list it in its package `requires`: when the session has the provider, they read after it; when it does not, they still run.
   - Quests and items are function runtimes that read fixed fields only. They do not call a model.
   - Affinity is still judged by the agent. For its fields, see [tools.md · submit-world-facts](./tools.md#submit-world-facts).
   - `inventory/vocabulary` and `core-quest/vocabulary` announce, in the pre-turn stage through `world-ir.vocabulary@1`, the item names, quest names and open objectives being tracked. The extraction uses the same names. [Per-objective assessment](./tools.md#per-objective-assessment) checks coverage and consistency with quest events.
-- When this shared extraction fails, the runtimes that depend on it are skipped. The narrative for the turn can still be committed successfully.
+- When the session has not selected `world-ir`, or this shared extraction fails, these runtimes get no input. `codex`, `affinity` and `npc-graph/extractor` read this turn's story in the conversation instead. `core-quest/log` and `inventory/ledger` end as `skipped` and change no quests or items. The narrative for the turn is committed as usual.
 - In a session where dimensions are maintained automatically, a `pending-settlement` is still left behind. A failure or a skip must not be treated as "the dimensions did not change". The next narrative is blocked until recovery is complete.
 
 ## World character schema

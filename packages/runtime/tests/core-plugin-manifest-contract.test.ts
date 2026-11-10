@@ -234,14 +234,14 @@ describe("core plugin manifest contract", () => {
     // The shared extractor owns the only typed narrative-to-WorldIR
     // conversion. State plugins consume its same-turn typed output and no
     // longer duplicate raw narrator injections.
-    expect(worldIr.outputContract).toBe("world-ir-provider@1");
+    expect(worldIr.outputContract).toBe("world-ir@2");
     expect(worldIr.inputs?.narrative).toEqual({
       from: { capability: "narrative-engine@2" },
       select: "/segments",
     });
     expect(worldIr.output).toEqual({
       from: { tool: "submit-world-facts" },
-      schema: "contract:world-ir@1",
+      schema: "contract:world-ir@2",
       recordAs: "world-ir-v1",
     });
     expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
@@ -258,8 +258,8 @@ describe("core plugin manifest contract", () => {
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();
       expect(downstream.inputs?.worldIR).toEqual({
-        from: { capability: "world-ir-provider@1" },
-        accepts: "contract:world-ir@1",
+        from: { capability: "world-ir@2" },
+        required: false,
       });
     }
 

@@ -332,7 +332,7 @@ describe("codex plugin manifest", () => {
     manifest = manifests[0].manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
-      "world-ir@1": JSON.parse(
+      "world-ir@2": JSON.parse(
         readContractFile(
           new URL(
             "../../world-ir/schemas/world-ir.schema.json",
@@ -355,13 +355,13 @@ describe("codex plugin manifest", () => {
     expect(manifest.handler).toBeUndefined();
   });
 
-  it("should consume typed WorldIR and inject existing plugin data", () => {
+  it("should consume optional typed WorldIR and inject existing plugin data", () => {
     expect(manifest.inputs?.worldIR).toEqual({
-      // `cardinality: one` and `required: true` are the defaults.
-      from: { capability: "world-ir-provider@1" },
-      accepts: "contract:world-ir@1",
+      // Optional: the plugin plays without a world-facts provider.
+      from: { capability: "world-ir@2" },
+      required: false,
     });
-    expect(declaration.requires).toContain("world-ir-provider@1");
+    expect(declaration.requires ?? []).not.toContain("world-ir@2");
 
     const injects = manifest.input?.inject ?? [];
     expect(injects).toHaveLength(1);

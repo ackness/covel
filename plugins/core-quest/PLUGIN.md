@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Quest Log
 description: >-
   Keeps track of your quests. New quests and their progress are noted from the
@@ -10,8 +10,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-requires:
-  - world-ir-provider@1
 contributes:
   data:
     quests:

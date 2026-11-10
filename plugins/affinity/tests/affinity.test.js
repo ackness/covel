@@ -735,7 +735,7 @@ describe("affinity plugin manifest", () => {
     manifest = manifests[0].manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
-      "world-ir@1": JSON.parse(
+      "world-ir@2": JSON.parse(
         readContractFile(
           new URL(
             "../../world-ir/schemas/world-ir.schema.json",
@@ -747,18 +747,18 @@ describe("affinity plugin manifest", () => {
     });
   });
 
-  it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
+  it("is a non-core post-turn agent runtime reading optional typed WorldIR", () => {
     expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.name).toBe("affinity");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.trigger).toBeUndefined(); // `auto`, the default
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      // `cardinality: one` and `required: true` are the defaults.
-      from: { capability: "world-ir-provider@1" },
-      accepts: "contract:world-ir@1",
+      // Optional: the plugin plays without a world-facts provider.
+      from: { capability: "world-ir@2" },
+      required: false,
     });
-    expect(declaration.requires).toContain("world-ir-provider@1");
+    expect(declaration.requires ?? []).not.toContain("world-ir@2");
     // Agent runtime — no `runtimeType` field means default 'agent'
     expect(manifest.runtimeType).toBe("agent");
     expect(manifest.handler).toBeUndefined();

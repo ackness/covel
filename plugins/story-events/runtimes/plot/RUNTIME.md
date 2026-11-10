@@ -28,8 +28,7 @@ io:
       required: false
     worldIR:
       from:
-        contract: world-ir-provider@1
-      accepts: "contract:world-ir@1"
+        contract: world-ir@2
       required: false
   output:
     from:

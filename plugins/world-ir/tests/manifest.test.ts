@@ -21,7 +21,7 @@ describe("world-ir plugin contract", () => {
     const [parsed] = definition.manifests;
     const { manifest: packageManifest } = definition.packageManifest;
     const loaded = await loadRuntime(discovery!, "world-ir");
-    expect(parsed?.manifest.outputContract).toBe("world-ir-provider@1");
+    expect(parsed?.manifest.outputContract).toBe("world-ir@2");
     expect(packageManifest.displayName).toEqual({
       zh: "故事整理",
       en: "Story Notes",
@@ -48,10 +48,10 @@ describe("world-ir plugin contract", () => {
     expect(loaded?.bindingAcceptsSchemas?.narrative).toBeUndefined();
     expect(parsed?.manifest.output).toEqual({
       from: { tool: "submit-world-facts" },
-      schema: "contract:world-ir@1",
+      schema: "contract:world-ir@2",
       recordAs: "world-ir-v1",
     });
-    expect(loaded?.outputSchema?.$id).toBe("contract:world-ir@1");
+    expect(loaded?.outputSchema?.$id).toBe("contract:world-ir@2");
   });
 
   it("emits the same envelope accepted by the shared WorldIR validator", () => {
