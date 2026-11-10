@@ -1,7 +1,22 @@
 import { parseSync } from "oxc-parser";
 
-/** Parse syntax so comments, import types and mixed imports keep their meaning. */
-export function packageImports(filename, source) {
+// Vitest calls whose first argument names a module. Mocking a module couples
+// the test to that file as much as importing it does.
+const MODULE_MOCKS = new Set([
+  "mock",
+  "doMock",
+  "unmock",
+  "doUnmock",
+  "importActual",
+  "importMock",
+]);
+
+/**
+ * Parse syntax so comments, import types and mixed imports keep their meaning.
+ * With `mocks`, string specifiers passed to `vi.mock()` and its siblings are
+ * returned too, marked `mock: true`.
+ */
+export function packageImports(filename, source, { mocks = false } = {}) {
   const parsed = parseSync(filename, source);
   if (parsed.errors.length)
     throw new Error(`${filename}: ${parsed.errors[0].message}`);
@@ -35,6 +50,21 @@ export function packageImports(filename, source) {
       typeof node.source?.value === "string"
     ) {
       imports.push({ specifier: node.source.value, typeOnly: false });
+    } else if (
+      mocks &&
+      node.type === "CallExpression" &&
+      node.callee?.type === "MemberExpression" &&
+      !node.callee.computed &&
+      node.callee.object?.type === "Identifier" &&
+      node.callee.object.name === "vi" &&
+      MODULE_MOCKS.has(node.callee.property?.name) &&
+      typeof node.arguments[0]?.value === "string"
+    ) {
+      imports.push({
+        specifier: node.arguments[0].value,
+        typeOnly: false,
+        mock: true,
+      });
     } else if (
       node.type === "TSImportType" &&
       typeof node.source?.value === "string"

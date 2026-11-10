@@ -4,10 +4,7 @@ import { createPgStore } from "@covel/store/postgres";
 import { finalizeExecution } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { publishExecutionExports } from "../../../../packages/runtime/src/commit/runtime-export-publish.js";
-import {
-  makeSession,
-  makeTurnResult,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeSession, makeTurnResult } from "@covel/store/testing";
 import { createIsolatedPgDatabase } from "./pg-test-db.js";
 import { createPgEventTransport } from "../../src/lib/pg-event-transport.js";
 

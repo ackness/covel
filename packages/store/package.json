@@ -51,6 +51,10 @@
     "./capabilities": {
       "types": "./src/storage-capabilities.ts",
       "import": "./src/storage-capabilities.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts"
     }
   },
   "scripts": {

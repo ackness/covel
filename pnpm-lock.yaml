@@ -919,6 +919,9 @@ importers:
 
   plugins/affinity:
     devDependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
