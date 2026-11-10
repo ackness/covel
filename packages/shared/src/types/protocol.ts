@@ -630,6 +630,13 @@ export type CovelEvent =
   // so /debug can explain a turn that lost context instead of silently losing it.
   // Trace-only (forward:false) — the player-facing stream is unaffected.
   | { readonly type: "context.pruned"; readonly payload: CovelEventPayload }
+  // The notes a `story-context@1` reader received and the ones left out, with
+  // their estimated tokens (TurnEmitter). Emitted once per reader run that
+  // had any contribution. Trace-only (forward:false).
+  | {
+      readonly type: "story-context.selected";
+      readonly payload: CovelEventPayload;
+    }
   // History compaction attempt that failed (TurnEmitter): carries the reason
   // and the count of consecutive failures. Trace-only (forward:false).
   | {
@@ -789,6 +796,8 @@ export const COVEL_EVENT_META = {
   "utils.fetch.failed": { forwardToActionStream: false },
   // Prompt-budget prune trace — /debug only.
   "context.pruned": { forwardToActionStream: false },
+  // Story-context selection of one reader run — /debug only.
+  "story-context.selected": { forwardToActionStream: false },
   // History compaction failure and post-commit publish failure — /debug only.
   "context.compaction.failed": { forwardToActionStream: false },
   "commit.fanout.failed": { forwardToActionStream: false },

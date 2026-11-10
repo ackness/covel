@@ -245,6 +245,41 @@
     "concealed": {
       "type": "boolean"
     },
+    "storyContext": {
+      "type": "object",
+      "properties": {
+        "select": {
+          "type": "string",
+          "pattern": "^(\\/([^/~]|~0|~1)*)*$"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["high", "normal", "low"]
+        },
+        "order": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "outputContract": {
       "type": "string",
       "minLength": 1
@@ -781,7 +816,7 @@
                   },
                   "from": {
                     "type": "string",
-                    "enum": ["turn-digest@1", "operations@1"]
+                    "enum": ["turn-digest@1", "operations@1", "story-context@1"]
                   },
                   "name": {
                     "type": "string",

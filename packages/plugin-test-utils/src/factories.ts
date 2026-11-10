@@ -2,7 +2,18 @@
  * Test data factories for common types.
  */
 
-import type { TurnInput, RuntimeResult } from "@covel/shared";
+import type {
+  InputSlot,
+  JsonValue,
+  TurnInput,
+  RuntimeResult,
+} from "@covel/shared";
+import {
+  STORY_CONTEXT_INPUT,
+  type StoryContextItem,
+  type StoryContextOmission,
+  type StoryContextValue,
+} from "@covel/plugin-handlers-utils";
 import type { TriggerContext } from "@covel/runtime";
 
 /**
@@ -79,5 +90,46 @@ export function makeRuntimeResult(
     durationMs: 100,
     timestamp: new Date().toISOString(),
     ...overrides,
+  };
+}
+
+/**
+ * Create the input slot a reader of the `story-context@1` kernel input gets,
+ * for a function handler's `ctx.inputs`. Items keep the order given, as the
+ * kernel's ranking would leave them; `priority` defaults to `normal` and
+ * `source` to a placeholder provider.
+ *
+ * @example
+ * ```typescript
+ * const inputs = {
+ *   context: storyContextSlot([{ title: "World time", content: "Dusk." }]),
+ * };
+ * ```
+ */
+export function storyContextSlot(
+  items: readonly (Pick<StoryContextItem, "title" | "content"> &
+    Partial<Pick<StoryContextItem, "priority" | "source">>)[],
+  omitted: readonly StoryContextOmission[] = [],
+): InputSlot {
+  const value: StoryContextValue = {
+    items: items.map((item) => ({
+      title: item.title,
+      content: item.content,
+      priority: item.priority ?? "normal",
+      source: item.source ?? {
+        pluginId: "test-provider",
+        runtimeId: "test-provider/context",
+      },
+    })),
+    omitted: omitted.map((entry) => ({ ...entry })),
+  };
+  return {
+    cardinality: "one",
+    value: structuredClone(value) as unknown as JsonValue,
+    source: {
+      pluginId: "__kernel",
+      runtimeId: STORY_CONTEXT_INPUT,
+      resultId: "test-execution",
+    },
   };
 }

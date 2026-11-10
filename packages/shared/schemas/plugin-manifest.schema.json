@@ -1560,8 +1560,12 @@
                         "properties": {
                           "kernel": {
                             "type": "string",
-                            "enum": ["turn-digest@1", "operations@1"],
-                            "description": "Kernel input: the turn digest or staged operations from completed upstream runs."
+                            "enum": [
+                              "turn-digest@1",
+                              "operations@1",
+                              "story-context@1"
+                            ],
+                            "description": "Kernel input: the turn digest, staged operations from completed upstream runs, or the notes pre-turn runtimes hand to the story."
                           }
                         },
                         "required": ["kernel"],
@@ -1687,6 +1691,30 @@
               },
               "additionalProperties": false,
               "description": "What the runtime produces."
+            },
+            "storyContext": {
+              "type": "object",
+              "properties": {
+                "select": {
+                  "type": "string",
+                  "pattern": "^(\\/([^/~]|~0|~1)*)*$",
+                  "description": "JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output.",
+                  "examples": ["/storyContext"]
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": ["high", "normal", "low"],
+                  "description": "Ranking tier: `high` notes come first and are the last to be left out. Defaults to `normal`."
+                },
+                "order": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Order within a tier, ascending; ties go by package and runtime ID. Defaults to `0`."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Hands one value of this runtime's output to the story of the same turn as a note of the `story-context@1` kernel input. Only on stage `pre-turn`."
             },
             "visibility": {
               "type": "string",

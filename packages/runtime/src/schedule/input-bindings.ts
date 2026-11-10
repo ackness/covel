@@ -36,8 +36,8 @@ export { hasIllegalDetachedContract };
 import {
   checkAcceptsCompatibility,
   projectSchemaBySelect,
-  resolveJsonPointer,
 } from "./accepts-compat.js";
+import { resolveJsonPointer } from "./json-pointer.js";
 import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
 import {
   guardProvidedValue,

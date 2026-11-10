@@ -16,6 +16,9 @@ import {
 } from "../presentation/projection.js";
 import { presentationSnapshotSchema } from "@covel/shared";
 import { buildOperationsInput } from "./operations-input.js";
+import { buildStoryContextInput } from "./story-context-input.js";
+import { resolveRequestContextBudget } from "../agent-loop/request-context-budget.js";
+import { resolveRuntimeModel } from "../agent-loop/runtime-model.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import { commitEligibility } from "../session/session-runtime-result.js";
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
@@ -33,7 +36,10 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import type { SessionContextSnapshot } from "@covel/context";
+import {
+  KERNEL_INPUT_PLUGIN_ID,
+  type SessionContextSnapshot,
+} from "@covel/context";
 import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import {
@@ -213,7 +219,7 @@ export function canStageOperations(
 export async function executeOneRuntime(
   inv: RuntimeInvocation,
 ): Promise<RuntimeResult> {
-  const stage: InvocationState = { operationReads: new Set() };
+  const stage: InvocationState = { kernelInputReads: new Set() };
   const result = await executeRuntime(inv, stage);
   if (inv.manifest.presentation !== undefined && !presentationState(result)) {
     const admitted = presentationPolicyError(inv.manifest)
@@ -264,17 +270,51 @@ export async function executeOneRuntime(
   }
   // A run that did not succeed keeps its records, taken back.
   stage.current?.attachTo(result, false);
-  // A run that read upstream operations through its `operations@1` input
-  // built on writes that are not committed yet: it depends on them.
-  if (stage.operationReads.size > 0 && commitEligibility(result) !== "none")
-    attachReadDependencies(result, stage.operationReads);
+  // A run that read upstream operations through its `operations@1` input,
+  // or notes through `story-context@1`, built on results that are not
+  // committed yet: it depends on them.
+  // A suspension is checked at its source commit before it is saved, so its
+  // continuation is not kept on a note or operation that did not land.
+  if (
+    stage.kernelInputReads.size > 0 &&
+    (commitEligibility(result) !== "none" || result.status === "suspended")
+  )
+    attachReadDependencies(result, stage.kernelInputReads);
   return result;
 }
 
 interface InvocationState {
   current?: RootOperationStage;
-  /** Ids of the operations the run's `operations@1` input showed. */
-  readonly operationReads: Set<string>;
+  /**
+   * Producer ids the run's kernel inputs showed: the operations of its
+   * `operations@1` input and the runs whose notes its `story-context@1`
+   * input carries.
+   */
+  readonly kernelInputReads: Set<string>;
+}
+
+/** Input tokens of the story model after its output reserve, when known. */
+function storyInputWindow({
+  deps,
+  manifest,
+  input,
+}: Pick<RuntimeInvocation, "deps" | "manifest" | "input">): number | undefined {
+  if (!deps.contextBudget) return undefined;
+  try {
+    const slot =
+      manifest.outputKind === "story"
+        ? resolveRuntimeModel(manifest, input, deps)
+        : "story";
+    const budget = resolveRequestContextBudget(
+      deps.contextBudget,
+      deps.llm,
+      slot,
+    );
+    return budget.maxInputTokens - (budget.reservedForResponse ?? 0);
+  } catch {
+    // An unresolvable story model leaves the fixed budget.
+    return undefined;
+  }
 }
 
 async function executeRuntime(
@@ -896,16 +936,49 @@ async function executeRuntime(
           completedResults,
           inv.seedResults,
         );
-        for (const id of snapshot.producerIds) stage.operationReads.add(id);
+        for (const id of snapshot.producerIds) stage.kernelInputReads.add(id);
         inputSlots[inject.name] = {
           cardinality: "one",
           value: snapshot.value,
           source: {
-            pluginId: "__kernel",
+            pluginId: KERNEL_INPUT_PLUGIN_ID,
             runtimeId: inject.from,
             resultId: executionContext.executionId,
           },
         };
+        continue;
+      }
+      if (inject.from === "story-context@1") {
+        const storyContext = buildStoryContextInput({
+          results: completedResults,
+          ...(inv.seedResults ? { seeds: inv.seedResults } : {}),
+          activeRuntimes,
+          ...(input.locale ? { locale: input.locale } : {}),
+          inputWindow: storyInputWindow(inv),
+          ...(deps.estimator ? { estimator: deps.estimator } : {}),
+        });
+        for (const id of storyContext.producerIds)
+          stage.kernelInputReads.add(id);
+        inputSlots[inject.name] = {
+          cardinality: "one",
+          value: storyContext.value,
+          source: {
+            pluginId: KERNEL_INPUT_PLUGIN_ID,
+            runtimeId: inject.from,
+            resultId: executionContext.executionId,
+          },
+        };
+        const { selection } = storyContext;
+        if (selection.trace.included.length + selection.trace.omitted.length)
+          await deps.emitter?.emit("story-context.selected", {
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            runId,
+            budgetTokens: selection.budgetTokens,
+            usedTokens: selection.usedTokens,
+            included: selection.trace.included,
+            omitted: selection.trace.omitted,
+          });
         continue;
       }
       if (input.detachedStage && !input.detachedStage.turnDigest)
@@ -924,7 +997,7 @@ async function executeRuntime(
         cardinality: "one",
         value: freezeSnapshot(structuredClone(digest)),
         source: {
-          pluginId: "__kernel",
+          pluginId: KERNEL_INPUT_PLUGIN_ID,
           runtimeId: inject.from,
           resultId:
             input.detachedStage?.sourceExecutionId ??

@@ -790,6 +790,8 @@ export const SSE_EVENT_ROUTES: SseEventRouteTable = {
   "utils.fetch.responded": "ignored",
   // Prompt-budget prune trace: /debug reads it from trace_events.
   "context.pruned": "ignored",
+  // Story-context selection belongs to the debug trace, not the action view.
+  "story-context.selected": "ignored",
 };
 
 /** Narrows a raw wire string to a protocol event type with a route. */
