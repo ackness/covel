@@ -405,18 +405,29 @@ export function resolveSessionPlugins(args: {
     // Drop one failed candidate, then reconsider admission. In particular, a
     // failed replacement must restore its default before judging consumers
     // that lost another contract the default also provided.
-    const held = [...active];
-    const failures = held.flatMap((id) => {
-      const contract = registry
-        .get(id)!
-        .requires?.find(
-          (required) =>
-            !held.some((candidate) =>
-              contracts(registry.get(candidate)!).includes(required),
-            ),
-        );
-      return contract ? [{ id, contract }] : [];
-    });
+    // Find the entire failure chain without changing admission. A replacement
+    // can lose a required provider indirectly; removing its consumers first
+    // would make their rejection permanent before the default returns.
+    const viable = new Set(active);
+    const failures: { id: string; contract: string }[] = [];
+    while (true) {
+      const wave = [...viable].flatMap((id) => {
+        const contract = registry
+          .get(id)!
+          .requires?.find(
+            (required) =>
+              ![...viable].some((candidate) =>
+                contracts(registry.get(candidate)!).includes(required),
+              ),
+          );
+        return contract ? [{ id, contract }] : [];
+      });
+      if (!wave.length) break;
+      for (const failure of wave) {
+        viable.delete(failure.id);
+        failures.push(failure);
+      }
+    }
     const failed =
       failures.find(({ id }) => replacements.has(id)) ??
       failures.find(
