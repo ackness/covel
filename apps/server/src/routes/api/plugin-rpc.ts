@@ -56,7 +56,6 @@ import {
 
 import { Hono } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { snapshotUserSettings } from "@covel/runtime";
 import {
   type RpcCommandInvocation,
   type RuntimeResult,
@@ -64,19 +63,17 @@ import {
 } from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { validatePluginRpcBody } from "./plugin-rpc/body.js";
+import { readPluginUserSettings } from "./plugin-user-settings.js";
 import {
-  readPluginUserSettings,
-  loadSessionPluginUserSettings,
-} from "./plugin-user-settings.js";
+  loadExecutionUserSettings,
+  syncLiveSessionRuntimes,
+} from "./execution-context.js";
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
   deferredJobRefs,
   enqueueActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import {
-  queueCommitFollowUps,
-  type QueuedCommitFollowUps,
-} from "./commit-envelope.js";
+import { queueFollowUpsWith } from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
@@ -198,27 +195,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const sessionLock = c.get("sessionLock");
     const prepareToolsForSession = c.get("prepareToolsForSession");
 
-    // Reconcile the process-local registry from the persisted session
-    // snapshot under the session lock. Besides restart recovery, this removes
-    // stale activations after a plugin is disabled through another request or
-    // server instance. The lock matters: `syncSessionActivations` writes
-    // shared in-memory state, and syncing from the lock-free snapshot read
-    // above could resurrect a plugin that a concurrent enable/disable writer
-    // has just persisted and deactivated (lost update). Under the lock the
-    // fresh read is linearised against those writers, keeping this a pure
-    // read-repair. A session deleted in the meantime reconciles to the empty
-    // set, so the runtime lookup below fails closed with `runtime_not_active`.
-    const activeRuntimes = await withSettledSessionLock(
-      c,
-      sessionId,
-      async () => {
-        const live = await store.getSession(sessionId);
-        const livePlugins = live?.activePlugins as
-          readonly string[] | undefined;
-        pluginRegistry.syncSessionActivations(sessionId, livePlugins ?? []);
-        return pluginRegistry.getActiveRuntimes(sessionId);
-      },
-    );
+    // Reconcile the process-local registry from a fresh read under the
+    // session lock, not from the lock-free snapshot read above. A session
+    // deleted in the meantime reconciles to the empty set, so the runtime
+    // lookup below fails closed with `runtime_not_active`.
+    const activeRuntimes = await syncLiveSessionRuntimes(c, sessionId);
     const target = activeRuntimes.find((rt) => rt.name === body.runtimeId);
     if (!target) {
       return c.json(
@@ -310,8 +291,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // turn. Never persisted server-side; request-scoped only.
     // Merge the world's authored defaults (WorldRecord.metadata.pluginSettings)
     // under the player's header overrides — same resolution chain as the main
-    // turn route (player override → world default → manifest default).
-    const userSettingsMap = await loadSessionPluginUserSettings(
+    // turn route (player override → world default → manifest default). One
+    // snapshot serves the run and every job it queues.
+    const userSettingsMap = await loadExecutionUserSettings(
       store,
       session,
       decodedUserSettings.settings,
@@ -434,9 +416,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
               sourceTurnId: body.retryFromTurnId ?? turnId,
               turnId,
               locale: live.locale,
-              ...(userSettingsMap
-                ? { userSettings: snapshotUserSettings(userSettingsMap) }
-                : {}),
+              ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
               ...(body.payload !== undefined ? { input: body.payload } : {}),
               ...(body.retryFromTurnId
                 ? { retryFromTurnId: body.retryFromTurnId }
@@ -470,10 +450,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // declares `turnCompletion: detached` is deferred to the durable queue
     // instead of running inline. Both are queued inside the same commit
     // transaction, so a rolled-back turn queues nothing.
-    // `queueCommitFollowUps` leaves out followers of an emitter whose writes
-    // were dropped; a sync run commits all-or-nothing, so none is today.
-    // What the landed commit queued; a retried transaction replaces it.
-    let queued: QueuedCommitFollowUps = { runtimeJobs: [], followerJobs: [] };
+    // The queue leaves out followers of an emitter whose writes were dropped;
+    // a sync run commits all-or-nothing, so none is today.
     let summary;
     try {
       summary = await runtimeTurnRunner.runManualTurn({
@@ -484,23 +462,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(retrySeedResults
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
-        completeInTx: async (tx, result, isolation) => {
-          queued = await queueCommitFollowUps(tx, {
-            sessionId,
-            activeRuntimes,
-            locale: session.locale,
-            ...(userSettingsMap
-              ? { userSettings: snapshotUserSettings(userSettingsMap) }
-              : {}),
-            credentials,
-            sourceRuntimeId: body.runtimeId,
-            isolation,
-            results: result.runtimeResults,
-            sourceTurnId: result.turnId,
-            deferredJobs: result.deferredRuntimeJobs ?? [],
-            followers: result.deferredFollowers ?? [],
-          });
-        },
+        followUps: queueFollowUpsWith({
+          sessionId,
+          activeRuntimes,
+          locale: session.locale,
+          ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+          credentials,
+          sourceRuntimeId: body.runtimeId,
+        }),
       });
     } catch (err) {
       credentials.discard();
@@ -535,11 +504,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         500,
       );
     }
-    await announceDeferredRuntimeJobs(c, queued.runtimeJobs);
-    announceQueuedRuntimeJobs(c, queued.followerJobs);
+    const { followUps } = summary.commit;
+    await announceDeferredRuntimeJobs(c, followUps.runtimeJobs);
+    announceQueuedRuntimeJobs(c, followUps.followerJobs);
     const deferredJobs = deferredJobRefs([
-      ...queued.runtimeJobs,
-      ...queued.followerJobs,
+      ...followUps.runtimeJobs,
+      ...followUps.followerJobs,
     ]);
     return c.json({
       status: "ok",

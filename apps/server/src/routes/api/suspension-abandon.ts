@@ -46,6 +46,7 @@ import {
 import type { JobCredentialHandoff } from "./plugin-rpc/runtime-job-credentials.js";
 import type { RuntimeJobWorker } from "./plugin-rpc/runtime-job-worker.js";
 import { loadSessionPluginUserSettings } from "./plugin-user-settings.js";
+import { syncSessionRuntimes } from "./execution-context.js";
 
 export interface SuspensionAbandonDeps {
   readonly store: DataStore;
@@ -107,7 +108,8 @@ export function heldJobsRelease(
       if (jobs.length === 0) return;
       const session = await tx.getSession(sessionId);
       if (!session) return;
-      deps.pluginRegistry.syncSessionActivations(
+      const activeRuntimes = syncSessionRuntimes(
+        deps.pluginRegistry,
         session.id,
         session.activePlugins,
       );
@@ -122,7 +124,7 @@ export function heldJobsRelease(
           {
             sessionId: session.id,
             session,
-            activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
+            activeRuntimes,
             locale: session.locale ?? DEFAULT_LOCALE,
             ...(userSettings ? { userSettings } : {}),
             ...(deps.credentials ? { credentials: deps.credentials } : {}),
@@ -148,10 +150,11 @@ async function activeManifest(
 ): Promise<RuntimeManifest | undefined> {
   const session = await deps.store.getSession(suspension.sessionId);
   if (!session) return undefined;
-  deps.pluginRegistry.syncSessionActivations(session.id, session.activePlugins);
-  return deps.pluginRegistry
-    .getActiveRuntimes(session.id)
-    .find((runtime) => runtime.name === suspension.runtimeId);
+  return syncSessionRuntimes(
+    deps.pluginRegistry,
+    session.id,
+    session.activePlugins,
+  ).find((runtime) => runtime.name === suspension.runtimeId);
 }
 
 /**

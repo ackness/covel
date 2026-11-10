@@ -129,32 +129,6 @@ export async function withSettledSessionLock<T>(
   );
 }
 
-/** Freeze entry registrations and runtime artifacts only after the settle barrier. */
-export async function withSettledExecutionLock<T>(
-  c: Context,
-  sessionId: string,
-  fn: () => Promise<T>,
-  waitBudget?: SettleWaitBudget,
-  stopSignal?: AbortSignal,
-): Promise<T> {
-  return withSettledSessionLock(
-    c,
-    sessionId,
-    async () => {
-      const session = await c.get("store").getSession(sessionId);
-      if (session)
-        c.get("pluginRegistry")?.syncSessionActivations(
-          sessionId,
-          session.activePlugins,
-        );
-      const snapshot = c.get("withPluginSnapshot");
-      return snapshot ? snapshot(sessionId, fn) : fn();
-    },
-    waitBudget,
-    stopSignal,
-  );
-}
-
 /**
  * After the transaction that queued them commits: hand this request's provider
  * credentials to the worker, publish the queued status, and wake the worker.

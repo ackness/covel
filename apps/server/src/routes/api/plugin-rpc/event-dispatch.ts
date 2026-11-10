@@ -5,19 +5,18 @@ import {
 } from "../approval-verdict.js";
 import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { snapshotUserSettings } from "@covel/runtime";
 import type { PluginRpcEventRequest } from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
-import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
+import {
+  loadExecutionUserSettings,
+  syncLiveSessionRuntimes,
+} from "../execution-context.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { enqueueEventFollowers } from "./runtime-job-enqueue.js";
 import { requireLiveScope, runtimeQueueErrorResponse } from "./runtime-turn.js";
-import {
-  announceQueuedRuntimeJobs,
-  withSettledSessionLock,
-} from "./settled-request.js";
+import { announceQueuedRuntimeJobs } from "./settled-request.js";
 import { requireAccess } from "../../../host-profile.js";
 
 /**
@@ -53,18 +52,7 @@ export async function dispatchPluginEvent(
 
   // Reconcile activations under the session lock, as the runtime branch does,
   // so a plugin disabled by a concurrent request cannot emit or receive.
-  const activeRuntimes = await withSettledSessionLock(
-    c,
-    sessionId,
-    async () => {
-      const live = await store.getSession(sessionId);
-      pluginRegistry.syncSessionActivations(
-        sessionId,
-        (live?.activePlugins as readonly string[] | undefined) ?? [],
-      );
-      return pluginRegistry.getActiveRuntimes(sessionId);
-    },
-  );
+  const activeRuntimes = await syncLiveSessionRuntimes(c, sessionId);
 
   const directory = c.get("eventDirectory");
   if (!directory) {
@@ -197,7 +185,7 @@ export async function dispatchPluginEvent(
     });
   }
 
-  const userSettings = await loadSessionPluginUserSettings(
+  const userSettings = await loadExecutionUserSettings(
     store,
     session,
     playerSettings,
@@ -223,9 +211,7 @@ export async function dispatchPluginEvent(
           })),
           sourceTurnId: eventId,
           locale: live.locale,
-          ...(userSettings
-            ? { userSettings: snapshotUserSettings(userSettings) }
-            : {}),
+          ...(userSettings ? { userSettings } : {}),
         }),
       );
     });

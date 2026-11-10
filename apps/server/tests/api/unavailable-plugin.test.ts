@@ -123,7 +123,7 @@ it("keeps a plugin whose requirement is missing out of every execution path", as
 
   const scope = buildSessionHookScope({
     pluginRegistry: boot.registry,
-    activePluginIds: session.activePlugins,
+    session,
   });
   expect([...scope.activePluginIds]).toEqual(["steady"]);
 
