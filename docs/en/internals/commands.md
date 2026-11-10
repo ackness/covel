@@ -185,6 +185,8 @@ Workflow, script and E2E/config-only changes can select no package unit tests lo
 
 Some tests read files outside their own package. If a file is written in the `$TURBO_ROOT$` input of `turbo.json` for a test, that test runs whenever the file changes. So these inputs must stay accurate.
 
+`lint` and `test` re-run only when a package they depend on, or a file listed in their `inputs`, changes. When a test or config file references another workspace's files by relative path, either depend on that package in `package.json` (and import through its entry) or list the files in that task's `$TURBO_ROOT$` inputs in `turbo.json`. `pnpm check:boundaries` rejects a reference with neither, because the cache would otherwise replay an old pass after the referenced code changed. Uncached tasks are exempt.
+
 Documentation readers follow the same rule: the shared test task tracks the environment-variable reference, runtime tracks the hook reference, and plugin-loader tracks both plugin guides and the create-plugin skill. Mixed source/documentation changes therefore invalidate the relevant cached results, without running the same documentation tests twice.
 
 All tests run in any of the following cases:

@@ -3,7 +3,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
-import { unusedPackageExports } from "./lib/package-exports.mjs";
+import { unusedPackageExports, workspaceOf } from "./lib/package-exports.mjs";
+import {
+  crossWorkspaceReferences,
+  uncachedReferences,
+} from "./lib/cross-package-inputs.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
@@ -101,9 +105,7 @@ for (const workspace of workspaces) {
         errors.push(`${path.relative(root, file)}: ${specifier}: ${reason}`);
       if (specifier.startsWith(".")) {
         const target = path.resolve(path.dirname(file), specifier);
-        const owner = workspaces.find((item) =>
-          target.startsWith(`${item.directory}${path.sep}`),
-        );
+        const owner = workspaceOf(workspaces, target);
         if (owner && owner !== workspace)
           fail("cross-workspace source import; use the package's public entry");
         // Plugin modules execute as written; no compiler maps `.js` to `.ts`.
@@ -169,6 +171,18 @@ for (const workspace of workspaces) {
     }
   }
 }
+// Files another workspace loads by relative path must reach the task hash,
+// or Turbo replays a cached pass after the loaded file changed.
+const turbo = JSON.parse(readFileSync(path.join(root, "turbo.json"), "utf8"));
+for (const problem of uncachedReferences({
+  root,
+  turbo,
+  workspaces,
+  references: crossWorkspaceReferences(workspaces),
+}))
+  errors.push(
+    `${path.relative(root, problem.file)}: ${problem.specifier}: ${problem.missing.join("/")} cache ignores ${problem.owner.manifest.name}; depend on it in package.json or list ${path.relative(root, problem.target)} as a Turbo input`,
+  );
 errors.push(
   ...unusedPackageExports(root, workspaces, {
     "@covel/plugin-handlers-utils/image-generation":

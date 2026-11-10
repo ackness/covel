@@ -63,10 +63,11 @@ test("a file a suite reads from outside its package selects that suite alone", (
     "@covel/server",
     "@covel/test-runtime",
   ]);
-  // Listed once when the package itself changed too.
+  // Listed once when the package itself changed too. The affinity plugin's
+  // suite loads server source, so it is selected alongside the server.
   assert.deepEqual(
     select("apps/server/src/index.ts", "worlds/mistport/world.yaml").filters,
-    ["...@covel/server", "@covel/site"],
+    ["...@covel/server", "@covel/plugin-affinity", "@covel/site"],
   );
   assert.deepEqual(select("packs/builtin.yaml").filters, [
     "@covel/server",
