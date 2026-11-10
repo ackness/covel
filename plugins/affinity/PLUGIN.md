@@ -1,5 +1,5 @@
 ---
-version: 0.0.45
+version: 0.0.46
 displayName: Affinity
 description: >-
   Tracks how much each character likes you, with scores, levels and recent
@@ -10,8 +10,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-requires:
-  - world-ir-provider@1
 contributes:
   extensions:
     - prompt.segment@1/current-affinity
@@ -62,8 +60,8 @@ runtime:
     inputs:
       worldIR:
         from:
-          contract: world-ir-provider@1
-        accepts: "contract:world-ir@1"
+          contract: world-ir@2
+        required: false
     selfData:
       - namespace: affinity
         as: <existing-affinity>
@@ -89,9 +87,11 @@ This plugin **only tracks numeric player-to-NPC affinity** (score, tier, change 
 
 ## Inputs
 
-### Current WorldIR
+### This turn's facts
 
-The shared extraction agent has converted this turn's narrative to `contract:world-ir@1`. Read it from `worldIR.value` inside `<runtime-inputs>`. Use `events[type=interaction]`, changed relations, and related entities to identify explicit player-NPC interactions; attributes and descriptions are the evidence for this turn's change. Do not update without explicit evidence.
+When `<runtime-inputs>` has `worldIR`, a shared extraction step has already turned this turn's narrative into structured facts in `worldIR.value`. Use `events[type=interaction]`, changed relations, and related entities to identify explicit player-NPC interactions; attributes and descriptions are the evidence for this turn's change.
+
+When `worldIR` is absent, read this turn's narrative in the conversation instead. The same evidence rule applies either way: do not update without explicit evidence.
 
 ### Existing affinity records
 
@@ -105,7 +105,7 @@ To check whether an NPC already has a record, match its name against this list. 
 
 ## Procedure
 
-1. Read `worldIR.value` inside `<runtime-inputs>` carefully
+1. Read `worldIR.value` inside `<runtime-inputs>` carefully, or this turn's narrative when there is no `worldIR`
 2. Find **explicit interactions** between the player and NPCs (conversation, gifts, help, conflict, deception, betrayal…)
 3. Assess one delta per interacting NPC and call `update-affinity` once (batching allowed, max 5 changes)
 4. If nothing this turn is worth recording → **submit `{}` through `submit-output` without calling any business tool**

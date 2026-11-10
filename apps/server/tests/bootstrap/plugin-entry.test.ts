@@ -31,6 +31,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 import { emptyRpcStore } from "../helpers/rpc-store.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 /** What the host profile passes to the provider layer on a hosted tier. */
 const HOSTED_PROVIDER_POLICY = {
@@ -699,7 +700,9 @@ describe("createBootstrapPluginEntries", () => {
     expect(params.tools.find("entry-tool", "other")).toBeUndefined();
 
     // Hook: fires through the pipeline.
-    const result = await params.hookPipeline.run("TurnStart", hookCtx, {});
+    const result = await inHookScope(["entry-full-a"], () =>
+      params.hookPipeline.run("TurnStart", hookCtx, {}),
+    );
     expect(result.action).toBe("continue");
 
     // RPC: inline handler entry, trust from plugin source.
@@ -729,14 +732,18 @@ describe("createBootstrapPluginEntries", () => {
     const plainOnly = makeParams([plain]);
     await createBootstrapPluginEntries(plainOnly);
     await expect(
-      plainOnly.hookPipeline.outputDraftHold("s1"),
+      inHookScope(["review-plain"], () =>
+        plainOnly.hookPipeline.outputDraftHold("s1"),
+      ),
     ).resolves.toBeUndefined();
 
     const both = makeParams([plain, holding]);
     await createBootstrapPluginEntries(both);
-    await expect(both.hookPipeline.outputDraftHold("s1")).resolves.toBe(
-      "review",
-    );
+    await expect(
+      inHookScope(["review-plain", "review-holding"], () =>
+        both.hookPipeline.outputDraftHold("s1"),
+      ),
+    ).resolves.toBe("review");
   });
 
   it("holds drafts for a community review only once its hooks are approved", async () => {
@@ -760,12 +767,16 @@ describe("createBootstrapPluginEntries", () => {
       await entries.ensurePluginEntry("review-community", "session");
       // Unapproved hooks answer `continue` without running, so they hold nothing.
       await expect(
-        params.hookPipeline.outputDraftHold("s1"),
+        inHookScope(["review-community"], () =>
+          params.hookPipeline.outputDraftHold("s1"),
+        ),
       ).resolves.toBeUndefined();
       approved = true;
-      await expect(params.hookPipeline.outputDraftHold("s1")).resolves.toBe(
-        "commit",
-      );
+      await expect(
+        inHookScope(["review-community"], () =>
+          params.hookPipeline.outputDraftHold("s1"),
+        ),
+      ).resolves.toBe("commit");
     } finally {
       await entries.close();
     }
@@ -1066,9 +1077,11 @@ export default async function (covel) {
       error: "Entry activation failed; check the server log for details.",
     });
     expect(params.rpcRegistry.list()).toEqual([]);
-    expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual({
-      action: "continue",
-    });
+    expect(
+      await inHookScope([p.discovery.id], () =>
+        params.hookPipeline.run("TurnStart", hookCtx, {}),
+      ),
+    ).toEqual({ action: "continue" });
     await entries.ensurePluginEntry(p.discovery.id);
     expect(entries.hasPendingEntry(p.discovery.id)).toBe(false);
     expect(params.pluginRegistry.get(p.discovery.id)?.status).toBe(
@@ -1088,7 +1101,11 @@ export default async function (covel) {
       ),
     ).toBe(2);
     expect(
-      (await params.hookPipeline.run("TurnStart", hookCtx, {})).action,
+      (
+        await inHookScope([p.discovery.id], () =>
+          params.hookPipeline.run("TurnStart", hookCtx, {}),
+        )
+      ).action,
     ).toBe("abort");
   });
 
@@ -1233,9 +1250,11 @@ export default async function (covel) {
         expect(params.tools.pluginTools.size).toBe(0);
         expect(params.rpcRegistry.list()).toEqual([]);
         expect(getSpeechWire(`${pluginId}/entry-tts`)).toBeNull();
-        expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual(
-          { action: "continue" },
-        );
+        expect(
+          await inHookScope([pluginId], () =>
+            params.hookPipeline.run("TurnStart", hookCtx, {}),
+          ),
+        ).toEqual({ action: "continue" });
         expect(params.pluginRegistry.get(pluginId)).toMatchObject({
           status: "registered",
           error: expect.stringContaining(

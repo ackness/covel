@@ -7,6 +7,9 @@ import {
 } from "@covel/tools";
 import { cloneHookData } from "../src/hooks/hook-data.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 describe("Hook snapshot data", () => {
   it("inspects the actual backing buffer when a view subclasses a native type", () => {

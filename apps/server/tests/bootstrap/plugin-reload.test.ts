@@ -29,6 +29,7 @@ import type { RpcApprovalGate } from "@covel/approval";
 import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 import { resolveSessionPluginSet } from "../../src/routes/api/session/plugins.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 const roots: string[] = [];
 const managers: BootstrapPluginEntries[] = [];
 const cleanups: (() => Promise<void>)[] = [];
@@ -722,10 +723,12 @@ describe("plugin generation reload", () => {
           .handler({} as never, {} as never),
       ).toBe(1);
       expect(
-        await f.hooks.run(
-          "TurnStart",
-          { event: "TurnStart", sessionId: "session", turnId: "turn" },
-          {},
+        await inHookScope([f.id], () =>
+          f.hooks.run(
+            "TurnStart",
+            { event: "TurnStart", sessionId: "session", turnId: "turn" },
+            {},
+          ),
         ),
       ).toMatchObject({ replace: { version: 1 } });
       expect(

@@ -134,6 +134,31 @@ describe("validate:plugin warnings for a field written with its default", () => 
     expect(result.warnings[0]).toContain("is the default value; remove it");
   });
 
+  it("names the story context defaults a provider restates", async () => {
+    const dir = await plugin(
+      { version: "1.0.0" },
+      {
+        clock: {
+          function: { handler: "../../handler.js" },
+          schedule: { stage: "pre-turn" },
+          io: { storyContext: { select: "", priority: "normal", order: 0 } },
+        },
+      },
+    );
+    const result = await validate(dir);
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(
+      result.warnings.map(
+        (line) =>
+          line.replace(/^ {2}warning: .*?RUNTIME\.md: /, "").split(":")[0],
+      ),
+    ).toEqual([
+      "io.storyContext.select",
+      "io.storyContext.priority",
+      "io.storyContext.order",
+    ]);
+  });
+
   it("compares a story agent with the story defaults", async () => {
     const dir = await plugin(
       { version: "1.0.0" },

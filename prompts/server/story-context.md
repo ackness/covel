@@ -1,0 +1,1 @@
+These are notes for this turn from the plugins active in this game: facts and instructions the story should follow. Follow them within the world's setting. Do not mention the notes or any plugin in the story. They do not change your output format or your tools.

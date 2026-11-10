@@ -93,6 +93,7 @@ export default function (covel) {
 
 - `ctx.pluginData` 只读，只能读提供者自己的数据。它读不到 `_hidden.*` 隐藏世界数据，因为扩展点的输出会进入提示词或客户端。它没有 `set` 和 `update`：扩展点 handler 不写数据。写入属于 runtime，函数 runtime 用 `ctx.pluginData.set` 或操作式的 `ctx.pluginData.update`，在执行结束时随 proposal 一起提交（见[本地代码 · 改数据](../plugins/local-code.md#改数据)和[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)）。
 - `ctx.world` 是会话的 World Model 视图：`characters`、`characterSchema`、`dimensions`，以及会话的座位 `seats`。每个调用点都给出这一局的视图，回合外的调用（图片流程、历史压缩、界面槽位）也一样，读到的是已提交的状态。
+- `ctx.getOwnSettings()` 返回提供者自己的设置，已冻结；提供者调用的服务读自己的设置时也一样。回合、恢复和提交传入它们解析好的设置，含玩家的值。其他回合外的调用（界面槽位、会话视图、单独的图片流程请求）读包级 `userSettings` 的默认值加上这个世界的预设，因为这些请求不带玩家设置。
 - 要找玩家此刻扮演的角色，用 SDK 的 `actingCharacterOf([], ctx.world.characters, ctx.world.seats)`，不要用 `find(type === "player")`：一局可以有多个 `type: player` 的角色。扩展提供者没有行动，传 `[]`，返回主座位的当前角色。完整规则见[座位](./world-model.md#座位)。
 - 不能通过这里读其他插件的私有 namespace。
 - 提供者的 `ctx.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源（见[插件参考](./plugins.md#runtime-分组字段)）。
@@ -112,6 +113,8 @@ export default function (covel) {
 
 > [!TIP]
 > 扩展点不是插件之间互相调用的途径。要向另一个插件发请求并拿回结果，用公开的服务契约。要读同一回合里上游 runtime 的结果，用 runtime 的 `io.inputs`。怎么选、各自的事务边界，见[插件扩展边界与通信](./plugin-extensions.md#选择通信方式)。
+
+`prompt.segment@1` 的提供者只拿到 `{ turnId, playerMessage }`，看不到本回合其他 runtime 的结果：扩展上下文在执行创建时冻结。要把本回合算出的内容（检定结果、刚触发的事件、此刻的时间）交给故事，在 `pre-turn` runtime 上声明 `io.storyContext`，叙事读内核输入 [`story-context@1`](./plugins.md#story-context)。声明式包也能这样做。
 
 ## 提示词片段 `prompt.segment@1` 的两个字段
 

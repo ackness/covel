@@ -29,6 +29,9 @@ import {
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope();
 
 const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));

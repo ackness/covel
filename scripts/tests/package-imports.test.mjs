@@ -36,3 +36,26 @@ test("ignores documentation and string examples while checking re-exports", () =
     [{ specifier: "@covel/shared", typeOnly: false }],
   );
 });
+test("reports Vitest module mocks only when asked", () => {
+  const source = `
+    import { fn } from "./local.js";
+    vi.mock("../../other/src/module.js", () => ({}));
+    vi.doMock("./later.js");
+    const actual = await vi.importActual("@covel/shared");
+    other.mock("./not-vitest.js");
+  `;
+  assert.deepEqual(packageImports("fixture.ts", source), [
+    { specifier: "./local.js", typeOnly: false },
+  ]);
+  assert.deepEqual(
+    packageImports("fixture.ts", source, { mocks: true })
+      .map(({ specifier, mock }) => `${specifier}${mock ? " (mock)" : ""}`)
+      .sort(),
+    [
+      "../../other/src/module.js (mock)",
+      "./later.js (mock)",
+      "./local.js",
+      "@covel/shared (mock)",
+    ],
+  );
+});

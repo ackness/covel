@@ -22,6 +22,7 @@ import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 import { buildSessionCommandList } from "../../src/routes/api/session/commands.js";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
 import { validatePluginBundle } from "../../src/routes/api/install/plugin-bundle.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -171,10 +172,12 @@ describe("package declarations across framework consumers", () => {
         if (mode === "multiple") {
           expect(registry.get("inspector")?.error).toBeUndefined();
           expect(
-            await hookPipeline.run(
-              "PreLLMCall",
-              { event: "PreLLMCall", sessionId: "s1", turnId: "t1" },
-              {},
+            await inHookScope(["inspector"], () =>
+              hookPipeline.run(
+                "PreLLMCall",
+                { event: "PreLLMCall", sessionId: "s1", turnId: "t1" },
+                {},
+              ),
             ),
           ).toEqual({
             action: "continue",

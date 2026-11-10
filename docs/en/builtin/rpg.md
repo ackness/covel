@@ -154,6 +154,10 @@ It has no settings you can change.
 
 Quests are matched by name, so quest names and the names of people who give them must match what the setting says. For how to write them, see [Starting content](../recipes/starting-content.md).
 
+### Works with
+
+The quest log records and advances quests from the quest events that "Story Notes" (`world-ir`) sorts out, without calling a model itself. Without Story Notes, preset quests still show, but no quest is recorded or advanced during play.
+
 ## Bag (`inventory`)
 
 Items that the story clearly gives you, takes from you, or equips are recorded in your bag automatically. You can check it on the right at any time.
@@ -196,6 +200,8 @@ Keep the list short. Items gained during play are recorded automatically. For ho
 
 Both Storyteller (`narrator`) and Chat Storyteller (`chat-mode-narrator`) use the bag lookup and change tools when Bag is active. Without Bag, they continue telling the story as usual.
 
+Bag adds the story's other item changes from the facts that "Story Notes" (`world-ir`) sorts out. Without Story Notes it adds none, and the bag changes only through the storyteller's bag tools and actions in the panel.
+
 ## Affinity (`affinity`)
 
 Records your relationship with each NPC. When you have a clear interaction with an NPC, such as chatting, giving a gift, helping, a conflict, or a betrayal, that NPC's score changes.
@@ -234,6 +240,8 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 
 > [!NOTE]
 > It makes one more model call per turn to decide score changes, so it costs a little more money and time. If you want to save money, do not turn it on.
+
+With "Story Notes" (`world-ir`) on, it looks for interactions in the sorted facts; without it, it reads this turn's story directly.
 
 It has no settings you can change.
 

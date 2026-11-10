@@ -136,6 +136,8 @@ Getting ready groups the plugins by whether they call a model, that is by the de
 
 ### contributes fields
 
+`contributes` is a security artifact, not documentation: the capability snapshot, approval-free grants and declarative admission all read it without executing code, so the manifest stays the single source of truth and is never generated from the entry at install or load time. After changing entry code, authors sync the manifest to the registrations with `pnpm plugin:extract <plugin directory>`; `pnpm check:manifests` enforces it for bundled plugins, and the load-time check in both directions (its errors name this command) is the backstop.
+
 <!-- prettier-ignore -->
 | `contributes` field | Registration or resource it maps to |
 | --- | --- |
@@ -178,7 +180,7 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | Field         | Main settings                                                                                              |
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
 | `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                                    |
-| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                                 |
+| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `storyContext`, `visibility`, `concealed`                 |
 | `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `completion`, `loop`                               |
 | `function`    | A runtime with this block is a function, one without it an agent; `handler`, `model`, `timeoutMs`, `tools` |
 | `guard`       | The guard module, relative to the runtime                                                                  |
@@ -211,6 +213,8 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `io.inputs.*.required` | `true` |
 | `io.inputs.*.scope` | `turn` |
 | `io.selfData[].format`, `maxEntries` | `summary`, `50` |
+| `io.storyContext.select` | the whole output |
+| `io.storyContext.priority`, `order` | `normal`, `0` |
 | `agent.model` | `story` for a runtime with `io.visibility: story`, `plugin` for any other |
 | `agent.reasoning` | `true`: the model's own reasoning setting applies |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
@@ -302,7 +306,7 @@ Use `io.concealed: true` for runtimes that handle hidden content, such as an age
 - The stored execution record keeps the full content, so that retries can use it.
 - The text in its output (`narrativeOutput` or `content`) is not written to the conversation log. So it does not reach other runtimes' prompt history, the message API, or the "rebuild prompt" API. Content it shows to the player directly (interactive forms and UI blocks) is written as usual.
 - You cannot declare it together with `io.visibility: story`. A story runtime's text is the story text the player reads. A manifest that does this is rejected when it loads.
-- A hidden runtime passes its result to other runtimes through an `io.output` contract or through `effects`. The author decides who can read it.
+- A hidden runtime passes its result to other runtimes through an `io.output` contract, through `effects` or through [`io.storyContext`](#story-context). The author decides who can read it.
 
 ### Scope of dependencies and references
 
@@ -531,7 +535,7 @@ io:
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
 - To read a result left by an earlier execution, use `scope: committed` with `recordAs`.
-- A kernel input (`from: { kernel: turn-digest@1 }` or `from: { kernel: operations@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
+- A kernel input (`from: { kernel: turn-digest@1 }`, `from: { kernel: operations@1 }` or `from: { kernel: story-context@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
 - A schema can be a local path, or it can be written as `contract:<contractId>`. A contract schema from another provider is resolved when the package loads.
 - In the prompt, an input is at `runtime-inputs.<binding>.value`. Do not rely on the old injection tags.
 - If an agent runs after the narrative and it is bound to this turn's story text, that `value` is a sentence that points to the story message in the conversation. The story text itself is not repeated (see [Prompt structure](./prompt-structure.md#this-turns-story-text)).
@@ -863,6 +867,95 @@ It adds no scheduling dependency, but it adds a commit dependency: the reader de
 When retrying or recovering a failed runtime, seed results from the source turn and committed retries contribute only `committed` operations. They appear before this execution’s staged operations so consumers can recognize changes already handled. Their writes are not replayed and they add no new commit dependencies. Failed, discarded or still-staged seed operations are excluded.
 
 A `detached` runtime cannot declare this input: static validation and loading report the field path. Its source snapshot carries no operation records; only `turn-digest@1` reads that snapshot. Kernel inputs take only `from`, with no other binding options.
+
+<a id="story-context"></a>
+
+#### The kernel input `story-context@1`
+
+`story-context@1` hands the notes worked out this turn to the story, such as this turn's check result, a hidden event that just fired, or the world time right now. A runtime that provides a note does not need to know which runtime narrates, and the narrator does not bind each provider's contract one by one:
+
+- A provider is a runtime in the `pre-turn` stage. Its `io.storyContext` names which value of its own output it hands over.
+- A reader writes one input and reads all of this turn's notes. The kernel handles ranking, deduplication and the token budget.
+
+```yaml
+# Provider: runtimes/clock/RUNTIME.md
+schedule:
+  stage: pre-turn
+io:
+  output:
+    contract: world-clock@1 # unchanged; other consumers still read it
+  storyContext:
+    select: /storyContext # points into this runtime's validated output
+    priority: high
+function: {}
+```
+
+```yaml
+# Reader: a narrative runtime
+io:
+  inputs:
+    context:
+      from: { kernel: story-context@1 }
+  visibility: story
+```
+
+**Provider (`io.storyContext`)**
+
+| Field      | Meaning                                                                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `select`   | An RFC 6901 JSON Pointer into this runtime's validated output. Without it, the whole output is taken                                      |
+| `priority` | `high`, `normal` or `low`; defaults to `normal`. It decides the ranking, and so which notes are left out first when the budget runs short |
+| `order`    | The order within one priority, ascending; defaults to `0`                                                                                 |
+
+The value at `select` can be one of three things:
+
+- `null`, an empty string or nothing: nothing to say this turn, so no note.
+- A string: the text of the note.
+- `{ title?, content }`: text with a title. Without `title`, or with a blank one, the title is the package's `displayName`, resolved in the session content locale; a package without `displayName` uses its package ID.
+
+The text holds at most 6,000 characters and the title at most 80; surrounding whitespace is ignored. A note that is too long or has the wrong shape is recorded as `invalid` and left out. The provider itself does not fail: its output is validated, published and committed as usual. The SDK exports `storyContextContributionSchema` so a provider's tests can check its own value.
+
+Static checks (shared by `pnpm validate:plugin`, installation and loading; errors carry the field path):
+
+- It needs `schedule.stage: pre-turn`.
+- It cannot be used with `schedule.detached`, `schedule.background`, `schedule.subagentOnly`, `io.visibility: story` or a `presentation` runtime.
+- `select` must be an RFC 6901 JSON Pointer; an empty string is the default whole output, and `pnpm validate:plugin` suggests removing it.
+- An agent needs `io.output.schema`, an `output.schema.json` beside its manifest, or an output contract, because the note comes from its validated output. `pnpm validate:plugin`, installation and loading the runtime check this, since only they see files. A function's note comes from the `value` its handler returns.
+
+An `io.concealed` provider may use it. The text of its note reaches readers as usual, the same as with a bound contract input. When the reader itself is not concealed, its `llm.calling` trace carries the full prompt, note text included, just as when a reader binds a contract input of a concealed runtime. In `story-context.selected`, this provider's entries keep only the package's display name: neither the text nor the title it wrote (which a model may have written).
+
+**Readers**
+
+- Any non-detached runtime in the `narrative`, `post-turn` or `audit` stage can read it, not only story runtimes. A runtime in another stage, a `detached` one, or one without a stage that declares it fails static validation.
+- The value is always present, shaped `{ items, omitted }`; its SDK type is `StoryContextValue`:
+
+| Field     | Contents                                                                                              |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| `items`   | The included notes, by rank: `{ title, content, priority, source: { pluginId, runtimeId } }`          |
+| `omitted` | The notes left out: `{ title, source, reason }`, where `reason` is `budget`, `invalid` or `duplicate` |
+
+- A function reads `ctx.inputs.<name>.value`.
+- An agent reads the `<story-context>` block of its turn context: first a paragraph written by the kernel (in the instruction language, from `prompts/server/story-context.md` and `.zh.md`), then one `<note title="…">…</note>` per item. This input does not appear in `<runtime-inputs>`, so the content is not sent twice; the block carries no plugin or runtime IDs. Without notes there is no block. See [Prompt structure](./prompt-structure.md#turn-context).
+- `PostContextAssembly` can read this slot in `inputSlots` but cannot replace it.
+
+**How the kernel builds the value**
+
+1. Candidates: this execution's finished results with status `success`, plus retry seeds, by the same rule as `operations@1`. Only `pre-turn` runtimes that declare `io.storyContext` count. A runtime that ran again in this execution contributes its new result.
+2. Take the value at `select` and check it against the shapes above. A value that does not match is recorded as `invalid`.
+3. Rank: `priority` (`high` > `normal` > `low`) → `order` ascending → package ID → runtime ID, the last two compared by code unit. Ranking does not depend on the source; bundled plugins get no privilege.
+4. Deduplicate: of notes with identical text, only the highest-ranked one stays; the rest are recorded as `duplicate`.
+5. Budget: the whole block holds at most `min(3000, 10% of the story model's input window)` estimated tokens. The input window is the selected role's context window minus the share reserved for the reply; when it is unknown, the budget is 3000. Notes go in by rank. A note that does not fit is left out whole and recorded as `budget` (never cut, since a cut rule reads as a different rule); smaller notes after it still go in. This first version gives readers no switch to change the budget.
+
+A story agent reader uses its own selected role, including the request's `modelOverride` and the session's `runtimeModelOverrides`; see the [role selection priority](./slots.md#actual-selection-priority). Multiple story readers calculate their budgets separately. A story function reader uses its default text role, without agent overrides or predicting each handler call's `presetId`.
+
+Other readers still use the `story` role, even without a story runtime. The budget is set at input binding and is not recalculated after `PreLLMCall` rewrites or provider fallback.
+
+**Scheduling and commit**
+
+- It adds no scheduling edge. Providers run only in `pre-turn` and readers in later stages, so the stage barrier ensures providers finish first. A provider that fails or is skipped only means one note fewer; the reader runs as usual. This input is never required.
+- It adds a commit dependency: a reader depends on the provider of every note from this execution that it included. When a provider is discarded at commit, an auxiliary reader is discarded with it; a story or setup reader commits and records `read-dependency.kept` (see [Transactions · Turn-level single transaction](./transactions.md#turn-level-single-transaction)). Retry seeds are already committed and add no dependency.
+- When a reader suspends, this value is frozen into the suspension record with its other inputs and reused on resume.
+- The reader's trace records one `story-context.selected` event: the title, source, estimated tokens and omission reason of each included and omitted note, and the budget. Entries from an `io.concealed` provider keep only the package's display name (and the omission reason). When the reader itself is concealed, the whole event is cleared under the concealed rules. See [Protocol](./protocol.md).
 
 ## Advanced fields
 
@@ -1324,11 +1417,13 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows scores, tiers and changes; `prompt.segment@1` provides a read-only projection of current scores. |
 | [branch-reply](../../../plugins/branch-reply/README.md) | Alternative Replies | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist with echoed form answers and records character changes. |
+| [character-agent](../../../plugins/character-agent/README.md) | Character Voice | `plugin` | `character-actor@1` | inline (delegation only) | Lets one character speak in their own voice. Other runtimes delegate to it; it cannot run on its own. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
 | [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Chat Storyteller | `plugin` | `narrative-engine@2` | `plan` / `narrate` | Makes the story read like a conversation; stage presence informs both planning and narration. |
 | [codex](../../../plugins/codex/README.md) | Codex | `plugin` | none | inline | Organizes newly found places, people, items, and rumors. |
 | [core-quest](../../../plugins/core-quest/README.md) | Quest Log | `plugin` | `world-ir.vocabulary@1` | `log`, `vocabulary` | Registers quests from the narrative and moves them forward. |
 | [dice-check](../../../plugins/dice-check/README.md) | Dice Check | `plugin` | `action-check@1` | `roller`, `recorder` | Rolls dice for actions that carry a risk of failure. |
+| [dm-console](../../../plugins/dm-console/README.md) | Game Master Panel | `plugin` | none | none | Shows the characters in the scene, what is waiting for you, the story and the input box on one page. It is only a view and makes no model calls. |
 | [guide](../../../plugins/guide/README.md) | Action Suggestions | `plugin` | `scene-prompts@1` | inline | After each story turn, reviews what has happened so far and offers short actions the player can use as they are. |
 | [history-compaction](../../../plugins/history-compaction/README.md) | Long-Story Memory | `core` | `history.compact@2` (default provider) | none | Organizes earlier conversation into segmented summaries. |
 | [inventory](../../../plugins/inventory/README.md) | Inventory | `plugin` | `world-ir.vocabulary@1` | `ledger`, `vocabulary` | Records items gained and lost, and changes of equipment. |
@@ -1341,8 +1436,9 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue`, `story-cues` | Optionally reads story scene and mood cues to play the world's music; scene selection works without Stage Scene, and events remain overrides. |
 | [story-events](../../../plugins/story-events/README.md) | Hidden Plot Events | `plugin` | `story-event-cue@1`, `story-event.plan@1` | `intake`, `evaluate`, `plot` | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
 | [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Ability Checks | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
+| [turn-policy](../../../plugins/turn-policy/README.md) | Who Speaks Next | `plugin` | `turn-policy@1` | none | Decides which characters speak each turn: whoever you mention, a set order, at random, your pick or an AI director. It is a read-only service. |
 | [world-init](../../../plugins/world-init/README.md) | World State | `core` | `world-data-provider@1`, `world.dimensions@1` | `schema-gen`, `dimension-context`, `dimension-tracker`, `dimension-clock`, `edit-dimensions` | Initializes character attributes and world dimensions, and keeps maintaining them. |
-| [world-ir](../../../plugins/world-ir/README.md) | Story Notes | `plugin` | `world-ir-provider@1` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
+| [world-ir](../../../plugins/world-ir/README.md) | Story Notes | `plugin` | `world-ir@2` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
 | [world-time](../../../plugins/world-time/README.md) | World Time | `core` | `world-time-evolution@1`, `world-time-context@1` | `context`, `advance` | Keeps the date, the time of day, and the direction time flows, and settles time changes from this turn's story. |
 
 The details of each plugin are in its own `PLUGIN.md` and README.

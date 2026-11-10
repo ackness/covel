@@ -24,6 +24,7 @@ import {
   isSchemaObject,
 } from "./action-kinds.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
+import { storyContextSchemaError } from "./story-context-schema.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
 export function pluginImportReferences(
@@ -414,6 +415,12 @@ export function validatePluginFiles(
       throw new Error(
         `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
       );
+    const storyContextError = storyContextSchemaError(
+      runtime,
+      parsed.sourcePath,
+      outputSchema,
+    );
+    if (storyContextError) throw new Error(storyContextError);
     if (runtime.runtimeType !== "function" && outputSchema !== undefined) {
       try {
         assertAgentOutputObjectSchema(outputSchema);

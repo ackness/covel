@@ -8,7 +8,11 @@ import type { StoreTransaction } from "@covel/store";
 import type { SessionEvent } from "@covel/shared";
 import { assertSuspensionWritesUnchanged } from "../resume/suspension-baseline.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
-import { isDimensionSnapshotSkip } from "../turn-executor/dimension-barrier.js";
+import {
+  HOOK_FAILURE_SKIP,
+  failedUpstreamOf,
+  skippedByOf,
+} from "../turn-executor/turn-executor-helpers.js";
 import { recordRuntimeTriggersTx } from "../trigger/trigger-ledger.js";
 import {
   bindDimensionProvider,
@@ -100,20 +104,43 @@ async function checkWriteBaseline(ctx: CommitTxContext): Promise<void> {
 
 function rejectUncommittableStory(ctx: CommitTxContext): void {
   // A failed story cannot complete a player action. Optional state
-  // extractors may fail independently after a valid narrative exists.
-  // A story held back because the dimension provider failed is the same
-  // case: committing would count the turn and keep the writes of the
-  // runtimes before it, with no narrative.
-  for (const result of ctx.args.results) {
-    if (ctx.options.kindOf(result) !== "story") continue;
+  // extractors, the dimension provider among them, may fail independently
+  // after a valid narrative exists.
+  const stories = ctx.args.results.filter(
+    (result) => ctx.options.kindOf(result) === "story",
+  );
+  for (const result of stories) {
     const error =
       result.status === "failed"
         ? `Story runtime ${result.runtimeId} failed; the action was not committed.`
         : result.status === "success"
           ? storyOutputError(result.output)
-          : isDimensionSnapshotSkip(result)
-            ? `Story runtime ${result.runtimeId} did not run because the dimension provider failed; the action was not committed.`
-            : undefined;
+          : undefined;
+    if (error) throw new Error(error);
+  }
+  // So is a story the `needs` or required-input gate held back because a
+  // runtime it hard depends on failed in this execution, or was skipped by a
+  // failed hook: the gate records that runtime as `failedUpstream`. So is a
+  // story skipped because a PreRuntime handler failed judging it. Unlike a
+  // failed story it wrote nothing, so a narrative from another story still
+  // completes the action.
+  // Other held-back stories commit as before, and no gate records a failure
+  // for them:
+  // - an upstream its package chose not to run (trigger, cadence or guard):
+  //   rejecting would stop the clock a cadence-gated upstream waits on;
+  // - the plugin's pending setup: rejecting would discard the setup's own
+  //   writes, such as its form;
+  // - a dependency cycle, which also holds back everything after it, so a
+  //   cycle in any package would stop every turn; validation and traces
+  //   report it.
+  if (stories.some((result) => result.status === "success")) return;
+  for (const result of stories) {
+    const failed = failedUpstreamOf(result);
+    const error = failed
+      ? `Story runtime ${result.runtimeId} did not run because ${failed} failed; the action was not committed.`
+      : skippedByOf(result) === HOOK_FAILURE_SKIP.by
+        ? `Story runtime ${result.runtimeId} did not run because a hook failed; the action was not committed.`
+        : undefined;
     if (error) throw new Error(error);
   }
 }

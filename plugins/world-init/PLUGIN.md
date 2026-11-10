@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.49
+version: 0.0.50
 displayName: World State
 description: Keeps track of the world's numbers and states, such as factions,
   weather and reputation, and updates them as the story goes on.

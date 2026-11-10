@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookResult } from "../src/hooks/types.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 afterEach(() => {
   vi.useRealTimers();

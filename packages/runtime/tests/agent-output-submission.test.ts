@@ -15,6 +15,9 @@ import {
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createTurnEmitter } from "../src/trace/turn-emitter.js";
 import type { ReviewAgentOutputPayload } from "../src/hooks/wire-helpers.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["reviewer"]);
 
 const submit = (value: Record<string, unknown>, id = "submit") =>
   toolCall("submit-output", value, id);

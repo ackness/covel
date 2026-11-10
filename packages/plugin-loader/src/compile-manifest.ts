@@ -270,6 +270,15 @@ export function compileRuntimeManifest(
     ...(loopProfile ? { loopProfile } : {}),
     outputKind: visibility,
     ...(runtime.io?.concealed ? { concealed: true } : {}),
+    // The package's display name is the default title of the note.
+    ...(runtime.io?.storyContext
+      ? {
+          storyContext: {
+            ...runtime.io.storyContext,
+            ...(plugin.displayName ? { title: plugin.displayName } : {}),
+          },
+        }
+      : {}),
     ...(output
       ? {
           output: {

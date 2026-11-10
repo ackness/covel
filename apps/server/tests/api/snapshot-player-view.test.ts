@@ -16,7 +16,7 @@ import {
   makeSnapshotPayload,
   makeSuspension,
   makeWorld,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 

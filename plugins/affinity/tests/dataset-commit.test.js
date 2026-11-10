@@ -58,7 +58,7 @@ async function loadTracker() {
   ).find((entry) => entry.id === "affinity");
   const [parsed] = await loadPluginManifest(discovery);
   return loadRuntime(discovery, parsed.manifest.name, undefined, undefined, {
-    "world-ir@1": worldIRSchema,
+    "world-ir@2": worldIRSchema,
   });
 }
 
@@ -123,7 +123,7 @@ async function fixture(invalidWrite) {
     stage: "post-turn",
     runtimeType: "function",
     outputKind: "system",
-    outputContract: "world-ir-provider@1",
+    outputContract: "world-ir@2",
     trigger: { type: "auto" },
     inputs: {
       narrative: {

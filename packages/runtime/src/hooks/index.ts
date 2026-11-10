@@ -10,7 +10,12 @@ export {
   type SessionStartPayload,
   type SessionEndPayload,
 } from "./wire-helpers.js";
-export { runWithHookScope, type HookScope } from "./hook-scope.js";
+export {
+  MissingHookScopeError,
+  requireHookScope,
+  runWithHookScope,
+  type HookScope,
+} from "./hook-scope.js";
 export type {
   HookEvent,
   HookSemantic,

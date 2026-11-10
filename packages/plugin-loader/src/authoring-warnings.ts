@@ -91,6 +91,10 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
     DEFAULT_FUNCTION_HANDLER,
   );
   out.check(at("io.visibility"), io?.visibility, DEFAULT_RUNTIME_VISIBILITY);
+  const storyContext = record(io?.storyContext);
+  out.check(at("io.storyContext.select"), storyContext?.select, "");
+  out.check(at("io.storyContext.priority"), storyContext?.priority, "normal");
+  out.check(at("io.storyContext.order"), storyContext?.order, 0);
   const output = record(io?.output);
   if (
     output?.contract === STORY_OUTPUT_CONTRACT &&

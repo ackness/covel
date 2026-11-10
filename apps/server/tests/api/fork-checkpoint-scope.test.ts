@@ -13,7 +13,7 @@ import {
   makeSnapshot,
   makeSnapshotPayload,
   makeSuspension,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {

@@ -214,6 +214,42 @@ To turn other world content into your own data, use `contributes.worldProjection
 
 Business formats such as character cards belong to the plugin that handles them. Covel handles only the general "source to target" flow and the characters themselves. It does not wrap data for any particular plugin. A plugin's data about a character can be written in the world's character record: declare `authoring.characterField` on the receiving data space, and Covel gives you that field of the record, keyed by the character ID. See [one character file per world](../reference/world-data.md#one-character-file-per-world).
 
+<a id="feeding-the-story"></a>
+
+## Add a note for the story
+
+When something this turn worked out (a check result, an event that just fired, the time of day) should reach the story, you do not bind a narrator's contract or need to know which runtime narrates. Put `io.storyContext` on a `pre-turn` runtime and point it at a value in its output:
+
+```yaml
+---
+description: Hand the world time to the story
+schedule:
+  stage: pre-turn
+io:
+  storyContext:
+    select: /storyContext
+    priority: high
+function: {}
+---
+```
+
+```js
+export default async function handler(ctx) {
+  const time = await ctx.pluginData.get("clock", "now");
+  return {
+    outcome: "success",
+    value: { storyContext: time ? `World time: ${time.label}.` : null },
+  };
+}
+```
+
+- The value there can be text, `{ title, content }`, or `null` (nothing to say this turn). A note without a title uses the package's `displayName`.
+- An agent provider needs `io.output.schema`, an `output.schema.json` beside its manifest, or an output contract, because the note comes from its validated output.
+- A note that is not valid (too long, wrong shape) is only left out; your runtime still succeeds.
+- Notes are read by a runtime with `from: { kernel: story-context@1 }`, usually the narrator. The kernel ranks, deduplicates and fits them into a token budget, so one input line gives the reader every plugin's notes.
+
+For fields, limits, ranking and the budget, see [the kernel input `story-context@1`](../reference/plugins.md#story-context). For how to choose between this and the other routes into the story (contract inputs, prompt segments, `PostContextAssembly`), see [feeding the story](../reference/plugin-extensions.md#feeding-the-story). To test a reader, build its input with [`storyContextSlot`](./testing.md#what-the-test-kit-contains).
+
 ## Services and extensions
 
 There are two ways to let other code call yours:

@@ -93,6 +93,7 @@ A provider's handler receives two arguments: the input the extension point defin
 
 - `ctx.pluginData` is read-only, and it can read only the provider's own data. It cannot read `_hidden.*` hidden world data, because the output of an extension point goes into the prompt or to the client. It has no `set` or `update`: an extension point handler does not write data. Writes belong to runtimes; a function runtime uses `ctx.pluginData.set` or the operation-based `ctx.pluginData.update`, which commit with the execution's proposals (see [Local code · Change data](../plugins/local-code.md#change-data) and [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate)).
 - `ctx.world` is the session's World Model view: `characters`, `characterSchema`, `dimensions`, and the session's seats, `seats`. Every call site gives this session's view, including calls outside a turn (the image flow, history compaction, UI slots), which read the committed state.
+- `ctx.getOwnSettings()` returns the provider's own frozen settings, and a service the provider calls reads its own settings the same way. A turn, resume or commit passes the settings it resolved, player values included. Other calls outside a turn (UI slots, the session view, the standalone image-flow request) read the package-level `userSettings` defaults plus this world's presets, because no player settings reach them.
 - To find the character the player is acting as, use the SDK's `actingCharacterOf([], ctx.world.characters, ctx.world.seats)`, not `find(type === "player")`: a session may have several `type: player` characters. Extension providers have no actions and pass `[]`, returning the primary seat’s current character. For the full rule, see [Seats](./world-model.md#seats).
 - It cannot read other plugins' private namespaces from here.
 - A provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
@@ -112,6 +113,8 @@ The input and every output are validated against the extension point's schema. T
 
 > [!TIP]
 > An extension point is not a way for plugins to call each other. To send a request to another plugin and get a result back, use a public service contract. To read the results of an upstream runtime in the same turn, use the runtime's `io.inputs`. For how to choose, and the transaction boundaries of each, see [Plugin extension boundaries and communication](./plugin-extensions.md#choose-a-way-to-communicate).
+
+A `prompt.segment@1` provider gets only `{ turnId, playerMessage }` and cannot see the results of other runtimes this turn: the extension context is frozen when the execution is created. To hand something worked out this turn (a check result, an event that just fired, the time of day) to the story, declare `io.storyContext` on a `pre-turn` runtime and have the narrator read the kernel input [`story-context@1`](./plugins.md#story-context). Declarative packages can do this too.
 
 ## The two fields of the prompt segment `prompt.segment@1`
 

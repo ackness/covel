@@ -24,7 +24,6 @@ import {
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { pluginFaultHost } from "../plugin-faults.js";
-import type { RuntimeJobCredentialKey } from "../plugin-rpc/runtime-job-credentials.js";
 import type { ActionRequestControl } from "../turn-control.js";
 import type { ActionStream } from "./action-stream.js";
 import { createAdvanceRoot } from "./auto-advance.js";
@@ -95,8 +94,6 @@ export interface RequestLedger {
   readonly resyncRequired: boolean;
   /** Why an auto-advanced round did not start, when it refused itself. */
   readonly autoStartRefusal: ExecutionAdvanceStopReason | undefined;
-  /** Credentials handed to queued jobs, discarded unless the job is queued. */
-  readonly credentialKeys: readonly RuntimeJobCredentialKey[];
 
   /** Forget the previous turn's settlement and round state. */
   resetTurn(): void;
@@ -113,7 +110,6 @@ export interface RequestLedger {
   markCommitSettled(): void;
   /** The current turn settled with `outcome`. */
   recordSettled(outcome: TurnOutcome): void;
-  keepCredentialKey(key: RuntimeJobCredentialKey): void;
 
   /** Run a step after the turn settled; a failure only asks for a resync. */
   afterSettlement(step: string, run: () => Promise<unknown>): Promise<void>;
@@ -149,7 +145,6 @@ export function createRequestLedger(
   const { requestId, sessionId, traceId } = stream;
   const root = createAdvanceRoot(requestId);
   const faults = pluginFaultHost(store);
-  const credentialKeys: RuntimeJobCredentialKey[] = [];
   let closeFaultGroup: (() => FaultTransition[]) | undefined;
   let roundReported = false;
   let accumulatedResync = false;
@@ -210,7 +205,6 @@ export function createRequestLedger(
     get autoStartRefusal() {
       return autoStartRefusal;
     },
-    credentialKeys,
 
     resetTurn() {
       commitStatusSettled = false;
@@ -252,9 +246,6 @@ export function createRequestLedger(
         runtimeCount: activeRuntimes.length,
         outcome,
       };
-    },
-    keepCredentialKey(key) {
-      credentialKeys.push(key);
     },
 
     afterSettlement,

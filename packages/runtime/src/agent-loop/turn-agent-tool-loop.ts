@@ -29,6 +29,7 @@ import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
+import { resolveRuntimeModel } from "./runtime-model.js";
 import type { ToolCallContext } from "./tool-executor.js";
 import { submitOutputPrompt } from "./loop-prompts.js";
 import {
@@ -306,13 +307,12 @@ async function runAgentToolLoopWithinBudget(
   // Set by a PreStep cancellation or a request that cannot fit.
   let stopMessage: string | undefined;
 
-  // The policy owns tool surfaces, model settings, and execution budgets.
+  // The policy owns tool surfaces and execution budgets.
   const {
     toolDefs,
     output,
     deferredToolNames,
     responseFormat,
-    runtimeModelOverride,
     useStreaming,
     effectiveMaxSteps: configuredMaxSteps,
     retryPolicy,
@@ -421,6 +421,7 @@ async function runAgentToolLoopWithinBudget(
     inputSlots,
     emittedEventTopics: emittedEvents.map((event) => event.topic),
     emitter: deps.emitter,
+    ...(deps.serviceOutcomes ? { serviceOutcomes: deps.serviceOutcomes } : {}),
     ...(turnNumber !== undefined ? { turnNumber } : {}),
     ...(logicalTurn !== undefined ? { logicalTurn } : {}),
     authorizedToolNames,
@@ -453,13 +454,7 @@ async function runAgentToolLoopWithinBudget(
     readonly submissionOnly?: boolean;
     readonly trim?: "normal" | "emergency";
   }) => {
-    // Model resolution chain for story runtimes:
-    // API override > manifest.model (a role the player binds) > undefined.
-    // Tool-heavy plugin runtimes stay on their declared slot so E2E story
-    // overrides do not destabilize function-calling behaviour.
-    const effectiveModel = deps.resolveModel
-      ? deps.resolveModel(manifest, runtimeModelOverride)
-      : (runtimeModelOverride ?? manifest.model);
+    const effectiveModel = resolveRuntimeModel(manifest, input, deps);
 
     // ── PreLLMCall hook ──────────────────────────────────────────
     // Lets plugins non-destructively rewrite the request sent on THIS call

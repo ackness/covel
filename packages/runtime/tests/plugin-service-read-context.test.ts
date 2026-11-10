@@ -22,6 +22,7 @@ import {
   executeTurn,
 } from "../src/index.js";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
+import { runWithHookScope } from "../src/hooks/hook-scope.js";
 import { readDependenciesOf } from "../src/read-dependencies.js";
 import { createPluginDataVisibility } from "../src/function-runtime/upstream-plugin-data.js";
 import { executeFunctionRuntime } from "../src/function-runtime/turn-function-runtime.js";
@@ -517,6 +518,34 @@ describe("read-service context", () => {
     });
     expect(resultOf(reader.name).status).toBe("success");
     expect(seen).toEqual({ tone: "provider setting" });
+  });
+
+  it("refuses a provider's settings read outside a session scope instead of answering {}", async () => {
+    const { registry } = await fixture();
+    registry.register("provider", {
+      name: "read",
+      contract: "fixture/read@1",
+      input: z.unknown(),
+      output: z.unknown(),
+      handler: (_input, ctx) => ctx.getOwnSettings(),
+    });
+    const client = registry.createClient({
+      sessionId: SESSION,
+      pluginId: "consumer",
+      signal: new AbortController().signal,
+    });
+    await expect(client.call(request())).rejects.toThrow(
+      /getOwnSettings\(\) ran outside a session hook scope/,
+    );
+    await expect(
+      runWithHookScope(
+        {
+          activePluginIds: new Set(["consumer", "provider"]),
+          settings: { provider: Object.freeze({ tone: "scoped" }) },
+        },
+        () => client.call(request()),
+      ),
+    ).resolves.toEqual({ tone: "scoped" });
   });
 
   it("gives write and nested read services their own provider's message catalogs", async () => {

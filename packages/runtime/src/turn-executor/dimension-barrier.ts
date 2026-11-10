@@ -7,23 +7,6 @@ import {
 } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
 
-/** How the executor marks a story held back because the provider did not publish. */
-export const DIMENSION_SNAPSHOT_SKIP = {
-  reason: "dimension-snapshot-unavailable",
-  by: "framework:dimensionSnapshot",
-} as const;
-
-export function isDimensionSnapshotSkip(result: {
-  readonly status: string;
-  readonly output?: unknown;
-}): boolean {
-  const output = result.output as { skippedBy?: unknown } | null | undefined;
-  return (
-    result.status === "skipped" &&
-    output?.skippedBy === DIMENSION_SNAPSHOT_SKIP.by
-  );
-}
-
 /** The session's unsettled narratives, oldest first, with their provider. */
 export async function pendingDimensionSettlements(args: {
   readonly store: DataStore;
@@ -72,8 +55,10 @@ export function dimensionProviderConflictReason(
  * Whether the execution may run. A bound provider that is not running only
  * pauses the dimensions: the story goes on, no runtime can write them (the
  * commit refuses every writer but the bound provider), and they keep their
- * values until it is back. Several providers, or another one taking the bound
- * provider's place, stop the execution with a reason the player can act on.
+ * values until it is back. A provider that runs and fails pauses only this
+ * execution's snapshot; the story reads the committed values. Several
+ * providers, or another one taking the bound provider's place, stop the
+ * execution with a reason the player can act on.
  */
 export async function dimensionExecutionBarrier(args: {
   readonly session: SessionRecord | null;

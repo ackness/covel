@@ -9,11 +9,18 @@ import { MAX_QUESTS, questUpdatesFromWorldIR } from "../../lib/world-ir.js";
 
 /**
  * Register and advance quests from the shared WorldIR extraction, without a
- * model call.
+ * model call. The extraction is optional: without it (no provider in the
+ * session, or it failed this turn) the log changes nothing, and quests that
+ * the world seeded stay as they are.
  *
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
+  if (!ctx.inputs?.worldIR)
+    return {
+      outcome: "skipped",
+      skipReason: "No world facts this turn; quests are not updated",
+    };
   const rows = (await ctx.store.listPluginData("quests")) ?? [];
   const known = rows
     .map((row) => row.value?.name)

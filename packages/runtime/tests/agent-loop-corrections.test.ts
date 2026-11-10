@@ -16,6 +16,9 @@ import {
   scriptedLLM,
   toolCall,
 } from "./_helpers/agent-loop-fixture.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope();
 
 async function thrownBy(promise: Promise<unknown>) {
   try {

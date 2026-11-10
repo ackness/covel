@@ -12,6 +12,7 @@ import { runValidateManifest } from "../scripts/run-validate-manifest.js";
 import {
   discoverPluginAt,
   loadPluginDefinition,
+  loadRuntime,
   loadPluginUiSpecs,
   parsePluginMd,
   parseRuntimeMd,
@@ -370,6 +371,51 @@ const crossField = [
     },
     field: "io.inputs.digest.required",
   },
+  {
+    name: "story context from a narrative runtime",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "narrative" },
+      io: { storyContext: { select: "/note" } },
+    },
+    field: "io.storyContext",
+  },
+  {
+    name: "story context from a story runtime",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "pre-turn" },
+      io: { visibility: "story", storyContext: {} },
+    },
+    field: "io.storyContext",
+  },
+  {
+    name: "story context with a select that is no pointer",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "pre-turn" },
+      io: { storyContext: { select: "note" } },
+    },
+    field: "io.storyContext.select",
+  },
+  {
+    name: "story context read on stage pre-turn",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "pre-turn" },
+      io: { inputs: { context: { from: { kernel: "story-context@1" } } } },
+    },
+    field: "io.inputs.context",
+  },
+  {
+    name: "story context read by a detached runtime",
+    runtime: {
+      function: { handler: "../../handler.js" },
+      schedule: { stage: "post-turn", detached: true },
+      io: { inputs: { context: { from: { kernel: "story-context@1" } } } },
+    },
+    field: "io.inputs.context",
+  },
 ];
 
 describe("cross-field rules", () => {
@@ -455,7 +501,7 @@ describe("cross-field rules", () => {
     expect((await validate(kernel)).status).toBe(0);
   });
 
-  it.each(["turn-digest@1", "operations@1"])(
+  it.each(["turn-digest@1", "operations@1", "story-context@1"])(
     "accepts kernel input %s with only its source",
     async (kernel) => {
       const dir = await plugin(
@@ -470,6 +516,110 @@ describe("cross-field rules", () => {
       expect((await validate(dir)).status).toBe(0);
     },
   );
+
+  it("needs an output schema for an agent story-context provider, and counts output.schema.json", async () => {
+    const provider = {
+      schedule: { stage: "pre-turn" },
+      io: { storyContext: { select: "/note" } },
+    };
+    const schema = JSON.stringify({
+      type: "object",
+      properties: { note: { type: ["string", "null"] } },
+      required: ["note"],
+    });
+    const loadOne = async (dir: string, name: string) => {
+      const discovery = (await discoverPluginAt(dir))!;
+      return loadRuntime(discovery, name).then(
+        () => undefined,
+        (caught: Error) => caught.message,
+      );
+    };
+
+    // Without a schema, validation and loading reject the runtime by field.
+    const bare = await plugin({}, { one: provider });
+    const file = path.join(bare, "runtimes/one/RUNTIME.md");
+    const bareResult = await validate(bare);
+    expect(bareResult.status).toBe(1);
+    expect(bareResult.stderr).toContain(`${file}: io.storyContext:`);
+    expect(await loadOne(bare, "probe/one")).toContain(
+      `${file}: io.storyContext:`,
+    );
+    const inlineBare = await plugin({ runtime: provider });
+    expect((await validate(inlineBare)).stderr).toContain(
+      `${path.join(inlineBare, "PLUGIN.md")}: runtime.io.storyContext:`,
+    );
+
+    // The conventional file beside RUNTIME.md or an inline PLUGIN.md counts.
+    const conventional = await plugin(
+      {},
+      { one: provider },
+      { "runtimes/one/output.schema.json": schema },
+    );
+    const conventionalResult = await validate(conventional);
+    expect(conventionalResult.stderr).toBe("");
+    expect(conventionalResult.status).toBe(0);
+    expect(await loadOne(conventional, "probe/one")).toBeUndefined();
+    const inline = await plugin(
+      { runtime: provider },
+      {},
+      { "output.schema.json": schema },
+    );
+    expect((await validate(inline)).status).toBe(0);
+    expect(await loadOne(inline, "probe")).toBeUndefined();
+
+    // So does an output contract.
+    const contract = await plugin(
+      {},
+      {
+        one: {
+          ...provider,
+          io: { ...provider.io, output: { contract: "probe.note@1" } },
+        },
+      },
+    );
+    expect((await validate(contract)).stderr).not.toContain("io.storyContext");
+  });
+
+  it("accepts a pre-turn provider of story context and a story that reads it", async () => {
+    const dir = await plugin(
+      {},
+      {
+        clock: {
+          function: { handler: "../../handler.js" },
+          schedule: { stage: "pre-turn" },
+          io: {
+            storyContext: { select: "/note", priority: "high", order: -1 },
+          },
+        },
+        omen: {
+          schedule: { stage: "pre-turn" },
+          io: {
+            output: { schema: "./omen.schema.json" },
+            storyContext: { select: "/note" },
+            concealed: true,
+          },
+        },
+        story: {
+          function: { handler: "../../handler.js" },
+          schedule: { stage: "narrative" },
+          io: {
+            inputs: { context: { from: { kernel: "story-context@1" } } },
+            visibility: "story",
+          },
+        },
+      },
+      {
+        "runtimes/omen/omen.schema.json": JSON.stringify({
+          type: "object",
+          properties: { note: { type: ["string", "null"] } },
+          required: ["note"],
+        }),
+      },
+    );
+    const result = await validate(dir);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
 
   it("orders after a contract the package does not depend on", async () => {
     const dir = await plugin(

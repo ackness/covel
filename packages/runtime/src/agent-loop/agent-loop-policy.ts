@@ -2,7 +2,7 @@
  * Explicit per-run policy for the agent tool-call loop.
  *
  * Everything the loop needs to decide HOW to run — tool surface, response
- * format, model override, streaming gate, step/retry budgets, tool-use
+ * format, streaming gate, step/retry budgets, tool-use
  * enforcement, and the loop profile (steering, fallback, finalizer) — is
  * derived here, in one place, from the manifest and turn input. The loop body (`turn-agent-tool-loop.ts`) only consumes the
  * resulting `AgentLoopPolicy`, so its `while` reads as control flow rather
@@ -46,12 +46,6 @@ export interface AgentLoopPolicy {
   /** Final output is submitted only through the generated tool. */
   readonly output: AgentOutputContract;
   readonly responseFormat: undefined;
-  /**
-   * Session/API model override for this runtime. Story runtimes honour
-   * the request-scoped story-only API override; every runtime kind honours the
-   * per-session `runtimeModelOverrides` snapshot.
-   */
-  readonly runtimeModelOverride: string | undefined;
   /**
    * Use provider streaming whenever available, to track first-output/idle
    * timeouts and complete tool calls. Output remains internal until accepted
@@ -122,12 +116,6 @@ export async function buildAgentLoopPolicy({
   const authorizedToolNames = new Set(declaredToolNames(manifest));
   authorizedToolNames.add(output.toolName);
 
-  // Output contract, not loop behaviour.
-  const sessionRuntimeSlot = input.runtimeModelOverrides?.[manifest.name];
-  const runtimeModelOverride =
-    input.modelOverride && manifest.outputKind === "story"
-      ? input.modelOverride
-      : sessionRuntimeSlot;
   return {
     toolDefs,
     deferredToolNames: deps.toolExecutor
@@ -135,7 +123,6 @@ export async function buildAgentLoopPolicy({
       : new Set<string>(),
     responseFormat: undefined,
     output,
-    runtimeModelOverride,
     useStreaming: !!deps.llm.stream,
     effectiveMaxSteps: manifest.maxSteps ?? maxSteps,
     retryPolicy: buildRetryPolicy({

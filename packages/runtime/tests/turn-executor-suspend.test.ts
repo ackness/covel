@@ -41,6 +41,9 @@ import type {
   ToolCallContext,
   ToolCallResult,
 } from "../src/agent-loop/tool-executor.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["source", "test-plugin"]);
 
 // ── Fixtures ─────────────────────────────────────────────────────
 

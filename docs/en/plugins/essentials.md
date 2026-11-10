@@ -23,7 +23,7 @@ For all the fields, see the [plugin field reference](../reference/plugins.md).
 
 ## The minimal loop
 
-Each time you change a plugin, follow three steps: generate (only once), validate, and run offline.
+Each time you change a plugin, follow three steps: generate (only once), validate, and run offline. A plugin with entry code adds one step before validation: sync its declarations, described in [where to declare what my code registers](#where-to-declare-what-my-code-registers).
 
 For a plugin you write for yourself or for the community, put it in the user plugin directory. It needs no dependency install:
 
@@ -118,8 +118,21 @@ contributes:
       description: Emitted after a note is saved.
 ```
 
+### After changing the entry, sync the declarations
+
+`PLUGIN.md` is the single source of truth: installation approval, the capability snapshot and approval-free trusted-source grants all read these declarations before any code runs, so they cannot be generated from code at load time. Syncing goes from code to manifest with your own command; do not hand-edit these seven lists:
+
+```bash
+pnpm plugin:extract <plugin directory>           # rewrite contributes from the entry's registrations
+pnpm plugin:extract <plugin directory> --check   # write nothing; exit 1 on drift
+```
+
+Run it after every added or removed `registerTool`, `registerRpc`, `registerService`, `on`, `registerFormValidator`, `registerWires` or `provideExtension`, then validate and run offline. It writes `tools`, `actions`, `services`, `forms`, `wires`, `hooks` and `extensions`; for `extensions` it only adds and drops IDs and keeps the options (`order`, `slot`, ...) of entries that stay. Command metadata in `commands` and declaration-only fields such as `events` and `prompt` stay yours to maintain. See [Plugins with local code](./local-code.md#4-write-the-entry-file) for the details.
+
+For bundled plugins, `pnpm check:manifests` inside `pnpm check` enforces this: it executes each bundled entry, compares the declarations, and prints the differences with the fix command. The load-time check in both directions remains the last gate, and its errors name the same fix command.
+
 > [!NOTE]
-> The validation command only reads files. It does not run the entry file. So it cannot find "declared but never registered in code". That error appears only when the plugin loads. You can catch it early with [offline runs](./testing.md).
+> The validation command only reads files and does not run the entry file, so it cannot find "declared but never registered in code". The sync command and [offline runs](./testing.md) catch that error early; otherwise it appears only when the plugin loads.
 
 ## Which tools the model can use
 
@@ -132,7 +145,7 @@ There are two lists, with different jobs:
 | `contributes.tools` | `PLUGIN.md`                | The tools this plugin registers |
 | `agent.tools`       | The agent runtime's config | The tools this agent can call   |
 
-`agent.tools` has three common groups: `builtin` holds the tools that Covel provides, `plugin` holds your own tools, and `datasets` holds the read and write tools that Covel generates for the datasets you declare in `contributes.datasets` (for example `notes-get` and `notes-upsert`).
+`agent.tools` has four common groups: `builtin` holds the tools that Covel provides, `plugin` holds your own tools, `datasets` holds the read and write tools that Covel generates for the datasets you declare in `contributes.datasets` (for example `notes-get` and `notes-upsert`), and `services` imports services that other plugins offer to models as tools (see [imported service tools](../reference/tools.md#imported-service-tools)). `defer` also lives there; it controls which tools load late and is not a group of tools. For each field, see the [runtime field table](../reference/schema/runtime-manifest.md#agenttools).
 
 ```yaml
 agent:
@@ -370,7 +383,7 @@ Keep an entity together with references to it. See the [plugin reference](../ref
 | A write fails, with a message that the size limit was exceeded                  | A value is over 256 KiB. Split it into several keys.                                                                              |
 | In a game in Chinese, changes to the prompt have no effect                      | You changed only the English body. A game in Chinese reads `*.zh.md`.                                                             |
 
-An auxiliary plugin that repeatedly fails in one session because of its own exceptions, timeouts, invalid agent stops or rejected proposals is paused. Use “Resume” in the plugin list to reset and retry. Provider/model errors, cancellations, dependency cascades and version conflicts do not count; setup, story providers and dimension providers receive special protection. A deliberate Hook veto is not a Hook fault; throws and timeouts count against the Hook owner. A sub-agent’s own failures count against its provider; a paused provider returns `unavailable` to callers. See the [fault latch](../reference/protocol.md#plugin-fault-latch) for the full rules. State lives in memory and clears on restart.
+An auxiliary plugin that repeatedly fails in one session because of its own exceptions, timeouts, invalid agent stops or rejected proposals is paused. Use “Resume” in the plugin list to reset and retry. Provider/model errors, cancellations, dependency cascades and version conflicts do not count; setup, story providers and dimension providers receive special protection. A deliberate Hook veto is not a Hook fault; throws and timeouts count against the Hook owner. A failed guard Hook stops only what it judged; a failed `TurnStart` handler of a plugin with runtimes but no story runtime makes the plugin sit a turn with a story out, so a hook that must stop the whole turn on its own errors should catch them and return `abort`; see [When a guard handler fails](../reference/hooks.md#auxiliary-hook-failures). A sub-agent’s own failures count against its provider; a paused provider returns `unavailable` to callers. See the [fault latch](../reference/protocol.md#plugin-fault-latch) for the full rules. State lives in memory and clears on restart.
 
 ## Next
 

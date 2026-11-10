@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   validateWorldIRV1,
   WORLD_IR_V1_JSON_SCHEMA,
-  WORLD_IR_V1_SCHEMA_URI,
+  WORLD_IR_SCHEMA_URI,
 } from "../schemas/world-ir.js";
 describe("world IR validation", () => {
   it("publishes one canonical JSON Schema for the WorldIR URI", () => {
-    expect(WORLD_IR_V1_JSON_SCHEMA.$id).toBe(WORLD_IR_V1_SCHEMA_URI);
+    expect(WORLD_IR_V1_JSON_SCHEMA.$id).toBe(WORLD_IR_SCHEMA_URI);
     expect(Object.isFrozen(WORLD_IR_V1_JSON_SCHEMA.properties.entities)).toBe(
       true,
     );

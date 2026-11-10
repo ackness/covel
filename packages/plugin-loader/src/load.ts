@@ -13,6 +13,7 @@ import {
 } from "./action-kinds.js";
 import { assertInsideRoot } from "./path-containment.js";
 import { fileExists } from "./file-system.js";
+import { storyContextSchemaError } from "./story-context-schema.js";
 import {
   PackageInventoryError,
   packageFileSignature,
@@ -872,6 +873,13 @@ export async function loadRuntime(
       }
     }
   }
+
+  const storyContextError = storyContextSchemaError(
+    parsed.manifest,
+    parsed.sourcePath,
+    outputSchema,
+  );
+  if (storyContextError) throw new Error(storyContextError);
 
   const inputSchema = parsed.manifest.input?.schema
     ? await loadDeclaredSchema(

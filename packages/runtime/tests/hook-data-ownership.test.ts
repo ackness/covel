@@ -11,6 +11,9 @@ import {
   type HookSemantic,
 } from "../src/hooks/types.js";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 const originalSemantic = HOOK_SEMANTICS.TurnStart;
 afterEach(() => {

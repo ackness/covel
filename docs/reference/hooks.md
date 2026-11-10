@@ -11,7 +11,7 @@ Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或
 Hook 不写玩法。一条玩法规则应该放在 runtime 或工具里。
 
 > [!NOTE]
-> 事件名只在一处定义：`HOOK_EVENTS`（`packages/shared/src/types/hooks.ts`）。每个事件怎么运行写在 `HOOK_SEMANTICS` 和 `GUARD_HOOK_EVENTS`（`packages/runtime/src/hooks/types.ts`），负载在 `packages/runtime/src/hooks/wire-helpers.ts` 里构造。本页和这些表对不上时，`packages/runtime/tests/hooks-reference-doc.test.ts` 会失败。
+> 事件名只在一处定义：`HOOK_EVENTS`（`packages/shared/src/types/hooks.ts`）。每个事件怎么运行写在 `HOOK_SEMANTICS`、`GUARD_HOOK_EVENTS` 和 `GUARD_FAILURE_SCOPE`（`packages/runtime/src/hooks/types.ts`），负载在 `packages/runtime/src/hooks/wire-helpers.ts` 里构造。本页和这些表对不上时，`packages/runtime/tests/hooks-reference-doc.test.ts` 会失败。
 
 ## Declaring and registering
 
@@ -75,6 +75,8 @@ handler 收到两个参数：上下文 `ctx` 和负载 `payload`。它返回一�
 
 runtime 的身份只在上下文里。负载不会重复 `pluginId` 或 `runtimeId`，所以一句 `ctx.runtimeId === "..."` 对每个事件都适用。
 
+handler 总能拿到 `activePluginIds` 和 `getOwnSettings`。内核只在一个会话的 Hook 作用域里运行 handler：回合、恢复、手动运行、后台作业、提交和会话的开始与结束都会先建立它。宿主代码如果在作用域外触发 Hook，内核直接报 `MissingHookScopeError`，不会让所有插件的 handler 在没有设置的情况下运行。`ctx.getOwnSettings?.() ?? {}` 的写法仍然有效。
+
 ### Payload
 
 负载是一份私有副本。直接修改它没有任何效果。要改内容，把改动放在返回值的 `replace` 里。
@@ -98,10 +100,42 @@ runtime 的身份只在上下文里。负载不会重复 `pluginId` 或 `runtime
 
 handler 抛出异常、超时或返回了格式不对的结果，都算这个 handler 失败。失败之后怎么办，取决于事件：
 
-- **可以拦截的事件**：失败按 `abort` 处理。一条坏掉的规则不能让它本该拦住的操作通过。
 - **其他事件**：跳过这个 handler，它之前的 handler 做出的改写保留，失败记入 trace（`hook.error`）。
+- **可以拦截的事件**：失败绝不放过 handler 判的那件事，一条坏掉的规则不能让它本该拦住的操作通过。失败对那件事按 `abort` 处理；`TurnStart` 有一个例外，见下文。
 
-抛错、超时或返回无效结果，会计入注册这个 Hook 的插件的[故障熔断](./protocol.md#插件故障熔断)。主动返回 `abort` / 否决不算 Hook 故障；`PreStateCommit` 的主动否决属于 proposal 所属插件的拒绝。父执行取消不算 Hook 故障。
+只有失败适用这些规则。handler 主动返回的 `abort` 或否决，效果在任何情况下都不变。
+
+<a id="auxiliary-hook-failures"></a>
+
+### guard handler 失败时
+
+失败只拦住 handler 判的那件事，别的都不动。每个事件拦住的是：
+
+<!-- prettier-ignore -->
+| 事件 | 范围 | handler 失败时 |
+| --- | --- | --- |
+| `TurnStart` | `own-runtimes` | 和 `abort` 一样结束这次执行，除非 handler 所属的插件可以退出这次执行，见下文。 |
+| `PreCompaction` | `closed` | 这一回合不压缩历史。回合照常进行。 |
+| `PreRuntime` | `closed` | 它判的那个 runtime 被跳过，原因是 `hook-failed`，不论那个 runtime 属于哪个插件。 |
+| `ReviewAgentOutput` | `closed` | 被审查的 runtime 失败。这是内容闸门：审查可能就是为了不让玩家读到某些文字，见[压住故事草稿](#holds-drafts)。 |
+| `PreToolUse` | `closed` | 拒绝这一次工具调用，模型收到 `refused` 错误，可以接着做别的事。这是权限闸门：工具调用会发出外部请求、生成媒体，这些副作用回滚撤不回来。 |
+| `PreStateCommit` | `closed` | 它判的那条 proposal 被拒绝，`code: "hook-failed"`，不论那条 proposal 属于哪个插件。 |
+
+被跳过的 runtime 或被拒绝的 proposal 让回合付出多少，按[提交单元](./transactions.md#回合级单事务)的规则定：有成功的故事时，别的 runtime 的单元单独丢弃，回合照常提交；故事的 proposal 被拒绝，整次执行失败。故事因为 Hook 失败被跳过，或者它硬依赖的 runtime 这样被跳过而被扣住，按故事失败拒绝提交，不会提交一个没有叙事的回合，见[事务](./transactions.md#backend-implementations)。
+
+**退出一个回合。** 一个插件的 `TurnStart` handler 失败时，下面几条都满足，执行就不停下，而是不带这个插件接着进行：
+
+- handler 属于插件而不是框架，并且这个插件没有 `outputKind: story` runtime。内核按 runtime 的 `outputKind` 认出故事插件，不看插件 ID。
+- 这次执行会运行故事：触发条件、节奏和 `PreSchedule` 选出要运行的 runtime 之后，其中有故事 runtime。开局准备不运行故事，瞄准别的 runtime 的手动运行和重试也不运行。
+- 选出的 runtime 里至少有一个属于这个插件。只有 Hook 的插件可能就是专门把关输入的，它失败就结束这次执行。
+
+后两条要等会话阶段读出来、runtime 选好之后才能判断，所以执行先接着走，到那时不满足，就在任何 runtime 开始之前结束。
+
+退出的插件在这次执行里失去它的 runtime：它们的结果是 `skipped`，原因是 `hook-failed`；它的子代理拒绝调用；硬依赖它某个 runtime 的故事被拒绝提交。它对整个回合的否决在这一回合不起作用。自己的检查坏掉时必须结束整个回合的插件，应当自己捕获错误并返回 `abort`。超时捕获不了，所以总是按这种方式处理；要当硬闸门用的 Hook 应当保持快速。
+
+嵌套执行（`recursiveCall`）继续排除退出父执行的插件；其中别的 `TurnStart` 失败会结束这次嵌套执行。
+
+失败都记入 trace（`hook.error` 或 `hook.timeout`）。玩家在回合的执行状态里看到被跳过的 runtime 和原因，被结束或被拒绝的回合显示为错误。抛错、超时或返回无效结果，计入注册这个 Hook 的插件的[故障熔断](./protocol.md#插件故障熔断)：同一会话连续三个输入失败后，这个插件被暂停，玩家看到提示。主动返回 `abort` / 否决不算 Hook 故障；`PreStateCommit` 的主动否决属于 proposal 所属插件的拒绝。父执行取消不算 Hook 故障，也总是结束整条链。
 
 ## Events
 
@@ -144,7 +178,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 负载：`{ playerMessage, actions, activeRuntimes }`。`playerMessage` 是内核从玩家行动渲染出的文字；`actions` 是解析后的行动（每个是 `{ seatId, kind, actorId?, text?, fields?, interaction?, source }`），没有玩家输入的执行是空数组；`activeRuntimes` 是这个会话的 runtime ID 列表。
 
-`abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。
+`abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。handler 失败也结束这次执行，除非它所属的插件可以退出，见[guard handler 失败时](#auxiliary-hook-failures)。
 
 ### `PreCompaction`
 
@@ -179,7 +213,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 负载：`{ manifest, input }`，即这个 runtime 的清单和回合输入。
 
-`abort` 跳过这个 runtime：它的结果状态是 `skipped`，带上原因。这个事件不读 `replace`。
+`abort` 跳过这个 runtime：它的结果状态是 `skipped`，带上原因。handler 失败也跳过它，原因是 `hook-failed`。这个事件不读 `replace`。
 
 ### `PostContextAssembly`
 
@@ -191,7 +225,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `outputKind`         | `story` 或 `system`。                                                                                                                                                                                           |
 | `promptTemplate`     | 这个 runtime 的提示词正文，渲染之前的样子。                                                                                                                                                                     |
-| `inputSlots`         | 解析后的 `io.inputs` 值。                                                                                                                                                                                       |
+| `inputSlots`         | 解析后的 `io.inputs` 值，包括内核输入。[`story-context@1`](./plugins.md#story-context) 的槽在这里可读，但它的 `<story-context>` 块不能靠改这个字段替换。                                                        |
 | `characters`         | 会话里的角色（`id`、`name`、`type`、`description`）。                                                                                                                                                           |
 | `currentCharacterId` | 玩家当前扮演的角色的 `id`：主座位的当前角色（见[座位](./world-model.md#座位)），是 `characters` 中的一个。没有座位绑定角色时不出现。按它找玩家角色，不要按 `type === "player"` 找：一个会话可以有多个玩家角色。 |
 | `promptSegments`     | 这个 runtime 的提示词用到的 [`prompt.segment@1`](./extension-points.md) 片段，每条是 `{ pluginId, id }`：提供片段的插件，以及它给片段起的 `id`。`audience` 没有包含这个 runtime 的片段不列出。                  |
@@ -342,6 +376,7 @@ agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.
 
 - `abort` 拒绝这条 proposal，带上原因。
 - `replace.proposal.payload` 替换 payload。proposal 的类型、来源和 ID 保持不变。
+- handler 失败时拒绝这条 proposal，`code: "hook-failed"`，见[guard handler 失败时](#auxiliary-hook-failures)。
 
 [写服务](./plugin-extensions.md#写服务)暂存的写入以提供者为来源到达：`ctx.pluginId` 是提供者，`ctx.runtimeId` 是 `service:<服务名>`，发起调用的插件不出现在 Hook 里。拒绝其中任何一条，整个操作被拒（见[事务 · 写服务的操作](./transactions.md#写服务的操作)）。
 

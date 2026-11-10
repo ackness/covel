@@ -14,7 +14,7 @@ import {
   makeWorld,
   makeSnapshot,
   makeRuntimeExport,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 import { copyForkRuntimeExports } from "../../src/routes/api/fork-runtime-exports.js";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
