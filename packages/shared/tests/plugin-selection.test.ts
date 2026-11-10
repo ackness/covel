@@ -376,6 +376,42 @@ describe("session plugin contract resolution", () => {
       code: "default-replaced",
     });
   });
+  it.each([false, true])(
+    "restores consumers before pruning after a failed default replacement (fixed: %s)",
+    (fixed) => {
+      for (const requested of [
+        ["default-story", "replacement-story", "reader", "dependent"],
+        ["reader", "dependent", "replacement-story", "default-story"],
+      ]) {
+        const plan = resolveSessionPlugins({
+          requested,
+          fixed,
+          plugins: [
+            p("default-story", {
+              provides: [
+                { contract: "narrative-engine@2", default: true },
+                "memory@1",
+              ],
+            }),
+            p("replacement-story", {
+              provides: ["narrative-engine@2"],
+              requires: ["memory@1"],
+            }),
+            p("reader", { provides: ["reader@1"], requires: ["memory@1"] }),
+            p("dependent", { requires: ["reader@1"] }),
+          ],
+        });
+        expect([...plan.active].sort()).toEqual([
+          "default-story",
+          "dependent",
+          "reader",
+        ]);
+        expect(plan.rejected).toEqual([
+          expect.objectContaining({ pluginId: "replacement-story" }),
+        ]);
+      }
+    },
+  );
   it.each(["narrative-engine@2", "story@1"])(
     "settles a replacement chain before removing the default %s provider",
     (contract) => {
