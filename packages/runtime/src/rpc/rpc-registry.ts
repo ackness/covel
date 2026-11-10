@@ -180,6 +180,8 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
   const pluginEntries = new Map<string, RpcRegistryEntry>(); // key = `${pluginId}::${action}`
   const frameworkEntries = new Map<string, RpcRegistryEntry>();
 
+  // An execution's frozen actions and validators. Absent means the live ones,
+  // which is correct outside an execution (plain RPC dispatch, diagnostics).
   const snapshots = new AsyncLocalStorage<{
     entries: Map<string, RpcRegistryEntry>;
     validators: Map<string, ValidatePluginForm>;

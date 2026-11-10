@@ -13,6 +13,9 @@ import {
   runPreToolUseHook,
 } from "../src/hooks/wire-helpers.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["origin-plugin", "p", "plugin-x"]);
 
 describe("HookPipeline emitter integration", () => {
   it("does not emit any hook.* event when no handlers are registered", async () => {

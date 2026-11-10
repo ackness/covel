@@ -14,6 +14,9 @@ import { prepareRuntimeProposals } from "../src/session/session-runtime-result.j
 import { readBaselineFixture } from "./helpers/read-baseline-fixture.js";
 import { executeTurn, PluginServiceRegistry } from "../src/index.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["bank", "writer"]);
 
 describe.each([
   ["memory", createMemoryStore],

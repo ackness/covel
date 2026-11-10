@@ -14,6 +14,9 @@ import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 describe.each(["agent", "function"] as const)(
   "%s suspension terminal",

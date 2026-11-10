@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runPreLLMCallHook } from "../src/hooks/wire-helpers.js";
 import type { HookResult } from "../src/hooks/types.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["fixture"]);
 
 afterEach(() => vi.useRealTimers());
 

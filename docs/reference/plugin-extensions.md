@@ -86,7 +86,7 @@ RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调�
 - 它的 Hook 仍然按会话里启用的插件集合运行。
 - `ctx.getOwnSettings()` 读到包级 `userSettings` 的默认值，加上这个世界和玩家的覆盖值。没有 runtime 不会丢掉这些默认值，也不会凭空多出一个 runtime 被调度。
 
-把内核嵌进自己宿主的开发者还要知道：执行和提交各用一个明确的会话 Hook scope。直接调用 `executeTurn` 的宿主如果要包含没有 runtime 的包，在 `TurnExecutorDeps.hookScope` 里传入它的 `activePluginIds` 和解析好的 `settings`。执行入口会记下并冻结这个范围，随后随 `execution` 自动传给 `commitExecution`。Covel 的服务端从持久化的会话激活集合构造这个 scope。社区插件的 Hook 每次调用时仍检查当前的 server-code 授权。
+把内核嵌进自己宿主的开发者还要知道：执行和提交各用一个明确的会话 Hook scope。直接调用 `executeTurn` 的宿主如果要包含没有 runtime 的包，在 `TurnExecutorDeps.hookScope` 里传入它的 `activePluginIds` 和解析好的 `settings`。执行入口会记下并冻结这个范围，随后随 `execution` 自动传给 `commitExecution`。Covel 的服务端从持久化的会话激活集合构造这个 scope。社区插件的 Hook 每次调用时仍检查当前的 server-code 授权。宿主在这些入口之外触发 Hook、提交 proposal 或调用服务时（例如会话生命周期 Hook、直接提交），要自己用 `runWithHookScope` 包住这段代码。没有 scope 时 `HookPipeline.run` 和服务的 `getOwnSettings()` 抛出 `MissingHookScopeError`，不会退回到运行所有插件的 Hook 或返回空设置。
 
 ### Hook
 

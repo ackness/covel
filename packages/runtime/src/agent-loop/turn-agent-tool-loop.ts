@@ -421,6 +421,7 @@ async function runAgentToolLoopWithinBudget(
     inputSlots,
     emittedEventTopics: emittedEvents.map((event) => event.topic),
     emitter: deps.emitter,
+    ...(deps.serviceOutcomes ? { serviceOutcomes: deps.serviceOutcomes } : {}),
     ...(turnNumber !== undefined ? { turnNumber } : {}),
     ...(logicalTurn !== undefined ? { logicalTurn } : {}),
     authorizedToolNames,

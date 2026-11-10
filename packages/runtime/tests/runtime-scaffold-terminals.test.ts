@@ -32,6 +32,9 @@ import {
   collectExecutionSuspensionRuns,
   collectExecutionSuspensions,
 } from "../src/suspension-artifact.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -1046,6 +1049,8 @@ describe("resume terminals", () => {
 
 describe("agent timeout", () => {
   it("fails a thrown agent timeout without a failure target, even with the target known", async () => {
+    vi.useFakeTimers();
+    const toolEntered = Promise.withResolvers<void>();
     let reachedTool = false;
     const h = harness({
       toolExecutor: {
@@ -1056,6 +1061,7 @@ describe("agent timeout", () => {
             ctx.signal?.addEventListener("abort", () =>
               reject(ctx.signal?.reason),
             );
+            toolEntered.resolve();
           }),
       } as unknown as TurnExecutorDeps["toolExecutor"],
     });
@@ -1073,10 +1079,13 @@ describe("agent timeout", () => {
       usage: { inputTokens: 1, outputTokens: 1 },
     }));
     try {
-      const turn = await runTurnPipeline(input, [runtime], {
+      const pendingTurn = runTurnPipeline(input, [runtime], {
         ...h.deps({}),
         llm: { generate, resolveTarget },
       });
+      await toolEntered.promise;
+      await vi.advanceTimersByTimeAsync(31);
+      const turn = await pendingTurn;
       // The model call returned with a resolved target and the loop reached
       // the tool stage, so the agent knew its target when the deadline hit.
       expect(resolveTarget).toHaveBeenCalled();

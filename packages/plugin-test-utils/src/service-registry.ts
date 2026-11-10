@@ -1,6 +1,7 @@
 import {
   createRootOperationStage,
   PluginServiceRegistry,
+  runWithHookScope,
 } from "@covel/runtime";
 import type { OperationRecord, Proposal, RuntimeResult } from "@covel/shared";
 import type {
@@ -84,6 +85,8 @@ export interface TestServiceOperation {
  * Call a service the way a runtime of `caller.pluginId` would, without a
  * turn. A write service stages into a fresh stage; the result lists what it
  * staged (nothing commits). `store` holds the provider's committed data.
+ * The call runs in its own session scope with no plugin settings, so a
+ * provider's `getOwnSettings()` returns `{}`.
  */
 export async function callTestService(options: {
   readonly registry: PluginServiceRegistry;
@@ -124,7 +127,14 @@ export async function callTestService(options: {
     },
     operations: stage,
   });
-  const output = await client.call(options.request);
+  const output = await runWithHookScope(
+    {
+      activePluginIds: new Set([caller.pluginId]),
+      settings: {},
+      ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
+    },
+    () => client.call(options.request),
+  );
   const carrier: Pick<RuntimeResult, "operations" | "operationWrites"> = {};
   stage.attachTo(carrier as RuntimeResult, true);
   return {

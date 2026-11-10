@@ -75,6 +75,8 @@ Every handler for every event receives a context with the same shape.
 
 A runtime's identity is only in the context. The payload does not repeat `pluginId` or `runtimeId`, so a line such as `ctx.runtimeId === "..."` applies to every event.
 
+A handler always receives `activePluginIds` and `getOwnSettings`. The kernel runs handlers only inside a session's hook scope: turns, resumes, manual runs, background jobs, commits, and the start and end of a session each set one up first. When host code fires a hook outside a scope, the kernel fails with `MissingHookScopeError` instead of running every plugin's handlers without their settings. The `ctx.getOwnSettings?.() ?? {}` form still works.
+
 ### Payload
 
 The payload is a private copy. Changing it directly has no effect. To change the content, put the change in the `replace` of the returned value.

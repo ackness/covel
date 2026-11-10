@@ -21,6 +21,7 @@ import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
+import { loadSessionPluginSettings } from "../session/hook-scope.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 import { runtimeRunsWithoutPrompt } from "./approval-preflight.js";
 
@@ -69,6 +70,12 @@ export async function retryPendingDimensionSettlements(
       .createExecution({
         sessionId,
         locale: session.locale,
+        settings: await loadSessionPluginSettings({
+          store,
+          pluginRegistry,
+          session,
+          userSettings: args.playerSettings,
+        }),
         signal: c.req.raw.signal,
         runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
           ([pluginId, entry]) =>
@@ -105,13 +112,15 @@ export async function retryPendingDimensionSettlements(
     const hookPipeline = c.get("hookPipeline");
     const runner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
-      resolveImageFlowRuntimeIds: async () =>
+      resolveImageFlowRuntimeIds: async (settings) =>
         (
-          await resolveMediaImageFlow(
+          await resolveMediaImageFlow({
             store,
-            c.get("pluginExtensions"),
+            host: c.get("pluginExtensions"),
+            pluginRegistry,
             sessionId,
-          )
+            settings,
+          })
         )?.assetRuntimeIds,
       withSettledLock: (fn, waitBudget) =>
         withSettledSessionLock(c, sessionId, fn, waitBudget, signal),

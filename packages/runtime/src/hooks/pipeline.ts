@@ -23,13 +23,9 @@ import type { EventBus } from "@covel/events";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
 import {
-  currentActivePluginIds,
-  currentHookLocale,
-  currentHookLogicalTurn,
-  currentHookLogicalKey,
-  currentOwnSettings,
   isHookInScope,
-  isHookScopeActive,
+  requireHookScope,
+  scopedOwnSettings,
 } from "./hook-scope.js";
 import type {
   HookEvent,
@@ -107,6 +103,11 @@ export class HookPipeline {
     Array<HookRegistration<unknown>>
   >();
 
+  /**
+   * An execution's frozen registrations, so a plugin reload mid-turn changes
+   * nothing until the next one. Absent means the live registrations, which is
+   * correct outside an execution (session lifecycle and direct commit routes).
+   */
   private readonly snapshots = new AsyncLocalStorage<
     Map<HookEvent, Array<HookRegistration<unknown>>>
   >();
@@ -173,17 +174,19 @@ export class HookPipeline {
    * is accepted (a holding `PostLLMResponse`, `PreToolUse` or `ReviewAgentOutput` hook), until
    * the commit (a holding `PostRuntime` hook), or not at all. Only hooks that
    * would run count: from an active plugin, not latched off, and approved.
+   * Throws `MissingHookScopeError` outside a session hook scope.
    */
   async outputDraftHold(
     sessionId: string,
   ): Promise<"review" | "commit" | undefined> {
+    const scope = requireHookScope("HookPipeline.outputDraftHold()");
     const registrations = this.snapshots.getStore() ?? this.registrations;
-    const active = currentActivePluginIds();
+    const active = scope.activePluginIds;
     const runs = async (reg: HookRegistration): Promise<boolean> =>
       reg.holdsDrafts === true &&
       isHookInScope(reg.pluginId, active) &&
       // The same filter `run` applies to the event's handlers.
-      (currentHookLogicalKey() !== undefined ||
+      (scope.logicalKey !== undefined ||
         reg.pluginId === undefined ||
         !this.options.isPluginLatched?.(sessionId, reg.pluginId)) &&
       (await (reg.runsFor?.(sessionId) ?? true));
@@ -213,6 +216,10 @@ export class HookPipeline {
    * Run all handlers registered for `event` with the event's semantic.
    * Sequential hooks can return accumulated `replace` or `abort`;
    * parallel hooks record handler results and return `continue`.
+   *
+   * Requires a session hook scope (`runWithHookScope`), even when no handler
+   * is registered, so an entry point that forgot it fails on its first hook
+   * instead of once a plugin happens to register one.
    */
   async run<P>(
     event: HookEvent,
@@ -220,10 +227,10 @@ export class HookPipeline {
     payload: P,
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
+    const scope = requireHookScope(`HookPipeline.run("${event}")`);
     opts = {
       ...opts,
-      logicalKey:
-        currentHookLogicalKey() ?? (ctx.turnId || crypto.randomUUID()),
+      logicalKey: scope.logicalKey ?? (ctx.turnId || crypto.randomUUID()),
     };
     const raw =
       (this.snapshots.getStore() ?? this.registrations).get(event) ?? [];
@@ -232,20 +239,19 @@ export class HookPipeline {
     }
 
     // Session scope: a plugin's hooks fire only for sessions where the plugin
-    // is active (framework hooks always fire). No active scope → run all.
-    const active = currentActivePluginIds();
+    // is active (framework hooks always fire).
+    const active = scope.activePluginIds;
     const scoped = raw.filter(
       (reg) =>
         isHookInScope(reg.pluginId, active) &&
-        (currentHookLogicalKey() !== undefined ||
+        (scope.logicalKey !== undefined ||
           reg.pluginId === undefined ||
           !this.options.isPluginLatched?.(ctx.sessionId, reg.pluginId)),
     );
     if (scoped.length === 0) {
       return { action: "continue" };
     }
-    const ctxScoped: HookContext =
-      active === undefined ? ctx : { ...ctx, activePluginIds: active };
+    const ctxScoped: HookContext = { ...ctx, activePluginIds: active };
 
     const handlers = orderHandlers(scoped);
     const semantic = HOOK_SEMANTICS[event];
@@ -396,20 +402,18 @@ export class HookPipeline {
 
     // Inject a read-only, per-plugin settings accessor bound to *this* handler's
     // plugin, reusing the same session hook scope that carries activePluginIds.
-    // Only attached when a scope is active — mirrors the run()-level ctxScoped
-    // gate. Scope-less calls still receive the per-handler cancellation signal.
-    // Framework hooks (no pluginId) get a getter returning `{}`.
-    const ownSettings = currentOwnSettings(reg.pluginId);
-    const locale = ctx.locale ?? currentHookLocale();
+    // `run` already required the scope. Framework hooks (no pluginId) get a
+    // getter returning `{}`.
+    const scope = requireHookScope(`HookPipeline.run("${event}")`);
+    const ownSettings = scopedOwnSettings(scope, reg.pluginId);
+    const locale = ctx.locale ?? scope.locale;
     const ctxForHandler: HookContext = {
       ...ctx,
       ...(locale === undefined ? {} : { locale }),
-      logicalTurn: currentHookLogicalTurn() ?? ctx.logicalTurn,
-      // A supplied activation set needs isolation even without an ambient scope.
-      ...(ctx.activePluginIds
-        ? { activePluginIds: new Set(ctx.activePluginIds) }
-        : {}),
-      ...(isHookScopeActive() ? { getOwnSettings: () => ownSettings } : {}),
+      logicalTurn: scope.logicalTurn ?? ctx.logicalTurn,
+      // Each handler gets its own copy of the activation set.
+      activePluginIds: new Set(ctx.activePluginIds ?? scope.activePluginIds),
+      getOwnSettings: () => ownSettings,
     };
 
     try {

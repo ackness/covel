@@ -8,6 +8,7 @@ import {
   SESSION_NOT_FOUND_CODE,
 } from "./session-guard.js";
 import { buildSnapshotPluginList, runnablePluginIds } from "./plugins.js";
+import { loadSessionPluginSettings } from "./hook-scope.js";
 import type { SessionRouteEnv } from "./route-env.js";
 import { getSessionExecutionStatus } from "../actions/execution-recovery.js";
 
@@ -63,6 +64,11 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
             .createExecution({
               sessionId: id,
               locale: currentSession.locale,
+              settings: await loadSessionPluginSettings({
+                store,
+                pluginRegistry,
+                session: currentSession,
+              }),
               signal: c.req.raw.signal,
               runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
                 ([pluginId, entry]) =>

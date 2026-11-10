@@ -6,11 +6,23 @@ import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
 import { runnablePluginIds } from "./plugins.js";
 
 /**
- * The hook scope of `session`: the hooks of its runnable plugins
- * (`runnablePluginIds`, including plugins with no runtimes), each plugin's
- * settings resolved from `userSettings`, and the session's content locale,
- * which every hook receives as `ctx.locale`. An execution passes the
- * settings snapshot it runs with.
+ * The session's resolved plugin settings, for extension executions that run
+ * outside a turn (UI slots, the session view, image flow): manifest defaults,
+ * world presets and, when the request carries them, the player's values. A
+ * turn passes its own frozen snapshot instead.
+ */
+export async function loadSessionPluginSettings(args: {
+  readonly store: DataStore;
+  readonly pluginRegistry: Pick<PluginRegistry, "get" | "getAll"> | undefined;
+  readonly session: Pick<SessionRecord, "activePlugins" | "worldId" | "locale">;
+  readonly userSettings?: TurnInput["userSettings"];
+}): Promise<NonNullable<HookScope["settings"]>> {
+  return (await loadSessionHookScope(args)).settings ?? {};
+}
+
+/**
+ * Hooks of the session's runnable plugins (`runnablePluginIds`), including
+ * plugins with no runtimes; `activePluginIds` is the confirmed set.
  */
 export function buildSessionHookScope(args: {
   readonly pluginRegistry: Pick<PluginRegistry, "get" | "getAll"> | undefined;

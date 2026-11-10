@@ -30,6 +30,9 @@ import {
   toolCall,
   type GenerateParams,
 } from "./_helpers/agent-loop-fixture.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["plug"]);
 
 const twoTools = manifest({ tools: { plugin: ["mark", "save"] } });
 const twoToolExecutor = () => makeExecutor([markTool, saveTool]);

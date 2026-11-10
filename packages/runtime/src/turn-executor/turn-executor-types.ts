@@ -42,6 +42,15 @@ export interface AgentLoopDeps {
   readonly progressAttemptId?: string;
   /** Host-owned delegation capabilities carried to tool invocations. */
   readonly delegation?: import("../orchestration/delegation-budget.js").DelegationBudget;
+  /**
+   * Kernel only: the execution's service-call collector. Execution entry
+   * points set it, and every service client the kernel creates for a
+   * runtime, tool or sub-agent receives it explicitly, so the fault latch
+   * sees each call. Without it no call is counted.
+   */
+  readonly serviceOutcomes?: (
+    outcome: import("../plugin-services.js").ServiceCallOutcome,
+  ) => void;
   /** LLM adapter for making model calls. */
   readonly llm: LLMAdapter;
   /** Optional tool executor for handling LLM tool calls. */
@@ -110,9 +119,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly failedOperationSummaries?: Readonly<
     Record<string, readonly string[]>
   >;
-  readonly serviceOutcomes?: (
-    outcome: import("../plugin-services.js").ServiceCallOutcome,
-  ) => void;
   /** Captured at execution entry; latch changes apply to the next execution. */
   readonly pluginFaults?: {
     isLatched(sessionId: string, pluginId: string): boolean;

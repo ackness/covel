@@ -11,6 +11,9 @@ import { AiProviderError } from "@covel/ai-provider";
 import { tagStop } from "../src/agent-loop/stop-reason.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runPreStateCommitHook } from "../src/commit/session-commit-pipeline.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["actor-pkg", "caller-pkg", "hook-owner", "p"]);
 
 function faultResult(extra: Partial<RuntimeResult> = {}): RuntimeResult {
   return {

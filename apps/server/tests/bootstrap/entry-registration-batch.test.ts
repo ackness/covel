@@ -10,6 +10,7 @@ import { ToolRegistry, type ToolModule } from "@covel/tools";
 import { PluginEntryScope } from "@covel/runtime";
 import { buildEntryApi } from "../../src/routes/api/bootstrap/plugin-entry-api.js";
 import type { BootstrapPluginEntriesParams } from "../../src/routes/api/bootstrap/plugin-entry.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 function fixture() {
   const batch = new PluginEntryScope();
@@ -68,7 +69,9 @@ describe("entry publication", () => {
     ).toBeUndefined();
     expect(params.tools.pluginTools.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
-    await params.hookPipeline.run("TurnStart", ctx, {});
+    await inHookScope(["batch-fixture"], () =>
+      params.hookPipeline.run("TurnStart", ctx, {}),
+    );
     expect(hook).not.toHaveBeenCalled();
     batch.commit();
     expect(
@@ -80,7 +83,9 @@ describe("entry publication", () => {
     expect(
       params.rpcRegistry.getPluginAction("batch-fixture", "staged"),
     ).toBeDefined();
-    await params.hookPipeline.run("TurnStart", ctx, {});
+    await inHookScope(["batch-fixture"], () =>
+      params.hookPipeline.run("TurnStart", ctx, {}),
+    );
     expect(hook).toHaveBeenCalledOnce();
     expect(() => api.registerRpc("late", async () => true)).toThrow(
       "registration is closed",
@@ -91,7 +96,9 @@ describe("entry publication", () => {
     expect(
       params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
     ).toBeUndefined();
-    await params.hookPipeline.run("TurnStart", ctx, {});
+    await inHookScope(["batch-fixture"], () =>
+      params.hookPipeline.run("TurnStart", ctx, {}),
+    );
     expect(hook).toHaveBeenCalledOnce();
     await expect(batch.dispose()).resolves.toBeUndefined();
   });
@@ -135,7 +142,9 @@ describe("entry publication", () => {
     expect(
       params.rpcRegistry.getFormValidator("batch-fixture", "rollback-form"),
     ).toBeUndefined();
-    await params.hookPipeline.run("TurnStart", ctx, {});
+    await inHookScope(["batch-fixture"], () =>
+      params.hookPipeline.run("TurnStart", ctx, {}),
+    );
     expect(hook).not.toHaveBeenCalled();
     expect(getImageWire("batch-fixture/rollback")).toBeNull();
     expect(getSpeechWire("batch-fixture/rollback")).toBeNull();
