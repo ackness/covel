@@ -16,6 +16,7 @@ import {
   rotateSessionApprovalScope,
   sessionApprovalScope,
 } from "../../src/routes/api/session/session-guard.js";
+import { refuseFollowUps } from "../../src/routes/api/commit-envelope.js";
 
 const SESSION_ID = "sess-background-lock";
 const PLUGIN_ID = "image-plugin";
@@ -137,12 +138,14 @@ describe("detached runtime cross-process lock boundary", () => {
     });
     const { runner } = await setup(handler);
     const first = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "first",
       runtimeId: RUNTIME_A,
       triggerEvent,
     });
     await started.promise;
     const second = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "cancelled",
       runtimeId: RUNTIME_A,
       triggerEvent,
@@ -175,6 +178,7 @@ describe("detached runtime cross-process lock boundary", () => {
       };
     });
     const running = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "cancel-provider",
       runtimeId: RUNTIME_A,
       triggerEvent,
@@ -207,12 +211,14 @@ describe("detached runtime cross-process lock boundary", () => {
     const { runner, lock, requestedKeys } = await setup(handler);
 
     const first = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "follower-a-1",
       runtimeId: RUNTIME_A,
       triggerEvent,
     });
     await vi.waitFor(() => expect(calls).toBe(1));
     const second = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "follower-a-2",
       runtimeId: RUNTIME_A,
       triggerEvent: {
@@ -249,6 +255,7 @@ describe("detached runtime cross-process lock boundary", () => {
 
     await expect(
       runner.runManualTurn({
+        followUps: refuseFollowUps,
         turnId: "turn-revoked-before-run",
         runtimeId: RUNTIME_A,
         detached: true,
@@ -267,6 +274,7 @@ describe("detached runtime cross-process lock boundary", () => {
     };
     const { runner, store, session } = await setup(handler);
     const running = runner.runManualTurn({
+      followUps: refuseFollowUps,
       turnId: "turn-revoked-before-commit",
       runtimeId: RUNTIME_A,
       detached: true,
@@ -299,11 +307,13 @@ describe("detached runtime cross-process lock boundary", () => {
     const { runner } = await setup(handler);
 
     const first = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "follower-a-1",
       runtimeId: RUNTIME_A,
       triggerEvent,
     });
     const second = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "follower-a-2",
       runtimeId: RUNTIME_A,
       triggerEvent: {
@@ -312,6 +322,7 @@ describe("detached runtime cross-process lock boundary", () => {
       },
     });
     const third = runner.runDeferredFollowerTurn({
+      followUps: refuseFollowUps,
       followerTurnId: "follower-b",
       runtimeId: RUNTIME_B,
       triggerEvent,

@@ -13,12 +13,17 @@ import { createPluginRandom } from "../function-runtime/plugin-random.js";
 import type { ToolCallContext } from "./tool-executor.js";
 import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
-/** Own input snapshots and bind read authority to this invocation's identity. */
+/**
+ * Own input snapshots and bind read authority to this invocation's identity.
+ * `imported` marks a kernel-generated import tool, whose service calls are
+ * the kernel's own imports.
+ */
 export function createToolExecutionContext(
   caller: ToolCallContext,
   store: DataStore | undefined,
   toolCallId?: string,
   baselineReads?: PluginDataVisibility["baselineReads"],
+  imported = false,
 ): {
   context: ToolExecutionContext;
   assertLive(): void;
@@ -100,7 +105,8 @@ export function createToolExecutionContext(
     // and recorder as the tool's own store reads.
     const client = caller.services.createClient({
       delegation: caller.delegation,
-      onSettled: caller.services.executionObserver(),
+      ...(caller.serviceOutcomes ? { onSettled: caller.serviceOutcomes } : {}),
+      ...(imported ? { imported } : {}),
       ...(caller.emitter ? { emitter: caller.emitter } : {}),
       ...identity,
       ...(toolCallId !== undefined ? { toolCallId } : {}),

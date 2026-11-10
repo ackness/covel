@@ -11,6 +11,17 @@ export const kernelExtensionPoints = {
   uiSlot: { id: "ui.slot@1", mode: "pipeline" },
 } as const;
 
+/**
+ * The story output contract. The kernel owns the story shape for every
+ * `outputKind: story` runtime, so this is the one plugin-facing contract the
+ * framework names itself rather than discovering it: presentation runtimes may
+ * bind it only as optional public input and may never provide or require it,
+ * and commit and presentation projection recognize the public story by it.
+ * Bump the version here, together with every provider and consumer, when the
+ * story shape breaks.
+ */
+export const STORY_OUTPUT_CONTRACT = "narrative-engine@2";
+
 export const kernelUiSlots = {
   backdrop: "stage.backdrop@1",
   cast: "stage.cast@1",

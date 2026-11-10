@@ -291,6 +291,8 @@ export {
   runSessionStartHook,
   runSessionEndHook,
   runWithHookScope,
+  requireHookScope,
+  MissingHookScopeError,
 } from "./hooks/index.js";
 export type {
   HookScope,

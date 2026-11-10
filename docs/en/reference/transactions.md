@@ -215,11 +215,18 @@ First, two rules before commit that apply to every backend.
 
 - A runtime with `outputKind: story` failed.
 - A story result succeeded, but after normalization under [Story output](./plugins.md#story-output) it has no text (no segment has text, so `narrativeOutput` is empty).
-- A dimension provider failed in the same execution, so the executor held back the story (`dimension-snapshot-unavailable`).
+- The story did not run because of a fault, and no other story in the execution succeeded. A fault is one of these:
+  - A runtime the story hard-depends on (`needs`, or an input whose `required` is not `false`) failed in this execution, or was skipped because a hook failed (`hook-failed`), so the framework did not run the story. Only the upstreams that really kept the gate closed count: when the story depends on a contract and needs only one provider (`cardinality: one`), one provider that succeeded is enough, and another provider's failure does not count. When a hard upstream was itself held back the same way, the check follows its dependencies back to the runtime with the fault. The error names it, for example `Story runtime teller/narrate did not run because teller/roll failed; the action was not committed.`
+  - A `PreRuntime` handler failed (threw, timed out or returned an invalid result) while judging the story, so the story was skipped with `hook-failed`.
 
 Related rules:
 
-- When the story is skipped for another reason (its guard, or a declared gate), the execution is not refused.
+- When the story does not run for another reason, the execution is not refused. For example:
+  - Its own guard skipped it, or a `PreRuntime` hook deliberately vetoed it.
+  - A hard upstream was not scheduled this time (its trigger or cadence did not match), or skipped itself. That is the package's own decision, like the story's guard skipping it. Refusing would also stop the turn count, so an upstream that runs on a cadence would never reach its turn.
+  - Its plugin's setup is not finished yet (`setup-incomplete`). This execution has to commit the setup's own writes, such as the form for the player.
+  - It is in a dependency cycle, or comes after one (`dependency-cycle`). The scheduler holds back everything after a cycle, `after` edges included, so refusing would let a cycle in any package stop every turn. Validation and traces tell the author about the cycle.
+- When a dimension provider fails in the same execution, the execution is not refused. The story runs and reads the saved values frozen when the execution started; see [World Model](./world-model.md#turn-timing-and-settlement-receipts). Only a story that reads `world.dimensions@1` through an input whose `required` is not `false` hard-depends on the failed provider, and is refused by the rule above.
 - Client messages that have already been stored are not part of this transaction.
 - Only agent output accepted through `submit-output` validation and review can enter commit. Missing or rejected submissions use bounded ordinary steps for correction; exhaustion fails the story, without substituting a draft.
 - This does not retry or undo side effects that external tools have already caused.
@@ -643,7 +650,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 
-`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
+`FailedProposal.code: "hook-failed"` means `PreStateCommit` failed because a handler threw, timed out or returned an invalid result, rather than deliberately vetoing. Only the Hook owner's fault counts; the proposal owner is not blamed for a deliberate rejection. A failed handler rejects the proposal it judged, whichever plugin owns it; next to a successful story, that proposal's unit drops alone unless it holds the story; see [Hooks](./hooks.md#auxiliary-hook-failures). `dimension-version-conflict`, `conflict` and `suspension-data-changed` also do not count toward the [latch](./protocol.md#plugin-fault-latch).
 
 ## World Data import
 

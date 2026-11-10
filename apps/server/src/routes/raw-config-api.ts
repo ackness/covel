@@ -22,10 +22,8 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseLlmConfig } from "@covel/ai-provider";
-import { readRuntimeEnv } from "@covel/shared";
 import { parseDesktopConfig } from "@covel/shared/desktop-config";
 import { errorBody, listBody, readJsonBody } from "../api-error.js";
 import {
@@ -34,7 +32,7 @@ import {
   type AiReloadResult,
   type AiStack,
 } from "../ai-setup.js";
-import { accessGuard } from "../host-profile.js";
+import { accessGuard, desktopHome } from "../host-profile.js";
 
 const MAX_CONTENT_BYTES = 256 * 1024;
 
@@ -47,15 +45,6 @@ interface RawConfigFile {
   readonly starter: string;
   /** What a saved file needs before it is in effect. */
   readonly applies: "reload" | "restart";
-}
-
-/** Same rule as the config routes: `~/.covel` only under the desktop shell. */
-function desktopHome(): string | null {
-  const env = readRuntimeEnv();
-  if (!env.desktopRest) return null;
-  if (env.covelHome) return env.covelHome;
-  const candidate = join(homedir(), ".covel");
-  return existsSync(candidate) ? candidate : null;
 }
 
 function digestOf(content: string): string {

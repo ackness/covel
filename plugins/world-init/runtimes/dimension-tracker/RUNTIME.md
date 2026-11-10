@@ -12,7 +12,7 @@ io:
       select: /segments
     worldIR:
       from:
-        contract: world-ir-provider@1
+        contract: world-ir@2
       required: false
     worldTime:
       from:

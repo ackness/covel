@@ -50,6 +50,8 @@ import {
 import { canonicalizeMediaRefs } from "../media/canonicalize-media-refs.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
+  HOOK_FAILURE_SKIP,
+  failureBehind,
   makeFailedResult,
   makeSkippedResult,
 } from "./turn-executor-helpers.js";
@@ -502,8 +504,30 @@ async function executeRuntime(
     await reportRuntimeResult(deps, input.sessionId, result, reason);
     return result;
   };
+  // The failure an upstream passes on to a gate it keeps closed, recorded on
+  // the skip as `failedUpstream`. A retry seed failed in its source
+  // execution, not in this one.
+  const failureOf = (
+    upstream: RuntimeResult | undefined,
+  ): string | undefined =>
+    upstream && !inv.seedResults?.has(upstream)
+      ? failureBehind(upstream)
+      : undefined;
 
   try {
+    // ── Hook-failure gate ─────────────────────────────────────────
+    // This plugin's TurnStart hook failed in an execution with a story: its
+    // runtimes sit the execution out, and the rest of it goes on.
+    if (deps.hookFailedPlugins?.has(manifest.pluginId))
+      return emitGateTerminal(
+        makeSkippedResult(
+          manifest,
+          input,
+          HOOK_FAILURE_SKIP.reason,
+          HOOK_FAILURE_SKIP.by,
+        ),
+        HOOK_FAILURE_SKIP.reason,
+      );
     if (
       input.detachedStage?.presentation !== undefined &&
       manifest.presentation === undefined
@@ -578,12 +602,20 @@ async function executeRuntime(
       //    provider; the default requires at least one. Zero providers is always
       //    unsatisfied, so a consumer never runs blind.
       const missing: string[] = [];
+      // The first failure behind an upstream that kept the gate closed.
+      let failedUpstream: string | undefined;
+      const unmet = (name: string): void => {
+        failedUpstream ??= failureOf(completedResults.get(name));
+      };
       for (const entry of required) {
         if (typeof entry === "string" || "runtime" in entry) {
           const name = typeof entry === "string" ? entry : entry.runtime;
           const up = completedResults.get(name);
           if (!up && setupRuntimeDone(name)) continue;
-          if (!isRequiredUpstreamSatisfied(up)) missing.push(name);
+          if (!isRequiredUpstreamSatisfied(up)) {
+            missing.push(name);
+            unmet(name);
+          }
           continue;
         }
         const providers = activeRuntimes
@@ -598,7 +630,13 @@ async function executeRuntime(
             : providers.some((name) =>
                 isRequiredUpstreamSatisfied(completedResults.get(name)),
               ));
-        if (!satisfied) missing.push(`capability:${entry.capability}`);
+        if (!satisfied) {
+          missing.push(`capability:${entry.capability}`);
+          // Unmet `one`: no provider succeeded. Unmet `all`: some did not.
+          for (const name of providers)
+            if (!isRequiredUpstreamSatisfied(completedResults.get(name)))
+              unmet(name);
+        }
       }
       if (missing.length > 0) {
         const reason = `upstream not success: ${missing.join(", ")}`;
@@ -613,6 +651,7 @@ async function executeRuntime(
             reason,
             skippedBy: "framework:needs",
             missingUpstreams: missing,
+            ...(failedUpstream ? { failedUpstream } : {}),
           },
           toolCalls: [],
           durationMs: Date.now() - startTime,
@@ -873,12 +912,18 @@ async function executeRuntime(
       }
     }
     if (!binding.ok) {
+      // Any required input whose producer failed, not only the input that
+      // closed the gate: the declaration order must not decide.
+      const failedUpstream = binding.upstreams
+        ?.map((upstream) => failureOf(upstream))
+        .find((failed) => failed !== undefined);
       return emitGateTerminal(
         makeSkippedResult(
           manifest,
           input,
           binding.skipReason,
           "framework:inputBinding",
+          failedUpstream ? { failedUpstream } : undefined,
         ),
         binding.skipReason,
       );

@@ -480,6 +480,47 @@ describe("sub-agent admission", () => {
     },
   );
 
+  it.each(["contract", "runtimeId"] as const)(
+    "refuses, and does not offer, a provider addressed by %s whose plugin sits the turn out",
+    async (target) => {
+      // Its plugin's TurnStart hook failed: its scheduled runtimes are
+      // skipped, and so are its sub-agents.
+      const f = fixture();
+      const sittingOut = new Set([provider.pluginId]);
+      const asker =
+        target === "contract"
+          ? f.args.caller
+          : { ...f.args.caller, pluginId: provider.pluginId };
+      expect(f.runner.availableTargets(asker)).not.toEqual([]);
+      expect(f.runner.availableTargets(asker, sittingOut)).toEqual([]);
+      const result = await f.runner.run({
+        ...f.args,
+        caller: asker,
+        deps: { ...f.args.deps, hookFailedPlugins: sittingOut },
+        request: {
+          ...request,
+          target:
+            target === "contract"
+              ? { contract: CONTRACT }
+              : { runtimeId: provider.name },
+        },
+      });
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "unavailable",
+          message:
+            target === "contract"
+              ? `The sub-agent provider for contract "${CONTRACT}" sits this turn out because a hook of its plugin failed`
+              : `The sub-agent runtime "${provider.name}" sits this turn out because a hook of its plugin failed`,
+        },
+      });
+      expect(f.loadRuntime).not.toHaveBeenCalled();
+      expect(f.generate).not.toHaveBeenCalled();
+      expect(f.onSettled).not.toHaveBeenCalled();
+    },
+  );
+
   it("counts paused providers toward contract ambiguity", async () => {
     const f = fixture();
     const runner = createSubagentRunner({

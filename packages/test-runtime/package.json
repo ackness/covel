@@ -3,6 +3,12 @@
   "version": "0.0.54",
   "private": true,
   "type": "module",
+  "exports": {
+    "./runtime-loading": {
+      "types": "./src/runtime-loading.ts",
+      "import": "./src/runtime-loading.ts"
+    }
+  },
   "bin": {
     "covel-test-runtime": "./src/cli.ts",
     "test-runtime": "./src/cli.ts",

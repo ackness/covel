@@ -17,10 +17,7 @@ import {
   type SnapshotRecord,
 } from "@covel/store";
 import { createPgStore } from "@covel/store/postgres";
-import {
-  makeSession,
-  makeWorld,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeSession, makeWorld } from "@covel/store/testing";
 import {
   createInProcessSessionLock,
   type SessionLock,

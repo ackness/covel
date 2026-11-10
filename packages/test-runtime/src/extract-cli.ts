@@ -8,8 +8,9 @@ export const EXTRACT_HELP = `Usage:
   covel-test-runtime extract <plugin-dir> [--check] [--json]
 
 Runs the plugin's entry code with your permissions. Use only for your own package.
-Writes tools, actions, services, forms, wires and hooks to canonical PLUGIN.md.
-Extensions and command metadata are reported, never rewritten.
+Writes tools, actions, services, forms, wires, hooks and extensions to canonical
+PLUGIN.md. Extensions are added or dropped by <point>/<id>; options of entries that
+stay registered (slot, order, ...) are kept. Command metadata is reported, never rewritten.
 Localized registration lists are reported, never changed; prompt translations are allowed.
   --check  Write nothing; report added/removed names. Exit 1 on drift, 0 in sync.
   --json   Print extracted declarations and drift as JSON.
@@ -70,9 +71,6 @@ export async function runExtractCli(
         );
       if (!result.changed.length)
         output.stdout.write("Declarations are in sync.\n");
-      output.stdout.write(
-        `Extensions (not rewritten): ${extracted.extensions.join(", ") || "none"}\n`,
-      );
       output.stdout.write(
         `Commands (not rewritten): ${extracted.commands.map((command) => command.name).join(", ") || "none"}\n`,
       );

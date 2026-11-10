@@ -4,12 +4,12 @@ import {
   createGateway,
   createPresetRegistry,
   createProviderRegistry,
+  outboundFetch,
 } from "@covel/ai-provider";
 import { createGatewayAdapter } from "@covel/runtime";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import type { AiStack } from "../../src/ai-setup.js";
 import { createPerRequestLlmMiddleware } from "../../src/middleware/per-request-llm.js";
-import { outboundFetch } from "../../../../packages/ai-provider/src/outbound-network.js";
 
 vi.mock("../../../../packages/ai-provider/src/outbound-network.js", () => ({
   outboundFetch: vi.fn(),

@@ -60,7 +60,10 @@ export function withSubagentDelegate(
   runner: SubagentRunner,
   scope: SubagentDelegateScope,
 ): ToolExecutor {
-  const targets = runner.availableTargets(scope.caller);
+  const targets = runner.availableTargets(
+    scope.caller,
+    scope.deps.hookFailedPlugins,
+  );
   const request =
     targets.length === 0
       ? undefined

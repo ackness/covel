@@ -30,7 +30,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import { spawn } from "node:child_process";
 import {
   patchDesktopConfigFile,
@@ -64,7 +64,12 @@ import {
 } from "../lib/proxy-config.js";
 import { getDesktopSystemProxyResolver } from "../lib/desktop-system-proxy.js";
 import { captureBootKeySources } from "../lib/env-key-overrides.js";
-import { accessGuard, allowsAccess, hostProfileOf } from "../host-profile.js";
+import {
+  accessGuard,
+  allowsAccess,
+  desktopHome,
+  hostProfileOf,
+} from "../host-profile.js";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -76,7 +81,7 @@ export interface ConfigApiDeps {
 export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
   const requireToken = accessGuard("host.config");
-  const initialCovelHome = resolveCovelHome();
+  const initialCovelHome = desktopHome();
   const externalApiKeys = {
     ...(deps.externalApiKeys ?? providerApiKeysFromEnv()),
   };
@@ -121,7 +126,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         worldsDir: null,
       });
     }
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     const env = readRuntimeEnv();
     const inDesktopMode = covelHome !== null;
     return c.json({
@@ -146,7 +151,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // Values travel only inside the server process; the UI shows "configured /
   // not configured" rather than echoing secrets back across HTTP.
   app.get("/api/config/keys", requireToken, (c) => {
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     if (!covelHome) return c.json(listBody([]));
 
     const file = join(covelHome, "keys.env");
@@ -173,7 +178,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // PUT /api/config/keys — body: { [provider]: value }
   // Empty string / null value → remove that provider's key.
   app.put("/api/config/keys", requireToken, async (c) => {
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     if (!covelHome) {
       return c.json(
         errorBody("Key persistence is not available on this deployment.", {
@@ -248,7 +253,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // `covel:settings:*` IPC channels. Web deployments never see
   // `isDesktop: true` so this never leaks on production web tiers.
   app.get("/api/config/settings", requireToken, (c) => {
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     if (!covelHome) {
       return c.json(emptySettingsPersistenceBundle());
     }
@@ -277,7 +282,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // though `settings.json` should not contain secrets, the user might
   // import/export with `includeSecrets: true`.
   app.put("/api/config/settings", requireToken, async (c) => {
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     if (!covelHome) {
       return c.json(
         errorBody("Not a desktop deployment", {
@@ -356,7 +361,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   });
 
   app.get("/api/config/proxy", requireToken, (c) => {
-    if (!resolveCovelHome()) {
+    if (!desktopHome()) {
       return c.json(
         errorBody("Proxy configuration is available only in desktop mode.", {
           code: "proxy_config_unavailable",
@@ -368,7 +373,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   });
 
   app.put("/api/config/proxy", requireToken, async (c) => {
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     if (!covelHome) {
       return c.json(
         errorBody("Proxy configuration is available only in desktop mode.", {
@@ -439,7 +444,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // existing data: the contract is "new location, fresh start; old data
   // stays where it is". Caller must restart the server to pick up.
   app.put("/api/config/data-root", requireToken, async (c) => {
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     if (!covelHome) {
       return c.json(
         errorBody("Not a desktop deployment", {
@@ -493,7 +498,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         ? (body as { target?: string }).target
         : undefined;
 
-    const covelHome = resolveCovelHome();
+    const covelHome = desktopHome();
     const env = readRuntimeEnv();
     const targetMap: Record<string, string | null | undefined> = {
       config: covelHome,
@@ -588,26 +593,6 @@ function resolveDataRoot(): string | null {
     return resolve(env.userWorldsDir, "..");
   }
   return null;
-}
-
-/**
- * Desktop-mode gate. Writing `keys.env`, mutating `data_root`, and
- * firing platform `open` commands are **privileged** — we only expose
- * them when the caller process was explicitly started as a desktop shell.
- *
- * Only `COVEL_DESKTOP_REST=1` enables these capabilities. `COVEL_HOME`
- * selects a directory and grants no administration capability.
- *
- * A shared-backend deployment that happens to have `~/.covel/` on disk
- * (docker image bundling, admin home dir) therefore CAN'T reach these
- * endpoints, which prevents a remote client from editing server config.
- */
-export function resolveCovelHome(): string | null {
-  const env = readRuntimeEnv();
-  if (!env.desktopRest) return null;
-  if (env.covelHome) return env.covelHome;
-  const candidate = join(homedir(), ".covel");
-  return existsSync(candidate) ? candidate : null;
 }
 
 function readKeysEnv(file: string): Record<string, string> {

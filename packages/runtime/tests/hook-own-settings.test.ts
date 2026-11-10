@@ -7,9 +7,9 @@
  * `getOwnSettings` accessor bound to the handler's own `pluginId`.
  *
  * Covers:
- * - hook-scope `currentOwnSettings` / `isHookScopeActive` primitives
+ * - hook-scope `currentOwnSettings` primitive (throws outside a scope)
  * - pipeline injection (plugin hook reads its own bucket; cross-plugin → {};
- *   framework hook → {}; outside scope → getter absent, ctx forwarded as-is)
+ *   framework hook → {}; outside scope → MissingHookScopeError)
  * - read-only guarantee (returned bucket is frozen)
  * - end-to-end through runTurnPipeline (snapshot built from manifest.userSettings
  *   merged with TurnInput.userSettings, visible to an in-turn TurnStart hook)
@@ -21,8 +21,8 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import {
   runWithHookScope,
-  isHookScopeActive,
   currentOwnSettings,
+  MissingHookScopeError,
 } from "../src/hooks/hook-scope.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookContext } from "../src/hooks/types.js";
@@ -35,9 +35,19 @@ import type { LLMAdapter, LLMResponse } from "@covel/shared";
 // ── hook-scope primitives ──────────────────────────────────────────
 
 describe("hook-scope settings", () => {
-  it("reports no active scope and returns a frozen empty bucket by default", () => {
-    expect(isHookScopeActive()).toBe(false);
-    const out = currentOwnSettings("any-plugin");
+  it("refuses to read settings outside a scope instead of answering {}", () => {
+    expect(() => currentOwnSettings("any-plugin")).toThrow(
+      MissingHookScopeError,
+    );
+    expect(() => currentOwnSettings("any-plugin")).toThrow(
+      /getOwnSettings\(\) ran outside a session hook scope/,
+    );
+  });
+
+  it("returns a frozen empty bucket for a plugin the scope has no settings for", () => {
+    const out = runWithHookScope({ activePluginIds: new Set() }, () =>
+      currentOwnSettings("any-plugin"),
+    );
     expect(out).toEqual({});
     expect(Object.isFrozen(out)).toBe(true);
   });
@@ -52,7 +62,6 @@ describe("hook-scope settings", () => {
         },
       },
       () => {
-        expect(isHookScopeActive()).toBe(true);
         expect(currentOwnSettings("plugin-a")).toEqual({ tone: "dramatic" });
         expect(currentOwnSettings("plugin-b")).toEqual({ tone: "calm" });
         // Plugin absent from the snapshot → empty bucket.
@@ -62,12 +71,11 @@ describe("hook-scope settings", () => {
       },
     );
 
-    expect(isHookScopeActive()).toBe(false);
+    expect(() => currentOwnSettings("plugin-a")).toThrow(MissingHookScopeError);
   });
 
   it("degrades to {} when a custom scope carries no settings", () => {
     runWithHookScope({ activePluginIds: new Set(["plugin-a"]) }, () => {
-      expect(isHookScopeActive()).toBe(true);
       expect(currentOwnSettings("plugin-a")).toEqual({});
     });
   });
@@ -333,16 +341,9 @@ describe("HookPipeline getOwnSettings injection", () => {
     expect(seen).toEqual({});
   });
 
-  it("does not attach getOwnSettings outside an active scope (behaviour-preserving)", async () => {
+  it("refuses to run any handler outside an active scope", async () => {
     const pipeline = createHookPipeline();
-    let hadGetter = true;
-
-    // Scope-less calls have no settings getter, but still receive cancellation.
-    const ctx = { ...baseCtx };
-    const handler = vi.fn(async (c: HookContext) => {
-      hadGetter = c.getOwnSettings !== undefined;
-      return { action: "continue" as const };
-    });
+    const handler = vi.fn(async () => ({ action: "continue" as const }));
     pipeline.register({
       id: "plugin-a:TurnStart:0",
       event: "TurnStart",
@@ -350,14 +351,10 @@ describe("HookPipeline getOwnSettings injection", () => {
       handler,
     });
 
-    await pipeline.run("TurnStart", ctx, { playerMessage: "hi" });
-
-    expect(hadGetter).toBe(false);
-    // Identity metadata is preserved; only the cancellation signal is added.
-    expect(handler).toHaveBeenCalledWith(
-      { ...ctx, signal: expect.any(AbortSignal) },
-      { playerMessage: "hi" },
-    );
+    await expect(
+      pipeline.run("TurnStart", { ...baseCtx }, { playerMessage: "hi" }),
+    ).rejects.toThrow(MissingHookScopeError);
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 

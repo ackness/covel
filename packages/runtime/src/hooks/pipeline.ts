@@ -10,8 +10,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * - A handler that returns nothing made no decision: the pipeline continues.
  * - A handler that throws, times out or returns a malformed result is a failed
  *   handler. On a guard event (GUARD_HOOK_EVENTS) the pipeline fails closed and
- *   answers abort with the error message. On every other event the handler is
- *   skipped: later handlers run and earlier replacements are kept.
+ *   answers abort with the error message, unless the caller confines a
+ *   plugin's TurnStart failure (`confinable`): the chain then goes on and the
+ *   result lists the failure in `confined`. On every other event the handler
+ *   is skipped: later handlers run and earlier replacements are kept.
  * - All aborts/timeouts/errors emit observability events via the EventBus.
  */
 
@@ -21,23 +23,30 @@ import { describeReplacement } from "./rewrite-summary.js";
 import { z } from "zod";
 import type { EventBus } from "@covel/events";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
 import {
-  currentActivePluginIds,
-  currentHookLocale,
-  currentHookLogicalTurn,
-  currentHookLogicalKey,
-  currentOwnSettings,
+  GUARD_FAILURE_SCOPE,
+  GUARD_HOOK_EVENTS,
+  HOOK_SEMANTICS,
+} from "./types.js";
+import {
   isHookInScope,
-  isHookScopeActive,
+  requireHookScope,
+  scopedOwnSettings,
 } from "./hook-scope.js";
 import type {
+  ConfinedHookFailure,
   HookEvent,
   HookContext,
   HookHandler,
   HookRegistration,
   HookResult,
+  HookRunResult,
 } from "./types.js";
+
+/** One handler's result; a failure the pipeline went on without is named. */
+type HandlerResult<P> = HookResult<P> & {
+  readonly confinedFailure?: ConfinedHookFailure;
+};
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
@@ -59,6 +68,14 @@ interface HookPipelineRunOptions {
   readonly logicalKey?: string;
   readonly eventBus?: EventBus;
   readonly emitter?: TurnEmitter;
+  /**
+   * On an `own-runtimes` event (`GUARD_FAILURE_SCOPE`), the plugins whose
+   * failed handler the caller sits out of the operation instead of failing
+   * it: the chain goes on and the result lists them in `confined`. A caller
+   * that passes it must act on `confined`. A framework hook is never
+   * confined.
+   */
+  readonly confinable?: (pluginId: string) => boolean;
 }
 
 export interface HookHandlerOutcome {
@@ -107,6 +124,11 @@ export class HookPipeline {
     Array<HookRegistration<unknown>>
   >();
 
+  /**
+   * An execution's frozen registrations, so a plugin reload mid-turn changes
+   * nothing until the next one. Absent means the live registrations, which is
+   * correct outside an execution (session lifecycle and direct commit routes).
+   */
   private readonly snapshots = new AsyncLocalStorage<
     Map<HookEvent, Array<HookRegistration<unknown>>>
   >();
@@ -173,17 +195,19 @@ export class HookPipeline {
    * is accepted (a holding `PostLLMResponse`, `PreToolUse` or `ReviewAgentOutput` hook), until
    * the commit (a holding `PostRuntime` hook), or not at all. Only hooks that
    * would run count: from an active plugin, not latched off, and approved.
+   * Throws `MissingHookScopeError` outside a session hook scope.
    */
   async outputDraftHold(
     sessionId: string,
   ): Promise<"review" | "commit" | undefined> {
+    const scope = requireHookScope("HookPipeline.outputDraftHold()");
     const registrations = this.snapshots.getStore() ?? this.registrations;
-    const active = currentActivePluginIds();
+    const active = scope.activePluginIds;
     const runs = async (reg: HookRegistration): Promise<boolean> =>
       reg.holdsDrafts === true &&
       isHookInScope(reg.pluginId, active) &&
       // The same filter `run` applies to the event's handlers.
-      (currentHookLogicalKey() !== undefined ||
+      (scope.logicalKey !== undefined ||
         reg.pluginId === undefined ||
         !this.options.isPluginLatched?.(sessionId, reg.pluginId)) &&
       (await (reg.runsFor?.(sessionId) ?? true));
@@ -213,17 +237,21 @@ export class HookPipeline {
    * Run all handlers registered for `event` with the event's semantic.
    * Sequential hooks can return accumulated `replace` or `abort`;
    * parallel hooks record handler results and return `continue`.
+   *
+   * Requires a session hook scope (`runWithHookScope`), even when no handler
+   * is registered, so an entry point that forgot it fails on its first hook
+   * instead of once a plugin happens to register one.
    */
   async run<P>(
     event: HookEvent,
     ctx: HookContext,
     payload: P,
     opts?: HookPipelineRunOptions,
-  ): Promise<HookResult<P>> {
+  ): Promise<HookRunResult<P>> {
+    const scope = requireHookScope(`HookPipeline.run("${event}")`);
     opts = {
       ...opts,
-      logicalKey:
-        currentHookLogicalKey() ?? (ctx.turnId || crypto.randomUUID()),
+      logicalKey: scope.logicalKey ?? (ctx.turnId || crypto.randomUUID()),
     };
     const raw =
       (this.snapshots.getStore() ?? this.registrations).get(event) ?? [];
@@ -232,20 +260,19 @@ export class HookPipeline {
     }
 
     // Session scope: a plugin's hooks fire only for sessions where the plugin
-    // is active (framework hooks always fire). No active scope → run all.
-    const active = currentActivePluginIds();
+    // is active (framework hooks always fire).
+    const active = scope.activePluginIds;
     const scoped = raw.filter(
       (reg) =>
         isHookInScope(reg.pluginId, active) &&
-        (currentHookLogicalKey() !== undefined ||
+        (scope.logicalKey !== undefined ||
           reg.pluginId === undefined ||
           !this.options.isPluginLatched?.(ctx.sessionId, reg.pluginId)),
     );
     if (scoped.length === 0) {
       return { action: "continue" };
     }
-    const ctxScoped: HookContext =
-      active === undefined ? ctx : { ...ctx, activePluginIds: active };
+    const ctxScoped: HookContext = { ...ctx, activePluginIds: active };
 
     const handlers = orderHandlers(scoped);
     const semantic = HOOK_SEMANTICS[event];
@@ -309,22 +336,28 @@ export class HookPipeline {
     payload: P,
     handlers: readonly HookRegistration<unknown>[],
     opts?: HookPipelineRunOptions,
-  ): Promise<HookResult<P>> {
+  ): Promise<HookRunResult<P>> {
     let currentPayload: P = payload;
     let hasReplace = false;
     const accumulated: Partial<P> = {};
+    const confined: ConfinedHookFailure[] = [];
+    const withConfined = <R extends HookResult<P>>(
+      result: R,
+    ): HookRunResult<P> =>
+      confined.length > 0 ? { ...result, confined } : result;
 
     for (const reg of handlers) {
-      const result = await this.invokeHandler(
+      const { confinedFailure, ...result } = await this.invokeHandler(
         event,
         ctx,
         currentPayload,
         reg,
         opts,
       );
+      if (confinedFailure) confined.push(confinedFailure);
 
       if (result.action === "abort") {
-        return result;
+        return withConfined(result);
       }
 
       if ("replace" in result && result.replace !== undefined) {
@@ -347,9 +380,9 @@ export class HookPipeline {
     }
 
     if (hasReplace) {
-      return { action: "continue", replace: accumulated };
+      return withConfined({ action: "continue", replace: accumulated });
     }
-    return { action: "continue" };
+    return withConfined({ action: "continue" });
   }
 
   private async runParallel<P>(
@@ -387,7 +420,7 @@ export class HookPipeline {
     payload: P,
     reg: HookRegistration<unknown>,
     opts?: HookPipelineRunOptions,
-  ): Promise<HookResult<P>> {
+  ): Promise<HandlerResult<P>> {
     const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const handler = reg.handler as HookHandler<P>;
 
@@ -396,20 +429,18 @@ export class HookPipeline {
 
     // Inject a read-only, per-plugin settings accessor bound to *this* handler's
     // plugin, reusing the same session hook scope that carries activePluginIds.
-    // Only attached when a scope is active — mirrors the run()-level ctxScoped
-    // gate. Scope-less calls still receive the per-handler cancellation signal.
-    // Framework hooks (no pluginId) get a getter returning `{}`.
-    const ownSettings = currentOwnSettings(reg.pluginId);
-    const locale = ctx.locale ?? currentHookLocale();
+    // `run` already required the scope. Framework hooks (no pluginId) get a
+    // getter returning `{}`.
+    const scope = requireHookScope(`HookPipeline.run("${event}")`);
+    const ownSettings = scopedOwnSettings(scope, reg.pluginId);
+    const locale = ctx.locale ?? scope.locale;
     const ctxForHandler: HookContext = {
       ...ctx,
       ...(locale === undefined ? {} : { locale }),
-      logicalTurn: currentHookLogicalTurn() ?? ctx.logicalTurn,
-      // A supplied activation set needs isolation even without an ambient scope.
-      ...(ctx.activePluginIds
-        ? { activePluginIds: new Set(ctx.activePluginIds) }
-        : {}),
-      ...(isHookScopeActive() ? { getOwnSettings: () => ownSettings } : {}),
+      logicalTurn: scope.logicalTurn ?? ctx.logicalTurn,
+      // Each handler gets its own copy of the activation set.
+      activePluginIds: new Set(ctx.activePluginIds ?? scope.activePluginIds),
+      getOwnSettings: () => ownSettings,
     };
 
     try {
@@ -489,12 +520,20 @@ export class HookPipeline {
           reason,
         },
       );
-      // A guard fails closed. Elsewhere the failed handler changed nothing, so
-      // the chain goes on without it and keeps what earlier handlers replaced.
-      // A cancelled execution always ends the chain.
-      return GUARD_HOOK_EVENTS.has(event) || ctx.signal?.aborted
+      // A cancelled execution always ends the chain. Elsewhere than on a
+      // guard the failed handler changed nothing, so the chain goes on without
+      // it and keeps what earlier handlers replaced. A guard fails closed,
+      // unless the caller confines the failure to the handler's plugin.
+      if (ctx.signal?.aborted)
+        return { action: "abort", reason, handlerFailed: true };
+      if (!GUARD_HOOK_EVENTS.has(event)) return { action: "continue" };
+      const confinedTo = confinedOwner(event, reg, opts);
+      return confinedTo === undefined
         ? { action: "abort", reason, handlerFailed: true }
-        : { action: "continue" };
+        : {
+            action: "continue",
+            confinedFailure: { pluginId: confinedTo, reason },
+          };
     }
 
     await this.handlerOutcome(ctx, reg, "ok", opts?.emitter, opts?.logicalKey);
@@ -547,6 +586,24 @@ export function createHookPipeline(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * The plugin a failed guard handler is confined to, when the chain goes on
+ * without it: a plugin's handler on an `own-runtimes` event, which the caller
+ * offered to confine. Every other failure fails closed.
+ */
+function confinedOwner(
+  event: HookEvent,
+  reg: HookRegistration<unknown>,
+  opts: HookPipelineRunOptions | undefined,
+): string | undefined {
+  const owner = reg.pluginId;
+  return owner !== undefined &&
+    GUARD_FAILURE_SCOPE[event] === "own-runtimes" &&
+    opts?.confinable?.(owner) === true
+    ? owner
+    : undefined;
+}
 
 function orderHandlers(
   handlers: readonly HookRegistration<unknown>[],

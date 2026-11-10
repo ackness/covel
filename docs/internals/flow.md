@@ -308,7 +308,7 @@ flowchart TB
     Keep --> End
 ```
 
-图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。
+图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。守卫 Hook 出错只拦住它判的那件事：一个 runtime 或一条 proposal。没有故事 runtime 的插件，`TurnStart` handler 出错时可以退出有故事的回合，故事和其他插件照常运行，见 [guard handler 失败时](../reference/hooks.md#auxiliary-hook-failures)。维度提供者的 runtime 失败也不拦住故事，见 [World Model](../reference/world-model.md#回合时序与结算回执)。
 
 **Stage 分带**（`packages/runtime/src/turn-executor/scheduling.ts` + `packages/runtime/src/schedule/` 硬性约束）：
 
@@ -374,6 +374,8 @@ flowchart LR
 - 用 `recordAs` 导出结果；
 - 能发出事件：它的 `tools.builtin` 列了 `emit-event`，或者声明了 `advertiseEvents: true`；
 - 直接修改角色、状态或交互。
+
+**手动点名时。** 插件 RPC 点名运行一个声明了 `schedule.detached` 的 runtime，它同样通过上面的检查后变成作业，不在这次执行里运行：同步模式在这次手动运行的提交事务里入队，并在响应的 `deferredJobs` 里列出；后台模式在 manual 作业的提交事务里入队，并记在它的 `result.deferredJobs` 里。玩家回合、同步 manual RPC 和后台作业都通过 `queueCommitFollowUps` 排入这些作业，没有一条提交路径会把它丢掉。
 
 **回合里有挂起时。** 回合里有 runtime 挂起时，这些作业先不入队，随挂起项一起保存，回合也先不计数。结束这个回合的那个出口把作业入队、给回合计数：最后一个挂起项恢复成功，或者它被放弃、过期、因过时而作废。恢复后又挂起时，作业转给新的挂起项，回合仍不计数；整条挂起链只在结束时计一次。规则见[挂起与回合计数](../reference/api.md#挂起与回合计数)。
 

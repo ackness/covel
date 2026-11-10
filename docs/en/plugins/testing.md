@@ -63,7 +63,14 @@ When there is an error, it gives the path of the file and the field:
 
 The CLI writes errors from the first failing stage to stderr and collected warnings to stdout, including warnings from packages with errors. The exit code is `1` for errors, `0` for warnings alone, and `2` for no path arguments or unsupported options. The app can show other independently checkable errors; see [in-app validation](../reference/plugin-installation.md#in-app-validation).
 
-What it does not do: it does not run the entry file, the guards, or the functions. So it cannot find "a tool is declared, but the code never registers it". The two kinds of test below are needed for that.
+What it does not do: it does not run the entry file, the guards, or the functions. So it cannot find "a tool is declared, but the code never registers it". A plugin with entry code syncs its declarations before validating:
+
+```bash
+pnpm plugin:extract ~/.covel/plugins/my-plugin          # rewrite contributes from the entry's registrations
+pnpm plugin:extract ~/.covel/plugins/my-plugin --check  # write nothing; exit 1 on drift, for CI
+```
+
+This is a fixed step after every entry change, not an option: it runs the entry factory on your own machine and records the registrations without calling any handler. For bundled plugins in the repository, `pnpm check:manifests` inside `pnpm check` enforces the sync; an out-of-sync plugin fails to load, and the error names this command. See [Plugins with local code](./local-code.md#4-write-the-entry-file).
 
 Execution classification can be derived statically from files and declarations without running an entry. The CLI prints neither classification nor execution-inspection diagnostics. Passing validation does not establish declarative admission proof or grant permission to execute code; see [declarative plugins](../reference/plugin-installation.md#declarative-plugins).
 

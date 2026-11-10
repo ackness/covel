@@ -15,6 +15,9 @@ import {
   type KernelStore,
 } from "../src/session/session-kernel.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["test-plugin"]);
 
 // ── Store factory ─────────────────────────────────────────────────
 

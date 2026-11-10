@@ -15,6 +15,7 @@ import {
   createBootstrapCompactorRunner,
   createTurnContextBudget,
 } from "../../src/routes/api/bootstrap/compactor.js";
+import { inHookScope } from "../helpers/hook-scope.js";
 
 describe("createTurnContextBudget", () => {
   it("retains the explicit deployment ceiling", () => {
@@ -99,13 +100,8 @@ describe("createBootstrapCompactorRunner", () => {
       traceId: "current-flow",
     });
     await emitter.emit("hook.fired", {});
-    const result = await runner.run(
-      "session-1",
-      "",
-      messages,
-      "en-US",
-      emitter.traceId,
-      emitter,
+    const result = await inHookScope([], () =>
+      runner.run("session-1", "", messages, "en-US", emitter.traceId, emitter),
     );
     await emitter.emit("hook.fired", {});
 
@@ -196,7 +192,9 @@ describe("createBootstrapCompactorRunner", () => {
         content: "x".repeat(2_000),
         createdAt: new Date(0).toISOString(),
       };
-      await runner.run("session-1", "", [message], "en-US");
+      await inHookScope([], () =>
+        runner.run("session-1", "", [message], "en-US"),
+      );
       expect(handler).toHaveBeenCalledOnce();
       expect(handler).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -264,13 +262,15 @@ describe("createBootstrapCompactorRunner", () => {
           sessionId: "session-1",
           turnId: `current-${turn}`,
         });
-        const result = await runner.run(
-          "session-1",
-          "",
-          messages,
-          "en-US",
-          emitter.traceId,
-          emitter,
+        const result = await inHookScope([], () =>
+          runner.run(
+            "session-1",
+            "",
+            messages,
+            "en-US",
+            emitter.traceId,
+            emitter,
+          ),
         );
         expect(result.compacted).toBe(false);
       }
@@ -358,13 +358,15 @@ describe("createBootstrapCompactorRunner", () => {
           llmAdapter,
           failures,
         });
-        await runner.run(
-          "session-1",
-          "",
-          messages,
-          "en-US",
-          emitter.traceId,
-          emitter,
+        await inHookScope([], () =>
+          runner.run(
+            "session-1",
+            "",
+            messages,
+            "en-US",
+            emitter.traceId,
+            emitter,
+          ),
         );
       }
     } finally {

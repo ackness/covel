@@ -29,6 +29,8 @@ pnpm validate:plugin plugins/<id>/PLUGIN.md # 单份 manifest
 pnpm validate:plugin ~/.covel/plugins/<id>  # 仓库外插件，绝对路径即可
 ```
 
+`validate:plugin` 不执行入口，查不出“声明了但没注册”。带入口代码的插件在 L1 之前先运行 `pnpm plugin:extract plugins/<id>`（改完入口后的固定步骤；`--check` 不写文件、有漂移时退出 1）。内置插件由 `pnpm check:manifests` 强制这一步。
+
 失败输出会指名违规字段并给替代写法，例如：
 
 ```

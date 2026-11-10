@@ -55,6 +55,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@covel/events": "workspace:*",
+    "@covel/runtime": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/router-cli": "1.167.46",
     "@tanstack/router-plugin": "1.168.48",

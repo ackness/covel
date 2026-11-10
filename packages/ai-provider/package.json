@@ -19,6 +19,10 @@
     "./url-safety": {
       "types": "./src/adapters/http/url-safety.ts",
       "import": "./src/adapters/http/url-safety.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts"
     }
   },
   "scripts": {

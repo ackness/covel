@@ -91,9 +91,9 @@ describe("npc-graph manifests", () => {
     expect(extractor.trigger).toEqual({ type: "auto", cooldownTurns: 1 });
     expect(extractor.needs).toBeUndefined();
     expect(extractor.inputs?.worldIR).toEqual({
-      // `cardinality: one` and `required: true` are the defaults.
-      from: { capability: "world-ir-provider@1" },
-      accepts: "contract:world-ir@1",
+      // Optional: the plugin plays without a world-facts provider.
+      from: { capability: "world-ir@2" },
+      required: false,
     });
   });
 

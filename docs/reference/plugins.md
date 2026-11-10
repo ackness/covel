@@ -136,6 +136,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 ### contributes 字段
 
+`contributes` 是安全制品，不是文档：能力快照、免提示授权和声明式准入都在不执行代码时读取它，所以清单仍是唯一来源，不会在安装或加载时从入口生成。入口代码改动后，作者用 `pnpm plugin:extract <插件目录>` 把清单同步到注册；内置插件由 `pnpm check:manifests` 强制，加载时的双向核对（报错附这条命令）兜底。
+
 <!-- prettier-ignore -->
 | `contributes` 字段 | 对应注册或资源 |
 | --- | --- |
@@ -1399,11 +1401,13 @@ pnpm lint
 | [affinity](../../plugins/affinity/README.md) | 好感度 | `plugin` | 无 | 内联 | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化；通过 `prompt.segment@1` 只读投影当前分数 |
 | [branch-reply](../../plugins/branch-reply/README.md) | 备选回复 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
 | [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角并逐项回填表单答案，记录故事中的角色变化 |
+| [character-agent](../../plugins/character-agent/README.md) | 角色扮演 | `plugin` | `character-actor@1` | 内联（只供委托） | 让一个角色按自己的性格和经历说话，只能由其他 runtime 委托运行 |
 | [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
 | [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 聊天式讲述 | `plugin` | `narrative-engine@2` | `plan` / `narrate` | 让故事更像角色对话；舞台在场输入同时供规划和叙事使用 |
 | [codex](../../plugins/codex/README.md) | 图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
 | [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary` | 从叙事中登记和推进任务 |
 | [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定 |
+| [dm-console](../../plugins/dm-console/README.md) | 主持人面板 | `plugin` | 无 | 无 | 在一个页面里展示在场角色、等你处理的事项、故事和输入框；只有界面，不调用模型 |
 | [guide](../../plugins/guide/README.md) | 行动建议 | `plugin` | `scene-prompts@1` | 内联 | 每轮故事后回顾前情，给出可直接采用的行动短句 |
 | [history-compaction](../../plugins/history-compaction/README.md) | 长篇故事记忆 | `core` | `history.compact@2`（默认提供者） | 无 | 把较早的对话整理成分段摘要 |
 | [inventory](../../plugins/inventory/README.md) | 背包 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary` | 记录物品得失和装备变化 |
@@ -1416,8 +1420,9 @@ pnpm lint
 | [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue`、`story-cues` | 可选读取故事的场景与情绪提示，播放世界自带的音乐；场景不依赖舞台画面，事件仍可覆盖 |
 | [story-events](../../plugins/story-events/README.md) | 隐藏剧情 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
 | [tabletop-rules](../../plugins/tabletop-rules/README.md) | 属性判定 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
+| [turn-policy](../../plugins/turn-policy/README.md) | 轮流发言 | `plugin` | `turn-policy@1` | 无 | 决定每个回合由哪些角色发言：提到谁是谁、固定顺序、随机、手选或 AI 导演；是只读服务 |
 | [world-init](../../plugins/world-init/README.md) | 世界状态 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界状态，并持续维护 |
-| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir-provider@1` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
+| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir@2` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
 | [world-time](../../plugins/world-time/README.md) | 世界时间 | `core` | `world-time-evolution@1`、`world-time-context@1` | `context`、`advance` | 维护日期、时段和时间流向，按本轮故事结算时间变化 |
 
 每个插件的细节以它自己的 `PLUGIN.md` 和 README 为准。

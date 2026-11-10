@@ -307,7 +307,7 @@ flowchart TB
     Keep --> End
 ```
 
-The boxes that carry hook names in the diagram (`TurnStart`, `PreRuntime`, `PreLLMCall`, and so on) are the points where a plugin can attach a handler. The full list is in the [Hook reference](../reference/hooks.md).
+The boxes that carry hook names in the diagram (`TurnStart`, `PreRuntime`, `PreLLMCall`, and so on) are the points where a plugin can attach a handler. The full list is in the [Hook reference](../reference/hooks.md). A failing guard hook stops only what it judged: one runtime or one proposal. A failing `TurnStart` handler of a plugin without a story runtime can make that plugin sit a turn with a story out, and the story and the other plugins run; see [When a guard handler fails](../reference/hooks.md#auxiliary-hook-failures). A failing dimension provider runtime does not stop the story either; see [World Model](../reference/world-model.md#turn-timing-and-settlement-receipts).
 
 **Stage bands** (fixed rules in `packages/runtime/src/turn-executor/scheduling.ts` and `packages/runtime/src/schedule/`):
 
@@ -373,6 +373,8 @@ flowchart LR
 - Its result is exported with `recordAs`;
 - It can emit events: its `tools.builtin` lists `emit-event`, or it declares `advertiseEvents: true`;
 - It changes characters, state, or interactions directly.
+
+**When a plugin RPC names it.** When a plugin RPC runs a runtime that declares `schedule.detached` by name, it also becomes a job once it passes the checks above, and does not run in that execution: in sync mode it is queued in the commit transaction of the manual run and listed in the response's `deferredJobs`; in background mode it is queued in the manual job's commit transaction and recorded in its `result.deferredJobs`. Player turns, sync manual RPCs and background jobs all queue these jobs through `queueCommitFollowUps`, so no commit path drops them.
 
 **When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. When a resume suspends again, the jobs move to the new suspended item and the turn is still not counted; a whole chain of suspensions counts once, when it ends. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
 

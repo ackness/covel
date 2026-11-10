@@ -27,7 +27,7 @@ import {
  * `scripts/e2e-plugin-verify.ts`, not here.
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import path from "node:path";
 import {
   discoverPlugins,
@@ -719,7 +719,7 @@ describe("core-quest plugin manifest", () => {
     ).manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
-      "world-ir@1": JSON.parse(
+      "world-ir@2": JSON.parse(
         readContractFile(
           new URL(
             "../../world-ir/schemas/world-ir.schema.json",
@@ -731,7 +731,7 @@ describe("core-quest plugin manifest", () => {
     });
   });
 
-  it("keeps the log in a post-turn function runtime gated on typed WorldIR", () => {
+  it("keeps the log in a post-turn function runtime reading optional typed WorldIR", () => {
     expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.runtimeType).toBe("function");
@@ -740,11 +740,11 @@ describe("core-quest plugin manifest", () => {
     expect(manifest.trigger).toBeUndefined(); // `auto`, the default
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      // `cardinality: one` and `required: true` are the defaults.
-      from: { capability: "world-ir-provider@1" },
-      accepts: "contract:world-ir@1",
+      // Optional: the plugin plays without a world-facts provider.
+      from: { capability: "world-ir@2" },
+      required: false,
     });
-    expect(declaration.requires).toContain("world-ir-provider@1");
+    expect(declaration.requires ?? []).not.toContain("world-ir@2");
     // The entry only feeds the session summary; it registers no tool, so the
     // log stays a function runtime.
     expect(packageManifest.entry).toBe("./server/index.js");
@@ -852,6 +852,20 @@ describe("quests from WorldIR", () => {
       },
       { name: "Stop the Convoy", status: "completed" },
     ]);
+  });
+
+  it("skips without reading the store when no world facts are bound", async () => {
+    const store = {
+      listPluginData: vi.fn(),
+      getPluginData: vi.fn(),
+    };
+    const result = await questLog({ store, inputs: {} });
+    expect(result).toEqual({
+      outcome: "skipped",
+      skipReason: expect.stringContaining("No world facts"),
+    });
+    expect(getPendingProposals(result)).toEqual([]);
+    expect(store.listPluginData).not.toHaveBeenCalled();
   });
 
   it("writes the updates through the log without a model call", async () => {

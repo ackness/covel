@@ -53,7 +53,7 @@ The `submit-output` schema preserves its authored meaning. Strict is selected on
 | advance-world-time | local | world-time | auto-allow | Settle a reached target time or a duration; the tool computes calendar differences. Random mode takes only a reason. Commits with the story | defaults |
 | dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging | `readOnly`, `idempotent`, `concurrencySafe` |
 | update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed | `idempotent` |
-| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments | `stagesWrites: false`, `idempotent` |
+| submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@2` as function calling arguments | `stagesWrites: false`, `idempotent` |
 | sync-codex-entries | local | codex | auto-allow | Submit this turn's codex changes at once. Creates or adds to entries by title | defaults |
 | generate-guide | local | guide | auto-allow | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically | defaults |
 | upsert-npc-graph | local | npc-graph | auto-allow | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs | defaults |
@@ -1449,7 +1449,7 @@ Player edits and manual handling go through [the RPC of manual runtimes](./api.m
 
 **Owner**: world-ir (`plugins/world-ir/tools/submit-world-facts.js`)
 
-The model submits the complete facts of this turn through the tool arguments, as one `contract:world-ir@1`. For the full data shape, see [world-data.md · WorldIR and plugin projections](./world-data.md#worldir-and-plugin-projections).
+The model submits the complete facts of this turn through the tool arguments, as one `contract:world-ir@2`. For the full data shape, see [world-data.md · WorldIR and plugin projections](./world-data.md#worldir-and-plugin-projections).
 
 | Argument                                           | Required | Description                                                                                                              |
 | -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -1461,7 +1461,7 @@ The argument schema extends `worldIRV1Schema` with tool-only assessments, and ru
 
 The tool declares `{stagesWrites:false, idempotent:true}`. Reference validation after completion returns `invalid-input` with a hint to declare every referenced id in `entities` and retry.
 
-The tool returns filled-in, validated facts after removing assessments, without persistent proposals. The public model view exposes canonical facts in `data.facts`; `data.entityReferences` indexes semantic fact identities so ordinary projection retains required entity IDs even before an incoming edge exists. The index is not final output and contains no store row metadata. `completion.afterTools: [submit-world-facts]` requires successful extraction before calling `submit-output` with `{}`. `io.output.from.tool: submit-world-facts` supplies the canonical facts directly without copying the model view. Correcting final output does not repeat extraction, and the `contract:world-ir@1` business shape stays unchanged.
+The tool returns filled-in, validated facts after removing assessments, without persistent proposals. The public model view exposes canonical facts in `data.facts`; `data.entityReferences` indexes semantic fact identities so ordinary projection retains required entity IDs even before an incoming edge exists. The index is not final output and contains no store row metadata. `completion.afterTools: [submit-world-facts]` requires successful extraction before calling `submit-output` with `{}`. `io.output.from.tool: submit-world-facts` supplies the canonical facts directly without copying the model view. Correcting final output does not repeat extraction, and the `contract:world-ir@2` business shape stays unchanged.
 
 #### Per-objective assessment
 
@@ -1469,7 +1469,7 @@ When vocabulary supplies open quest objectives, submit the tool-only `objectiveA
 
 The tool checks coverage, duplicates, canonical names, quote provenance and consistency with `quest_change.completedObjectives`. An achieved assessment with only a generic interaction is rejected. Plans, partial work, failures and unverified claims cannot also finish an objective. A quest cannot be marked completed while a vocabulary objective is neither achieved nor superseded. Shortened quest names and objective paraphrases that could resolve to a supplied entry are rejected, including ambiguous objective matches. Use exact vocabulary text; this comparison never infers completion. Without open objectives, omit the array or submit `[]`. Vocabulary is bounded context, not the entire quest ledger. Coverage checks constrain supplied quests and objectives; unlisted content keeps the existing WorldIR and consumer validation.
 
-Assessments are removed before returning the unchanged public `world-ir@1` shape. The tool does not write quest data. Whether the objective was achieved remains a model judgment; quotations and coverage checks cannot guarantee semantic correctness.
+Assessments are removed before returning the unchanged public `world-ir@2` shape. The tool does not write quest data. Whether the objective was achieved remains a model judgment; quotations and coverage checks cannot guarantee semantic correctness.
 
 #### Mechanical mistakes fixed automatically
 
