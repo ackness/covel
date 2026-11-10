@@ -754,12 +754,16 @@ describe("story gate on the dimension provider", () => {
     expect(seen).toEqual([0]);
   });
 
-  it("still blocks narration when the provider ran and failed", async () => {
+  it("narrates from the frozen committed snapshot when the provider ran and failed", async () => {
     const { result, seen } = await run(true);
-    expect(
-      result.runtimeResults.find((entry) => entry.runtimeId === "story/auto"),
-    ).toMatchObject({ status: "skipped" });
-    expect(seen).toEqual([]);
+    const status = (runtimeId: string) =>
+      result.runtimeResults.find((entry) => entry.runtimeId === runtimeId)
+        ?.status;
+    expect(result.abortReason).toBeUndefined();
+    expect(status("owner/context")).toBe("failed");
+    expect(status("story/auto")).toBe("success");
+    // The values the provider would have republished, not a stale copy.
+    expect(seen).toEqual([0]);
   });
 
   it("narrates while the bound provider is not running, with its dimensions as they were", async () => {

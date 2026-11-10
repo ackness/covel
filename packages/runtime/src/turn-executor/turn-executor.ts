@@ -50,6 +50,7 @@ import { __testOnly_parseFinalOutputEnvelope } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
+  executionNarrates,
   makeSkippedResult,
   retainPreGameRuntimes,
 } from "./turn-executor-helpers.js";
@@ -61,6 +62,7 @@ import {
   snapshotUserSettings,
 } from "../hooks/hook-settings.js";
 import { requireHookScope, runWithHookScope } from "../hooks/hook-scope.js";
+import type { ConfinedHookFailure } from "../hooks/types.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
   type RecursiveTurnInput,
@@ -84,10 +86,7 @@ import {
   planTurnDetachment,
 } from "../schedule/turn-completion.js";
 import { DIMENSION_CONTRACT } from "@covel/shared";
-import {
-  DIMENSION_SNAPSHOT_SKIP,
-  dimensionExecutionBarrier,
-} from "./dimension-barrier.js";
+import { dimensionExecutionBarrier } from "./dimension-barrier.js";
 import {
   createWorldModelView,
   memoizeWorldModelReads,
@@ -261,6 +260,29 @@ async function executeTurnImpl(
   });
 
   // ── TurnStart hook ───────────────────────────────────
+  // A failed handler fails the execution, unless its plugin can sit it out:
+  // one without a story runtime, with runtimes scheduled in an execution
+  // that has a story. Phase and scheduled set come later, so the top
+  // execution confines provisionally whenever a story may run, and settles
+  // it below; a nested one confines only a plugin already sitting out.
+  const alreadySittingOut = deps.hookFailedPlugins;
+  const mayNarrate =
+    recursionDepth === 0 && executionNarrates(input, activeRuntimes);
+  const storyPlugins = new Set(
+    activeRuntimes
+      .filter((runtime) => runtime.outputKind === "story")
+      .map((runtime) => runtime.pluginId),
+  );
+  let sittingOut: readonly ConfinedHookFailure[] = [];
+  const failClosed = (failure: ConfinedHookFailure): TurnResult => ({
+    turnId: input.turnId,
+    sessionId: input.sessionId,
+    runtimeResults: [],
+    executionContext,
+    durationMs: Date.now() - startTime,
+    timestamp: new Date().toISOString(),
+    abortReason: failure.reason,
+  });
   {
     const tsResult = await runTurnStartHook(
       {
@@ -270,6 +292,11 @@ async function executeTurnImpl(
         turnId: input.turnId,
         eventBus: deps.eventBus,
         emitter: deps.emitter,
+        confinable: (pluginId) =>
+          alreadySittingOut?.has(pluginId) === true ||
+          (mayNarrate &&
+            !storyPlugins.has(pluginId) &&
+            activeRuntimes.some((runtime) => runtime.pluginId === pluginId)),
       },
       {
         playerMessage: input.playerMessage,
@@ -288,6 +315,19 @@ async function executeTurnImpl(
         abortReason: tsResult.reason,
       };
     }
+    // A plugin whose handler failed sits this execution out; the story and
+    // every other plugin go on.
+    sittingOut = (tsResult.confined ?? []).filter(
+      (failure) => !alreadySittingOut?.has(failure.pluginId),
+    );
+    if (sittingOut.length > 0)
+      deps = {
+        ...deps,
+        hookFailedPlugins: new Set([
+          ...(alreadySittingOut ?? []),
+          ...sittingOut.map((failure) => failure.pluginId),
+        ]),
+      };
   }
 
   let sessionState: LoadedTurnSessionState;
@@ -332,11 +372,7 @@ async function executeTurnImpl(
     store: deps.store,
     sessionId: input.sessionId,
     runtimes: activeRuntimes,
-    willNarrate: activeRuntimes.some(
-      (runtime) =>
-        runtime.outputKind === "story" &&
-        (!isTargeted || targetedRuntimeIds.has(runtime.name)),
-    ),
+    willNarrate: executionNarrates(input, activeRuntimes),
   });
   if (dimensionBarrier)
     return {
@@ -379,6 +415,9 @@ async function executeTurnImpl(
     activeRuntimes,
     sessionState.phase,
   );
+  // Setup runs no story, so a TurnStart failure confined above fails the
+  // execution before setup writes anything.
+  if (isPreGamePending && sittingOut[0]) return failClosed(sittingOut[0]);
   // Single owner of setup-completion state for this execution: the setup-band
   // mirror frozen at execution start (drives setup scheduling by
   // pending/blocked rather than turn cadence, the attempt-ledger generation,
@@ -536,6 +575,22 @@ async function executeTurnImpl(
     triggered: scheduledRuntimes,
     isPreGamePending,
   });
+  // Settle the TurnStart failures confined above against what really runs,
+  // after trigger, cadence and PreSchedule: a plugin sits out only when a
+  // story is scheduled and so is one of its own runtimes. Otherwise its
+  // failure fails the execution before any runtime starts.
+  if (sittingOut.length > 0) {
+    const scheduled = scheduledGroups.flatMap((group) => group.runtimes);
+    const narrates = scheduled.some(
+      (runtime) => runtime.outputKind === "story",
+    );
+    const unconfined = sittingOut.find(
+      (failure) =>
+        !narrates ||
+        !scheduled.some((runtime) => runtime.pluginId === failure.pluginId),
+    );
+    if (unconfined) return failClosed(unconfined);
+  }
 
   // Same-layer effects hazard policy (01 §7): derive read/write sets for each
   // parallel group and check pairs. Default `warn` keeps the groups parallel and
@@ -752,28 +807,10 @@ async function executeTurnImpl(
     triggerEvent: RuntimeInvocation["triggerEvent"],
     identity?: ParallelRuntimeIdentity,
   ): Promise<RuntimeResult> => {
-    // A provider that ran and did not publish blocks narration. One that was
-    // not scheduled (a targeted manual run or retry) only republishes
-    // committed values, which `deps.dimensionContext` already froze.
-    const providerStatus = dimensionProvider
-      ? completedResults.get(dimensionProvider.name)?.status
-      : undefined;
-    if (
-      manifest.outputKind === "story" &&
-      providerStatus !== undefined &&
-      providerStatus !== "success"
-    ) {
-      steeringReaders.settled(manifest.name);
-      return Promise.resolve(
-        makeSkippedResult(
-          manifest,
-          input,
-          DIMENSION_SNAPSHOT_SKIP.reason,
-          DIMENSION_SNAPSHOT_SKIP.by,
-          {},
-        ),
-      );
-    }
+    // A dimension provider that ran and did not publish costs only its own
+    // snapshot: the story reads the committed values that every runtime of
+    // this execution shares through `deps.dimensionContext`, which is all the
+    // provider republishes.
     return executeOneRuntime({
       manifest,
       input,

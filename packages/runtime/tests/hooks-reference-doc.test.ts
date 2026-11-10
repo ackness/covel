@@ -2,12 +2,21 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import { HOOK_EVENTS } from "@covel/shared";
-import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "../src/hooks/types.js";
+import {
+  GUARD_FAILURE_SCOPE,
+  GUARD_HOOK_EVENTS,
+  HOOK_SEMANTICS,
+} from "../src/hooks/types.js";
 
 const page = readFileSync(
   resolve(import.meta.dirname, "../../../docs/reference/hooks.md"),
   "utf8",
 );
+const englishPage = readFileSync(
+  resolve(import.meta.dirname, "../../../docs/en/reference/hooks.md"),
+  "utf8",
+);
+const pages = [page, englishPage];
 
 it("the hooks reference lists every event as the pipeline runs it", () => {
   const rows = [
@@ -27,3 +36,18 @@ it("the hooks reference lists every event as the pipeline runs it", () => {
     [...HOOK_EVENTS],
   );
 });
+
+it.each(pages.map((text, index) => [index === 0 ? "zh" : "en", text]))(
+  "the %s hooks reference gives each guard event its failure scope",
+  (_language, text) => {
+    const rows = [
+      ...text.matchAll(/^\| `(\w+)` \| `(own-runtimes|closed)` \|/gm),
+    ].map(([, name, scope]) => [name, scope]);
+    expect(rows).toEqual(
+      HOOK_EVENTS.filter((name) => GUARD_HOOK_EVENTS.has(name)).map((name) => [
+        name,
+        GUARD_FAILURE_SCOPE[name],
+      ]),
+    );
+  },
+);
