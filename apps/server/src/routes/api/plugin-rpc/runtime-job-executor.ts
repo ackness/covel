@@ -9,14 +9,19 @@ import {
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
 import type { RuntimeJobRecord } from "./jobs.js";
-import type {
-  RuntimeJobServices,
-  createRuntimeJobCredentials,
+import {
+  createJobCredentialHandoff,
+  type RuntimeJobCredentials,
+  type RuntimeJobServices,
 } from "./runtime-job-credentials.js";
-import type { QueuedActivatedRuntimeJob } from "./runtime-job-enqueue.js";
-import { queueCommitFollowUps } from "../commit-envelope.js";
+import { deferredJobRefs } from "./runtime-job-enqueue.js";
+import {
+  queueCommitFollowUps,
+  type QueuedCommitFollowUps,
+} from "../commit-envelope.js";
 import { settleActivatedRun } from "./runtime-response.js";
 import type { createPluginRpcRuntimeTurnRunner } from "./runtime-turn.js";
+import { publishDeferredRuntimeJobs } from "./settled-request.js";
 import {
   runtimeJobIncarnation,
   parseActivatedRuntimeJobPayload,
@@ -51,10 +56,7 @@ export function createRuntimeJobExecutor(deps: {
     PluginRegistry,
     "syncSessionActivations" | "getActiveRuntimes"
   >;
-  readonly credentials?: Pick<
-    ReturnType<typeof createRuntimeJobCredentials>,
-    "register"
-  >;
+  readonly credentials?: Pick<RuntimeJobCredentials, "register" | "discard">;
   readonly createRunner: RuntimeJobRunnerFactory;
 }): (
   requestServices: RuntimeJobServices,
@@ -88,7 +90,8 @@ export function createRuntimeJobExecutor(deps: {
   /**
    * Background manual RPC calls and event followers. A failure the runtime
    * reports in its own result still commits its writes; followers it emitted
-   * are queued in the same transaction and inherit its credentials.
+   * and stage jobs it deferred (a manually run `turnCompletion: detached`
+   * target) are queued in the same transaction and inherit its credentials.
    */
   const executeActivatedJob = async (
     job: RuntimeJobRecord,
@@ -111,7 +114,13 @@ export function createRuntimeJobExecutor(deps: {
       payload,
       payload.expectedApprovalScope,
     );
-    const followers: QueuedActivatedRuntimeJob[] = [];
+    // Services a request handed over pass on to the jobs this run queues.
+    const credentials = createJobCredentialHandoff(
+      handoff ? deps.credentials : undefined,
+      () => requestServices,
+    );
+    // What the landed commit queued; a retried transaction replaces it.
+    let queued: QueuedCommitFollowUps = { runtimeJobs: [], followerJobs: [] };
     const completeInTx = async (
       tx: StoreTransaction,
       turnResult: TurnResult,
@@ -123,32 +132,30 @@ export function createRuntimeJobExecutor(deps: {
         turnResult,
         ...(payload.expectFollower ? { expectFollower: true } : {}),
       });
-      const queued = await queueCommitFollowUps(tx, {
+      queued = await queueCommitFollowUps(tx, {
         sessionId: job.sessionId,
         activeRuntimes,
         locale: payload.locale,
         ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
+        credentials,
         sourceRuntimeId: job.runtimeId,
         isolation,
         results: turnResult.runtimeResults,
         sourceTurnId: turnResult.turnId,
+        deferredJobs: turnResult.deferredRuntimeJobs ?? [],
         followers: settlement.followers,
       });
-      followers.push(...queued.followerJobs);
+      const deferredJobs = deferredJobRefs([
+        ...queued.runtimeJobs,
+        ...queued.followerJobs,
+      ]);
       const result = {
         turnId: turnResult.turnId,
         executionId: turnResult.executionContext.executionId,
         runtimeId: job.runtimeId,
         durationMs: turnResult.durationMs,
         runtimeResults: settlement.runtimeResults,
-        ...(followers.length > 0
-          ? {
-              deferredJobs: followers.map(({ job: queued }) => ({
-                jobId: queued.jobId,
-                runtimeId: queued.runtimeId,
-              })),
-            }
-          : {}),
+        ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
       };
       if (settlement.failure)
         await control.failInTx(tx, { ...settlement.failure, result });
@@ -175,45 +182,49 @@ export function createRuntimeJobExecutor(deps: {
           })
         )[0]?.runtimeResults as readonly RuntimeResult[] | undefined)
       : undefined;
-    const commit =
+    const run = () =>
       payload.activation === "manual"
-        ? (
-            await runner.runManualTurn({
-              ...queuedRun,
-              turnId: payload.turnId,
-              runtimeId: job.runtimeId,
-              detached: true,
-              ...(payload.input !== undefined
-                ? { payload: payload.input }
-                : {}),
-              ...(retrySeedResults
-                ? {
-                    retrySeedResults,
-                    sourceTurnId: payload.retryFromTurnId,
-                  }
-                : {}),
-            })
-          ).commit
-        : (
-            await runner.runDeferredFollowerTurn({
-              ...queuedRun,
-              followerTurnId: payload.turnId,
-              runtimeId: job.runtimeId,
-              triggerEvent: payload.triggerEvent!,
-            })
-          ).commit;
+        ? runner.runManualTurn({
+            ...queuedRun,
+            turnId: payload.turnId,
+            runtimeId: job.runtimeId,
+            detached: true,
+            ...(payload.input !== undefined ? { payload: payload.input } : {}),
+            ...(retrySeedResults
+              ? {
+                  retrySeedResults,
+                  sourceTurnId: payload.retryFromTurnId,
+                }
+              : {}),
+          })
+        : runner.runDeferredFollowerTurn({
+            ...queuedRun,
+            followerTurnId: payload.turnId,
+            runtimeId: job.runtimeId,
+            triggerEvent: payload.triggerEvent!,
+          });
+    let commit;
+    try {
+      commit = (await run()).commit;
+    } catch (error) {
+      credentials.discard();
+      throw error;
+    }
     if (!commit.committed) {
+      credentials.discard();
       throw new Error(commit.error ?? "runtime job proposals did not commit");
     }
-    for (const queued of followers) {
-      if (handoff)
-        deps.credentials?.register(queued.credentialKey, requestServices);
+    credentials.handOff(queued.followerJobs);
+    for (const follower of queued.followerJobs)
       publishRuntimeJobStatusEvent(
         eventBus,
-        queued.status,
-        runtimeJobIncarnation(queued.job.payload) ?? "",
+        follower.status,
+        runtimeJobIncarnation(follower.job.payload) ?? "",
       );
-    }
+    await publishDeferredRuntimeJobs(
+      { eventBus, worker: undefined },
+      queued.runtimeJobs,
+    );
   };
 
   const executeRuntimeJob =

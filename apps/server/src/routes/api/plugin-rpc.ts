@@ -6,7 +6,9 @@ import {
 import { sessionEventBus } from "./session/session-events.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
+  announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
+  requestCredentialHandoff,
   withSettledSessionLock,
 } from "./plugin-rpc/settled-request.js";
 /**
@@ -68,10 +70,13 @@ import {
 } from "./plugin-user-settings.js";
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
+  deferredJobRefs,
   enqueueActivatedRuntimeJob,
-  type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import { queueCommitFollowUps } from "./commit-envelope.js";
+import {
+  queueCommitFollowUps,
+  type QueuedCommitFollowUps,
+} from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
@@ -357,6 +362,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
 
     const turnId = crypto.randomUUID();
+    // Provider services this request hands to the jobs its commit queues,
+    // withdrawn if that commit does not land.
+    const credentials = requestCredentialHandoff(c);
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
@@ -388,7 +396,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       ),
       deps: buildTurnExecutorDeps(c),
       ...(hookPipeline ? { hookPipeline } : {}),
-      heldJobs: requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
+      heldJobs: requestSuspensionAbandonDeps(
+        c,
+        decodedUserSettings.settings,
+        credentials,
+      ),
     });
 
     const mode: "sync" | "background" = target.execution ?? "sync";
@@ -454,13 +466,17 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     //
     // The sync turn may surface `deferredFollowers` — event-chain followers
     // with `execution: 'background'` that were skipped so the user gets an
-    // immediate response. They are queued as durable event jobs inside the
-    // same commit transaction, so a rolled-back turn queues nothing.
+    // immediate response — and `deferredRuntimeJobs`: a targeted runtime that
+    // declares `turnCompletion: detached` is deferred to the durable queue
+    // instead of running inline. Both are queued inside the same commit
+    // transaction, so a rolled-back turn queues nothing.
     // `queueCommitFollowUps` leaves out followers of an emitter whose writes
     // were dropped; a sync run commits all-or-nothing, so none is today.
-    const followerJobs: QueuedActivatedRuntimeJob[] = [];
+    // What the landed commit queued; a retried transaction replaces it.
+    let queued: QueuedCommitFollowUps = { runtimeJobs: [], followerJobs: [] };
+    let summary;
     try {
-      const summary = await runtimeTurnRunner.runManualTurn({
+      summary = await runtimeTurnRunner.runManualTurn({
         turnId,
         runtimeId: body.runtimeId,
         ...(body.payload !== undefined ? { payload: body.payload } : {}),
@@ -469,70 +485,73 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
         completeInTx: async (tx, result, isolation) => {
-          const queued = await queueCommitFollowUps(tx, {
+          queued = await queueCommitFollowUps(tx, {
             sessionId,
             activeRuntimes,
             locale: session.locale,
             ...(userSettingsMap
               ? { userSettings: snapshotUserSettings(userSettingsMap) }
               : {}),
+            credentials,
             sourceRuntimeId: body.runtimeId,
             isolation,
             results: result.runtimeResults,
             sourceTurnId: result.turnId,
+            deferredJobs: result.deferredRuntimeJobs ?? [],
             followers: result.deferredFollowers ?? [],
           });
-          followerJobs.push(...queued.followerJobs);
         },
       });
-      // The runtime can report success while its proposals fail to land. A
-      // turn whose writes never committed is not a successful turn: report it
-      // as an error; its follower jobs rolled back with it.
-      if (!summary.commit.committed) {
-        if (summary.commit.dimensionConflict)
-          return c.json(
-            errorBody("dimension-version-conflict", {
-              code: "dimension-version-conflict",
-              details: {
-                currentVersions:
-                  summary.commit.dimensionConflict.currentVersions,
-              },
-            }),
-            409,
-          );
-        return c.json(
-          errorBody(commitFailureMessage(summary.commit), {
-            code: "turn_commit_failed",
-            details: {
-              turnId: summary.turnId,
-              runtimeResults: concealResultSummaries(
-                summary.runtimeResults,
-                registeredConcealedRuntimeIds(pluginRegistry),
-              ),
-            },
-          }),
-          500,
-        );
-      }
-      announceQueuedRuntimeJobs(c, followerJobs);
-      const deferredJobs = followerJobs.map(({ job }) => ({
-        jobId: job.jobId,
-        runtimeId: job.runtimeId,
-      }));
-      return c.json({
-        status: "ok",
-        turnId: summary.turnId,
-        runtimeResults: concealResultSummaries(
-          summary.runtimeResults,
-          registeredConcealedRuntimeIds(pluginRegistry),
-        ),
-        durationMs: summary.durationMs,
-        ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
-        ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
-      });
     } catch (err) {
+      credentials.discard();
       return runtimeQueueErrorResponse(c, err);
     }
+    // The runtime can report success while its proposals fail to land. A
+    // turn whose writes never committed is not a successful turn: report it
+    // as an error; its follower jobs rolled back with it.
+    if (!summary.commit.committed) {
+      credentials.discard();
+      if (summary.commit.dimensionConflict)
+        return c.json(
+          errorBody("dimension-version-conflict", {
+            code: "dimension-version-conflict",
+            details: {
+              currentVersions: summary.commit.dimensionConflict.currentVersions,
+            },
+          }),
+          409,
+        );
+      return c.json(
+        errorBody(commitFailureMessage(summary.commit), {
+          code: "turn_commit_failed",
+          details: {
+            turnId: summary.turnId,
+            runtimeResults: concealResultSummaries(
+              summary.runtimeResults,
+              registeredConcealedRuntimeIds(pluginRegistry),
+            ),
+          },
+        }),
+        500,
+      );
+    }
+    await announceDeferredRuntimeJobs(c, queued.runtimeJobs);
+    announceQueuedRuntimeJobs(c, queued.followerJobs);
+    const deferredJobs = deferredJobRefs([
+      ...queued.runtimeJobs,
+      ...queued.followerJobs,
+    ]);
+    return c.json({
+      status: "ok",
+      turnId: summary.turnId,
+      runtimeResults: concealResultSummaries(
+        summary.runtimeResults,
+        registeredConcealedRuntimeIds(pluginRegistry),
+      ),
+      durationMs: summary.durationMs,
+      ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
+      ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
+    });
   }
 
   return dispatchPluginAction(

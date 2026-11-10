@@ -4,8 +4,8 @@ import { commitExecution } from "./commit-execution.js";
 import { recordExecutionFaults } from "./plugin-faults.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
-  requestJobServices,
   announceDeferredRuntimeJobs,
+  requestCredentialHandoff,
   withSettledExecutionLock,
 } from "./plugin-rpc/settled-request.js";
 import { type QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
@@ -434,15 +434,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
                         activeRuntimes,
                         locale: liveSession.locale ?? DEFAULT_LOCALE,
                         ...(userSettings ? { userSettings } : {}),
-                        registerCredentials: (key, maxQueueMs) => {
-                          const services = requestJobServices(c);
-                          if (services)
-                            c.get("runtimeJobCredentials")?.register(
-                              key,
-                              services,
-                              maxQueueMs,
-                            );
-                        },
+                        credentials: requestCredentialHandoff(c),
                       },
                       releasedJobs,
                     )),

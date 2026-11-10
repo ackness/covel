@@ -25,11 +25,7 @@ import {
 } from "../commit-envelope.js";
 import { commitExecution } from "../commit-execution.js";
 import { resolveMediaImageFlow } from "../media-image-flow.js";
-import type { RuntimeJobCredentialKey } from "../plugin-rpc/runtime-job-credentials.js";
-import type {
-  QueuedActivatedRuntimeJob,
-  QueuedRuntimeJob,
-} from "../plugin-rpc/runtime-job-enqueue.js";
+import type { QueuedRuntimeJob } from "../plugin-rpc/runtime-job-enqueue.js";
 import {
   PLAYER_INTERJECTION_SOURCE,
   type TurnInterjection,
@@ -58,7 +54,7 @@ export interface CommittedTurn {
   readonly replaysPlayerInput: boolean;
   /** Jobs the commit queued, empty unless it committed. */
   readonly queuedRuntimeJobs: readonly QueuedRuntimeJob[];
-  readonly followerJobs: readonly QueuedActivatedRuntimeJob[];
+  readonly followerJobs: readonly QueuedRuntimeJob[];
 }
 
 export async function commitExecutedTurn(
@@ -83,16 +79,7 @@ export async function commitExecutedTurn(
   const { result } = execution;
   const hookPipeline = host.hookPipeline;
   const queuedRuntimeJobs: QueuedRuntimeJob[] = [];
-  const followerJobs: QueuedActivatedRuntimeJob[] = [];
-  const registerJobCredentials = (
-    credentialKey: RuntimeJobCredentialKey,
-    maxQueueMs: number | undefined,
-  ) => {
-    const services = host.jobServices();
-    if (!services) return;
-    host.jobCredentials?.register(credentialKey, services, maxQueueMs);
-    ledger.keepCredentialKey(credentialKey);
-  };
+  const followerJobs: QueuedRuntimeJob[] = [];
   // Interjections the player sent during the turn are part of it: the
   // turn's commit saves them to the prompt history (after the player's
   // message, at the moment a model call read them; one no call read
@@ -213,7 +200,7 @@ export async function commitExecutedTurn(
             activeRuntimes,
             locale: request.locale,
             ...(userSettings ? { userSettings } : {}),
-            registerCredentials: registerJobCredentials,
+            credentials: host.credentials,
           },
           jobs,
         )),
@@ -234,14 +221,11 @@ export async function commitExecutedTurn(
         locale: request.locale,
         ...(model ? { modelOverride: model } : {}),
         ...(userSettings ? { userSettings } : {}),
-        registerCredentials: registerJobCredentials,
+        credentials: host.credentials,
         isolation,
         results: result.runtimeResults,
         sourceTurnId: result.turnId,
-        deferred: {
-          session: effectiveSession,
-          jobs: result.deferredRuntimeJobs ?? [],
-        },
+        deferredJobs: result.deferredRuntimeJobs ?? [],
         followers: result.deferredFollowers ?? [],
       });
       queuedRuntimeJobs.push(...queued.runtimeJobs);

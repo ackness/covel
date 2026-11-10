@@ -3379,7 +3379,7 @@ command 成功时用同一个结构，另外有这些约定：
 
 - 声明了 `io.concealed` 的 runtime，在这里和失败响应的 `details.runtimeResults` 里，`output` 都是 `null`。
 - 回合被中止时多一个 `abortReason`。
-- 有后台 follower 被排入时多一个 `deferredJobs: [{ jobId, runtimeId }]`。
+- 有后台 follower 被排入时多一个 `deferredJobs: [{ jobId, runtimeId }]`。点名的 runtime 声明了 `schedule.detached` 时，它不在这次请求里运行，而是作为 staged 作业排入，也列在 `deferredJobs` 里，`runtimeResults` 里没有它。
 
 ##### 维度编辑与待结算恢复
 
