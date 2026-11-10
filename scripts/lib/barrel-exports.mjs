@@ -82,10 +82,12 @@ export function exportedNames(file, seen = new Set()) {
     } else if (node.type === "ExportAllDeclaration") {
       const source = node.source.value;
       if (node.exported) names.add(moduleName(node.exported));
-      else if (source.startsWith("."))
+      else if (source.startsWith(".")) {
         for (const name of exportedNames(resolveRelative(file, source), seen))
-          names.add(name);
-      else names.add(`* from ${source}`);
+          if (name !== "default") names.add(name);
+      } else names.add(`* from ${source}`);
+    } else if (node.type === "ExportDefaultDeclaration") {
+      names.add("default");
     } else if (node.type === "TSExportAssignment") names.add("export=");
   }
   return names;

@@ -58,6 +58,7 @@ test("export names are read from syntax, expanding relative export-star", (t) =>
     "FromA2",
     "IfaceA",
     "Kind",
+    "default",
     "fnA",
     "ns",
     "one",
@@ -70,6 +71,29 @@ test("an unchanged barrel passes", (t) => {
   const { root, accept } = fixture(t);
   accept();
   assert.deepEqual(sharedBarrelErrors(root), []);
+});
+
+test("adding a default export to the root fails the freeze", (t) => {
+  const { root, write, accept } = fixture(t);
+  write(sharedBarrel.entry, 'export * from "./a.js";');
+  accept();
+  write(sharedBarrel.entry, 'export * from "./a.js"; export default 1;');
+  assert.match(
+    sharedBarrelErrors(root).join("\n"),
+    /gained 1 export\(s\): default/,
+  );
+});
+
+test("export-star omits defaults while explicit default re-exports are counted", (t) => {
+  const { root, write } = fixture(t);
+  write("packages/shared/src/a2.ts", "export default class PrivateDefault {}");
+  write(sharedBarrel.entry, 'export * from "./a2.js";');
+  assert.deepEqual(currentBarrel(root), []);
+  write(
+    sharedBarrel.entry,
+    'export { default, default as publicDefault } from "./a2.js";',
+  );
+  assert.deepEqual(currentBarrel(root), ["default", "publicDefault"]);
 });
 
 test("a new export fails and points to the subpath entries", (t) => {
