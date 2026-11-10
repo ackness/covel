@@ -19,6 +19,7 @@
     - codex
     - npc-graph
     - living-world-rules
+    - world-ir
   recommended:
     - memory
 - id: dialogue-mode
@@ -48,6 +49,7 @@
   recommended:
     - memory
     - npc-graph
+    - world-ir
 - id: low-cost
   label:
     zh-CN: 省钱
@@ -115,6 +117,7 @@
     - guide
     - memory
     - codex
+    - world-ir
 - id: ensemble-dialogue
   label:
     zh-CN: 群像对话

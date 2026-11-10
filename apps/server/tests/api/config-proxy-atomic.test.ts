@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { getOutboundProxyStatus, outboundFetch } from "@covel/ai-provider";
-import { resetOutboundProxyForTests } from "../../../../packages/ai-provider/src/outbound-network.js";
+import { resetOutboundProxyForTests } from "@covel/ai-provider/testing";
 
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();

@@ -28,6 +28,7 @@ export { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 export {
   rewriteContributes,
   EXTRACTED_KINDS,
+  type ExtensionContribution,
   type ExtractedDeclarations,
 } from "./rewrite-contributes.js";
 export { runtimeDirectoryDiagnostics } from "./runtime-directory.js";

@@ -141,9 +141,10 @@ For declarative packages, run static validation and inspect classification and
 diagnostics; never create an entry just for extraction. Adding server code,
 executable registrations or HTTP permissions restores ordinary code/runtime
 approval. An earlier declarative enable is no code grant. For code packages,
-sync your own entry's declarations with `pnpm plugin:extract plugins/<id>` (executes code with your permissions); use `--check` for CI, and maintain `extensions` / `commands` metadata yourself. See [local code](../../../docs/plugins/local-code.md#4-写入口文件).
+syncing declarations is a fixed step after every entry change: run `pnpm plugin:extract plugins/<id>` (executes your entry with your permissions) before validating, rather than hand-editing `tools`, `actions`, `services`, `forms`, `wires`, `hooks` or `extensions`. It adds and drops `extensions` by `<point>/<id>` and keeps existing options; maintain `commands` yourself. `--check` writes nothing and exits 1 on drift: `pnpm check:manifests` (inside `pnpm check`) runs it on every bundled plugin, and a load failure from mismatched declarations names the same command. See [local code](../../../docs/plugins/local-code.md#4-写入口文件).
 
 ```bash
+pnpm plugin:extract plugins/<id>        # code packages only: sync contributes from the entry
 pnpm validate:plugin plugins/<id>       # manifest + cross-runtime checks
 pnpm --filter <package-name> test       # focused handler/registration tests
 pnpm check:plugins                      # plugin i18n + README gates

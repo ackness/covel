@@ -2,6 +2,7 @@ import { createTurnEmitter } from "../trace/turn-emitter.js";
 import {
   presentationSnapshotSchema,
   presentationCompletionSchema,
+  STORY_OUTPUT_CONTRACT,
   type DeferredRuntimeJob,
   type RuntimeManifest,
   type RuntimeResult,
@@ -65,7 +66,7 @@ export async function capturePresentationRecovery(
     (runtime) =>
       runtime.outputKind === "story" &&
       !runtime.concealed &&
-      runtime.outputContract === "narrative-engine@2",
+      runtime.outputContract === STORY_OUTPUT_CONTRACT,
   );
   if (providers.length !== 1) return undefined;
   const messages = (await store.listMessages(sessionId)).filter((message) => {
@@ -237,7 +238,7 @@ export async function finalizePresentationJobs(
       (runtime) =>
         runtime.outputKind === "story" &&
         !runtime.concealed &&
-        runtime.outputContract === "narrative-engine@2",
+        runtime.outputContract === STORY_OUTPUT_CONTRACT,
     );
     const provider = providers.length === 1 ? providers[0] : undefined;
     const messages = provider

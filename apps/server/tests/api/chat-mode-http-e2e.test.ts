@@ -369,13 +369,15 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         id: sessionId,
         worldId: "haruka-academy",
         locale: "zh-CN",
-        // The narrator requires no other plugin: the stage, the suggestions
-        // and the cards are asked for by name.
+        // The narrator requires no other plugin: the stage, the suggestions,
+        // the cards and the fact extraction that affinity reads are asked
+        // for by name.
         plugins: [
           "chat-mode-narrator",
           "scene-stage",
           "guide",
           "character-blueprint",
+          "world-ir",
         ],
       }),
     });

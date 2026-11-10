@@ -9,9 +9,9 @@ import {
   createHookPipeline,
   executeTurn,
   commitExecution,
-} from "../../../packages/runtime/src/index.ts";
-import { MockLLM } from "../../../packages/plugin-test-utils/src/mock-llm.ts";
-import { loadRuntimeBundle } from "../../../packages/test-runtime/src/runtime-loading.ts";
+} from "@covel/runtime";
+import { MockLLM } from "@covel/plugin-test-utils";
+import { loadRuntimeBundle } from "@covel/test-runtime/runtime-loading";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
 import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
 

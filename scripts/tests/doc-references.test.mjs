@@ -50,6 +50,36 @@ test("world files in docs code blocks name the locale exactly, not a bare langua
   assert.deepEqual(problems, []);
 });
 
+test("the bundled plugin table lists every plugins/ package in both editions", () => {
+  const bundled = readdirSync(path.join(root, "plugins"))
+    .filter((name) => {
+      try {
+        return statSync(path.join(root, "plugins", name, "PLUGIN.md")).isFile();
+      } catch {
+        return false;
+      }
+    })
+    .sort();
+  const problems = [];
+  for (const [page, prefix] of [
+    ["docs/reference/plugins.md", "../../"],
+    ["docs/en/reference/plugins.md", "../../../"],
+  ]) {
+    const text = readFileSync(path.join(root, page), "utf8");
+    const row = new RegExp(
+      `^\\| \\[[^\\]]+\\]\\(${prefix.replaceAll(".", "\\.")}plugins/([^/]+)/README\\.md\\)`,
+      "gm",
+    );
+    const listed = new Set([...text.matchAll(row)].map((match) => match[1]));
+    for (const id of bundled)
+      if (!listed.has(id)) problems.push(`${page}: ${id} is not in the table`);
+    for (const id of listed)
+      if (!bundled.includes(id))
+        problems.push(`${page}: ${id} has no plugins/ package`);
+  }
+  assert.deepEqual(problems, []);
+});
+
 test("store methods named in transactions.md exist in the store package", () => {
   // A method is declared as a function, a const, or a class member.
   const declaration =

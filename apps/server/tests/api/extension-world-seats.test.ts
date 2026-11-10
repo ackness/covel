@@ -18,7 +18,7 @@ import {
 } from "@covel/shared";
 import type { DataStore, TurnMessageRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { makeSession } from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeSession } from "@covel/store/testing";
 import {
   CompactionFailureTracker,
   createBootstrapCompactorRunner,

@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 
 import type { DataStore, VectorStore } from "@covel/store";
-import { assertSuccess } from "../../ai-provider/src/adapters/http/response.js";
-import { normalizeError } from "../../ai-provider/src/gateway-lifecycle.js";
 
 import { createMemorySystem } from "../src/memory-system.js";
 import { createVectorIngestor } from "../src/vector-ingest.js";
@@ -32,6 +30,18 @@ function embedText(text: string): Float32Array {
   norm = Math.sqrt(norm) || 1;
   for (let i = 0; i < DIM; i += 1) v[i]! /= norm;
   return v;
+}
+
+// The error an embedding adapter throws for a 400 that rejects one input:
+// the provider gateway's `AiProviderError` carries `statusCode` and
+// `details.providerCode`, which is all the ingestor reads. Memory may not
+// depend on that package, so the test builds the same shape.
+function rejectedByProvider(): Error {
+  return Object.assign(new Error("Input exceeds the embedding window"), {
+    code: "PROVIDER_ERROR",
+    statusCode: 400,
+    details: { providerCode: "context_length_exceeded" },
+  });
 }
 
 const embed: EmbedFn = async (texts) => texts.map(embedText);
@@ -211,7 +221,7 @@ describe("vector recall (semantic)", () => {
     expect(calls).toHaveLength(firstSweepCalls);
   });
 
-  it("isolates the actual normalized HTTP rejection returned by an embedding adapter", async () => {
+  it("isolates the normalized HTTP rejection shape an embedding adapter throws", async () => {
     const store = createMemoryStore();
     const sessionId = "http-poison-input";
     await lockModel(store, sessionId);
@@ -223,21 +233,7 @@ describe("vector recall (semantic)", () => {
       embed: async (texts) => {
         calls.push([...texts]);
         if (texts.some((text) => text.includes("rejected"))) {
-          try {
-            assertSuccess(
-              new Response("", { status: 400 }),
-              {
-                error: {
-                  code: "context_length_exceeded",
-                  type: "invalid_request_error",
-                  message: "Input exceeds the embedding window",
-                },
-              },
-              "openai-chat",
-            );
-          } catch (error) {
-            throw normalizeError(error, "openai-chat");
-          }
+          throw rejectedByProvider();
         }
         return texts.map(embedText);
       },

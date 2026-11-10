@@ -12,7 +12,11 @@
  */
 
 import type { StoreTransaction } from "@covel/store";
-import type { Proposal, SessionEvent } from "@covel/shared";
+import {
+  STORY_OUTPUT_CONTRACT,
+  type Proposal,
+  type SessionEvent,
+} from "@covel/shared";
 import { createDisplayMessageBuffer } from "./display-message-buffer.js";
 import {
   checkPendingReadBaselines,
@@ -340,7 +344,7 @@ async function commitUnit(
           runtime.name === member.runtimeId &&
           runtime.pluginId === member.pluginId &&
           runtime.outputKind === "story" &&
-          runtime.outputContract === "narrative-engine@2",
+          runtime.outputContract === STORY_OUTPUT_CONTRACT,
       )
     ) {
       for (const event of memberEvents)

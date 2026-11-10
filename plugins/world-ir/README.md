@@ -1,6 +1,6 @@
 # 故事整理 (World IR)
 
-`world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约选择当前故事的 `/segments`，保留逐段的 `kind`、`speaker` 和 `text`，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，模型随后用 `{}` 调用 `submit-output`，宿主直接采用工具的规范事实，通过接受门控后成为 `contract:world-ir@1` 输出。
+`world-ir` 是通用的叙事事实抽取管线。它通过 `runtime.io.inputs.narrative` 按 `narrative-engine@2` 契约选择当前故事的 `/segments`，保留逐段的 `kind`、`speaker` 和 `text`，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，模型随后用 `{}` 调用 `submit-output`，宿主直接采用工具的规范事实，通过接受门控后成为 `world-ir@2` 输出。`world-ir@2` 既是 runtime 的输出契约，也是共享的数据 schema（`contract:world-ir@2`），静态世界数据的投影用同一个 ID。
 
 同轮下游 runtime 应声明：
 
@@ -10,13 +10,11 @@ runtime:
     inputs:
       worldIR:
         from:
-          contract: world-ir-provider@1
-          cardinality: one
-        accepts: contract:world-ir@1
-        required: true
+          contract: world-ir@2
+        required: false
 ```
 
-框架由 typed input 自动建立 DAG 边、失败 gate 和 provenance；agent 在 `<runtime-inputs>` 的 `worldIR.value` 读取 IR。消费者包根声明 `requires: [world-ir-provider@1]`，让会话依赖解析器补齐生产者。生产者的 `runtime.io.output.recordAs: world-ir-v1` 还会把成功结果保留为跨执行 export。
+公共契约在绑定前校验完整输出，消费者不必再写 `accepts`。会话里有本插件时，typed input 让消费者排在它之后并记录 provenance；agent 在 `<runtime-inputs>` 的 `worldIR.value` 读取 IR。本插件是可选的：消费者不要在包根 `requires` 它，否则移除本插件会关掉消费者，或让解析器把它补回来。没有输入时（会话没选本插件，或本回合抽取失败），消费者应照常运行：agent 改读对话里的本回合正文，只靠 IR 记账的函数返回 `skipped`。生产者的 `runtime.io.output.recordAs: world-ir-v1` 还会把成功结果保留为跨执行 export。
 
 每次校验失败都要多一轮模型调用，所以工具先修正机械性失误：丢弃误抄进参数的抽取输入、把写在事实顶层的细节移入 `attributes`、给没写 `id` 的关系 / 事件 / 陈述补一个取自内容哈希的 id（以 JSON 文本传入的数组由 `tool()` 统一解析）；会话角色在抽取输入里以姓名生成的单词短名出现（如 `tomas-reed`），模型直接引用、不重复登记，工具把短名还原成真实 id 并按会话角色名册补登记；这样 UUID 不会在输出里被反复抄写。短名的连字符写在别处、或直接写了姓名时（`雷恩-修女` 对 `雷恩修女`），只要字母和数字与唯一一个角色的短名相同，也按该角色处理。引用处写的是本次输出里某个实体的名称而不是 id 时（且只有一个实体叫这个名称），按该实体的 id 处理。`vocabulary` 里会话已在追踪的物品和任务也是已知对象：模型按提示沿用这些名称并直接当作 id 引用时，工具按词表给出的类型补登记。陈述的 `subjectIds` 里写了本次输出中某条事件或陈述的 id 时，工具去掉它：主体只能是实体。只有其他错误（例如引用了既未登记、也不在名册和词表里的 id）才会退回模型修正。
 
@@ -26,7 +24,7 @@ runtime:
 
 `agent.reasoning: false` 默认关闭可选推理；`agent.toolChoice: required` 要求调用工具，`agent.completion.afterTools: [submit-world-facts]` 把抽取列为提交前提。成功后用 `{}` 调用 `submit-output`，宿主采用工具的规范结果。用户显式推理配置仍优先；对于 thinking 与强制工具不兼容的模型，adapter 保留用户配置并退回自动工具选择。叙事段落和身份数据分开保存在 user JSON，提示要求逐句核对施动者，无法解析的代词不猜姓名。结构校验能保证协议和引用完整，但无法保证所有模型生成事实的语义正确。
 
-抽取工具之后还需要一次最终提交的模型调用；当两个以上结构化插件复用结果时，通常可用更短、更稳定的下游输入抵消。新增只有一个消费者、且确实需要完整原文的独立能力时，可以直接绑定 `narrative-engine@2`，无需为了形式统一强制经过 World IR；现有图鉴、任务、关系、物品和好感插件则统一选择共享契约，以保持组合行为和失败语义一致。
+抽取工具之后还需要一次最终提交的模型调用；当两个以上结构化插件复用结果时，通常可用更短、更稳定的下游输入抵消。新增只有一个消费者、且确实需要完整原文的独立能力时，可以直接绑定 `narrative-engine@2`，无需为了形式统一强制经过 World IR；现有图鉴、任务、关系、物品和好感插件以可选输入读取共享契约：有本插件时复用同一份事实，没有时各自降级。
 
 ## 固定字段事件与名称词表
 

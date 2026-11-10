@@ -8,6 +8,7 @@ import type {
   PluginExtensionDefinition,
 } from "@covel/shared";
 import type { PluginAPI } from "./plugin-api.js";
+import { REGISTRATION_SYNC_HINT } from "./plugin-registration-contract.js";
 import type { PluginEntryScope } from "./plugin-entry-scope.js";
 import type { PluginExtensionHost } from "./plugin-extensions.js";
 
@@ -82,7 +83,9 @@ export function createExtensionRegistration(
         const key = `${point}/${id}`;
         const declaration = declared.get(key);
         if (!declaration)
-          throw invalid(`Undeclared extension: ${pluginId}/${key}`);
+          throw invalid(
+            `Undeclared extension: ${pluginId}/${key}. ${REGISTRATION_SYNC_HINT}`,
+          );
         if (provided.has(key))
           throw invalid(`Duplicate extension: ${pluginId}/${key}`);
         if (!host) throw new Error("Plugin extension host is unavailable");
@@ -105,7 +108,7 @@ export function createExtensionRegistration(
         for (const key of declared.keys()) {
           if (!provided.has(key))
             throw invalid(
-              `Missing extension implementation: ${pluginId}/${key}`,
+              `Missing extension implementation: ${pluginId}/${key}. ${REGISTRATION_SYNC_HINT}`,
             );
         }
       });

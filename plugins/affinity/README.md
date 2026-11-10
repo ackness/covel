@@ -13,7 +13,7 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：叙事后执行的 agent runtime（`stage: post-turn`，通过必需的 `world-ir-provider@1` 输入读取本轮事实）。
+- `PLUGIN.md`：叙事后执行的 agent runtime（`stage: post-turn`，通过可选的 `world-ir@2` 输入读取本轮事实；会话没有这个提供者或本回合抽取失败时，直接读对话里的本回合正文）。
 - `tier-metadata.js`：分数范围、六档 tier 与展示元数据的唯一来源。
 - `tools/update-affinity.js`：按名字去重的批量好感变更工具。
 - `server/index.js`：entry 模块，注册本地工具与 `prompt.segment@1/current-affinity`。

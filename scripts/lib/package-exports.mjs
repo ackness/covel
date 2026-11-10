@@ -20,6 +20,15 @@ export function sourceFiles(directory) {
   });
 }
 
+/** The workspace whose directory holds `target`, or the directory itself. */
+export function workspaceOf(workspaces, target) {
+  return workspaces.find(
+    (item) =>
+      target === item.directory ||
+      target.startsWith(`${item.directory}${path.sep}`),
+  );
+}
+
 export function unusedPackageExports(root, workspaces, allowlist = {}) {
   const consumers = new Map();
   for (const group of [

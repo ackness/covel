@@ -1,1045 +1,155 @@
-import { publicIncarnationTag } from "./session/session-guard.js";
-import { scopeSessionEvents } from "./session/session-events.js";
-import { runtimeJobIncarnation } from "./plugin-rpc/runtime-job-worker.js";
-import {
-  conventionsOfPlugins,
-  setWorldDataConventions,
-} from "../../world-data/conventions.js";
-import {
-  getRequestLlmOptions,
-  withRequestLlmOptions,
-} from "../../request-llm-context.js";
-import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
-import type { EmbedFn, MemorySystem } from "@covel/memory";
-import type { MemoryIndexControl } from "../../embedding-lock.js";
-import { createPluginReloadRoutes } from "./plugin-reload.js";
-import { createHostPluginFaults } from "./plugin-faults.js";
-import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
-import {
-  mediaImageFlowRoutes,
-  resolveMediaImageFlow,
-} from "./media-image-flow.js";
+/**
+ * Wire the API dependency graph for production and tests.
+ *
+ * `bootstrapApi` runs the stages under `bootstrap/` in order. Each stage
+ * returns a typed bundle the later ones consume; the order is the order
+ * resources are acquired, and a failure releases what was acquired so far.
+ */
+
 import { createUiSlotHost } from "../../ui-slots/host.js";
-import { uiSlotRoutes } from "./ui-slots.js";
+import { mountApiRoutes } from "./bootstrap/api-routes.js";
+import type {
+  ApiBootstrapConfig,
+  ApiBootstrapResult,
+} from "./bootstrap/config.js";
 import {
-  createRuntimeJobCredentials,
-  type RuntimeJobServices,
-} from "./plugin-rpc/runtime-job-credentials.js";
-import { createSettledSessionLock } from "./plugin-rpc/settled-session-lock.js";
+  createBootstrapEventBus,
+  releaseAfterStartupFailure,
+  type BootstrapOwned,
+} from "./bootstrap/event-infrastructure.js";
+import { startBootstrapMaintenance } from "./bootstrap/maintenance.js";
+import { wireBootstrapMemory } from "./bootstrap/memory.js";
+import { createBootstrapModelContext } from "./bootstrap/model-context.js";
+import { activatePluginEntries } from "./bootstrap/plugin-activation.js";
+import { discoverBootstrapPlugins } from "./bootstrap/plugin-catalog.js";
+import { createPluginHost } from "./bootstrap/plugin-host.js";
+import { createBootstrapRuntimeJobs } from "./bootstrap/runtime-jobs.js";
 import {
-  listSettlingRuntimeJobs,
-  markRunnableSettlingJobs,
-  type RuntimeJobRecord,
-} from "./plugin-rpc/jobs.js";
-/** Wire the API dependency graph for production and tests. */
+  loadServerTrust,
+  type TrustedSourcesRef,
+} from "./bootstrap/server-trust.js";
+import { createBootstrapStorage } from "./bootstrap/storage.js";
 
-import { Hono, type MiddlewareHandler } from "hono";
-import { readRuntimeEnv } from "@covel/shared";
-import type { RuntimeManifest } from "@covel/shared";
-import {
-  pluginRuntimeManifests,
-  pluginDeclarations,
-  resolvePluginRuntimeManifest,
-  deriveBuiltinPluginIds,
-  type PluginRegistry,
-  type PluginRuntimeGateway,
-  type PluginRuntimeUtils,
-} from "@covel/plugin-loader";
-import {
-  createEventBus,
-  type EventBus,
-  type EventBusTransport,
-} from "@covel/events";
-import type { DataStore, StoreBackend } from "@covel/store";
-import type { LLMAdapter } from "@covel/runtime";
-import {
-  PluginServiceRegistry,
-  PluginExtensionHost,
-  createHookPipeline,
-  maybeSweepOldTraces,
-} from "@covel/runtime";
-import { estimateTokens } from "@covel/context";
-import type { CompactorRunner } from "@covel/context";
-import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
-import {
-  createInProcessSessionLock,
-  type SessionLock,
-} from "../../lib/session-lock.js";
-import { makeErrorHandler } from "../../api-error.js";
-import {
-  createApplicationWork,
-  type ApplicationWork,
-} from "../../application-work.js";
-import { sessionRoutes } from "./session.js";
-import { pluginRoutes } from "./plugins.js";
-import { frameworkRoutes } from "./framework.js";
-import { stateRoutes } from "./state.js";
-import { eventRoutes } from "./events.js";
-import { createHealthRoutes } from "./health.js";
-import { worldRoutes } from "./worlds.js";
-import { messageRoutes } from "./messages.js";
-import { characterRoutes } from "./characters.js";
-import { actionRoutes } from "./actions.js";
-import { turnControlRoutes } from "./turn-control-routes.js";
-import { sessionTurnRoutes } from "./session-turns.js";
-import { setupRuntimeControlRoutes } from "./setup-runtime-control.js";
-import { subscribeRoutes } from "./subscribe.js";
-import { pluginDataRoutes } from "./plugin-data.js";
-import { installRoutes } from "./install.js";
-import { aiRoutes } from "./ai.js";
-import { traceRoutes } from "./traces.js";
-import {
-  createPluginDiagnostics,
-  RecentPluginServiceCalls,
-} from "./plugin-diagnostics.js";
-import { mediaRoutes } from "./media.js";
-import type { MediaStore } from "@covel/store";
-import type { MediaStoreBackend, VectorBackend } from "@covel/store";
-import { resumeRoutes } from "./resume.js";
-import {
-  maybeSweepExpiredSuspensions,
-  suspensionExpirer,
-} from "./suspension-sweep.js";
-import { installTraceRetentionSource } from "../../lib/trace-retention-source.js";
-import { createServerSettings } from "../../lib/server-settings.js";
-import { createServerSettingsRoutes } from "./server-settings.js";
-import { deriveHostProfile, type HostProfile } from "../../host-profile.js";
-import {
-  createRuntimeJobWorker,
-  parseActivatedRuntimeJobPayload,
-  parseStagedRuntimeJobPayload,
-  type RuntimeJobExecutor,
-  type RuntimeJobWorker,
-} from "./plugin-rpc/runtime-job-worker.js";
-import { createRuntimeJobExecutor } from "./plugin-rpc/runtime-job-executor.js";
-import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
-import { snapshotRoutes } from "./snapshots.js";
-import { lorebookRoutes } from "./lorebook.js";
-import { runtimeOutputRoutes } from "./runtime-outputs.js";
-import { runtimeJobRoutes } from "./runtime-jobs.js";
-import { pluginRpcRoutes } from "./plugin-rpc.js";
-import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
-import {
-  createBrowserWorkspaceCache,
-  createBrowserWorkspaceRoutes,
-} from "./browser-workspace.js";
+export type {
+  ApiBootstrapConfig,
+  ApiBootstrapResult,
+} from "./bootstrap/config.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
-import {
-  CompactionFailureTracker,
-  createBootstrapCompactorRunner,
-  createTurnContextBudget,
-} from "./bootstrap/compactor.js";
-import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
-import { setupPluginTools } from "./bootstrap/tools.js";
-import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
-import {
-  createRuntimeLoader,
-  pluginDatasetsLoader,
-} from "./bootstrap/runtime-loader.js";
-import { createEventDirectory } from "./bootstrap/event-directory.js";
-import { requestLlmServices } from "./bootstrap/request-llm-services.js";
-import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
-import { createSearchablePluginDataResolver } from "./bootstrap/searchable-plugin-data.js";
-import {
-  createTrustedSourceService,
-  type TrustedSourceService,
-} from "../../trust/trusted-source-service.js";
-import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
-import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
-import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
-import {
-  sessionApprovalScope,
-  verifyResolvedSessionRead,
-} from "./session/session-guard.js";
-
-// ── Bootstrap config ─────────────────────────────────────────────
-
-export interface ApiBootstrapConfig {
-  /** Share the composition root's request owner, or create one for an embedded API. */
-  readonly applicationWork?: ApplicationWork;
-  /** Path to plugins directory (e.g., 'plugins/'). Used when `pluginsDirs` is not provided. */
-  readonly pluginsDir: string;
-  /**
-   * Optional ordered list of plugin directories (first wins on collision).
-   * When provided, overrides `pluginsDir`. Typical desktop config:
-   *   [bundledPluginsDir, userPluginsDir]
-   * Bundled plugins take precedence so a user plugin with the same id cannot
-   * shadow a core plugin.
-   */
-  readonly pluginsDirs?: readonly string[];
-  /** Ordered world package directories. Later directories override earlier ones for session imports. */
-  readonly worldsDirs?: readonly string[];
-  /** Covel home directory for user world overrides. */
-  readonly covelHome?: string;
-  /** LLM adapter (real or mock). */
-  readonly llmAdapter: LLMAdapter;
-  /** Explicit server credential readiness; absent means request services are required. */
-  readonly canRunRuntimeJobWithServerServices?: (input: {
-    readonly job: RuntimeJobRecord;
-    readonly model?: string;
-  }) => boolean;
-  /**
-   * Optional narrow gateway facade exposed to function-runtime handlers
-   * via `FunctionHandlerContext.gateway`. The server composition root
-   * builds this from `createAiStack().gateway`; tests that don't need
-   * LLM access from function runtimes can leave it out.
-   */
-  readonly pluginGateway?: PluginRuntimeGateway;
-  /**
-   * Plugin-facing utility surface (SSRF guard + retrying fetch) exposed
-   * via `FunctionHandlerContext.utils`. Stateless singleton — typically
-   * built from `@covel/ai-provider`'s `validateBaseUrlForPlugin` +
-   * `fetchWithRetry` exports in the composition root.
-   */
-  readonly pluginUtils?: PluginRuntimeUtils;
-  /** DataStore for all persistence. */
-  readonly store: DataStore;
-  /**
-   * Active store backend identifier (e.g. `'sqlite'`, `'pg'`, `'memory'`).
-   * Used by the health route to report the actual backend in use rather
-   * than re-deriving it from environment variables.
-   */
-  readonly storeBackend: StoreBackend;
-  /**
-   * The deployment form the host resolved at start (`app.ts`). Every route
-   * asks it through `hostProfileOf(c)`. Optional so a test can assemble the
-   * API without one: requests then get the profile the environment and
-   * `storeBackend` give at the time of the request.
-   */
-  readonly hostProfile?: HostProfile;
-  /**
-   * Optional embedding-lock helper. When provided, route handlers that
-   * begin a turn (start_session, submit_actions, …) call it to lazily
-   * register the session's embedding model in vector_models and lock
-   * the session row. No-op when the store has no vector capability or
-   * no embed slot is configured.
-   */
-  readonly ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
-  /**
-   * Optional embedding configuration reader for the memory index routes
-   * (`/api/sessions/:id/memory-index`). Ignored when `vectorBackend` is "none".
-   */
-  readonly memoryIndex?: MemoryIndexControl;
-  /**
-   * Optional embedding function for the semantic (vector) memory tier. When
-   * provided AND the store supports vectors, the memory system upgrades
-   * recall/archival from keyword to vector search and gains a real embed-on-
-   * write ingestion path. The composition root builds it from
-   * `createAiStack().gateway.embed`. Absent → keyword-only memory (unchanged).
-   */
-  readonly memoryEmbed?: EmbedFn;
-  /**
-   * Optional per-request middleware inserted AFTER the default dependency
-   * injection middleware but BEFORE route handlers execute. Intended for
-   * request-scoped overrides (e.g. swapping `llmAdapter` based on headers
-   * that carry browser-defined custom slots or API keys).
-   */
-  readonly perRequestMiddleware?: readonly MiddlewareHandler[];
-  /**
-   * Per-session serializer used by turn-executing routes. When omitted,
-   * `bootstrapApi()` installs an in-process `Map`-based lock which is
-   * correct for single-node deployments (memory/sqlite, single PG pod).
-   * Multi-pod PG deployments MUST pass a distributed implementation —
-   * typically `createPgAdvisorySessionLock(sql)` from
-   * `../../lib/pg-session-lock.ts` — so mutual exclusion is enforced
-   * across processes. The implementation must also provide nonblocking
-   * `tryWithLock` so durable recovery can distinguish live commits.
-   */
-  readonly sessionLock?: SessionLock;
-  /**
-   * Dedicated serializer for background vector-ingestion sweeps. PostgreSQL
-   * deployments should inject a separate advisory-lock pool so slow embedding
-   * calls cannot exhaust the user-turn lock pool.
-   */
-  readonly memoryIngestLock?: SessionLock;
-  /**
-   * Optional content-addressable media store backing `/api/media/:id`
-   * and `ctx.media`. Composition roots that do not generate or serve
-   * media (e.g. headless test harnesses) may leave this unset; the
-   * route returns 503 in that case. See SPEC §5.1 (b)(g).
-   */
-  readonly mediaStore?: MediaStore;
-  readonly mediaBackend?: MediaStoreBackend;
-  readonly vectorBackend?: VectorBackend;
-}
-
-export interface ApiBootstrapResult {
-  readonly trustedSources: TrustedSourceService;
-  readonly memorySystem?: MemorySystem;
-  readonly applicationWork: ApplicationWork;
-  readonly app: Hono;
-  readonly registry: PluginRegistry;
-  readonly store: DataStore;
-  readonly eventBus: EventBus;
-  readonly compactorRunner: CompactorRunner;
-  readonly runtimeJobWorker: RuntimeJobWorker;
-  /** Non-blocking startup scans; the host must drain these before closing storage. */
-  readonly startupMaintenance: Promise<void>;
-  /** Stop tool admission and drain cancelled callbacks before releasing dependencies. */
-  readonly closeTools: () => Promise<void>;
-  /** Unregister capabilities only after runtime and memory producers have stopped. */
-  readonly closePluginEntries: () => Promise<void>;
-  /**
-   * Refresh the per-session tool override cache for `(create|update)-character`
-   * so the next `executeTurn` exposes schema-typed `fields` to the LLM.
-   * Idempotent and safe to call when no schema exists yet (it simply clears
-   * the cache for that session).
-   */
-  readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
-}
 
 /** Discover plugins, construct shared services, inject dependencies, and mount routes. */
 export async function bootstrapApi(
   config: ApiBootstrapConfig,
 ): Promise<ApiBootstrapResult> {
-  // 1. Create shared infrastructure first (eventBus needed by registry)
-  // Cross-pod EventBus fan-out (audit): multi-pod PG deployments need
-  // events emitted on one pod to reach SSE subscribers on another. PG
-  // LISTEN/NOTIFY is the lowest-dependency shared transport (the deployment
-  // already runs on PG). Single-process backends (memory/sqlite) pass no
-  // transport — pure in-process behavior, unchanged. A boot-time transport
-  // failure propagates: with a PG store backend, an unreachable PG is fatal
-  // anyway, and silently degrading to single-pod fan-out would be incorrect.
-  let eventTransport: EventBusTransport | undefined;
-  let eventBus: EventBus | undefined;
-  const owned: {
-    pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
-    closeTools?: () => Promise<void>;
-  } = {};
+  const owned: BootstrapOwned = {};
   try {
-    const databaseUrl = readRuntimeEnv().databaseUrl;
-    if (config.storeBackend === "pg" && databaseUrl) {
-      const { createPgEventTransport } =
-        await import("../../lib/pg-event-transport.js");
-      eventTransport = await createPgEventTransport(databaseUrl);
-      console.log(
-        "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
-      );
-    }
-    eventBus = createEventBus(config.store, {
-      transport: eventTransport,
-      requireSessionIncarnation: true,
-    });
-    return await assembleApi(config, eventBus, owned);
-  } catch (error) {
-    await owned.closeTools?.();
-    try {
-      await owned.pluginEntries?.close();
-    } catch {
-      console.warn(
-        "[bootstrap] failed to clean up plugin entries after startup failure",
-      );
-    }
-    try {
-      if (eventBus) await eventBus.close();
-      else await eventTransport?.close?.();
-    } catch {
-      console.warn(
-        "[bootstrap] failed to close event infrastructure after startup failure",
-      );
-    }
-    throw error;
-  }
-}
-
-async function assembleApi(
-  config: ApiBootstrapConfig,
-  eventBus: EventBus,
-  owned: {
-    pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
-    closeTools?: () => Promise<void>;
-  },
-): Promise<ApiBootstrapResult> {
-  // Per-session serializer. The caller (e.g. `app.ts`) may inject a PG
-  // advisory-lock implementation for multi-pod safety; otherwise we fall
-  // back to the in-process chain lock which is correct for single-process
-  // deployments (memory/sqlite, single PG pod). Route handlers read this
-  // via `c.get('sessionLock')` and never import a concrete lock module.
-  const sessionLock: SessionLock =
-    config.sessionLock ?? createInProcessSessionLock();
-  const tryWithCommitLock = sessionLock.tryWithLock?.bind(sessionLock);
-  if (!tryWithCommitLock) {
-    throw new Error("durable runtime jobs require a nonblocking session lock");
-  }
-  const memoryIngestLock: SessionLock =
-    config.memoryIngestLock ?? createInProcessSessionLock();
-  console.log(
-    `[bootstrap] session lock: ${config.sessionLock ? "external (injected)" : "in-process"}`,
-  );
-
-  // Wrap store to automatically emit plugin-data.changed SSE events
-  // on every setPluginData / setPluginDataBatch call, regardless of caller.
-  const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
-
-  const { registry, discoveryMap, failedDiscoveryMap, manifestCache } =
-    await discoverAndRegisterPlugins({
-      pluginsDir: config.pluginsDir,
-      pluginsDirs: config.pluginsDirs,
+    const eventBus = await createBootstrapEventBus(config, owned);
+    const storage = createBootstrapStorage(config, eventBus);
+    const { store, sessionLock } = storage;
+    const catalog = await discoverBootstrapPlugins(config, eventBus);
+    const { registry } = catalog;
+    // Filled by the trust stage once server settings are loaded; read at
+    // call time by everything built before it.
+    const trust: TrustedSourcesRef = { current: undefined };
+    const host = await createPluginHost({
+      storage,
       eventBus,
+      catalog,
+      trust,
+      owned,
     });
-  // Worlds are read after this point. A world package without a descriptor
-  // is read by the paths that the installed plugins name for their data.
-  setWorldDataConventions(conventionsOfPlugins(registry));
-
-  // Reserved plugin IDs for install-time shadow protection — derived from the
-  // bundled plugins just discovered (those tagged `source: 'builtin'`), so the
-  // reservation list tracks the `plugins/` directory automatically instead of a
-  // hand-edited array. Injected via middleware below and consumed by the plugin
-  // install route to reject third-party packages that claim a builtin id.
-  //
-  // Derived from the registry, not discoveryMap: a builtin whose load failed is
-  // quarantined out of discoveryMap, but it is still registered as an `error`
-  // entry carrying its `source`. Its id must stay reserved so a community
-  // package cannot claim the vacated builtin id while the directory lingers.
-  const reservedPluginIds = deriveBuiltinPluginIds(registry.getAll().values());
-
-  // Session event directory — aggregates active plugins' `events` manifest
-  // contracts (union, first-wins on cross-plugin topic conflicts) so the
-  // emit-event tool below can validate emitted payloads. Re-aggregated per
-  // call since session activation changes turn to turn; only compiled ajv
-  // validators are cached.
-  const eventDirectory = createEventDirectory({
-    registry,
-    resolvePluginDir: (pluginId) => discoveryMap.get(pluginId)?.rootPath,
-  });
-  const prepareEventDeclarations = async (
-    entry: import("@covel/plugin-loader").PluginRegistryEntry,
-  ) => {
-    await eventDirectory.prepareDeclarations(
-      pluginDeclarations(entry).map(({ manifest }) => manifest),
-      entry.rootPath,
-    );
-  };
-  await Promise.all(
-    [...registry.getAll().values()].map(prepareEventDeclarations),
-  );
-
-  // A runtime names only the role (slot) it wants; which model serves that
-  // role, and where the request goes, is the player's configuration. An
-  // explicit runtime/API selection wins; a runtime that names no role uses
-  // the request's `default` binding when there is one, else the default slot.
-  const resolveModel = (
-    manifest: RuntimeManifest,
-    apiOverride?: string,
-  ): string | undefined =>
-    apiOverride ??
-    manifest.model ??
-    (getRequestLlmOptions()?.slotOverrides?.slotBindings?.default !== undefined
-      ? "default"
-      : undefined);
-
-  // Runtime loader + community dual-authorization gate, extracted to
-  // bootstrap/runtime-loader.ts. It forward-references two things built
-  // further down: the rpc approval gate (lazy getter) and the real
-  // `ensurePluginEntry` (late-bound no-op seam, assigned via
-  // `bindPluginEntry` after `createBootstrapPluginEntries` resolves). See
-  // the ORDERING CONSTRAINT in runtime-loader.ts for the full contract.
-  const runtimeLoader = createRuntimeLoader({
-    pluginRegistry: registry,
-    discoveryMap,
-    manifestCache,
-    store,
-    getApprovalGate: () => rpcApprovalGate,
-    refreshDeclarativeEligibility: (pluginId) =>
-      refreshDeclarativeEligibility(trustedSources, pluginId),
-  });
-  const loadRuntimeFn = runtimeLoader.loadRuntimeFn;
-
-  // 6. Create ToolExecutor with builtin + plugin local tools + approval.
-  //    Wiring extracted into `setupPluginTools` (bootstrap/tools.ts). It builds
-  //    the framework tool registry, per-session character-tool overrides, and
-  //    the approval-gated executor. the registry remains
-  //    mutable here so the memory system can register its tools below.
-  const {
-    tools,
-    toolExecutor,
-    prepareToolsForSession,
-    clearSessionToolOverrides,
-  } = await setupPluginTools({
-    store,
-    eventDirectory,
-  });
-  owned.closeTools = () => toolExecutor.close();
-
-  let trustedSources: TrustedSourceService | undefined;
-  const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
-    createBootstrapPluginRpc({
-      implicitGrant: (query) => trustedSources?.implicitGrant(query) ?? false,
+    const activation = await activatePluginEntries({
+      storage,
+      catalog,
+      host,
+      trust,
+      owned,
+      uiSlots: () => uiSlots,
     });
-
-  // Entry import only honors the EXACT server-code grant. The old
-  // no-action `hasGrant` matched any live grant for the plugin, so approving
-  // one ordinary RPC action (or one runtime) silently authorized importing
-  // and executing the plugin's entire server entry.
-  const isCommunityServerCodeApproved = async (
-    sessionId: string | undefined,
-    pluginId: string,
-  ): Promise<boolean> => {
-    if (!sessionId) return false;
-    await trustedSources?.ensureFresh(pluginId);
-    const session = await store.getSession(sessionId);
-    return Boolean(
-      session &&
-      rpcApprovalGate.hasGrant(
-        sessionId,
-        pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        sessionApprovalScope(session, pluginId),
-      ),
-    );
-  };
-  const isCommunityHookApproved = async (
-    sessionId: string,
-    pluginId: string,
-  ): Promise<boolean> => {
-    await trustedSources?.ensureFresh(pluginId);
-    const session = await store.getSession(sessionId);
-    return Boolean(
-      session &&
-      rpcApprovalGate.hasGrant(
-        sessionId,
-        pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        sessionApprovalScope(session, pluginId),
-      ),
-    );
-  };
-
-  const pluginFaultHost = createHostPluginFaults({ store, eventBus, registry });
-  const pluginFaults = pluginFaultHost.latch;
-  const serviceCalls = new RecentPluginServiceCalls();
-  const serviceAdmission = createPluginServiceAdmission({
-    pluginFaults,
-    store,
-    registry,
-    ensurePluginEntry: (pluginId, sessionId) =>
-      runtimeLoader.ensurePluginEntry(pluginId, sessionId),
-    isEntryRetryDeferred: (pluginId) =>
-      owned.pluginEntries?.isEntryRetryDeferred(pluginId) ?? false,
-  });
-  const services = new PluginServiceRegistry(
-    {
-      onCallCompleted: (event) => serviceCalls.record(event),
-      ...serviceAdmission.admission,
-    },
-    (pluginId) => registry.get(pluginId)?.messages,
-  );
-  const extensions = new PluginExtensionHost(
-    services,
-    undefined,
-    (pluginId) => registry.get(pluginId)?.messages,
-  );
-  const hookPipeline = createHookPipeline({
-    onHandlerOutcome: pluginFaultHost.onHandlerOutcome,
-    isPluginLatched: pluginFaults.isLatched,
-  });
-
-  // Unified plugin server entries (`entry` frontmatter field) — needs the
-  // tool map, hook pipeline, and rpc registry above. Builtin
-  // entries run here; community entries defer to ensurePluginEntry.
-  const pluginEntries = (owned.pluginEntries =
-    await createBootstrapPluginEntries({
-      sessionLock,
-      discoveryMap,
-      failedDiscoveryMap,
-      manifestCache,
-      pluginRegistry: registry,
+    // From `watch()` above until the UI slot host exists, nothing awaits:
+    // a plugin reload cannot reach `uiSlots` before it is built.
+    const model = createBootstrapModelContext({
+      extensions: host.extensions,
       store,
-      tools,
-      hookPipeline,
-      rpcRegistry,
-      isCommunityServerCodeApproved,
-      isDeclarativePackage: (pluginId) =>
-        refreshDeclarativeEligibility(trustedSources, pluginId),
-      isCommunityHookApproved,
-      runtimeLoader,
-      prepareDeclarations: prepareEventDeclarations,
-      onReload: async () => {
-        setWorldDataConventions(conventionsOfPlugins(registry));
-        for (const session of await store.listSessions())
-          uiSlots.invalidateSession(session.id);
-      },
-      services,
-      extensions,
-    }));
-  // Community activation seam: running the plugin's `entry` module is what
-  // registers its tools, hooks, rpc actions and wires.
-  const activatePluginServerCode = async (
-    pluginId: string,
-    sessionId?: string,
-  ): Promise<void> => {
-    await trustedSources?.ensureFresh(pluginId);
-    await pluginEntries.ensurePluginEntry(pluginId, sessionId);
-    // Publishing an entry re-registers it and invalidates its verification.
-    await trustedSources?.ensureFresh(pluginId);
-  };
-  runtimeLoader.bindPluginEntry(activatePluginServerCode);
-  const withPluginSnapshot = <T>(
-    sessionId: string,
-    fn: () => Promise<T>,
-    beforeCapture?: () => Promise<void>,
-  ): Promise<T> => {
-    let authority: Awaited<ReturnType<typeof serviceAdmission.capture>>;
-    return pluginEntries.withSnapshot(
-      sessionId,
-      () => authority.run(fn),
-      async () => {
-        await beforeCapture?.();
-        authority = await serviceAdmission.capture(sessionId);
-      },
-    );
-  };
-  pluginEntries.watch();
-  const pluginDiagnostics = createPluginDiagnostics({
-    getTrustedSources: () => trustedSources,
-    registry,
-    tools,
-    hooks: hookPipeline,
-    rpc: rpcRegistry,
-    services,
-    extensions,
-    calls: serviceCalls,
-    isEntryPublished: pluginEntries.isEntryPublished,
-    isServerCodeApproved: (session, pluginId) =>
-      rpcApprovalGate.hasGrant(
-        session.id,
-        pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        sessionApprovalScope(session, pluginId),
-      ),
-  });
-
-  // For the routes that take the player's approval: the plugin's runtimes are
-  // loaded right then, and one that does not import is in their answer.
-  const preloadPluginRuntimes = async (pluginId: string, sessionId: string) => {
-    const failures = await runtimeLoader.preload(pluginId, sessionId);
-    for (const failure of failures)
-      console.error(
-        `[bootstrap] runtime ${failure.runtimeId} of plugin ${pluginId} does not load: ${failure.error}`,
-      );
-    return failures;
-  };
-
-  const runtimeEnv = readRuntimeEnv();
-  const budgetSource =
-    runtimeEnv.compactorContextWindow !== undefined
-      ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
-      : {};
-  // Shared by every request's runner so a run of failures counts across turns.
-  const compactionFailures = new CompactionFailureTracker();
-  const compactorRunner = createBootstrapCompactorRunner({
-    extensions,
-    store,
-    llmAdapter: config.llmAdapter,
-    failures: compactionFailures,
-    ...budgetSource,
-  });
-  const turnContextBudget = createTurnContextBudget(budgetSource);
-
-  // 8. Create memory system (Letta-style three-tier memory)
-  const bootstrapMemory = createBootstrapMemorySystem({
-    store,
-    searchablePluginData: createSearchablePluginDataResolver({
+      llmAdapter: config.llmAdapter,
+    });
+    const { memorySystem } = wireBootstrapMemory({
       store,
       registry,
-    }),
-    ...(config.vectorBackend !== "none" && config.memoryEmbed
-      ? { embed: config.memoryEmbed }
-      : {}),
-    runIngestExclusive: (sessionId, task) =>
-      memoryIngestLock.withLock(memoryIngestLockId(sessionId), async () => {
-        if (config.vectorBackend !== "none") {
-          await config.ensureEmbeddingLock?.(sessionId);
-        }
-        return task();
-      }),
-  });
-  if (bootstrapMemory) {
-    for (const t of bootstrapMemory.tools) {
-      tools.registerBuiltin(t);
-    }
-  }
-
-  const runtimeJobCredentials = createRuntimeJobCredentials();
-  const createJobRunner = (
-    job: RuntimeJobRecord,
-    requestServices: RuntimeJobServices,
-    activeRuntimes: readonly RuntimeManifest[],
-    session: {
-      readonly locale: string;
-      readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
-    },
-    expectedApprovalScope: string,
-  ) => {
-    const incarnation = runtimeJobIncarnation(job.payload);
-    if (!incarnation)
-      throw new Error("Runtime job is missing its session incarnation");
-    return createPluginRpcRuntimeTurnRunner({
-      memorySystem: bootstrapMemory?.memorySystem,
-      pluginRegistry: registry,
-      store,
-      eventBus: scopeSessionEvents(
-        eventBus,
-        job.sessionId,
-        publicIncarnationTag(incarnation),
-      ),
-      sessionLock,
-      sessionId: job.sessionId,
-      withSnapshot: (fn, beforeCapture) =>
-        withPluginSnapshot(job.sessionId, fn, beforeCapture),
-      session: {
-        locale: session.locale,
-        ...(session.runtimeModelOverrides
-          ? { runtimeModelOverrides: session.runtimeModelOverrides }
-          : {}),
-      },
-      activeRuntimes,
-      approvalScopes: new Map([[job.pluginId, expectedApprovalScope]]),
-      deps: {
-        pluginFaults,
-        loadRuntime: (manifest, locale) =>
-          loadRuntimeFn(manifest, locale, job.sessionId),
-        loadPluginDatasets: pluginDatasetsLoader(registry),
-        llm: requestServices.llm,
-        services,
-        extensions,
-        ...(requestServices.gateway
-          ? { gateway: requestServices.gateway }
-          : {}),
-        ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
-        ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
-        toolExecutor,
-        resolveModel,
-        compactor: requestServices.compactor ?? compactorRunner,
-        estimator: estimateTokens,
-        contextBudget: turnContextBudget,
-        eventDirectory,
-      },
-      hookPipeline,
-      resolveImageFlowRuntimeIds: async (settings) =>
-        (
-          await resolveMediaImageFlow({
-            store,
-            host: extensions,
-            pluginRegistry: registry,
-            sessionId: job.sessionId,
-            settings,
-          })
-        )?.assetRuntimeIds,
+      tools: host.tools.tools,
+      memoryIngestLock: storage.memoryIngestLock,
+      config,
     });
-  };
-
-  const executeRuntimeJob = createRuntimeJobExecutor({
-    store,
-    eventBus,
-    registry,
-    credentials: runtimeJobCredentials,
-    createRunner: createJobRunner,
-  });
-  // Shared by the worker's claim and the settle barrier's runnable check.
-  const prepareRuntimeJobExecution = (
-    job: RuntimeJobRecord,
-  ): RuntimeJobExecutor | undefined => {
-    const payload =
-      parseStagedRuntimeJobPayload(job.payload) ??
-      parseActivatedRuntimeJobPayload(job.payload);
-    if (!payload) return executeRuntimeJob({ llm: config.llmAdapter });
-    const key = {
-      jobId: job.jobId,
-      sessionId: job.sessionId,
-      expectedSessionIncarnation: payload.expectedSessionIncarnation,
-    };
-    const entry = registry.get(job.pluginId);
-    const parsed =
-      entry &&
-      pluginRuntimeManifests(entry).find(
-        ({ manifest }) => manifest.name === job.runtimeId,
-      );
-    const manifest =
-      entry && parsed
-        ? resolvePluginRuntimeManifest(entry, parsed.manifest)
-        : undefined;
-    const modelOverride =
-      "modelOverride" in payload ? payload.modelOverride : undefined;
-    const override =
-      manifest?.outputKind === "story" && modelOverride
-        ? modelOverride
-        : payload.runtimeModelOverrides?.[job.runtimeId];
-    // The worker may drain inside an unrelated request's scope. Resolve the
-    // job's model under the configuration of the services that will run it.
-    const modelFor = (services: RuntimeJobServices | undefined) =>
-      withRequestLlmOptions(services?.llmOptions, () =>
-        manifest ? resolveModel(manifest, override) : override,
-      );
-    let selectedServices = runtimeJobCredentials.peek(key);
-    let handoff = selectedServices !== undefined;
-    if (selectedServices?.canRun) {
-      let ready = false;
-      try {
-        ready = selectedServices.canRun(modelFor(selectedServices));
-      } catch {
-        /* Fail closed. */
-      }
-      if (!ready) {
-        // An unusable handoff must not block the next authenticated request.
-        runtimeJobCredentials.discard(key);
-        selectedServices = undefined;
-        handoff = false;
-      }
-    }
-    if (!selectedServices) {
-      if (
-        !config.canRunRuntimeJobWithServerServices?.({
-          job,
-          model: modelFor(undefined),
-        })
-      )
-        return undefined;
-      selectedServices = {
-        llm: config.llmAdapter,
-        gateway: config.pluginGateway,
-        compactor: compactorRunner,
-      };
-    }
-    // The executor restores the selected services' LLM scope around the job.
-    const execute = executeRuntimeJob(selectedServices, handoff);
-    return async (claimed, control) => {
-      runtimeJobCredentials.discard(key);
-      await execute(claimed, control);
-    };
-  };
-  const runtimeJobWorker = createRuntimeJobWorker({
-    store,
-    eventBus,
-    tryWithCommitLock,
-    execute: executeRuntimeJob({
-      llm: config.llmAdapter,
-      gateway: config.pluginGateway,
-      compactor: compactorRunner,
-    }),
-    prepareExecution: prepareRuntimeJobExecution,
-  });
-  const uiSlots = createUiSlotHost({
-    store,
-    pluginRegistry: registry,
-    eventBus,
-    extensionHost: extensions,
-    services,
-  });
-  const settledSessionLock = createSettledSessionLock({
-    sessionLock,
-    // Runs after the request handed its credentials over, so a job its
-    // credentials can serve counts as runnable.
-    listPendingJobs: async (sessionId) =>
-      markRunnableSettlingJobs(
-        await listSettlingRuntimeJobs(store, sessionId),
-        (job) => prepareRuntimeJobExecution(job) !== undefined,
-      ),
-    wake: (sessionId) => runtimeJobWorker.wake(sessionId),
-  });
-
-  // 9. Create app with dependency injection middleware
-  const app = new Hono();
-  const applicationWork = config.applicationWork ?? createApplicationWork();
-  app.use("*", applicationWork.middleware);
-  const browserWorkspaceCache = createBrowserWorkspaceCache();
-
-  const isDev = runtimeEnv.nodeEnv !== "production";
-  app.onError(makeErrorHandler("[api] Route error", isDev));
-
-  app.use("*", async (c, next) => {
-    if (config.hostProfile) c.set("hostProfile", config.hostProfile);
-    c.set("store", store);
-    c.set("storeBackend", config.storeBackend);
-    c.set("eventBus", eventBus);
-    c.set("pluginRegistry", registry);
-    c.set("pluginServices", services);
-    c.set("pluginExtensions", extensions);
-    c.set("uiSlots", uiSlots);
-    c.set("llmAdapter", config.llmAdapter);
-    if (config.pluginGateway) {
-      c.set("pluginGateway", config.pluginGateway);
-    }
-    if (config.pluginUtils) {
-      c.set("pluginUtils", config.pluginUtils);
-    }
-    c.set("loadRuntimeFn", loadRuntimeFn);
-    c.set("toolExecutor", toolExecutor);
-    c.set("resolveModel", resolveModel);
-    c.set("compactorRunner", compactorRunner);
-    c.set("turnContextBudget", turnContextBudget);
-    c.set("hookPipeline", hookPipeline);
-    c.set("pluginFaults", pluginFaults);
-    c.set("eventDirectory", eventDirectory);
-    if (bootstrapMemory) {
-      c.set("memorySystem", bootstrapMemory.memorySystem);
-    }
-    c.set("rpcExecutor", rpcExecutor);
-    c.set("rpcRegistry", rpcRegistry);
-    c.set("rpcApprovalGate", rpcApprovalGate);
-    c.set("trustedSources", trustedSources);
-    c.set("sessionLock", sessionLock);
-    c.set("memoryIngestLock", memoryIngestLock);
-    c.set("runtimeJobWorker", runtimeJobWorker);
-    c.set("runtimeJobCredentials", runtimeJobCredentials);
-    c.set("settledSessionLock", settledSessionLock);
-    c.set("prepareToolsForSession", prepareToolsForSession);
-    c.set("clearSessionToolOverrides", clearSessionToolOverrides);
-    c.set("clearCompactionFailures", (id: string) =>
-      compactionFailures.reset(id),
-    );
-    c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
-    c.set("activatePluginServerCode", activatePluginServerCode);
-    c.set("preloadPluginRuntimes", preloadPluginRuntimes);
-    c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
-    c.set("isPluginEntryPublished", pluginEntries.isEntryPublished);
-    c.set("withPluginSnapshot", withPluginSnapshot);
-    c.set("reservedPluginIds", reservedPluginIds);
-    if (config.worldsDirs) {
-      c.set("worldsDirs", config.worldsDirs);
-    }
-    if (config.covelHome) {
-      c.set("covelHome", config.covelHome);
-    }
-    if (config.vectorBackend !== "none" && config.ensureEmbeddingLock) {
-      c.set("ensureEmbeddingLock", config.ensureEmbeddingLock);
-    }
-    if (config.vectorBackend !== "none" && config.memoryIndex) {
-      c.set("memoryIndex", config.memoryIndex);
-    }
-    if (config.mediaStore) {
-      c.set("mediaStore", config.mediaStore);
-    }
-    c.set("builtinToolNames", [...tools.builtinTools.keys()].sort());
-    await next();
-    const staleRead = await verifyResolvedSessionRead(c);
-    if (staleRead) c.res = staleRead;
-  });
-
-  // Apply request overrides after base dependency injection, then rebind services.
-  for (const mw of config.perRequestMiddleware ?? []) app.use("*", mw);
-  app.use(
-    "*",
-    requestLlmServices({
-      extensions,
-      store,
-      failures: compactionFailures,
-      ...budgetSource,
-    }),
-  );
-
-  // 10. Mount routes — all under /api/ prefix
-  // Session routes: frontend uses /api/sessions (plural) for all session operations
-  app.route("/api/sessions", sessionRoutes);
-  app.route("/api/sessions", stateRoutes);
-  app.route("/api/sessions", messageRoutes);
-  app.route("/api/sessions", characterRoutes);
-  app.route("/api/sessions", pluginDataRoutes);
-  app.route("/api/sessions", uiSlotRoutes);
-  app.route("/api/sessions", mediaImageFlowRoutes);
-  app.route("/api/sessions", resumeRoutes); // suspend/resume (resume + suspensions list/delete)
-  app.route("/api/sessions", snapshotRoutes); // state snapshots + fork
-  app.route("/api/sessions", lorebookRoutes); // session-level lorebook viewer
-  app.route("/api/sessions", runtimeOutputRoutes); // translation-layer observability
-  app.route("/api/sessions", runtimeJobRoutes); // scheduler-detached runtime jobs
-  app.route("/api/sessions", pluginRpcRoutes); // plugin RPC channel
-  app.route("/api/sessions", turnControlRoutes); // mid-turn steer / abort
-  app.route("/api/sessions", sessionTurnRoutes); // turn_results artifact listing
-  app.route("/api/sessions", setupRuntimeControlRoutes); // setup retry / waive
-  app.route("/api/sessions", sessionApprovalRoutes); // per-session approvals listing
-  app.route(
-    "/api/sessions",
-    createBrowserWorkspaceRoutes(browserWorkspaceCache),
-  );
-  app.route("/api/approvals", approvalRoutes); // approval lookup + decision
-  app.route("/api/plugins", createPluginReloadRoutes(pluginEntries));
-  app.route("/api/plugins", pluginRoutes);
-  app.route("/api/framework", frameworkRoutes);
-  app.route("/api/events", eventRoutes);
-  app.route("/api/events", subscribeRoutes);
-  app.route("/api/worlds", worldRoutes);
-  app.route(
-    "/api/health",
-    createHealthRoutes(store, config.storeBackend, {
-      mediaBackend: config.mediaBackend,
-      mediaStore: config.mediaStore,
-      vectorBackend: config.vectorBackend,
-      source: {
-        repository: runtimeEnv.sourceRepository,
-        commit: runtimeEnv.sourceCommit,
-      },
-    }),
-  );
-  app.route("/api/install", installRoutes);
-  app.route("/api/ai", aiRoutes);
-  app.route("/api/actions", actionRoutes);
-  app.route("/api/traces", traceRoutes);
-  app.route("/api/sessions", pluginDiagnostics.routes);
-  app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
-
-  // The settings the server acts on. Loaded before the first sweep or commit
-  // reads one, so a stored choice is in force from the start. Whether a
-  // player's stored values count is the host profile's decision.
-  const serverSettings = createServerSettings(store, {
-    playerWritable: (
-      config.hostProfile ??
-      deriveHostProfile(runtimeEnv, { storeBackend: config.storeBackend })
-    ).retention.playerServerSettings,
-  });
-  await serverSettings.load();
-  installTraceRetentionSource(serverSettings);
-  trustedSources = createTrustedSourceService({
-    settings: serverSettings,
-    registry,
-    pluginsRoot: resolveUserResourceDirs().plugins,
-  });
-  app.route(
-    "/api/config/server-settings",
-    createServerSettingsRoutes(serverSettings),
-  );
-
-  // Start maintenance only after assembly succeeds. These scans remain
-  // non-blocking for readiness, but belong to the host's drain boundary.
-  const suspensionSweep = {
-    store,
-    expire: suspensionExpirer({
+    const jobs = createBootstrapRuntimeJobs({
+      config,
+      storage,
+      eventBus,
+      catalog,
+      host,
+      activation,
+      model,
+      memorySystem,
+    });
+    // Subscribes to the event bus, after the runtime-job worker.
+    const uiSlots = createUiSlotHost({
       store,
       pluginRegistry: registry,
+      eventBus,
+      extensionHost: host.extensions,
+      services: host.services,
+    });
+    const { app, applicationWork } = mountApiRoutes({
+      config,
+      storage,
+      eventBus,
+      catalog,
+      host,
+      activation,
+      model,
+      memorySystem,
+      jobs,
+      uiSlots,
+      trust,
+    });
+    const trustedSources = await loadServerTrust({
+      config,
+      runtimeEnv: model.runtimeEnv,
+      store,
+      registry,
+      app,
+      trust,
+    });
+    const startupMaintenance = startBootstrapMaintenance({
+      storeBackend: config.storeBackend,
+      store,
+      registry,
       sessionLock,
       eventBus,
-      worker: runtimeJobWorker,
-    }),
-  };
-  const startupMaintenance = maybeSweepExpiredSuspensions(suspensionSweep, {
-    force: true,
-    // Only PostgreSQL can have another server process with a live claim.
-    ...(config.storeBackend === "pg" ? {} : { claimMaxAgeMs: 0 }),
-  })
-    .catch(() => {
-      console.warn("[suspension-sweep] startup sweep failed");
-    })
-    .then(() => maybeSweepOldTraces(store, { force: true }))
-    .then(() => undefined);
-  runtimeJobWorker.wake();
+      runtimeJobWorker: jobs.runtimeJobWorker,
+    });
 
-  return {
-    memorySystem: bootstrapMemory?.memorySystem,
-    trustedSources,
-    app,
-    applicationWork,
-    registry,
-    store,
-    eventBus,
-    compactorRunner,
-    runtimeJobWorker,
-    startupMaintenance,
-    closeTools: () => toolExecutor.close(),
-    closePluginEntries: async () => {
-      runtimeJobCredentials.clear();
-      await uiSlots.close();
-      await pluginEntries.close();
-    },
-    prepareToolsForSession,
-  };
+    const { toolExecutor, prepareToolsForSession } = host.tools;
+    const { pluginEntries } = activation;
+    return {
+      memorySystem,
+      trustedSources,
+      app,
+      applicationWork,
+      registry,
+      store,
+      eventBus,
+      compactorRunner: model.compactorRunner,
+      runtimeJobWorker: jobs.runtimeJobWorker,
+      startupMaintenance,
+      closeTools: () => toolExecutor.close(),
+      closePluginEntries: async () => {
+        jobs.runtimeJobCredentials.clear();
+        await uiSlots.close();
+        await pluginEntries.close();
+      },
+      prepareToolsForSession,
+    };
+  } catch (error) {
+    await releaseAfterStartupFailure(owned);
+    throw error;
+  }
 }

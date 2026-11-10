@@ -5,7 +5,7 @@
  * transports:
  *
  *   - the `/api/actions` turn-execution stream (`SseEnvelope`), handled in
- *     `sse-handler.ts`;
+ *     `sse-handler.ts` through the `sse-event-routes.ts` table;
  *   - the persistent `/api/events/stream` subscription (`SubscriptionEvent`),
  *     handled in `subscription.ts`.
  *

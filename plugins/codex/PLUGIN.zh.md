@@ -13,9 +13,11 @@ contributes:
 
 ## 输入
 
-### 本回合 WorldIR
+### 本回合事实
 
-本回合叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。优先查看 `entities` 与 `statements`，并用 `summary`、`events` 和 `relations` 补充证据。只根据 IR 中明确存在的信息登记，不能补回原文没有被抽取的细节。
+`<runtime-inputs>` 里有 `worldIR` 时，共享抽取步骤已把本回合叙事整理成结构化事实，位于 `worldIR.value`。优先查看 `entities` 与 `statements`，并用 `summary`、`events` 和 `relations` 补充证据。只根据 IR 中明确存在的信息登记，不能补回原文没有被抽取的细节。
+
+没有 `worldIR` 时，直接读对话里的本回合叙事，只登记叙事明确写出的内容。
 
 ### 已有图鉴条目
 
@@ -29,8 +31,8 @@ contributes:
 
 ## 步骤
 
-1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
-2. 扫一遍 `<existing-entries>` 里的标题与摘要，对 WorldIR 中出现的每个潜在发现做匹配
+1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`；没有 `worldIR` 时阅读本回合叙事
+2. 扫一遍 `<existing-entries>` 里的标题与摘要，对读到的每个潜在发现做匹配
 3. 按下面的"合格条目判定规则"挑出**最多 3 个**真正值得登记的新发现
 4. 已有条目的补充沿用它的原标题，全新发现用新标题；两者都放进 `entries`，按重要性排序
 5. 用**一次** `sync-codex-entries` 调用提交
