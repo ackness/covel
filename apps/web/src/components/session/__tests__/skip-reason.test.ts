@@ -16,6 +16,9 @@ describe("skipReasonText", () => {
     expect(skipReasonText("setup-incomplete", i18n.t)).toBe(
       "Setup is not finished",
     );
+    expect(skipReasonText("hook-failed", i18n.t)).toBe(
+      "A plugin hook failed, so it did not run this turn",
+    );
   });
 
   it("leaves other text as it is", () => {

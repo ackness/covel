@@ -383,7 +383,7 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 | 写入失败，提示超过大小上限                           | 一个值超过了 256 KiB。拆成多个键                                                |
 | 中文的游戏里，提示词的修改没有生效                   | 只改了英文正文。中文的游戏读的是 `*.zh.md`                                      |
 
-同一会话里反复因自身异常、超时、无效 agent 结束或 proposal 被拒而失败的辅助插件会被暂停。插件列表的“重新启用”可清零重试。提供者/模型错误、取消、依赖连带失败和版本冲突不计数；setup、故事提供者和维度提供者受专门保护。Hook 主动否决不算 Hook 故障，抛错或超时则计在 Hook 所属插件。子 agent 自身的失败计在提供方；暂停的提供方对调用方返回 `unavailable`。完整规则见[故障熔断](../reference/protocol.md#插件故障熔断)。状态只在内存，重启后清空。
+同一会话里反复因自身异常、超时、无效 agent 结束或 proposal 被拒而失败的辅助插件会被暂停。插件列表的“重新启用”可清零重试。提供者/模型错误、取消、依赖连带失败和版本冲突不计数；setup、故事提供者和维度提供者受专门保护。Hook 主动否决不算 Hook 故障，抛错或超时则计在 Hook 所属插件；守卫 Hook 失败只拦住它判的那件事；有 runtime 但没有故事 runtime 的插件，`TurnStart` handler 失败时退出有故事的回合，所以自己出错时必须结束整个回合的 Hook，应当自己捕获错误并返回 `abort`，见 [guard handler 失败时](../reference/hooks.md#auxiliary-hook-failures)。子 agent 自身的失败计在提供方；暂停的提供方对调用方返回 `unavailable`。完整规则见[故障熔断](../reference/protocol.md#插件故障熔断)。状态只在内存，重启后清空。
 
 ## 接下来
 

@@ -32,7 +32,12 @@ import type {
 } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
 import { cloneHookData } from "./hook-data.js";
-import type { HookContext, HookEvent, HookResult } from "./types.js";
+import type {
+  HookContext,
+  HookEvent,
+  HookResult,
+  HookRunResult,
+} from "./types.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
@@ -87,11 +92,13 @@ async function runHook<P>(
   event: HookEvent,
   payload: P,
   extra?: HookCtxExtra,
-): Promise<HookResult<P> | undefined> {
+  confinable?: (pluginId: string) => boolean,
+): Promise<HookRunResult<P> | undefined> {
   if (!opts.pipeline) return undefined;
   return opts.pipeline.run(event, buildHookCtx(opts, event, extra), payload, {
     eventBus: opts.eventBus,
     emitter: opts.emitter,
+    ...(confinable ? { confinable } : {}),
   });
 }
 
@@ -133,11 +140,20 @@ export interface TurnStartPayload {
   readonly activeRuntimes: readonly string[];
 }
 
+/**
+ * `confinable` names the plugins whose failed handler may sit the execution
+ * out instead of failing it; `confined` lists the ones that did, and the
+ * caller skips their runtimes or, when it cannot, fails the execution.
+ */
 export async function runTurnStartHook(
-  opts: BaseOpts,
+  opts: BaseOpts & { readonly confinable?: (pluginId: string) => boolean },
   payload: TurnStartPayload,
-): Promise<HookResult<TurnStartPayload>> {
-  return (await runHook(opts, "TurnStart", payload)) ?? { action: "continue" };
+): Promise<HookRunResult<TurnStartPayload>> {
+  return (
+    (await runHook(opts, "TurnStart", payload, undefined, opts.confinable)) ?? {
+      action: "continue",
+    }
+  );
 }
 
 // ── TurnStop ─────────────────────────────────────────────────────

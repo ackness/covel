@@ -132,6 +132,11 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly worldModelReads?: import("../function-runtime/world-model-view.js").WorldModelReadStore;
   /** Persisted session activation scope, including plugins without runtimes. */
   readonly hookScope?: HookScope;
+  /**
+   * Plugins whose `TurnStart` hook failed in an execution with a story: each
+   * of their runtimes sits the execution out as `skipped` (`hook-failed`).
+   */
+  readonly hookFailedPlugins?: ReadonlySet<string>;
   readonly services?: import("../plugin-services.js").PluginServiceRegistry;
   readonly extensions?: import("../plugin-extensions.js").PluginExtensionHost;
   readonly extensionExecution?: ReturnType<
