@@ -89,7 +89,9 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 
 `pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]` 从 `templates/` 生成一个插件。默认生成到用户插件目录；加 `--with-tools` 时生成到仓库的 `plugins/` 下，这个选项不能和 `-t`、`-r` 一起用。
 
-`pnpm plugin:extract` 会以你的权限执行入口代码，只用于你自己的包。默认写回声明并列出变化的键；`--check` 不写文件，按键列出新增和移除的名字，有漂移时退出 1，一致时退出 0。`--json` 输出提取结果和漂移。提取失败退出 1，参数错误退出 2。范围和本地化文件规则见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。`pnpm validate:plugin` 仍然只做静态校验，不执行入口。
+`pnpm plugin:extract` 会以你的权限执行入口代码，只用于你自己的包。默认写回声明并列出变化的键；`--check` 不写文件，按键列出新增和移除的名字，有漂移时退出 1，一致时退出 0。`--json` 输出提取结果和漂移。提取失败退出 1，参数错误退出 2。范围和本地化文件规则见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。`pnpm validate:plugin` 仍然只做静态校验，不执行入口。`extensions` 也由它同步：按 `<point>/<id>` 增删，已有条目的选项保留。
+
+`pnpm check:manifests` 先对所有内置插件做静态校验，再在同一个进程里对每个带入口的内置插件做 `plugin:extract --check`。内置插件是受信的仓库代码，服务端测试本来就会加载它们，所以这里执行入口不扩大信任面；`validate:plugin` 本身不变。声明与注册不一致时，它按键列出差异，并给出 `pnpm plugin:extract plugins/<id>` 这条修复命令。
 
 延伸阅读：合集见[合集](../ship/collections.md)，翻译工具见 [i18n](../reference/i18n.md)。
 
@@ -120,7 +122,8 @@ pnpm check:push --full  # every suite; --base <ref> measures from another branch
 
 ```bash
 pnpm check:oxlint     # Oxlint; a warning fails it
-pnpm check:manifests  # pnpm validate:plugin on every bundled plugin
+pnpm check:manifests  # pnpm validate:plugin on every bundled plugin (static), then plugin:extract --check on
+                      # every bundled plugin with an entry (executes the trusted bundled entries)
 pnpm check:schemas    # the generated schema reference matches the Zod schemas (fix with pnpm schemas:generate)
 pnpm check:changelog  # the fragments in docs/changelog.d/ are well formed
 pnpm check:scripts    # scripts/tests/*.test.mjs under node --test

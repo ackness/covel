@@ -136,6 +136,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 ### contributes 字段
 
+`contributes` 是安全制品，不是文档：能力快照、免提示授权和声明式准入都在不执行代码时读取它，所以清单仍是唯一来源，不会在安装或加载时从入口生成。入口代码改动后，作者用 `pnpm plugin:extract <插件目录>` 把清单同步到注册；内置插件由 `pnpm check:manifests` 强制，加载时的双向核对（报错附这条命令）兜底。
+
 <!-- prettier-ignore -->
 | `contributes` 字段 | 对应注册或资源 |
 | --- | --- |
