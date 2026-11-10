@@ -4,7 +4,9 @@ import { createMemoryMediaStore } from "@covel/store/memory";
 import {
   takePresentationSnapshot,
   projectPresentationStory,
+  publicStoryCandidate,
 } from "../src/presentation/projection.js";
+import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import type {
   FunctionHandlerContext,
   PluginRuntimeGateway,
@@ -693,5 +695,75 @@ describe("restricted presentation context", () => {
     ).toBe("skipped");
     expect((await f.commit(result)).status).toBe("committed");
     await f.store.close();
+  });
+});
+
+describe("the story presentation reads", () => {
+  // A manual story runtime provides no contract. The automatic story
+  // runtime's story wins; without it, the execution's one successful public
+  // story is what presentation shows.
+  const handTold: RuntimeManifest = {
+    ...narrator,
+    name: "tales/told",
+    pluginId: "tales",
+    outputContract: undefined,
+    stage: undefined,
+    trigger: { type: "manual" },
+  };
+  const otherHandTold: RuntimeManifest = {
+    ...handTold,
+    name: "tales/retold",
+  };
+  const observer: RuntimeManifest = {
+    ...narrator,
+    name: "notes/observe",
+    pluginId: "notes",
+    outputKind: "system",
+    outputContract: undefined,
+    stage: "post-turn",
+  };
+  const aside = {
+    segments: [{ kind: "narration", text: "Meanwhile, elsewhere." }],
+  } as const;
+  const result = (
+    runtime: RuntimeManifest,
+    status: RuntimeResult["status"] = "success",
+    output: unknown = story,
+  ): RuntimeResult => ({
+    runId: crypto.randomUUID(),
+    runtimeId: runtime.name,
+    pluginId: runtime.pluginId,
+    turnId: "source",
+    status,
+    output: status === "success" ? (output as RuntimeResult["output"]) : null,
+    toolCalls: [],
+    durationMs: 0,
+    timestamp: "2026-11-09T00:00:00.000Z",
+  });
+  const runtimes = [narrator, handTold, otherHandTold, observer];
+
+  it.each([
+    ["the narrator's story", [result(narrator), result(observer)]],
+    ["a story told by hand", [result(handTold), result(observer)]],
+    [
+      "the one story that succeeded",
+      [result(narrator, "failed"), result(handTold)],
+    ],
+    [
+      "the narrator's story beside one told by hand",
+      [result(handTold, "success", aside), result(narrator)],
+    ],
+  ])("takes %s", (_name, results) => {
+    expect(publicStoryCandidate(runtimes, results)).toEqual(story);
+  });
+
+  it.each([
+    ["no story", [result(observer)]],
+    [
+      "two stories told by hand",
+      [result(handTold), result(otherHandTold, "success", aside)],
+    ],
+  ])("has no story with %s", (_name, results) => {
+    expect(publicStoryCandidate(runtimes, results)).toBeUndefined();
   });
 });

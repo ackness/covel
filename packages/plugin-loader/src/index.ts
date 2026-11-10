@@ -86,6 +86,7 @@ export {
   missingDefaultHandler,
   packageProvides,
   packageTags,
+  surplusStoryRuntimes,
   withDerivedPackageFields,
   type PackageFileExists,
 } from "./package-defaults.js";

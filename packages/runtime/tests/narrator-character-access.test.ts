@@ -144,8 +144,14 @@ describe.each(["narrator", "chat-mode-narrator"])(
 );
 
 it("finishes a story after a missing-character read while recording the failed call", async () => {
-  const { runRuntime, manifest, queuedLLM, toolCall, submitted, makeExecutor } =
-    await import("./_helpers/agent-loop-fixture.js");
+  const {
+    runRuntime,
+    manifest,
+    queuedLLM,
+    toolCall,
+    storySubmitted,
+    makeExecutor,
+  } = await import("./_helpers/agent-loop-fixture.js");
   const store = createMemoryStore();
   const executor = makeExecutor(createCharacterTools(store));
   const execute = vi.spyOn(executor, "execute");
@@ -156,7 +162,7 @@ it("finishes a story after a missing-character read while recording the failed c
     }),
     llm: queuedLLM([
       toolCall("get-character", { name: "Unknown traveler" }),
-      submitted("A traveler approaches the gate."),
+      storySubmitted("A traveler approaches the gate."),
     ]),
     deps: { toolExecutor: executor },
   });

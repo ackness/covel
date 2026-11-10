@@ -1,3 +1,4 @@
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 /**
  * A picture shown earlier in a session reaches the model that writes the
  * story: as a note in the history for every model, and as the image itself
@@ -38,7 +39,9 @@ class RecordingLLM implements LLMAdapter {
         {
           id: "final",
           name: "submit-output",
-          arguments: JSON.stringify({ narrativeOutput: "The story goes on." }),
+          arguments: JSON.stringify({
+            segments: narrationSegments("The story goes on."),
+          }),
         },
       ],
       finishReason: "tool_calls" as const,

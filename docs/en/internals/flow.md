@@ -214,6 +214,7 @@ Details to remember:
   - The player retrying or waiving a setup runtime in the UI.
   - The execution record. `turn_results` and each runtime's output are written before the commit; `turn_results` starts as `pending` and is settled to `committed` or `failed` after the commit.
 - `turn.suspended` is sent only after the commit.
+- Each committed story message carries a kernel receipt in `metadata.storySource`: execution, run, plugin and runtime IDs, plus `scope: top-level | nested`. Deferred presentation and selector recovery read this persisted identity, including after suspension release; they never infer top-level status from the runtime ID or a missing receipt.
 - When a suspension record is saved, an older item of the same runtime that still waits is voided in the same transaction. A resume's commit transaction first checks the record contents noted at the suspension, and writes nothing when one changed.
 - A resumed runtime can suspend again. That commit first marks the old suspended item handled, then saves the new one; the new item continues the same execution and does not abandon the old one. The rules are in [Suspending again](../reference/api.md#suspending-again).
 - When a function suspends, its successful recursive children and all their descendants are saved with the continuation. Their computation results remain successful while domain writes, journal rows, triggers and output exports wait. The final successful resume commits one atomic unit, children before parent, without rerunning saved handlers or Hooks. Another suspension only transfers the saved work.
@@ -331,7 +332,7 @@ Ordering rules for the main loop:
 - An explicit exclusion also works for core plugins.
 - If a dependency is missing, the kernel first picks the only regular provider. Then it considers the only default provider.
 - When the player explicitly swaps the default provider, this is handled before conflict detection.
-- A `conflicts` clash, or two plugins that compete for an extension point that allows only one provider (single), rejects that combination.
+- A `conflicts` clash, or two plugins that compete for an extension point that allows only one provider (single) or for a framework contract with one provider (`narrative-engine@2`), rejects that combination. A single-provider framework contract written in `conflicts` is ignored.
 - A normal output contract can have several providers. A consumer says whether it wants one or all with `cardinality: one | all`.
 - Explicit choices made when enabling and disabling are saved in `session.metadata.pluginSelection`. A recommendation list does not enable plugins by itself.
 

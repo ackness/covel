@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { frameworkContractSchemas } from "@covel/shared/contracts";
 import { describe, expect, it } from "vitest";
 import {
   checkStrictToolSchema,
@@ -90,15 +90,9 @@ describe("lossless strict tool schemas", () => {
     },
   );
   it("retains optional/open narrative values and returns bounded diagnostics", () => {
-    const narrative = JSON.parse(
-      readFileSync(
-        new URL(
-          "../../../plugins/narrator/schemas/narrative-engine.schema.json",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
-    );
+    const narrative: Record<string, unknown> = structuredClone({
+      ...frameworkContractSchemas["narrative-engine@2"],
+    });
     const before = JSON.stringify(narrative);
     const checked = checkStrictToolSchema(narrative, strictProfile);
     expect(checked.compatible).toBe(false);

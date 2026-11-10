@@ -1,3 +1,4 @@
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it } from "vitest";
 import {
   makeProposal,
@@ -123,7 +124,7 @@ describe("automatic same-key guards", () => {
           id: "final",
           name: "submit-output",
           arguments: JSON.stringify({
-            narrativeOutput: "The story continues.",
+            segments: narrationSegments("The story continues."),
           }),
         },
       ],

@@ -1,3 +1,4 @@
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it } from "vitest";
 import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
@@ -25,7 +26,9 @@ class CapturingLLM implements LLMAdapter {
         {
           id: "final",
           name: "submit-output",
-          arguments: '{"narrativeOutput":"角色信息已进入叙事上下文。"}',
+          arguments: JSON.stringify({
+            segments: narrationSegments("角色信息已进入叙事上下文。"),
+          }),
         },
       ],
       finishReason: "tool_calls" as const,

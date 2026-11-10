@@ -1,4 +1,4 @@
-import { submitted, toolCall } from "./_helpers/agent-loop-fixture.js";
+import { storySubmitted, toolCall } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { runtimeDoneTool, tool } from "@covel/tools";
@@ -162,7 +162,7 @@ async function run(
 describe("story completion contract", () => {
   it("rejects a hook that removes completed prose without committing the action", async () => {
     const { result, committed, store } = await run(
-      [submitted("A lamp lights the stairs.")],
+      [storySubmitted("A lamp lights the stairs.")],
       { emptyAfterHook: true },
     );
     expect(result.runtimeResults[0]?.status).toBe("failed");
@@ -173,7 +173,7 @@ describe("story completion contract", () => {
   });
   it("commits a valid story when an optional system extractor fails", async () => {
     const { committed, store } = await run(
-      [submitted("A lamp lights the stairs.")],
+      [storySubmitted("A lamp lights the stairs.")],
       { failedExtractor: true },
     );
     expect(committed.status).toBe("committed");
@@ -184,7 +184,7 @@ describe("story completion contract", () => {
   it("does not offer runtime-done to a story runtime", async () => {
     // Only the generated submission control can finish this agent.
     const { requests, result } = await run([
-      submitted("You climb the lit stairs."),
+      storySubmitted("You climb the lit stairs."),
     ]);
     expect(requests[0]?.tools?.map((offered) => offered.name)).toEqual([
       "read-scene",
@@ -196,8 +196,10 @@ describe("story completion contract", () => {
   it("requires a valid submission and commits the corrected story once", async () => {
     const { result, requests, committed, store } = await run([
       response(null, "read-scene"),
-      toolCall("submit-output", { narrativeOutput: " " }),
-      submitted("You climb the lit stairs."),
+      toolCall("submit-output", {
+        segments: [{ kind: "narration", text: " " }],
+      }),
+      storySubmitted("You climb the lit stairs."),
     ]);
     expect(requests).toHaveLength(3);
     expect(requests[2]?.tools?.map((tool) => tool.name)).toContain(
@@ -303,7 +305,7 @@ describe("story completion contract", () => {
         llm: {
           generate: async () => {
             modelCalls += 1;
-            return submitted("A lamp lights the stairs.");
+            return storySubmitted("A lamp lights the stairs.");
           },
         },
         loadRuntime: async (loaded) => ({

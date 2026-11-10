@@ -6,7 +6,11 @@
  * file.
  */
 import path from "node:path";
-import { DEFAULT_FUNCTION_HANDLER, DEFAULT_PLUGIN_ENTRY } from "@covel/shared";
+import {
+  DEFAULT_FUNCTION_HANDLER,
+  DEFAULT_PLUGIN_ENTRY,
+  STORY_OUTPUT_CONTRACT,
+} from "@covel/shared";
 import type { PluginManifest } from "@covel/shared";
 import { normalizePackageManifest } from "./parse-plugin-md.js";
 import type {
@@ -158,4 +162,37 @@ export function missingDefaultHandler(
       ? { outputContract: parsed.manifest.outputContract }
       : {}),
   };
+}
+
+/**
+ * A package has one automatically scheduled story runtime: the one whose
+ * runtime ID sorts first provides the story contract. Each other one is left
+ * out with this reason, and the rest of the package loads.
+ */
+export function surplusStoryRuntimes(
+  manifests: readonly ParsedRuntimeMd[],
+): { readonly parsed: ParsedRuntimeMd; readonly disabled: DisabledRuntime }[] {
+  const [kept, ...surplus] = manifests
+    .filter(
+      (parsed) => parsed.manifest.outputContract === STORY_OUTPUT_CONTRACT,
+    )
+    .sort((a, b) =>
+      a.manifest.name < b.manifest.name
+        ? -1
+        : a.manifest.name > b.manifest.name
+          ? 1
+          : 0,
+    );
+  if (!kept) return [];
+  return surplus.map((parsed) => {
+    const source = parsed.sourcePath ?? parsed.manifest.name;
+    return {
+      parsed,
+      // The kept runtime still provides the contract, so the package keeps it.
+      disabled: {
+        sourcePath: source,
+        message: `${source}: schedule.trigger: ${parsed.manifest.name} is a second automatically scheduled story runtime in this package, and ${kept.manifest.name} already provides ${STORY_OUTPUT_CONTRACT}; a package has one. Give this runtime trigger.type manual or event, or move it to its own package; the runtime does not run until this is fixed`,
+      },
+    };
+  });
 }

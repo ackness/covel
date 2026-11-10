@@ -38,8 +38,6 @@ io:
       select: /checkContext
       required: false
   output:
-    contract: narrative-engine@2
-    schema: contract:narrative-engine@2
     recordAs: latest-story
   visibility: story
 agent:

@@ -19,6 +19,8 @@ interface StageRenderFixtureOptions {
   fixturePlugins?: readonly string[];
   llmAdapter?: LLMAdapter;
   perRequestMiddleware?: readonly MiddlewareHandler[];
+  /** Join the default story runtime; false when a fixture plugin supplies the story. */
+  storyProbe?: boolean;
 }
 
 /** Real bundled projections and template loading, with deterministic story output. */
@@ -30,13 +32,6 @@ export async function createStageRenderFixture(
     user = join(root, "user");
   await mkdir(join(builtin, "story-probe"), { recursive: true });
   await mkdir(user);
-  await cp(
-    resolve(
-      import.meta.dirname,
-      "../../../../plugins/narrator/schemas/narrative-engine.schema.json",
-    ),
-    join(builtin, "story-probe", "narrative-engine.schema.json"),
-  );
   for (const path of options.fixturePlugins ?? [])
     await cp(path, join(builtin, basename(path)), { recursive: true });
   for (const id of [
@@ -55,13 +50,10 @@ export async function createStageRenderFixture(
     `---
 id: story-probe
 description: Scripted public stage story
-contracts:
-  narrative-engine@2: { schema: ./narrative-engine.schema.json }
 runtime:
   schedule: { stage: narrative }
   io:
     visibility: story
-    output: { contract: narrative-engine@2, schema: "contract:narrative-engine@2" }
 ---
 Tell the public scene story.
 `,
@@ -150,7 +142,7 @@ Tell the public scene story.
     body: JSON.stringify({
       worldId: "stage-world",
       plugins: [
-        "story-probe",
+        ...(options.storyProbe === false ? [] : ["story-probe"]),
         "scene-stage",
         "character-blueprint",
         ...(options.plugins ?? []),

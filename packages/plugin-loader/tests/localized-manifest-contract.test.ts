@@ -24,10 +24,10 @@ describe("localized manifest / canonical manifest consistency", () => {
 id: demo
 kind: plugin
 description: English description
-provides: [narrative-engine@2]
+provides: [demo-output@1]
 runtime:
   schedule: {stage: narrative}
-  io: {output: {contract: narrative-engine@2}}
+  io: {output: {contract: demo-output@1}}
   agent: {tools: {builtin: [sync-characters]}}
 ---
 English prompt body.
@@ -36,10 +36,10 @@ English prompt body.
 id: demo
 kind: plugin
 description: 中文描述
-provides: [narrative-engine@2, image-generation@1]
+provides: [demo-output@1, image-generation@1]
 runtime:
   schedule: {stage: pre-turn}
-  io: {output: {contract: narrative-engine@2}}
+  io: {output: {contract: demo-output@1}}
   agent: {tools: {builtin: [sync-characters, emit-event]}}
 ---
 中文提示词。
@@ -191,7 +191,7 @@ runtime:
     const loaded = await loadRuntime(discoveryOf(), "demo", "zh-CN");
 
     expect(loaded.manifest.stage).toBe("narrative");
-    expect(loaded.manifest.outputContract).toEqual("narrative-engine@2");
+    expect(loaded.manifest.outputContract).toEqual("demo-output@1");
     expect(loaded.manifest.tools?.builtin).toEqual(["sync-characters"]);
     // Prose and prompt body still come from the translation.
     expect(loaded.manifest.description).toBe("中文描述");
@@ -273,7 +273,7 @@ runtime:
 
     expect(loaded.manifest.description).toBe("English description");
     expect(loaded.manifest.stage).toBe("narrative");
-    expect(loaded.manifest.outputContract).toEqual("narrative-engine@2");
+    expect(loaded.manifest.outputContract).toEqual("demo-output@1");
     expect(loaded.manifest.tools?.builtin).toEqual(["sync-characters"]);
     expect(loaded.promptTemplate).toContain("只翻译正文。");
     expect(warn).not.toHaveBeenCalled();

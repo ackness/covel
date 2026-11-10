@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHookPipeline } from "@covel/runtime";
 import type { Proposal } from "@covel/shared";
+import type { DataStore } from "@covel/store";
+import { committedAdvanceDecision } from "../../src/routes/api/actions/auto-advance.js";
 import { advanceFixture, events } from "./__helpers/auto-advance.js";
 vi.mock("@hono/node-server/conninfo", () => ({
   getConnInfo: () => ({ remote: { address: "127.0.0.1" } }),
@@ -288,12 +290,11 @@ describe("committed story advancement", () => {
       }
     },
   );
-  it.each(["absent", "ambiguous", "user"])(
+  it.each(["absent", "user"])(
     "ends normally when the story signal is %s",
     async (kind) => {
       const f = await advanceFixture({
         noProvider: kind === "absent",
-        ambiguous: kind === "ambiguous",
         yields: kind === "user" ? [undefined] : undefined,
       });
       try {
@@ -307,16 +308,45 @@ describe("committed story advancement", () => {
         expect(
           stream.find((event) => event.type === "execution.advance")?.payload
             .reason,
-        ).toBe(
-          kind === "absent"
-            ? "no-eligible-story"
-            : kind === "ambiguous"
-              ? "ambiguous-story"
-              : "yielded-to-player",
-        );
+        ).toBe(kind === "absent" ? "no-eligible-story" : "yielded-to-player");
       } finally {
         await f.close();
       }
     },
   );
+  it("runs one story package when the confirmed set holds two", async () => {
+    // narrative-engine@2 admits one provider per session, so the second
+    // package sits out instead of writing a second story every round.
+    const f = await advanceFixture({ ambiguous: true, limit: 1 });
+    try {
+      const stream = events(await (await f.post()).text());
+      expect(
+        stream.filter((event) => event.type === "execution.started"),
+      ).toHaveLength(2);
+      expect(f.calls()).toBe(2);
+      expect(
+        stream.filter((event) => event.type === "execution.advance").at(-1)
+          ?.payload.reason,
+      ).toBe("limit");
+    } finally {
+      await f.close();
+    }
+  });
+  it("ends normally when one execution commits two top-level stories", async () => {
+    const getMessage = vi.fn();
+    expect(
+      await committedAdvanceDecision(
+        { getMessage } as unknown as DataStore,
+        "session",
+        {
+          status: "committed",
+          events: [],
+          failedProposals: [],
+          operations: [],
+          turnStoryMessageIds: ["first", "second"],
+        },
+      ),
+    ).toBe("ambiguous-story");
+    expect(getMessage).not.toHaveBeenCalled();
+  });
 });

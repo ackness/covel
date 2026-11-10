@@ -1,4 +1,7 @@
-import { submittedOutput } from "../helpers/output-submission.js";
+import {
+  narrationSegments,
+  submittedOutput,
+} from "../helpers/output-submission.js";
 /**
  * POST /api/actions `submit_actions` and GET /api/sessions/:id/action-kinds.
  *
@@ -171,7 +174,7 @@ describe("submit_actions", () => {
           typeof last?.content === "string" ? last.content : "",
         );
         return submittedOutput(
-          { narrativeOutput: "The story moves on." },
+          { segments: narrationSegments("The story moves on.") },
           { inputTokens: 1, outputTokens: 1 },
         );
       },

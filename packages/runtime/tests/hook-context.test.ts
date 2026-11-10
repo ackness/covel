@@ -7,6 +7,7 @@ import {
   createHookPipeline,
   executeTurn,
 } from "../src/index.js";
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 
 /** Events that concern one runtime, and so carry its identity in the context. */
 const RUNTIME_EVENTS = [
@@ -96,7 +97,9 @@ it("gives every hook the session locale, and the runtime identity in the context
         {
           id: "final",
           name: "submit-output",
-          arguments: JSON.stringify({ narrativeOutput: "The door opens." }),
+          arguments: JSON.stringify({
+            segments: narrationSegments("The door opens."),
+          }),
         },
       ],
       finishReason: "tool_calls" as const,

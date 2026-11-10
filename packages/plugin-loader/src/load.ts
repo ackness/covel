@@ -1,8 +1,8 @@
 import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import {
   frameworkContractSchemas,
-  CHARACTER_ACTOR_CONTRACT,
-} from "@covel/shared";
+  defaultOutputSchemaContract,
+} from "@covel/shared/contracts";
 import { isDeepStrictEqual } from "node:util";
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import {
@@ -35,6 +35,7 @@ import { pluginLanguages } from "./plugin-languages.js";
 import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
 import {
   missingDefaultHandler,
+  surplusStoryRuntimes,
   withDerivedPackageFields,
   type PackageFileExists,
 } from "./package-defaults.js";
@@ -510,6 +511,10 @@ export async function loadPluginDefinition(
     disabledRuntimes.push(disabled);
     manifests.splice(manifests.indexOf(parsed), 1);
   }
+  for (const { parsed, disabled } of surplusStoryRuntimes(manifests)) {
+    disabledRuntimes.push(disabled);
+    manifests.splice(manifests.indexOf(parsed), 1);
+  }
   for (const disabled of disabledRuntimes)
     console.warn(`[plugin-loader] ${disabled.message}`);
   const ignoredFields = [parsedPackage, ...manifests].flatMap(
@@ -838,10 +843,13 @@ export async function loadRuntime(
     parsed.manifest.output?.schema,
     contracts,
   );
+  // A framework contract the runtime provides is its output schema unless
+  // the runtime declares a narrower one (never a function story's: the
+  // kernel normalizes its return value into the story shape afterwards).
+  const frameworkContract = defaultOutputSchemaContract(parsed.manifest);
   const outputSchema =
-    loadedOutputSchema === undefined &&
-    parsed.manifest.outputContract === CHARACTER_ACTOR_CONTRACT
-      ? requireContractSchema(`contract:${CHARACTER_ACTOR_CONTRACT}`, contracts)
+    loadedOutputSchema === undefined && frameworkContract
+      ? requireContractSchema(`contract:${frameworkContract}`, contracts)
       : loadedOutputSchema;
   const outputContractSchema = parsed.manifest.outputContract
     ? contracts[parsed.manifest.outputContract]

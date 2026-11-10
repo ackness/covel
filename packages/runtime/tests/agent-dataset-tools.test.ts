@@ -1,4 +1,4 @@
-import { toolCall } from "./_helpers/agent-loop-fixture.js";
+import { narrationSegments, toolCall } from "./_helpers/agent-loop-fixture.js";
 /**
  * Dataset tools: an agent that lists a dataset of its own package in
  * `agent.tools.datasets` gets `<dataset>-get`, `-list`, `-upsert` and
@@ -124,7 +124,7 @@ function text(content: string): LLMResponse {
       {
         id: "final",
         name: "submit-output",
-        arguments: JSON.stringify({ narrativeOutput: content }),
+        arguments: JSON.stringify({ segments: narrationSegments(content) }),
       },
     ],
     finishReason: "tool_calls" as const,

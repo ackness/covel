@@ -11,4 +11,4 @@ agent:
     maxRetries: 0
 ---
 
-Write one short observable paragraph in the session content language. Use the host-generated `submit-output` tool alone, with `narrativeOutput`. Do not write reply text or invent a business operation. The tool acknowledgement is not a commit receipt.
+Write one short observable paragraph in the session content language. Use the host-generated `submit-output` tool alone, with the paragraph as one `narration` segment. Do not write reply text or invent a business operation. The tool acknowledgement is not a commit receipt.

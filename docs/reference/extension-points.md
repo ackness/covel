@@ -84,6 +84,7 @@ export default function (covel) {
 - 只在根 `provides` 里写一个内核契约的名字，不能满足别人的依赖。
 - 客户端预选和服务端激活用同一套规则。没有授权或被明确排除的提供者不会被自动加入。
 - `conflicts` 不能引用内核扩展点或具体槽位。作者校验和直接调用会话解析器都返回 `invalid-conflict`。
+- 每局只有一个提供者的框架契约（`narrative-engine@2`）像 `single` 扩展点一样自带互斥（`single-provider-conflict`）；写在 `conflicts` 里会被忽略。
 - `single` 的互斥由模式本身保证；`collect` / `pipeline` 允许多个实现并存。
 
 ## handler 能拿到什么

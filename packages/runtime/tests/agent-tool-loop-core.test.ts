@@ -26,7 +26,11 @@ import { promptCacheKeyFor } from "../src/llm/prompt-cache-key.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import type { LLMAdapter, LLMResponse, LLMStreamEvent } from "@covel/shared";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
-import { contextWindowWithOutputTool } from "./_helpers/agent-loop-fixture.js";
+import {
+  contextWindowWithOutputTool,
+  narrationSegments,
+  storySubmitted,
+} from "./_helpers/agent-loop-fixture.js";
 import { useHookScope } from "./_helpers/hook-scope.js";
 
 useHookScope(["plug"]);
@@ -524,11 +528,14 @@ describe("runAgentToolLoop core", () => {
 
   it("buffers transport text while accepting a complete story submission", async () => {
     const llm: LLMAdapter = {
-      generate: async () => submitted("fallback"),
+      generate: async () => storySubmitted("fallback"),
       stream: async function* (): AsyncIterable<LLMStreamEvent> {
         yield { type: "text-delta", textDelta: "Once " };
         yield { type: "text-delta", textDelta: "upon" };
-        yield { type: "tool-call", ...submitted("Once upon").toolCalls[0]! };
+        yield {
+          type: "tool-call",
+          ...storySubmitted("Once upon").toolCalls[0]!,
+        };
         yield {
           type: "done",
           finishReason: "tool_calls",
@@ -545,7 +552,9 @@ describe("runAgentToolLoop core", () => {
       },
     });
 
-    expect(result.acceptedOutput?.narrativeOutput).toBe("Once upon");
+    expect(result.acceptedOutput?.segments).toEqual(
+      narrationSegments("Once upon"),
+    );
   });
 
   it("does not resend an unchanged malformed-arguments request", async () => {
@@ -767,7 +776,7 @@ describe("runAgentToolLoop core", () => {
           requests.push(params);
           return params.tools?.some((tool) => tool.name === "mark")
             ? toolCall("mark", { note: "same" }, `tc-${i++}`)
-            : submitted("The fog closes over the pier.");
+            : storySubmitted("The fog closes over the pier.");
         },
       };
       const result = await run({
@@ -776,8 +785,8 @@ describe("runAgentToolLoop core", () => {
         maxSteps: 20,
       });
 
-      expect(result.acceptedOutput?.narrativeOutput).toBe(
-        "The fog closes over the pier.",
+      expect(result.acceptedOutput?.segments).toEqual(
+        narrationSegments("The fog closes over the pier."),
       );
       expect(requests.at(-1)?.tools?.map((tool) => tool.name)).toEqual([
         "submit-output",
@@ -870,7 +879,7 @@ describe("runAgentToolLoop core", () => {
         messages: readonly { role: string; content: unknown }[];
       }) => {
         seenMessages.push([...params.messages]);
-        return submitted("story goes left");
+        return storySubmitted("story goes left");
       },
     } as LLMAdapter;
     const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
@@ -901,7 +910,7 @@ describe("runAgentToolLoop core", () => {
         messages: readonly { role: string; content: unknown }[];
       }) => {
         seenMessages.push([...params.messages]);
-        return submitted(
+        return storySubmitted(
           seenMessages.length === 1 ? "walks ahead" : "turns back",
         );
       },
@@ -933,19 +942,22 @@ describe("runAgentToolLoop core", () => {
       ),
     ).toBe(true);
     // Only the candidate that saw steering can become output.
-    expect(result.acceptedOutput?.narrativeOutput).toBe("turns back");
+    expect(result.acceptedOutput?.segments).toEqual(
+      narrationSegments("turns back"),
+    );
   });
 
   it("steering supersedes a candidate received over provider streaming", async () => {
     const drains: string[][] = [[], ["等等，回头"]];
     let call = 0;
     const llm: LLMAdapter = {
-      generate: async () => submitted("fallback"),
+      generate: async () => storySubmitted("fallback"),
       stream: async function* () {
         call++;
         yield {
           type: "tool-call",
-          ...submitted(call === 1 ? "walks ahead" : "turns back").toolCalls[0]!,
+          ...storySubmitted(call === 1 ? "walks ahead" : "turns back")
+            .toolCalls[0]!,
         };
         yield { type: "done", finishReason: "tool_calls" };
       },
@@ -958,7 +970,9 @@ describe("runAgentToolLoop core", () => {
         turnControl: { drainSteering: () => drains.shift() ?? [] },
       },
     });
-    expect(result.acceptedOutput?.narrativeOutput).toBe("turns back");
+    expect(result.acceptedOutput?.segments).toEqual(
+      narrationSegments("turns back"),
+    );
     expect(call).toBe(2);
     expect(result.collectedToolCalls[0]?.output).toMatchObject({
       error: { code: "invalid-output" },

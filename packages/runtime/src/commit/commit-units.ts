@@ -12,11 +12,8 @@
  */
 
 import type { StoreTransaction } from "@covel/store";
-import {
-  STORY_OUTPUT_CONTRACT,
-  type Proposal,
-  type SessionEvent,
-} from "@covel/shared";
+import type { Proposal, RuntimeManifest, SessionEvent } from "@covel/shared";
+import { isPublicStoryRuntime } from "@covel/shared/contracts";
 import { createDisplayMessageBuffer } from "./display-message-buffer.js";
 import {
   checkPendingReadBaselines,
@@ -29,6 +26,7 @@ import {
   presentationSuperseded,
 } from "../presentation/commit.js";
 import { presentationState } from "../presentation/state.js";
+import { turnStory } from "../presentation/turn-story.js";
 import { nestedResultProposals } from "../resume/suspension-baseline.js";
 import {
   commitPreparedProposals,
@@ -151,7 +149,8 @@ export interface UnitCommitContext extends PreparedCommit {
   /** Rejected writes of the runs and operations dropped alone. */
   readonly isolatedFailures: FailedProposal[];
   readonly operationFailureMessages: { messageId: string; count: number }[];
-  readonly topLevelNarrativeMessageIds: Set<string>;
+  /** Public story messages top-level runs wrote, with each one's runtime. */
+  readonly topLevelStories: Map<string, RuntimeManifest>;
   readonly tx: StoreTransaction;
   /** Events of the committed proposals, in commit order. */
   readonly events: SessionEvent[];
@@ -207,6 +206,7 @@ async function commitResult(
   result: FinalizableResult,
   sink: StoreTransaction,
   defer: DeferPostCommit,
+  scope: "top-level" | "nested",
 ): Promise<readonly SessionEvent[]> {
   const { args, dimensions } = ctx;
   const { sessionId } = args;
@@ -245,7 +245,7 @@ async function commitResult(
   if (
     presentationSource &&
     !presentationSource.snapshot.committed &&
-    ctx.topLevelNarrativeMessageIds.size === 0
+    !turnStory(ctx.topLevelStories.values(), (runtime) => runtime)
   ) {
     presentationSource.reason = "no-story";
     return [];
@@ -269,13 +269,16 @@ async function commitResult(
   const failed = [...failedProposals];
   const commitBatch = async (batch: readonly Proposal[]): Promise<void> => {
     if (batch.length === 0) return;
-    const out = await commitPreparedProposals(
-      batch,
-      sink,
-      sessionId,
-      result,
-      ctx.options.forResult(result, defer),
-    );
+    const out = await commitPreparedProposals(batch, sink, sessionId, result, {
+      ...ctx.options.forResult(result, defer),
+      storySource: {
+        executionId: args.executionContext.executionId,
+        runId: result.runId,
+        pluginId: result.pluginId,
+        runtimeId: result.runtimeId,
+        scope,
+      },
+    });
     committed.push(...out.events);
     failed.push(...out.failedProposals);
   };
@@ -315,45 +318,37 @@ async function commitUnit(
   sink: StoreTransaction,
   defer: DeferPostCommit,
 ): Promise<readonly SessionEvent[]> {
-  const { args, narrativeOwners, topLevelNarrativeMessageIds } = ctx;
+  const { args, narrativeOwners, topLevelStories } = ctx;
   const { runtimes } = args;
   const committed: SessionEvent[] = [];
   for (const member of unit.members) {
     args.signal?.throwIfAborted();
-    const memberEvents = await commitResult(ctx, member, sink, defer);
+    const memberEvents = await commitResult(
+      ctx,
+      member,
+      sink,
+      defer,
+      member === unit.root ? "top-level" : "nested",
+    );
     committed.push(...memberEvents);
     const manifest = runtimes.find(
       (runtime) =>
         runtime.name === member.runtimeId &&
         runtime.pluginId === member.pluginId,
     );
-    if (manifest?.outputKind === "story" && !manifest.concealed) {
-      for (const event of memberEvents) {
-        if (
-          event.type === "narrative.completed" &&
-          event.payload.kind === "story" &&
-          typeof event.payload.messageId === "string"
-        )
-          narrativeOwners.set(event.payload.messageId, member);
+    if (!manifest || !isPublicStoryRuntime(manifest)) continue;
+    for (const event of memberEvents) {
+      if (
+        event.type === "narrative.completed" &&
+        event.payload.kind === "story" &&
+        typeof event.payload.messageId === "string"
+      ) {
+        narrativeOwners.set(event.payload.messageId, member);
+        // Only a top-level story can speak for the turn (auto-advance,
+        // presentation); nested story output belongs to its caller.
+        if (member === unit.root)
+          topLevelStories.set(event.payload.messageId, manifest);
       }
-    }
-    if (
-      member === unit.root &&
-      runtimes.some(
-        (runtime) =>
-          runtime.name === member.runtimeId &&
-          runtime.pluginId === member.pluginId &&
-          runtime.outputKind === "story" &&
-          runtime.outputContract === STORY_OUTPUT_CONTRACT,
-      )
-    ) {
-      for (const event of memberEvents)
-        if (
-          event.type === "narrative.completed" &&
-          event.payload.kind === "story" &&
-          typeof event.payload.messageId === "string"
-        )
-          topLevelNarrativeMessageIds.add(event.payload.messageId);
     }
   }
   return committed;

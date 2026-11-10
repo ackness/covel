@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pluginIdSchema, type PluginCapabilities } from "@covel/shared";
 import {
   missingDefaultHandler,
+  surplusStoryRuntimes,
   packageModuleTypeProblem,
   computePluginCapabilities,
   packageHasServerCode,
@@ -272,6 +273,8 @@ export function validatePluginBundle(
       const disabled = missingDefaultHandler(pluginId, declaration, exists);
       if (disabled) throw new Error(disabled.message);
     }
+    const [surplus] = surplusStoryRuntimes(declarations);
+    if (surplus) throw new Error(surplus.disabled.message);
     const root = withDerivedPackageFields(parsed, declarations, exists);
     validatePluginDeclarations(root);
     validatePluginFiles(

@@ -19,7 +19,7 @@ import {
   makeExecutor,
   manifest,
   markTool,
-  submitted,
+  storySubmitted,
 } from "./_helpers/agent-loop-fixture.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -96,7 +96,7 @@ async function fixture() {
 
 function completed(text: string): LLMStreamEvent[] {
   return [
-    { type: "tool-call", ...submitted(text).toolCalls[0]! },
+    { type: "tool-call", ...storySubmitted(text).toolCalls[0]! },
     {
       type: "done",
       finishReason: "tool_calls",
@@ -108,7 +108,7 @@ function completed(text: string): LLMStreamEvent[] {
 function scripted(scripts: readonly (readonly (LLMStreamEvent | Error)[])[]) {
   let attempts = 0;
   const generate = vi.fn<LLMAdapter["generate"]>(async () =>
-    submitted("Recovered story."),
+    storySubmitted("Recovered story."),
   );
   const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>(async function* () {
     const script = scripts[attempts++];
@@ -281,9 +281,12 @@ describe("internal provider streams and committed story delivery", () => {
       const f = await fixture();
       const aborter = new AbortController();
       const llm: LLMAdapter = {
-        generate: vi.fn(async () => submitted("Never.")),
+        generate: vi.fn(async () => storySubmitted("Never.")),
         stream: async function* () {
-          yield { type: "tool-call", ...submitted("Never.").toolCalls[0]! };
+          yield {
+            type: "tool-call",
+            ...storySubmitted("Never.").toolCalls[0]!,
+          };
           if (failure === "refusal")
             throw new AiProviderError({
               code: "REFUSAL",

@@ -114,10 +114,10 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `kind` | `core`（默认加入每一局）或 `plugin`（不写时的值，选了才启用） |
 | `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度。`ui:*` 和 `cost:*` 标签由 Covel 推出，作者只写其余的标签，如 `mode:*`，见[推出的标签](#推出的标签) |
 | `author`, `license` | 作者信息，只用于展示；见[作者信息](#作者信息) |
-| `provides` | 没有 runtime 输出的契约（例如由服务提供），或要标成 `{contract, default: true}` 的契约。每个 runtime 的 `io.output.contract` 自动加入，不用写 |
+| `provides` | 没有 runtime 输出的契约（例如由服务提供），或要标成 `{contract, default: true}` 的契约。每个 runtime 的 `io.output.contract`（包括自动调度的故事 runtime 推出的 `narrative-engine@2`）自动加入，不用写 |
 | `requires` | 必需契约，解析器补入提供者。runtime 引用了却没写进 `requires` 的契约是可选的 |
-| `conflicts` | 与提供这些契约的其他插件互斥 |
-| `contracts` | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约不用写 |
+| `conflicts` | 与提供这些契约的其他插件互斥。每局只有一个提供者的[框架契约](#framework-contracts)自带互斥，写了也被忽略 |
+| `contracts` | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约和[框架契约](#framework-contracts)不用写 |
 | `entry` | 包根相对的注册模块路径；不写时，存在 `server/index.js` 就用它 |
 | `contributes` | 包级贡献，见 [contributes 字段](#contributes-字段) |
 | `runtime` | 可选的单 runtime 声明 |
@@ -126,10 +126,10 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 契约是一个带版本的名字，形如 `narrative-engine@2`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
 
-- 本包提供的契约是 `provides` 加上每个 runtime 的 `io.output.contract`。
-- 同一个包里，两个 runtime 不能产出同一个契约（`ambiguous output contract`）。
+- 本包提供的契约是 `provides` 加上每个 runtime 的 `io.output.contract`。自动调度的 `io.visibility: story` runtime 不写也提供 `narrative-engine@2`，见[故事输出](#故事输出)。
+- 同一个包里，两个 runtime 不能写出同一个输出契约（`ambiguous output contract`）。一个包只有一个自动调度的故事 runtime：有多个时，runtime ID 排在最前的那个提供 `narrative-engine@2`，其余的被禁用，包的其他部分照常加载；`pnpm validate:plugin` 报告被禁用的 runtime，安装拒绝这个包。
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one`（默认）或 `all` 说明要一个还是全部。
-- 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
+- 只允许一个提供者的扩展点、每局只有一个提供者的框架契约，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
 
 准备页按插件是否调用模型分组，即推出的 `cost:*` 标签；没有这个标签的插件按第一个标签分组（作者写的标签排在推出的标签前面），一个标签也没有的放入“无标签”。推出的标签显示成文字（如“调用模型”“可手动使用”），作者写的标签照原样显示。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
@@ -243,6 +243,8 @@ permissions:
 | runtime 的类型 | 有 `function` 块是 function runtime，否则是 agent |
 | `function.handler` | 清单旁边的 `./handler.js` |
 | `provides` | 每个 runtime 的 `io.output.contract` |
+| 故事 runtime 的 `io.output.contract` | 自动调度时是 `narrative-engine@2`；手动、事件和子 agent 故事 runtime 没有输出契约 |
+| agent 的 `io.output.schema` | 输出契约是框架契约时用它的 schema；没有 schema 的故事 agent 用故事 schema，见[提交 schema](#default-output-schema) |
 | `tags` 里的 `ui:*`、`cost:*` | 由包的内容推出，见[推出的标签](#推出的标签) |
 | `contributes.data.*.authoring.source.key` | `id`；媒体目录是 `filename` |
 | `contributes.data.*.authoring.source` 的格式 | 由 `path` 推出：`.yaml`/`.yml`、`.json`，或没有扩展名的媒体目录 |
@@ -451,9 +453,11 @@ Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` �
 
 实际模型必须支持工具；strict 与非 strict 提交都经过相同的宿主验证，schema 的可选属性和开放对象不变。目标能力、同标签后备和 strict profile 见[工具提交能力](./slots.md#tool-submission-capabilities)。提交步骤优先指定 `submit-output`，思考能力不允许时退为 `required` 或 `auto`；不会为此关闭玩家选择的思考。
 
+<a id="default-output-schema"></a>
+
 没有输出 schema 时，宿主提供默认对象：
 
-- 故事 agent：必需的非空白 `narrativeOutput: string`，可选 `yield: user | continue`。
+- 故事 agent：[故事输出](#故事输出)的 schema，即 `narrative-engine@2` 的 schema：必需的 `segments`，可选 `cues` 和 `yield`。只写 `narrativeOutput` 的提交会被要求改成段落。
 - 系统 agent：开放对象，可选 `narrativeOutput: string`、`completion: done | pending`、`preGameDone: boolean`，允许其他业务字段。`{}` 表示没有业务输出。需要给下游提供类型化输出时应声明 schema。
 
 **完成字段。** 首次可见的 `submit-output` 工具说明和默认 system schema 已说明这组规则。先遵守实际 schema 的必填与取值限制；允许省略时，非 setup 运行省略 `preGameDone`，无需完成信号时也省略 `completion`。`preGameDone: false` 表示 setup 仍在等待，不表示“当前不是 setup”。等待用 `completion: "pending"`，完成用 `"done"`。两个字段同时提供时，只允许 `false + "pending"` 或 `true + "done"`；矛盾仍在宿主提交门被拒绝，不能靠提交成功提前完成或落库。
@@ -478,7 +482,7 @@ agent:
 
 业务工具仍负责覆盖条件等领域校验。仅有合法 JSON 不证明任务完整。输出提交规则见[工具](./tools.md#submit-output)。
 
-内置叙事器与群像叙事器保持 `narrative-engine@2` 的 `segments/cues/yield` 形状，通过最终提交交付。`createNarrativeReview` 注册到 `ReviewAgentOutput`，直接检查已校验的段落或默认 `narrativeOutput`，只返回 correction；不会改写回复或添加 effects。工具的准备说明不会进入故事。
+内置叙事器与群像叙事器保持 `narrative-engine@2` 的 `segments/cues/yield` 形状，通过最终提交交付。`createNarrativeReview` 注册到 `ReviewAgentOutput`，直接检查已校验的段落，只返回 correction；不会改写回复或添加 effects。工具的准备说明不会进入故事。
 
 建议、事实抽取、隐藏剧情规划、时间推进和世界初始化先成功完成必需的业务工具，再提交工具的规范结果。它们声明业务工具为输出来源，由宿主校验和审核规范结果；只纠正最终提交，不重复成功的写入。好感、图鉴和人物关系无变化时可直接提交 `{}`；角色追踪仍先同步空批次，维度追踪仍先结算 `updates: []`。世界初始化的规范结果必须包含 `preGameDone: true`，角色表单准备提交 `preGameDone: false`，等待玩家完成表单。
 
@@ -563,6 +567,14 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 - 替代插件靠它自己 runtime 的 `io.output.contract` 提供契约（`provides` 自动包含它）。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 
+<a id="framework-contracts"></a>
+
+#### 框架持有的契约
+
+有几个契约的 schema 由框架持有：`narrative-engine@2`（故事输出，内核自己读取）和 `character-actor@1`（[角色委托](#character-orchestration)）。包照常提供或读取它们，但不在根 `contracts` 里声明 schema：加载器直接用框架的 schema。写了一份相同的 schema，`pnpm validate:plugin` 警告可以删掉；写了不同的 schema，包被拒绝（`framework-owned and cannot be shadowed`）。提供框架契约的 runtime 不写 `io.output.schema` 时，框架 schema 就是它的输出 schema，所以 `recordAs` 也不用另写 schema。function 故事 runtime 例外：内核在 handler 返回之后才把返回值（包括只有 `narrativeOutput` 的返回值）整理成故事形状，所以它没有默认输出 schema，用 `recordAs` 时仍要写 `io.output.schema`。
+
+`narrative-engine@2` 每局只有一个提供者包。解析器像对待只允许一个提供者的扩展点那样互斥两个提供者（`single-provider-conflict`）：两个非默认提供者之间，请求或确认顺序靠前的那个保留。玩家明确选中的替代者照常换掉默认叙事器，但要等冲突和依赖选择稳定之后；替代者在选择中失去所需提供者时，解析器会重新考虑默认提供者，再确认最终组合。提供者不用写 `conflicts: [narrative-engine@2]`；写在任何包里都被忽略，`pnpm validate:plugin` 警告可以删掉。`character-actor@1` 可以有多个提供者。
+
 #### 契约在哪里被校验
 
 - 内核在 runtime 最终输出的边界校验已发布的契约。失败的结果不能提交领域 effects，也不能写入 `recordAs`。
@@ -588,7 +600,11 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 #### 故事输出
 
-故事的形状由内核负责，对所有 `outputKind: story` 的 runtime（agent、function 和 guard 提前给出的故事）都一样。当前契约是 `narrative-engine@2`：
+故事的形状由内核负责，对所有 `outputKind: story` 的 runtime（agent、function 和 guard 提前给出的故事）都一样。当前契约是 `narrative-engine@2`，它的 schema 由框架持有（见[框架持有的契约](#framework-contracts)）：
+
+- 自动调度的故事 runtime 提供 `narrative-engine@2`，不用写 `io.output.contract` 或 `io.output.schema`。写了 `narrative-engine@2` 时，`pnpm validate:plugin` 警告可以删掉；写了别的契约，这个 runtime 被禁用。
+- 手动、事件和子 agent 故事 runtime 被启动时照样写故事，但不提供契约，不和叙事器争这一局的故事，也不能写 `io.output.contract`（写了这个 runtime 被禁用）。
+- 没有 schema 的故事 agent 也按这个形状提交，见[没有输出 schema 时](#default-output-schema)。
 
 | 字段       | 类型                                  | 含义                                                                     |
 | ---------- | ------------------------------------- | ------------------------------------------------------------------------ |
@@ -1578,7 +1594,7 @@ const reply = await ctx.agents.run({
 
 agent 的 `yield: continue` 必须来自已接受且已提交的输出。拒绝、取消、提交失败和子 agent 输出不能启动下一轮；显示正文的本地动画不参与执行决定。
 
-宿主只读取已提交的顶层 `io.visibility: story`、`io.output.contract: narrative-engine@2` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
+宿主只读取代表这一局的已提交故事：自动调度的故事 runtime（`narrative-engine@2` 的提供者）写了故事时就是它的，同一次执行里手动或事件触发的故事不取代它；它没有写故事时，才看其余已提交的顶层 `io.visibility: story` 故事。恰好一条这样的故事在提交 Hook 处理后仍为 `yield: continue`，才会请求下一轮。没有故事、多个故事或省略 `yield` 都会交还玩家；子 agent 和递归调用的输出不决定推进。附带操作失败不会撤销已保存的故事，也不会单独阻止推进。
 
 下一轮照常经过调度、工具、proposal 校验和提交，内联 post-turn 每轮运行。`ctx.playerActions` 是一个无文本的 `advance`，来源为 `system`；输入 digest 同样保留它。需要的故事导入仍可声明为可选，没有提供方时继续运行。玩家可停止推进；上限和阻止条件见[会话推进设置](./api.md#auto-advance)。
 
@@ -1620,7 +1636,7 @@ runtime:
 
 ### 输入与写入
 
-只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。缺少或有多个公开故事提供方时，输入缺席。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
+只可绑定 `required: false`、本回合、无 `select` / 格式变换的 `narrative-engine@2` 输入。故事和[自动推进](#故事请求自动推进)读取的是同一条：自动调度的故事 runtime 成功时用它的故事；它没有成功时，本次执行恰好一条成功的顶层公开故事才算，没有或有多条时输入缺席。递归调用写的故事不算，挂起回合释放呈现作业或重试失败的选择器时也一样。同一 runtime 的每次调用分别保留身份，嵌套调用不会挤掉它的顶层故事。只复制通过校验的 `segments` 和 `cues`，不复制业务附加字段、concealed / 非故事 / 失败结果、工具、意图、推理、续接、操作或摘要。
 
 零预算函数在故事提交前读取公开候选；候选故事未提交时，其呈现写入也不会保留。detached 呈现读取 `PreStateCommit` 改写之后实际保存的故事，以及该次提交接受的本插件数据。作业只保存这一份版本化快照，不附带原始上游结果、玩家消息、行动或表单。快照总计最多 256 KiB，每个 namespace 最多 50 行，角色身份最多 100 个；超限整份拒绝，内联读取也一样。
 

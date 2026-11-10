@@ -24,6 +24,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import { narrationSegments } from "./_helpers/agent-loop-fixture.js";
 
 const SESSION_ID = "sess-budget-wire";
 const BUDGET = {
@@ -92,7 +93,7 @@ function makeResponse(content: string): LLMResponse {
       {
         id: "final",
         name: "submit-output",
-        arguments: JSON.stringify({ narrativeOutput: content }),
+        arguments: JSON.stringify({ segments: narrationSegments(content) }),
       },
     ],
     finishReason: "tool_calls" as const,
