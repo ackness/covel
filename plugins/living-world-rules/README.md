@@ -5,7 +5,7 @@
 ## 运行时结构
 
 - `PLUGIN.md`：`world.rules@1` 数据契约、WorldIR projection 和右侧面板声明。
-- `server/project-world-ir.js`：把 `contract:world-ir@1` 中 `type: rule` 的 statements 纯转换为 `rules` 记录。
+- `server/project-world-ir.js`：把 `contract:world-ir@2` 中 `type: rule` 的 statements 纯转换为 `rules` 记录。
 - `schemas/rules.schema.json`：世界规则导入 schema。
 - `ui/living-world-rules-panel.json`：右侧规则列表面板。
 

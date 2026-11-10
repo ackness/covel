@@ -1331,7 +1331,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Ability Checks | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
 | [turn-policy](../../../plugins/turn-policy/README.md) | Who Speaks Next | `plugin` | `turn-policy@1` | none | Decides which characters speak each turn: whoever you mention, a set order, at random, your pick or an AI director. It is a read-only service. |
 | [world-init](../../../plugins/world-init/README.md) | World State | `core` | `world-data-provider@1`, `world.dimensions@1` | `schema-gen`, `dimension-context`, `dimension-tracker`, `dimension-clock`, `edit-dimensions` | Initializes character attributes and world dimensions, and keeps maintaining them. |
-| [world-ir](../../../plugins/world-ir/README.md) | Story Notes | `plugin` | `world-ir-provider@1` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
+| [world-ir](../../../plugins/world-ir/README.md) | Story Notes | `plugin` | `world-ir@2` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
 | [world-time](../../../plugins/world-time/README.md) | World Time | `core` | `world-time-evolution@1`, `world-time-context@1` | `context`, `advance` | Keeps the date, the time of day, and the direction time flows, and settles time changes from this turn's story. |
 
 The details of each plugin are in its own `PLUGIN.md` and README.

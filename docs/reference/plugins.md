@@ -1331,7 +1331,7 @@ pnpm lint
 | [tabletop-rules](../../plugins/tabletop-rules/README.md) | 属性判定 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
 | [turn-policy](../../plugins/turn-policy/README.md) | 轮流发言 | `plugin` | `turn-policy@1` | 无 | 决定每个回合由哪些角色发言：提到谁是谁、固定顺序、随机、手选或 AI 导演；是只读服务 |
 | [world-init](../../plugins/world-init/README.md) | 世界状态 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界状态，并持续维护 |
-| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir-provider@1` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
+| [world-ir](../../plugins/world-ir/README.md) | 故事整理 | `plugin` | `world-ir@2` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
 | [world-time](../../plugins/world-time/README.md) | 世界时间 | `core` | `world-time-evolution@1`、`world-time-context@1` | `context`、`advance` | 维护日期、时段和时间流向，按本轮故事结算时间变化 |
 
 每个插件的细节以它自己的 `PLUGIN.md` 和 README 为准。

@@ -16,6 +16,7 @@
 
 ## 数据与行为
 
+- 台账以可选输入读取本轮 WorldIR（`world-ir@2`）。会话没有这个提供者或本回合抽取失败时，ledger 以 `skipped` 结束，背包只随服务和面板操作变化。
 - 台账补记 WorldIR 中归属主角的 `inventory_change` 事件；物品名取事件引用的 item 实体，数量缺省为 1。其他角色的物品变化不进背包。事件的固定字段由 `world-ir` 约定并校验。
 - 物品写入 `items` 数据集（`plugin_data[inventory][items]`），按名称查找记录，新物品由 `shortIdBatch` 分配稳定短 ID。新记录用 `set`，已有记录的数量变化用 `inc`；台账移除时以 0 为下界并 clamp；写服务移除不足时整次拒绝。提交时按数据集 schema 校验最终记录。
 - 减到 0 时用 `merge` 标记 tombstone（`quantity: 0, removed: true`）并取消装备；装备变化也用 `merge`。UI 隐藏 tombstone，同名物品再次获得时复用同一条记录并清除标记。
