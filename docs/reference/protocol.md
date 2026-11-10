@@ -127,6 +127,8 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 两处由 `satisfies Record<CovelEventType, CovelEventMeta>` 互相约束，漏改任何一处都会编译失败。
 
+网页端的事件路由表 `SSE_EVENT_ROUTES`（`apps/web/src/stores/session-store/sse-event-routes.ts`）同样按 `CovelEventType` 穷尽：新事件必须在表里登记处理函数，或明确标成 `"ignored"`，否则网页端编译失败。
+
 下面各表列出稳定的事件类型。两条流用的是同一组 `type` 字符串：
 
 - `/api/events/stream` 总是用命名事件帧发送（`event: <type>\ndata: ...`）。
@@ -1227,7 +1229,7 @@ interface SseEnvelope {
 
 ## 五、前端事件路由
 
-`handleSseEvent` 是回合内事件唯一的处理器。它按事件类型，把事件交给对应的状态片段：
+`handleSseEvent` 是回合内事件唯一的处理器。它在路由表 `SSE_EVENT_ROUTES` 里查事件类型，把事件交给对应的状态片段；表里标成 `"ignored"` 的事件不改动状态，不认识的类型只在控制台警告：
 
 ```
 narrative.completed   → messages (completed); drops that runtime's draft
@@ -1235,7 +1237,7 @@ output.draft          → outputDrafts (replaces the runtime's draft)
 output.retracted      → outputDrafts (revising: keeps the place; stopped: removed)
 output.accepted       → outputDrafts (accepted, awaiting commit)
 interaction.requested → messages (block)
-event.emitted         → gameState.events
+event.emitted         → ignored (no client state)
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
 runtime.started       → executionSteps
