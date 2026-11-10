@@ -3,6 +3,7 @@ import {
   currentCharacterOf,
   primarySeat,
   resolveCharacter,
+  STORY_OUTPUT_CONTRACT,
   presentationSnapshotSchema,
   presentationStorySchema,
   type PresentationSnapshot,
@@ -66,7 +67,7 @@ export function publicStoryCandidate(
     (runtime) =>
       runtime.outputKind === "story" &&
       !runtime.concealed &&
-      runtime.outputContract === "narrative-engine@2",
+      runtime.outputContract === STORY_OUTPUT_CONTRACT,
   );
   if (providers.length !== 1) return undefined;
   const result = results.find(

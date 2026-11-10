@@ -1,4 +1,5 @@
 import type { PresentationDeclaration } from "@covel/plugin-handlers-utils";
+import { STORY_OUTPUT_CONTRACT } from "../extension-points/contracts.js";
 import type { RuntimeRuleIssue } from "./runtime-rules.js";
 
 /** Common semantic view of authored and compiled declarations. */
@@ -77,7 +78,7 @@ export function presentationRuleIssues(
     add("schedule.stage", "stage", "requires post-turn");
   if ((m.visibility ?? "system") !== "system")
     add("io.visibility", "outputKind", "requires system visibility");
-  if (m.outputContract === "narrative-engine@2")
+  if (m.outputContract === STORY_OUTPUT_CONTRACT)
     add(
       "io.output.contract",
       "outputContract",
@@ -149,7 +150,7 @@ export function presentationRuleIssues(
   for (const [name, binding] of Object.entries(m.presentationInputs ?? {})) {
     if (
       (binding.from.contract ?? binding.from.capability) !==
-        "narrative-engine@2" ||
+        STORY_OUTPUT_CONTRACT ||
       (binding.from.cardinality ?? "one") !== "one" ||
       binding.required !== false ||
       (binding.scope ?? "turn") !== "turn" ||
@@ -159,8 +160,7 @@ export function presentationRuleIssues(
     )
       issues.push({
         path: [...at("io.inputs", "inputs"), name],
-        message:
-          "presentation: bind only optional, untransformed turn-scoped narrative-engine@2",
+        message: `presentation: bind only optional, untransformed turn-scoped ${STORY_OUTPUT_CONTRACT}`,
         disables: "runtime",
       });
   }

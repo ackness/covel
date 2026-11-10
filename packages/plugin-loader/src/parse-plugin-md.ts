@@ -13,6 +13,7 @@ import {
   pluginManifestSchema,
   runtimeAuthoringManifestSchema,
   resolveI18nText,
+  STORY_OUTPUT_CONTRACT,
 } from "@covel/shared";
 import type { PluginManifest, PluginManifestInput } from "@covel/shared";
 import type {
@@ -148,13 +149,13 @@ function compileDeclaredRuntime(
   filePath: string,
 ) {
   try {
-    if (runtime.presentation && plugin.requires?.includes("narrative-engine@2"))
+    if (runtime.presentation && plugin.requires?.includes(STORY_OUTPUT_CONTRACT))
       throw Object.assign(new Error("invalid presentation requirement"), {
         issues: [
           {
             path: ["requires"],
             message:
-              "presentation story inputs must remain optional; remove narrative-engine@2 from package requires",
+              `presentation story inputs must remain optional; remove ${STORY_OUTPUT_CONTRACT} from package requires`,
           },
         ],
       });
