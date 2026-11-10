@@ -28,7 +28,7 @@ describe("living-world-rules manifest and UI loading", () => {
       },
       worldProjections: {
         "rules-from-world-ir": {
-          from: "contract:world-ir@1",
+          from: "contract:world-ir@2",
           handler: "./server/project-world-ir.js",
           outputs: {
             rules: { namespace: "rules", key: "id" },

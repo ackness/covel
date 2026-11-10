@@ -21,7 +21,7 @@ The plugin has two runtimes: a retriever that runs before the turn starts (`npc-
 flowchart TD
   Input[Player message and optional current cast] --> Retrieve[pre-turn: deterministic graph retrieval]
   Retrieve --> Narrate[narrative-engine: story and character lookup tools]
-  Narrate --> IR[post-turn: world-ir-provider typed facts]
+  Narrate --> IR[post-turn: optional world-ir typed facts]
   IR --> Extract[post-turn: relationship extractor]
   Extract --> Commit[Graph proposals and transaction commit]
   Commit --> UI[plugin-data.changed and GraphCanvas]
@@ -42,7 +42,7 @@ The retriever reads all the nodes and edges before it traverses, and adjacency i
 
 ### Extractor: update the graph after the story text is written
 
-- **What it reads.** The required input `worldIR`, from the contract `world-ir-provider@1`. That is structured facts that another plugin has already organized from this turn's story text, so the extractor does not have to reread the whole story text.
+- **What it reads.** The optional input `worldIR`, from the contract `world-ir@2`. That is structured facts that another plugin has already organized from this turn's story text, so the extractor does not have to reread the whole story text. When the session has no such provider, or this turn's extraction failed, the extractor reads this turn's story in the conversation instead and updates the graph as usual.
 - **What it already knows.** The existing nodes and relationships are placed into its prompt before the model is called (`<existing-npcs>` and `<existing-relations>`, up to 60 each).
 - **What counts as finished.** When facts change, call `upsert-npc-graph`, read its result, then call `submit-output` alone. With no changes, submit `{}` directly. A business tool does not end the runtime.
 - **What does not count.** Claiming "updated" in text or JSON does not change the graph at all.

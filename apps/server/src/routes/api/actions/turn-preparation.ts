@@ -16,6 +16,7 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest, TurnAction } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
+import { syncSessionRuntimes } from "../execution-context.js";
 import { ActionRejectedError, entryRejection } from "./action-rejection.js";
 import {
   hasPendingAdvanceInput,
@@ -174,8 +175,9 @@ export async function prepareLockedTurn(
   // The commit's check stays the last line of defence.
   await assertInputUncommitted(store, sessionId, inputMessageId);
   // Refresh runtime activations from the session read under the lock.
-  pluginRegistry.syncSessionActivations(sessionId, liveSession.activePlugins);
-  ledger.useActiveRuntimes(pluginRegistry.getActiveRuntimes(sessionId));
+  ledger.useActiveRuntimes(
+    syncSessionRuntimes(pluginRegistry, sessionId, liveSession.activePlugins),
+  );
   const activeRuntimes = ledger.activeRuntimes;
   const retryPlan =
     body.type === "retry_runtime" || body.type === "retry_failed_runtimes"

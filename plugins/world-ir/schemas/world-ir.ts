@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { WorldIRJsonValue, WorldIRV1 } from "../types/world-ir.js";
 
-export const WORLD_IR_V1_SCHEMA_URI = "contract:world-ir@1" as const;
+export const WORLD_IR_SCHEMA_URI = "contract:world-ir@2" as const;
 
 function deepFreezeSchema<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -14,13 +14,14 @@ function deepFreezeSchema<T>(value: T): T {
 }
 
 /**
- * Canonical JSON Schema for the public WorldIR v1 URI. Runtime output and
- * typed-input contracts resolve this object by URI instead of copying plugin-
- * local schemas that can silently drift apart.
+ * Canonical JSON Schema of the `world-ir@2` contract, whose payload keeps
+ * `schemaVersion: 1`. Runtime output and typed-input contracts resolve this
+ * object by URI instead of copying plugin-local schemas that can silently
+ * drift apart.
  */
 export const WORLD_IR_V1_JSON_SCHEMA = deepFreezeSchema({
   $schema: "http://json-schema.org/draft-07/schema#",
-  $id: WORLD_IR_V1_SCHEMA_URI,
+  $id: WORLD_IR_SCHEMA_URI,
   title: "Covel WorldIR v1",
   type: "object",
   additionalProperties: false,

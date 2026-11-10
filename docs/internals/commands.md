@@ -89,7 +89,9 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 
 `pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]` 从 `templates/` 生成一个插件。默认生成到用户插件目录；加 `--with-tools` 时生成到仓库的 `plugins/` 下，这个选项不能和 `-t`、`-r` 一起用。
 
-`pnpm plugin:extract` 会以你的权限执行入口代码，只用于你自己的包。默认写回声明并列出变化的键；`--check` 不写文件，按键列出新增和移除的名字，有漂移时退出 1，一致时退出 0。`--json` 输出提取结果和漂移。提取失败退出 1，参数错误退出 2。范围和本地化文件规则见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。`pnpm validate:plugin` 仍然只做静态校验，不执行入口。
+`pnpm plugin:extract` 会以你的权限执行入口代码，只用于你自己的包。默认写回声明并列出变化的键；`--check` 不写文件，按键列出新增和移除的名字，有漂移时退出 1，一致时退出 0。`--json` 输出提取结果和漂移。提取失败退出 1，参数错误退出 2。范围和本地化文件规则见[带本地代码的插件](../plugins/local-code.md#4-写入口文件)。`pnpm validate:plugin` 仍然只做静态校验，不执行入口。`extensions` 也由它同步：按 `<point>/<id>` 增删，已有条目的选项保留。
+
+`pnpm check:manifests` 先对所有内置插件做静态校验，再在同一个进程里对每个带入口的内置插件做 `plugin:extract --check`。内置插件是受信的仓库代码，服务端测试本来就会加载它们，所以这里执行入口不扩大信任面；`validate:plugin` 本身不变。声明与注册不一致时，它按键列出差异，并给出 `pnpm plugin:extract plugins/<id>` 这条修复命令。
 
 延伸阅读：合集见[合集](../ship/collections.md)，翻译工具见 [i18n](../reference/i18n.md)。
 
@@ -107,7 +109,8 @@ pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool defini
 pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt;
                       # it also prints style and structure warnings, which do not fail it
 pnpm prompts:lock     # record an English / *.zh.md pair after both languages changed
-pnpm check:boundaries # public entry points, declared deps, package direction, unused exports
+pnpm check:boundaries # public entry points, declared deps, package direction, unused exports,
+                      # relative imports from tests into other workspaces
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
                       # while findings remain, so it is a report, not a gate
@@ -120,7 +123,8 @@ pnpm check:push --full  # every suite; --base <ref> measures from another branch
 
 ```bash
 pnpm check:oxlint     # Oxlint; a warning fails it
-pnpm check:manifests  # pnpm validate:plugin on every bundled plugin
+pnpm check:manifests  # pnpm validate:plugin on every bundled plugin (static), then plugin:extract --check on
+                      # every bundled plugin with an entry (executes the trusted bundled entries)
 pnpm check:schemas    # the generated schema reference matches the Zod schemas (fix with pnpm schemas:generate)
 pnpm check:changelog  # the fragments in docs/changelog.d/ are well formed
 pnpm check:scripts    # scripts/tests/*.test.mjs under node --test
@@ -184,6 +188,8 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 ### 什么时候会跑全部测试
 
 有的测试会读自己包以外的文件。`turbo.json` 里它的 `$TURBO_ROOT$` 输入写到了哪个文件，那个文件一改它就会跑，所以这些输入要保持准确。
+
+`lint` 和 `test` 只在依赖的包、或自己写进 `inputs` 的文件变化时重新运行。测试或配置用相对路径引用另一个工作区的文件时，要么在 `package.json` 里依赖那个包（并改用包入口导入），要么在 `turbo.json` 里把文件写进该任务的 `$TURBO_ROOT$` 输入；`pnpm check:boundaries` 会拒绝两者都没有的引用，否则缓存会在被引用的代码已经变化时重放旧的通过结果。不缓存的任务不受此限。
 
 读取文档的测试也遵守这条规则：shared 的测试跟踪环境变量参考页，runtime 跟踪 Hook 参考页，plugin-loader 跟踪插件指南和 create-plugin skill。源码和文档混合修改时，相关测试缓存会失效，不必把同一组文档测试再跑一遍。
 

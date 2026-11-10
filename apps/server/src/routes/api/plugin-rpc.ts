@@ -6,7 +6,9 @@ import {
 import { sessionEventBus } from "./session/session-events.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
+  announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
+  requestCredentialHandoff,
   withSettledSessionLock,
 } from "./plugin-rpc/settled-request.js";
 /**
@@ -54,7 +56,6 @@ import {
 
 import { Hono } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { snapshotUserSettings } from "@covel/runtime";
 import {
   type RpcCommandInvocation,
   type RuntimeResult,
@@ -62,16 +63,17 @@ import {
 } from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { validatePluginRpcBody } from "./plugin-rpc/body.js";
+import { readPluginUserSettings } from "./plugin-user-settings.js";
 import {
-  readPluginUserSettings,
-  loadSessionPluginUserSettings,
-} from "./plugin-user-settings.js";
+  loadExecutionUserSettings,
+  syncLiveSessionRuntimes,
+} from "./execution-context.js";
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
+  deferredJobRefs,
   enqueueActivatedRuntimeJob,
-  type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import { queueCommitFollowUps } from "./commit-envelope.js";
+import { queueFollowUpsWith } from "./commit-envelope.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
@@ -193,27 +195,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const sessionLock = c.get("sessionLock");
     const prepareToolsForSession = c.get("prepareToolsForSession");
 
-    // Reconcile the process-local registry from the persisted session
-    // snapshot under the session lock. Besides restart recovery, this removes
-    // stale activations after a plugin is disabled through another request or
-    // server instance. The lock matters: `syncSessionActivations` writes
-    // shared in-memory state, and syncing from the lock-free snapshot read
-    // above could resurrect a plugin that a concurrent enable/disable writer
-    // has just persisted and deactivated (lost update). Under the lock the
-    // fresh read is linearised against those writers, keeping this a pure
-    // read-repair. A session deleted in the meantime reconciles to the empty
-    // set, so the runtime lookup below fails closed with `runtime_not_active`.
-    const activeRuntimes = await withSettledSessionLock(
-      c,
-      sessionId,
-      async () => {
-        const live = await store.getSession(sessionId);
-        const livePlugins = live?.activePlugins as
-          readonly string[] | undefined;
-        pluginRegistry.syncSessionActivations(sessionId, livePlugins ?? []);
-        return pluginRegistry.getActiveRuntimes(sessionId);
-      },
-    );
+    // Reconcile the process-local registry from a fresh read under the
+    // session lock, not from the lock-free snapshot read above. A session
+    // deleted in the meantime reconciles to the empty set, so the runtime
+    // lookup below fails closed with `runtime_not_active`.
+    const activeRuntimes = await syncLiveSessionRuntimes(c, sessionId);
     const target = activeRuntimes.find((rt) => rt.name === body.runtimeId);
     if (!target) {
       return c.json(
@@ -305,8 +291,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // turn. Never persisted server-side; request-scoped only.
     // Merge the world's authored defaults (WorldRecord.metadata.pluginSettings)
     // under the player's header overrides — same resolution chain as the main
-    // turn route (player override → world default → manifest default).
-    const userSettingsMap = await loadSessionPluginUserSettings(
+    // turn route (player override → world default → manifest default). One
+    // snapshot serves the run and every job it queues.
+    const userSettingsMap = await loadExecutionUserSettings(
       store,
       session,
       decodedUserSettings.settings,
@@ -357,6 +344,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
 
     const turnId = crypto.randomUUID();
+    // Provider services this request hands to the jobs its commit queues,
+    // withdrawn if that commit does not land.
+    const credentials = requestCredentialHandoff(c);
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
@@ -388,7 +378,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       ),
       deps: buildTurnExecutorDeps(c),
       ...(hookPipeline ? { hookPipeline } : {}),
-      heldJobs: requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
+      heldJobs: requestSuspensionAbandonDeps(
+        c,
+        decodedUserSettings.settings,
+        credentials,
+      ),
     });
 
     const mode: "sync" | "background" = target.execution ?? "sync";
@@ -422,9 +416,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
               sourceTurnId: body.retryFromTurnId ?? turnId,
               turnId,
               locale: live.locale,
-              ...(userSettingsMap
-                ? { userSettings: snapshotUserSettings(userSettingsMap) }
-                : {}),
+              ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
               ...(body.payload !== undefined ? { input: body.payload } : {}),
               ...(body.retryFromTurnId
                 ? { retryFromTurnId: body.retryFromTurnId }
@@ -454,13 +446,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     //
     // The sync turn may surface `deferredFollowers` — event-chain followers
     // with `execution: 'background'` that were skipped so the user gets an
-    // immediate response. They are queued as durable event jobs inside the
-    // same commit transaction, so a rolled-back turn queues nothing.
-    // `queueCommitFollowUps` leaves out followers of an emitter whose writes
-    // were dropped; a sync run commits all-or-nothing, so none is today.
-    const followerJobs: QueuedActivatedRuntimeJob[] = [];
+    // immediate response — and `deferredRuntimeJobs`: a targeted runtime that
+    // declares `turnCompletion: detached` is deferred to the durable queue
+    // instead of running inline. Both are queued inside the same commit
+    // transaction, so a rolled-back turn queues nothing.
+    // The queue leaves out followers of an emitter whose writes were dropped;
+    // a sync run commits all-or-nothing, so none is today.
+    let summary;
     try {
-      const summary = await runtimeTurnRunner.runManualTurn({
+      summary = await runtimeTurnRunner.runManualTurn({
         turnId,
         runtimeId: body.runtimeId,
         ...(body.payload !== undefined ? { payload: body.payload } : {}),
@@ -468,71 +462,66 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(retrySeedResults
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
-        completeInTx: async (tx, result, isolation) => {
-          const queued = await queueCommitFollowUps(tx, {
-            sessionId,
-            activeRuntimes,
-            locale: session.locale,
-            ...(userSettingsMap
-              ? { userSettings: snapshotUserSettings(userSettingsMap) }
-              : {}),
-            sourceRuntimeId: body.runtimeId,
-            isolation,
-            results: result.runtimeResults,
-            sourceTurnId: result.turnId,
-            followers: result.deferredFollowers ?? [],
-          });
-          followerJobs.push(...queued.followerJobs);
-        },
-      });
-      // The runtime can report success while its proposals fail to land. A
-      // turn whose writes never committed is not a successful turn: report it
-      // as an error; its follower jobs rolled back with it.
-      if (!summary.commit.committed) {
-        if (summary.commit.dimensionConflict)
-          return c.json(
-            errorBody("dimension-version-conflict", {
-              code: "dimension-version-conflict",
-              details: {
-                currentVersions:
-                  summary.commit.dimensionConflict.currentVersions,
-              },
-            }),
-            409,
-          );
-        return c.json(
-          errorBody(commitFailureMessage(summary.commit), {
-            code: "turn_commit_failed",
-            details: {
-              turnId: summary.turnId,
-              runtimeResults: concealResultSummaries(
-                summary.runtimeResults,
-                registeredConcealedRuntimeIds(pluginRegistry),
-              ),
-            },
-          }),
-          500,
-        );
-      }
-      announceQueuedRuntimeJobs(c, followerJobs);
-      const deferredJobs = followerJobs.map(({ job }) => ({
-        jobId: job.jobId,
-        runtimeId: job.runtimeId,
-      }));
-      return c.json({
-        status: "ok",
-        turnId: summary.turnId,
-        runtimeResults: concealResultSummaries(
-          summary.runtimeResults,
-          registeredConcealedRuntimeIds(pluginRegistry),
-        ),
-        durationMs: summary.durationMs,
-        ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
-        ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
+        followUps: queueFollowUpsWith({
+          sessionId,
+          activeRuntimes,
+          locale: session.locale,
+          ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+          credentials,
+          sourceRuntimeId: body.runtimeId,
+        }),
       });
     } catch (err) {
+      credentials.discard();
       return runtimeQueueErrorResponse(c, err);
     }
+    // The runtime can report success while its proposals fail to land. A
+    // turn whose writes never committed is not a successful turn: report it
+    // as an error; its follower jobs rolled back with it.
+    if (!summary.commit.committed) {
+      credentials.discard();
+      if (summary.commit.dimensionConflict)
+        return c.json(
+          errorBody("dimension-version-conflict", {
+            code: "dimension-version-conflict",
+            details: {
+              currentVersions: summary.commit.dimensionConflict.currentVersions,
+            },
+          }),
+          409,
+        );
+      return c.json(
+        errorBody(commitFailureMessage(summary.commit), {
+          code: "turn_commit_failed",
+          details: {
+            turnId: summary.turnId,
+            runtimeResults: concealResultSummaries(
+              summary.runtimeResults,
+              registeredConcealedRuntimeIds(pluginRegistry),
+            ),
+          },
+        }),
+        500,
+      );
+    }
+    const { followUps } = summary.commit;
+    await announceDeferredRuntimeJobs(c, followUps.runtimeJobs);
+    announceQueuedRuntimeJobs(c, followUps.followerJobs);
+    const deferredJobs = deferredJobRefs([
+      ...followUps.runtimeJobs,
+      ...followUps.followerJobs,
+    ]);
+    return c.json({
+      status: "ok",
+      turnId: summary.turnId,
+      runtimeResults: concealResultSummaries(
+        summary.runtimeResults,
+        registeredConcealedRuntimeIds(pluginRegistry),
+      ),
+      durationMs: summary.durationMs,
+      ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
+      ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
+    });
   }
 
   return dispatchPluginAction(

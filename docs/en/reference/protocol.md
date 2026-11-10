@@ -127,6 +127,8 @@ To add a new SSE event, change two places:
 
 The two are tied together by `satisfies Record<CovelEventType, CovelEventMeta>`. If you miss either one, the build fails.
 
+The web app's route table `SSE_EVENT_ROUTES` (`apps/web/src/stores/session-store/sse-event-routes.ts`) is exhaustive over `CovelEventType` too: a new event must get a handler there, or be marked `"ignored"` explicitly, or the web app fails to compile.
+
 The tables below list the stable event types. The two streams use the same set of `type` strings:
 
 - `/api/events/stream` always sends them as named event frames (`event: <type>\ndata: ...`).
@@ -1226,7 +1228,7 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 
 ## 5. Frontend event routing
 
-`handleSseEvent` is the only handler for in-turn events. By event type, it passes each event to the matching state slice:
+`handleSseEvent` is the only handler for in-turn events. It looks up the event type in the route table `SSE_EVENT_ROUTES` and passes each event to the matching state slice. Events marked `"ignored"` in the table change no state; an unknown type only logs a console warning:
 
 ```
 narrative.completed   → messages (completed); drops that runtime's draft
@@ -1234,7 +1236,7 @@ output.draft          → outputDrafts (replaces the runtime's draft)
 output.retracted      → outputDrafts (revising: keeps the place; stopped: removed)
 output.accepted       → outputDrafts (accepted, awaiting commit)
 interaction.requested → messages (block)
-event.emitted         → gameState.events
+event.emitted         → ignored (no client state)
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
 runtime.started       → executionSteps

@@ -19,10 +19,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import {
-  makeSession,
-  makeWorld,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeSession, makeWorld } from "@covel/store/testing";
 import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import type { WorldEnv } from "../../src/routes/api/worlds/shared.js";
 import { resolveWorldRoot } from "../../src/world-data/session-import/utils.js";

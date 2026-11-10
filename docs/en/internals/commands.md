@@ -89,7 +89,9 @@ pnpm i18n:add         # add a UI locale to the web app (apps/web/src/i18n/locale
 
 `pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]` generates a plugin from `templates/`. By default it is generated into the user plugin directory. With `--with-tools`, it is generated under the repository's `plugins/` instead. This option cannot be used together with `-t` or `-r`.
 
-`pnpm plugin:extract` executes entry code with your permissions and is meant for your own package. By default it writes declarations and lists changed keys; `--check` writes nothing and lists added and removed names per key, exiting 1 on drift and 0 when in sync. `--json` emits the extraction result and drift. Extraction errors exit 1; invalid arguments exit 2. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the scope and localized-file rules. `pnpm validate:plugin` remains static and never executes the entry.
+`pnpm plugin:extract` executes entry code with your permissions and is meant for your own package. By default it writes declarations and lists changed keys; `--check` writes nothing and lists added and removed names per key, exiting 1 on drift and 0 when in sync. `--json` emits the extraction result and drift. Extraction errors exit 1; invalid arguments exit 2. See [Plugins with local code](../plugins/local-code.md#4-write-the-entry-file) for the scope and localized-file rules. `pnpm validate:plugin` remains static and never executes the entry. It also syncs `extensions`: added and dropped by `<point>/<id>`, with the options of kept entries preserved.
+
+`pnpm check:manifests` first validates every bundled plugin statically, then runs `plugin:extract --check` on every bundled plugin with an entry in one process. Bundled plugins are trusted repository code that the server tests already load, so executing the entries here adds no trust surface; `validate:plugin` itself is unchanged. When declarations and registrations disagree, it lists the differences per key and prints the fix command, `pnpm plugin:extract plugins/<id>`.
 
 Further reading: for collections, see [Collections](../ship/collections.md). For the translation tools, see [i18n](../reference/i18n.md).
 
@@ -107,7 +109,8 @@ pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool defini
 pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt;
                       # it also prints style and structure warnings, which do not fail it
 pnpm prompts:lock     # record an English / *.zh.md pair after both languages changed
-pnpm check:boundaries # public entry points, declared deps, package direction, unused exports
+pnpm check:boundaries # public entry points, declared deps, package direction, unused exports,
+                      # relative imports from tests into other workspaces
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
                       # while findings remain, so it is a report, not a gate
@@ -120,7 +123,8 @@ pnpm check:push --full  # every suite; --base <ref> measures from another branch
 
 ```bash
 pnpm check:oxlint     # Oxlint; a warning fails it
-pnpm check:manifests  # pnpm validate:plugin on every bundled plugin
+pnpm check:manifests  # pnpm validate:plugin on every bundled plugin (static), then plugin:extract --check on
+                      # every bundled plugin with an entry (executes the trusted bundled entries)
 pnpm check:schemas    # the generated schema reference matches the Zod schemas (fix with pnpm schemas:generate)
 pnpm check:changelog  # the fragments in docs/changelog.d/ are well formed
 pnpm check:scripts    # scripts/tests/*.test.mjs under node --test
@@ -184,6 +188,8 @@ Workflow, script and E2E/config-only changes can select no package unit tests lo
 ### When all tests run
 
 Some tests read files outside their own package. If a file is written in the `$TURBO_ROOT$` input of `turbo.json` for a test, that test runs whenever the file changes. So these inputs must stay accurate.
+
+`lint` and `test` re-run only when a package they depend on, or a file listed in their `inputs`, changes. When a test or config file references another workspace's files by relative path, either depend on that package in `package.json` (and import through its entry) or list the files in that task's `$TURBO_ROOT$` inputs in `turbo.json`. `pnpm check:boundaries` rejects a reference with neither, because the cache would otherwise replay an old pass after the referenced code changed. Uncached tasks are exempt.
 
 Documentation readers follow the same rule: the shared test task tracks the environment-variable reference, runtime tracks the hook reference, and plugin-loader tracks both plugin guides and the create-plugin skill. Mixed source/documentation changes therefore invalidate the relevant cached results, without running the same documentation tests twice.
 

@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: World Rules
 description: >-
   Shows the lasting rules of the world, such as taboos and customs, and keeps
@@ -36,7 +36,7 @@ contributes:
           lorebook: true
   worldProjections:
     rules-from-world-ir:
-      from: "contract:world-ir@1"
+      from: "contract:world-ir@2"
       handler: ./server/project-world-ir.js
       outputs:
         rules:

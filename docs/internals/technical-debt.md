@@ -59,36 +59,46 @@ rg -n "ponytail:" apps packages plugins
 
 - 只有当职责或维护成本确实需要时才拆分。长度本身不是缺陷。
 - 行数会变。动手之前用 `wc -l` 重新量一次。
-- 表里只统计 `apps/` 和 `packages/` 下的 TypeScript 源文件，不含测试，也不含 `packages/store/src/contract/` 里各存储后端共用的测试套件。
+- 表里统计 `apps/` 和 `packages/` 下已被 Git 跟踪的 `.ts` 和 `.tsx` 源文件，行数用 `wc -l`。不含测试（`*.test.*`、`*.spec.*`，以及 `tests/`、`__tests__/` 目录）、`.d.ts` 声明，也不含 `packages/store/src/contract/` 里各存储后端共用的测试套件。
 
 <!-- prettier-ignore -->
 | File | Lines |
 | --- | ---: |
-| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1496 |
-| `apps/server/src/world-data/validate-world-package.ts` | 1359 |
-| `packages/ai-provider/src/gateway.ts` | 1266 |
-| `packages/shared/src/schemas/plugin-schemas.ts` | 1246 |
-| `packages/runtime/src/turn-executor/turn-executor.ts` | 1082 |
-| `packages/store/src/types.ts` | 1026 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 1025 |
-| `apps/server/src/world-data/session-import.ts` | 1009 |
+| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1510 |
+| `packages/shared/src/schemas/plugin-schemas.ts` | 1470 |
+| `packages/runtime/src/plugin-services.ts` | 1355 |
+| `packages/ai-provider/src/gateway.ts` | 1314 |
+| `apps/server/src/world-data/validate-world-package.ts` | 1295 |
+| `packages/runtime/src/agent-loop/subagent-runner.ts` | 1180 |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 1176 |
+| `packages/runtime/src/turn-executor/turn-executor.ts` | 1167 |
+| `apps/server/src/world-data/session-import.ts` | 1165 |
+| `packages/plugin-handlers-utils/src/plugin-api.ts` | 1092 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 1071 |
+| `apps/web/src/stores/session-store/actions.ts` | 1058 |
+| `packages/store/src/types.ts` | 1045 |
+| `packages/create/src/create-world.ts` | 1032 |
+| `packages/plugin-loader/src/load.ts` | 1001 |
 | `packages/settings/src/store.ts` | 996 |
-| `apps/web/src/stores/session-store/actions.ts` | 992 |
-| `packages/events/src/event-bus.ts` | 982 |
-| `packages/plugin-handlers-utils/src/plugin-api.ts` | 980 |
-| `apps/server/src/world-data/session-import/planning.ts` | 926 |
-| `apps/web/src/stores/session-store/reducer.ts` | 915 |
-| `packages/runtime/src/retry/llm-retry.ts` | 903 |
-| `packages/plugin-loader/src/load.ts` | 898 |
-| `packages/shared/src/types/protocol.ts` | 872 |
+| `packages/shared/src/types/protocol.ts` | 996 |
+| `packages/events/src/event-bus.ts` | 995 |
+| `apps/web/src/components/session/game-view.tsx` | 989 |
+| `apps/server/src/world-data/session-import/planning.ts` | 975 |
+| `apps/server/src/routes/api/session.ts` | 957 |
+| `packages/runtime/src/function-runtime/plugin-handler-helpers.ts` | 946 |
+| `apps/web/src/stores/session-store/reducer.ts` | 939 |
+| `packages/runtime/src/agent-loop/tool-executor.ts` | 915 |
+| `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 907 |
+| `apps/web/src/components/session/session-prep-screen.tsx` | 899 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 882 |
 | `apps/server/src/routes/api/plugin-rpc/jobs.ts` | 867 |
 | `packages/runtime/src/interaction/interaction-submission.ts` | 863 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 861 |
+| `packages/runtime/src/retry/llm-retry.ts` | 859 |
 | `packages/plugin-handlers-utils/src/dimension-schemas.ts` | 852 |
-| `packages/create/src/create-world.ts` | 849 |
-| `apps/server/src/routes/api/ai.ts` | 841 |
-| `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 838 |
+| `apps/server/src/routes/api/ai.ts` | 844 |
+| `apps/web/src/services/data-service/local.ts` | 825 |
 | `apps/desktop/src/main.ts` | 820 |
-| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 816 |
+| `packages/runtime/src/hooks/wire-helpers.ts` | 809 |
+| `apps/web/src/stores/session-store/sse-event-routes.ts` | 806 |
 
 这份清单跟着当前源码里的注释走。历史上的数量和行号不是当前的契约。

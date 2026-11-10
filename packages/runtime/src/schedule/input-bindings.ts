@@ -85,6 +85,12 @@ export type BindingResolution =
       readonly ok: false;
       readonly skipReason: BindingSkipReason;
       readonly diagnostics: readonly SchedulingDiagnostic[];
+      /**
+       * Every required input's producer that did not succeed, whichever input
+       * closed the gate, so the caller can tell whether a failure is behind
+       * it without depending on the order the inputs are declared in.
+       */
+      readonly upstreams?: readonly RuntimeResult[];
     };
 
 export interface ResolveBindingsInput {
@@ -366,6 +372,26 @@ export async function resolveInputBindings(
   }
 
   const slots: Record<string, InputSlot> = Object.create(null);
+  const unsucceeded = (): RuntimeResult[] =>
+    bindingEntries.flatMap(([, binding]) => {
+      if (binding.required === false) return [];
+      const { providers, cardinality } = providersFor(binding, activeRuntimes);
+      // A `one` input with several providers never binds (cardinality-conflict).
+      const targets =
+        cardinality === "all" || providers.length === 1 ? providers : [];
+      return targets.flatMap((provider) => {
+        const result = completedResults.get(provider.name);
+        return result && result.status !== "success" && !isGuardProvided(result)
+          ? [result]
+          : [];
+      });
+    });
+  const closed = (skipReason: BindingSkipReason) => ({
+    ok: false as const,
+    skipReason,
+    diagnostics,
+    upstreams: unsucceeded(),
+  });
 
   bindings: for (const [name, binding] of bindingEntries) {
     const required = binding.required !== false;
@@ -390,7 +416,7 @@ export async function resolveInputBindings(
           `binding "${name}" is cardinality:one but ${providers.length} providers matched`,
         ),
       );
-      return { ok: false, skipReason: "cardinality-conflict", diagnostics };
+      return closed("cardinality-conflict");
     }
 
     if (providers.length === 0) {
@@ -402,8 +428,7 @@ export async function resolveInputBindings(
           `binding "${name}" has no active provider`,
         ),
       );
-      if (required)
-        return { ok: false, skipReason: "missing-provider", diagnostics };
+      if (required) return closed("missing-provider");
       continue; // optional → omit slot
     }
 
@@ -443,11 +468,7 @@ export async function resolveInputBindings(
             ),
           );
           if (!required) continue bindings;
-          return {
-            ok: false,
-            skipReason: "input-schema-incompatible",
-            diagnostics,
-          };
+          return closed("input-schema-incompatible");
         }
         if (compat === "indeterminate") {
           diagnostics.push(
@@ -468,9 +489,7 @@ export async function resolveInputBindings(
         : providers.slice(0, 1);
     const items: { value: JsonValue; source: InputSource }[] = [];
     const fail = (reason: BindingSkipReason) =>
-      required
-        ? { ok: false as const, skipReason: reason, diagnostics }
-        : undefined;
+      required ? closed(reason) : undefined;
     for (const provider of targets) {
       const got = extractValue(
         provider,

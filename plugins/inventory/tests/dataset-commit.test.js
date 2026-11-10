@@ -131,7 +131,7 @@ async function fixture(invalidWrite) {
     parsed.manifest.name,
     undefined,
     undefined,
-    { "world-ir@1": worldIRSchema },
+    { "world-ir@2": worldIRSchema },
   );
   const recorded = [];
   let rejected;
@@ -193,7 +193,7 @@ async function fixture(invalidWrite) {
     stage: "post-turn",
     runtimeType: "function",
     outputKind: "system",
-    outputContract: "world-ir-provider@1",
+    outputContract: "world-ir@2",
     trigger: { type: "auto" },
     inputs: {
       narrative: {
@@ -256,7 +256,7 @@ describe("inventory dataset schema", () => {
       undefined,
       undefined,
       {
-        "world-ir@1": JSON.parse(
+        "world-ir@2": JSON.parse(
           readFileSync(
             new URL(
               "../../world-ir/schemas/world-ir.schema.json",

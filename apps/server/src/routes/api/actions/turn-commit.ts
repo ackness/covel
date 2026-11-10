@@ -20,16 +20,13 @@ import {
   type ExecutionAdvanceStopReason,
 } from "@covel/shared";
 import {
+  NO_FOLLOW_UPS,
   queueCommitFollowUps,
   queueReleasedRuntimeJobs,
 } from "../commit-envelope.js";
 import { commitExecution } from "../commit-execution.js";
 import { resolveMediaImageFlow } from "../media-image-flow.js";
-import type { RuntimeJobCredentialKey } from "../plugin-rpc/runtime-job-credentials.js";
-import type {
-  QueuedActivatedRuntimeJob,
-  QueuedRuntimeJob,
-} from "../plugin-rpc/runtime-job-enqueue.js";
+import type { QueuedRuntimeJob } from "../plugin-rpc/runtime-job-enqueue.js";
 import {
   PLAYER_INTERJECTION_SOURCE,
   type TurnInterjection,
@@ -58,7 +55,7 @@ export interface CommittedTurn {
   readonly replaysPlayerInput: boolean;
   /** Jobs the commit queued, empty unless it committed. */
   readonly queuedRuntimeJobs: readonly QueuedRuntimeJob[];
-  readonly followerJobs: readonly QueuedActivatedRuntimeJob[];
+  readonly followerJobs: readonly QueuedRuntimeJob[];
 }
 
 export async function commitExecutedTurn(
@@ -82,17 +79,9 @@ export async function commitExecutedTurn(
   } = started;
   const { result } = execution;
   const hookPipeline = host.hookPipeline;
-  const queuedRuntimeJobs: QueuedRuntimeJob[] = [];
-  const followerJobs: QueuedActivatedRuntimeJob[] = [];
-  const registerJobCredentials = (
-    credentialKey: RuntimeJobCredentialKey,
-    maxQueueMs: number | undefined,
-  ) => {
-    const services = host.jobServices();
-    if (!services) return;
-    host.jobCredentials?.register(credentialKey, services, maxQueueMs);
-    ledger.keepCredentialKey(credentialKey);
-  };
+  const releasedJobs: QueuedRuntimeJob[] = [];
+  // What the landed transaction queued; a retried one replaces it.
+  let followUps = NO_FOLLOW_UPS;
   // Interjections the player sent during the turn are part of it: the
   // turn's commit saves them to the prompt history (after the player's
   // message, at the moment a model call read them; one no call read
@@ -204,7 +193,7 @@ export async function commitExecutedTurn(
     // runtime; when that ends the older turn, its held-back jobs are
     // queued here and announced with this turn's own.
     enqueueReleasedJobsInTx: async (tx, jobs) => {
-      queuedRuntimeJobs.push(
+      releasedJobs.push(
         ...(await queueReleasedRuntimeJobs(
           tx,
           {
@@ -213,7 +202,7 @@ export async function commitExecutedTurn(
             activeRuntimes,
             locale: request.locale,
             ...(userSettings ? { userSettings } : {}),
-            registerCredentials: registerJobCredentials,
+            credentials: host.credentials,
           },
           jobs,
         )),
@@ -228,24 +217,16 @@ export async function commitExecutedTurn(
       // generation) are queued with the writes they react to, so a
       // rolled-back turn queues none, and none derived from a
       // runtime whose writes were dropped.
-      const queued = await queueCommitFollowUps(tx, {
+      followUps = await queueCommitFollowUps(tx, {
         sessionId,
         activeRuntimes,
         locale: request.locale,
         ...(model ? { modelOverride: model } : {}),
         ...(userSettings ? { userSettings } : {}),
-        registerCredentials: registerJobCredentials,
+        credentials: host.credentials,
         isolation,
-        results: result.runtimeResults,
-        sourceTurnId: result.turnId,
-        deferred: {
-          session: effectiveSession,
-          jobs: result.deferredRuntimeJobs ?? [],
-        },
-        followers: result.deferredFollowers ?? [],
+        turnResult: result,
       });
-      queuedRuntimeJobs.push(...queued.runtimeJobs);
-      followerJobs.push(...queued.followerJobs);
       await saveInterjections(tx, control.closeInterjections());
     },
     ...(hookPipeline ? { hookPipeline } : {}),
@@ -296,7 +277,9 @@ export async function commitExecutedTurn(
     stopReason,
     // A `retry_turn` that ran again from the player's recorded input.
     replaysPlayerInput: type === "retry_turn" && playerInput !== undefined,
-    queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
-    followerJobs: committed ? followerJobs : [],
+    queuedRuntimeJobs: committed
+      ? [...releasedJobs, ...followUps.runtimeJobs]
+      : [],
+    followerJobs: committed ? followUps.followerJobs : [],
   };
 }

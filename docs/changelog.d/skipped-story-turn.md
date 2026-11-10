@@ -1,0 +1,3 @@
+### Fixed
+
+- **An action is no longer saved without a story when the story could not run because a runtime it depends on failed.** When a story runtime's `needs` or required input came from a runtime that failed in the same execution, the framework skipped the story but still committed the action: the other runtimes kept their writes and the player turn was counted, with no narrative. Such an action is now refused like a failed story, and the error names the runtime that failed. A story whose upstream was not scheduled or skipped itself, a story waiting for its plugin's setup, a story held back by a dependency cycle, and an execution in which another story succeeded still commit as before. Rules: [transactions](../en/reference/transactions.md#backend-implementations).

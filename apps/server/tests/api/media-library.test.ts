@@ -18,7 +18,7 @@ import {
   makeTraceEvent,
   makeTurnResult,
   ts,
-} from "../../../../packages/store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 
 interface LibraryItem {
   readonly id: string;

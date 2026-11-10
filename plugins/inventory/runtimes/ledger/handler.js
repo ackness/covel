@@ -14,11 +14,18 @@ import {
 
 /**
  * Apply this turn's player inventory changes from the shared WorldIR
- * extraction, without a model call.
+ * extraction, without a model call. The extraction is optional: without it
+ * (no provider in the session, or it failed this turn) the ledger records
+ * nothing, and the bag still changes through the inventory services.
  *
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
+  if (!ctx.inputs?.worldIR)
+    return {
+      outcome: "skipped",
+      skipReason: "No world facts this turn; item changes are not recorded",
+    };
   const player = actingCharacterOf(
     ctx.playerActions ?? [],
     ctx.world?.characters ?? [],
