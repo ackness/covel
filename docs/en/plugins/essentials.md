@@ -132,7 +132,7 @@ There are two lists, with different jobs:
 | `contributes.tools` | `PLUGIN.md`                | The tools this plugin registers |
 | `agent.tools`       | The agent runtime's config | The tools this agent can call   |
 
-`agent.tools` has three common groups: `builtin` holds the tools that Covel provides, `plugin` holds your own tools, and `datasets` holds the read and write tools that Covel generates for the datasets you declare in `contributes.datasets` (for example `notes-get` and `notes-upsert`).
+`agent.tools` has four common groups: `builtin` holds the tools that Covel provides, `plugin` holds your own tools, `datasets` holds the read and write tools that Covel generates for the datasets you declare in `contributes.datasets` (for example `notes-get` and `notes-upsert`), and `services` imports services that other plugins offer to models as tools (see [imported service tools](../reference/tools.md#imported-service-tools)). `defer` also lives there; it controls which tools load late and is not a group of tools. For each field, see the [runtime field table](../reference/schema/runtime-manifest.md#agenttools).
 
 ```yaml
 agent:
