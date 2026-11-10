@@ -1,5 +1,5 @@
 ---
-version: 0.1.10
+version: 0.1.11
 displayName: Hidden Plot Events
 description: >-
   Keeps the world's secret plot events hidden until their conditions are met,

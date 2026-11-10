@@ -5,7 +5,7 @@ import { parsePluginMd, type PluginRegistryEntry } from "@covel/plugin-loader";
 import type { OrderedWorldDataSource } from "../../src/world-data/types.js";
 
 export const NOW = "2026-01-01T00:00:00.000Z";
-export const WORLD_IR_SCHEMA = "contract:world-ir@1";
+export const WORLD_IR_SCHEMA = "contract:world-ir@2";
 
 export const VALID_WORLD_IR = {
   schemaVersion: 1,
@@ -179,7 +179,7 @@ export function worldIrEntry(): PluginRegistryEntry {
       runtimeCount: 0,
     },
     packageManifest: parsePluginMd(
-      `---\n${JSON.stringify({ id: "world-ir", kind: "plugin", description: "World IR schema", contracts: { "world-ir@1": { schema: "./schemas/world-ir.schema.json" } } })}\n---`,
+      `---\n${JSON.stringify({ id: "world-ir", kind: "plugin", description: "World IR schema", contracts: { "world-ir@2": { schema: "./schemas/world-ir.schema.json" } } })}\n---`,
       path.join(rootPath, "PLUGIN.md"),
     ),
     loadedRuntimes: new Map(),

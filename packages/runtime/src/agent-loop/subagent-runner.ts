@@ -446,30 +446,30 @@ export function createSubagentRunner(
             args.deps.turnControl?.signal?.aborted)
         )
           return refuse("cancelled", MESSAGES.cancelled);
-        const { fault, ...result } = await withServiceOrigin(args, () =>
-          runProvider({
-            args: {
-              ...args,
-              world,
-              deps: {
-                ...args.deps,
-                delegation,
-                emitter: delegation.privacy.emitter(
-                  args.deps.emitter,
-                  options.activeRuntimes,
-                ),
-              },
+        const serviceOutcomes = withServiceOrigin(args);
+        const { fault, ...result } = await runProvider({
+          args: {
+            ...args,
+            world,
+            deps: {
+              ...args.deps,
+              delegation,
+              emitter: delegation.privacy.emitter(
+                args.deps.emitter,
+                options.activeRuntimes,
+              ),
+              ...(serviceOutcomes ? { serviceOutcomes } : {}),
             },
-            request: parsed,
-            provider: target.provider,
-            subagentCallId,
-            startTime,
-            trace,
-            runner,
-            worldFork,
-            assertLive,
-          }),
-        );
+          },
+          request: parsed,
+          provider: target.provider,
+          subagentCallId,
+          startTime,
+          trace,
+          runner,
+          worldFork,
+          assertLive,
+        });
         options.onSettled?.({
           pluginId: target.provider.pluginId,
           runtimeId: target.provider.name,
@@ -499,27 +499,22 @@ export function createSubagentRunner(
 }
 
 /**
- * Run a sub-agent with the execution's service observer tagging each call
- * with the scheduled runtime the sub-agent works for, so the fault latch
+ * The execution's service observer for a sub-agent, tagging each call with
+ * the scheduled runtime the sub-agent works for, so the fault latch
  * classifies the call in that runtime's scope (a setup runtime's calls
- * neither count nor clear).
+ * neither count nor clear). Undefined when the execution collects none.
  */
-function withServiceOrigin<T>(
+function withServiceOrigin(
   args: SubagentRunArgs,
-  run: () => Promise<T>,
-): Promise<T> {
-  const services = args.deps.services;
-  const observer = services?.executionObserver();
-  if (!services || !observer) return run();
-  return services.withExecutionObserver(
-    (outcome) =>
-      observer(
-        outcome.originRuntimeId !== undefined
-          ? outcome
-          : { ...outcome, originRuntimeId: args.caller.runtimeId },
-      ),
-    run,
-  );
+): TurnExecutorDeps["serviceOutcomes"] {
+  const observer = args.deps.serviceOutcomes;
+  if (!observer) return undefined;
+  return (outcome) =>
+    observer(
+      outcome.originRuntimeId !== undefined
+        ? outcome
+        : { ...outcome, originRuntimeId: args.caller.runtimeId },
+    );
 }
 
 /** The validated request, or the reason it is invalid. */

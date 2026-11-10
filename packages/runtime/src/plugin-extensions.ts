@@ -18,12 +18,24 @@ import {
 } from "@covel/shared";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
+import { deepFreeze } from "./hooks/hook-settings.js";
 
 export interface PluginExtensionExecutionScope {
   readonly emitter?: import("./trace/turn-emitter.js").TurnEmitter;
   readonly world?: import("@covel/shared").WorldModelView;
   readonly sessionId: string;
   readonly locale: string;
+  /**
+   * The session's resolved plugin settings for this execution, keyed by plugin
+   * ID. A provider's `getOwnSettings()`, and that of every service it calls,
+   * reads only the callee's own bucket. Required
+   * because extensions also run outside a turn (UI slots, the session view),
+   * where no hook scope carries them: a turn passes its frozen snapshot, a
+   * host route loads the session's.
+   */
+  readonly settings: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
   readonly turnId?: string;
   readonly runtimeIdentities?: readonly {
     readonly name: string;
@@ -243,6 +255,9 @@ export class PluginExtensionHost {
     const cache = new Map<string, Promise<unknown>>();
     const client = this.services.createKernelClient({
       ...scope,
+      // Providers and the services they call read their own bucket of this
+      // frozen snapshot, with or without a session hook scope.
+      settings: deepFreeze(structuredClone(scope.settings)),
       extensionContext: (pluginId, signal) => {
         let providerWorld: typeof world | undefined;
         return {

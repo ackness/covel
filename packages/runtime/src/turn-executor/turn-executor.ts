@@ -61,7 +61,7 @@ import {
   buildHookSettings,
   snapshotUserSettings,
 } from "../hooks/hook-settings.js";
-import { runWithHookScope } from "../hooks/hook-scope.js";
+import { requireHookScope, runWithHookScope } from "../hooks/hook-scope.js";
 import type { ConfinedHookFailure } from "../hooks/types.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
@@ -470,6 +470,9 @@ async function executeTurnImpl(
       ...deps,
       extensionExecution: deps.extensions.createExecution({
         emitter: deps.emitter,
+        // The turn's frozen settings snapshot, from the scope runTurnPipeline
+        // opened around this execution.
+        settings: requireHookScope("extension execution").settings ?? {},
         runtimeIdentities: activeRuntimes,
         sessionId: input.sessionId,
         turnId: input.turnId,

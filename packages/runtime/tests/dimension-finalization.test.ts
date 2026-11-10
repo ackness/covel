@@ -158,7 +158,7 @@ async function finalize(
               pluginId: "facts",
               description: "facts",
               outputKind: "system",
-              outputContract: "world-ir-provider@1",
+              outputContract: "world-ir@2",
             } as RuntimeManifest,
           ]
         : []),

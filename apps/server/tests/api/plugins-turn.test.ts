@@ -199,10 +199,10 @@ describe("Plugin Routes", () => {
         inputs: {
           worldIR: {
             from: {
-              capability: "world-ir-provider@1",
+              capability: "world-ir@2",
               cardinality: "one",
             },
-            accepts: "contract:world-ir@1",
+            accepts: "contract:world-ir@2",
             required: true,
           },
         },
@@ -231,7 +231,7 @@ describe("Plugin Routes", () => {
               pluginId: "my-plugin",
               worldProjections: {
                 "images-from-world-ir": {
-                  from: "contract:world-ir@1",
+                  from: "contract:world-ir@2",
                   handler: "./server/project-world-ir.js",
                   outputs: {
                     images: { namespace: "images", key: "id" },
@@ -265,7 +265,7 @@ describe("Plugin Routes", () => {
         },
         worldProjections: {
           "images-from-world-ir": {
-            from: "contract:world-ir@1",
+            from: "contract:world-ir@2",
             outputs: {
               images: { namespace: "images", key: "id" },
             },
@@ -282,10 +282,10 @@ describe("Plugin Routes", () => {
         inputs: {
           worldIR: {
             from: {
-              capability: "world-ir-provider@1",
+              capability: "world-ir@2",
               cardinality: "one",
             },
-            accepts: "contract:world-ir@1",
+            accepts: "contract:world-ir@2",
             required: true,
           },
         },

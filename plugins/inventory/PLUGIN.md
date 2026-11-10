@@ -1,5 +1,5 @@
 ---
-version: 0.0.44
+version: 0.0.45
 displayName: Bag
 description: >-
   Keeps track of what you carry. Items you gain, lose or equip in the story are
@@ -10,8 +10,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-requires:
-  - world-ir-provider@1
 contributes:
   services:
     - contract: inventory.bag@1

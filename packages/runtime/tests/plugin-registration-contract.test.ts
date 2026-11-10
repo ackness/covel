@@ -39,6 +39,40 @@ function register(
   return registerService;
 }
 
+describe("the registration mismatch error", () => {
+  it("names the command that syncs PLUGIN.md for an undeclared or missing registration", () => {
+    const hint = "pnpm plugin:extract <plugin-dir>";
+    expect(() => register({}, undefined)).toThrow(hint);
+    const registerTool = vi.fn();
+    const contract = enforcePluginRegistrationContract(
+      { registerTool } as unknown as PluginAPI,
+      { tools: ["save-note"], hooks: [{ event: "TurnStart" }] },
+    );
+    expect(() => contract.validate()).toThrow(
+      /Missing registration: hook:TurnStart.*pnpm plugin:extract/,
+    );
+    const noHooks = enforcePluginRegistrationContract(
+      { registerTool } as unknown as PluginAPI,
+      { tools: ["save-note"] },
+    );
+    expect(() => noHooks.validate()).toThrow(
+      /Missing registration: tool:save-note.*pnpm plugin:extract/,
+    );
+  });
+
+  it("does not suggest syncing for a duplicate registration", () => {
+    const registerTool = vi.fn();
+    const contract = enforcePluginRegistrationContract(
+      { registerTool } as unknown as PluginAPI,
+      { tools: ["save-note"] },
+    );
+    contract.api.registerTool({ name: "save-note" } as never);
+    expect(() =>
+      contract.api.registerTool({ name: "save-note" } as never),
+    ).toThrow(/^Undeclared or duplicate registration: tool:save-note$/);
+  });
+});
+
 describe("the service registration contract", () => {
   it("rejects a model-facing registration declared as a plain service", () => {
     expect(() => register({ services: ["inventory.items@1"] }, true)).toThrow(

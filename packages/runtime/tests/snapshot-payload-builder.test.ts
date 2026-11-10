@@ -5,7 +5,7 @@ import {
   makeSessionSummary,
   makeSnapshot,
   makeTurnMessage,
-} from "../../store/src/contract/test-fixtures.js";
+} from "@covel/store/testing";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
 
 it("excludes presentation dispatch bookkeeping while retaining owned display state", async () => {

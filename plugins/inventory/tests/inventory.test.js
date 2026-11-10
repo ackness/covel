@@ -718,7 +718,7 @@ describe("inventory plugin manifest", () => {
     ).manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
-      "world-ir@1": JSON.parse(
+      "world-ir@2": JSON.parse(
         readContractFile(
           new URL(
             "../../world-ir/schemas/world-ir.schema.json",
@@ -730,17 +730,17 @@ describe("inventory plugin manifest", () => {
     });
   });
 
-  it("records changes in a post-turn function runtime gated on typed WorldIR", () => {
+  it("records changes in a post-turn function runtime reading optional typed WorldIR", () => {
     expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.trigger).toBeUndefined(); // `auto`, the default
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      // `cardinality: one` and `required: true` are the defaults.
-      from: { capability: "world-ir-provider@1" },
-      accepts: "contract:world-ir@1",
+      // Optional: the plugin plays without a world-facts provider.
+      from: { capability: "world-ir@2" },
+      required: false,
     });
-    expect(declaration.requires).toContain("world-ir-provider@1");
+    expect(declaration.requires ?? []).not.toContain("world-ir@2");
     expect(manifest.input.inject).toContainEqual({
       kind: "kernel",
       name: "operations",
@@ -880,6 +880,25 @@ describe("inventory from WorldIR", () => {
       ),
     ).toEqual([]);
     expect(inventoryChangesFromWorldIR(worldIR([]), undefined)).toEqual([]);
+  });
+
+  it("skips without reading the store when no world facts are bound", async () => {
+    const store = {
+      listPluginData: vi.fn(),
+      getPluginData: vi.fn(),
+    };
+    const result = await ledger({
+      store,
+      world: { characters: [player], seats: [] },
+      inputs: { operations: { value: { operations: [] } } },
+    });
+    expect(result).toEqual({
+      outcome: "skipped",
+      skipReason: expect.stringContaining("No world facts"),
+    });
+    expect(getPendingProposals(result)).toEqual([]);
+    expect(store.listPluginData).not.toHaveBeenCalled();
+    expect(store.getPluginData).not.toHaveBeenCalled();
   });
 
   it("applies the changes through the ledger without a model call", async () => {

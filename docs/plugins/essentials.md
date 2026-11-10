@@ -23,7 +23,7 @@
 
 ## 最小闭环
 
-每次改完插件，都走这三步：生成（只做一次）、校验、离线运行。
+每次改完插件，都走这三步：生成（只做一次）、校验、离线运行。带入口代码的插件在校验前多一步：同步声明，见下文[我注册的东西要在哪里声明](#我注册的东西要在哪里声明)。
 
 写给自己或社区用的插件，放在用户插件目录里，不需要安装依赖：
 
@@ -118,8 +118,21 @@ contributes:
       description: Emitted after a note is saved.
 ```
 
+### 改完入口，先同步声明
+
+`PLUGIN.md` 是唯一的来源：安装审批、能力快照和免提示授权都在运行代码之前读取这里的声明，所以不能等加载时再从代码生成。同步的方向是从代码到清单，用你自己的命令，不要手改这六七个列表：
+
+```bash
+pnpm plugin:extract <插件目录>           # 按入口的注册改写 contributes
+pnpm plugin:extract <插件目录> --check   # 不写文件，有漂移时退出 1
+```
+
+每次增删 `registerTool`、`registerRpc`、`registerService`、`on`、`registerFormValidator`、`registerWires` 或 `provideExtension` 之后都跑一次，再用校验和离线运行。它写回 `tools`、`actions`、`services`、`forms`、`wires`、`hooks` 和 `extensions`；`extensions` 只增删 ID，已有条目的 `order`、`slot` 等选项原样保留。命令元数据 `commands` 以及 `events`、`prompt` 等纯声明仍由你维护。详细行为见[带本地代码的插件](./local-code.md#4-写入口文件)。
+
+内置插件由 `pnpm check` 里的 `pnpm check:manifests` 强制：它执行每个内置入口并核对声明，漂移时列出差异和修复命令。加载时的双向核对仍是最后一道闸，报错会带上同一条修复命令。
+
 > [!NOTE]
-> 校验命令只读文件，不运行入口文件。它查不出“声明了但代码里没注册”。这种错误在插件加载时才出现，用[离线运行](./testing.md)可以提前发现。
+> 校验命令只读文件，不运行入口文件，所以查不出“声明了但代码里没注册”。同步命令和[离线运行](./testing.md)会提前发现这种错误；否则它在插件加载时才出现。
 
 ## 模型能用哪些工具
 
@@ -132,7 +145,7 @@ agent 提交时，先按实际 schema 选择可省略字段。完成字段的含
 | `contributes.tools` | `PLUGIN.md`          | 这个插件注册了哪些工具      |
 | `agent.tools`       | agent runtime 的配置 | 这个 agent 可以调用哪些工具 |
 
-`agent.tools` 常用三组：`builtin` 是 Covel 自带的工具，`plugin` 是你自己的工具，`datasets` 是 Covel 为你在 `contributes.datasets` 里声明的数据集生成的读写工具（例如 `notes-get`、`notes-upsert`）。
+`agent.tools` 常用四组：`builtin` 是 Covel 自带的工具，`plugin` 是你自己的工具，`datasets` 是 Covel 为你在 `contributes.datasets` 里声明的数据集生成的读写工具（例如 `notes-get`、`notes-upsert`），`services` 是把别的插件提供给模型用的服务导入成工具（见[导入的服务工具](../reference/tools.md#导入的服务工具)）。另有 `defer` 控制哪些工具延迟加载，不是一组工具。每个字段的写法见 [runtime 字段表](../reference/schema/runtime-manifest.md#agenttools)。
 
 ```yaml
 agent:

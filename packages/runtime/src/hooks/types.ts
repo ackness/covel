@@ -125,7 +125,7 @@ export interface HookContext {
   readonly turnId: string;
   /**
    * The session's content locale. The pipeline fills it from the session
-   * hook scope; absent only for a direct `pipeline.run` with no scope.
+   * hook scope; absent only when the scope carries no locale.
    */
   readonly locale?: string;
   /** Frozen logical number of the originating input, when run in an execution. */
@@ -161,9 +161,10 @@ export interface HookContext {
    * - Scoped to the handler's own plugin only — no cross-plugin reads.
    * - Returns `{}` for framework / global hooks (no `pluginId`), or when the
    *   plugin declared no settings, or when the scope carries no settings.
-   * - Absent (`undefined`) when invoked outside an active hook scope (e.g.
-   *   direct `pipeline.run` unit calls) — handlers should use
-   *   `ctx.getOwnSettings?.() ?? {}`.
+   * - Always set on the context a handler receives: the pipeline refuses to
+   *   run outside a hook scope (`MissingHookScopeError`). It stays optional
+   *   in the type because callers build the context without it, so
+   *   `ctx.getOwnSettings?.() ?? {}` keeps working.
    */
   readonly getOwnSettings?: () => Readonly<Record<string, unknown>>;
 }

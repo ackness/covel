@@ -15,6 +15,9 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createRuntimeTools } from "../src/function-runtime/runtime-tools.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["community"]);
 
 const manifest: RuntimeManifest = {
   name: "community/create",

@@ -135,6 +135,36 @@ describe("test service registry", () => {
       await store.close();
     }
   });
+
+  it("lets a provider read its (empty) settings without a turn", async () => {
+    const registry = makeTestServiceRegistry({
+      activePluginIds: ["notes"],
+      services: {
+        dice: [
+          {
+            name: "faces",
+            contract: "dice.faces@1",
+            input: z.object({}),
+            output: z.object({ settings: z.record(z.string(), z.unknown()) }),
+            handler: (_input: never, ctx) => ({
+              settings: { ...ctx.getOwnSettings() },
+            }),
+          },
+        ],
+      },
+    });
+    const { output } = await callTestService({
+      registry,
+      caller: { pluginId: "notes" },
+      request: {
+        pluginId: "dice",
+        name: "faces",
+        contract: "dice.faces@1",
+        input: {},
+      },
+    });
+    expect(output).toEqual({ settings: {} });
+  });
 });
 
 it("exposes a scoped witnessed-history capability to public tool authors", async () => {

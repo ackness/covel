@@ -14,6 +14,9 @@ import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 afterEach(() => {
   vi.useRealTimers();

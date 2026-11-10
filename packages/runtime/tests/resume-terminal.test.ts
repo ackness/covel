@@ -10,6 +10,9 @@ import type { SuspensionRecord } from "@covel/store";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
+import { useHookScope } from "./_helpers/hook-scope.js";
+
+useHookScope(["probe"]);
 
 afterEach(() => vi.useRealTimers());
 

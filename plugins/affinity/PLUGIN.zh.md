@@ -21,9 +21,11 @@ contributes:
 
 ## 输入
 
-### 本回合 WorldIR
+### 本回合事实
 
-本回合叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。从 `events[type=interaction]`、关系变化和相关 entities 中判断玩家与 NPC 的明确互动；attributes 与 description 是本回合变化的证据。没有明确证据就不更新。
+`<runtime-inputs>` 里有 `worldIR` 时，共享抽取步骤已把本回合叙事整理成结构化事实，位于 `worldIR.value`。从 `events[type=interaction]`、关系变化和相关 entities 中判断玩家与 NPC 的明确互动；attributes 与 description 是本回合变化的证据。
+
+没有 `worldIR` 时，直接读对话里的本回合叙事。两种情况的证据标准相同：没有明确证据就不更新。
 
 ### 已有好感记录
 
@@ -37,7 +39,7 @@ contributes:
 
 ## 步骤
 
-1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
+1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`；没有 `worldIR` 时阅读本回合叙事
 2. 找出玩家与 NPC 之间的**明确互动**（对话、赠礼、帮助、冲突、欺骗、背叛……）
 3. 对每个发生互动的 NPC 评估一个 delta，调用一次 `update-affinity`（可批量，至多 5 条）
 4. 如果本回合没有任何值得记录的变化 → **不调用任何业务工具，用 `submit-output` 提交 `{}` 结束**

@@ -90,6 +90,36 @@ export default async (covel) => {
     });
   });
 
+  it("syncs extensions by ID and keeps the options of those still registered", async () => {
+    const root = await fixture(
+      `export default (covel) => {
+  const handler = () => null;
+  covel.provideExtension("ui.slot@1", "summary", { handler });
+  covel.provideExtension("prompt.segment@1", "notes", { handler });
+};`,
+      "description: Fixture\ncontributes:\n  extensions:\n    - { point: ui.slot@1, id: summary, slot: session.summary@1, order: 5 }\n    - prompt.segment@1/gone\n",
+    );
+    expect((await extractDeclarations(root)).extensions).toEqual([
+      {
+        point: "ui.slot@1",
+        id: "summary",
+        slot: "session.summary@1",
+        order: 5,
+      },
+      "prompt.segment@1/notes",
+    ]);
+    const check = await cli(["extract", root, "--check"]);
+    expect(check.code).toBe(1);
+    expect(check.stdout).toContain("+ prompt.segment@1/notes");
+    expect(check.stdout).toContain("- prompt.segment@1/gone");
+    expect((await cli(["extract", root])).code).toBe(0);
+    const manifest = await fs.readFile(path.join(root, "PLUGIN.md"), "utf8");
+    expect(manifest).toContain("order: 5");
+    expect(manifest).toContain("prompt.segment@1/notes");
+    expect(manifest).not.toContain("gone");
+    expect(await cli(["extract", root, "--check"])).toMatchObject({ code: 0 });
+  });
+
   it("keeps a declared holdsDrafts, which no registration states", async () => {
     const root = await fixture(
       `export default (covel) => {

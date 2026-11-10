@@ -6,7 +6,7 @@ import {
   invalidateSessionEvents,
   sessionEventBus,
 } from "../../src/routes/api/session/session-events.js";
-import { makeSession } from "../../../../packages/store/src/contract/test-fixtures.js";
+import { makeSession } from "@covel/store/testing";
 import { createIsolatedPgDatabase } from "./pg-test-db.js";
 import { drain, makeApp } from "../api/sse-test-utils.js";
 

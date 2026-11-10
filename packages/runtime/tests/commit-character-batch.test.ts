@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CharacterUpsertPayload, Proposal } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import {
-  makeCharacter,
-  makeSession,
-} from "../../store/src/contract/test-fixtures.js";
+import { makeCharacter, makeSession } from "@covel/store/testing";
 import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";
 
 const SESSION_ID = "sess-1";

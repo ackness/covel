@@ -200,6 +200,7 @@ describe("memory detached lifecycle", () => {
       const execution = extensions.createExecution({
         sessionId: "session",
         locale: "en",
+        settings: {},
         turnId: "next",
         signal: new AbortController().signal,
         readPluginData: (pluginId, namespace) =>
@@ -287,6 +288,7 @@ describe("memory detached lifecycle", () => {
         const execution = extensions.createExecution({
           sessionId: "session",
           locale: "en",
+          settings: {},
           signal: new AbortController().signal,
           readPluginData: async () => [],
         });
@@ -369,6 +371,7 @@ it("settles ten source turns in order and never publishes a timed-out late memor
           sessionId: "session",
           turnId: `next-${index}`,
           locale: "en",
+          settings: {},
           signal: new AbortController().signal,
           readPluginData: (pluginId, namespace) =>
             store.listPluginData("session", pluginId, namespace),

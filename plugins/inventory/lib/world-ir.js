@@ -18,7 +18,7 @@ export const MAX_CHANGES = 8;
 const MAX_TAGS = 5;
 
 /**
- * @param {unknown} worldIR  `contract:world-ir@1` value
+ * @param {unknown} worldIR  `contract:world-ir@2` value
  * @param {{ id: string, name: string } | undefined} player
  * @returns {Array<{ op: string, name: string, quantity?: number, description?: string, tags?: string[] }>}
  */

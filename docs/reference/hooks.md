@@ -75,6 +75,8 @@ handler 收到两个参数：上下文 `ctx` 和负载 `payload`。它返回一�
 
 runtime 的身份只在上下文里。负载不会重复 `pluginId` 或 `runtimeId`，所以一句 `ctx.runtimeId === "..."` 对每个事件都适用。
 
+handler 总能拿到 `activePluginIds` 和 `getOwnSettings`。内核只在一个会话的 Hook 作用域里运行 handler：回合、恢复、手动运行、后台作业、提交和会话的开始与结束都会先建立它。宿主代码如果在作用域外触发 Hook，内核直接报 `MissingHookScopeError`，不会让所有插件的 handler 在没有设置的情况下运行。`ctx.getOwnSettings?.() ?? {}` 的写法仍然有效。
+
 ### Payload
 
 负载是一份私有副本。直接修改它没有任何效果。要改内容，把改动放在返回值的 `replace` 里。

@@ -1,8 +1,10 @@
 import { publicSessionIncarnation } from "../routes/api/session/session-guard.js";
+import { loadSessionPluginSettings } from "../routes/api/session/hook-scope.js";
 import { createHash } from "node:crypto";
 import { ZodError } from "zod";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import {
   createWorldModelView,
   type PluginExtensionHost,
@@ -66,6 +68,8 @@ const terminalEvents = new Set([
 /** Session-scoped, serialized projections; provider code sees only its own data. */
 export function createUiSlotHost(args: {
   readonly store: DataStore;
+  /** Resolves each provider's settings for the session's projections. */
+  readonly pluginRegistry: Pick<PluginRegistry, "get" | "getAll">;
   readonly eventBus: EventBus;
   readonly extensionHost: PluginExtensionHost;
   readonly services: PluginServiceRegistry;
@@ -166,6 +170,11 @@ export function createUiSlotHost(args: {
     const execution = args.extensionHost.createExecution({
       sessionId,
       locale: session.locale,
+      settings: await loadSessionPluginSettings({
+        store: args.store,
+        pluginRegistry: args.pluginRegistry,
+        session,
+      }),
       signal: abort.signal,
       readPluginData: (pluginId, namespace) =>
         args.store.listPluginData(sessionId, pluginId, namespace),

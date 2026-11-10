@@ -1,5 +1,6 @@
 import {
   createWorldModelView,
+  requireHookScope,
   resolveRequestContextBudget,
   type PluginExtensionHost,
   type LLMAdapter,
@@ -118,6 +119,9 @@ export function createBootstrapCompactorRunner(
             }
           : {}),
         locale: locale ?? "zh-CN",
+        // Compaction runs inside a turn: providers read the turn's frozen
+        // settings, and a call from outside a turn fails loudly.
+        settings: requireHookScope("history compaction").settings ?? {},
         signal: signal ?? new AbortController().signal,
         world: await createWorldModelView(store, sessionId),
         readPluginData: (pluginId, namespace) =>

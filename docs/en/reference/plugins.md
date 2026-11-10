@@ -136,6 +136,8 @@ Getting ready groups the plugins by whether they call a model, that is by the de
 
 ### contributes fields
 
+`contributes` is a security artifact, not documentation: the capability snapshot, approval-free grants and declarative admission all read it without executing code, so the manifest stays the single source of truth and is never generated from the entry at install or load time. After changing entry code, authors sync the manifest to the registrations with `pnpm plugin:extract <plugin directory>`; `pnpm check:manifests` enforces it for bundled plugins, and the load-time check in both directions (its errors name this command) is the backstop.
+
 <!-- prettier-ignore -->
 | `contributes` field | Registration or resource it maps to |
 | --- | --- |
@@ -1308,11 +1310,13 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows scores, tiers and changes; `prompt.segment@1` provides a read-only projection of current scores. |
 | [branch-reply](../../../plugins/branch-reply/README.md) | Alternative Replies | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
 | [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist with echoed form answers and records character changes. |
+| [character-agent](../../../plugins/character-agent/README.md) | Character Voice | `plugin` | `character-actor@1` | inline (delegation only) | Lets one character speak in their own voice. Other runtimes delegate to it; it cannot run on its own. |
 | [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
 | [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Chat Storyteller | `plugin` | `narrative-engine@2` | `plan` / `narrate` | Makes the story read like a conversation; stage presence informs both planning and narration. |
 | [codex](../../../plugins/codex/README.md) | Codex | `plugin` | none | inline | Organizes newly found places, people, items, and rumors. |
 | [core-quest](../../../plugins/core-quest/README.md) | Quest Log | `plugin` | `world-ir.vocabulary@1` | `log`, `vocabulary` | Registers quests from the narrative and moves them forward. |
 | [dice-check](../../../plugins/dice-check/README.md) | Dice Check | `plugin` | `action-check@1` | `roller`, `recorder` | Rolls dice for actions that carry a risk of failure. |
+| [dm-console](../../../plugins/dm-console/README.md) | Game Master Panel | `plugin` | none | none | Shows the characters in the scene, what is waiting for you, the story and the input box on one page. It is only a view and makes no model calls. |
 | [guide](../../../plugins/guide/README.md) | Action Suggestions | `plugin` | `scene-prompts@1` | inline | After each story turn, reviews what has happened so far and offers short actions the player can use as they are. |
 | [history-compaction](../../../plugins/history-compaction/README.md) | Long-Story Memory | `core` | `history.compact@2` (default provider) | none | Organizes earlier conversation into segmented summaries. |
 | [inventory](../../../plugins/inventory/README.md) | Inventory | `plugin` | `world-ir.vocabulary@1` | `ledger`, `vocabulary` | Records items gained and lost, and changes of equipment. |
@@ -1325,8 +1329,9 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue`, `story-cues` | Optionally reads story scene and mood cues to play the world's music; scene selection works without Stage Scene, and events remain overrides. |
 | [story-events](../../../plugins/story-events/README.md) | Hidden Plot Events | `plugin` | `story-event-cue@1`, `story-event.plan@1` | `intake`, `evaluate`, `plot` | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
 | [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Ability Checks | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
+| [turn-policy](../../../plugins/turn-policy/README.md) | Who Speaks Next | `plugin` | `turn-policy@1` | none | Decides which characters speak each turn: whoever you mention, a set order, at random, your pick or an AI director. It is a read-only service. |
 | [world-init](../../../plugins/world-init/README.md) | World State | `core` | `world-data-provider@1`, `world.dimensions@1` | `schema-gen`, `dimension-context`, `dimension-tracker`, `dimension-clock`, `edit-dimensions` | Initializes character attributes and world dimensions, and keeps maintaining them. |
-| [world-ir](../../../plugins/world-ir/README.md) | Story Notes | `plugin` | `world-ir-provider@1` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
+| [world-ir](../../../plugins/world-ir/README.md) | Story Notes | `plugin` | `world-ir@2` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
 | [world-time](../../../plugins/world-time/README.md) | World Time | `core` | `world-time-evolution@1`, `world-time-context@1` | `context`, `advance` | Keeps the date, the time of day, and the direction time flows, and settles time changes from this turn's story. |
 
 The details of each plugin are in its own `PLUGIN.md` and README.

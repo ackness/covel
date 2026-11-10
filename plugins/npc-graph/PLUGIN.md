@@ -1,5 +1,5 @@
 ---
-version: 0.0.42
+version: 0.0.43
 displayName: Relationships
 description: >-
   Keeps track of who is connected to whom, so the story remembers the people
@@ -10,8 +10,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-requires:
-  - world-ir-provider@1
 contracts:
   graph-rag@1:
     schema: ./schemas/graph-rag.schema.json

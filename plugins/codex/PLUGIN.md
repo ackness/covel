@@ -1,5 +1,5 @@
 ---
-version: 0.0.43
+version: 0.0.44
 displayName: Almanac
 description: >-
   Collects the places, people, items and rumors you discover into an almanac you
@@ -10,8 +10,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-requires:
-  - world-ir-provider@1
 contributes:
   ui:
     right:
@@ -34,8 +32,8 @@ runtime:
     inputs:
       worldIR:
         from:
-          contract: world-ir-provider@1
-        accepts: "contract:world-ir@1"
+          contract: world-ir@2
+        required: false
     selfData:
       - namespace: entries
         as: <existing-entries>
@@ -52,9 +50,11 @@ You are the Knowledge Codex Tracker. Judge whether this turn's narrative surface
 
 ## Inputs
 
-### Current WorldIR
+### This turn's facts
 
-The shared extraction agent has converted this turn's narrative to `contract:world-ir@1`. Read it from `worldIR.value` inside `<runtime-inputs>`. Start with `entities` and `statements`, using `summary`, `events`, and `relations` as supporting evidence. Record only information explicitly present in the IR; never reconstruct details that were not extracted.
+When `<runtime-inputs>` has `worldIR`, a shared extraction step has already turned this turn's narrative into structured facts in `worldIR.value`. Start with `entities` and `statements`, using `summary`, `events`, and `relations` as supporting evidence. Record only information explicitly present in the IR; never reconstruct details that were not extracted.
+
+When `worldIR` is absent, read this turn's narrative in the conversation instead, and record only what the narrative states explicitly.
 
 ### Existing codex entries
 
@@ -68,8 +68,8 @@ The framework has already injected the session's full set of entries into the `<
 
 ## Procedure
 
-1. Read `worldIR.value` inside `<runtime-inputs>` carefully
-2. Scan `<existing-entries>` for titles/tags that overlap any potential discovery in the WorldIR
+1. Read `worldIR.value` inside `<runtime-inputs>` carefully, or this turn's narrative when there is no `worldIR`
+2. Scan `<existing-entries>` for titles/tags that overlap any potential discovery you read
 3. Pick **at most 3** truly codex-worthy new discoveries using the rules below
 4. For an addition to an entry, reuse its title. For a new discovery, write a new title. Put both in `entries`, most important first
 5. Submit them in **one** `sync-codex-entries` call

@@ -265,7 +265,7 @@ describe("normalize golden (bundled plugin set)", () => {
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
     expect(manifestOf(manifests, "world-ir").outputContract).toBe(
-      "world-ir-provider@1",
+      "world-ir@2",
     );
     // `cardinality: one` and `required: true` are the defaults the manifests
     // leave out; the scheduler reads an absent value as them.
@@ -274,8 +274,9 @@ describe("normalize golden (bundled plugin set)", () => {
       select: "/segments",
     });
 
-    // Structured consumers use only the typed WorldIR slot. The binding is
-    // both the DAG edge and the same-turn failure gate.
+    // Structured consumers use only the typed WorldIR slot. The optional
+    // binding orders them after the extractor when it is active; without it
+    // they still run.
     for (const id of [
       "affinity",
       "codex",
@@ -287,8 +288,8 @@ describe("normalize golden (bundled plugin set)", () => {
       expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([]);
       expect(spec.bindings.worldIR).toEqual({
-        from: { capability: "world-ir-provider@1" },
-        accepts: "contract:world-ir@1",
+        from: { capability: "world-ir@2" },
+        required: false,
       });
     }
 

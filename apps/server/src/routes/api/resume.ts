@@ -4,9 +4,8 @@ import { commitExecution } from "./commit-execution.js";
 import { recordExecutionFaults } from "./plugin-faults.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
-  requestJobServices,
   announceDeferredRuntimeJobs,
-  withSettledExecutionLock,
+  requestCredentialHandoff,
 } from "./plugin-rpc/settled-request.js";
 import { type QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
 import { queueReleasedRuntimeJobs } from "./commit-envelope.js";
@@ -63,7 +62,6 @@ import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
   refuseReleasedJobs,
   resumeSuspendedRuntime,
-  snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
   settleFailedResumeJobs,
@@ -86,10 +84,14 @@ import {
   parseJsonBody,
 } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
+import { buildSessionHookScope } from "./session/hook-scope.js";
 import {
-  readLockedSession,
-  withLockedSessionMutation,
-} from "./session/locked-mutation.js";
+  loadExecutionUserSettings,
+  readExecutionSession,
+  syncSessionRuntimes,
+  withSettledExecutionLock,
+} from "./execution-context.js";
 import {
   maybeSweepExpiredSuspensions,
   requestSuspensionSweepDeps,
@@ -98,12 +100,8 @@ import {
   abandonSuspension,
   requestSuspensionAbandonDeps,
 } from "./suspension-abandon.js";
-import {
-  readPluginUserSettings,
-  loadSessionPluginUserSettings,
-} from "./plugin-user-settings.js";
+import { readPluginUserSettings } from "./plugin-user-settings.js";
 import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
-import { buildSessionHookScope } from "./session/hook-scope.js";
 
 type Env = {
   Variables: {
@@ -240,15 +238,14 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   // (see hooks/hook-scope.ts).
   try {
     return await withSettledExecutionLock(c, sessionId, async () => {
-      c.get("requestWork")?.signal.throwIfAborted();
       // Active gate under the lock — a paused/ended session must
       // not accept a resume (it would commit state and write history).
-      const liveSession = await readLockedSession({
-        c,
+      // No stream is open yet: the refusal is the response.
+      const liveSession = await readExecutionSession(c, {
         store,
         sessionId,
         expectedSession: guard.session,
-        allowedStatuses: ["active"],
+        signal: c.get("requestWork")?.signal,
       });
       if (liveSession instanceof Response) return liveSession;
 
@@ -280,11 +277,11 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
       // Rebuild the process-local activation view from persisted truth only
       // after the lifecycle checks above. A disabled runtime cannot be
       // resumed from a stale registry snapshot.
-      pluginRegistry.syncSessionActivations(
+      const activeRuntimes = syncSessionRuntimes(
+        pluginRegistry,
         sessionId,
         liveSession.activePlugins,
       );
-      const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
       const effectiveManifest: RuntimeManifest | undefined =
         activeRuntimes.find((rt) => rt.name === liveSuspension.runtimeId);
       if (!effectiveManifest) {
@@ -326,18 +323,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         concealedRuntimeIds: concealedRuntimeIds(activeRuntimes),
       });
 
-      const userSettings = snapshotUserSettings(
-        await loadSessionPluginUserSettings(
-          store,
-          liveSession,
-          decodedUserSettings.settings,
-        ),
+      const userSettings = await loadExecutionUserSettings(
+        store,
+        liveSession,
+        decodedUserSettings.settings,
       );
       const hookScope = buildSessionHookScope({
         pluginRegistry,
-        activePluginIds: liveSession.activePlugins,
+        session: liveSession,
         userSettings,
-        locale: liveSession.locale,
       });
       return runWithHookScope(hookScope, async () => {
         // Claim while holding the same lifecycle lock as resume execution and
@@ -434,15 +428,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
                         activeRuntimes,
                         locale: liveSession.locale ?? DEFAULT_LOCALE,
                         ...(userSettings ? { userSettings } : {}),
-                        registerCredentials: (key, maxQueueMs) => {
-                          const services = requestJobServices(c);
-                          if (services)
-                            c.get("runtimeJobCredentials")?.register(
-                              key,
-                              services,
-                              maxQueueMs,
-                            );
-                        },
+                        credentials: requestCredentialHandoff(c),
                       },
                       releasedJobs,
                     )),
@@ -459,11 +445,13 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           enqueueReleasedJobsInTx: refuseReleasedJobs,
           memorySystem: c.get("memorySystem"),
           imageFlowRuntimeIds: (
-            await resolveMediaImageFlow(
+            await resolveMediaImageFlow({
               store,
-              c.get("pluginExtensions"),
+              host: c.get("pluginExtensions"),
+              pluginRegistry,
               sessionId,
-            )
+              settings: hookScope.settings,
+            })
           )?.assetRuntimeIds,
           signal: c.get("requestWork")?.signal,
           completion: {
