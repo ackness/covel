@@ -401,12 +401,13 @@ export function resolveSessionPlugins(args: {
   // Each failed round removes at least one unsupported candidate, then admits
   // the remaining candidates again with their defaults still available.
   const unsupported = new Map<string, PluginResolutionRejection>();
-  const pruneUnprovided = () => {
-    // One wave only: a consumer of a removed provider may use a restored
-    // default in the next round. Do not reject it transitively in this round.
+  const pruneUnprovided = (replacements: ReadonlySet<string> = new Set()) => {
+    // Drop one failed candidate, then reconsider admission. In particular, a
+    // failed replacement must restore its default before judging consumers
+    // that lost another contract the default also provided.
     const held = [...active];
-    for (const id of held) {
-      const missing = registry
+    const failures = held.flatMap((id) => {
+      const contract = registry
         .get(id)!
         .requires?.find(
           (required) =>
@@ -414,22 +415,35 @@ export function resolveSessionPlugins(args: {
               contracts(registry.get(candidate)!).includes(required),
             ),
         );
-      if (missing) {
-        const pending = args.plugins.filter(
-          (provider) =>
-            contracts(provider).includes(missing) &&
-            rejected.get(provider.id)?.code === "approval-required",
-        );
-        reject(
-          id,
-          pending.length ? "approval-required" : "missing-provider",
-          `Required contract ${missing} has no active provider`,
-          pending.map((provider) => provider.id),
-          undefined,
-          missing,
-        );
-        unsupported.set(id, rejected.get(id)!);
-      }
+      return contract ? [{ id, contract }] : [];
+    });
+    const failed =
+      failures.find(({ id }) => replacements.has(id)) ??
+      failures.find(
+        ({ contract }) =>
+          !candidates.some(
+            (id) =>
+              !unsupported.has(id) &&
+              contracts(registry.get(id)!).includes(contract),
+          ),
+      ) ??
+      failures[0];
+    if (failed) {
+      const { id, contract: missing } = failed;
+      const pending = args.plugins.filter(
+        (provider) =>
+          contracts(provider).includes(missing) &&
+          rejected.get(provider.id)?.code === "approval-required",
+      );
+      reject(
+        id,
+        pending.length ? "approval-required" : "missing-provider",
+        `Required contract ${missing} has no active provider`,
+        pending.map((provider) => provider.id),
+        undefined,
+        missing,
+      );
+      unsupported.set(id, rejected.get(id)!);
     }
   };
   // Explicit requests precede dependencies; ties retain stable request/catalog order.
@@ -468,6 +482,7 @@ export function resolveSessionPlugins(args: {
     const pending = new Set(
       ordered.filter((id) => active.has(id) && replacers.has(id)),
     );
+    const replacements = new Set<string>();
     while (pending.size > 0) {
       const waiting = [...pending];
       // Settle replacement chains from their end. In a cycle, stable request
@@ -482,15 +497,16 @@ export function resolveSessionPlugins(args: {
       const replacement = others.find(
         (other) => active.has(other) && accepted.includes(other),
       );
-      if (replacement)
+      if (replacement) {
+        replacements.add(replacement);
         reject(
           id,
           "default-replaced",
           `A non-default provider (${replacement}) replaces ${id}`,
         );
-      else admit(id);
+      } else admit(id);
     }
-    pruneUnprovided();
+    pruneUnprovided(replacements);
     if (unsupported.size === before) break;
   }
   // A provider added only for the world has no requesting plugin; without this
