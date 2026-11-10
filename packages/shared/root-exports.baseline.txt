@@ -794,7 +794,6 @@ findCharacterAliasConflict
 findInlineLocaleMaps
 fitWorldLore
 formatValidationErrors
-frameworkContractSchemas
 getBuiltinProviderConnection
 getEnvDefinition
 getProviderProtocolDescriptor

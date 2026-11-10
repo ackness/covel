@@ -64,23 +64,22 @@ Below are the non-test source files over 800 lines. 800 lines is only the thresh
 <!-- prettier-ignore -->
 | File | Lines |
 | --- | ---: |
-| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1510 |
-| `packages/shared/src/schemas/plugin-schemas.ts` | 1470 |
-| `packages/runtime/src/plugin-services.ts` | 1355 |
+| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 1505 |
+| `packages/shared/src/schemas/plugin-schemas.ts` | 1493 |
+| `packages/runtime/src/plugin-services.ts` | 1359 |
 | `packages/ai-provider/src/gateway.ts` | 1314 |
 | `apps/server/src/world-data/validate-world-package.ts` | 1295 |
-| `apps/web/src/stores/session-store/actions.ts` | 1281 |
-| `packages/runtime/src/agent-loop/subagent-runner.ts` | 1180 |
-| `packages/runtime/src/turn-executor/turn-executor.ts` | 1167 |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 1263 |
+| `packages/runtime/src/turn-executor/turn-executor.ts` | 1207 |
+| `packages/runtime/src/agent-loop/subagent-runner.ts` | 1194 |
 | `apps/server/src/world-data/session-import.ts` | 1165 |
-| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 1145 |
 | `packages/plugin-handlers-utils/src/plugin-api.ts` | 1092 |
 | `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 1071 |
+| `apps/web/src/stores/session-store/actions.ts` | 1058 |
 | `packages/store/src/types.ts` | 1045 |
-| `apps/server/src/routes/api/bootstrap.ts` | 1037 |
 | `packages/create/src/create-world.ts` | 1032 |
-| `packages/plugin-loader/src/load.ts` | 1001 |
-| `packages/shared/src/types/protocol.ts` | 996 |
+| `packages/plugin-loader/src/load.ts` | 1017 |
+| `packages/shared/src/types/protocol.ts` | 1005 |
 | `packages/settings/src/store.ts` | 996 |
 | `packages/events/src/event-bus.ts` | 995 |
 | `apps/web/src/components/session/game-view.tsx` | 989 |
@@ -88,17 +87,19 @@ Below are the non-test source files over 800 lines. 800 lines is only the thresh
 | `apps/server/src/routes/api/session.ts` | 957 |
 | `packages/runtime/src/function-runtime/plugin-handler-helpers.ts` | 946 |
 | `apps/web/src/stores/session-store/reducer.ts` | 939 |
-| `packages/runtime/src/agent-loop/tool-executor.ts` | 915 |
+| `packages/runtime/src/agent-loop/tool-executor.ts` | 924 |
 | `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 907 |
 | `apps/web/src/components/session/session-prep-screen.tsx` | 899 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 888 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 885 |
 | `apps/server/src/routes/api/plugin-rpc/jobs.ts` | 867 |
 | `packages/runtime/src/interaction/interaction-submission.ts` | 863 |
 | `packages/runtime/src/retry/llm-retry.ts` | 859 |
 | `packages/plugin-handlers-utils/src/dimension-schemas.ts` | 852 |
 | `apps/server/src/routes/api/ai.ts` | 844 |
 | `apps/web/src/services/data-service/local.ts` | 825 |
+| `packages/runtime/src/hooks/wire-helpers.ts` | 825 |
 | `apps/desktop/src/main.ts` | 820 |
-| `packages/runtime/src/hooks/wire-helpers.ts` | 809 |
+| `apps/web/src/stores/session-store/sse-event-routes.ts` | 808 |
+| `packages/shared/src/schemas/runtime-rules.ts` | 804 |
 
 This list follows the comments in the current source. Historical counts and line numbers are not the current contract.

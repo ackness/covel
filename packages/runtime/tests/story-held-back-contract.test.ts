@@ -1,4 +1,4 @@
-import { submitted } from "./_helpers/agent-loop-fixture.js";
+import { storySubmitted } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type {
@@ -95,7 +95,7 @@ async function playTurn(
     {
       store,
       llm: {
-        generate: async () => submitted("The door creaks open."),
+        generate: async () => storySubmitted("The door creaks open."),
       },
       loadRuntime: async (loaded) => ({
         manifest: loaded,
