@@ -15,6 +15,7 @@ import {
   stageSchema,
   toolsConfigSchema,
   effectsDeclSchema,
+  jsonPointerSchema,
   permissionsDeclSchema,
   pluginDataInjectDeclSchema,
   runtimeManifestInputSchema,
@@ -23,6 +24,10 @@ import {
   AGENT_LOOP_DEFAULTS,
   DEFAULT_FUNCTION_HANDLER,
 } from "./runtime-defaults.js";
+import {
+  STORY_CONTEXT_INPUT,
+  storyContextPriorities,
+} from "@covel/plugin-handlers-utils";
 
 const loopDefault = (field: "timeoutMs" | "callTimeoutMs" | "maxRetries") =>
   `Defaults to ${AGENT_LOOP_DEFAULTS.system[field]}; ${AGENT_LOOP_DEFAULTS.story[field]} with \`io.visibility: story\`.`;
@@ -92,9 +97,9 @@ const sourceSchema = z.union([
   runtimeSourceSchema,
   z.strictObject({
     kernel: z
-      .enum(["turn-digest@1", "operations@1"])
+      .enum(["turn-digest@1", "operations@1", "story-context@1"])
       .describe(
-        "Kernel input: the turn digest or staged operations from completed upstream runs.",
+        "Kernel input: the turn digest, staged operations from completed upstream runs, or the notes pre-turn runtimes hand to the story.",
       ),
   }),
 ]);
@@ -258,6 +263,33 @@ export const runtimeAuthoringManifestSchema = z
               .optional(),
           })
           .describe("What the runtime produces.")
+          .optional(),
+        storyContext: z
+          .strictObject({
+            select: jsonPointerSchema
+              .meta({
+                description:
+                  "JSON Pointer into this runtime's validated output. The value is `null` or empty for nothing to say, a string, or `{ title?, content }`. Defaults to the whole output.",
+                examples: ["/storyContext"],
+              })
+              .optional(),
+            priority: z
+              .enum(storyContextPriorities)
+              .describe(
+                "Ranking tier: `high` notes come first and are the last to be left out. Defaults to `normal`.",
+              )
+              .optional(),
+            order: z
+              .number()
+              .int()
+              .describe(
+                "Order within a tier, ascending; ties go by package and runtime ID. Defaults to `0`.",
+              )
+              .optional(),
+          })
+          .describe(
+            "Hands one value of this runtime's output to the story of the same turn as a note of the `story-context@1` kernel input. Only on stage `pre-turn`.",
+          )
           .optional(),
         visibility: z
           .enum(["story", "system"])
@@ -597,6 +629,14 @@ export const runtimeAuthoringManifestSchema = z
             ([, binding]) =>
               "kernel" in binding.from &&
               binding.from.kernel === "operations@1",
+          )
+          .map(([name]) => ({ name })),
+        storyContext: value.io?.storyContext,
+        storyContextInputs: inputs
+          .filter(
+            ([, binding]) =>
+              "kernel" in binding.from &&
+              binding.from.kernel === STORY_CONTEXT_INPUT,
           )
           .map(([name]) => ({ name })),
         turnInputs: inputs

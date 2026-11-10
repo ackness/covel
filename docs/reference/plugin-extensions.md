@@ -22,6 +22,7 @@
 | 需求                             | 接口                                                                                          | 执行与数据边界                                                                                                 |
 | -------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                                               | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过                                     |
+| 把本回合算出的说明交给故事       | `pre-turn` runtime 的 `io.storyContext` + 读者的 `from: { kernel: story-context@1 }`          | 不加调度边；内核排序、去重、按预算整条省略，见[内核输入 `story-context@1`](./plugins.md#story-context)         |
 | 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed`                              | 读取本次执行开始前的快照                                                                                       |
 | 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger                                     | 由调度和提交链路管理；不是内存中任意广播                                                                       |
 | 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services` / 工具的 `context.services` / `agent.tools.services` | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务；agent 把给模型用的服务导入成工具                        |
@@ -30,6 +31,17 @@
 | UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`                                      | 复用现有 RPC、会话归属与审批；写入边界见下文                                                                   |
 | UI 发出领域事件                  | `emitEvent`                                                                                   | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行                                        |
 | 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                                                 | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                                                       |
+
+<a id="feeding-the-story"></a>
+
+内容进入故事 runtime 有四条路，各管一件事：
+
+| 路径                                            | 用在什么时候                                                                                                                     |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| [`story-context@1`](./plugins.md#story-context) | 本回合算出、给故事看的说明，例如检定结果、刚触发的事件、此刻的时间。提供方不用知道谁是叙事，声明式包的 `pre-turn` agent 也能提供 |
+| 契约输入 `io.inputs.*.from.contract`            | 读者要按 schema 读结构化的值，例如按名单逐个处理在场角色                                                                         |
+| [`prompt.segment@1`](./extension-points.md)     | entry 代码按会话状态拼的段落。它看不到本回合其他 runtime 的结果                                                                  |
+| 静态 `contributes.prompt`                       | 和回合无关的固定指令                                                                                                             |
 
 agent 可用 [`delegate-batch`](./tools.md#delegate-batch) 并发委托独立请求。写服务仍共用调用方/提供方锁和操作序号；结果按索引排列不代表服务按该顺序取得锁。
 

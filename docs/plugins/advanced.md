@@ -214,6 +214,42 @@ Authoring examples match their schemas.
 
 角色卡这类业务格式归对应的插件所有。Covel 只处理通用的“来源 → 目标”和角色本身，不会为某个插件单独包装数据。插件给某个角色的数据可以写在世界的角色记录里：在接收的数据空间上声明 `authoring.characterField`，Covel 按角色 ID 把记录里这个字段交给你，见[一个世界一份角色文件](../reference/world-data.md#一个世界一份角色文件)。
 
+<a id="feeding-the-story"></a>
+
+## 给故事加一条说明
+
+本回合算出的东西（检定结果、刚触发的事件、此刻的时间）要让故事写进去时，不用绑定某个叙事的契约，也不用知道谁在叙事。在 `pre-turn` runtime 上写 `io.storyContext`，指向输出里的一个值：
+
+```yaml
+---
+description: Hand the world time to the story
+schedule:
+  stage: pre-turn
+io:
+  storyContext:
+    select: /storyContext
+    priority: high
+function: {}
+---
+```
+
+```js
+export default async function handler(ctx) {
+  const time = await ctx.pluginData.get("clock", "now");
+  return {
+    outcome: "success",
+    value: { storyContext: time ? `World time: ${time.label}.` : null },
+  };
+}
+```
+
+- 这个位置可以是一段文字、`{ title, content }`，或者 `null`（本回合没什么要说）。没写标题时用包的 `displayName`。
+- agent 提供方要有 `io.output.schema`、同目录的 `output.schema.json` 或输出契约，说明从已校验的输出里取。
+- 说明不合格（太长、形状不对）时只是被省略，你的 runtime 照常成功。
+- 读说明的是写了 `from: { kernel: story-context@1 }` 的 runtime，通常是叙事。内核负责排序、去重和 token 预算，读者一行输入就读到所有插件的说明。
+
+字段、限制、排序和预算见[内核输入 `story-context@1`](../reference/plugins.md#story-context)。其他交给故事的路子（契约输入、提示词片段、`PostContextAssembly`）怎样选，见[给故事提供内容](../reference/plugin-extensions.md#feeding-the-story)。测读者时用 [`storyContextSlot`](./testing.md#工具包里有什么) 造输入。
+
 ## 服务与扩展
 
 两种让别人调用你的代码的方式：

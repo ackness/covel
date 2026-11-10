@@ -23,8 +23,8 @@ import {
 import {
   checkAcceptsCompatibility,
   projectSchemaBySelect,
-  resolveJsonPointer,
 } from "../src/schedule/accepts-compat.js";
+import { resolveJsonPointer } from "../src/schedule/json-pointer.js";
 import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 
 type Schema = Readonly<Record<string, unknown>>;

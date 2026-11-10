@@ -46,6 +46,11 @@ import { loadPrompt } from "./prompts-loader.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
 import { fitWorldLore } from "./world-lore.js";
 import {
+  isStoryContextSlot,
+  renderStoryContextBlock,
+} from "./story-context.js";
+import type { StoryContextValue } from "@covel/plugin-handlers-utils";
+import {
   activeContributions,
   collectDepthContributions,
   renderSystemLoreContributions,
@@ -212,12 +217,37 @@ function modelFacingSlots(
 /**
  * Reserved `<runtime-inputs>` block (docs 02 §3.2): the provenance-wrapped
  * `inputs.<name>` slots as JSON, the shape a function handler reads from
- * `ctx.inputs` minus result ids. Absent when no bindings resolved.
+ * `ctx.inputs` minus result ids. Absent when no bindings resolved. The
+ * `story-context@1` input has a block of its own, so it is not sent twice.
  */
 function buildInputsBindingBlock(params: ContextBuildParams): string {
-  const slots = params.inputSlots;
-  if (!slots || Object.keys(slots).length === 0) return "";
+  const slots = Object.fromEntries(
+    Object.entries(params.inputSlots ?? {}).filter(
+      ([, slot]) => !isStoryContextSlot(slot),
+    ),
+  );
+  if (Object.keys(slots).length === 0) return "";
   return `<runtime-inputs>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots, executionStoryInConversation(params))))}\n</runtime-inputs>`;
+}
+
+/**
+ * Reserved `<story-context>` block: the notes pre-turn runtimes handed to
+ * this turn's story through the `story-context@1` input, after a header in
+ * the instruction language. Absent without notes.
+ */
+async function buildStoryContextBlock(
+  params: ContextBuildParams,
+): Promise<string> {
+  const slot = Object.values(params.inputSlots ?? {}).find(isStoryContextSlot);
+  if (slot?.cardinality !== "one") return "";
+  const value = slot.value as unknown as StoryContextValue;
+  if (!value.items?.length) return "";
+  const header = await loadPrompt(
+    "server",
+    "story-context",
+    instructionLocaleFor(params.turnInput.locale),
+  );
+  return renderStoryContextBlock(value, header);
 }
 
 /**
@@ -315,6 +345,7 @@ async function buildPromptSegments(
   const turnData = [
     rawInjects,
     buildInputsBindingBlock(params),
+    await buildStoryContextBlock(params),
     buildExportsBindingBlock(params),
     await buildOperationNoticeBlock(params),
     staged ? "" : activation,

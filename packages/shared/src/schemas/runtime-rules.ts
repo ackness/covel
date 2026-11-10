@@ -15,6 +15,7 @@ import {
 } from "./presentation-rules.js";
 import {
   CHARACTER_ACTOR_CONTRACT,
+  STORY_CONTEXT_INPUT,
   TURN_POLICY_CONTRACT,
   FRAMEWORK_TOOL_NAMES,
 } from "@covel/plugin-handlers-utils";
@@ -97,6 +98,10 @@ export interface RuntimeRuleView extends PresentationRuleView {
     readonly recordAs?: string;
     readonly from?: { readonly tool: string };
   };
+  /** The value this pre-turn runtime hands to the story (`io.storyContext`). */
+  readonly storyContext?: {
+    readonly select?: string;
+  };
   /** `true` when a `manual` / `event` activation runs as a background job. */
   readonly background?: boolean;
   readonly builtinTools?: readonly string[];
@@ -117,6 +122,11 @@ export interface RuntimeRuleView extends PresentationRuleView {
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
   readonly operationsInputs?: readonly {
+    readonly name: string;
+    readonly path?: readonly (string | number)[];
+  }[];
+  /** Inputs bound to the `story-context@1` kernel input. */
+  readonly storyContextInputs?: readonly {
     readonly name: string;
     readonly path?: readonly (string | number)[];
   }[];
@@ -155,7 +165,8 @@ type RuleField =
   | "builtinTools"
   | "pluginTools"
   | "serviceImports"
-  | "requiredBusinessTools";
+  | "requiredBusinessTools"
+  | "storyContext";
 
 /** Where a manifest format writes each field the rules read. */
 export type RuntimeRuleFieldPaths = Readonly<
@@ -188,6 +199,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   pluginTools: ["tools", "plugin"],
   serviceImports: ["tools", "services"],
   requiredBusinessTools: ["completeAfterTools"],
+  storyContext: ["storyContext"],
 };
 
 /** The grouped RUNTIME.md an author writes. */
@@ -216,6 +228,7 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   pluginTools: ["agent", "tools", "plugin"],
   serviceImports: ["agent", "tools", "services"],
   requiredBusinessTools: ["agent", "completion", "afterTools"],
+  storyContext: ["io", "storyContext"],
 };
 
 type RulePath = (
@@ -324,6 +337,74 @@ function subagentOnlyIssues(
       at("guard"),
       `${runtime} runs without a guard; the caller decides when to run it`,
     );
+}
+
+/**
+ * `io.storyContext` hands a value of a pre-turn runtime's output to the story
+ * of the same turn. The stage barrier orders it before every reader, so the
+ * kernel adds no edge: the provider must run in the foreground of `pre-turn`.
+ * A reader of `story-context@1` runs in a later stage of the same execution.
+ */
+function storyContextIssues(
+  m: RuntimeRuleView,
+  at: RulePath,
+  name: (field: RuleField, ...rest: string[]) => string,
+  add: (path: readonly (string | number)[], message: string) => void,
+): void {
+  const provider = m.storyContext;
+  if (provider) {
+    const field = name("storyContext");
+    const path = at("storyContext");
+    if (m.stage !== "pre-turn")
+      add(
+        path,
+        `${field} requires ${name("stage")} 'pre-turn': the story reads the notes after the pre-turn stage`,
+      );
+    if (m.detached)
+      add(
+        path,
+        `${field} cannot be used by a detached runtime; the story does not wait for it`,
+      );
+    if (m.background)
+      add(
+        path,
+        `${field} cannot be used with ${name("background")}; only a staged runtime of the turn hands notes to its story`,
+      );
+    if (m.subagentOnly)
+      add(
+        path,
+        `${field} cannot be used by a sub-agent-only runtime; it returns output to its caller`,
+      );
+    if (m.visibility === "story")
+      add(
+        path,
+        `${field} cannot be used by a story runtime (${name("visibility")} 'story'); it hands notes to the story`,
+      );
+    if (m.presentation)
+      add(
+        path,
+        `${field} cannot be used by a presentation runtime; it hands notes to the story`,
+      );
+    // An agent provider also needs an output schema: the loader and static
+    // validation check it, since only they see an `output.schema.json` file.
+  }
+  for (const input of m.storyContextInputs ?? []) {
+    const path = input.path ?? at("inputs", input.name);
+    if (m.detached)
+      add(
+        path,
+        `a detached runtime cannot read kernel input ${STORY_CONTEXT_INPUT}`,
+      );
+    else if (
+      m.stage !== "narrative" &&
+      m.stage !== "post-turn" &&
+      m.stage !== "audit"
+    )
+      add(
+        path,
+        `kernel input ${STORY_CONTEXT_INPUT} is read on ${name("stage")} 'narrative', 'post-turn' or 'audit': its notes come from pre-turn runtimes of the same execution`,
+      );
+  }
 }
 
 const FRAMEWORK_TOOLS: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);
@@ -530,6 +611,8 @@ export function runtimeRuleIssues(
 
   if (m.serviceImports?.length)
     serviceImportIssues(m, m.serviceImports, at, name, add);
+
+  storyContextIssues(m, at, name, add);
 
   if (m.runtimeType === "function" && !m.handler?.trim())
     add(at("handler"), `${name("handler")} is required for a function runtime`);
