@@ -13,7 +13,6 @@ import type {
   RuntimeManifest,
   TurnResult,
 } from "@covel/shared";
-import type { StoreTransaction } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type { RuntimeJobRecord } from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
@@ -21,7 +20,9 @@ import {
   type RuntimeJobCredentialKey,
   type RuntimeJobServices,
 } from "../../src/routes/api/plugin-rpc/runtime-job-credentials.js";
+import { NO_FOLLOW_UPS } from "../../src/routes/api/commit-envelope.js";
 import { createRuntimeJobExecutor } from "../../src/routes/api/plugin-rpc/runtime-job-executor.js";
+import type { RunManualTurnArgs } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
 import type { RuntimeJobExecutionControl } from "../../src/routes/api/plugin-rpc/runtime-job-worker.js";
 import {
   sessionApprovalScope,
@@ -146,23 +147,23 @@ async function runJob(committed: boolean) {
     credentials,
     createRunner: () =>
       ({
-        runManualTurn: async (args: {
-          completeInTx: (
-            tx: StoreTransaction,
-            result: TurnResult,
-            isolation: { droppedRuntimeIds: ReadonlySet<string> },
-          ) => Promise<void>;
-        }) => {
-          await store.withTransaction(async (tx) => {
-            await args.completeInTx(tx, turnResult, {
-              droppedRuntimeIds: new Set(),
-            });
+        // The runner's commit: follow-ups, then the job's own completion.
+        runManualTurn: async (args: RunManualTurnArgs) => {
+          const isolation = { droppedRuntimeIds: new Set<string>() };
+          const queued = await store.withTransaction(async (tx) => {
+            const followUps = await args.followUps(tx, turnResult, isolation);
+            await args.completeInTx?.(tx, turnResult, isolation, followUps);
             handedInTx = credentials.peek(stageKey);
+            return followUps;
           });
           return {
             commit: committed
-              ? { committed: true }
-              : { committed: false, error: "commit refused" },
+              ? { committed: true, followUps: queued }
+              : {
+                  committed: false,
+                  error: "commit refused",
+                  followUps: NO_FOLLOW_UPS,
+                },
           };
         },
       }) as never,

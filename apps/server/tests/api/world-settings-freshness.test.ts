@@ -46,7 +46,7 @@ it("resolves hook settings for an active package with no runtimes", () => {
   });
   const scope = buildSessionHookScope({
     pluginRegistry: registry,
-    activePluginIds: [pluginId],
+    session: { activePlugins: [pluginId], locale: "en-US" },
     userSettings: { [pluginId]: { budget: 4 } },
   });
   expect([...scope.activePluginIds]).toEqual([pluginId]);
@@ -55,7 +55,7 @@ it("resolves hook settings for an active package with no runtimes", () => {
   expect(
     buildSessionHookScope({
       pluginRegistry: registry,
-      activePluginIds: [],
+      session: { activePlugins: [], locale: "en-US" },
     }).settings?.[pluginId],
   ).toBeUndefined();
 });

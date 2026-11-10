@@ -26,9 +26,11 @@ import {
   announceDeferredRuntimeJobs,
   announceQueuedRuntimeJobs,
   requestCredentialHandoff,
-  withSettledExecutionLock,
 } from "../plugin-rpc/settled-request.js";
-import { readLockedSession } from "../session/locked-mutation.js";
+import {
+  readExecutionSession,
+  withSettledExecutionLock,
+} from "../execution-context.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 import { entryRejection } from "./action-rejection.js";
 import type { ActionStream } from "./action-stream.js";
@@ -149,14 +151,13 @@ export function createTurnHost(
       return c.get("requestWork")?.signal;
     },
     async readLiveSession() {
-      c.get("requestWork")?.signal.throwIfAborted();
-      const live = await readLockedSession({
-        c,
+      const live = await readExecutionSession(c, {
         store,
         sessionId,
         expectedSession: session,
-        allowedStatuses: ["active"],
+        signal: c.get("requestWork")?.signal,
       });
+      // The stream is open: a refusal travels as `error.occurred`.
       if (live instanceof Response) throw await entryRejection(live);
       return live;
     },

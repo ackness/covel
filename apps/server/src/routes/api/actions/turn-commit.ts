@@ -20,6 +20,7 @@ import {
   type ExecutionAdvanceStopReason,
 } from "@covel/shared";
 import {
+  NO_FOLLOW_UPS,
   queueCommitFollowUps,
   queueReleasedRuntimeJobs,
 } from "../commit-envelope.js";
@@ -78,8 +79,9 @@ export async function commitExecutedTurn(
   } = started;
   const { result } = execution;
   const hookPipeline = host.hookPipeline;
-  const queuedRuntimeJobs: QueuedRuntimeJob[] = [];
-  const followerJobs: QueuedRuntimeJob[] = [];
+  const releasedJobs: QueuedRuntimeJob[] = [];
+  // What the landed transaction queued; a retried one replaces it.
+  let followUps = NO_FOLLOW_UPS;
   // Interjections the player sent during the turn are part of it: the
   // turn's commit saves them to the prompt history (after the player's
   // message, at the moment a model call read them; one no call read
@@ -191,7 +193,7 @@ export async function commitExecutedTurn(
     // runtime; when that ends the older turn, its held-back jobs are
     // queued here and announced with this turn's own.
     enqueueReleasedJobsInTx: async (tx, jobs) => {
-      queuedRuntimeJobs.push(
+      releasedJobs.push(
         ...(await queueReleasedRuntimeJobs(
           tx,
           {
@@ -215,7 +217,7 @@ export async function commitExecutedTurn(
       // generation) are queued with the writes they react to, so a
       // rolled-back turn queues none, and none derived from a
       // runtime whose writes were dropped.
-      const queued = await queueCommitFollowUps(tx, {
+      followUps = await queueCommitFollowUps(tx, {
         sessionId,
         activeRuntimes,
         locale: request.locale,
@@ -223,13 +225,8 @@ export async function commitExecutedTurn(
         ...(userSettings ? { userSettings } : {}),
         credentials: host.credentials,
         isolation,
-        results: result.runtimeResults,
-        sourceTurnId: result.turnId,
-        deferredJobs: result.deferredRuntimeJobs ?? [],
-        followers: result.deferredFollowers ?? [],
+        turnResult: result,
       });
-      queuedRuntimeJobs.push(...queued.runtimeJobs);
-      followerJobs.push(...queued.followerJobs);
       await saveInterjections(tx, control.closeInterjections());
     },
     ...(hookPipeline ? { hookPipeline } : {}),
@@ -280,7 +277,9 @@ export async function commitExecutedTurn(
     stopReason,
     // A `retry_turn` that ran again from the player's recorded input.
     replaysPlayerInput: type === "retry_turn" && playerInput !== undefined,
-    queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
-    followerJobs: committed ? followerJobs : [],
+    queuedRuntimeJobs: committed
+      ? [...releasedJobs, ...followUps.runtimeJobs]
+      : [],
+    followerJobs: committed ? followUps.followerJobs : [],
   };
 }
