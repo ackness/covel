@@ -16,6 +16,7 @@ import {
   isProductionFile,
   testSourceImportErrors,
 } from "./lib/test-source-imports.mjs";
+import { sharedBarrelErrors } from "./lib/barrel-exports.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
@@ -192,6 +193,8 @@ errors.push(
       "Public plugin SDK entry for community entry modules.",
   }),
 );
+// The shared root entry may shrink but never grow; new code uses subpath entries.
+errors.push(...sharedBarrelErrors(root));
 
 // Tests that still reach into another workspace by relative path. None of these
 // targets can be reached through an entry: one would expose an internal, invert
