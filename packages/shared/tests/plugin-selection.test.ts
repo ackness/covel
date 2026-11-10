@@ -412,6 +412,34 @@ describe("session plugin contract resolution", () => {
       }
     },
   );
+  it.each([false, true])(
+    "restores consumers when a replacement loses a transitive requirement (fixed: %s)",
+    (fixed) => {
+      const plan = resolveSessionPlugins({
+        requested: ["reader", "default-story", "replacement-story", "bridge"],
+        fixed,
+        plugins: [
+          p("default-story", {
+            provides: [
+              { contract: "narrative-engine@2", default: true },
+              "memory@1",
+              "base@1",
+            ],
+          }),
+          p("replacement-story", {
+            provides: ["narrative-engine@2"],
+            requires: ["bridge@1"],
+          }),
+          p("bridge", { provides: ["bridge@1"], requires: ["base@1"] }),
+          p("reader", { requires: ["memory@1"] }),
+        ],
+      });
+      expect(plan.active).toEqual(["reader", "default-story", "bridge"]);
+      expect(plan.rejected).toEqual([
+        expect.objectContaining({ pluginId: "replacement-story" }),
+      ]);
+    },
+  );
   it.each(["narrative-engine@2", "story@1"])(
     "settles a replacement chain before removing the default %s provider",
     (contract) => {
