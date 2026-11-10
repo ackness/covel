@@ -926,7 +926,11 @@ An `io.concealed` provider may use it. The text of its note reaches readers as u
 2. Take the value at `select` and check it against the shapes above. A value that does not match is recorded as `invalid`.
 3. Rank: `priority` (`high` > `normal` > `low`) → `order` ascending → package ID → runtime ID, the last two compared by code unit. Ranking does not depend on the source; bundled plugins get no privilege.
 4. Deduplicate: of notes with identical text, only the highest-ranked one stays; the rest are recorded as `duplicate`.
-5. Budget: the whole block holds at most `min(3000, 10% of the story model's input window)` estimated tokens. The input window is the context window of the `story` purpose minus the share reserved for the reply; when it is unknown, the budget is 3000. Notes go in by rank. A note that does not fit is left out whole and recorded as `budget` (never cut, since a cut rule reads as a different rule); smaller notes after it still go in. This first version gives readers no switch to change the budget.
+5. Budget: the whole block holds at most `min(3000, 10% of the story model's input window)` estimated tokens. The input window is the selected role's context window minus the share reserved for the reply; when it is unknown, the budget is 3000. Notes go in by rank. A note that does not fit is left out whole and recorded as `budget` (never cut, since a cut rule reads as a different rule); smaller notes after it still go in. This first version gives readers no switch to change the budget.
+
+A story agent reader uses its own selected role, including the request's `modelOverride` and the session's `runtimeModelOverrides`; see the [role selection priority](./slots.md#actual-selection-priority). Multiple story readers calculate their budgets separately. A story function reader uses its default text role, without agent overrides or predicting each handler call's `presetId`.
+
+Other readers still use the `story` role, even without a story runtime. The budget is set at input binding and is not recalculated after `PreLLMCall` rewrites or provider fallback.
 
 **Scheduling and commit**
 

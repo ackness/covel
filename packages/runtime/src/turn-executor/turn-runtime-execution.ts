@@ -18,6 +18,7 @@ import { presentationSnapshotSchema } from "@covel/shared";
 import { buildOperationsInput } from "./operations-input.js";
 import { buildStoryContextInput } from "./story-context-input.js";
 import { resolveRequestContextBudget } from "../agent-loop/request-context-budget.js";
+import { resolveRuntimeModel } from "../agent-loop/runtime-model.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import { commitEligibility } from "../session/session-runtime-result.js";
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
@@ -291,19 +292,25 @@ interface InvocationState {
 }
 
 /** Input tokens of the story model after its output reserve, when known. */
-function storyInputWindow(
-  deps: Pick<TurnExecutorDeps, "contextBudget" | "llm">,
-): number | undefined {
+function storyInputWindow({
+  deps,
+  manifest,
+  input,
+}: Pick<RuntimeInvocation, "deps" | "manifest" | "input">): number | undefined {
   if (!deps.contextBudget) return undefined;
   try {
+    const slot =
+      manifest.outputKind === "story"
+        ? resolveRuntimeModel(manifest, input, deps)
+        : "story";
     const budget = resolveRequestContextBudget(
       deps.contextBudget,
       deps.llm,
-      "story",
+      slot,
     );
     return budget.maxInputTokens - (budget.reservedForResponse ?? 0);
   } catch {
-    // An unresolvable story slot leaves the fixed budget.
+    // An unresolvable story model leaves the fixed budget.
     return undefined;
   }
 }
@@ -902,7 +909,7 @@ async function executeRuntime(
           ...(inv.seedResults ? { seeds: inv.seedResults } : {}),
           activeRuntimes,
           ...(input.locale ? { locale: input.locale } : {}),
-          inputWindow: storyInputWindow(deps),
+          inputWindow: storyInputWindow(inv),
           ...(deps.estimator ? { estimator: deps.estimator } : {}),
         });
         for (const id of storyContext.producerIds)
