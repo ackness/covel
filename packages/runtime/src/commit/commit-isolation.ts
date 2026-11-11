@@ -15,6 +15,7 @@ import { droppedUpstream } from "./commit-dependencies.js";
 import type { OperationEntry, OperationLedger } from "./operation-ledger.js";
 import type { RanSetupRuntime } from "./setup-settle.js";
 import type { FinalizableResult, IsolatedRuntime } from "./finalize-types.js";
+import type { ExecutionEventDependencies } from "../event-dependencies.js";
 
 /** Results as committed: a runtime whose writes were dropped reads as failed. */
 export function applyIsolatedRuntimes<
@@ -218,9 +219,10 @@ export interface UnitDependencyInput {
   >;
   /** Producer ids by reader `runId` (`FinalizeExecutionArgs.readDependencies`). */
   readonly readDependencies?: Readonly<Record<string, readonly string[]>>;
+  readonly eventDependencies?: ExecutionEventDependencies;
   /** The `runId` of the result each continuation came from. */
   readonly suspensionRuns?: Readonly<Record<string, string>>;
-  readonly operations: Pick<OperationLedger, "entry" | "dropped">;
+  readonly operations: Pick<OperationLedger, "entry" | "dropped" | "stagedOf">;
   /** Read at each check: the units dropped so far. */
   readonly drops: Pick<DroppedUnits, "rootIds" | "runs">;
 }
@@ -236,18 +238,27 @@ export interface UnitDependencies {
 export function unitDependencies(input: UnitDependencyInput): UnitDependencies {
   const { runtimes, results, units, prepared, operations, drops } = input;
   const manifestByRuntime = new Map(runtimes.map((rt) => [rt.name, rt]));
-  // A unit stands on its top-level result's hard upstreams when that result
-  // succeeded, and also when the unit has writes to commit whatever its
-  // status: a guard that wrote and then returned `{ skip: true }` leaves a
-  // skipped result with buffered writes. Nested results depend only on
-  // results of their own nested execution, which sit in the same unit.
+  const resultByRun = new Map(results.map((result) => [result.runId, result]));
+  const continuationRuns = new Set(Object.values(input.suspensionRuns ?? {}));
+  // A skipped guard can own successful nested runs, including operation-only
+  // writes. A continuation must also retain its activation's dependencies.
+  const active = (unit: CommitUnit): boolean =>
+    unit.members.some((member) => member.status === "success") ||
+    unit.members.some((member) => continuationRuns.has(member.runId)) ||
+    unit.members.some((member) => prepared.get(member)!.proposals.length > 0) ||
+    operations.stagedOf(unit.members).length > 0;
   const lostUpstreamOf = (unit: CommitUnit): string | undefined => {
+    if (!active(unit)) return undefined;
+    const droppedRuns = drops.runs();
+    for (const member of unit.members) {
+      const sourceRun = input.eventDependencies?.runs[member.runId];
+      const source =
+        sourceRun === undefined ? undefined : resultByRun.get(sourceRun);
+      if (source && !unit.members.includes(source) && droppedRuns.has(source))
+        return source.runtimeId;
+    }
     const manifest = manifestByRuntime.get(unit.root.runtimeId);
-    return manifest &&
-      (unit.root.status === "success" ||
-        unit.members.some(
-          (member) => prepared.get(member)!.proposals.length > 0,
-        ))
+    return manifest
       ? droppedUpstream(manifest, {
           runtimes,
           results: units.map((candidate) => candidate.root),
@@ -259,25 +270,13 @@ export function unitDependencies(input: UnitDependencyInput): UnitDependencies {
   // set is taken from results completed before it started, children
   // before their parent. Edges inside one unit are ignored, as the unit
   // commits or drops as one.
-  const resultByRun = new Map(results.map((result) => [result.runId, result]));
   const positionOf = new Map(results.map((result, index) => [result, index]));
   // An operation commits at the end of its caller's unit.
   const unitRootOf = (member: FinalizableResult): FinalizableResult =>
     units.find((unit) => unit.members.includes(member))?.root ?? member;
-  const continuationRuns = new Set(Object.values(input.suspensionRuns ?? {}));
   const lostReadsOf = (unit: CommitUnit): LostRead[] => {
     const edges = input.readDependencies;
-    if (
-      !edges ||
-      !(
-        unit.root.status === "success" ||
-        unit.members.some((member) => continuationRuns.has(member.runId)) ||
-        unit.members.some(
-          (member) => prepared.get(member)!.proposals.length > 0,
-        )
-      )
-    )
-      return [];
+    if (!edges || !active(unit)) return [];
     const members = new Set(unit.members);
     const dropped = drops.runs();
     const lost = new Map<FinalizableResult | OperationEntry, LostRead>();

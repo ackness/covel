@@ -26,6 +26,7 @@ import {
 } from "./session/session-guard.js";
 import type { RuntimeJobCredentialKey } from "./plugin-rpc/runtime-job-credentials.js";
 import { publicRuntimeJob } from "./plugin-rpc/runtime-job-public.js";
+import { readLockedSession } from "./session/locked-mutation.js";
 
 export const runtimeJobRoutes = new Hono();
 
@@ -82,6 +83,14 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
   const jobId = c.req.param("jobId");
   const eventBus = c.get("eventBus");
   const changed = await c.get("sessionLock").withLock(sessionId, async () => {
+    const live = await readLockedSession({
+      c,
+      store: c.get("store"),
+      sessionId,
+      expectedSession: guard.session,
+      allowedStatuses: "any",
+    });
+    if (live instanceof Response) return live;
     const job = await findJob(c.get("store"), sessionId, jobId);
     if (!job) return undefined;
     const cancelled = await transitionRuntimeJob(c.get("store"), {
@@ -96,6 +105,7 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
       await appendRuntimeJobStatus(c.get("store"), eventBus, cancelled);
     return cancelled;
   });
+  if (changed instanceof Response) return changed;
   if (!changed) {
     return c.json(
       errorBody("Runtime job was not found or can no longer be cancelled", {
@@ -132,8 +142,14 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
   const created = await c
     .get("sessionLock")
     .withLock(sessionId, async () => {
-      const live = await c.get("store").getSession(sessionId);
-      if (!live || live.status !== "active") return undefined;
+      const live = await readLockedSession({
+        c,
+        store: c.get("store"),
+        sessionId,
+        expectedSession: guard.session,
+        allowedStatuses: ["active"],
+      });
+      if (live instanceof Response) return live;
       const source = await findJob(c.get("store"), sessionId, sourceJobId);
       if (
         !source ||
@@ -205,6 +221,7 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
       if (error instanceof RuntimeJobSupersededError) return undefined;
       throw error;
     });
+  if (created instanceof Response) return created;
   if (!created) {
     return c.json(
       errorBody("Runtime job was not found or is not retryable", {

@@ -197,59 +197,6 @@ export function useBuildSessionActions({
     [dispatch, sessionIdRef, sessionGenerationRef],
   );
 
-  const beginAdventure = useCallback(() => {
-    const state = stateRef.current;
-    if (!canRunSessionAction(state)) return;
-    const sessionId = state.session?.id;
-    if (!sessionId) return;
-    const owner = claimAction(sessionId);
-
-    if (!owner.isCurrent()) return;
-    dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
-    dispatch({ type: "SET_EXECUTING", value: true });
-    dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-    const requestId = owner.requestId;
-    void workspace
-      .run(sessionId, requestId, () => {
-        if (!owner.isCurrent()) {
-          return Promise.reject(
-            new Error("Session changed before action start"),
-          );
-        }
-        return runActionStream(
-          {
-            requestId,
-            type: "start_session",
-            sessionId,
-            payload: {},
-          },
-          handleSseEvent,
-          dispatch,
-          { sessionIdRef, isCurrentAction: owner.isCurrent },
-        );
-      })
-      .catch((error: unknown) => {
-        if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
-      })
-      .finally(() => {
-        finalizeActionExecution(
-          dispatch,
-          sessionId,
-          sessionIdRef,
-          owner.isCurrent,
-        );
-        resyncSession(sessionId, owner.isCurrent);
-      });
-  }, [
-    workspace,
-    stateRef,
-    handleSseEvent,
-    dispatch,
-    resyncSession,
-    sessionIdRef,
-    claimAction,
-  ]);
-
   const resumeSession = useCallback(
     async (session: api.SessionRecord) => {
       await restoreSessionState({
@@ -709,6 +656,19 @@ export function useBuildSessionActions({
       claimAction,
     ],
   );
+
+  const beginAdventure = useCallback(() => {
+    const state = stateRef.current;
+    if (!canRunSessionAction(state)) return;
+    const sessionId = state.session?.id;
+    if (!sessionId) return;
+    runKernelAction({
+      requestId: crypto.randomUUID(),
+      type: "start_session",
+      sessionId,
+      payload: {},
+    });
+  }, [stateRef, runKernelAction]);
 
   const executeCommand = useCallback(
     (command: string) => {

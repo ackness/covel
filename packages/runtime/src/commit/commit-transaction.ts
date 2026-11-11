@@ -183,6 +183,8 @@ async function runHostWrites(ctx: CommitTxContext): Promise<void> {
   const { extraInTx } = ctx.args;
   await extraInTx?.(ctx.tx, {
     droppedRuntimeIds: ctx.drops.settled().rootIds,
+    droppedRunIds: ctx.drops.settled().runIds,
+    followerSources: ctx.args.eventDependencies?.followers ?? [],
   });
 }
 

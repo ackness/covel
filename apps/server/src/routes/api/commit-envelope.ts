@@ -16,7 +16,7 @@
  */
 
 import {
-  droppedEmitter,
+  committedEventFollowers,
   droppedUpstream,
   settleDroppedInputs,
   type CommitIsolation,
@@ -24,6 +24,7 @@ import {
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
+  RuntimeResult,
   TurnResult,
 } from "@covel/shared";
 import type { SessionRecord, StoreTransaction } from "@covel/store";
@@ -57,14 +58,19 @@ export interface CommitEnqueueContext {
   readonly sourceRuntimeId?: string;
 }
 
-export type EventFollower = FollowerEnqueueArgs["followers"][number];
+export type EventFollower = NonNullable<
+  TurnResult["deferredFollowers"]
+>[number];
 
 /** The parts of an execution's result its follow-up work comes from. */
 export interface FollowUpSource {
   /** The execution's turn, named by its followers as their source. */
   readonly turnId: string;
   /** The execution's runtime results, as executed. */
-  readonly runtimeResults: Parameters<typeof droppedEmitter>[1]["results"];
+  readonly runtimeResults: readonly Pick<
+    RuntimeResult,
+    "runtimeId" | "status"
+  >[];
   /**
    * Detached stage jobs the execution deferred. They are admitted under the
    * session as the commit transaction reads it.
@@ -81,7 +87,8 @@ export interface CommitFollowUps extends CommitEnqueueContext {
   readonly turnResult: FollowUpSource;
   /**
    * The followers to queue when not all the result emitted: none after an
-   * activation that failed, which chains no followers.
+   * activation that failed, which chains no followers. Each descriptor must
+   * be an original member of `turnResult.deferredFollowers`.
    */
   readonly followers?: readonly EventFollower[];
 }
@@ -158,7 +165,7 @@ export class CommitSessionGoneError extends Error {
  * commit transaction, leaving out work derived from a dropped runtime. A
  * deferred job whose target hard-depends on a dropped runtime is not queued;
  * the others see dropped runtimes as failed in their frozen inputs. A
- * follower whose trigger event only dropped runtimes emitted is not queued.
+ * follower whose selected payload producer was dropped is not queued.
  * Returns what was queued, for the caller to announce after the commit.
  * Throws {@link CommitSessionGoneError}, failing the commit, when there are
  * detached jobs to queue and the session is gone.
@@ -190,13 +197,19 @@ export async function queueCommitFollowUps(
       return !target || !droppedUpstream(target, committedView);
     })
     .map((descriptor) => settleDroppedInputs(descriptor, dropped));
-  const followers = (
-    args.followers ??
-    args.turnResult.deferredFollowers ??
-    []
-  ).filter(
-    (follower) => !droppedEmitter(follower.triggerEvent.topic, committedView),
-  );
+  const emittedFollowers = args.turnResult.deferredFollowers ?? [];
+  // Overrides select original descriptors; matching by target or payload could
+  // merge separate nested invocations and associate the wrong producer.
+  if (args.followers?.some((follower) => !emittedFollowers.includes(follower)))
+    throw new Error(
+      "Follower overrides must select original emitted descriptors",
+    );
+  const selected = args.followers ? new Set(args.followers) : undefined;
+  const followers = committedEventFollowers(
+    emittedFollowers,
+    args.isolation.followerSources,
+    args.isolation.droppedRunIds,
+  ).filter((follower) => selected === undefined || selected.has(follower));
   const runtimeJobs = session
     ? await enqueueDeferredRuntimeJobs(tx, {
         sessionId: args.sessionId,

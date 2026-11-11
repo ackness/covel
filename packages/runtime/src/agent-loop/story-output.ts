@@ -17,7 +17,6 @@ import {
   type StorySegment,
   type StorySegmentKind,
 } from "@covel/shared";
-import { isMetaChoiceParagraph } from "../turn-executor/turn-output-helpers.js";
 
 export const STORY_EMPTY_ERROR =
   "Story runtime finished without narrative output. Retry the action to generate the missing story.";
@@ -146,11 +145,18 @@ function rawSegments(output: Record<string, unknown>): StorySegment[] {
     .map((text) => ({ kind: "narration" as const, text }));
 }
 
+/** A trailing paragraph that offers the player a menu instead of story. */
+function isMetaChoiceParagraph(paragraph: string): boolean {
+  const plain = paragraph.replace(/\*\*/g, "").trim();
+  return /^(?:现在，你需要(?:做出选择|做出决定)|你的选择是|你需要决定|你要如何选择|你会怎么做|请选择)/u.test(
+    plain,
+  );
+}
+
 /**
  * The published story, or undefined when no text is left. Business fields
  * survive; a model-written `narrativeOutput` is replaced by the segment texts
- * joined by blank lines. A prose story's `narrativeOutput` equals
- * `sanitizeStoryNarrativeText` of that prose. Idempotent.
+ * joined by blank lines. Trailing choice prompts are removed. Idempotent.
  */
 export function normalizeStoryOutput(
   output: unknown,

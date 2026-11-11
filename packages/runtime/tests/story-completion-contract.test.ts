@@ -1,7 +1,7 @@
 import { storySubmitted, toolCall } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import { runtimeDoneTool, tool } from "@covel/tools";
+import { tool } from "@covel/tools";
 import { z } from "zod";
 import {
   promptHistoryTransformV1,
@@ -108,12 +108,7 @@ async function run(
       },
       toolExecutor: createToolExecutor({
         store,
-        findTool: (name) =>
-          name === lookup.name
-            ? lookup
-            : name === "runtime-done"
-              ? runtimeDoneTool
-              : undefined,
+        findTool: (name) => (name === lookup.name ? lookup : undefined),
       }),
     },
     { maxSteps: 3 },

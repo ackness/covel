@@ -26,7 +26,6 @@ import {
 import type { AgentToolLoopCompleted } from "../src/agent-loop/turn-agent-tool-loop.js";
 import {
   contextWindowWithOutputTool,
-  doneTool,
   input,
   makeExecutor,
   manifest,
@@ -87,7 +86,7 @@ describe("the loop's own exits", () => {
         toolCall("mark", { note: "a" }),
         toolCall("submit-output", {}, "tc-done"),
       ]),
-      deps: { toolExecutor: makeExecutor([markTool, doneTool]) },
+      deps: { toolExecutor: makeExecutor([markTool]) },
     });
     expect(result.stop).toEqual({ reason: "completed" });
   });

@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mirrorSetupDone } from "@covel/shared";
 import type { JsonValue, RuntimeManifest, RuntimeResult } from "@covel/shared";
 import { runEventChain } from "../src/trigger/turn-event-chain.js";
+import { collectExecutionEventDependencies } from "../src/event-dependencies.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -21,7 +22,7 @@ function resultEmitting(
   return {
     pluginId: runtimeId.split("/")[0]!,
     runtimeId,
-    runId: "run-1",
+    runId: `run-${runtimeId}`,
     turnId: "turn-1",
     status: "success",
     output: {},
@@ -81,6 +82,16 @@ describe("runEventChain deferred-follower dedup", () => {
     // depth 1 and depth 2 — with it, exactly one job survives.
     expect(deferred).toHaveLength(1);
     expect(deferred[0]?.runtimeId).toBe("gen/background");
+    expect(
+      collectExecutionEventDependencies({
+        runtimeResults: [...completedResults.values()],
+        deferredFollowers: deferred,
+      }),
+    ).toEqual({
+      runs: { "run-relay/main": "run-seed/emitter" },
+      followers: ["run-seed/emitter"],
+    });
+    expect(JSON.stringify(deferred)).not.toContain("producerRunId");
 
     // The duplicate defer is logged, not silently swallowed.
     expect(warn).toHaveBeenCalledTimes(1);

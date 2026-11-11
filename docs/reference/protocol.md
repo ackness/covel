@@ -10,6 +10,8 @@
 
 类型定义在 `packages/shared/src/types/protocol.ts`。
 
+模型能力查询可通过 `credentials=1` 和现有 `X-Slot-Config` 请求头，同时取得自定义连接的服务端凭据可用性。它仍是只读 JSON 查询，不发起模型调用，也不增加 SSE 事件。参数、校验和布尔响应字段见[模型数据库 API](./api.md#模型数据库model-db)。
+
 ## 声明式授权语义
 
 插件摘要必须提供宿主推导的 `executionMode`。新鲜的 `declarative` 状态使创建、启用和 runtime 调用免去代码与 runtime 提示，但不产生授权记录；`serverCodeApproved` 仍只报告真实授权，`approvalRequired` 不再把这些包列为待批准。`code` 和 `unknown` 恢复普通路径。过期审批返回 `409 approval_obsolete`，浏览器把这个响应视为请求已消费，不保存授权；允许操作的调用方保留会话导航检查，再按当前策略重试原始启用或运行。字段定义见[API 状态](./api.md#声明式插件的-api-状态)。
@@ -51,6 +53,8 @@ SSE 是服务端在一条 HTTP 连接上持续推送文本的方式。Covel 有�
 - `commit` 是留在宿主手里的完整提交计划。它包含顶层和递归的结果、待提交的命令、对话 journal、暂停记录、Hook 设置的快照、回合计数的责任，以及执行时加载的输出 schema。
 
 宿主调用 `commitExecution({ execution, store, completion, ...services })` 完成提交。宿主不用自己收集这些字段，提交时也不会重新加载插件。公开的执行入口要求 `deps.store`。
+
+给事件 follower 入队的宿主使用提交回调的 `CommitIsolation.droppedRunIds` 和 `followerSources` 调用 `committedEventFollowers`。`followerSources` 按执行结果的 `deferredFollowers` 顺序一一配对；恢复执行使用内部 `commit.deferredFollowers`。保留完整提交计划与原始 descriptor，不能按 runtime 名合并不同调用。旧的 `droppedEmitter` 导出已移除。
 
 ```ts
 const execution = await executeTurn(input, runtimes, deps);

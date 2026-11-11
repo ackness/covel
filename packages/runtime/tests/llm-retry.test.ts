@@ -330,11 +330,9 @@ describe("perturbMessages", () => {
         String(
           perturbMessages(baseMessages, 1, reason, locale).at(-1)!.content,
         );
-      // `[retry N]` and the tool name are markers; the sentences are Chinese.
+      // `[retry N]` is a marker; the sentences are Chinese.
       expect(hint("zh-CN")).toMatch(/^\[retry 1\] \p{Script=Han}/u);
-      expect(
-        hint("zh-CN").replace("[retry 1]", "").replace("runtime-done", ""),
-      ).not.toMatch(/[A-Za-z]/);
+      expect(hint("zh-CN").replace("[retry 1]", "")).not.toMatch(/[A-Za-z]/);
       expect(hint("zh-Hant-TW")).toBe(hint("en-US"));
       expect(hint()).toBe(hint("en-US"));
     }

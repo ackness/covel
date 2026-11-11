@@ -201,7 +201,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/context/src/budget.ts": 1,
   // Patterns that match Chinese text.
   "packages/create/src/validation-helpers.ts": 7,
-  "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
+  "packages/runtime/src/agent-loop/story-output.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,
   // Example input for tests.
   "packages/plugin-test-utils/src/factories.ts": 1,

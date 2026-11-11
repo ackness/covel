@@ -347,6 +347,95 @@ describe("current package discovery and loading", () => {
     const [d] = await discoverPlugins(temp);
     await expect(loadRuntime(d!, "probe")).rejects.toThrow("default function");
   });
+  it("does not import unauthorized code and rechecks grants after a module is cached", async () => {
+    await root({
+      runtime: { ...agent, function: { handler: "./handler.mjs" } },
+    });
+    const marker = path.join(temp, "imported.txt");
+    await write(marker, "");
+    await write(
+      path.join(temp, "probe/handler.mjs"),
+      `import fs from "node:fs";
+fs.appendFileSync(${JSON.stringify(marker)}, "handler");
+export default () => ({});`,
+    );
+    const [d] = await discoverPlugins(temp);
+    const authorize = vi.fn(async () => false);
+    const load = () =>
+      loadRuntime(d!, "probe", undefined, undefined, {}, undefined, authorize);
+
+    await expect(load()).rejects.toThrow(/authorization/);
+    expect(await fs.readFile(marker, "utf8")).toBe("");
+    authorize.mockResolvedValue(true);
+    expect((await load()).handler).toBeTypeOf("function");
+    authorize.mockResolvedValue(false);
+    await expect(load()).rejects.toThrow(/authorization/);
+    expect(await fs.readFile(marker, "utf8")).toBe("handler");
+  });
+  it("rechecks authorization after importing a handler before importing its guard", async () => {
+    await root({
+      runtime: {
+        ...agent,
+        function: { handler: "./handler.mjs" },
+        guard: "./guard.mjs",
+      },
+    });
+    const marker = path.join(temp, "imported.txt");
+    await write(marker, "");
+    await write(
+      path.join(temp, "probe/handler.mjs"),
+      `import fs from "node:fs";
+fs.writeFileSync(${JSON.stringify(marker)}, "handler");
+export default () => ({});`,
+    );
+    await write(
+      path.join(temp, "probe/guard.mjs"),
+      'throw new Error("guard imported without authorization");',
+    );
+    const [d] = await discoverPlugins(temp);
+    const authorize = vi.fn(
+      async () => (await fs.readFile(marker, "utf8")) === "",
+    );
+
+    await expect(
+      loadRuntime(d!, "probe", undefined, undefined, {}, undefined, authorize),
+    ).rejects.toThrow(/Runtime guard requires/);
+    expect(authorize).toHaveBeenCalledTimes(2);
+  });
+  it("rejects a guard symlink outside the package before requesting authorization", async () => {
+    await root({ runtime: { ...agent, guard: "./guard.mjs" } });
+    const outside = path.join(temp, "outside.mjs");
+    await write(outside, 'throw new Error("outside module imported");');
+    await fs.symlink(outside, path.join(temp, "probe/guard.mjs"));
+    const [d] = await discoverPlugins(temp);
+    const authorize = vi.fn(async () => true);
+
+    await expect(
+      loadRuntime(d!, "probe", undefined, undefined, {}, undefined, authorize),
+    ).rejects.toThrow(/path traversal/);
+    expect(authorize).not.toHaveBeenCalled();
+  });
+  it("loads callable handler and guard exports without awaiting their then property", async () => {
+    await root({
+      runtime: {
+        ...agent,
+        function: { handler: "./handler.mjs" },
+        guard: "./guard.mjs",
+      },
+    });
+    for (const module of ["handler", "guard"]) {
+      await write(
+        path.join(temp, `probe/${module}.mjs`),
+        `export default Object.assign(() => ({}), {
+  then() { throw new Error("the default function must not be awaited"); }
+});`,
+      );
+    }
+    const [d] = await discoverPlugins(temp);
+    const loaded = await loadRuntime(d!, "probe");
+    expect(loaded.handler).toBeTypeOf("function");
+    expect(loaded.guard).toBeTypeOf("function");
+  });
   it("skips hidden, disabled and non-plugin directories", async () => {
     await write(path.join(temp, ".staged/PLUGIN.md"), md({}));
     await write(path.join(temp, "disabled/PLUGIN.md.disabled"), md({}));

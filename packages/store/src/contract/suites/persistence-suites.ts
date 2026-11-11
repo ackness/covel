@@ -51,6 +51,16 @@ const resumeParityFields = {
         output: { content: "child" },
         pendingProposals: [{ type: "plugin.data", payload: { key: "B" } }],
       },
+      deferredFollowers: [
+        {
+          runtimeId: "probe/follower",
+          pluginId: "probe",
+          triggerEvent: {
+            topic: "probe.ready",
+            data: { nested: { values: ["ready", 1, true, null] } },
+          },
+        },
+      ],
       journal: [{ id: "message-1", content: "" }],
       trigger: "probe/child",
     },
@@ -590,6 +600,7 @@ export function registerPersistenceStoreSuites(
     });
 
     it("should persist all payload slices verbatim", async () => {
+      const suspension = makeSuspension({ sessionId: "sess-snap-pay" });
       const payload = makeSnapshotPayload({
         characterSchema: null,
         characters: [
@@ -621,20 +632,22 @@ export function registerPersistenceStoreSuites(
             sessionId: "sess-snap-pay",
           }),
         ],
+        suspensions: [
+          {
+            ...suspension,
+            pendingContinuation: {
+              ...suspension.pendingContinuation,
+              ...resumeParityFields,
+            },
+          },
+        ],
         messagesCursor: "tm-last-abc",
       });
       const snap = makeSnapshot({ sessionId: "sess-snap-pay", payload });
       await store.saveSnapshot(snap);
 
       const result = await store.getSnapshot(snap.id);
-      expect(result).not.toBeNull();
-      expect(result!.payload.characters).toHaveLength(1);
-      expect(result!.payload.characters[0]!.name).toBe("Hero");
-      expect(result!.payload.pluginData[0]!.value).toEqual({ a: 1 });
-      expect(result!.payload.sessionSummaries).toEqual([
-        expect.objectContaining({ id: "summary-1" }),
-      ]);
-      expect(result!.payload.messagesCursor).toBe("tm-last-abc");
+      expect(result?.payload).toEqual(payload);
     });
 
     it("round-trips the current snapshot session lifecycle state", async () => {

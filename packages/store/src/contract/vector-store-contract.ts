@@ -1227,6 +1227,48 @@ export function runVectorStoreContractTests(
       ).resolves.toEqual([]);
     });
 
+    it("rejects a delayed query from the model the index was reset away from", async () => {
+      const sessionId = "s-stale-query";
+      const oldTarget = await setupSessionWithModel(store, sessionId, 2);
+      const session = (await store.getSession(sessionId))!;
+      const query = new Float32Array([1, 0]);
+      const scope = { sessionId, pluginId: "owner", namespace: "chunks" };
+      const search = { ...scope, query };
+      await store.upsertVector({ ...scope, key: "old", embedding: query });
+      expect(
+        await store.searchVectors({
+          ...search,
+          expectedModelRegistryId: oldTarget.modelRegistryId,
+        }),
+      ).toHaveLength(1);
+      const newTarget = await store.ensureVectorModel({
+        provider: "other",
+        modelName: "same-dim",
+        dim: 2,
+        modelId: "other/same-dim",
+      });
+      await store.resetSessionVectorIndex({
+        sessionId,
+        expectedSessionCreatedAt: session.createdAt,
+        expectedModelRegistryId: oldTarget.modelRegistryId,
+        target: newTarget,
+      });
+      await store.upsertVector({ ...scope, key: "new", embedding: query });
+      await expect(
+        store.searchVectors({
+          ...search,
+          expectedModelRegistryId: oldTarget.modelRegistryId,
+        }),
+      ).resolves.toEqual([]);
+      const current = await store.searchVectors({
+        ...search,
+        expectedModelRegistryId: newTarget.modelRegistryId,
+      });
+      expect(current.map((row) => row.key)).toEqual(["new"]);
+      // Callers embedding against the current space can still omit a guard.
+      expect(await store.searchVectors(search)).toEqual(current);
+    });
+
     it("rejects an index batch embedded with the model the index was reset away from", async () => {
       const oldTarget = await setupSessionWithModel(store, "s-stale", 4);
       const session = (await store.getSession("s-stale"))!;

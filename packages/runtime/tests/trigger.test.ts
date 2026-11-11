@@ -14,139 +14,114 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
 }
 
 function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
-  const merged: TriggerContext = {
+  return {
     sessionId: "sess-1",
-    turnNumber: 5,
+    // Keep the message count distinct so cadence cannot accidentally use it.
+    turnNumber: 99,
     logicalTurn: 5,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     ...overrides,
   };
-  // every / startTurn gate on `logicalTurn`; these cases express the turn
-  // number via `turnNumber`, so mirror it unless a test sets logicalTurn.
-  return {
-    ...merged,
-    logicalTurn: overrides?.logicalTurn ?? merged.turnNumber,
-  };
 }
 
 describe("shouldTrigger", () => {
-  // 1. auto (default) — no trigger config → true
-  it("should return true when no trigger config (defaults to auto)", () => {
-    const manifest = makeManifest();
-    const ctx = makeContext();
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
+  it("defaults to auto when trigger configuration is absent", () => {
+    expect(shouldTrigger(makeManifest(), makeContext())).toBe(true);
   });
 
-  // 2. auto explicit — trigger.type: 'auto' → true
-  it("should return true for explicit auto trigger type", () => {
+  it("defaults an explicit auto trigger to every logical turn", () => {
     const manifest = makeManifest({ trigger: { type: "auto" } });
-    const ctx = makeContext();
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
+    expect(shouldTrigger(manifest, makeContext())).toBe(true);
   });
 
-  // 3. manual, not triggered
   it("leaves explicit manual selection to the scheduler", () => {
     const manifest = makeManifest({ trigger: { type: "manual" } });
-    const ctx = makeContext();
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
+    expect(shouldTrigger(manifest, makeContext())).toBe(false);
   });
 
-  // 5. auto with a cadence, on the cadence
-  it("should return true for an auto trigger when turnNumber is on its cadence", () => {
-    const manifest = makeManifest({
-      trigger: { type: "auto", every: 3 },
-    });
-    const ctx = makeContext({ turnNumber: 6 });
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
+  it.each([
+    [6, true],
+    [7, false],
+  ] as const)(
+    "evaluates auto cadence on logical turn %i",
+    (logicalTurn, expected) => {
+      const manifest = makeManifest({ trigger: { type: "auto", every: 3 } });
+      expect(shouldTrigger(manifest, makeContext({ logicalTurn }))).toBe(
+        expected,
+      );
+    },
+  );
+
+  it.each([
+    ["quest.completed", true],
+    ["combat.start", false],
+    [undefined, false],
+  ] as const)("requires a matching event topic (%s)", (topic, expected) => {
+    const manifest = makeManifest({ trigger: { type: "event", topic } });
+    const context = makeContext({ pendingEventTopics: ["quest.completed"] });
+    expect(shouldTrigger(manifest, context)).toBe(expected);
   });
 
-  // 6. auto with a cadence, off the cadence
-  it("should return false for an auto trigger when turnNumber is off its cadence", () => {
+  it("rejects a trigger type outside the current contract", () => {
     const manifest = makeManifest({
-      trigger: { type: "auto", every: 3 },
-    });
-    const ctx = makeContext({ turnNumber: 7 });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
-
-  // 7. event, matching topic
-  it("should return true for event trigger when topic matches pending events", () => {
-    const manifest = makeManifest({
-      trigger: { type: "event", topic: "quest.completed" },
-    });
-    const ctx = makeContext({ pendingEventTopics: ["quest.completed"] });
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
-  });
-
-  // 8. event, no match
-  it("should return false for event trigger when topic does not match", () => {
-    const manifest = makeManifest({
-      trigger: { type: "event", topic: "quest.completed" },
-    });
-    const ctx = makeContext({ pendingEventTopics: ["combat.start"] });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
-
-  // 9. error-retry is reserved and never fires
-  it("should return false for reserved error-retry trigger", () => {
-    // Deliberately invalid: "error-retry" is no longer a trigger type.
-    const manifest = makeManifest({
-      trigger: { type: "error-retry" },
+      trigger: { type: "unsupported" },
     } as unknown as Partial<RuntimeManifest>);
     expect(shouldTrigger(manifest, makeContext())).toBe(false);
   });
 
-  // 11. conditional with unknown condition returns false
-  it("should return false for conditional trigger with unknown condition", () => {
-    // Deliberately invalid: "conditional" is no longer a trigger type.
-    const manifest = makeManifest({
-      trigger: { type: "conditional", condition: "has-write-conflicts" },
-    } as unknown as Partial<RuntimeManifest>);
-    const ctx = makeContext();
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
+  it.each(["auto", "event"] as const)(
+    "enforces maxTriggerCount for %s runtimes",
+    (type) => {
+      const manifest = makeManifest({
+        trigger: { type, topic: "quest.completed", maxTriggerCount: 3 },
+      });
+      const context = makeContext({
+        triggerCount: 3,
+        pendingEventTopics: ["quest.completed"],
+      });
+      expect(shouldTrigger(manifest, context)).toBe(false);
+    },
+  );
 
-  // 12. maxTriggerCount exceeded
-  it("should return false when triggerCount >= maxTriggerCount", () => {
-    const manifest = makeManifest({
-      trigger: { type: "auto", maxTriggerCount: 3 },
-    });
-    const ctx = makeContext({ triggerCount: 3 });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
-
-  // 13. cooldownTurns not met
-  it("should return false when turnsSinceLastTrigger < cooldownTurns", () => {
+  it("blocks automatic execution during cooldown", () => {
     const manifest = makeManifest({
       trigger: { type: "auto", cooldownTurns: 5 },
     });
-    const ctx = makeContext({ turnsSinceLastTrigger: 2 });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
+    expect(
+      shouldTrigger(manifest, makeContext({ turnsSinceLastTrigger: 2 })),
+    ).toBe(false);
   });
 
-  // ── startTurn is compared against turnNumber directly
+  it.each([
+    [2, false],
+    [3, true],
+  ] as const)(
+    "checks startTurn against logical turn %i",
+    (logicalTurn, expected) => {
+      const manifest = makeManifest({
+        trigger: { type: "auto", startTurn: 3 },
+      });
+      expect(shouldTrigger(manifest, makeContext({ logicalTurn }))).toBe(
+        expected,
+      );
+    },
+  );
 
-  it("should gate by turnNumber when startTurn is set", () => {
+  it("requires both startTurn and cadence to pass", () => {
     const manifest = makeManifest({
-      trigger: { type: "auto", startTurn: 3 },
+      trigger: { type: "auto", every: 2, startTurn: 4 },
     });
-    const ctx = makeContext({ turnNumber: 2 });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
-
-  it("should trigger once turnNumber reaches startTurn", () => {
-    const manifest = makeManifest({
-      trigger: { type: "auto", startTurn: 3 },
-    });
-    const ctx = makeContext({ turnNumber: 3 });
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
-  });
-
-  it("should not gate when startTurn is undefined", () => {
-    const manifest = makeManifest({ trigger: { type: "auto" } });
-    const ctx = makeContext({ turnNumber: 0 });
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
+    for (const [logicalTurn, expected] of [
+      [2, false],
+      [4, true],
+      [5, false],
+      [6, true],
+    ] as const) {
+      expect(shouldTrigger(manifest, makeContext({ logicalTurn }))).toBe(
+        expected,
+      );
+    }
   });
 });

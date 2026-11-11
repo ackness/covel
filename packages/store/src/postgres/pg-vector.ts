@@ -448,8 +448,11 @@ export function createPgVectorCapability(
     const topK = normalizeVectorTopK(input.topK);
     if (topK === 0) return [];
     const target = await resolveSessionVectorTarget(input.sessionId);
-    if (!target) {
-      // No embedding model locked → return empty results.
+    if (
+      !target ||
+      (input.expectedModelRegistryId !== undefined &&
+        target.modelRegistryId !== input.expectedModelRegistryId)
+    ) {
       return [];
     }
 
@@ -462,10 +465,17 @@ export function createPgVectorCapability(
     const tname = physicalTableName(target.modelRegistryId);
     const vecStr = serializeVector(input.query);
 
-    // Build conditional WHERE clauses.
-    const extraClauses: string[] = [`session_id = $2`];
-    const extraParams: Array<string | number> = [input.sessionId];
-    let paramIdx = 3;
+    // The session binding and vectors share this statement's snapshot. A
+    // reset after target resolution cannot publish hits from the old table.
+    const extraClauses: string[] = [
+      `session_id = $2`,
+      `EXISTS (SELECT 1 FROM sessions WHERE id = $2 AND embedding_model_id = $3)`,
+    ];
+    const extraParams: Array<string | number> = [
+      input.sessionId,
+      target.modelRegistryId,
+    ];
+    let paramIdx = 4;
 
     if (input.pluginId !== undefined) {
       extraClauses.push(`plugin_id = $${paramIdx++}`);

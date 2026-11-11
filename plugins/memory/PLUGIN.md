@@ -22,7 +22,7 @@ contributes:
       accepts:
         - memory.blocks@1
       schema: ./schemas/block-definitions.schema.json
-      description: What the story should remember, chosen by the world instead of the default list.
+      description: Extra story memory topics supplied by the world, alongside the default blocks.
       authoring:
         title: Story memory topics
         summary: Lets the story remember things that fit the genre, such as clues, promises and countdowns.

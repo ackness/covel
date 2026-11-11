@@ -38,7 +38,7 @@ export interface HostRouteDeps {
 export function mountApiRoutes(app: Hono, deps: HostRouteDeps): void {
   app.route("/", deps.api.app);
   app.route("/", createPluginAssetRoutes(deps.api.registry));
-  app.route("/", createModelDbRoutes(deps.ai));
+  app.route("/", createModelDbRoutes(deps.ai, deps.apiKeys));
   app.route(
     "/",
     createMiscApiRoutes(deps.ai, deps.api.registry, deps.store, deps.apiKeys),

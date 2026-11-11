@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { SuspensionsPanel } from "../suspensions-panel.js";
@@ -22,18 +22,34 @@ const base = {
   createdAt: new Date().toISOString(),
 };
 
-it("resumes a choice suspension with the picked option, without asking for JSON", () => {
-  const onResume = vi.fn().mockResolvedValue(undefined);
+it("resumes a choice suspension and keeps it answerable if it remains unresolved", async () => {
+  let resolveAnswer!: () => void;
+  const answer = new Promise<void>((resolve) => {
+    resolveAnswer = resolve;
+  });
+  const onResume = vi.fn(() => answer);
+  const onCancel = vi.fn().mockResolvedValue(undefined);
   render(
     <SuspensionsPanel
       suspensions={[{ ...base, resumeSchema: { enum: ["left", "right"] } }]}
       onResume={onResume}
-      onCancel={vi.fn()}
+      onCancel={onCancel}
     />,
   );
   expect(screen.queryByRole("textbox")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "right" }));
+  const right = screen.getByRole("button", { name: "right" });
+  const abandon = screen.getByRole("button", { name: /abandon/i });
+  fireEvent.click(right);
   expect(onResume).toHaveBeenCalledWith("s1", "right");
+  expect(right).toHaveProperty("disabled", true);
+  expect(abandon).toHaveProperty("disabled", true);
+  // Declining an approval returns normally and leaves the suspension in place.
+  await act(async () => resolveAnswer());
+  expect(screen.getByText(base.reason)).toBeTruthy();
+  expect(right).toHaveProperty("disabled", false);
+  expect(abandon).toHaveProperty("disabled", false);
+  await act(async () => fireEvent.click(abandon));
+  expect(onCancel).toHaveBeenCalledWith(base.id);
 });
 
 it("builds a form from an object schema and resumes with the typed values", () => {

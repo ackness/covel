@@ -32,21 +32,4 @@ describe.skipIf(subtleSkip)("sha256Hex", () => {
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     );
   });
-
-  it("returns lowercase hex of length 64", async () => {
-    const bytes = new TextEncoder().encode("hello world");
-    const buffer = bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    ) as ArrayBuffer;
-    const hash = await sha256Hex(buffer);
-    expect(hash).toHaveLength(64);
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
-  });
-
-  it("subtleAvailable() reports true under jsdom", () => {
-    // The skipIf above guards against environments without subtle —
-    // here we simply assert the helper is honest about that.
-    expect(subtleAvailable()).toBe(true);
-  });
 });

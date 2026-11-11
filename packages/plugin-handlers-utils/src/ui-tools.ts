@@ -296,9 +296,7 @@ export const createChoicesTool = tool({
 // ── create-notification ──────────────────────────────────────────
 
 /**
- * The runtime only promotes a tool result that carries `ui` or `interaction`
- * (`findPresentableToolOutput`). A notification is not awaiting player input,
- * so it takes the `ui` channel: the block is normalized into a `ui.render`
+ * A notification uses the `ui` channel: the block is normalized into a `ui.render`
  * proposal, and the renderer maps a part whose `content` is itself a
  * json-render spec onto that component — here `Alert`, whose props are
  * exactly level/title/message.

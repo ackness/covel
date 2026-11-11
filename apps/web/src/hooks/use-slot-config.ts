@@ -134,7 +134,10 @@ export function useSlotConfig(
       scope: "custom",
     }));
   }, [customPresets]);
-  const localPresets = useModelCapabilities(unresolvedLocalPresets);
+  const localPresets = useModelCapabilities(
+    unresolvedLocalPresets,
+    JSON.stringify([version, llmConfig]),
+  );
   const allPresets = useMemo(
     () => [...serverPresets, ...localPresets],
     [serverPresets, localPresets],
@@ -156,26 +159,6 @@ export function useSlotConfig(
       ),
     ]),
   ]);
-
-  /** Resolve a slot name to a preset (checks user config, falls back to server default). */
-  const resolveSlot = useCallback(
-    (slotId: string): PresetSummary | null => {
-      const entry = slotConfig[slotId];
-      const bindingId = slotBindingId(entry);
-      if (bindingId) {
-        return findBinding(entry) ?? null;
-      }
-      return (
-        serverPresets.find(
-          (p) => p.slotBindings?.includes(slotId) || p.id === `slot-${slotId}`,
-        ) ??
-        serverPresets.find((p) => p.isDefault) ??
-        serverPresets[0] ??
-        null
-      );
-    },
-    [slotConfig, findBinding, serverPresets],
-  );
 
   /**
    * All resolvable slot entries.
@@ -279,6 +262,14 @@ export function useSlotConfig(
           ? getSettings().get<string>(`keys.${provider}`)
           : undefined;
         if (localKey?.trim()) return true;
+        if (slot.preset?.scope === "custom") {
+          // The registry checked this exact endpoint/protocol as request-scoped.
+          // A server slot's preset override is not a trusted provider default.
+          return (
+            isLoopbackBaseUrl(slot.preset.baseUrl) ||
+            slot.preset.serverCredentialsAvailable === true
+          );
+        }
         const server = llmConfig?.slots[slot.slotId];
         // A service on this machine (Ollama, a local gateway) takes no key.
         if (isLoopbackBaseUrl(slot.preset?.baseUrl ?? server?.baseUrl))
@@ -286,9 +277,7 @@ export function useSlotConfig(
         return (
           !!server?.serverKeyConfigured &&
           server.provider === provider &&
-          (!slot.presetId ||
-            (slot.preset?.baseUrl === server.baseUrl &&
-              slot.preset?.scope !== "custom"))
+          (!slot.presetId || slot.preset?.baseUrl === server.baseUrl)
         );
       })(),
       reasoningEffort:
@@ -309,5 +298,5 @@ export function useSlotConfig(
     credentialRevision,
   ]);
 
-  return { slotConfig, resolvedSlots, allPresets, resolveSlot, refresh };
+  return { slotConfig, resolvedSlots, allPresets, refresh };
 }

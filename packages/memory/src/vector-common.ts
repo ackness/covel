@@ -98,6 +98,7 @@ export async function searchSessionVectors(
   const results = await store.searchVectors({
     sessionId,
     query: queryVector,
+    expectedModelRegistryId: target.modelRegistryId,
     topK: limit,
     pluginId: MEMORY_VECTOR_PLUGIN_ID,
     namespace,

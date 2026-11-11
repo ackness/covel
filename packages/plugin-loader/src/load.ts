@@ -1,4 +1,3 @@
-import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import {
   frameworkContractSchemas,
   defaultOutputSchemaContract,
@@ -13,7 +12,7 @@ import {
 } from "./action-kinds.js";
 import { assertInsideRoot } from "./path-containment.js";
 import { fileExists } from "./file-system.js";
-import { storyContextSchemaError } from "./story-context-schema.js";
+import { assertRuntimeOutputSchema } from "./runtime-output-schema.js";
 import {
   PackageInventoryError,
   packageFileSignature,
@@ -855,31 +854,21 @@ export async function loadRuntime(
     ? contracts[parsed.manifest.outputContract]
     : undefined;
 
-  if (parsed.manifest.runtimeType !== "function") {
-    const effectiveSchema =
-      outputSchema !== undefined ? outputSchema : outputContractSchema;
-    if (parsed.manifest.output?.from && effectiveSchema === undefined)
-      throw new Error(
-        `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
-      );
-    if (effectiveSchema !== undefined) {
-      try {
-        assertAgentOutputObjectSchema(effectiveSchema);
-      } catch (cause) {
-        throw new Error(
-          `${parsed.sourcePath}: ${cause instanceof Error ? cause.message : String(cause)}`,
-          { cause },
-        );
-      }
-    }
-  }
-
-  const storyContextError = storyContextSchemaError(
+  const effectiveSchema =
+    outputSchema !== undefined ? outputSchema : outputContractSchema;
+  if (
+    parsed.manifest.runtimeType !== "function" &&
+    parsed.manifest.output?.from &&
+    effectiveSchema === undefined
+  )
+    throw new Error(
+      `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
+    );
+  assertRuntimeOutputSchema(
     parsed.manifest,
     parsed.sourcePath,
-    outputSchema,
+    effectiveSchema,
   );
-  if (storyContextError) throw new Error(storyContextError);
 
   const inputSchema = parsed.manifest.input?.schema
     ? await loadDeclaredSchema(
@@ -926,54 +915,51 @@ export async function loadRuntime(
     }),
   );
 
-  // Load function handler for runtimeType: 'function'
-  let handler: FunctionHandler | undefined;
-  if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
-    const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
+  async function loadRuntimeFunction(
+    modulePath: string,
+    label: "Handler" | "Guard",
+  ) {
+    const fullPath = path.resolve(runtimeDir, modulePath);
     await assertInsideRoot(
       discovery.rootPath,
-      handlerPath,
-      "Handler path traversal rejected",
+      fullPath,
+      `${label} path traversal rejected`,
     );
     if (authorizeCode && !(await authorizeCode()))
       throw new Error(
-        "Runtime handler requires server-code and runtime authorization",
+        `Runtime ${label.toLowerCase()} requires server-code and runtime authorization`,
       );
     provideHostModules(discovery.rootPath);
-    const url = pathToFileURL(handlerPath);
+    const url = pathToFileURL(fullPath);
     if (generation) url.searchParams.set("generation", generation);
-    const mod = await import(url.href);
+    const mod: { readonly default?: unknown } = await import(url.href);
     if (typeof mod.default !== "function") {
       throw new Error(
-        `Handler module "${parsed.manifest.handler}" does not export a default function (got ${typeof mod.default})`,
+        `${label} module "${modulePath}" does not export a default function (got ${typeof mod.default})`,
       );
     }
-    handler = mod.default as FunctionHandler;
+    // Do not let the async return await a function's own `then` property.
+    return { callable: mod.default };
+  }
+
+  // Load function handler for runtimeType: 'function'
+  let handler: FunctionHandler | undefined;
+  if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
+    const { callable } = await loadRuntimeFunction(
+      parsed.manifest.handler,
+      "Handler",
+    );
+    handler = callable as FunctionHandler;
   }
 
   // Load guard function for agent runtimes with pre-execution gate
   let guard: AgentGuard | undefined;
   if (parsed.manifest.guard) {
-    const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
-    await assertInsideRoot(
-      discovery.rootPath,
-      guardPath,
-      "Guard path traversal rejected",
+    const { callable } = await loadRuntimeFunction(
+      parsed.manifest.guard,
+      "Guard",
     );
-    if (authorizeCode && !(await authorizeCode()))
-      throw new Error(
-        "Runtime guard requires server-code and runtime authorization",
-      );
-    provideHostModules(discovery.rootPath);
-    const url = pathToFileURL(guardPath);
-    if (generation) url.searchParams.set("generation", generation);
-    const mod = await import(url.href);
-    if (typeof mod.default !== "function") {
-      throw new Error(
-        `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
-      );
-    }
-    guard = mod.default as AgentGuard;
+    guard = callable as AgentGuard;
   }
 
   const datasetSchemas = snapshot.packageManifest?.datasetSchemas;

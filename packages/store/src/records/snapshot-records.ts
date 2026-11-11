@@ -264,6 +264,8 @@ export interface SuspendedNestedResult {
   readonly result: unknown;
   /** Conversation rows (`TurnMessageRecord`) it adds when it commits. */
   readonly journal?: readonly unknown[];
+  /** Background event followers owned by this saved producer invocation. */
+  readonly deferredFollowers?: import("@covel/shared").TurnResult["deferredFollowers"];
   /** The runtime it counts one run of in the trigger ledger. */
   readonly trigger?: string;
 }

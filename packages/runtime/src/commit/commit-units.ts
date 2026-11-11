@@ -418,6 +418,7 @@ export async function commitUnitsInOrder(
     units: ctx.units,
     prepared: ctx.prepared,
     readDependencies: args.readDependencies,
+    eventDependencies: args.eventDependencies,
     suspensionRuns: args.suspensionRuns,
     operations: ledger,
     drops,

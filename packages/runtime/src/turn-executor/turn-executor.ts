@@ -46,7 +46,6 @@ import {
   runPostCompactionHook,
 } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
-import { __testOnly_parseFinalOutputEnvelope } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
@@ -108,10 +107,7 @@ import {
 } from "./scheduling.js";
 import { nestedResultsOf } from "./nested-results.js";
 
-export {
-  __testOnly_parseFinalOutputEnvelope,
-  looksLikeStructuredRuntimeOutput,
-} from "./turn-output-helpers.js";
+export { looksLikeStructuredRuntimeOutput } from "./turn-output-helpers.js";
 export {
   MaxRecursionExceeded,
   type AgentLoopDeps,

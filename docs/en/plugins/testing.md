@@ -553,8 +553,13 @@ For how to package and trial-install your own plugin, see [Package and trial-ins
 - **Data ownership**: only write to your own data space. The plugin ID in the write request is your own.
 - **A failure leaves no trace**: after a failed run, no half-written data is saved.
 - **Write first, then read**: in the same run, a later step can read what an earlier step wrote.
+- **Batch merging**: update different properties of one entity through its canonical name and an existing alias, then check both persisted. A new alias can name an edge endpoint in that batch without taking over an existing node's canonical name.
 
 When you change a character tool, check it against the real character field definitions. Do not write a simplified copy of your own.
+
+For memory block aggregation, use the real definitions loader and cover default blocks, duplicate labels and new labels; see [memory extensions](../reference/plugins.md#prompt-and-memory-extensions).
+
+For asynchronous UI actions, check controls while work is pending and whether the player can continue after a failure or denied approval, rather than only asserting an error message.
 
 ## When it does not work as expected
 

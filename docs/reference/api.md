@@ -1522,6 +1522,8 @@ fork 和社区插件的授权：
 - `pricingKind=reference` 表示这是通过聚合服务商匹配到的上游模型参考价，实际账单可能不同。
 - `reasoning` 返回按上游模型家族识别出的思考强度档位、默认值和家族名称，供生成参数界面使用。
 
+可选的 `credentials=1` 同时查询自定义连接能否使用服务端现有凭据。`X-Slot-Config.customPresets` 必须恰有一个连接，其 `provider`、`model`、`protocol` 与查询参数一致；不合法时返回 `400 invalid_llm_configuration`。响应增加 `serverCredentialsAvailable: boolean`；没有该参数则省略此字段。判断包含可信来源上的 API key、认证 headers 和无需密钥的回环地址，不调用模型或验证服务商认证，也不返回地址或凭据。
+
 `POST /api/model-db/refresh`：
 
 - 在线获取 LiteLLM 的最新数据。
@@ -2912,6 +2914,8 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 `status` 的全部取值：`queued | claimed | running | committing | succeeded | failed | timed_out | cancelled | stale | orphaned`。
 
 `succeeded` 作业的 `result` 是后台回合、执行和 runtime 的摘要，不是插件数据的副本。插件数据以 proposal 提交之后的标准 API 和 SSE 为准。
+
+取消和重试都会在取得会话锁后重新校验 owner、会话代次和删除标记。等待期间会话被同 ID 重建时，不会操作替代会话里的同名作业：owner 校验失败返回 `401`，代次不匹配返回 `409 session_incarnation_changed`。
 
 #### `POST /api/sessions/:id/runtime-jobs/:jobId/cancel`
 
@@ -4517,6 +4521,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 会话的 `runtimeModelOverrides` 照常生效：恢复的 runtime 和它调用的子 agent 都按各自的 runtimeId 选模型。
 - 时限和最初派发时相同：runtime 清单写了 `timeoutMs` 就用它，没写时用框架的默认时限。
 - 恢复的 runtime 可以再次挂起，见下面的[再次挂起](#再次挂起)。
+- 递归子调用保留的后台事件任务只在成功恢复的事务里入队；再次挂起时继续暂存。入队后通过既有的 `runtime.deferred` 通知和作业状态订阅发布。
 
 agent 恢复沿用已用步数、纠正计数及其准入上限，不把答案正文当作提交。输出 schema 或必需工作规则已变化、或 continuation 缺少当前契约时，在模型请求前失败，保留原挂起项供放弃。重建活跃的旧 agent continuation 及包含它们的快照/checkpoint；不需要删除已提交故事。
 

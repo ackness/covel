@@ -1,5 +1,5 @@
 import { useModelCapabilities } from "@/hooks/use-model-capabilities.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, Loader2, RotateCw } from "lucide-react";
 import {
@@ -22,7 +22,7 @@ import {
   sameSettingValue,
   SettingsRevisionConflictError,
 } from "@covel/settings";
-import { useSettingsSave } from "../use-settings-save.js";
+import { useSettingsSave, useSettingsSaveQueue } from "../use-settings-save.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
 import { LlmSlotCard } from "./llm-slot-card.js";
@@ -62,17 +62,12 @@ export function LlmSlotsPane() {
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reloading, setReloading] = useState(false);
-  const [savingSlot, setSavingSlot] = useState(false);
   const [slotSaveError, setSlotSaveError] = useState<string | null>(null);
-  const pendingSlotSave = useRef(Promise.resolve());
-  const slotSaveCount = useRef(0);
-  const mounted = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const {
+    enqueue: enqueueSlot,
+    saving: savingSlot,
+    mounted,
+  } = useSettingsSaveQueue();
   const revision = useSettingsRevision([
     "llm.providers",
     "llm.slotConfig",
@@ -114,48 +109,39 @@ export function LlmSlotsPane() {
           (key) => !sameSettingValue(slotConfig[key], next[key]),
         );
     const requested = next;
-    const previous = pendingSlotSave.current;
-    let release!: () => void;
-    pendingSlotSave.current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    slotSaveCount.current += 1;
-    setSavingSlot(true);
-    setSlotSaveError(null);
-    await previous;
-    const currentSlots = getSlotConfig();
-    next = { ...currentSlots };
-    for (const key of changed) {
-      if (requested[key]) next[key] = requested[key];
-      else delete next[key];
-    }
-    const currentParamOverrides = getParamOverrides();
-    const nextParamOverrides = clearChangedSlotReasoningEfforts(
-      currentSlots,
-      next,
-      currentParamOverrides,
-    );
-    try {
-      await store.setMany({
-        "llm.slotConfig": next,
-        ...(nextParamOverrides !== currentParamOverrides
-          ? { "llm.paramOverrides": nextParamOverrides }
-          : {}),
-      });
-      if (mounted.current) setSlotConfigLocal(getSlotConfig());
-    } catch (error) {
-      const message = t("settings.saveFailed");
-      if (mounted.current) {
-        setSlotConfigLocal(getSlotConfig());
-        setSlotSaveError(message);
+    const result = enqueueSlot(async () => {
+      const currentSlots = getSlotConfig();
+      next = { ...currentSlots };
+      for (const key of changed) {
+        if (requested[key]) next[key] = requested[key];
+        else delete next[key];
       }
-      if (!(error instanceof SettingsRevisionConflictError))
-        emitToast("error", message);
-    } finally {
-      slotSaveCount.current -= 1;
-      release();
-      if (mounted.current) setSavingSlot(slotSaveCount.current > 0);
-    }
+      const currentParamOverrides = getParamOverrides();
+      const nextParamOverrides = clearChangedSlotReasoningEfforts(
+        currentSlots,
+        next,
+        currentParamOverrides,
+      );
+      try {
+        await store.setMany({
+          "llm.slotConfig": next,
+          ...(nextParamOverrides !== currentParamOverrides
+            ? { "llm.paramOverrides": nextParamOverrides }
+            : {}),
+        });
+        if (mounted.current) setSlotConfigLocal(getSlotConfig());
+      } catch (error) {
+        const message = t("settings.saveFailed");
+        if (mounted.current) {
+          setSlotConfigLocal(getSlotConfig());
+          setSlotSaveError(message);
+        }
+        if (!(error instanceof SettingsRevisionConflictError))
+          emitToast("error", message);
+      }
+    });
+    setSlotSaveError(null);
+    await result;
   };
 
   const autoBindDiscoveredSlots = () => {

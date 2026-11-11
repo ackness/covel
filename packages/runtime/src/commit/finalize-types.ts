@@ -38,6 +38,7 @@ import type { SavedLifecycleDeps } from "../resume/suspended-lifecycle.js";
 import type { DatasetSchemas } from "../plugin-data-validation.js";
 import type { ExecutionReadBaselines } from "../read-baselines.js";
 import type { PresentationState } from "../presentation/state.js";
+import type { ExecutionEventDependencies } from "../event-dependencies.js";
 
 /**
  * Manifests resolve output kind, capabilities, scope, the persistent
@@ -228,6 +229,8 @@ export interface FinalizeExecutionArgs {
    */
   readonly readBaselines?: ExecutionReadBaselines;
   readonly readDependencies?: Readonly<Record<string, readonly string[]>>;
+  /** Actual payload producers, captured by the event chain, never inferred by topic. */
+  readonly eventDependencies?: ExecutionEventDependencies;
 }
 
 /** How one write-service operation ended. */
@@ -301,4 +304,8 @@ export interface IsolatedRuntime {
 export interface CommitIsolation {
   /** Top-level runtimes of this execution whose writes were dropped. */
   readonly droppedRuntimeIds: ReadonlySet<string>;
+  /** Every dropped invocation, including nested runs with repeated runtime IDs. */
+  readonly droppedRunIds: ReadonlySet<string>;
+  /** Actual source run IDs, paired by position with the execution's followers. */
+  readonly followerSources: readonly string[];
 }

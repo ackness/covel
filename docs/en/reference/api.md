@@ -1522,6 +1522,8 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 - `pricingKind=reference` means the price is a reference price for an upstream model, matched through an aggregating provider. The actual bill may differ.
 - `reasoning` returns the reasoning effort levels, the default value, and the family name, recognized from the upstream model family. The generation-parameter screen uses them.
 
+Optional `credentials=1` also checks whether a custom connection can use existing server credentials. `X-Slot-Config.customPresets` must contain exactly one connection whose `provider`, `model` and `protocol` match the query parameters; invalid input returns `400 invalid_llm_configuration`. The response adds `serverCredentialsAvailable: boolean`, omitted without this option. The check covers origin-trusted API keys, authentication headers and loopback endpoints that need no key. It does not call the model, validate provider authentication or return endpoints or credentials.
+
 `POST /api/model-db/refresh`:
 
 - Fetches the latest LiteLLM data online.
@@ -2912,6 +2914,8 @@ The response does not return the internal `payload`. This means frozen inputs, u
 All values of `status`: `queued | claimed | running | committing | succeeded | failed | timed_out | cancelled | stale | orphaned`.
 
 The `result` of a `succeeded` job is a summary of the background turn, the run, and the runtime. It is not a copy of plugin data. For plugin data, use the standard API and SSE after the proposal is committed.
+
+Cancellation and retry revalidate the owner, session incarnation and deletion mark after taking the session lock. If the session was recreated with the same ID while waiting, they cannot change a same-ID job in its replacement: failed owner authorization returns `401`, and an incarnation mismatch returns `409 session_incarnation_changed`.
 
 #### `POST /api/sessions/:id/runtime-jobs/:jobId/cancel`
 
@@ -4517,6 +4521,7 @@ A story is returned only after the resume transaction commits, and state subscri
 - The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
 - The time limit is the one of the original dispatch: the runtime manifest's `timeoutMs` when it sets one, otherwise the framework default.
 - A resumed runtime can suspend again; see [Suspending again](#suspending-again) below.
+- Background event jobs retained from recursive calls are queued only in the successful resume transaction. Suspending again keeps them buffered. Queued jobs use the existing `runtime.deferred` notification and job-status subscription.
 
 Agent resume retains spent steps, correction counts and admitted ceilings; reply text is not a submission. A changed output schema or required-work rule, or a continuation missing the current contract, fails before a model request and leaves the suspension available to abandon. Recreate active old agent continuations and snapshots/checkpoints containing them; committed stories need not be deleted.
 

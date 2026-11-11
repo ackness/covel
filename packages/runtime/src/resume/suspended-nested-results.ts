@@ -17,6 +17,10 @@ import {
  * proposals, the conversation rows it adds and its trigger-ledger entry.
  */
 
+import {
+  deferEventFollower,
+  deferredFollowersOf,
+} from "../event-dependencies.js";
 import type { RuntimeResult } from "@covel/shared";
 import type { SuspendedNestedResult } from "@covel/store";
 import {
@@ -43,6 +47,7 @@ export function suspendNestedResults(nested: readonly RuntimeResult[]): {
       dropped.push(result);
       continue;
     }
+    const followers = deferredFollowersOf([result]);
     const journal = journalOf(result);
     const trigger = runtimeTriggerOf(result);
     saved.push({
@@ -62,6 +67,9 @@ export function suspendNestedResults(nested: readonly RuntimeResult[]): {
           : {}),
       }),
       readScopes: readScopesOf(result),
+      ...(followers.length > 0
+        ? { deferredFollowers: structuredClone(followers) }
+        : {}),
       ...(Object.keys(operationReadScopesOf(result)).length
         ? { operationReadScopes: operationReadScopesOf(result) }
         : {}),
@@ -79,6 +87,8 @@ export function restoreNestedResults(
   return saved.map((entry) => {
     const result = structuredClone(entry.result) as RuntimeResult;
     attachReadScopes(result, validateReadScopes(entry.readScopes));
+    for (const follower of entry.deferredFollowers ?? [])
+      deferEventFollower(result, structuredClone(follower));
     const operations = Object.fromEntries(
       Object.entries(entry.operationReadScopes ?? {}).map(([id, scopes]) => [
         id,

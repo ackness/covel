@@ -371,79 +371,83 @@ export function WorldEditor({
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 overflow-hidden pt-4">
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="flex flex-col h-full"
-          >
-            <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto overscroll-x-contain">
-              {TABS.map((tab) => (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  aria-label={t(tab.labelKey)}
-                  className="shrink-0 gap-1.5"
-                >
-                  {tab.icon}
-                  <span aria-hidden="true" className="hidden sm:inline">
-                    {t(tab.labelKey)}
-                  </span>
-                  {problems?.tabs[tab.id] && (
-                    <span
-                      aria-hidden="true"
-                      className="size-1.5 rounded-full bg-destructive"
-                    />
-                  )}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {TABS.map((tab) => {
-                const id = tab.id as keyof typeof templateComponents;
-                const Component =
-                  tab.id === "definitions" ? undefined : templateComponents[id];
-                // A tab is a form when its dimension is new or fitted the
-                // template as loaded, which is when it got its draft. The
-                // draft is not checked again here: a value that is incomplete
-                // in the middle of an edit must not swap the form for JSON
-                // under the player's cursor.
-                const hasForm = !dimensions[id] || drafts[id] !== undefined;
-                return (
-                  <TabsContent value={tab.id} key={tab.id}>
-                    {Component && hasForm ? (
-                      <Component
-                        dimensions={drafts}
-                        onChange={setDrafts}
-                        t={t}
-                        problems={problems?.tabs[tab.id]}
-                      />
-                    ) : (
-                      <DimensionsJsonEditor
-                        dimensions={merged}
-                        onChange={applyDefinitions}
-                        draft={
-                          jsonDrafts[tab.id]?.value ??
-                          JSON.stringify(merged, null, 2)
-                        }
-                        onDraftChange={(value) =>
-                          setJsonDrafts((current) => ({
-                            ...current,
-                            [tab.id]: {
-                              value,
-                              original:
-                                current[tab.id]?.original ??
-                                JSON.stringify(merged, null, 2),
-                            },
-                          }))
-                        }
+          <fieldset disabled={saving || confirming} className="contents">
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="flex flex-col h-full"
+            >
+              <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto overscroll-x-contain">
+                {TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    aria-label={t(tab.labelKey)}
+                    className="shrink-0 gap-1.5"
+                  >
+                    {tab.icon}
+                    <span aria-hidden="true" className="hidden sm:inline">
+                      {t(tab.labelKey)}
+                    </span>
+                    {problems?.tabs[tab.id] && (
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 rounded-full bg-destructive"
                       />
                     )}
-                  </TabsContent>
-                );
-              })}
-            </div>
-          </Tabs>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                {TABS.map((tab) => {
+                  const id = tab.id as keyof typeof templateComponents;
+                  const Component =
+                    tab.id === "definitions"
+                      ? undefined
+                      : templateComponents[id];
+                  // A tab is a form when its dimension is new or fitted the
+                  // template as loaded, which is when it got its draft. The
+                  // draft is not checked again here: a value that is incomplete
+                  // in the middle of an edit must not swap the form for JSON
+                  // under the player's cursor.
+                  const hasForm = !dimensions[id] || drafts[id] !== undefined;
+                  return (
+                    <TabsContent value={tab.id} key={tab.id}>
+                      {Component && hasForm ? (
+                        <Component
+                          dimensions={drafts}
+                          onChange={setDrafts}
+                          t={t}
+                          problems={problems?.tabs[tab.id]}
+                        />
+                      ) : (
+                        <DimensionsJsonEditor
+                          dimensions={merged}
+                          onChange={applyDefinitions}
+                          draft={
+                            jsonDrafts[tab.id]?.value ??
+                            JSON.stringify(merged, null, 2)
+                          }
+                          onDraftChange={(value) =>
+                            setJsonDrafts((current) => ({
+                              ...current,
+                              [tab.id]: {
+                                value,
+                                original:
+                                  current[tab.id]?.original ??
+                                  JSON.stringify(merged, null, 2),
+                              },
+                            }))
+                          }
+                        />
+                      )}
+                    </TabsContent>
+                  );
+                })}
+              </div>
+            </Tabs>
+          </fieldset>
         </CardContent>
       </Card>
     </div>

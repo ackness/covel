@@ -6,6 +6,7 @@ import type {
 import { getSettings } from "@/settings/store";
 import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
 import {
+  encodeBase64Json,
   buildProviderKeysHeader,
   buildSlotConfigHeaderInternal,
   rememberServerSlotProviders,
@@ -138,6 +139,8 @@ export interface ModelCapabilityLookupResult {
   /** Operational envelope for the requested role; absent for raw lookups. */
   effectiveCapability?: ModelCapabilityInfo;
   usesBuiltinAdapter?: boolean;
+  /** Server-owned credentials usable by the exact request-scoped connection. */
+  serverCredentialsAvailable?: boolean;
 }
 
 import type { ReasoningEffort } from "@covel/shared";
@@ -187,12 +190,14 @@ export async function lookupModelCapabilityDetails(
   provider?: string,
   protocol?: string,
   role?: string,
+  connection?: { baseUrl?: string; revision?: string },
 ): Promise<ModelCapabilityLookupResult> {
   const cacheKey = JSON.stringify([
     provider ?? null,
     protocol ?? null,
     role ?? null,
     model,
+    connection ? [connection.baseUrl ?? "", connection.revision ?? null] : null,
   ]);
   const cached = capabilityCache.get(cacheKey);
   if (cached) return cached;
@@ -201,9 +206,31 @@ export async function lookupModelCapabilityDetails(
   if (provider) params.set("provider", provider);
   if (protocol) params.set("protocol", protocol);
   if (role) params.set("role", role);
+  // The endpoint stays in the existing configuration header, never in a URL.
+  const credentialHeaders = connection
+    ? {
+        "X-Slot-Config": encodeBase64Json({
+          customPresets: [
+            {
+              id: "lookup",
+              provider,
+              model,
+              protocol,
+              baseUrl: connection.baseUrl,
+            },
+          ],
+        }),
+      }
+    : undefined;
+  if (connection) params.set("credentials", "1");
   let promise: Promise<ModelCapabilityLookupResult>;
-  promise = request<ModelCapabilityLookupResult>(
-    `/api/model-db/lookup?${params.toString()}`,
+  const url = `/api/model-db/lookup?${params.toString()}`;
+  promise = (
+    credentialHeaders
+      ? request<ModelCapabilityLookupResult>(url, {
+          headers: credentialHeaders,
+        })
+      : request<ModelCapabilityLookupResult>(url)
   ).catch((error: unknown) => {
     // Failed lookups stay retryable; only settled results are cached.
     if (capabilityCache.get(cacheKey) === promise) {

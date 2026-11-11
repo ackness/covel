@@ -242,9 +242,11 @@ stateDiagram-v2
 它的运行方式：
 
 - 它包括两种：被一次执行带起、延后运行的 follower，以及后台模式的 manual 触发。
-- 作为持久的作业排进 `_runtime_jobs`，`origin.activation` 是 `manual` 或 `event`。follower 在触发它的那次执行的提交事务里入队。
+- 作为持久的作业排进 `_runtime_jobs`，`origin.activation` 是 `manual` 或 `event`。follower 在触发它的那次执行的提交事务里入队；只有实际选中 payload 的生产者提交成功才入队，见[事件依赖](../reference/transactions.md)。
 - 作业 worker 认领后，把 handler 跑在会话锁**外**。只有 `processTurnResults`（finalize 事务加自动快照）进锁。作业的终态和它写入的数据在同一个事务里提交。
 - 它不能挂起等玩家：没有玩家在等它。runtime 真的挂起了，作业记为 `failed`，什么也不提交。
+
+递归调用产生的后台 follower 随其生产者所属的提交单元保存；父调用失败时不入队。不同嵌套执行可以各自触发同一个后台目标，分别保留 payload 和生产者。父调用挂起时，follower 随 continuation 保存，直到成功恢复才在同一提交事务里入队；再次挂起不会提前入队。
 
 为什么这样是安全的：
 

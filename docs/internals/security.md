@@ -226,6 +226,8 @@ Electron 45 已包含 eMudhra 被攻陷中间证书的公钥封锁补丁。它�
 
 供应商注册表（`packages/ai-provider/src/provider-registry.ts`）只在一种情况下附上环境密钥：解析出的目标 `baseUrl` 的源（origin）与受信任的配置（`llm.toml` 或已注册的供应商默认值）一致。
 
+请求里的自定义连接按 `requestScoped` 规则解析，只信任对应 provider／protocol 的默认来源。服务端某个 preset 覆盖的地址不会因此变成自定义连接的可信来源。模型就绪查询复用实际注册表解析，只公开可用性布尔值，不返回地址、密钥、headers 或内部异常；见[模型查询](../reference/api.md#模型数据库model-db)。
+
 Web 客户端只发送它的请求用得到的供应商的密钥：
 
 - 每个模型角色解析到的供应商（保存的绑定；没有绑定时是服务端自己为该角色配的供应商）；
@@ -506,11 +508,13 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 例外只有一种：没有故事 runtime 的插件的 `TurnStart` handler，而这次执行里排上了故事，也排上了这个插件的 runtime。它失败时，这个插件退出这次执行：它的 runtime 和子代理不运行，回合其余部分照常进行。它对整个回合的否决在这一回合不起作用，所以自己出错时必须结束整个回合的插件，要自己捕获错误并返回 `abort`。超时捕获不了，要当硬闸门用的 Hook 应当保持快速。只有 Hook 的插件、框架或故事插件的 Hook、没有故事的执行，一律 fail-closed。规则见 [Hook](../reference/hooks.md#auxiliary-hook-failures)。
 - 改写的 trace 只记录改了哪些 key 的摘要，不记录改写前后的完整提示词。
 
-**会话写入。** 会话变更、玩家操作、恢复挂起和操作 RPC，共用 `routes/api/session/locked-mutation.ts` 里的存活会话守卫。
+**会话写入。** 会话变更、玩家操作、恢复挂起、操作 RPC 和作业取消／重试，共用 `routes/api/session/locked-mutation.ts` 里的存活会话守卫。
 
 - 它们在持有会话锁的时候、写入之前，重新检查：会话是否存在、owner 授权、不可变的会话代次（incarnation）、删除标记，以及调用方允许的状态。
 - 如果一个操作的 SSE 响应已经打开，进入被拒时会通过 `error.occurred` 报告，机器可读的错误码与 JSON 守卫相同。
 - 脱离主流程的后台运行时作业保留它们各自的准入锁和提交锁。
+
+取消／重试在原始会话锁内重新校验，不经过等待后台任务完成的 settle 屏障；取消不能等待自己要取消的任务。
 
 **订阅内容。** SSE 连接只接收通过 owner 验证时那一代会话的事件，通过验证后才占用补发状态。生产者在异步工作之前捕获代次；删除控制事件不受 topic 过滤，跨来源乱序也不能把另一代内容交给旧连接。具体握手与重连规则见[协议](../reference/protocol.md)。
 

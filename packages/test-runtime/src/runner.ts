@@ -8,6 +8,7 @@ import {
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import type { RunRuntimeDebugOptions } from "./types.js";
 import {
+  committedEventFollowers,
   createToolExecutor,
   buildHookSettings,
   executeTurn,
@@ -239,7 +240,17 @@ export async function runRuntimeDebug(
       detached: false,
     });
     const committedFollowers =
-      commit.status === "committed" ? (result.deferredFollowers ?? []) : [];
+      commit.status === "committed"
+        ? committedEventFollowers(
+            result.deferredFollowers ?? [],
+            execution.commit.eventDependencies?.followers ?? [],
+            new Set(
+              (commit.isolatedRuntimes ?? []).flatMap((result) =>
+                result.runId ? [result.runId] : [],
+              ),
+            ),
+          )
+        : [];
 
     const jobs: Array<{
       jobId: string;

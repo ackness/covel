@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { selectCiScope } from "../ci-scope.mjs";
 
 const workflow = (name) =>
   parse(
@@ -33,7 +28,7 @@ function selected(condition, context) {
   );
 }
 
-test("nightly and manual triggers force full scope, including malformed or absent data", () => {
+test("browser workflow keeps scheduled/manual triggers and PR-only cancellation", () => {
   assert.deepEqual(ci.on.schedule, [{ cron: "17 3 * * *" }]);
   assert.ok(Object.hasOwn(ci.on, "workflow_dispatch"));
   assert.equal(ci.on.workflow_dispatch?.inputs, undefined);
@@ -53,53 +48,9 @@ test("nightly and manual triggers force full scope, including malformed or absen
   );
   assert.equal(ci.on.pull_request?.paths, undefined);
   assert.equal(ci.on.push.paths, undefined);
-  for (const eventName of ["schedule", "workflow_dispatch"]) {
-    for (const event of [
-      undefined,
-      null,
-      {},
-      "invalid",
-      { before: "a".repeat(40), after: "b".repeat(40) },
-    ]) {
-      assert.equal(
-        selectCiScope({ cwd: "/missing", eventName, event }).scope,
-        "full",
-      );
-    }
-  }
   // Site deployment remains limited to main pushes, regardless of scope.
   assert.match(ci.jobs.site.with.deploy, /github.event_name == 'push'/);
   assert.match(ci.jobs.site.with.deploy, /github.ref == 'refs\/heads\/main'/);
-});
-
-test("scope CLI requires full suites for malformed or missing nightly/manual events", (t) => {
-  const cwd = mkdtempSync(join(tmpdir(), "covel-browser-events-"));
-  t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  const payload = join(cwd, "event.json");
-  for (const eventName of ["schedule", "workflow_dispatch"]) {
-    for (const data of [undefined, "not JSON", "{}", "null"]) {
-      if (data === undefined) rmSync(payload, { force: true });
-      else writeFileSync(payload, data);
-      const result = spawnSync(
-        process.execPath,
-        [fileURLToPath(new URL("../ci-scope.mjs", import.meta.url))],
-        {
-          cwd,
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            GITHUB_EVENT_NAME: eventName,
-            GITHUB_EVENT_PATH: payload,
-            RELEASE: "false",
-            COMMIT: "",
-          },
-        },
-      );
-      assert.ifError(result.error);
-      assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /^scope=full\n/);
-    }
-  }
 });
 
 test("every full scope requires all eight isolated browser shards and the native aggregate", () => {

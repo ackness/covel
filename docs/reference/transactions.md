@@ -432,7 +432,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 | --- | --- |
 | turn 作用域的 `needs` 目标 | 下游一起丢弃 |
 | 必填 `inputs` 的来源 | 下游一起丢弃 |
-| 事件订阅者，触发它的事件的全部发出者都被丢弃 | 订阅者一起丢弃 |
+| 事件订阅者实际收到的 payload 的生产者被丢弃 | 订阅者一起丢弃，后台 follower 不入队 |
 | `after`、`required: false` 的输入 | 不级联，它们只表达顺序或尽力读取 |
 | `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足 |
 | story 或 setup runtime 的硬上游 | 整回合回滚 |
@@ -440,6 +440,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 | 读取了它未提交的插件数据、角色或角色 schema（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
 | 读取了没有提交的写服务操作（辅助单元） | 下游一起丢弃 |
 | 读取了没有提交的写服务操作（story 或 setup 单元） | 照常提交，trace 记 `read-dependency.kept` |
+
+**事件依赖。** 每层同一 topic 只选第一份 payload；提交计划记录这份 payload 的生产者 `runId`。另一个生产者的同主题事件即使提交成功，也不能代替已被丢弃的来源。依赖随事件链逐层检查，也约束尚无写入的挂起消费者；显式手动执行没有收到事件时，不因清单声明了 event trigger 而建立这条依赖。guard 跳过但单元里有成功的嵌套结果或已暂存的写服务操作时，仍检查这些依赖。
 
 **读取依赖。** 同一次执行里，runtime 读自己插件的数据时能看到同插件上游 runtime 还没提交的写入（见[执行内的插件数据可见性](./plugins.md#执行内的插件数据可见性)）。每次读取记下它实际看到了哪些上游的写入（`read-dependencies.ts`），执行把这些依赖带进提交计划。
 

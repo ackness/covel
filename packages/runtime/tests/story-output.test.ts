@@ -5,24 +5,32 @@ import {
   storyOutputError,
   storyOutputProblems,
 } from "../src/agent-loop/story-output.js";
-import { sanitizeStoryNarrativeText } from "../src/turn-executor/turn-output-helpers.js";
 
 describe("story normalization", () => {
   it.each([
-    "雨停了。",
-    "雨停了。\n\n她转身离开。",
-    "  The lamp flickers.  \n\n\n\nA door opens.\nSomeone waits.  ",
-    "第一段。\n \n仍是第一段。\n\n第二段。",
-    "她看着你。\n\n**你会怎么做？**",
-  ])("keeps a prose story's text byte for byte (%#)", (prose) => {
-    const story = normalizeStoryOutput({ narrativeOutput: prose });
-    expect(story?.narrativeOutput).toBe(sanitizeStoryNarrativeText(prose));
-    expect(
-      (story!.segments as { kind: string }[]).every(
-        (segment) => segment.kind === "narration",
-      ),
-    ).toBe(true);
-  });
+    ["雨停了。", "雨停了。"],
+    ["雨停了。\n\n她转身离开。", "雨停了。\n\n她转身离开。"],
+    [
+      "  The lamp flickers.  \n\n\n\nA door opens.\nSomeone waits.  ",
+      "The lamp flickers.\n\nA door opens.\nSomeone waits.",
+    ],
+    [
+      "第一段。\n \n仍是第一段。\n\n第二段。",
+      "第一段。\n \n仍是第一段。\n\n第二段。",
+    ],
+    ["她看着你。\n\n**你会怎么做？**", "她看着你。"],
+  ])(
+    "normalizes prose paragraphs and removes trailing choice prompts (%#)",
+    (prose, expected) => {
+      const story = normalizeStoryOutput({ narrativeOutput: prose });
+      expect(story?.narrativeOutput).toBe(expected);
+      expect(
+        (story!.segments as { kind: string }[]).every(
+          (segment) => segment.kind === "narration",
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("joins segment texts, overwrites the written text and keeps business fields", () => {
     const written = {

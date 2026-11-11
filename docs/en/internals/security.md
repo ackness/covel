@@ -226,6 +226,8 @@ Model provider keys come from two sources, and they take two paths:
 
 The provider registry (`packages/ai-provider/src/provider-registry.ts`) attaches an environment key in only one case: the origin of the resolved target `baseUrl` matches a trusted configuration (`llm.toml`, or a registered provider default).
 
+Custom request connections use `requestScoped` resolution and trust the matching provider/protocol default origin. A server preset's endpoint override does not become a trusted origin for a custom connection. Model readiness lookup reuses the real registry and exposes only an availability boolean, without endpoints, keys, headers or internal exceptions; see [model lookup](../reference/api.md#model-database-model-db).
+
 The Web client sends only the keys of the providers its requests need:
 
 - the provider each model role resolves to (the saved binding; when there is no binding, it is the provider the server configured for that role);
@@ -506,11 +508,13 @@ A multi-file view loads directly from `/plugin-assets/<pluginId>/<digest>/<entry
 - There is one exception: a `TurnStart` handler of a plugin without a story runtime, in an execution where a story and some of that plugin's runtimes are scheduled. Its failure makes the plugin sit the execution out: its runtimes and sub-agents do not run, and the rest of the turn goes on. Its turn-level veto does not apply to that turn, so a plugin that must stop the whole turn on its own errors catches them and returns `abort`. A timeout cannot be caught, so a hook meant as a hard gate should stay fast. A plugin made of hooks alone, a hook of the framework or of the story plugin, and an execution with no story always fail closed. The rules are in [Hooks](../reference/hooks.md#auxiliary-hook-failures).
 - The trace of a rewrite records only a summary of which keys were changed. It does not record the full prompt from before and after the rewrite.
 
-**Session writes.** Session changes, player actions, resuming suspensions, and action RPCs all share the live-session guard in `routes/api/session/locked-mutation.ts`.
+**Session writes.** Session changes, player actions, resuming suspensions, action RPCs, and job cancellation/retry all share the live-session guard in `routes/api/session/locked-mutation.ts`.
 
 - While holding the session lock and before writing, they check again: whether the session exists, owner authorization, the immutable session incarnation, the deletion mark, and the states the caller allows.
 - If an operation's SSE response is already open, a rejection is reported through `error.occurred`. The machine-readable error code is the same as for the JSON guard.
 - Background runtime jobs that run apart from the main flow keep their own admission lock and commit lock.
+
+Cancellation/retry revalidates under the raw session lock, without the settle barrier that waits for background jobs. Cancellation must not wait for the job it is trying to cancel.
 
 **Subscription content.** An SSE connection admits events only from the session incarnation that passed owner authorization. Replay state is allocated only after that authorization. Producers capture the incarnation before async work; deletion controls bypass topic filters, and cross-origin reordering cannot deliver another incarnation to the old connection. See the [protocol](../reference/protocol.md) for handshake and reconnect rules.
 

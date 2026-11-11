@@ -294,47 +294,28 @@ class RuntimeJobWorkerClosedError extends Error {
   }
 }
 
-function publicState(status: RuntimeJobStatus): JobStatusState {
-  switch (status) {
-    case "queued":
-      return "queued";
-    case "claimed":
-    case "running":
-      return "running";
-    case "committing":
-      return "progress";
-    case "succeeded":
-      return "succeeded";
-    case "cancelled":
-      return "cancelled";
-    case "failed":
-    case "timed_out":
-    case "stale":
-    case "orphaned":
-      return "failed";
-  }
-}
-
-function publicProgress(status: RuntimeJobStatus): number {
-  switch (status) {
-    case "queued":
-      return 0;
-    case "claimed":
-      return 5;
-    case "running":
-      return 10;
-    case "committing":
-      return 95;
-    default:
-      return 100;
-  }
-}
+const PUBLIC_RUNTIME_JOB_STATUS = {
+  queued: { state: "queued", progress: 0 },
+  claimed: { state: "running", progress: 5 },
+  running: { state: "running", progress: 10 },
+  committing: { state: "progress", progress: 95 },
+  succeeded: { state: "succeeded", progress: 100 },
+  cancelled: { state: "cancelled", progress: 100 },
+  failed: { state: "failed", progress: 100 },
+  timed_out: { state: "failed", progress: 100 },
+  stale: { state: "failed", progress: 100 },
+  orphaned: { state: "failed", progress: 100 },
+} as const satisfies Record<
+  RuntimeJobStatus,
+  { readonly state: JobStatusState; readonly progress: number }
+>;
 
 export function makeRuntimeJobStatusRecord(
   job: RuntimeJobRecord,
   sequence: number,
 ): JobStatusRecord {
   const diagnostics = publicRuntimeJobDiagnostics(job);
+  const { state, progress } = PUBLIC_RUNTIME_JOB_STATUS[job.status];
   return {
     sessionId: job.sessionId,
     // Control-plane jobs own an independent scope. Reusing the source
@@ -345,8 +326,8 @@ export function makeRuntimeJobStatusRecord(
     pluginId: job.pluginId,
     runtimeId: job.runtimeId,
     jobId: job.jobId,
-    state: publicState(job.status),
-    progress: publicProgress(job.status),
+    state,
+    progress,
     ...(diagnostics.error ? { message: diagnostics.error } : {}),
     data: {
       originTurnId: job.origin.sourceTurnId,

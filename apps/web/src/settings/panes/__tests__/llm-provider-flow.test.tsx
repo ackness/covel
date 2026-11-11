@@ -608,6 +608,10 @@ it("F-037 queues connection edits and keeps the next field focused", async () =>
   expect(protocol.matches(":disabled")).toBe(false);
   expect(document.activeElement).toBe(protocol);
   fireEvent.change(protocol, { target: { value: "anthropic-messages-v1" } });
+  await act(async () => undefined);
+  expect(
+    mocks.store.get<ProviderModelProfile[]>("llm.providers")[0]?.protocol,
+  ).not.toBe("anthropic-messages-v1");
   await act(async () => gate.resolve());
   await waitFor(() =>
     expect(mocks.store.get("llm.providers")).toEqual([

@@ -115,10 +115,6 @@ test("empty, missing, mismatched and failed diffs cannot opt out of suites", (t)
   assert.deepEqual(repo.push(docs, undefined, { event: {} }), unknown);
   assert.deepEqual(repo.push(docs, undefined, { sha: repo.base }), unknown);
   assert.deepEqual(
-    repo.push(docs, undefined, { eventName: "workflow_dispatch" }),
-    unknown,
-  );
-  assert.deepEqual(
     selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event: {} }),
     unknown,
   );
@@ -705,7 +701,9 @@ test("the workflow command consumes real event payloads and fails closed on unre
   assert.equal(malformed.stdout.trim(), "scope=full\nsite_deploy=true");
   assert.equal(run("true").stdout.trim(), "scope=full\nsite_deploy=false");
   rmSync(payload);
-  assert.equal(run().stdout.trim(), "scope=full\nsite_deploy=true");
+  const missing = run();
+  assert.equal(missing.status, 0, missing.stderr);
+  assert.equal(missing.stdout.trim(), "scope=full\nsite_deploy=true");
   assert.equal(run("true").stdout.trim(), "scope=full\nsite_deploy=false");
 });
 

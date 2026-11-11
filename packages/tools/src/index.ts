@@ -67,11 +67,6 @@ export { suspendTool, isSuspendSentinel } from "./builtin/suspend.js";
 export { suspendFieldsToResumeSchema } from "./builtin/suspend-form.js";
 export type { SuspendSentinel } from "./builtin/suspend.js";
 export {
-  runtimeDoneTool,
-  isRuntimeDoneSentinel,
-} from "./builtin/runtime-done.js";
-export type { RuntimeDoneSentinel } from "./builtin/runtime-done.js";
-export {
   SEARCH_TOOLS_TOOL_NAME,
   SEARCH_TOOLS_DEFAULT_LIMIT,
   SEARCH_TOOLS_MAX_LIMIT,

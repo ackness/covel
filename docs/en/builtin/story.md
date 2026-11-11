@@ -146,7 +146,7 @@ The player profile follows the source turn’s actor, falling back to the primar
 
 ### What you will see
 
-The "Core Memory" panel on the right lists what is remembered, in blocks. There are four blocks by default: Story State, Character Relationships, Current Scene, and Player Profile. At the start of a game the panel is empty. It fills in after the first turn ends.
+The "Core Memory" panel on the right lists what is remembered, in blocks. There are four blocks by default: Plot so far, Your relationships, Current scene, and Your character. At the start of a game the panel is empty. It fills in after the first turn ends.
 
 Each block is rewritten in full every turn, so it stores the "current state". Separately, up to 3 new facts can be recorded each turn, and old facts are never edited. When your later input mentions something related, the related old facts are brought back.
 
@@ -161,7 +161,7 @@ Updating the memory takes one more model call. It runs in the background, so you
 
 ### What world authors can preset
 
-A world can replace the four default blocks with its own memory blocks, so memory records clues, relics, countdowns and similar things that suit its genre. The file is `data/memory-blocks.json`. Write one object: `id` is `world`, and the `blocks` list has, for each item, `label`, `displayName` and `extractionHint`. `icon` and `maxChars` are optional. Do not add a block for data that another dimension or plugin already records.
+A world can add memory blocks for clues, relics, countdowns and other topics that suit its genre. The four default blocks remain; see [memory extensions](../reference/plugins.md#prompt-and-memory-extensions) for how definitions merge by `label`. The file is `data/memory-blocks.json`. Write one object: `id` is `world`, and the `blocks` list has, for each item, `label`, `displayName` and `extractionHint`. `icon` and `maxChars` are optional. Do not add a block for data that another dimension or plugin already records.
 
 "Mistport: The Riftide Chronicle" (雾港・裂潮纪) includes such a file. For field details, see [World data reference](../reference/world-data.md).
 

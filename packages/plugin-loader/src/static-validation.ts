@@ -1,4 +1,3 @@
-import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
 import { frameworkContractSchemas } from "@covel/shared/contracts";
 import type { PluginThemeFiles } from "./theme-files.js";
 import type { MessageCatalog } from "./locale-messages.js";
@@ -24,7 +23,7 @@ import {
   isSchemaObject,
 } from "./action-kinds.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
-import { storyContextSchemaError } from "./story-context-schema.js";
+import { assertRuntimeOutputSchema } from "./runtime-output-schema.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
 export function pluginImportReferences(
@@ -415,22 +414,7 @@ export function validatePluginFiles(
       throw new Error(
         `${parsed.sourcePath}: io.output.from requires a loaded output schema or contract`,
       );
-    const storyContextError = storyContextSchemaError(
-      runtime,
-      parsed.sourcePath,
-      outputSchema,
-    );
-    if (storyContextError) throw new Error(storyContextError);
-    if (runtime.runtimeType !== "function" && outputSchema !== undefined) {
-      try {
-        assertAgentOutputObjectSchema(outputSchema);
-      } catch (cause) {
-        throw new Error(
-          `${parsed.sourcePath}: ${cause instanceof Error ? cause.message : String(cause)}`,
-          { cause },
-        );
-      }
-    }
+    assertRuntimeOutputSchema(runtime, parsed.sourcePath, outputSchema);
     file(parsed.sourcePath, "io.payloadSchema", runtime.input?.schema, true);
     // Committed bindings compile into input.inject, not runtime.inputs.
     // Validate both scopes from the authored declarations to retain field paths.

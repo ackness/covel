@@ -33,6 +33,10 @@ import {
   collectExecutionSuspensions,
 } from "./suspension-artifact.js";
 import { collectExecutionReadDependencies } from "./read-dependencies.js";
+import {
+  collectExecutionEventDependencies,
+  deferredFollowersOf,
+} from "./event-dependencies.js";
 import { runWithHookScope } from "./hooks/hook-scope.js";
 import {
   buildHookSettings,
@@ -93,6 +97,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "providerDatasets"
   | "operationRecords"
   | "readDependencies"
+  | "eventDependencies"
   | "readBaselines"
   | "presentationStates"
   | "progressScopeId"
@@ -108,6 +113,8 @@ export interface ExecutionCommitPlan extends Pick<
    * completes it. The host queues them inside the same commit.
    */
   readonly releasedRuntimeJobs?: readonly DeferredRuntimeJob[];
+  /** Restored nested event followers, queued by the host with a successful resume. */
+  readonly deferredFollowers?: TurnResult["deferredFollowers"];
 }
 
 /** Only `result` is a transport payload. The commit plan stays with the host. */
@@ -360,6 +367,7 @@ export async function executeTurn(
         journalMessageRuns: collectExecutionJournalRuns(turn),
         // A resume has no upstream in its execution, so it carries none.
         readDependencies: collectExecutionReadDependencies(turn),
+        eventDependencies: collectExecutionEventDependencies(turn),
         readBaselines: collectReadBaselines(results),
         progressAttemptId:
           deps.progressAttemptId ?? turn.executionContext.executionId,
@@ -539,9 +547,11 @@ export async function resumeSuspendedRuntime(
       : undefined;
   // Nested results restored from the suspension commit with the resumed
   // parent, children first, as one unit.
+  const nestedRuntimeResults = nestedResultsOf([result]);
   const carrier = {
     runtimeResults: [result],
-    nestedRuntimeResults: nestedResultsOf([result]),
+    nestedRuntimeResults,
+    deferredFollowers: deferredFollowersOf(nestedRuntimeResults),
   };
   if (
     result.status === "success" &&
@@ -637,6 +647,10 @@ export async function resumeSuspendedRuntime(
       ),
       ...structuredClone({
         readBaselines: collectReadBaselines(results),
+        eventDependencies: collectExecutionEventDependencies(carrier),
+        ...(carrier.deferredFollowers.length > 0
+          ? { deferredFollowers: carrier.deferredFollowers }
+          : {}),
         sessionId: suspension.sessionId,
         executionContext: {
           ...inherited,

@@ -106,6 +106,8 @@ export interface PresetSummary {
   /** Slot IDs whose presetId resolves here (e.g. ["default","fast"]). */
   slotBindings?: string[];
   capability?: import("./llm.js").ModelCapabilityInfo;
+  /** Server projection for this exact custom connection; absent while unknown. */
+  serverCredentialsAvailable?: boolean;
   parameterOverrides?: import("./model-settings.js").ModelParameterOverrides;
 }
 

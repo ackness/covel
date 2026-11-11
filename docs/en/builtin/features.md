@@ -30,6 +30,8 @@ Worlds generated in the app can be revised in "Revise this world" on their detai
 
 When the world dimension editor has unsaved changes, clicking "Cancel", navigating to another page, or going back asks whether to discard them. Choose "Keep editing" to retain the drafts; the browser prompts before reloading or closing the page. This also protects incomplete form input and unapplied JSON. For JSON edits, click "Apply definitions" before saving.
 
+Editing is disabled while a save or discard confirmation is pending. A failed save keeps the drafts, so you can edit and retry.
+
 ## Session-prep screen: choose plugins and gameplay packs
 
 After you choose a world and click "Enter", you reach the session-prep screen ("Session Setup"). Here you decide which plugins are on for this game.
@@ -64,6 +66,8 @@ Models sometimes fail. The app only redoes the part that failed, so the parts th
 - If a turn fails, the recovery notice at the top shows the cause recorded by the task. Expand it to read the original error. For key, permission, endpoint or rate-limit errors, open "Model settings" before retrying. While the recovery notice is visible, retry from there. Execution records keep a summary and expandable details.
 - Key, permission, quota and rate-limit errors name the provider. If several model uses in this session share it, the notice lists them, such as Story and Plugin tasks. For key authentication failures, "Model settings" opens "Providers and models". Fixing the shared key applies to all those uses. The list follows current settings; failure details keep the provider and model used at the time.
 - If the app stops unexpectedly, unfinished tasks stop, and the progress that was saved is kept. A new attempt starts only when you click "Retry unfinished turn".
+
+If approval for a pending interaction is denied, its card stays available. You can send an answer again or choose "Abandon" to end the interaction.
 
 ## Debug page
 

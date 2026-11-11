@@ -448,6 +448,114 @@ describe("upsert-npc-graph", () => {
     ).toEqual(["Ysolde", "the Keeper"]);
   });
 
+  it.each([
+    ["Lantern Guild", "Keepers"],
+    ["Keepers", "Lantern Guild"],
+  ])("merges same-batch updates through %s and %s", async (first, second) => {
+    await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: "Lantern Guild",
+            aliases: ["Keepers"],
+            type: "faction",
+            summary: "Keeps the lanterns.",
+          },
+        ],
+      },
+      ctx,
+      store,
+    );
+    await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: first,
+            type: "faction",
+            summary: "Keeps the lanterns.",
+            attributes: { resource: "oil" },
+          },
+          {
+            name: second,
+            type: "faction",
+            summary: "Keeps the lanterns.",
+            attributes: { leader: "Mara" },
+          },
+        ],
+      },
+      ctx,
+      store,
+    );
+    const nodes = await store.listPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      "nodes",
+    );
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].value.attributes).toEqual({
+      resource: "oil",
+      leader: "Mara",
+    });
+  });
+
+  it("uses a newly added alias for same-batch edges while preserving canonical name ownership", async () => {
+    await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: "Lantern Guild",
+            type: "faction",
+            summary: "Keeps the lanterns.",
+          },
+          { name: "Council", type: "faction", summary: "Rules the village." },
+        ],
+      },
+      ctx,
+      store,
+    );
+    const result = await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: "Lantern Guild",
+            aliases: ["Lamplighters", "Council"],
+            type: "faction",
+            summary: "Keeps the lanterns.",
+          },
+        ],
+        edges: [
+          {
+            sourceName: "Lamplighters",
+            targetName: "Council",
+            relation: "TRUSTS",
+            strength: 0.5,
+            fact: "The guild trusts the council.",
+          },
+        ],
+      },
+      ctx,
+      store,
+    );
+    expect(getToolContent(result).edges).toMatchObject({
+      created: 1,
+      skipped: 0,
+    });
+    const nodes = await store.listPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      "nodes",
+    );
+    const guild = nodes.find((row) => row.value.name === "Lantern Guild").value;
+    const council = nodes.find((row) => row.value.name === "Council").value;
+    expect(await storedEdges()).toMatchObject([
+      { source: guild.id, target: council.id },
+    ]);
+  });
+
   it("keeps an existing lastSeenTurn when a re-upsert carries no logicalTurn", async () => {
     const seeded = await executeAndCommit(
       upsertTool,

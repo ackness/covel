@@ -58,17 +58,17 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 
 ### Narrative and memory
 
-| Plugin                                                             | What it does                                                                   | On by default |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------- |
-| [Storyteller](./story.md) `narrator`                               | Writes the story text for each turn                                            | Yes           |
-| [Chat Storyteller](./story.md) `chat-mode-narrator`                | Tells the story as character dialogue; works alone, Stage Scene is optional    |               |
-| [Character Voice](./story.md) `character-agent`                    | Plays the selected character's public speech/actions                           |               |
-| [Who Speaks Next](./story.md) `turn-policy`                        | One service with five strategy settings                                        |               |
-| [Game Master Panel](./story.md#dm-console-dm-console) `dm-console` | Public cast, interactions, story and current-role input                        |               |
-| [Action Suggestions](./story.md) `guide`                           | Gives a few actions you can tap below the story text                           |               |
-| [Alternative Replies](./story.md) `branch-reply`                   | Writes another version of the same turn                                        |               |
-| [Story Memory](./story.md) `memory`                                | Remembers the ongoing plot, the current scene and the player character's state | Yes           |
-| [Long-Story Memory](./story.md) `history-compaction`               | When the conversation gets long, summarizes the older part                     | Yes           |
+| Plugin                                                             | What it does                                                                | On by default |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------- |
+| [Storyteller](./story.md) `narrator`                               | Writes the story text for each turn                                         | Yes           |
+| [Chat Storyteller](./story.md) `chat-mode-narrator`                | Tells the story as character dialogue; works alone, Stage Scene is optional |               |
+| [Character Voice](./story.md) `character-agent`                    | Plays the selected character's public speech/actions                        |               |
+| [Who Speaks Next](./story.md) `turn-policy`                        | One service with five strategy settings                                     |               |
+| [Game Master Panel](./story.md#dm-console-dm-console) `dm-console` | Public cast, interactions, story and current-role input                     |               |
+| [Action Suggestions](./story.md) `guide`                           | Gives a few actions you can tap below the story text                        |               |
+| [Alternative Replies](./story.md) `branch-reply`                   | Writes another version of the same turn                                     |               |
+| [Story Memory](./story.md) `memory`                                | Remembers plot and character state; worlds can add memory blocks            | Yes           |
+| [Long-Story Memory](./story.md) `history-compaction`               | When the conversation gets long, summarizes the older part                  | Yes           |
 
 A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Storyteller · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). Story Memory, Bag, Dice Check, Ability Checks, Character Creator and Character Profiles follow the action’s actor, falling back to the primary seat’s current character. Stage Scene still uses the first player character.
 
@@ -100,7 +100,7 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 | [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                           | Yes           |
 | [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges   |               |
 | [Almanac](./world.md) `codex`                          | Records people, places and things, with localized category badges          |               |
-| [Relationships](./world.md) `npc-graph`                | Records a graph of relationships between people, groups and factions       |               |
+| [Relationships](./world.md) `npc-graph`                | Tracks people, groups and factions by canonical name and alias             |               |
 | [Story Notes](./world.md) `world-ir`                   | Extracts current facts and reviews open quest objectives for other plugins |               |
 
 ### Stage and sound

@@ -41,16 +41,13 @@ describe("classifyActionableError", () => {
         'Runtime "tracker" exhausted the tool loop after 2 steps without producing final output.',
       ),
     ).toBe("invalid-output");
-    expect(
-      classifyActionableError(
-        'Runtime "world-ir" output did not match output.schema: /events/0 must NOT have additional properties',
-      ),
-    ).toBe("invalid-output");
-    expect(
-      classifyActionableError(
-        'Runtime "generator" expected a JSON envelope per output.schema',
-      ),
-    ).toBe("invalid-output");
+    for (const field of ["/events/0", "/network", "/timeout"]) {
+      expect(
+        classifyActionableError(
+          `output-schema-invalid: ${field} must be string`,
+        ),
+      ).toBe("invalid-output");
+    }
   });
 
   it.each([
@@ -63,7 +60,7 @@ describe("classifyActionableError", () => {
   ])("recognises rejected agent submissions (%s)", (reason) => {
     expect(
       classifyActionableError(
-        `[provider: fixture-provider, model: failed-model] Output rejected (${reason}).`,
+        `[provider: fixture-provider, model: failed-model] Output rejected (${reason}). /network must be string.`,
       ),
     ).toBe("invalid-output");
   });

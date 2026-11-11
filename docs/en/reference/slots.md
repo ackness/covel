@@ -190,6 +190,8 @@ Keys from the server's environment, and default credentials registered in the pr
 - If only the path changes within the same origin, the default credentials are kept.
 - A resolve request does not change a registered config.
 
+For a custom connection, the frontend uses the exact-connection result from [model lookup](./api.md#model-database-model-db) to determine server credential readiness. Matching a server preset's endpoint alone is insufficient. Protocol authentication headers also count. Results from an old lookup are not used after the connection, protocol or configuration revision changes.
+
 ## Config layers and the front end
 
 First, two terms:

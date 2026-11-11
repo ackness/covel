@@ -7,13 +7,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import {
-  runtimeDoneTool,
-  suspendTool,
-  tool,
-  worldDimensionListTool,
-  z,
-} from "@covel/tools";
+import { suspendTool, tool, worldDimensionListTool, z } from "@covel/tools";
 import {
   commitExecution,
   refuseReleasedJobs,
@@ -313,7 +307,7 @@ describe("resume completion evidence", () => {
         return { saved: true };
       },
     });
-    const modules = [saveWork, suspendTool, runtimeDoneTool];
+    const modules = [saveWork, suspendTool];
     const toolExecutor = createToolExecutor({
       store,
       findTool: (name) => modules.find((module) => module.name === name),
@@ -327,7 +321,7 @@ describe("resume completion evidence", () => {
       stage: "narrative",
       outputKind: "system",
       trigger: { type: "auto" },
-      tools: { builtin: ["save-work", "suspend", "runtime-done"] },
+      tools: { builtin: ["save-work", "suspend"] },
       requireToolUse: true,
       maxRetries: 0,
     };
@@ -405,32 +399,6 @@ describe("resume completion evidence", () => {
     const { result, workCalls } = await resumeAfterWork(
       [false, true],
       [call("retry", "save-work")],
-    );
-    expect(result.status).toBe("success");
-    expect(workCalls).toBe(2);
-  });
-
-  // `runtime-done` leaves the loop through its own exit, which must read the
-  // same evidence as a text answer.
-  const done = call("done", "runtime-done", { reason: "finished" });
-
-  it("does not let runtime-done stand in for a tool that failed before the suspension", async () => {
-    const { result, workCalls } = await resumeAfterWork([false], [done]);
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("required-work");
-    expect(workCalls).toBe(1);
-  });
-
-  it("accepts runtime-done after a tool that succeeded before the suspension", async () => {
-    const { result, workCalls } = await resumeAfterWork([true], [done]);
-    expect(result.status).toBe("success");
-    expect(workCalls).toBe(1);
-  });
-
-  it("accepts runtime-done once the resumed runtime has repeated the failed tool successfully", async () => {
-    const { result, workCalls } = await resumeAfterWork(
-      [false, true],
-      [call("retry", "save-work"), done],
     );
     expect(result.status).toBe("success");
     expect(workCalls).toBe(2);

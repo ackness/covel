@@ -1,26 +1,8 @@
 /**
- * Plugin runtime scheduling redesign — acceptance matrix (contract skeleton).
- *
- * This file is the machine-readable form of the "minimal acceptance scenarios"
- * defined in the design docs:
- *
- *  - devs/docs/plugin-runtime-scheduling/04-migration.md, §6 (scenarios 1-18)
- *  - devs/docs/plugin-runtime-scheduling/05-dependencies-and-permissions.md,
- *    §5 (scenarios 19-25)
- *
- * The scenario text in those docs is the sole authority — this file only
- * indexes each scenario as an `it.todo` so the matrix can be tracked and
- * lit up one at a time as the corresponding release step lands. Every
- * `it.todo` carries a `// needs: <mechanism> (release step N)` comment
- * pointing at the 04-migration.md §3 step that introduces the mechanism it
- * depends on. As each step ships, replace the matching `it.todo` with a real
- * test body (arrange the fixture, act, assert) — do not delete or renumber
- * scenarios, since the numbering is shared with the design docs.
- *
- * Scenario 18 in 04-migration.md §6 bundles two independently testable
- * claims (recordAs export-revision publication, and same-layer effects
- * hazard detection); it is split into 18a/18b below so each lands with its
- * own release step instead of forcing both mechanisms to ship together.
+ * Scheduling acceptance scenarios for the current runtime contract.
+ * See docs/reference/plugins.md and docs/internals/flow.md; remaining gaps
+ * are tracked in docs/internals/technical-debt.md.
+ * Pure effects policy cases live in effects-derivation.test.ts.
  */
 
 import { describe, it, expect } from "vitest";
@@ -53,12 +35,6 @@ import {
   hasIllegalDetachedContract,
   resolveInputBindings,
 } from "../src/schedule/input-bindings.js";
-import {
-  applyHazardPolicy,
-  effectsHazard,
-  deriveEffects,
-} from "../src/schedule/effects.js";
-import type { ScheduledGroup } from "../src/types.js";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
@@ -1883,94 +1859,6 @@ describe("recordAs export (persistent export revision)", () => {
       // still resolve it; asserted once the shared MediaRef canonicaliser +
       // ownership path lands (scenario 10).
     }
-  });
-});
-
-describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
-  const rt = (
-    name: string,
-    fields: Partial<RuntimeManifest>,
-  ): RuntimeManifest =>
-    ({
-      name,
-      pluginId: name.split("/")[0],
-      stage: "narrative",
-      trigger: { type: "auto" },
-      model: "m",
-      runtimeType: "agent",
-      ...fields,
-    }) as RuntimeManifest;
-
-  it("scenario 18b: 同层 effects 检查覆盖 W/W、W/R、R/W 且放行 R/R；双方 parallelSafe 只豁免不含 unknown:* 的纯 W/W；相同输入在 default/strict policy 下分别产出稳定的 warning/串行 level — 断言 hazard 矩阵与两种 policy 的稳定输出", () => {
-    const writer = deriveEffects(
-      rt("p/writer", { tools: { builtin: ["sync-characters"] } }),
-    );
-    const reader = deriveEffects(
-      rt("p/reader", { tools: { builtin: ["list-characters"] } }),
-    );
-    const otherReader = deriveEffects(
-      rt("p/reader2", { tools: { builtin: ["get-character"] } }),
-    );
-
-    // Hazard matrix: W/W, W/R, R/W all conflict; R/R is exempt.
-    expect(effectsHazard(writer, writer)).toBe(true); // W/W
-    expect(effectsHazard(writer, reader)).toBe(true); // W/R
-    expect(effectsHazard(reader, writer)).toBe(true); // R/W
-    expect(effectsHazard(reader, otherReader)).toBe(false); // R/R
-
-    // parallelSafe exempts pure W/W without unknown:*, but never a W/R hazard,
-    // and never a W/W overlap that involves unknown:*.
-    const safeWriterA = deriveEffects(
-      rt("p/sa", {
-        effects: { writes: ["characters:*"], parallelSafe: true },
-      }),
-    );
-    const safeWriterB = deriveEffects(
-      rt("q/sb", {
-        effects: { writes: ["characters:*"], parallelSafe: true },
-      }),
-    );
-    expect(effectsHazard(safeWriterA, safeWriterB)).toBe(false); // pure W/W exempt
-    expect(effectsHazard(safeWriterA, { ...reader, parallelSafe: true })).toBe(
-      true,
-    ); // W/R never exempt
-    // A conservative unknown:* write, marked parallelSafe.
-    const safeUnknown = {
-      ...safeWriterA,
-      writes: new Set(["unknown:*"] as const),
-    };
-    expect(effectsHazard(safeUnknown, safeWriterA)).toBe(true); // unknown:* never exempt
-
-    // Same input → stable output under both policies. Group has two conflicting
-    // writers plus an independent narrator.
-    const group: ScheduledGroup = {
-      runtimes: [
-        rt("p/narrator", { outputKind: "story" }),
-        rt("z/writer2", { tools: { builtin: ["sync-characters"] } }),
-        rt("a/writer1", { tools: { builtin: ["sync-characters"] } }),
-      ],
-    };
-
-    const warn1 = applyHazardPolicy([group], "warn");
-    const warn2 = applyHazardPolicy([group], "warn");
-    // warn: one parallel level, one diagnostic per conflicting pair, stable.
-    expect(warn1.groups).toHaveLength(1);
-    expect(warn1.diagnostics).toHaveLength(1);
-    expect(warn1.diagnostics[0]?.message).toContain("a/writer1");
-    expect(warn1.diagnostics[0]?.message).toContain("z/writer2");
-    expect(warn2.diagnostics).toEqual(warn1.diagnostics);
-
-    const strict1 = applyHazardPolicy([group], "strict");
-    const strict2 = applyHazardPolicy([group], "strict");
-    // strict: the two writers land in different levels (serialized in id order),
-    // the independent narrator stays parallel with the first.
-    const strictLevels = strict1.groups.map((g) =>
-      g.runtimes.map((r) => r.name).sort(),
-    );
-    expect(strictLevels).toEqual([["a/writer1", "p/narrator"], ["z/writer2"]]);
-    expect(strict2.groups.map((g) => g.runtimes.map((r) => r.name))).toEqual(
-      strict1.groups.map((g) => g.runtimes.map((r) => r.name)),
-    );
   });
 });
 

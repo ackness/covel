@@ -119,6 +119,7 @@ function SuspensionCard({
       await onResume(suspension.id, data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
       setBusy(null);
     }
   };
@@ -131,6 +132,7 @@ function SuspensionCard({
       await onCancel(suspension.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
       setBusy(null);
     }
   };
