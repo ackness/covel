@@ -131,6 +131,20 @@ loader, SDK, native targets and licenses. Detach staging hardlinks before mutati
   or explicit existence checks; use `items[i]!` only with a visibly in-range index.
 - Web appearance comes from SettingsStore helpers, with no separate theme provider.
 
+### Redundancy review
+
+Before finishing any code change, review the changed implementation and tests
+for redundancy against existing code, not just correctness and passing checks.
+
+- Reuse canonical helpers and existing test fixtures where their behavior fits.
+  Consolidate duplicate branches, state maintenance, setup and equivalent test
+  scenarios; use parameterized cases when only inputs and expectations differ.
+- Preserve tests for distinct risks, layers and lifecycle boundaries even when
+  their assertions look similar. Each regression must still detect its failure.
+- Keep simplification within the change's scope, preserve behavior, and rerun
+  affected tests. Do not add thin wrappers or speculative abstractions merely
+  to reduce repetition or line count.
+
 ## Critical Conventions
 
 ### Framework ↔ Plugin Isolation Rule

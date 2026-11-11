@@ -49,7 +49,7 @@ function steps(
       runtimeId,
       pluginId,
       ...(status === "failed"
-        ? { error: `${runtimeId} output did not match output.schema` }
+        ? { error: "Output rejected (invalid-output)." }
         : {}),
     });
   const base = [

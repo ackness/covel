@@ -241,9 +241,11 @@ A runtime that declares `schedule.background: true` does not hold the session lo
 How it runs:
 
 - There are two kinds: a follower that one execution starts and that runs later, and a manual trigger in background mode.
-- It is queued as a durable job in `_runtime_jobs`. `origin.activation` is `manual` or `event`. A follower is queued in the commit transaction of the execution that triggered it.
+- It is queued as a durable job in `_runtime_jobs`. `origin.activation` is `manual` or `event`. A follower is queued in the commit transaction of the execution that triggered it, only if the producer of its selected payload committed. See [event dependencies](../reference/transactions.md).
 - After a job worker claims the job, it runs the handler **outside** the session lock. Only `processTurnResults` (the finalize transaction plus the automatic snapshot) takes the lock. The final state of the job and the data it writes are committed in the same transaction.
 - It cannot suspend to wait for the player, because no player is waiting on it. If the runtime suspends anyway, the job is recorded as `failed` and nothing is committed.
+
+A background follower from a recursive call belongs to its producer's commit unit and is not queued if the parent call fails. Separate nested executions can each trigger the same background target, preserving their own payload and producer. If the parent suspends, the follower is saved with its continuation and queued in the successful resume's commit transaction. Suspending again does not queue it early.
 
 Why this is safe:
 

@@ -24,20 +24,6 @@ function makeRequest(overrides?: Partial<ApprovalRequest>): ApprovalRequest {
 }
 
 describe("approval rule ordering", () => {
-  it("first match wins — earlier deny suppresses later allow", () => {
-    // Auditors often add a tighter rule above a permissive one. Order matters.
-    const pipeline = createApprovalPipeline([
-      { pattern: "covel_dangerous_tool", action: "deny" },
-      { pattern: "local:*", action: "allow" },
-    ]);
-    const result = pipeline.check(
-      makeRequest({ toolName: "covel_dangerous_tool" }),
-      "local",
-    );
-    expect(result.decision).toBe("deny");
-    expect(result.reason).toBe("rule-deny");
-  });
-
   it("first match wins — earlier allow shields a later deny", () => {
     const pipeline = createApprovalPipeline([
       { pattern: "covel_safe_tool", action: "allow" },

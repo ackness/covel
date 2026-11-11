@@ -6,7 +6,6 @@ import {
   createCharacterTools,
   worldDimensionGetTool,
   worldDimensionListTool,
-  runtimeDoneTool,
 } from "@covel/tools";
 import {
   executeTurn,
@@ -178,7 +177,6 @@ export async function runAttributionTurn(
       ...createCharacterTools(store),
       worldDimensionGetTool,
       worldDimensionListTool,
-      runtimeDoneTool,
     ].map((t) => [t.name, t]),
   );
   const executor = createToolExecutor({

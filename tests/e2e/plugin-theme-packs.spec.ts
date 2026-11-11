@@ -146,6 +146,23 @@ async function themeIdentity(host: Host, sessionId = host.sessionId) {
   return theme;
 }
 async function controlStyle(locator: Locator) {
+  // Compare the same resting pointer state after hover transitions settle.
+  await locator.page().mouse.move(0, 0);
+  await expect
+    .poll(() =>
+      locator.evaluate(
+        (element) =>
+          !element.matches(":hover") &&
+          element
+            .getAnimations()
+            .every(
+              (animation) =>
+                animation.playState === "finished" ||
+                animation.playState === "idle",
+            ),
+      ),
+    )
+    .toBe(true);
   return locator.evaluate((element) => {
     const s = getComputedStyle(element),
       r = element.getBoundingClientRect();

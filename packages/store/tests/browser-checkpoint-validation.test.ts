@@ -372,6 +372,92 @@ describe("checkpoint record validation", () => {
       ).toThrow("suspensions[0].pendingContinuation.loop.corrections.review");
   });
 
+  describe("suspended nested event followers", () => {
+    const follower = {
+      runtimeId: "probe/follower",
+      pluginId: "probe",
+      triggerEvent: {
+        topic: "probe.ready",
+        data: { nested: { values: ["ready", 1, true, null] } },
+      },
+    };
+    const withFollowers = (
+      deferredFollowers: unknown,
+      boundary: "checkpoint" | "snapshot",
+    ) => {
+      const suspension = checkpoint.suspensions[0]!;
+      const suspensions = [
+        {
+          ...suspension,
+          pendingContinuation: {
+            ...suspension.pendingContinuation,
+            nestedResults: [
+              {
+                readScopes: [],
+                result: {
+                  pluginId: "probe",
+                  runtimeId: "probe/child",
+                  runId: "run-child",
+                  turnId: "turn-1",
+                  status: "success",
+                },
+                deferredFollowers,
+              },
+            ],
+          },
+        },
+      ];
+      return boundary === "checkpoint"
+        ? { ...checkpoint, suspensions }
+        : {
+            ...checkpoint,
+            snapshots: [
+              {
+                ...checkpoint.snapshots[0]!,
+                payload: { ...checkpoint.snapshots[0]!.payload, suspensions },
+              },
+            ],
+          };
+    };
+
+    it.each(["checkpoint", "snapshot"] as const)(
+      "preserves followers through the %s boundary and JSON round-trip",
+      (boundary) => {
+        const value = JSON.parse(
+          JSON.stringify(withFollowers([follower], boundary)),
+        );
+        expect(validateBrowserCheckpoint(value)).toEqual(value);
+      },
+    );
+
+    it.each([
+      { follower: { ...follower, runtimeId: "" }, path: "runtimeId" },
+      { follower: { ...follower, pluginId: 42 }, path: "pluginId" },
+      { follower: { ...follower, extra: true }, path: "" },
+      ...[
+        { topic: " ", data: {} },
+        { ...follower.triggerEvent, data: null },
+        { ...follower.triggerEvent, data: [] },
+        { ...follower.triggerEvent, data: { bad: undefined } },
+        { ...follower.triggerEvent, extra: true },
+      ].map((triggerEvent) => ({
+        follower: { ...follower, triggerEvent },
+        path: "triggerEvent",
+      })),
+    ])(
+      "rejects malformed follower targets and event data: %j",
+      ({ follower, path }) => {
+        for (const boundary of ["checkpoint", "snapshot"] as const) {
+          expect(() =>
+            validateBrowserCheckpoint(withFollowers([follower], boundary)),
+          ).toThrow(
+            `nestedResults[0].deferredFollowers[0]${path ? `.${path}` : ""}`,
+          );
+        }
+      },
+    );
+  });
+
   it("preserves valid records in every durable domain and opaque JSON", () => {
     expect(validateBrowserCheckpoint(checkpoint)).toEqual(checkpoint);
   });

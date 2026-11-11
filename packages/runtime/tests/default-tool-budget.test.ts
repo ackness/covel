@@ -2,7 +2,7 @@ import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import { createEmitEventTool, runtimeDoneTool } from "@covel/tools";
+import { createEmitEventTool } from "@covel/tools";
 import {
   runTurnPipeline,
   resumeRuntimePipeline,
@@ -70,12 +70,7 @@ async function run(
     loadRuntime: async () => ({ manifest, promptTemplate: "Use the tools." }),
     toolExecutor: createToolExecutor({
       store,
-      findTool: (name) =>
-        name === emit.name
-          ? emit
-          : name === runtimeDoneTool.name
-            ? runtimeDoneTool
-            : undefined,
+      findTool: (name) => (name === emit.name ? emit : undefined),
     }),
   };
   const options = callerLimit ? { maxSteps: callerLimit } : undefined;

@@ -1270,7 +1270,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 
 - **Static sections** go in `contributes.prompt`. Each item has `id`, `content`, and `position`, and it may have `role`. The position is `system`, `pre-history`, `post-history`, or `{depth: number}`. The host registers static sections automatically, so you do not need to declare an extension for them. `static-prompt` is a reserved registration ID.
 - **Dynamic content** uses extension points. A dynamic prompt uses `prompt.segment@1`, world context uses `session.world-context@1`, history transforms use `prompt.history-transform@1`, and history compression uses `history.compact@2`. See [Plugin extension points](./plugin-extensions.md) for details. These extensions use the snapshot of the same execution, and they do not reread the manifest on each call.
-- **Memory blocks** belong to the memory plugin. The default definitions are provided through the `memory.block-definitions@1` service. World-defined custom definitions are imported through the `memory.blocks@1` data contract. The framework does not combine `memoryBlocks` or `summaryFocus` fields, and there is no separate working_memory table.
+- **Memory blocks** belong to the memory plugin. It keeps the four default blocks, then reads active `memory.block-definitions@1` services followed by world definitions imported through the `memory.blocks@1` data contract, appending new labels. Duplicate `label` values keep the first complete definition without overwriting its fields; world definitions cannot replace default blocks. The framework does not combine `memoryBlocks` or `summaryFocus` fields, and there is no separate working_memory table.
 
 ## Session plugin selection
 

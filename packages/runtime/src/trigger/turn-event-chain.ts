@@ -12,6 +12,10 @@ import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import { makeSkippedResult } from "../turn-executor/turn-executor-helpers.js";
 import { isRequiredUpstreamSatisfied } from "../turn-executor/turn-output-helpers.js";
 import { shouldTrigger } from "./trigger.js";
+import {
+  attachEventProducer,
+  deferEventFollower,
+} from "../event-dependencies.js";
 import type { TriggerContext } from "../types.js";
 
 export type DeferredFollower = NonNullable<
@@ -104,9 +108,14 @@ function eventFanoutTriggerContext(
  * Collect emitted runtime events into a topic -> payload map. First emission
  * wins inside a depth to keep fan-out deterministic; later ones are reported.
  */
+interface SelectedEvent {
+  readonly data: Record<string, unknown>;
+  readonly producer: RuntimeResult;
+}
+
 function collectEventsFrom(
   result: RuntimeResult,
-  sink: Map<string, Record<string, unknown>>,
+  sink: Map<string, SelectedEvent>,
   onDropped?: (topic: string, runtimeId: string) => void,
 ): void {
   // Domain events belong only to successful producers, including at later depths.
@@ -122,7 +131,7 @@ function collectEventsFrom(
       continue;
     }
     const data = (evt?.data as Record<string, unknown> | undefined) ?? {};
-    sink.set(topic, data);
+    sink.set(topic, { data, producer: result });
   }
 }
 
@@ -140,7 +149,7 @@ export async function runEventChain({
   setupRuntimes,
   onDroppedEvent,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
-  const emittedEvents = new Map<string, Record<string, unknown>>();
+  const emittedEvents = new Map<string, SelectedEvent>();
   for (const [, result] of completedResults) {
     collectEventsFrom(result, emittedEvents, onDroppedEvent);
   }
@@ -192,7 +201,7 @@ export async function runEventChain({
     const ordered = [...nextBatch].sort((a, b) => compareText(a.name, b.name));
 
     const currentDepthEvents = new Map(emittedEvents);
-    const newEvents = new Map<string, Record<string, unknown>>();
+    const newEvents = new Map<string, SelectedEvent>();
     const syncBatch: RuntimeManifest[] = [];
 
     for (const manifest of ordered) {
@@ -212,11 +221,13 @@ export async function runEventChain({
           continue;
         }
         deferredNames.add(manifest.name);
-        deferredFollowers.push({
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          triggerEvent: { topic, data: matchedEvent },
-        });
+        deferredFollowers.push(
+          deferEventFollower(matchedEvent.producer, {
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            triggerEvent: { topic, data: matchedEvent.data },
+          }),
+        );
         continue;
       }
       syncBatch.push(manifest);
@@ -253,9 +264,12 @@ export async function runEventChain({
             topic !== undefined ? currentDepthEvents.get(topic) : undefined;
           const triggerEvent =
             topic !== undefined && matchedEvent !== undefined
-              ? { topic, data: matchedEvent }
+              ? { topic, data: matchedEvent.data }
               : undefined;
-          return executeRuntime(manifest, triggerEvent, identity);
+          const result = await executeRuntime(manifest, triggerEvent, identity);
+          return matchedEvent
+            ? attachEventProducer(result, matchedEvent.producer.runId)
+            : result;
         },
         turnId,
       );

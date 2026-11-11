@@ -15,6 +15,8 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { PluginExtensionHost } from "../src/plugin-extensions.js";
 import { createMemoryStore } from "@covel/store/memory";
+import { tool, z } from "@covel/tools";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { DataStore } from "@covel/store";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
@@ -1287,9 +1289,8 @@ describe("Turn executor hook wire-in", () => {
 
     it("records the removed terminator as an unavailable call when a business hook terminates", async () => {
       const llm = new SimpleMockLLM();
-      // Same response: runtime-done is processed first, then a business tool
-      // whose PostToolUse hook terminates. The runtime-done sentinel must still
-      // be stripped from collected tool calls (cleanup must not be skipped).
+      // The unavailable call precedes a business tool whose hook terminates.
+      // Both calls must remain in the trace even when the loop stops.
       llm.nextResponse({
         content: null,
         toolCalls: [
@@ -1300,36 +1301,20 @@ describe("Turn executor hook wire-in", () => {
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
-      const toolExecutor = {
-        execute: vi.fn().mockImplementation(async (tc: { name: string }) =>
-          tc.name === "runtime-done"
-            ? {
-                result: "{}",
-                parsedResult: { _covelRuntimeDone: true },
-                success: true,
-              }
-            : {
-                result: '{"ok":true}',
-                parsedResult: { ok: true },
-                success: true,
-              },
-        ),
-        getToolInfo: vi.fn().mockReturnValue({
-          name: "my-tool",
-          description: "test",
-          annotations: {
-            readOnly: false,
-            stagesWrites: true,
-            idempotent: false,
-            concurrencySafe: false,
-          },
-          jsonSchema: { type: "object" },
-        }),
-      };
+      const businessTool = tool({
+        name: "my-tool",
+        description: "test",
+        parameters: z.object({}),
+        execute: async () => ({ ok: true }),
+      });
+      const toolExecutor = createToolExecutor({
+        findTool: (name) =>
+          name === businessTool.name ? businessTool : undefined,
+      });
+      const execute = vi.spyOn(toolExecutor, "execute");
 
       const pipeline = createHookPipeline();
-      // Terminate only after the business tool, so runtime-done is already in
-      // executedToolCalls when terminate fires.
+      // Terminate only after the business tool.
       pipeline.register({
         id: "global:PostToolUse:terminate-biz",
         event: "PostToolUse",
@@ -1343,7 +1328,7 @@ describe("Turn executor hook wire-in", () => {
           ),
       });
 
-      const manifest = makeManifest({ tools: { builtin: [], plugin: [] } });
+      const manifest = makeManifest({ tools: { plugin: [businessTool.name] } });
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => ({
           manifest,
@@ -1362,6 +1347,10 @@ describe("Turn executor hook wire-in", () => {
 
       // An unknown tool is recorded truthfully; termination cannot create accepted output.
       expect(toolNames).toContain("runtime-done");
+      expect(await execute.mock.results[0]?.value).toMatchObject({
+        success: false,
+        error: { code: "unavailable" },
+      });
       expect(result.runtimeResults[0]!.status).toBe("failed");
       expect(toolNames).toContain("my-tool");
       expect(llm.calls).toHaveLength(1);

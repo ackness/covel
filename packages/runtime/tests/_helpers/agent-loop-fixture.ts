@@ -95,15 +95,6 @@ export const saveTool = tool({
   },
 });
 
-export const doneTool = tool({
-  name: "runtime-done",
-  description: "declare completion",
-  parameters: z.object({}),
-  async execute() {
-    return { _covelRuntimeDone: true, reason: "done" };
-  },
-});
-
 export function makeExecutor(modules: readonly ToolModule[] = [markTool]) {
   return createToolExecutor({
     findTool: (name) => modules.find((module) => module.name === name),

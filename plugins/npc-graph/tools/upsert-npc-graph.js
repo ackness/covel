@@ -183,7 +183,7 @@ export default function ({ tool, z, shortIdBatch }) {
       const incomingEdges = params.edges ?? [];
       const readRows = (namespace) => context.store.listPluginData(namespace);
 
-      // ── 1. Load existing nodes and build a name → NpcNode index ──
+      // ── 1. Resolve names and aliases to stable node identities ──
       // A name or alias of a session character means that character, under
       // the character's own name: "the keeper" and "Isolde" are one node. A
       // name of nobody in the World Model (a group, a faction, a person not
@@ -196,17 +196,23 @@ export default function ({ tool, z, shortIdBatch }) {
       const keyOf = (name) => characterNameKey(castMember(name)?.name ?? name);
       const existingNodeRows = await readRows("nodes");
       /** @type {Map<string, any>} */
-      const nodeByName = new Map();
+      const nodeById = new Map(
+        existingNodeRows.map((row) => [row.key, row.value ?? {}]),
+      );
+      /** @type {Map<string, string>} */
+      const nodeIdByName = new Map();
       for (const row of existingNodeRows) {
         const v = row.value ?? {};
         for (const alias of v.aliases ?? []) {
-          if (typeof alias === "string") nodeByName.set(keyOf(alias), v);
+          if (typeof alias === "string")
+            nodeIdByName.set(keyOf(alias), row.key);
         }
       }
       // Names after aliases: a node's own name wins over another's alias.
       for (const row of existingNodeRows) {
         const v = row.value ?? {};
-        if (typeof v.name === "string") nodeByName.set(keyOf(v.name), v);
+        if (typeof v.name === "string")
+          nodeIdByName.set(keyOf(v.name), row.key);
       }
 
       // ── 2. Assign word IDs to nodes that don't already exist ──
@@ -217,7 +223,7 @@ export default function ({ tool, z, shortIdBatch }) {
       const newNameToId = new Map();
       for (const { name } of incomingNodes) {
         const lookup = keyOf(name);
-        if (nodeByName.has(lookup) || newNameToId.has(lookup)) continue;
+        if (nodeIdByName.has(lookup) || newNameToId.has(lookup)) continue;
         const id = wordId("npc", castMember(name)?.name ?? name, occupiedIds);
         occupiedIds.add(id);
         newNameToId.set(lookup, id);
@@ -231,14 +237,16 @@ export default function ({ tool, z, shortIdBatch }) {
 
       for (const incoming of incomingNodes) {
         const lookupKey = keyOf(incoming.name);
-        const existing = nodeByName.get(lookupKey);
+        const existingId = nodeIdByName.get(lookupKey);
+        const existing = existingId ? nodeById.get(existingId) : undefined;
         const member = castMember(incoming.name);
         // The name the model wrote is an alias when the node has another.
         const namedAs = [...(incoming.aliases ?? []), incoming.name];
+        let node;
 
         if (existing) {
           // Merge — existing wins on immutable fields, new wins on extendable ones.
-          const merged = {
+          node = {
             ...existing,
             name: existing.name,
             type: existing.type ?? incoming.type,
@@ -259,22 +267,11 @@ export default function ({ tool, z, shortIdBatch }) {
             // stamp; also keeps lastSeenTurn monotonic.
             lastSeenTurn: Math.max(currentTurn, existing.lastSeenTurn ?? -1),
           };
-          pluginDataWrites.push({
-            namespace: "nodes",
-            key: existing.id,
-            value: merged,
-          });
-          nodeByName.set(lookupKey, merged);
-          nodeResults.push({
-            id: existing.id,
-            name: existing.name,
-            status: "updated",
-          });
         } else {
           const id = newNameToId.get(lookupKey);
           if (!id) continue;
           const name = member?.name ?? incoming.name;
-          const fresh = {
+          node = {
             id,
             name,
             aliases: mergeCharacterAliases(name, member?.aliases, namedAs),
@@ -285,18 +282,24 @@ export default function ({ tool, z, shortIdBatch }) {
             lastSeenTurn: currentTurn,
             attributes: incoming.attributes ?? {},
           };
-          pluginDataWrites.push({
-            namespace: "nodes",
-            key: id,
-            value: fresh,
-          });
-          nodeByName.set(lookupKey, fresh);
-          for (const alias of fresh.aliases) {
-            if (!nodeByName.has(keyOf(alias)))
-              nodeByName.set(keyOf(alias), fresh);
-          }
-          nodeResults.push({ id, name: fresh.name, status: "created" });
+          nodeIdByName.set(lookupKey, id);
         }
+
+        pluginDataWrites.push({
+          namespace: "nodes",
+          key: node.id,
+          value: node,
+        });
+        nodeById.set(node.id, node);
+        for (const alias of node.aliases) {
+          const aliasKey = keyOf(alias);
+          if (!nodeIdByName.has(aliasKey)) nodeIdByName.set(aliasKey, node.id);
+        }
+        nodeResults.push({
+          id: node.id,
+          name: node.name,
+          status: existing ? "updated" : "created",
+        });
       }
 
       // ── 4. Load existing edges and index the open version of each relation ──
@@ -327,8 +330,10 @@ export default function ({ tool, z, shortIdBatch }) {
       const edgeResults = [];
 
       for (const incoming of incomingEdges) {
-        const src = nodeByName.get(keyOf(incoming.sourceName));
-        const tgt = nodeByName.get(keyOf(incoming.targetName));
+        const sourceId = nodeIdByName.get(keyOf(incoming.sourceName));
+        const targetId = nodeIdByName.get(keyOf(incoming.targetName));
+        const src = sourceId ? nodeById.get(sourceId) : undefined;
+        const tgt = targetId ? nodeById.get(targetId) : undefined;
         if (!src || !tgt) {
           edgeResults.push({
             id: "",

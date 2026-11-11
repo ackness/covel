@@ -5,7 +5,7 @@
 import { Hono } from "hono";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { readRuntimeEnv } from "@covel/shared";
+import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import {
   type ProviderProtocol,
   getProtocolDefinition,
@@ -20,10 +20,15 @@ import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
 import { errorBody, listBody, okBody } from "../api-error.js";
 import { requireAccess } from "../host-profile.js";
+import { parseSlotOverrides } from "../middleware/per-request-llm.js";
+import { hasResolvedRuntimeJobCredentials } from "../runtime-job-readiness.js";
 
 const MAX_SEARCH_LIMIT = 200;
 
-export function createModelDbRoutes(ai: AiStack): Hono {
+export function createModelDbRoutes(
+  ai: AiStack,
+  apiKeys: Readonly<Record<string, string>> = providerApiKeysFromEnv(),
+): Hono {
   const app = new Hono();
 
   app.get("/api/model-db", (c) => {
@@ -64,6 +69,48 @@ export function createModelDbRoutes(ai: AiStack): Hono {
     const provider = c.req.query("provider");
     const protocol = c.req.query("protocol") as ProviderProtocol | undefined;
     const role = c.req.query("role");
+    // A browser may ask about its own connection in this existing local lookup.
+    // Never trust a server preset's endpoint as the origin of a request target.
+    let serverCredentialsAvailable: boolean | undefined;
+    if (c.req.query("credentials") === "1") {
+      const presets = parseSlotOverrides(
+        c.req.header("X-Slot-Config"),
+      )?.customPresets;
+      const target = presets?.length === 1 ? presets[0] : undefined;
+      if (
+        !target ||
+        target.provider !== provider ||
+        target.model !== model ||
+        target.protocol !== protocol
+      ) {
+        return c.json(
+          errorBody("Invalid model configuration", {
+            code: "invalid_llm_configuration",
+          }),
+          400,
+        );
+      }
+      serverCredentialsAvailable = false;
+      try {
+        const resolution = ai.providerRegistry.resolve({
+          provider: target.provider,
+          baseUrl: target.baseUrl,
+          protocol: target.protocol,
+          requestScoped: true,
+        });
+        const resolved = ai.providerRegistry.withApiKeys(
+          resolution,
+          {},
+          target.provider,
+          apiKeys,
+        );
+        serverCredentialsAvailable = hasResolvedRuntimeJobCredentials(
+          resolved.config,
+        );
+      } catch {
+        // A missing provider/wire is not evidence that a key can be used.
+      }
+    }
     const result = resolveCapabilityDetails(
       model,
       provider ?? undefined,
@@ -84,6 +131,9 @@ export function createModelDbRoutes(ai: AiStack): Hono {
     const found = result.source !== "protocol-default";
     return c.json({
       found,
+      ...(serverCredentialsAvailable !== undefined
+        ? { serverCredentialsAvailable }
+        : {}),
       source: result.source,
       matchedModelId: result.matchedModelId,
       matchKind: result.matchKind,

@@ -34,7 +34,7 @@ export function hasRuntimeJobCredentials(
   return hasResolvedRuntimeJobCredentials(slot);
 }
 
-function hasResolvedRuntimeJobCredentials(
+export function hasResolvedRuntimeJobCredentials(
   slot:
     | Pick<ResolvedSlotConfig, "apiKey" | "headers" | "baseUrl">
     | null
@@ -46,7 +46,7 @@ function hasResolvedRuntimeJobCredentials(
   if (isLoopbackBaseUrl(slot.baseUrl)) return true;
   return Object.entries(slot.headers ?? {}).some(
     ([name, value]) =>
-      /^(authorization|api-key|x-api-key)$/i.test(name) &&
+      /^(authorization|api-key|x-api-key|x-goog-api-key)$/i.test(name) &&
       Boolean(value.trim()),
   );
 }

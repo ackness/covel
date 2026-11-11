@@ -146,12 +146,19 @@ function envelope(
   overrides: Partial<CommitFollowUps> = {},
   source: Partial<FollowUpSource> = {},
 ): CommitFollowUps {
+  const turnResult = committed(source);
   return {
     sessionId: SESSION_ID,
     activeRuntimes,
     locale: "en-US",
-    isolation: { droppedRuntimeIds: new Set() },
-    turnResult: committed(source),
+    isolation: {
+      droppedRuntimeIds: new Set(),
+      droppedRunIds: new Set(),
+      followerSources: (turnResult.deferredFollowers ?? []).map(
+        () => "run-narrator",
+      ),
+    },
+    turnResult,
     ...overrides,
   };
 }
@@ -199,7 +206,11 @@ describe("queueCommitFollowUps", () => {
       queueCommitFollowUps(
         tx,
         envelope({
-          isolation: { droppedRuntimeIds: new Set(["sidebar"]) },
+          isolation: {
+            droppedRuntimeIds: new Set(["sidebar"]),
+            droppedRunIds: new Set(["run-sidebar"]),
+            followerSources: ["run-narrator"],
+          },
         }),
       ),
     );
@@ -233,7 +244,11 @@ describe("queueCommitFollowUps", () => {
       queueCommitFollowUps(
         tx,
         followersOnly({
-          isolation: { droppedRuntimeIds: new Set(["narrator"]) },
+          isolation: {
+            droppedRuntimeIds: new Set(["narrator"]),
+            droppedRunIds: new Set(["run-narrator"]),
+            followerSources: ["run-narrator"],
+          },
         }),
       ),
     );
@@ -242,6 +257,41 @@ describe("queueCommitFollowUps", () => {
       await listRuntimeJobs(store, { sessionId: SESSION_ID }),
     ).toHaveLength(0);
   });
+
+  it.each([
+    ["narrator", "run-narrator", "run-narrator", []],
+    ["sidebar", "run-sidebar", "run-narrator", ["illustrator"]],
+    ["narrator", "old-narrator-run", "new-narrator-run", ["illustrator"]],
+  ] as const)(
+    "filters followers when runtime %s drops run %s (producer=%s)",
+    async (droppedRuntimeId, droppedRunId, producerRunId, expected) => {
+      const { store } = await setup();
+      const queued = await store.withTransaction((tx) =>
+        queueCommitFollowUps(
+          tx,
+          followersOnly(
+            {
+              isolation: {
+                droppedRuntimeIds: new Set([droppedRuntimeId]),
+                droppedRunIds: new Set([droppedRunId]),
+                followerSources: [producerRunId],
+              },
+            },
+            {
+              runtimeResults: [
+                result("narrator", [{ topic: TOPIC }]),
+                result("sidebar", [{ topic: TOPIC }]),
+              ],
+            },
+          ),
+        ),
+      );
+      expect(queued.followerJobs.map(({ job }) => job.runtimeId)).toEqual(
+        expected,
+      );
+      await store.close();
+    },
+  );
 
   it("filters followers of an execution that deferred no stage jobs", async () => {
     // A manual or event run usually emits followers only. A sync run drops
@@ -265,7 +315,11 @@ describe("queueCommitFollowUps", () => {
         followersOnly(
           {
             sourceRuntimeId: "narrator",
-            isolation: { droppedRuntimeIds: new Set(["narrator"]) },
+            isolation: {
+              droppedRuntimeIds: new Set(["narrator"]),
+              droppedRunIds: new Set(["run-narrator"]),
+              followerSources: ["run-narrator"],
+            },
           },
           { turnId: "turn-2" },
         ),
@@ -326,7 +380,13 @@ describe("queueCommitFollowUps", () => {
         queueCommitFollowUps(
           tx,
           envelope(
-            { isolation: { droppedRuntimeIds: new Set(["sidebar"]) } },
+            {
+              isolation: {
+                droppedRuntimeIds: new Set(["sidebar"]),
+                droppedRunIds: new Set(["run-sidebar"]),
+                followerSources: ["run-narrator"],
+              },
+            },
             {
               deferredRuntimeJobs: [deferredJob("recap")],
               deferredFollowers: [],
@@ -386,6 +446,8 @@ describe("commit follow-up queues", () => {
     const queued = await store.withTransaction((tx) =>
       queue(tx, asTurnResult(committed()), {
         droppedRuntimeIds: new Set(),
+        droppedRunIds: new Set(),
+        followerSources: ["run-narrator"],
       }),
     );
     expect(queued.runtimeJobs.map(({ job }) => job.runtimeId)).toEqual([
@@ -397,7 +459,11 @@ describe("commit follow-up queues", () => {
 
   it("refuse, rolling the commit back, what a host cannot queue", async () => {
     const { store } = await setup();
-    const isolation = { droppedRuntimeIds: new Set<string>() };
+    const isolation = {
+      droppedRuntimeIds: new Set<string>(),
+      droppedRunIds: new Set<string>(),
+      followerSources: [],
+    };
     for (const source of [
       committed({ deferredFollowers: [] }),
       committed({ deferredRuntimeJobs: [] }),
@@ -461,4 +527,64 @@ describe("queueReleasedRuntimeJobs", () => {
     );
     expect(queued).toEqual([]);
   });
+});
+
+it("filters repeated follower targets by invocation before narrowing overrides", async () => {
+  const { store } = await setup();
+  const first = {
+    ...follower,
+    triggerEvent: { topic: TOPIC, data: { invocation: 1 } },
+  };
+  const second = {
+    ...follower,
+    triggerEvent: { topic: TOPIC, data: { invocation: 2 } },
+  };
+  const args = followersOnly(
+    {
+      isolation: {
+        droppedRuntimeIds: new Set(),
+        droppedRunIds: new Set(["first-run"]),
+        followerSources: ["first-run", "second-run"],
+      },
+      followers: [second],
+    },
+    { deferredFollowers: [first, second] },
+  );
+  const queued = await store.withTransaction((tx) =>
+    queueCommitFollowUps(tx, args),
+  );
+  expect(queued.followerJobs).toHaveLength(1);
+  expect(queued.followerJobs[0]!.job.payload).toMatchObject({
+    triggerEvent: { data: { invocation: 2 } },
+  });
+  await store.close();
+});
+
+it("refuses a follower override rebuilt outside the emitted descriptor list", async () => {
+  const { store } = await setup();
+  await expect(
+    store.withTransaction((tx) =>
+      queueCommitFollowUps(tx, followersOnly({ followers: [{ ...follower }] })),
+    ),
+  ).rejects.toThrow("original emitted descriptors");
+  await store.close();
+});
+
+it("refuses an unpaired follower producer list", async () => {
+  const { store } = await setup();
+  await expect(
+    store.withTransaction((tx) =>
+      queueCommitFollowUps(
+        tx,
+        followersOnly({
+          isolation: {
+            droppedRuntimeIds: new Set(),
+            droppedRunIds: new Set(),
+            followerSources: [],
+          },
+        }),
+      ),
+    ),
+  ).rejects.toThrow("equal lengths");
+  await store.close();
 });

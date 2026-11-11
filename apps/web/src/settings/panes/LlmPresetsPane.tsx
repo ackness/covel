@@ -18,7 +18,10 @@ import {
 } from "@covel/shared";
 import { sameSettingValue } from "@covel/settings";
 import { SettingsRevisionConflictError } from "@covel/settings";
-import { useSettingsWritable } from "../use-settings-save.js";
+import {
+  useSettingsWritable,
+  useSettingsSaveQueue,
+} from "../use-settings-save.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { Button } from "@/components/ui/button.js";
 import { useSession } from "@/stores/session-store.js";
@@ -46,16 +49,10 @@ export function LlmPresetsPane() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const pendingSave = useRef(false);
-  const saveQueue = useRef(Promise.resolve());
-  const saveCount = useRef(0);
-  const mounted = useRef(false);
+  const { enqueue, saving, mounted, pending } = useSettingsSaveQueue();
   const importGeneration = useRef(0);
   useEffect(() => {
-    mounted.current = true;
     return () => {
-      mounted.current = false;
       importGeneration.current += 1;
     };
   }, []);
@@ -120,45 +117,34 @@ export function LlmPresetsPane() {
     slots?: ReturnType<typeof getSlotConfig>,
   ): Promise<boolean> => {
     if (!writable || !mounted.current) return false;
-    const previous = saveQueue.current;
-    let release!: () => void;
-    saveQueue.current = new Promise<void>((resolve) => {
-      release = resolve;
+    const result = enqueue(async () => {
+      try {
+        const normalized = normalizeProviderProfiles(
+          typeof next === "function" ? next(getProviderProfiles()) : next,
+        );
+        const result = await setProviderProfiles(normalized, slots);
+        if (mounted.current) {
+          setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
+        }
+        if (result.unclearedProviderIds.length > 0) {
+          const message = t("settings.providerKeyCleanupFailed");
+          if (mounted.current) setSaveError(message);
+          emitToast("error", message, result.unclearedProviderIds.join(", "));
+        }
+        return mounted.current;
+      } catch (error) {
+        const message = t("settings.saveFailed");
+        if (mounted.current) {
+          setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
+          setSaveError(message);
+        }
+        if (!(error instanceof SettingsRevisionConflictError))
+          emitToast("error", message);
+        return false;
+      }
     });
-    saveCount.current += 1;
-    pendingSave.current = true;
-    setSaving(true);
     setSaveError(null);
-    await previous;
-    try {
-      const normalized = normalizeProviderProfiles(
-        typeof next === "function" ? next(getProviderProfiles()) : next,
-      );
-      const result = await setProviderProfiles(normalized, slots);
-      if (mounted.current) {
-        setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
-      }
-      if (result.unclearedProviderIds.length > 0) {
-        const message = t("settings.providerKeyCleanupFailed");
-        if (mounted.current) setSaveError(message);
-        emitToast("error", message, result.unclearedProviderIds.join(", "));
-      }
-      return mounted.current;
-    } catch (error) {
-      const message = t("settings.saveFailed");
-      if (mounted.current) {
-        setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
-        setSaveError(message);
-      }
-      if (!(error instanceof SettingsRevisionConflictError))
-        emitToast("error", message);
-      return false;
-    } finally {
-      saveCount.current -= 1;
-      pendingSave.current = saveCount.current > 0;
-      release();
-      if (mounted.current) setSaving(pendingSave.current);
-    }
+    return result;
   };
 
   const prepareModels = (
@@ -349,7 +335,7 @@ export function LlmPresetsPane() {
       ]),
     );
     if (
-      pendingSave.current ||
+      pending.current > 0 ||
       imported.some(
         (profile) =>
           !sameSettingValue(current.get(profile.id), base.get(profile.id)) &&
@@ -504,7 +490,7 @@ export function LlmPresetsPane() {
         error={saveError}
         draft={providerDraft}
         onOpenChange={(open) => {
-          if (!pendingSave.current) setProviderDialogOpen(open);
+          if (pending.current === 0) setProviderDialogOpen(open);
         }}
         onDraftChange={setProviderDraft}
         onSubmit={handleAddProvider}
@@ -524,7 +510,7 @@ export function LlmPresetsPane() {
           onReasoningChange={setModelReasoningDraft}
           value={modelIdsDraft}
           onOpenChange={(open) => {
-            if (!pendingSave.current) setModelDialogOpen(open);
+            if (pending.current === 0) setModelDialogOpen(open);
           }}
           onChange={setModelIdsDraft}
           onSubmit={handleAddModels}

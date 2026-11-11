@@ -47,6 +47,7 @@
      PR cache isolation must remain intact. Release/explicit-commit runs only restore caches
      and disable setup-node's pnpm cache, including explicit-commit Site builds. Explicit cache saves
      require success, an authorized source, an exact-key miss, and the restore step's original key.
+     Browser setup/save aliases must preserve runner-local step IDs, execution order and cache guards.
      Control-script sparse checkouts must retain required imports and comparison history.
      Desktop uses bundled Electron RunAsNode; verify target/actual versions, fuses and ASAR binding.
      Static checks and source tests/build run independently with separate cache namespaces;
@@ -69,6 +70,7 @@
      缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
      PR 缓存隔离保持不变。发布和显式 commit 只恢复缓存，并关闭 setup-node 的 pnpm 缓存，
      包括显式 commit 的 Site 构建。显式保存须满足任务成功、来源获准、精确键未命中，并使用恢复步骤的原始键。
+     浏览器准备与保存步骤的别名须保留各 runner 的步骤 ID、执行顺序和缓存条件。
      控制脚本的稀疏检出保留所需导入及比较历史。桌面使用随包 Electron RunAsNode；核对目标/实际版本、fuse 和 ASAR 绑定。
      静态检查与源码测试、构建独立并行并使用不同缓存命名空间，均须纳入 Verification；
      拆分任务时保留纯文档和发布范围选择。必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。

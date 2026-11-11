@@ -68,6 +68,41 @@ describe("model capability lookup cache", () => {
     );
   });
 
+  it("separates request connections from catalogue facts and from each other", async () => {
+    requestMock.mockImplementation(lookupReply);
+    await lookupModelCapabilityDetails("gpt-4o", "openai", "openai-chat-v1");
+    for (const connection of [
+      { baseUrl: "https://one.example/v1" },
+      { baseUrl: "https://two.example/v1" },
+      { baseUrl: "https://two.example/v1", revision: "reloaded" },
+    ]) {
+      await lookupModelCapabilityDetails(
+        "gpt-4o",
+        "openai",
+        "openai-chat-v1",
+        undefined,
+        connection,
+      );
+    }
+    expect(requestMock).toHaveBeenCalledTimes(4);
+    const [url, options] = requestMock.mock.calls[1]!;
+    expect(url).not.toContain("one.example");
+    expect(url).toContain("credentials=1");
+    const header = options.headers["X-Slot-Config"];
+    expect(JSON.parse(Buffer.from(header, "base64").toString("utf8"))).toEqual({
+      customPresets: [
+        {
+          id: "lookup",
+          provider: "openai",
+          model: "gpt-4o",
+          protocol: "openai-chat-v1",
+          baseUrl: "https://one.example/v1",
+        },
+      ],
+    });
+    expect(options.headers).not.toHaveProperty("X-Provider-Keys");
+  });
+
   it("keeps tuple keys distinct when a value contains the old delimiter", async () => {
     requestMock.mockImplementation(lookupReply);
 

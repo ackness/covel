@@ -137,7 +137,11 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
       const topK = normalizeVectorTopK(input.topK);
       if (topK === 0) return [];
       const target = state.sessionVectorTargets.get(input.sessionId) ?? null;
-      if (!target) {
+      if (
+        !target ||
+        (input.expectedModelRegistryId !== undefined &&
+          target.modelRegistryId !== input.expectedModelRegistryId)
+      ) {
         return [];
       }
       if (input.query.length !== target.dim) {

@@ -1105,42 +1105,8 @@ async function executeRuntime(
           createOperationExecutionScope(deps.loadPluginDatasets),
       });
     const operations = stage.current;
-    if (manifest.runtimeType === "function") {
-      return await executeFunctionRuntime({
-        upstreamPluginData,
-        lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
-        ...(sessionMeta?.logicalTurn !== undefined
-          ? { logicalTurn: sessionMeta.logicalTurn }
-          : {}),
-        upstreamProposals,
-        upstreamWorld,
-        manifest,
-        input,
-        loaded,
-        deps,
-        hookPipeline,
-        triggerEvent,
-        activation,
-        inputs: inputSlots,
-        exports: exportSlots,
-        executionContext,
-        createRecursiveCall,
-        recursionDepth,
-        startTime,
-        runId,
-        timeoutMs,
-        executionId: progressScopeId,
-        upstreamOf,
-        ...(operations ? { operations } : {}),
-      });
-    }
-
-    const guardResult = await executeAgentGuard({
+    const runtimeOptions = {
       upstreamPluginData,
-      lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
-      ...(sessionMeta?.logicalTurn !== undefined
-        ? { logicalTurn: sessionMeta.logicalTurn }
-        : {}),
       upstreamProposals,
       upstreamWorld,
       manifest,
@@ -1148,33 +1114,40 @@ async function executeRuntime(
       loaded,
       deps,
       hookPipeline,
-      triggerEvent,
       activation,
       inputs: inputSlots,
       exports: exportSlots,
       executionContext,
-      executionId: progressScopeId,
-      createRecursiveCall,
-      recursionDepth,
       startTime,
       runId,
       timeoutMs,
       upstreamOf,
-    });
+    } as const;
+    const handlerOptions = {
+      ...runtimeOptions,
+      lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
+      ...(sessionMeta?.logicalTurn !== undefined
+        ? { logicalTurn: sessionMeta.logicalTurn }
+        : {}),
+      triggerEvent,
+      executionId: progressScopeId,
+      createRecursiveCall,
+      recursionDepth,
+    } as const;
+    if (manifest.runtimeType === "function") {
+      return await executeFunctionRuntime({
+        ...handlerOptions,
+        ...(operations ? { operations } : {}),
+      });
+    }
+
+    const guardResult = await executeAgentGuard(handlerOptions);
     if (guardResult) return guardResult;
 
     return await executeAgentRuntime({
-      upstreamProposals,
-      upstreamWorld,
-      upstreamPluginData,
-      upstreamOf,
-      manifest,
-      input,
-      loaded,
+      ...runtimeOptions,
       completedResults,
-      deps,
       maxSteps,
-      timeoutMs,
       messageHistory,
       executionStory: projectExecutionStory({
         manifest,
@@ -1183,17 +1156,10 @@ async function executeRuntime(
         completedResults,
       }),
       sessionMeta,
-      hookPipeline,
       sessionSummaries,
       prepareCompactedContext,
       sessionContext,
-      activation,
-      inputs: inputSlots,
-      exports: exportSlots,
-      executionContext,
       ...(progressScopeId !== undefined ? { progressScopeId } : {}),
-      startTime,
-      runId,
       ...(operations ? { operations } : {}),
     });
   } catch (error: unknown) {

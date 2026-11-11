@@ -7,6 +7,7 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
+import { deferredFollowersOf } from "../event-dependencies.js";
 import { buildRuntimeOutputFromResult } from "./turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
@@ -135,6 +136,10 @@ export async function finalizeTurnResult({
   nestedRuntimeResults,
 }: FinalizeTurnResultParams): Promise<TurnResult> {
   const pendingInputs = collectPendingInputs(completedResults);
+  const followers = [
+    ...deferredFollowersOf(nestedRuntimeResults ?? []),
+    ...deferredFollowers,
+  ];
   const turnResult: TurnResult = {
     turnId: input.turnId,
     sessionId: input.sessionId,
@@ -146,7 +151,7 @@ export async function finalizeTurnResult({
     pendingInputs: pendingInputs.length > 0 ? pendingInputs : undefined,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),
-    ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
+    ...(followers.length > 0 ? { deferredFollowers: followers } : {}),
     ...(deferredRuntimeJobs.length > 0 ? { deferredRuntimeJobs } : {}),
     ...(withheldRuntimeJobs && withheldRuntimeJobs.length > 0
       ? { withheldRuntimeJobs }

@@ -24,6 +24,10 @@ import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import {
+  attachEventProducer,
+  collectExecutionEventDependencies,
+} from "../src/event-dependencies.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
@@ -1090,6 +1094,9 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
       runtimes: [makeRuntime("story", "story"), ...runtimes] as never,
       results: [storyResult(), ...results] as never,
       turnIds: [TURN_ID],
+      eventDependencies: collectExecutionEventDependencies({
+        runtimeResults: results as never,
+      }),
       ...(options.extraInTx ? { extraInTx: options.extraInTx as never } : {}),
     });
     const persisted = (await store.listTurnResults(SESSION_ID))[0]!
@@ -1159,6 +1166,14 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
   );
 
   it("drops a required input consumer and an event follower whose only emitter was dropped", async () => {
+    const producer = makeResult(
+      "up",
+      {},
+      {
+        ...malformedEffects(),
+        events: [{ topic: "found", data: {} }],
+      },
+    );
     const { store, outcome } = await finalize(
       [
         manifest("up"),
@@ -1169,17 +1184,13 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
         manifest("follower", { trigger: { type: "event", topic: "found" } }),
       ],
       [
-        makeResult(
-          "up",
-          {},
-          {
-            ...malformedEffects(),
-            events: [{ topic: "found", data: {} }],
-          },
-        ),
+        producer,
         makeResult("reader", {}, pluginData("reader", 1)),
         makeResult("optional-reader", {}, pluginData("optional", 1)),
-        makeResult("follower", {}, pluginData("follower", 1)),
+        attachEventProducer(
+          makeResult("follower", {}, pluginData("follower", 1)),
+          producer.runId,
+        ),
       ],
     );
 

@@ -138,6 +138,38 @@ afterEach(() => {
 });
 
 describe("WorldEditor unsaved changes", () => {
+  it("locks editing until a pending save settles and restores editing after failure", async () => {
+    let rejectSave!: (reason: unknown) => void;
+    const save = new Promise<WorldRecord>((_resolve, reject) => {
+      rejectSave = reject;
+    });
+    mocks.updateWorld.mockReturnValueOnce(save);
+    const { onSave } = openEditor();
+    changeOpening("At the harbor");
+    const input = screen.getByLabelText(i18n.t("world.openingScenario"));
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("common.save") }),
+    );
+    expect(input.matches(":disabled")).toBe(true);
+    expect(
+      mocks.updateWorld.mock.calls[0]?.[1].dimensions.startingConditions
+        .initialValue.openingScenario,
+    ).toBe("At the harbor");
+    await act(async () => rejectSave(new Error("Save unavailable")));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(input.matches(":disabled")).toBe(false);
+    expect(screen.getByRole("alert").textContent).toContain("Save unavailable");
+    changeOpening("A later edit");
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("common.save") }),
+    );
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(
+      mocks.updateWorld.mock.calls[1]?.[1].dimensions.startingConditions
+        .initialValue.openingScenario,
+    ).toBe("A later edit");
+  });
+
   it.each([false, true])(
     "round-trips applied JSON through editor save, browser reload and canonical hydration (clear=%s)",
     async (clear) => {

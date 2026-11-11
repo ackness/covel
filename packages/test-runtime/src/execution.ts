@@ -1,6 +1,7 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
+  committedEventFollowers,
   commitExecution,
   executeTurn,
   refuseReleasedJobs,
@@ -232,7 +233,15 @@ export async function runDeferredFollower(args: {
     });
     // The host only chains events after their producing execution commits.
     if (commit.status === "committed")
-      deferredFollowers = turn.deferredFollowers ?? [];
+      deferredFollowers = committedEventFollowers(
+        turn.deferredFollowers ?? [],
+        execution.commit.eventDependencies?.followers ?? [],
+        new Set(
+          (commit.isolatedRuntimes ?? []).flatMap((result) =>
+            result.runId ? [result.runId] : [],
+          ),
+        ),
+      );
     runtimeResult =
       commit.status === "committed"
         ? target

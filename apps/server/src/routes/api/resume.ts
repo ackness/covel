@@ -8,7 +8,10 @@ import {
   requestCredentialHandoff,
 } from "./plugin-rpc/settled-request.js";
 import { type QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
-import { queueReleasedRuntimeJobs } from "./commit-envelope.js";
+import {
+  queueCommitFollowUps,
+  queueReleasedRuntimeJobs,
+} from "./commit-envelope.js";
 /**
  * Resume route — resumes a suspended runtime.
  *
@@ -58,7 +61,12 @@ import type {
   SuspensionRecord,
 } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
-import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
+import type {
+  CommitIsolation,
+  LLMAdapter,
+  ToolExecutor,
+  HookPipeline,
+} from "@covel/runtime";
 import {
   refuseReleasedJobs,
   resumeSuspendedRuntime,
@@ -414,25 +422,45 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         // The resume that completes a suspended turn queues the detached
         // jobs that turn held back, inside the same commit.
         const releasedJobs = execution.commit.releasedRuntimeJobs ?? [];
+        const followers = execution.commit.deferredFollowers ?? [];
         const queuedRuntimeJobs: QueuedRuntimeJob[] = [];
         const outcome = await commitExecution({
-          ...(releasedJobs.length > 0
+          ...(releasedJobs.length > 0 || followers.length > 0
             ? {
-                extraInTx: async (tx: StoreTransaction) => {
-                  queuedRuntimeJobs.push(
-                    ...(await queueReleasedRuntimeJobs(
-                      tx,
-                      {
-                        sessionId,
-                        session: liveSession,
-                        activeRuntimes,
-                        locale: liveSession.locale ?? DEFAULT_LOCALE,
-                        ...(userSettings ? { userSettings } : {}),
-                        credentials: requestCredentialHandoff(c),
+                extraInTx: async (
+                  tx: StoreTransaction,
+                  isolation: CommitIsolation,
+                ) => {
+                  if (releasedJobs.length > 0)
+                    queuedRuntimeJobs.push(
+                      ...(await queueReleasedRuntimeJobs(
+                        tx,
+                        {
+                          sessionId,
+                          session: liveSession,
+                          activeRuntimes,
+                          locale: liveSession.locale ?? DEFAULT_LOCALE,
+                          ...(userSettings ? { userSettings } : {}),
+                          credentials: requestCredentialHandoff(c),
+                        },
+                        releasedJobs,
+                      )),
+                    );
+                  if (followers.length > 0) {
+                    const queued = await queueCommitFollowUps(tx, {
+                      sessionId,
+                      activeRuntimes,
+                      locale: liveSession.locale ?? DEFAULT_LOCALE,
+                      ...(userSettings ? { userSettings } : {}),
+                      isolation,
+                      turnResult: {
+                        turnId: suspension.turnId,
+                        runtimeResults: execution.commit.results,
+                        deferredFollowers: followers,
                       },
-                      releasedJobs,
-                    )),
-                  );
+                    });
+                    queuedRuntimeJobs.push(...queued.followerJobs);
+                  }
                 },
               }
             : {}),

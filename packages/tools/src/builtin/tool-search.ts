@@ -10,7 +10,7 @@ import { compareText } from "@covel/shared";
  *
  * Modeled after openai/codex's `tool_search` (ToolExposure::Deferred + BM25
  * over name/description/parameter-schema text, default limit 8). Like
- * `suspend` / `runtime-done`, execution is intercepted in the agent loop —
+ * `submit-output`, execution is intercepted in the agent loop —
  * this module only carries the LLM-facing contract and the ranking function;
  * it is never registered in the executor tool map and never declarable in a
  * plugin's own whitelist.

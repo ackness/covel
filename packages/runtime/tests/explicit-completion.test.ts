@@ -1,7 +1,7 @@
 import { suspendedLoopState } from "./_helpers/agent-loop-fixture.js";
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import { runtimeDoneTool, suspendTool, tool } from "@covel/tools";
+import { suspendTool, tool } from "@covel/tools";
 import { z } from "zod";
 import type { LLMAdapter, RuntimeManifest } from "@covel/shared";
 import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
@@ -43,7 +43,6 @@ async function run(
   });
   const write = vi.fn(async () => ({ updated: true }));
   const tools = [
-    runtimeDoneTool,
     tool({
       name: "save-facts",
       description: "Save facts",
@@ -73,7 +72,7 @@ async function run(
     stage: "post-turn",
     outputKind: "system",
     trigger: { type: "auto" },
-    tools: { plugin: tools.slice(1).map((entry) => entry.name) },
+    tools: { plugin: tools.map((entry) => entry.name) },
     ...(resume === "tool-use" ? { completeAfterTools: ["save-facts"] } : {}),
     requireToolUse: strict || resume === "tool-use",
     maxSteps: 4,

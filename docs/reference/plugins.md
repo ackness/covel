@@ -1270,7 +1270,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - **静态段**放在 `contributes.prompt`。每项包含 `id/content/position`，可选 `role`。位置是 `system`、`pre-history`、`post-history` 或 `{depth: number}`。宿主自动注册静态段，不需要再声明扩展。`static-prompt` 是保留的注册 ID。
 - **动态内容**用扩展点：动态提示词用 `prompt.segment@1`，世界上下文用 `session.world-context@1`，历史变换用 `prompt.history-transform@1`，长篇故事记忆用 `history.compact@2`。详见[插件扩展点](./plugin-extensions.md)。这些扩展使用同一次执行的快照，不在每次调用时重读清单。
-- **记忆块**属于 memory 插件。默认定义经 `memory.block-definitions@1` 服务提供，世界自定义的定义经 `memory.blocks@1` 数据契约导入。框架不聚合 `memoryBlocks` 或 `summaryFocus` 字段，也没有单独的 working_memory 表。
+- **记忆块**属于 memory 插件。插件先保留四个默认块，再依次读取活跃的 `memory.block-definitions@1` 服务和经 `memory.blocks@1` 数据契约导入的世界定义，按 `label` 去重追加。相同 `label` 保留先出现的整项，不覆盖其字段；世界定义不能替换默认块。框架不聚合 `memoryBlocks` 或 `summaryFocus` 字段，也没有单独的 working_memory 表。
 
 ## 会话插件选择
 

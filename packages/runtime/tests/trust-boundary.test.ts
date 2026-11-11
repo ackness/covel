@@ -99,7 +99,7 @@ describe("executor-side tool authorization", () => {
       { toolCallId: "tc3", name: "memory-update-block", arguments: "{}" },
       {
         ...baseContext,
-        authorizedToolNames: new Set(["echo", "runtime-done"]),
+        authorizedToolNames: new Set(["echo"]),
       },
     );
     expect(result.success).toBe(false);

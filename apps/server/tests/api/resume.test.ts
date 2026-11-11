@@ -18,7 +18,14 @@ import {
   type RpcApprovalGate,
 } from "@covel/approval";
 import type { BudgetOptions } from "@covel/context";
-import { type DataStore, type SuspensionRecord } from "@covel/store";
+import { createEventBus, type EventBus } from "@covel/events";
+import type { RuntimeJobWorker } from "../../src/routes/api/plugin-rpc/runtime-job-worker.js";
+import {
+  exportSessionCheckpoint,
+  validateBrowserCheckpoint,
+  type DataStore,
+  type SuspensionRecord,
+} from "@covel/store";
 import { readSuspensionWriteDigest } from "@covel/store/session";
 import { createMemoryStore } from "@covel/store/memory";
 import { __resetSweepClockForTests } from "../../src/routes/api/suspension-sweep.js";
@@ -56,6 +63,8 @@ import { suspendedAgentLoop } from "../helpers/agent-continuation.js";
 // ── Helpers ──────────────────────────────────────────────────────────
 
 type Deps = {
+  eventBus?: EventBus;
+  runtimeJobWorker?: RuntimeJobWorker;
   rpcApprovalGate?: RpcApprovalGate;
   contextBudget?: Omit<BudgetOptions, "estimator">;
   store: DataStore;
@@ -102,6 +111,10 @@ function createTestApp(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("resolveModel", deps.resolveModel as any);
     c.set("sessionLock", sessionLock);
+    if (deps.eventBus) c.set("eventBus", deps.eventBus);
+    if (deps.runtimeJobWorker) {
+      c.set("runtimeJobWorker", deps.runtimeJobWorker);
+    }
     if (deps.rpcApprovalGate) c.set("rpcApprovalGate", deps.rpcApprovalGate);
     if (deps.prepareToolsForSession) {
       c.set("prepareToolsForSession", deps.prepareToolsForSession);
@@ -1261,6 +1274,159 @@ describe("Resume Routes", () => {
         ),
       ).toEqual(["held-back-job"]);
     });
+
+    it.each([false, true])(
+      "queues and announces saved nested event followers only after successful resume (resuspend=%s)",
+      async (resuspend) => {
+        const parent: RuntimeManifest = {
+          ...TEST_MANIFEST,
+          runtimeType: "function",
+          outputKind: "system",
+        };
+        const producer: RuntimeManifest = {
+          ...parent,
+          name: "test-plugin/producer",
+          trigger: { type: "manual" },
+        };
+        const follower: RuntimeManifest = {
+          ...parent,
+          name: "test-plugin/follower",
+          execution: "background",
+          trigger: { type: "event", topic: "test-plugin.changed" },
+        };
+        const descriptor = {
+          runtimeId: follower.name,
+          pluginId: follower.pluginId,
+          triggerEvent: { topic: "test-plugin.changed", data: { selected: 7 } },
+        };
+        const saved = await createSuspension(store);
+        await store.saveSuspension({
+          ...saved,
+          pendingContinuation: {
+            ...saved.pendingContinuation,
+            nestedResults: [
+              {
+                readScopes: [],
+                result: {
+                  pluginId: producer.pluginId,
+                  runtimeId: producer.name,
+                  runId: "nested-producer-run",
+                  turnId: saved.turnId,
+                  status: "success",
+                  output: {},
+                  effects: { events: [descriptor.triggerEvent] },
+                  toolCalls: [],
+                  durationMs: 0,
+                  timestamp: saved.createdAt,
+                },
+                deferredFollowers: [descriptor],
+              },
+            ],
+          },
+        });
+        const eventBus = createEventBus(store);
+        const announced: string[] = [];
+        const visibleAtAnnouncement: Promise<string[]>[] = [];
+        eventBus.onEmit((event) => {
+          const payload = event.payload as Record<string, unknown>;
+          if (event.type !== "runtime.deferred") return;
+          announced.push(String(payload.jobId));
+          visibleAtAnnouncement.push(
+            listRuntimeJobs(store, { sessionId: "sess-1" }).then((jobs) =>
+              jobs.map((job) => job.jobId),
+            ),
+          );
+        });
+        const wake = vi.fn();
+        let calls = 0;
+        const handler: FunctionHandler = async () =>
+          resuspend && ++calls === 1
+            ? {
+                outcome: "suspended",
+                reason: "Another answer",
+                resumeSchema: {},
+              }
+            : { outcome: "success", value: {} };
+        const app = createTestApp(
+          makeDefaultDeps(
+            store,
+            {
+              eventBus,
+              runtimeJobWorker: { wake, close: async () => {}, activeCount: 0 },
+              loadRuntimeFn: async () =>
+                ({ manifest: parent, promptTemplate: "", handler }) as never,
+            },
+            parent,
+            [producer, follower],
+          ),
+        );
+        const resume = (id: string) =>
+          app.request(`/api/sessions/sess-1/suspensions/${id}/resume`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { name: "Alice" } }),
+          });
+        let response = await resume(saved.id);
+        expect(response.status).toBe(200);
+        let body = (await response.json()) as {
+          result: { status: string; output?: { suspensionId?: string } };
+        };
+        let completedId = saved.id;
+        if (resuspend) {
+          expect(body.result.status).toBe("suspended");
+          expect(await listRuntimeJobs(store, { sessionId: "sess-1" })).toEqual(
+            [],
+          );
+          expect(announced).toEqual([]);
+          expect(wake).not.toHaveBeenCalled();
+          completedId = body.result.output!.suspensionId!;
+          const checkpoint = validateBrowserCheckpoint(
+            await exportSessionCheckpoint(store, "sess-1", {
+              revision: 1,
+              actionId: "resuspended-nested-follower",
+            }),
+          );
+          expect(
+            checkpoint.suspensions.find((item) => item.id === completedId)
+              ?.pendingContinuation.nestedResults?.[0]?.deferredFollowers,
+          ).toEqual([descriptor]);
+          expect(
+            (await store.getSuspension(completedId))!.pendingContinuation
+              .nestedResults?.[0]?.deferredFollowers,
+          ).toEqual([descriptor]);
+          expect((await resume(saved.id)).status).toBe(409);
+          response = await resume(completedId);
+          expect(response.status).toBe(200);
+          body = (await response.json()) as typeof body;
+        }
+        expect(body.result.status).toBe("success");
+        const jobs = await listRuntimeJobs(store, { sessionId: "sess-1" });
+        expect(jobs).toHaveLength(1);
+        expect(jobs[0]).toMatchObject({
+          runtimeId: follower.name,
+          status: "queued",
+          origin: { activation: "event", sourceTurnId: saved.turnId },
+          payload: { triggerEvent: descriptor.triggerEvent },
+        });
+        expect(announced).toEqual([jobs[0]!.jobId]);
+        expect(await Promise.all(visibleAtAnnouncement)).toEqual([
+          [jobs[0]!.jobId],
+        ]);
+        expect(wake).toHaveBeenCalledExactlyOnceWith("sess-1");
+        expect((await resume(completedId)).status).toBe(409);
+        expect(
+          await listRuntimeJobs(store, { sessionId: "sess-1" }),
+        ).toHaveLength(1);
+        expect(announced).toEqual([jobs[0]!.jobId]);
+        expect(wake).toHaveBeenCalledTimes(1);
+        expect(
+          (await store.listSuspensions("sess-1")).filter(
+            (item) => item.resolvedAt === undefined,
+          ),
+        ).toEqual([]);
+        await eventBus.close();
+      },
+    );
 
     it("queues a function chain's held-back job once, when the chain ends", async () => {
       await store.updateSession("sess-1", {

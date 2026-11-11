@@ -432,7 +432,7 @@ Who calls it:
 | --- | --- |
 | The target of a turn-scoped `needs` | Downstream is dropped with it |
 | The source of a required `inputs` | Downstream is dropped with it |
-| An event subscriber, when all emitters of the event that triggered it are dropped | The subscriber is dropped with it |
+| The producer of the payload an event subscriber actually received is dropped | The subscriber is dropped; its background follower is not queued |
 | `after`, and inputs with `required: false` | No cascade. They only express order or a best-effort read |
 | A `cardinality: one` capability dependency, when another provider committed successfully | Still satisfied |
 | The hard upstream of a story or setup runtime | The whole turn is rolled back |
@@ -440,6 +440,8 @@ Who calls it:
 | Read its uncommitted plugin data, characters or character schema (story or setup unit) | Commits as usual; the trace records `read-dependency.kept` |
 | Read a write-service operation that did not commit (auxiliary unit) | The downstream runtime is dropped too |
 | Read a write-service operation that did not commit (story or setup unit) | Commits as usual; the trace records `read-dependency.kept` |
+
+**Event dependencies.** Each depth selects the first payload for a topic. The commit plan records that payload's producer by `runId`. Another producer's committed event on the same topic cannot replace a dropped source. This dependency is checked through successive event depths and also protects suspended consumers with no writes yet. An explicitly selected manual run that received no event acquires no event dependency from its manifest's trigger. A skipped guard still checks these dependencies when its unit owns successful nested results or staged write-service operations.
 
 **Read dependencies.** Within one execution, a runtime that reads its own plugin's data sees the uncommitted writes of upstream runtimes of the same plugin (see [In-execution plugin-data visibility](./plugins.md#in-execution-plugin-data-visibility)). Each read records which upstream writes it actually saw (`read-dependencies.ts`), and the execution carries these dependencies into its commit plan.
 

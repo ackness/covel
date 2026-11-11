@@ -10,6 +10,8 @@ It is for three kinds of readers: people who write their own client, people who 
 
 The type definitions are in `packages/shared/src/types/protocol.ts`.
 
+Model capability lookup can use `credentials=1` and the existing `X-Slot-Config` header to request server credential availability for a custom connection. It remains a read-only JSON query, makes no model call and adds no SSE event. See the [model database API](./api.md#model-database-model-db) for parameters, validation and the boolean response field.
+
 ## Declarative approval semantics
 
 Plugin summaries require host-derived `executionMode`. Fresh `declarative` status skips code/runtime prompts during creation, enable and runtime calls without recording grants. `serverCodeApproved` still reports real grants; `approvalRequired` no longer marks these packages as pending. `code` and `unknown` use normal admission. Obsolete approvals return `409 approval_obsolete`; the browser treats it as consumed without a grant, and callers allowing the operation retry enable/run under current policy with their session navigation checks intact. See [API state](./api.md#declarative-plugin-api-state) for field definitions.
@@ -51,6 +53,8 @@ This section is for people who embed `@covel/runtime` in their own service. The 
 - `commit` is the full commit plan, which stays in the host's hands. It holds the top-level and nested results, the pending commands, the conversation journal, the suspension records, a snapshot of the Hook settings, the responsibility for counting turns, and the output schemas loaded during execution.
 
 The host completes the commit by calling `commitExecution({ execution, store, completion, ...services })`. The host does not collect these fields itself, and the commit does not load plugins again. The public execution entry points require `deps.store`.
+
+A host that queues event followers calls `committedEventFollowers` with the commit callback's `CommitIsolation.droppedRunIds` and `followerSources`. The source array pairs with the execution result's `deferredFollowers` in order; a resumed execution uses internal `commit.deferredFollowers`. Preserve the full commit plan and original descriptors, keeping distinct invocations of one runtime separate. The old `droppedEmitter` export has been removed.
 
 ```ts
 const execution = await executeTurn(input, runtimes, deps);

@@ -2,7 +2,7 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getPendingProposals } from "@covel/plugin-handlers-utils";
-import { createCharacterTools, runtimeDoneTool } from "@covel/tools";
+import { createCharacterTools } from "@covel/tools";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   createToolExecutor,
@@ -100,10 +100,7 @@ async function runFromRead(firstRead, secondResponse, ...corrections) {
     ],
   });
   const tools = new Map(
-    [...createCharacterTools(store, {}), runtimeDoneTool].map((tool) => [
-      tool.name,
-      tool,
-    ]),
+    createCharacterTools(store, {}).map((tool) => [tool.name, tool]),
   );
   const toolResults = [];
   const hookPipeline = createHookPipeline();

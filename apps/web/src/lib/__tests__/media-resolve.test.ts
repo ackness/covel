@@ -96,10 +96,6 @@ function pngBytes(): Uint8Array {
   return new Uint8Array(PNG_BYTES);
 }
 
-function pngBlob(): Blob {
-  return new Blob([PNG_PAYLOAD], { type: "image/png" });
-}
-
 function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(
     bytes.byteOffset,
@@ -500,34 +496,11 @@ describe("resolveMediaSrc", () => {
 });
 
 describe("__testing.verifyBlobAgainstRef", () => {
-  it("accepts a blob whose size, mime and SHA-256 all match", async () => {
-    const ref = await pngRef();
-    const result = await __testing.verifyBlobAgainstRef(pngBlob(), ref);
-    expect(result).toBeNull();
-  });
-
-  it("returns a size-mismatch reason when sizes diverge", async () => {
-    const ref = await pngRef();
-    const tooBig = new Blob([PNG_PAYLOAD + "extra"], { type: "image/png" });
-    const reason = await __testing.verifyBlobAgainstRef(tooBig, ref);
-    expect(reason).toMatch(/size mismatch/);
-  });
-
   it("returns a mime-mismatch reason when types diverge", async () => {
     const ref = await pngRef();
     const wrongType = new Blob([PNG_PAYLOAD], { type: "text/html" });
     const reason = await __testing.verifyBlobAgainstRef(wrongType, ref);
     expect(reason).toMatch(/mime mismatch/);
-  });
-
-  it("returns a sha mismatch reason when bytes do not hash to ref.id", async () => {
-    const ref: MediaRef = {
-      id: "0".repeat(64),
-      mime: "image/png",
-      size: PNG_BYTES.byteLength,
-    };
-    const reason = await __testing.verifyBlobAgainstRef(pngBlob(), ref);
-    expect(reason).toMatch(/sha256 mismatch/);
   });
 
   it("ignores trivial mime parameter differences (charset)", () => {

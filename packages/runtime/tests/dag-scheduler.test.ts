@@ -1,5 +1,5 @@
 /**
- * DAG scheduler — derives parallel levels from manifest.input.inject + needs.
+ * DAG scheduler — derives parallel levels from inputs, needs and after.
  */
 
 import { describe, it, expect } from "vitest";
@@ -8,30 +8,21 @@ import type { RuntimeManifest } from "@covel/shared";
 
 function mk(
   name: string,
-  priority: number,
   overrides: Partial<RuntimeManifest> = {},
 ): RuntimeManifest {
   return {
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    stage:
-      priority <= 99
-        ? "setup"
-        : priority <= 499
-          ? "pre-turn"
-          : priority === 500
-            ? "narrative"
-            : priority <= 999
-              ? "post-turn"
-              : "audit",
+    runtimeType: "agent",
+    stage: "narrative",
     ...overrides,
-  } as RuntimeManifest;
+  };
 }
 
 describe("scheduleByDag", () => {
   it("puts independent runtimes on the first level (can run in parallel)", () => {
-    const input = [mk("rag", 490), mk("other", 495)];
+    const input = [mk("rag"), mk("other")];
     const { groups, error } = scheduleByDag(input);
     expect(error).toBeUndefined();
     expect(groups).toHaveLength(1);
@@ -43,22 +34,22 @@ describe("scheduleByDag", () => {
 
   it("parallelises all narrator downstreams after narrator completes", () => {
     const input = [
-      mk("npc-graph/rag-retriever", 490),
-      mk("narrator", 500, {
+      mk("npc-graph/rag-retriever"),
+      mk("narrator", {
         inputs: { npc: { from: { runtime: "npc-graph/rag-retriever" } } },
-      } as Partial<RuntimeManifest>),
-      mk("guide", 550, {
+      }),
+      mk("guide", {
         inputs: { n: { from: { runtime: "narrator" } } },
-      } as Partial<RuntimeManifest>),
-      mk("npc-graph/extractor", 620, {
+      }),
+      mk("npc-graph/extractor", {
         inputs: { n: { from: { runtime: "narrator" } } },
-      } as Partial<RuntimeManifest>),
-      mk("codex", 650, {
+      }),
+      mk("codex", {
         inputs: { n: { from: { runtime: "narrator" } } },
-      } as Partial<RuntimeManifest>),
-      mk("char-creator/character-tracker", 750, {
+      }),
+      mk("char-creator/character-tracker", {
         inputs: { n: { from: { runtime: "narrator" } } },
-      } as Partial<RuntimeManifest>),
+      }),
     ];
 
     const { groups, error } = scheduleByDag(input);
@@ -84,8 +75,8 @@ describe("scheduleByDag", () => {
     );
   });
 
-  it("needs adds an edge even without an inject declaration", () => {
-    const input = [mk("a", 100), mk("b", 200, { needs: ["a"] })];
+  it("needs orders runtimes without an input binding", () => {
+    const input = [mk("a"), mk("b", { needs: ["a"] })];
     const { groups } = scheduleByDag(input);
     expect(groups.length).toBe(2);
     expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(["a"]);
@@ -93,15 +84,15 @@ describe("scheduleByDag", () => {
   });
 
   it("does not pull a cardinality-one consumer into an alternative provider cycle", () => {
-    const available = mk("engine-a", 500, {
+    const available = mk("engine-a", {
       outputContract: "narrative-engine@2",
     });
-    const cyclicProvider = mk("engine-b", 500, {
+    const cyclicProvider = mk("engine-b", {
       outputContract: "narrative-engine@2",
       needs: ["cycle-peer"],
     });
-    const cyclePeer = mk("cycle-peer", 500, { needs: ["engine-b"] });
-    const consumer = mk("guide", 500, {
+    const cyclePeer = mk("cycle-peer", { needs: ["engine-b"] });
+    const consumer = mk("guide", {
       needs: [{ capability: "narrative-engine@2", cardinality: "one" }],
     });
 
@@ -123,15 +114,15 @@ describe("scheduleByDag", () => {
   });
 
   it("keeps cardinality-all consumers downstream of every provider cycle", () => {
-    const available = mk("engine-a", 500, {
+    const available = mk("engine-a", {
       outputContract: "narrative-engine@2",
     });
-    const cyclicProvider = mk("engine-b", 500, {
+    const cyclicProvider = mk("engine-b", {
       outputContract: "narrative-engine@2",
       needs: ["cycle-peer"],
     });
-    const cyclePeer = mk("cycle-peer", 500, { needs: ["engine-b"] });
-    const consumer = mk("guide", 500, {
+    const cyclePeer = mk("cycle-peer", { needs: ["engine-b"] });
+    const consumer = mk("guide", {
       needs: [{ capability: "narrative-engine@2", cardinality: "all" }],
     });
 
@@ -152,27 +143,12 @@ describe("scheduleByDag", () => {
     ]);
   });
 
-  it("ignores plugin-data kind injects (not runtime deps)", () => {
-    const input = [
-      mk("codex", 650, {
-        input: {
-          inject: [
-            { kind: "plugin-data", namespace: "entries", as: "<existing>" },
-          ],
-        },
-      }),
-    ];
-    const { groups } = scheduleByDag(input);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(["codex"]);
-  });
-
   it("ignores out-of-scope dependencies", () => {
     // downstream declares `from: 'not-scheduled'` which isn't in the input.
     const input = [
-      mk("downstream", 500, {
+      mk("downstream", {
         inputs: { x: { from: { runtime: "not-scheduled" } } },
-      } as Partial<RuntimeManifest>),
+      }),
     ];
     const { groups, error } = scheduleByDag(input);
     expect(error).toBeUndefined();
@@ -181,19 +157,15 @@ describe("scheduleByDag", () => {
   });
 
   it("reports an error on cycles", () => {
-    const input = [
-      mk("a", 100, { needs: ["b"] }),
-      mk("b", 200, { needs: ["a"] }),
-    ];
+    const input = [mk("a", { needs: ["b"] }), mk("b", { needs: ["a"] })];
     const { error } = scheduleByDag(input);
     expect(error).toMatch(/cycle/i);
   });
 
   it("orders same-level runtimes by name", () => {
-    const input = [mk("z", 100), mk("a", 900), mk("m", 500)];
+    const input = [mk("z"), mk("a"), mk("m")];
     const { groups } = scheduleByDag(input);
     expect(groups).toHaveLength(1);
-    // Name order a<m<z, even though priority order would be z(100)<m(500)<a(900).
     expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(["a", "m", "z"]);
   });
 

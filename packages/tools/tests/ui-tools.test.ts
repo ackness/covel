@@ -77,9 +77,8 @@ describe("builtin ui tools", () => {
   });
 
   it("create-notification emits a ui payload the runtime will promote", async () => {
-    // Only a result carrying `ui` (or `interaction`) is picked up by
-    // `findPresentableToolOutput`. Returning a bare `{ notified: true }` makes
-    // the tool report success to the model while the player sees nothing.
+    // The `ui` payload stages the player-visible notification;
+    // `{ notified: true }` alone only reports success to the model.
     const result = (await createNotificationTool.execute(
       { level: "success", title: "获得物品", message: "你捡到了一把钥匙。" },
       CTX,

@@ -858,6 +858,56 @@ describe("graceful degradation", () => {
     expect(calls.length).toBe(0);
   });
 
+  it("falls back to keyword if the model changes while the query is being embedded", async () => {
+    const store = createMemoryStore();
+    const sessionId = "sess-query-model-reset";
+    await lockModel(store, sessionId);
+    order = 0;
+    await addMessage(store, sessionId, "assistant", "the dragon breathed fire");
+    await addMessage(store, sessionId, "assistant", "the cook made soup");
+    const session = (await store.getSession(sessionId))!;
+    const oldTarget = (await store.resolveSessionVectorTarget(sessionId))!;
+    const newTarget = await store.ensureVectorModel({
+      provider: "test",
+      modelName: "other-embed",
+      dim: DIM,
+      modelId: "test/other-embed",
+    });
+    const system = createMemorySystem({
+      store,
+      embed: async () => {
+        // Another request rebuilds a same-dimension index before the old
+        // provider request finishes. Its nearest hit means something else.
+        await store.resetSessionVectorIndex({
+          sessionId,
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: oldTarget.modelRegistryId,
+          target: newTarget,
+        });
+        await store.upsertVector({
+          sessionId,
+          pluginId: MEMORY_VECTOR_PLUGIN_ID,
+          namespace: RECALL_NAMESPACE,
+          key: "m-2",
+          embedding: embedText("dragon"),
+          payload: JSON.stringify({
+            role: "assistant",
+            content: "the cook made soup",
+          }),
+        });
+        return [embedText("dragon")];
+      },
+    });
+    try {
+      const hits = await system.recall.search(sessionId, "dragon", 1);
+      expect(hits.map((hit) => hit.content)).toEqual([
+        "the dragon breathed fire",
+      ]);
+    } finally {
+      await store.close();
+    }
+  });
+
   it("falls back to keyword when embedding throws (never breaks the turn)", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-embed-fail";

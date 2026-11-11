@@ -460,28 +460,33 @@ jobs:
       # downloads a build per distribution release and ubuntu-latest moves to a
       # new release. The system packages are not part of it and are installed
       # on every run.
-      - name: Read Playwright version
+      - &read-playwright-version
+        name: Read Playwright version
         id: playwright
         run: |
           echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
           echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
-      - name: Restore Chromium
+      - &restore-chromium
+        name: Restore Chromium
         id: chromium-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
 
-      - name: Install Chromium
+      - &install-chromium
+        name: Install Chromium
         if: steps.chromium-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Install Chromium system packages
+      - &install-chromium-system-packages
+        name: Install Chromium system packages
         if: steps.chromium-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
-      - name: Select allowed CPUs
+      - &select-browser-cpus
+        name: Select allowed CPUs
         id: setup
         run: |
           cpus="$(node scripts/e2e-cpu-list.mjs)"
@@ -505,7 +510,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Save Chromium
+      - &save-chromium
+        name: Save Chromium
         if: ${{ success() && !inputs.release && inputs.commit == '' && steps.chromium-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -544,41 +550,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The browser download is cached by Playwright version (from the
-      # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
-      # downloads a build per distribution release and ubuntu-latest moves to a
-      # new release. The system packages are not part of it and are installed
-      # on every run.
-      - name: Read Playwright version
-        id: playwright
-        run: |
-          echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
-          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Chromium
-        id: chromium-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
-
-      - name: Install Chromium
-        if: steps.chromium-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Install Chromium system packages
-        if: steps.chromium-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
-
-      - name: Select allowed CPUs
-        id: setup
-        run: |
-          cpus="$(node scripts/e2e-cpu-list.mjs)"
-          echo "Browser CPU affinity: $cpus"
-          if [[ "$cpus" != *,* ]]; then
-            echo "::notice::Only one allowed CPU is available."
-          fi
-          echo "cpus=$cpus" >> "$GITHUB_OUTPUT"
+      # Shared definitions execute independently on each runner.
+      - *read-playwright-version
+      - *restore-chromium
+      - *install-chromium
+      - *install-chromium-system-packages
+      - *select-browser-cpus
 
       - name: Test browser smoke
         if: ${{ matrix.suite == 'smoke' }}
@@ -614,12 +591,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Save Chromium
-        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.chromium-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ steps.chromium-cache.outputs.cache-primary-key }}
+      - *save-chromium
 
   result:
     name: Verification

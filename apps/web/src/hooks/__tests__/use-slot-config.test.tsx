@@ -1,5 +1,6 @@
 import i18n from "@/i18n/index.js";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
+import { lookupModelCapabilityDetails } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   effectiveSlotModel,
@@ -54,6 +55,51 @@ beforeEach(async () => {
 });
 
 describe("useSlotConfig", () => {
+  it.each([true, false])(
+    "uses the exact custom connection credential projection (%s)",
+    async (ready) => {
+      modelSettings.slotConfig = { story: { modelRef: "model-a" } };
+      modelSettings.values.set("llm.slotConfig", modelSettings.slotConfig);
+      modelSettings.customPresets = [
+        {
+          ...preset("model-a", "openai", "gpt-4o"),
+          baseUrl: "https://preset-override.example/v1",
+        },
+      ];
+      vi.mocked(lookupModelCapabilityDetails).mockResolvedValueOnce({
+        found: true,
+        source: "known",
+        pricingKind: "unknown",
+        candidates: [],
+        reasoning: null,
+        capability: { input: ["text"], output: ["text"] },
+        serverCredentialsAvailable: ready,
+      });
+      const { result } = renderHook(() =>
+        useSlotConfig([], {
+          configured: true,
+          providers: ["openai"],
+          slots: {
+            story: {
+              provider: "openai",
+              model: "server-model",
+              baseUrl: "https://preset-override.example/v1",
+              protocol: "openai-chat-v1",
+              tag: "text",
+              serverKeyConfigured: true,
+            },
+          },
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          result.current.resolvedSlots[0]?.preset?.serverCredentialsAvailable,
+        ).toBe(ready),
+      );
+      expect(result.current.resolvedSlots[0]?.hasCredentials).toBe(ready);
+    },
+  );
+
   it("does not advertise server defaults for an unresolved explicit local model", () => {
     modelSettings.slotConfig = { story: { modelRef: "missing" } };
     modelSettings.customPresets = [];
@@ -79,7 +125,6 @@ describe("useSlotConfig", () => {
         },
       }),
     );
-    expect(result.current.resolveSlot("story")).toBeNull();
     const slot = result.current.resolvedSlots[0]!;
     expect(effectiveSlotModel(slot)).toBeUndefined();
     expect(slot.serverProvider).toBeUndefined();
@@ -101,8 +146,6 @@ describe("useSlotConfig", () => {
       scope: "server",
     };
     const { result } = renderHook(() => useSlotConfig([server]));
-    expect(result.current.resolveSlot("story")?.model).toBe("local-model");
-    expect(result.current.resolveSlot("memory")?.model).toBe("server-model");
     expect(
       result.current.resolvedSlots.map((slot) => slot.preset?.model),
     ).toEqual(["local-model", "server-model"]);

@@ -86,6 +86,8 @@ When you add a table or a query, put it in the module for its feature area, add 
 
 **Checking sources at query time.** Before a query on archived vectors returns content, it reads only the records its hits name, not the whole corpus. If a hit's record has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
 
+**Query vectors are bound to their model.** Memory search passes the `expectedModelRegistryId` used to embed its query. The backend checks the session binding and searches within one read snapshot. If the model has changed, it returns no vector hits and memory falls back to keyword search. Models with equal dimensions are still distinct. SQLite uses a synchronous read transaction; PostgreSQL checks the binding in the search statement itself. Custom `VectorStoreCapability` implementations must honor the same atomic guard.
+
 **Where progress is stored.** The recall cursor (the last `write_seq` handled) and the archive progress (the last change number handled, the searchable namespaces indexed, and any unfinished catch-up or removal) are stored in the `vector_index_progress` table. They sit next to the physical index, not in `plugin_data`.
 
 - When progress is written, the previously serialized value is compared. The session's "incarnation" is also checked inside the backend's write boundary. (If the same ID is deleted and then recreated, it counts as a different incarnation.)

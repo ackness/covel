@@ -3,9 +3,8 @@
  *
  * These exercise corners that are easy to break during refactors:
  *  - self-loops (cycle of length 1)
- *  - same-priority alphabetical tiebreaker
  *  - silently dropping malformed `from` declarations instead of crashing
- *  - `needs + input.inject` merge (no double-counting, no clash)
+ *  - `needs + inputs` merge (no double-counting, no clash)
  *  - multi-runtime plugin name keying (`pluginId/runtimeName`)
  */
 
@@ -15,28 +14,19 @@ import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 
 function rt(
   name: string,
-  priority: number,
   overrides: Partial<RuntimeManifest> = {},
 ): RuntimeManifest {
   return {
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    stage:
-      priority <= 99
-        ? "setup"
-        : priority <= 499
-          ? "pre-turn"
-          : priority === 500
-            ? "narrative"
-            : priority <= 999
-              ? "post-turn"
-              : "audit",
+    runtimeType: "agent",
+    stage: "narrative",
     ...overrides,
-  } as RuntimeManifest;
+  };
 }
 
-function injectRuntime(...names: readonly string[]): Partial<RuntimeManifest> {
+function runtimeInputs(...names: readonly string[]): Partial<RuntimeManifest> {
   return {
     inputs: Object.fromEntries(
       names.map((n, i) => [`in${i}`, { from: { runtime: n } }]),
@@ -46,7 +36,7 @@ function injectRuntime(...names: readonly string[]): Partial<RuntimeManifest> {
 
 describe("scheduleByDag — self-dependency", () => {
   it("flags a self-edge as a cycle and emits no levels", () => {
-    const looped = rt("loop", 100, injectRuntime("loop"));
+    const looped = rt("loop", runtimeInputs("loop"));
     const { groups, error } = scheduleByDag([looped]);
     expect(groups).toEqual([]);
     expect(error).toMatch(/cycle/i);
@@ -54,41 +44,10 @@ describe("scheduleByDag — self-dependency", () => {
   });
 });
 
-describe("scheduleByDag — same-priority tiebreaker", () => {
-  it("breaks ties alphabetically by name within a level", () => {
-    // Insert in non-alphabetical, non-priority order. Output must be stable.
-    const a = [rt("charlie", 500), rt("alpha", 500), rt("bravo", 500)];
-    const { groups } = scheduleByDag(a);
-    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual([
-      "alpha",
-      "bravo",
-      "charlie",
-    ]);
-  });
-
-  it("orders a level by name only — priority never enters the tiebreak", () => {
-    // W6: the DAG tie-break switched from `(priority, name)` to name only. A
-    // level runs in parallel (Promise.allSettled), so intra-level order is
-    // trace-cosmetic; name is the single deterministic key. `zzzz` has the
-    // lowest priority but sorts last by name.
-    const a = [
-      rt("zzzz", 100), // lowest priority, but alphabetically last
-      rt("aaaa", 200),
-      rt("mmmm", 200),
-    ];
-    const { groups } = scheduleByDag(a);
-    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual([
-      "aaaa",
-      "mmmm",
-      "zzzz",
-    ]);
-  });
-});
-
 describe("scheduleByDag — malformed input declarations", () => {
   it('silently drops an empty-string runtime instead of treating it as a runtime named ""', () => {
-    const a = rt("a", 100);
-    const b = rt("b", 200, { inputs: { x: { from: { runtime: "" } } } });
+    const a = rt("a");
+    const b = rt("b", { inputs: { x: { from: { runtime: "" } } } });
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
     // Both runtimes can run on level 0 — `b` has no real dependency.
@@ -97,8 +56,8 @@ describe("scheduleByDag — malformed input declarations", () => {
   });
 
   it("silently drops empty-string entries from needs", () => {
-    const a = rt("a", 100);
-    const b = rt("b", 200, { needs: ["", "a"] });
+    const a = rt("a");
+    const b = rt("b", { needs: ["", "a"] });
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
     expect(groups).toHaveLength(2);
@@ -107,14 +66,14 @@ describe("scheduleByDag — malformed input declarations", () => {
   });
 });
 
-describe("scheduleByDag — needs + inject merge", () => {
-  it("does not double-count a dependency declared via both inject and needs", () => {
-    // If the algorithm naively summed inject + upstream edges without dedup,
+describe("scheduleByDag — needs + inputs merge", () => {
+  it("does not double-count a dependency declared via both inputs and needs", () => {
+    // If the algorithm naively summed input + needs edges without dedup,
     // `b` would have inDegree=2 and need TWO completions of `a` to clear,
     // which is impossible — the level would never form.
-    const a = rt("a", 100);
-    const b = rt("b", 200, {
-      ...injectRuntime("a"),
+    const a = rt("a");
+    const b = rt("b", {
+      ...runtimeInputs("a"),
       needs: ["a"],
     });
     const { groups, error } = scheduleByDag([a, b]);
@@ -123,12 +82,12 @@ describe("scheduleByDag — needs + inject merge", () => {
     expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(["b"]);
   });
 
-  it("needs adds an edge even when the same runtime is not injected", () => {
-    const root = rt("root", 100);
-    const sibling = rt("sibling", 110);
+  it("needs adds an edge even when the same runtime has no input binding", () => {
+    const root = rt("root");
+    const sibling = rt("sibling");
     // `child` does not need `sibling`'s output, but execution order must wait.
-    const child = rt("child", 200, {
-      ...injectRuntime("root"),
+    const child = rt("child", {
+      ...runtimeInputs("root"),
       needs: ["sibling"],
     });
     const { groups } = scheduleByDag([root, sibling, child]);
@@ -143,13 +102,12 @@ describe("scheduleByDag — needs + inject merge", () => {
 describe("scheduleByDag — multi-runtime plugin identity", () => {
   it("keys edges on `pluginId/runtimeName`, not `pluginId`", () => {
     // Two siblings under the same plugin; downstream depends on one, not both.
-    const schema = rt("world-init/schema-gen", 50);
+    const schema = rt("world-init/schema-gen");
     const data = rt(
       "world-init/data-gen",
-      60,
-      injectRuntime("world-init/schema-gen"),
+      runtimeInputs("world-init/schema-gen"),
     );
-    const sibling = rt("world-init/audit", 55);
+    const sibling = rt("world-init/audit");
 
     const { groups } = scheduleByDag([schema, data, sibling]);
     // Level 0 holds schema-gen + audit (both have no deps).
@@ -167,8 +125,8 @@ describe("scheduleByDag — multi-runtime plugin identity", () => {
     // A common authoring mistake is to inject `from: "codex"` instead of
     // `from: "codex/unlocker"`. The scheduler treats `codex` as out-of-scope
     // (no runtime by that exact name) and proceeds.
-    const unlocker = rt("codex/unlocker", 600);
-    const retriever = rt("codex/retriever", 610, injectRuntime("codex"));
+    const unlocker = rt("codex/unlocker");
+    const retriever = rt("codex/retriever", runtimeInputs("codex"));
     const { groups, error } = scheduleByDag([unlocker, retriever]);
     expect(error).toBeUndefined();
     // No edge formed → both on level 0.
@@ -182,12 +140,12 @@ describe("scheduleByDag capability-one edge provenance", () => {
     { after: ["p/b"] },
     { needs: [need, "p/b"] },
     { inputs: { data: { from: { runtime: "p/b" }, required: false } } },
-    injectRuntime("p/b"),
+    runtimeInputs("p/b"),
     { needs: [need, { capability: "data@1", cardinality: "all" as const }] },
   ])("preserves independent hard ordering constraints: %j", (hard) => {
-    const a = rt("p/a", 600, { outputContract: "data@1" });
-    const b = rt("p/b", 600, { outputContract: "data@1", after: ["p/c"] });
-    const c = rt("p/c", 600, { needs: [need], ...hard });
+    const a = rt("p/a", { outputContract: "data@1" });
+    const b = rt("p/b", { outputContract: "data@1", after: ["p/c"] });
+    const c = rt("p/c", { needs: [need], ...hard });
     const result = scheduleByDag([a, b, c]);
     expect(
       result.groups.map((group) => group.runtimes.map((r) => r.name)),
@@ -197,9 +155,9 @@ describe("scheduleByDag capability-one edge provenance", () => {
 
   it("still relaxes a pure OR provider barrier once an alternative completes", () => {
     const result = scheduleByDag([
-      rt("p/a", 600, { outputContract: "data@1" }),
-      rt("p/b", 600, { outputContract: "data@1", after: ["p/c"] }),
-      rt("p/c", 600, { needs: [need] }),
+      rt("p/a", { outputContract: "data@1" }),
+      rt("p/b", { outputContract: "data@1", after: ["p/c"] }),
+      rt("p/c", { needs: [need] }),
     ]);
     expect(result.error).toBeUndefined();
     expect(

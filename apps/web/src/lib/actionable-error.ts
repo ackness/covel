@@ -31,6 +31,14 @@ function classifyRawActionableError(
 ): ActionableErrorKind {
   if (!raw) return "unknown";
   const lower = raw.toLowerCase();
+  // Schema paths and rejection details may contain words like "network".
+  if (
+    /output-schema-invalid:|output rejected \((?:invalid-json|invalid-output|missing-submission|required-work|review-rejected|submission-batch)\)/.test(
+      lower,
+    )
+  ) {
+    return "invalid-output";
+  }
   if (
     /\b401\b|unauthoriz|authentication.+fail|invalid.+key|invalid.*api.?key|api.?key.+(?:missing|not configured)/.test(
       lower,
@@ -52,7 +60,7 @@ function classifyRawActionableError(
     return "network";
   }
   if (
-    /output rejected \((?:invalid-json|invalid-output|missing-submission|required-work|review-rejected|submission-batch)\)|output did not match output\.schema|expected a json envelope|schema[- ]validation|exhausted the tool loop|without producing final output|requiretooluse/.test(
+    /schema[- ]validation|exhausted the tool loop|without producing final output|requiretooluse/.test(
       lower,
     )
   ) {

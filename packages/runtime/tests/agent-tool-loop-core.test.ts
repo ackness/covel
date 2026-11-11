@@ -9,12 +9,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import {
-  createCharacterTools,
-  runtimeDoneTool,
-  tool,
-  withPendingProposals,
-} from "@covel/tools";
+import { createCharacterTools, tool, withPendingProposals } from "@covel/tools";
 import { createMemoryStore } from "@covel/store/memory";
 import { z } from "zod";
 import { runAgentToolLoop } from "../src/agent-loop/turn-agent-tool-loop.js";
@@ -662,11 +657,11 @@ describe("runAgentToolLoop core", () => {
   it("rejects undeclared runtime-done for a completing-tool runtime and keeps running", async () => {
     const executor = createToolExecutor({
       findTool: (name) =>
-        name === "runtime-done"
-          ? runtimeDoneTool
-          : name === "submit"
-            ? { ...markTool, name: "submit" }
-            : markTool,
+        name === "submit"
+          ? { ...markTool, name: "submit" }
+          : name === "mark"
+            ? markTool
+            : undefined,
     });
     const execute = vi.spyOn(executor, "execute");
     const llm = new ScriptedLLM([

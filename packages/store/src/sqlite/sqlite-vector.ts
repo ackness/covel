@@ -451,60 +451,66 @@ export function createSqliteVectorCapability(
   ): Promise<VectorSearchResult[]> {
     const topK = normalizeVectorTopK(input.topK);
     if (topK === 0) return [];
-    const target = await resolveSessionVectorTarget(input.sessionId);
-    if (!target) {
-      // No embedding model locked → return empty results (RAG disabled).
-      return [];
-    }
+    // Keep routing, the query's model guard and KNN in one read snapshot.
+    return runSqliteTransaction(sqlite, () => {
+      const target = resolveVectorTarget(input.sessionId);
+      if (
+        !target ||
+        (input.expectedModelRegistryId !== undefined &&
+          target.modelRegistryId !== input.expectedModelRegistryId)
+      ) {
+        return [];
+      }
 
-    if (input.query.length !== target.dim) {
-      throw new Error(
-        `sqlite-vec searchVectors: query length ${input.query.length} does not match model dim ${target.dim}`,
-      );
-    }
+      if (input.query.length !== target.dim) {
+        throw new Error(
+          `sqlite-vec searchVectors: query length ${input.query.length} does not match model dim ${target.dim}`,
+        );
+      }
 
-    const tname = physicalTableName(target.modelRegistryId);
+      const tname = physicalTableName(target.modelRegistryId);
 
-    // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
-    const conditions = ["embedding MATCH ?", "k = ?", "session_id = ?"];
-    const params: Array<string | number> = [
-      serializeVector(input.query),
-      topK,
-      input.sessionId,
-    ];
+      // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
+      const conditions = ["embedding MATCH ?", "k = ?", "session_id = ?"];
+      const params: Array<string | number> = [
+        serializeVector(input.query),
+        topK,
+        input.sessionId,
+      ];
 
-    if (input.pluginId !== undefined) {
-      conditions.push("plugin_id = ?");
-      params.push(input.pluginId);
-    }
-    if (input.namespace !== undefined) {
-      conditions.push("namespace = ?");
-      params.push(input.namespace);
-    }
+      if (input.pluginId !== undefined) {
+        conditions.push("plugin_id = ?");
+        params.push(input.pluginId);
+      }
+      if (input.namespace !== undefined) {
+        conditions.push("namespace = ?");
+        params.push(input.namespace);
+      }
 
-    const sql = `
-      SELECT session_id, plugin_id, namespace, data_key, payload, distance
-        FROM ${tname}
-       WHERE ${conditions.join(" AND ")}
-       ORDER BY distance
-    `;
-    const rows = sqlite.prepare(sql).all(...params) as Array<{
-      session_id: string;
-      plugin_id: string;
-      namespace: string;
-      data_key: string;
-      payload: string | null;
-      distance: number;
-    }>;
+      const sql = `
+        SELECT session_id, plugin_id, namespace, data_key, payload, distance
+          FROM ${tname}
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY distance
+      `;
+      const rows = sqlite.prepare(sql).all(...params) as Array<{
+        session_id: string;
+        plugin_id: string;
+        namespace: string;
+        data_key: string;
+        payload: string | null;
+        distance: number;
+      }>;
 
-    return rows.map((r) => ({
-      sessionId: r.session_id,
-      pluginId: r.plugin_id,
-      namespace: r.namespace,
-      key: r.data_key,
-      distance: r.distance,
-      payload: r.payload,
-    }));
+      return rows.map((r) => ({
+        sessionId: r.session_id,
+        pluginId: r.plugin_id,
+        namespace: r.namespace,
+        key: r.data_key,
+        distance: r.distance,
+        payload: r.payload,
+      }));
+    });
   }
 
   async function getVectorPayloads(

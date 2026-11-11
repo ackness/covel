@@ -169,6 +169,8 @@ The right panel reads the nodes and edges, and “Expand panel” shows a larger
 
 A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
 
+When a batch updates one node by both its canonical name and an existing alias, each update uses the latest result in that batch, preserving properties added by the other updates. A newly added alias can immediately name an edge endpoint in that batch. When an alias matches an existing node's canonical name, the canonical name wins.
+
 Records relationships between people, groups and factions. It checks existing nodes and relationships when recording new ones. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
 
 **What you will see**: the "Relationships" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.

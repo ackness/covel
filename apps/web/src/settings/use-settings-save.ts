@@ -23,13 +23,13 @@ export function useSettingsWritable(): boolean {
   );
 }
 
-/** Serialize edits; each operation reads the confirmed store when its turn starts. */
-export function useSettingsSave(restore: () => void) {
-  const { t } = useTranslation();
-  const writable = useSettingsWritable();
-  const pending = useRef(Promise.resolve());
-  const count = useRef(0);
-  const mounted = useRef(true);
+/** Queue mechanics shared by settings controls and the model panes. */
+export function useSettingsSaveQueue({
+  initiallyMounted = false,
+}: { initiallyMounted?: boolean } = {}) {
+  const queue = useRef(Promise.resolve());
+  const pending = useRef(0);
+  const mounted = useRef(initiallyMounted);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -37,11 +37,42 @@ export function useSettingsSave(restore: () => void) {
     };
   }, []);
   const [saving, setSaving] = useState(false);
+  const enqueue = async <T>(
+    operation: () => Promise<T>,
+    onSettled?: () => void,
+  ): Promise<T> => {
+    const previous = queue.current;
+    let release!: () => void;
+    queue.current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    pending.current += 1;
+    setSaving(true);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      pending.current -= 1;
+      release();
+      if (mounted.current) {
+        onSettled?.();
+        setSaving(pending.current > 0);
+      }
+    }
+  };
+  return { enqueue, saving, mounted, pending };
+}
+
+/** Serialize edits; each operation reads the confirmed store when its turn starts. */
+export function useSettingsSave(restore: () => void) {
+  const { t } = useTranslation();
+  const writable = useSettingsWritable();
+  const { enqueue, saving, mounted } = useSettingsSaveQueue({
+    initiallyMounted: true,
+  });
   const save = (operation: () => Promise<void>): Promise<boolean> => {
     if (!writable || !mounted.current) return Promise.resolve(false);
-    count.current += 1;
-    setSaving(true);
-    const result = pending.current.then(async () => {
+    return enqueue(async () => {
       try {
         await operation();
         return true;
@@ -53,16 +84,8 @@ export function useSettingsSave(restore: () => void) {
             error instanceof Error ? error.message : String(error),
           );
         return false;
-      } finally {
-        count.current -= 1;
-        if (mounted.current) {
-          restore();
-          setSaving(count.current > 0);
-        }
       }
-    });
-    pending.current = result.then(() => undefined);
-    return result;
+    }, restore);
   };
   return { save, saving, writable };
 }

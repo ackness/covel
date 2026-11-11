@@ -83,6 +83,11 @@ export interface UpsertVectorInput {
 export interface SearchVectorsInput {
   readonly sessionId: string;
   readonly query: Float32Array;
+  /**
+   * Bind a delayed query to the model used to embed it. A different current
+   * model returns no matches; omitting this queries the current vector space.
+   */
+  readonly expectedModelRegistryId?: number;
   /** Top-k cap. Default: 8. Typical range: 3–30. */
   readonly topK?: number;
   /** Optional narrowing — only match rows with this pluginId. */

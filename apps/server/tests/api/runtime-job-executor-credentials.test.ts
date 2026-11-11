@@ -149,7 +149,11 @@ async function runJob(committed: boolean) {
       ({
         // The runner's commit: follow-ups, then the job's own completion.
         runManualTurn: async (args: RunManualTurnArgs) => {
-          const isolation = { droppedRuntimeIds: new Set<string>() };
+          const isolation = {
+            droppedRuntimeIds: new Set<string>(),
+            droppedRunIds: new Set<string>(),
+            followerSources: [],
+          };
           const queued = await store.withTransaction(async (tx) => {
             const followUps = await args.followUps(tx, turnResult, isolation);
             await args.completeInTx?.(tx, turnResult, isolation, followUps);

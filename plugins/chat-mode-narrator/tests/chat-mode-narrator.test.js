@@ -105,8 +105,6 @@ describe(`${PLUGIN_ID} package`, () => {
       "omniscient",
       "dm",
     ]);
-    expect(placeholders(english)).toContain("userSettings.perspective");
-    expect(placeholders(chinese)).toContain("userSettings.perspective");
     // The stage reads nameplates from segments, not from an ID map.
     for (const file of ["PLUGIN.md", "runtimes/narrate/RUNTIME.zh.md"])
       expect(readFileSync(path.join(PLUGIN_DIR, file), "utf8")).not.toMatch(
@@ -121,11 +119,9 @@ describe(`${PLUGIN_ID} package`, () => {
     ]);
     expect(definition.packageManifest.plugin.requires ?? []).toEqual([]);
     expect(manifest.needs ?? []).toEqual([]);
-    expect(
-      Object.values(manifest.inputs ?? {}).every(
-        (input) => input.required === false,
-      ),
-    ).toBe(true);
+    const inputs = Object.values(manifest.inputs ?? {});
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs.every((input) => input.required === false)).toBe(true);
     expect(english).toContain("When the `change-inventory` tool is offered");
     expect(english).toContain("with the payment first");
     expect(english).toContain(
@@ -149,25 +145,6 @@ describe(`${PLUGIN_ID} package`, () => {
 
   it("fills the same placeholders in the Chinese body as in the English one", () => {
     expect(placeholders(chinese)).toEqual(placeholders(english));
-  });
-
-  it("requires no other package and reads every contract input as optional", () => {
-    expect(definition.packageManifest.plugin.requires ?? []).toEqual([]);
-    const inputs = Object.values(manifest.inputs ?? {});
-    expect(inputs.length).toBeGreaterThan(0);
-    for (const input of inputs) expect(input.required).toBe(false);
-    expect(manifest.needs ?? []).toEqual([]);
-  });
-
-  it("needs no companion plugin that the player may turn off", () => {
-    const companions = [
-      "branch-reply@1",
-      "living-world-rules@1",
-      "character-blueprint@1",
-      "character-presence@1",
-    ];
-    for (const contract of definition.packageManifest.plugin.requires ?? [])
-      expect(companions).not.toContain(contract);
   });
 
   it("guides correctable lookups, staged changes and changed scene cues in both languages", () => {
