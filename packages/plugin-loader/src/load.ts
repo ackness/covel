@@ -2,7 +2,11 @@ import {
   frameworkContractSchemas,
   defaultOutputSchemaContract,
 } from "@covel/shared/contracts";
-import { isDeepStrictEqual } from "node:util";
+import {
+  assertDataContractSchemaPaths,
+  packageContractSchemaPath,
+  resolvePackageContractSchema,
+} from "./package-contracts.js";
 import { datasetKeyIssue, datasetSchemaIssues } from "./dataset-rules.js";
 import {
   actionKindDeclarationIssues,
@@ -56,7 +60,7 @@ import type {
   PluginManifest,
   PluginLanguages,
   PluginMessageCatalog,
-  RuntimeManifest,
+  RuntimeBinding,
 } from "@covel/shared";
 import type {
   DisabledRuntime,
@@ -379,7 +383,10 @@ export async function loadPluginDefinition(
   for (const [contract, declaration] of Object.entries(
     parsedPackage.plugin.contracts ?? {},
   )) {
-    const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
+    const schemaPath = path.resolve(
+      discovery.rootPath,
+      packageContractSchemaPath(rootPath, contract, declaration.schema),
+    );
     await assertInsideRoot(
       discovery.rootPath,
       schemaPath,
@@ -389,34 +396,13 @@ export async function loadPluginDefinition(
       schemaPath,
       `contracts.${contract}.schema`,
     );
-    const canonical = frameworkContractSchemas[contract];
-    const { $id: _id, title: _title, ...body } = declaredSchema;
-    const {
-      $id: _canonicalId,
-      title: _canonicalTitle,
-      ...canonicalBody
-    } = canonical ?? {};
-    if (canonical && !isDeepStrictEqual(body, canonicalBody))
-      throw new Error(
-        `Contract ${contract} is framework-owned and cannot be shadowed`,
-      );
-    contractSchemas[contract] = canonical ?? declaredSchema;
+    contractSchemas[contract] = resolvePackageContractSchema(
+      rootPath,
+      contract,
+      declaredSchema,
+    );
   }
-  for (const [namespace, declaration] of Object.entries(
-    parsedPackage.plugin.contributes?.data ?? {},
-  )) {
-    for (const contract of declaration.accepts ?? []) {
-      const declared = parsedPackage.plugin.contracts?.[contract];
-      if (
-        !declared ||
-        path.resolve(discovery.rootPath, declared.schema) !==
-          path.resolve(discovery.rootPath, declaration.schema)
-      )
-        throw new Error(
-          `${rootPath}: data namespace ${namespace} must use its accepted contract ${contract} schema`,
-        );
-    }
-  }
+  assertDataContractSchemaPaths(parsedPackage, rootPath);
   const datasetSchemas: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const [name, declaration] of Object.entries(
     parsedPackage.plugin.contributes?.datasets ?? {},
@@ -628,28 +614,6 @@ export async function loadPluginEntryDefinition(
 }
 
 /**
- * Resolve the directory for a given runtime name within a discovery result.
- */
-async function resolveRuntimeDir(
-  discovery: PluginDiscoveryResult,
-  runtimeName: string,
-  definition: PluginDefinition,
-): Promise<string> {
-  const records = definition.manifests;
-  const record = records.find(({ manifest }) => manifest.name === runtimeName);
-  if (!record?.sourcePath)
-    throw new Error(
-      `Runtime declaration "${runtimeName}" has no discovered source path`,
-    );
-  await assertInsideRoot(
-    discovery.rootPath,
-    record.sourcePath,
-    "Runtime manifest path traversal rejected",
-  );
-  return path.dirname(record.sourcePath);
-}
-
-/**
  * Load a runtime's output JSON Schema.
  *
  * When `manifest.output.schema` declares a path, that exact file is loaded
@@ -663,54 +627,37 @@ async function loadOutputSchema(
   declaredPath: string | undefined,
   contracts: ContractSchemas,
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
-  if (declaredPath) {
-    if (declaredPath.startsWith("contract:"))
-      return requireContractSchema(declaredPath, contracts);
-    const fullPath = path.resolve(runtimeDir, declaredPath);
-    await assertInsideRoot(
+  const field = "io.output.schema";
+  const containmentError = "Output schema path traversal rejected";
+  if (declaredPath)
+    return loadDeclaredSchema(
+      runtimeDir,
       pluginRoot,
-      fullPath,
-      "Output schema path traversal rejected",
+      declaredPath,
+      field,
+      contracts,
+      containmentError,
     );
-    if (!(await fileExists(fullPath))) {
-      throw new Error(
-        `${fullPath}: io.output.schema: file not found; include the declared JSON Schema`,
-      );
-    }
-    return readSchemaFile(fullPath, "io.output.schema");
-  }
 
   const conventionPath = path.join(runtimeDir, "output.schema.json");
   if (!(await fileExists(conventionPath))) return undefined;
-  await assertInsideRoot(
-    pluginRoot,
-    conventionPath,
-    "Output schema path traversal rejected",
-  );
-  return readSchemaFile(conventionPath, "io.output.schema");
+  await assertInsideRoot(pluginRoot, conventionPath, containmentError);
+  return readSchemaFile(conventionPath, field);
 }
 
-/**
- * Load a declared runtime-dir-relative JSON Schema (no convention fallback).
- * Used for `input.schema` (activation payload) and `inputs.<name>.accepts`
- * (binding value). Same containment and declared-file validation as
- * {@link loadOutputSchema}; a bad reference rejects this runtime.
- */
+/** Load a declared contract or runtime-dir-relative JSON Schema. */
 async function loadDeclaredSchema(
   runtimeDir: string,
   pluginRoot: string,
   declaredPath: string,
   label: string,
   contracts: ContractSchemas,
-): Promise<Readonly<Record<string, unknown>> | undefined> {
+  containmentError = `${label} path traversal rejected`,
+): Promise<Readonly<Record<string, unknown>>> {
   if (declaredPath.startsWith("contract:"))
     return requireContractSchema(declaredPath, contracts);
   const fullPath = path.resolve(runtimeDir, declaredPath);
-  await assertInsideRoot(
-    pluginRoot,
-    fullPath,
-    `${label} path traversal rejected`,
-  );
+  await assertInsideRoot(pluginRoot, fullPath, containmentError);
   if (!(await fileExists(fullPath))) {
     throw new Error(
       `${fullPath}: ${label}: file not found; include the declared JSON Schema`,
@@ -720,84 +667,50 @@ async function loadDeclaredSchema(
 }
 
 /**
- * An optional binding may accept a contract whose publisher is not installed:
- * the plugin that publishes it is optional as well. The runtime still loads,
- * and the binding is reported in `unresolved` so the runtime withholds a value
- * it cannot check. A required binding keeps failing the load.
+ * Resolve the consumer's accepts schema separately from the public contract.
+ * Missing accepts contracts are recorded for optional bindings so the runtime
+ * can withhold values it cannot validate; required bindings fail to load.
  */
-function isUnresolvedOptionalContract(
-  binding: { readonly accepts?: string; readonly required?: boolean },
-  contracts: ContractSchemas,
-): boolean {
-  return (
-    binding.required === false &&
-    binding.accepts?.startsWith("contract:") === true &&
-    !contracts[binding.accepts.slice("contract:".length)]
-  );
-}
-
-/**
- * Load every `inputs.<name>.accepts` schema declared on the manifest, keyed by
- * binding name. Absent / missing files are simply omitted (the runtime Ajv
- * check only runs where a schema resolved).
- */
-async function loadBindingAcceptsSchemas(
+async function loadBindingSchemas(
   runtimeDir: string,
   pluginRoot: string,
-  inputs: RuntimeManifest["inputs"],
+  bindings: readonly (readonly [string, RuntimeBinding])[],
+  label: "binding" | "export",
   contracts: ContractSchemas,
   unresolved: string[],
-): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
-  if (!inputs) return undefined;
-  const out: Record<string, Readonly<Record<string, unknown>>> = {};
-  for (const [name, binding] of Object.entries(inputs)) {
-    if (!binding.accepts) continue;
-    if (isUnresolvedOptionalContract(binding, contracts)) {
+) {
+  const acceptsSchemas: Record<string, Readonly<Record<string, unknown>>> = {};
+  const contractSchemas: [string, Readonly<Record<string, unknown>>][] = [];
+  for (const [name, binding] of bindings) {
+    if ("capability" in binding.from) {
+      const schema = contracts[binding.from.capability];
+      if (schema) contractSchemas.push([name, schema]);
+    }
+    const { accepts } = binding;
+    if (!accepts) continue;
+    if (
+      binding.required === false &&
+      accepts.startsWith("contract:") &&
+      !contracts[accepts.slice("contract:".length)]
+    ) {
       unresolved.push(name);
       continue;
     }
     const schema = await loadDeclaredSchema(
       runtimeDir,
       pluginRoot,
-      binding.accepts,
-      `binding accepts schema (${name})`,
+      accepts,
+      `${label} accepts schema (${name})`,
       contracts,
     );
-    if (schema) out[name] = schema;
+    if (schema) acceptsSchemas[name] = schema;
   }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
-/**
- * Load every `input.inject` runtime-export `accepts` schema, keyed by the
- * binding `name`. Same containment / omit-on-missing rules as the same-execution
- * `inputs.<name>.accepts` loader (docs 02 §3.4.4).
- */
-async function loadExportAcceptsSchemas(
-  runtimeDir: string,
-  pluginRoot: string,
-  inject: NonNullable<RuntimeManifest["input"]>["inject"],
-  contracts: ContractSchemas,
-  unresolved: string[],
-): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
-  if (!inject) return undefined;
-  const out: Record<string, Readonly<Record<string, unknown>>> = {};
-  for (const decl of inject) {
-    if (decl.kind !== "runtime-export" || !decl.accepts) continue;
-    if (isUnresolvedOptionalContract(decl, contracts)) {
-      unresolved.push(decl.name);
-      continue;
-    }
-    const schema = await loadDeclaredSchema(
-      runtimeDir,
-      pluginRoot,
-      decl.accepts,
-      `export accepts schema (${decl.name})`,
-      contracts,
-    );
-    if (schema) out[decl.name] = schema;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
+  return {
+    accepts: Object.keys(acceptsSchemas).length ? acceptsSchemas : undefined,
+    contracts: contractSchemas.length
+      ? Object.fromEntries(contractSchemas)
+      : undefined,
+  };
 }
 
 /**
@@ -817,16 +730,24 @@ export async function loadRuntime(
 ): Promise<LoadedRuntime> {
   const snapshot =
     definition ?? (await loadPluginDefinition(discovery, locale));
-  const runtimeDir = await resolveRuntimeDir(discovery, runtimeName, snapshot);
+  const parsed = snapshot.manifests.find(
+    (record) => record.manifest.name === runtimeName,
+  );
+  if (!parsed?.sourcePath)
+    throw new Error(
+      `Runtime declaration "${runtimeName}" has no discovered source path`,
+    );
+  await assertInsideRoot(
+    discovery.rootPath,
+    parsed.sourcePath,
+    "Runtime manifest path traversal rejected",
+  );
+  const runtimeDir = path.dirname(parsed.sourcePath);
   const contracts = {
     ...resolvedContracts,
     ...snapshot.packageManifest?.contractSchemas,
     ...frameworkContractSchemas,
   };
-  const parsed = snapshot.manifests.find(
-    (record) => record.manifest.name === runtimeName,
-  )!;
-
   // Deterministic loader rejection (01 §4): a recurrently-detached spec that
   // still declares turn bindings can never satisfy them.
   if (hasIllegalDetachedContract(parsed.manifest)) {
@@ -881,39 +802,26 @@ export async function loadRuntime(
     : undefined;
 
   const unresolvedAccepts: string[] = [];
-  const bindingAcceptsSchemas = await loadBindingAcceptsSchemas(
-    runtimeDir,
-    discovery.rootPath,
-    parsed.manifest.inputs,
-    contracts,
-    unresolvedAccepts,
-  );
-
-  const bindingContractSchemas = Object.fromEntries(
-    Object.entries(parsed.manifest.inputs ?? {}).flatMap(([name, binding]) => {
-      const schema =
-        "capability" in binding.from
-          ? contracts[binding.from.capability]
-          : undefined;
-      return schema ? [[name, schema]] : [];
-    }),
-  );
-
-  const exportAcceptsSchemas = await loadExportAcceptsSchemas(
-    runtimeDir,
-    discovery.rootPath,
-    parsed.manifest.input?.inject,
-    contracts,
-    unresolvedAccepts,
-  );
-  const exportContractSchemas = Object.fromEntries(
-    (parsed.manifest.input?.inject ?? []).flatMap((binding) => {
-      if (binding.kind !== "runtime-export" || !("capability" in binding.from))
-        return [];
-      const schema = contracts[binding.from.capability];
-      return schema ? [[binding.name, schema]] : [];
-    }),
-  );
+  const { accepts: bindingAcceptsSchemas, contracts: bindingContractSchemas } =
+    await loadBindingSchemas(
+      runtimeDir,
+      discovery.rootPath,
+      Object.entries(parsed.manifest.inputs ?? {}),
+      "binding",
+      contracts,
+      unresolvedAccepts,
+    );
+  const { accepts: exportAcceptsSchemas, contracts: exportContractSchemas } =
+    await loadBindingSchemas(
+      runtimeDir,
+      discovery.rootPath,
+      (parsed.manifest.input?.inject ?? []).flatMap((binding) =>
+        binding.kind === "runtime-export" ? [[binding.name, binding]] : [],
+      ),
+      "export",
+      contracts,
+      unresolvedAccepts,
+    );
 
   async function loadRuntimeFunction(
     modulePath: string,
@@ -972,14 +880,10 @@ export async function loadRuntime(
     ...(outputContractSchema ? { outputContractSchema } : {}),
     ...(inputSchema ? { inputSchema } : {}),
     ...(bindingAcceptsSchemas ? { bindingAcceptsSchemas } : {}),
-    ...(Object.keys(bindingContractSchemas).length
-      ? { bindingContractSchemas }
-      : {}),
+    ...(bindingContractSchemas ? { bindingContractSchemas } : {}),
     ...(exportAcceptsSchemas ? { exportAcceptsSchemas } : {}),
     ...(unresolvedAccepts.length > 0 ? { unresolvedAccepts } : {}),
-    ...(Object.keys(exportContractSchemas).length
-      ? { exportContractSchemas }
-      : {}),
+    ...(exportContractSchemas ? { exportContractSchemas } : {}),
     // Shared, not copied: the commit's Ajv cache keys on schema identity.
     ...(datasetSchemas && Object.keys(datasetSchemas).length > 0
       ? { datasetSchemas }

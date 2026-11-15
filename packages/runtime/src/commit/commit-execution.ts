@@ -65,7 +65,10 @@ export const refuseReleasedJobs: ReleasedJobsQueue = async () => {
 
 export interface CommitExecutionArgs extends Omit<
   FinalizeExecutionArgs,
-  keyof ExecutionCommitPlan | "loadOutputSchema" | "enqueueReleasedJobsInTx"
+  | keyof ExecutionCommitPlan
+  | "loadOutputSchema"
+  | "enqueueReleasedJobsInTx"
+  | "deferredRuntimeJobs"
 > {
   readonly execution: PreparedExecution;
   /**
@@ -100,11 +103,14 @@ export async function commitExecution(
   args: CommitExecutionArgs,
 ): Promise<CommitExecutionOutcome> {
   const plan = args.execution.commit;
+  const result = args.execution.result;
   // From here on the commit settles the execution, whatever its outcome.
   settlementClaimed.add(args.execution);
   const outcome = await finalizeExecution({
     ...args,
     ...plan,
+    deferredRuntimeJobs:
+      "runtimeResults" in result ? result.deferredRuntimeJobs : undefined,
     // Activation can shrink during detached work, but a later activation must
     // never introduce hooks into an execution that did not capture them.
     activePluginIds: new Set(

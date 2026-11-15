@@ -71,16 +71,13 @@ const world = {
   createdAt: "2026-08-09T00:00:00.000Z",
 } as WorldRecord;
 
-function makeDataService(order: string[]): DataService {
+function makeDataService(order: string[] = []): DataService {
   return {
     createSession: vi.fn(async () => {
       order.push("create");
       return session;
     }),
     getSession: vi.fn(async () => session),
-    syncToServer: vi.fn(async () => {
-      order.push("sync");
-    }),
     updateSession: vi.fn((sessionId, updates) =>
       api.updateSession(sessionId, updates),
     ),
@@ -90,9 +87,11 @@ function makeDataService(order: string[]): DataService {
   } as unknown as DataService;
 }
 
-function makeWorkspace(ds: DataService): SessionWorkspace {
+function makeWorkspace(order: string[] = []): SessionWorkspace {
   return {
-    hydrate: (sessionId) => ds.syncToServer(sessionId),
+    hydrate: vi.fn(async () => {
+      order.push("hydrate");
+    }),
     run: (_sessionId, _actionId, mutate) => mutate(),
     checkpoint: () => Promise.resolve(),
   };
@@ -303,10 +302,10 @@ describe("startGameSession bootstrap order", () => {
   it.each(["Current draft", ""])(
     "persists the selected lore with the session (%j)",
     async (loreOverride) => {
-      const ds = makeDataService([]);
+      const ds = makeDataService();
       await startGameSession({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace: makeWorkspace(),
         dispatch: vi.fn(),
         sessionIdRef: { current: null },
         sessionGenerationRef,
@@ -317,11 +316,11 @@ describe("startGameSession bootstrap order", () => {
     },
   );
   it("uses the world language when creating a session", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
 
     await startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch: vi.fn(),
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -354,7 +353,7 @@ describe("startGameSession bootstrap order", () => {
     const ds = makeDataService(order);
     await startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(order),
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -364,9 +363,9 @@ describe("startGameSession bootstrap order", () => {
 
     expect(order).toEqual([
       "create",
-      "sync",
+      "hydrate",
       "bindings",
-      "sync",
+      "hydrate",
       "dispatch-session",
       "clear-bindings",
     ]);
@@ -375,13 +374,13 @@ describe("startGameSession bootstrap order", () => {
   it("rolls back without publishing and keeps prep bindings when the patch fails", async () => {
     api.updateSession.mockRejectedValue(new Error("patch failed"));
     const dispatch = vi.fn();
-    const ds = makeDataService([]);
+    const ds = makeDataService();
 
     const sessionIdRef = { current: null };
     await expect(
       startGameSession({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace: makeWorkspace(),
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
@@ -401,15 +400,16 @@ describe("startGameSession bootstrap order", () => {
   });
 
   it("preserves prep selections and rolls back if uploading the saved bindings fails", async () => {
-    const ds = makeDataService([]);
-    vi.mocked(ds.syncToServer)
+    const ds = makeDataService();
+    const workspace = makeWorkspace();
+    vi.mocked(workspace.hydrate)
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error("binding sync failed"));
     const dispatch = vi.fn();
     await expect(
       startGameSession({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace,
         dispatch,
         sessionIdRef: { current: null },
         sessionGenerationRef,
@@ -482,15 +482,15 @@ describe("startGameSession bootstrap order", () => {
   });
 
   it("rejects visibly and removes a local session when server sync fails", async () => {
-    const order: string[] = [];
-    const ds = makeDataService(order);
-    vi.mocked(ds.syncToServer).mockRejectedValueOnce(new Error("offline"));
+    const ds = makeDataService();
+    const workspace = makeWorkspace();
+    vi.mocked(workspace.hydrate).mockRejectedValueOnce(new Error("offline"));
     const dispatch = vi.fn();
 
     await expect(
       startGameSession({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace,
         dispatch,
         sessionIdRef: { current: null },
         sessionGenerationRef,
@@ -509,7 +509,7 @@ describe("startGameSession bootstrap order", () => {
 
   it("clears a published session when initial snapshot hydration fails", async () => {
     api.getSessionView.mockRejectedValueOnce(new Error("snapshot failed"));
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     vi.mocked(ds.deleteSession).mockRejectedValueOnce(
       new Error("cleanup failed"),
     );
@@ -519,7 +519,7 @@ describe("startGameSession bootstrap order", () => {
     await expect(
       startGameSession({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace: makeWorkspace(),
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
@@ -545,10 +545,10 @@ describe("startGameSession bootstrap order", () => {
         resolveSnapshot = resolve;
       }),
     );
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const starting = startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch: vi.fn(),
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -572,13 +572,13 @@ describe("startGameSession bootstrap order", () => {
         resolveSnapshot = resolve;
       }),
     );
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const dispatch = vi.fn();
     const sessionIdRef = { current: null as string | null };
 
     const starting = startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef,
       sessionGenerationRef,
@@ -603,12 +603,12 @@ describe("startGameSession bootstrap order", () => {
         rejectSnapshot = reject;
       }),
     );
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const dispatch = vi.fn();
     const sessionIdRef = { current: null as string | null };
     const starting = startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef,
       sessionGenerationRef,
@@ -625,9 +625,10 @@ describe("startGameSession bootstrap order", () => {
   });
 
   it("does not delete a session adopted while its initial workspace hydration is pending", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
+    const workspace = makeWorkspace();
     let rejectHydration!: (error: Error) => void;
-    vi.mocked(ds.syncToServer).mockReturnValueOnce(
+    vi.mocked(workspace.hydrate).mockReturnValueOnce(
       new Promise((_resolve, reject) => {
         rejectHydration = reject;
       }),
@@ -636,13 +637,13 @@ describe("startGameSession bootstrap order", () => {
     const sessionIdRef = { current: null as string | null };
     const starting = startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace,
       dispatch,
       sessionIdRef,
       sessionGenerationRef,
       world,
     });
-    await vi.waitFor(() => expect(ds.syncToServer).toHaveBeenCalled());
+    await vi.waitFor(() => expect(workspace.hydrate).toHaveBeenCalled());
     sessionGenerationRef.current += 1;
     sessionIdRef.current = session.id;
     dispatch.mockClear();
@@ -656,8 +657,9 @@ describe("startGameSession bootstrap order", () => {
   });
 
   it("suppresses a bootstrap error when the player leaves during rollback", async () => {
-    const ds = makeDataService([]);
-    vi.mocked(ds.syncToServer).mockRejectedValueOnce(new Error("offline"));
+    const ds = makeDataService();
+    const workspace = makeWorkspace();
+    vi.mocked(workspace.hydrate).mockRejectedValueOnce(new Error("offline"));
     let resolveDeletion!: () => void;
     vi.mocked(ds.deleteSession).mockReturnValueOnce(
       new Promise((resolve) => {
@@ -667,7 +669,7 @@ describe("startGameSession bootstrap order", () => {
     const dispatch = vi.fn();
     const starting = startGameSession({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace,
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,

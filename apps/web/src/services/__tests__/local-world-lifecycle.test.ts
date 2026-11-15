@@ -3,11 +3,17 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { LocalDataService } from "../data-service/local.js";
+import { createSessionWorkspace } from "../data-service/workspace.js";
 
 const api = await vi.hoisted(async () => {
   const { fakeSessionServer } =
     await import("./support/fake-session-server.js");
-  return { ...fakeSessionServer(), deleteWorld: vi.fn() };
+  return {
+    ...fakeSessionServer({ vault: () => vault }),
+    getSession: vi.fn(async (id: string) => ({ id })),
+    uploadBrowserCheckpoint: vi.fn(async () => ({ ok: true })),
+    deleteWorld: vi.fn(),
+  };
 });
 vi.mock("../api.js", () => api);
 vi.mock("../app-kv-store.js", () => ({
@@ -52,13 +58,26 @@ it("keeps edited worlds through later local checkpoint writes and a fresh servic
     },
     name: "Edited",
   });
-  await service.addMessage({
-    id: "message-a",
-    sessionId: "session-a",
-    role: "user",
-    content: "Hello",
-    createdAt: "2026-01-02",
-  });
+  await createSessionWorkspace(service, "local").run(
+    "session-a",
+    "turn-a",
+    async () => {
+      await expect(vault.getCheckpoint("session-a")).resolves.toMatchObject({
+        revision: 2,
+        world: { name: "Edited" },
+        messages: [expect.objectContaining({ id: "message-a" })],
+      });
+    },
+    {
+      input: {
+        id: "message-a",
+        sessionId: "session-a",
+        role: "user",
+        content: "Hello",
+        createdAt: "2026-01-02",
+      },
+    },
+  );
   await service.updateSession("session-a", { status: "paused" });
   const reloaded = new LocalDataService(vault);
   expect((await reloaded.getWorld("world-a"))?.name).toBe("Edited");

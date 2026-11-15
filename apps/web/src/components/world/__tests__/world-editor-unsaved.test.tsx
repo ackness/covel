@@ -22,6 +22,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { WorldRecord as StoreWorldRecord } from "@covel/store/browser-sync";
 import { BrowserVault } from "@/services/storage/browser-vault.js";
 import { LocalDataService } from "@/services/data-service/local.js";
+import { createSessionWorkspace } from "@/services/data-service/workspace.js";
 import { fakeSessionServer } from "@/services/__tests__/support/fake-session-server.js";
 import { invalidateAllWorldRecords } from "@/services/world-records.js";
 import { WorldEditor, WorldEditorLoader } from "../world-editor.js";
@@ -286,14 +287,15 @@ describe("WorldEditor unsaved changes", () => {
         ).toEqual(dimensions);
         reopened.unmount();
         await service.createSession(world.id, "edited-session", [], "en-US");
-        await service.syncToServer("edited-session");
+        const workspace = createSessionWorkspace(service, "local");
+        await workspace.hydrate("edited-session");
         expect((await mirror.getWorld(world.id))?.dimensions).toEqual(
           dimensions,
         );
         expect((await mirror.getWorld(world.id))?.metadata?.dimensions).toEqual(
           dimensions,
         );
-        await service.commitFromServer("edited-session", "opening");
+        await workspace.checkpoint("edited-session", "opening");
         vault.close();
         vault = new BrowserVault({ dbName });
         expect(

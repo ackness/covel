@@ -1,6 +1,6 @@
 ### Breaking
 
-- **Embedding hosts must carry event invocation provenance through commit.** `CommitIsolation` now includes `droppedRunIds` and ordered `followerSources`; use `committedEventFollowers` when queuing followers. The topic-based `droppedEmitter` export is removed. See [host commit boundaries](../en/reference/protocol.md).
+- **Embedding hosts queue follow-up work from the commit callback.** Use `CommitIsolation.deferredFollowers` and `deferredRuntimeJobs` in `extraInTx`; the kernel matches the real producer and removes work that did not commit. The old host-side filtering helpers are no longer exported. No saved data needs to be recreated. See [host commit boundaries](../en/reference/protocol.md).
 - **Custom vector adapters must honor query model guards atomically.** `SearchVectorsInput.expectedModelRegistryId`, when provided, must be checked in the same read snapshot as the vector query. See [storage](../en/internals/storage.md).
 - **Unused runtime completion exports are removed from `@covel/tools`.** Consumers must drop imports of `runtimeDoneTool`, `isRuntimeDoneSentinel` and `RuntimeDoneSentinel`; the unused `runtime-done` tool is no longer exported.
 

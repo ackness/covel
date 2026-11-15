@@ -127,11 +127,7 @@ describe("SSE subscription retry policy", () => {
     expect(sub.state).toBe("closed");
     expect(states).toEqual(["closed"]);
   });
-  it("keeps retrying an early 404 — local mode connects before syncToServer", async () => {
-    // `startGameSession` dispatches SET_SESSION (which mounts the subscription)
-    // several round-trips before `syncToServer` creates the session on the
-    // server, so the opening attempts legitimately 404. Giving up on the first
-    // one left the whole session with no plugin-data or suspension events.
+  it("keeps retrying an early 404 while the local session mirror is unavailable", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       status: 404,
       ok: false,

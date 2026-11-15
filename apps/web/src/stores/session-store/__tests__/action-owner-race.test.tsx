@@ -59,7 +59,7 @@ function renderActions(
   workspace: SessionWorkspace,
   recovery = initialState.executionRecovery,
 ) {
-  const ds = { addMessage: vi.fn(async () => {}) } as unknown as DataService;
+  const ds = {} as DataService;
   return renderHook(() => {
     const [state, dispatch] = useReducer(reducer, {
       ...initialState,

@@ -230,8 +230,8 @@ export async function commitExecutedTurn(
         ...(model ? { modelOverride: model } : {}),
         ...(userSettings ? { userSettings } : {}),
         credentials: host.credentials,
-        isolation,
-        turnResult: result,
+        ...isolation,
+        turnId: result.turnId,
       });
       await saveInterjections(tx, control.closeInterjections());
     },

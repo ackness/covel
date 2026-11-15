@@ -55,18 +55,9 @@ import { Hono } from "hono";
 import { trackRequestWork } from "../../application-work.js";
 import { z } from "zod";
 import { validateResumeData } from "../../lib/resume-schema.js";
-import type {
-  DataStore,
-  StoreTransaction,
-  SuspensionRecord,
-} from "@covel/store";
+import type { DataStore, SuspensionRecord } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
-import type {
-  CommitIsolation,
-  LLMAdapter,
-  ToolExecutor,
-  HookPipeline,
-} from "@covel/runtime";
+import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
   refuseReleasedJobs,
   resumeSuspendedRuntime,
@@ -422,48 +413,36 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         // The resume that completes a suspended turn queues the detached
         // jobs that turn held back, inside the same commit.
         const releasedJobs = execution.commit.releasedRuntimeJobs ?? [];
-        const followers = execution.commit.deferredFollowers ?? [];
         const queuedRuntimeJobs: QueuedRuntimeJob[] = [];
+        const enqueueContext = {
+          sessionId,
+          activeRuntimes,
+          locale: liveSession.locale ?? DEFAULT_LOCALE,
+          ...(userSettings ? { userSettings } : {}),
+        };
         const outcome = await commitExecution({
-          ...(releasedJobs.length > 0 || followers.length > 0
-            ? {
-                extraInTx: async (
-                  tx: StoreTransaction,
-                  isolation: CommitIsolation,
-                ) => {
-                  if (releasedJobs.length > 0)
-                    queuedRuntimeJobs.push(
-                      ...(await queueReleasedRuntimeJobs(
-                        tx,
-                        {
-                          sessionId,
-                          session: liveSession,
-                          activeRuntimes,
-                          locale: liveSession.locale ?? DEFAULT_LOCALE,
-                          ...(userSettings ? { userSettings } : {}),
-                          credentials: requestCredentialHandoff(c),
-                        },
-                        releasedJobs,
-                      )),
-                    );
-                  if (followers.length > 0) {
-                    const queued = await queueCommitFollowUps(tx, {
-                      sessionId,
-                      activeRuntimes,
-                      locale: liveSession.locale ?? DEFAULT_LOCALE,
-                      ...(userSettings ? { userSettings } : {}),
-                      isolation,
-                      turnResult: {
-                        turnId: suspension.turnId,
-                        runtimeResults: execution.commit.results,
-                        deferredFollowers: followers,
-                      },
-                    });
-                    queuedRuntimeJobs.push(...queued.followerJobs);
-                  }
-                },
-              }
-            : {}),
+          extraInTx: async (tx, { deferredFollowers }) => {
+            if (releasedJobs.length > 0)
+              queuedRuntimeJobs.push(
+                ...(await queueReleasedRuntimeJobs(
+                  tx,
+                  {
+                    ...enqueueContext,
+                    session: liveSession,
+                    credentials: requestCredentialHandoff(c),
+                  },
+                  releasedJobs,
+                )),
+              );
+            if (deferredFollowers.length > 0) {
+              const queued = await queueCommitFollowUps(tx, {
+                ...enqueueContext,
+                turnId: suspension.turnId,
+                deferredFollowers,
+              });
+              queuedRuntimeJobs.push(...queued.followerJobs);
+            }
+          },
           // A resume saves no suspension that ends another turn: under the
           // session lock the only new one is the resumed runtime's own (it
           // cannot start a nested run that suspends), its claimed record is

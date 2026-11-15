@@ -240,7 +240,7 @@ export class LocalDataService implements DataService {
           if (message.sessionId !== sessionId)
             throw new Error("Workspace input session mismatch");
           await this.recoverPendingCommitNow(sessionId);
-          await this.addMessageNow(message);
+          await this.persistInputNow(message);
         },
         hydrate: () => this.syncToServerNow(sessionId),
         stage: (actionId) => this.stageServerCommitNow(sessionId, actionId),
@@ -526,8 +526,8 @@ export class LocalDataService implements DataService {
     const vault = await this.ready();
     await Promise.all([
       vault.deleteSession(sessionId),
-      // A local session may already have an authoritative server mirror from
-      // syncToServer. Its cleanup is best-effort so offline users can still
+      // A local session may already have a transient server mirror from
+      // workspace hydration. Its cleanup is best-effort so offline users can still
       // delete their browser data, but always attempt it to avoid orphaned
       // sessions when startup rolls back after a partial or completed sync.
       api.deleteSession(sessionId, { silentErrors: true }).catch((error) => {
@@ -595,14 +595,7 @@ export class LocalDataService implements DataService {
     return { items, nextCursor };
   }
 
-  async addMessage(msg: MessageRecord): Promise<void> {
-    return this.withSessionWorkspaceLock(msg.sessionId, async () => {
-      await this.recoverPendingCommitNow(msg.sessionId);
-      await this.addMessageNow(msg);
-    });
-  }
-
-  private async addMessageNow(msg: MessageRecord): Promise<void> {
+  private async persistInputNow(msg: MessageRecord): Promise<void> {
     const record: StoreMessageRecord = {
       id: msg.id,
       sessionId: msg.sessionId,
@@ -659,12 +652,6 @@ export class LocalDataService implements DataService {
 
   // Sync to server
 
-  async stageServerCommit(sessionId: string, actionId: string): Promise<void> {
-    return this.withSessionWorkspaceLock(sessionId, () =>
-      this.stageServerCommitNow(sessionId, actionId),
-    );
-  }
-
   private async stageServerCommitNow(
     sessionId: string,
     actionId: string,
@@ -674,12 +661,6 @@ export class LocalDataService implements DataService {
     if (!(await vault.getSession(sessionId)))
       throw new Error(`Session not found: ${sessionId}`);
     await vault.stagePendingCommit(sessionId, actionId);
-  }
-
-  async syncToServer(sessionId: string): Promise<void> {
-    return this.withSessionWorkspaceLock(sessionId, () =>
-      this.syncToServerNow(sessionId),
-    );
   }
 
   private async recoverPendingCommitNow(
@@ -769,12 +750,6 @@ export class LocalDataService implements DataService {
       await vault.stagePendingCommit(sessionId, actionId);
       await this.commitFromServerNow(sessionId, actionId);
     }
-  }
-
-  async commitFromServer(sessionId: string, actionId: string): Promise<void> {
-    return this.withSessionWorkspaceLock(sessionId, () =>
-      this.commitFromServerNow(sessionId, actionId),
-    );
   }
 
   private async commitFromServerNow(

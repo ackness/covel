@@ -138,12 +138,16 @@ describe("loadRuntime output schema resolution", () => {
     );
   });
 
-  it("rejects a missing declared schema with its path and field", async () => {
+  it("rejects a missing declared schema without falling back to the convention", async () => {
     const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(
       path.join(pluginDir, "PLUGIN.md"),
       makeFrontmatter({ output: { schema: "./schemas/out.schema.json" } }),
+    );
+    await fs.writeFile(
+      path.join(pluginDir, "output.schema.json"),
+      JSON.stringify(SCHEMA),
     );
 
     const [discovery] = await discoverPlugins(tmpDir);
@@ -153,53 +157,71 @@ describe("loadRuntime output schema resolution", () => {
   });
 });
 
-describe("loadRuntime binding accepts contracts", () => {
-  async function load(
-    required: boolean,
-    contracts: Record<string, Record<string, unknown>> = {},
-  ) {
-    const pluginDir = path.join(tmpDir, "test-plugin");
-    await fs.mkdir(pluginDir, { recursive: true });
-    await fs.writeFile(
-      path.join(pluginDir, "PLUGIN.md"),
-      makeFrontmatter({
-        inputs: {
-          facts: {
-            from: { contract: "facts-provider@1" },
-            accepts: "contract:facts@1",
-            required,
+describe.each([
+  {
+    scope: "turn",
+    acceptsField: "bindingAcceptsSchemas",
+    contractField: "bindingContractSchemas",
+  },
+  {
+    scope: "committed",
+    acceptsField: "exportAcceptsSchemas",
+    contractField: "exportContractSchemas",
+  },
+] as const)(
+  "loadRuntime $scope binding schemas",
+  ({ scope, acceptsField, contractField }) => {
+    async function load(
+      required: boolean,
+      contracts: Record<string, Record<string, unknown>> = {},
+    ) {
+      const pluginDir = path.join(tmpDir, "test-plugin");
+      await fs.mkdir(pluginDir, { recursive: true });
+      await fs.writeFile(
+        path.join(pluginDir, "PLUGIN.md"),
+        makeFrontmatter({
+          inputs: {
+            facts: {
+              from: { contract: "facts-provider@1" },
+              accepts: "contract:facts@1",
+              required,
+              scope,
+              ...(scope === "committed" ? { recordAs: "latest-facts" } : {}),
+            },
           },
-        },
-      }).replace(
-        "kind: plugin",
-        `kind: plugin\n${required ? "requires" : "optional"}: ["facts-provider@1"]`,
-      ),
-    );
-    const [discovery] = await discoverPlugins(tmpDir);
-    return loadRuntime(
-      discovery!,
-      "test-plugin",
-      undefined,
-      undefined,
-      contracts,
-    );
-  }
+        }),
+      );
+      const [discovery] = await discoverPlugins(tmpDir);
+      return loadRuntime(
+        discovery!,
+        "test-plugin",
+        undefined,
+        undefined,
+        contracts,
+      );
+    }
 
-  it("loads a runtime whose optional binding accepts a contract that is not installed", async () => {
-    const loaded = await load(false);
-    expect(loaded.bindingAcceptsSchemas).toBeUndefined();
-    expect(loaded.unresolvedAccepts).toEqual(["facts"]);
-  });
+    it("loads a runtime whose optional binding accepts a contract that is not installed", async () => {
+      const loaded = await load(false);
+      expect(loaded[acceptsField]).toBeUndefined();
+      expect(loaded.unresolvedAccepts).toEqual(["facts"]);
+    });
 
-  it("checks the optional binding once the contract is installed", async () => {
-    const loaded = await load(false, { "facts@1": SCHEMA });
-    expect(loaded.bindingAcceptsSchemas).toEqual({ facts: SCHEMA });
-    expect(loaded.unresolvedAccepts).toBeUndefined();
-  });
+    it("loads the optional binding's accepts and public schemas separately", async () => {
+      const publicSchema = { type: "object" };
+      const loaded = await load(false, {
+        "facts@1": SCHEMA,
+        "facts-provider@1": publicSchema,
+      });
+      expect(loaded[acceptsField]).toEqual({ facts: SCHEMA });
+      expect(loaded[contractField]).toEqual({ facts: publicSchema });
+      expect(loaded.unresolvedAccepts).toBeUndefined();
+    });
 
-  it("still refuses a required binding whose accepts contract is not installed", async () => {
-    await expect(load(true)).rejects.toThrow(
-      "Unresolved schema contract: contract:facts@1",
-    );
-  });
-});
+    it("still refuses a required binding whose accepts contract is not installed", async () => {
+      await expect(load(true)).rejects.toThrow(
+        "Unresolved schema contract: contract:facts@1",
+      );
+    });
+  },
+);

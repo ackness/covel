@@ -11,6 +11,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type {
+  DeferredRuntimeJob,
   HandlerResult,
   JsonValue,
   Proposal,
@@ -113,11 +114,15 @@ async function run(
       handler: handlers[runtime.name],
     }),
   });
+  let deferredJobs: readonly DeferredRuntimeJob[] = [];
   const outcome = await commitExecution({
     enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
     execution,
     completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+    extraInTx: async (_tx, { deferredRuntimeJobs }) => {
+      deferredJobs = deferredRuntimeJobs ?? [];
+    },
     ...(options.proposalGuard ? { proposalGuard: options.proposalGuard } : {}),
   });
   const notes = Object.fromEntries(
@@ -126,7 +131,7 @@ async function run(
       row.value,
     ]),
   );
-  return { store, execution, outcome, notes };
+  return { store, execution, outcome, notes, deferredJobs };
 }
 
 const ids = (results: readonly { readonly runtimeId: string }[]) =>
@@ -757,78 +762,87 @@ describe("recursiveCall results at commit", () => {
     expect(notes).toEqual({});
   });
 
-  it("settles the jobs a surviving continuation holds back against a dropped unit", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const story = manifest("story", {
-      outputKind: "story",
-      trigger: { type: "auto" },
-    });
-    const facts = manifest("facts", {
-      stage: "pre-turn",
-      trigger: { type: "auto" },
-    });
-    const asker = manifest("asker", {
-      stage: "post-turn",
-      trigger: { type: "auto" },
-    });
-    const detached = (id: string, extra: Partial<RuntimeManifest>) =>
-      manifest(id, {
+  it.each([false, true])(
+    "settles detached jobs against a dropped unit (suspended=%s)",
+    async (suspended) => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const story = manifest("story", {
+        outputKind: "story",
+        trigger: { type: "auto" },
+      });
+      const facts = manifest("facts", {
+        stage: "pre-turn",
+        trigger: { type: "auto" },
+      });
+      const asker = manifest("asker", {
         stage: "post-turn",
         trigger: { type: "auto" },
-        turnCompletion: { mode: "detached" },
-        effects: { writes: ["plugin-data:self:notes"] },
-        ...extra,
+      });
+      const detached = (id: string, extra: Partial<RuntimeManifest>) =>
+        manifest(id, {
+          stage: "post-turn",
+          trigger: { type: "auto" },
+          turnCompletion: { mode: "detached" },
+          effects: { writes: ["plugin-data:self:notes"] },
+          ...extra,
+        } as Partial<RuntimeManifest>);
+      const needsFacts = detached("needs-facts", { needs: [facts.name] });
+      const readsFacts = detached("reads-facts", {
+        inputs: { facts: { from: { runtime: facts.name }, required: false } },
       } as Partial<RuntimeManifest>);
-    const needsFacts = detached("needs-facts", { needs: [facts.name] });
-    const readsFacts = detached("reads-facts", {
-      inputs: { facts: { from: { runtime: facts.name }, required: false } },
-    } as Partial<RuntimeManifest>);
-    const { store, execution, outcome } = await run(
-      [story, facts, asker, needsFacts, readsFacts],
-      {
-        [story.name]: async () => ok({ narrativeOutput: "The story goes on." }),
-        [facts.name]: async (ctx) => {
-          await note(ctx, "facts");
-          return ok({ fact: "the gate is open" });
+      const { store, execution, outcome, deferredJobs } = await run(
+        [story, facts, ...(suspended ? [asker] : []), needsFacts, readsFacts],
+        {
+          [story.name]: async () =>
+            ok({ narrativeOutput: "The story goes on." }),
+          [facts.name]: async (ctx) => {
+            await note(ctx, "facts");
+            return ok({ fact: "the gate is open" });
+          },
+          [asker.name]: async () => ({
+            outcome: "suspended",
+            reason: "Need an answer",
+            resumeSchema: { type: "object" },
+          }),
+          [needsFacts.name]: async () => ok(),
+          [readsFacts.name]: async () => ok(),
         },
-        [asker.name]: async () => ({
-          outcome: "suspended",
-          reason: "Need an answer",
-          resumeSchema: { type: "object" },
-        }),
-        [needsFacts.name]: async () => ok(),
-        [readsFacts.name]: async () => ok(),
-      },
-      {
-        proposalGuard: (proposal) =>
-          (proposal.payload as { key?: unknown }).key === "facts"
-            ? "facts rejected"
-            : undefined,
-      },
-    );
+        {
+          proposalGuard: (proposal) =>
+            (proposal.payload as { key?: unknown }).key === "facts"
+              ? "facts rejected"
+              : undefined,
+        },
+      );
 
-    expect(
-      execution.result.withheldRuntimeJobs?.map((job) => job.runtimeId),
-    ).toEqual([needsFacts.name, readsFacts.name]);
-    expect(outcome.status).toBe("committed");
-    expect(outcome.isolatedRuntimes?.map((item) => item.runtimeId)).toEqual([
-      facts.name,
-    ]);
-    const [saved] = await store.listSuspensions(SESSION);
-    const jobs = saved!.pendingContinuation.withheldRuntimeJobs as
-      | readonly {
-          readonly runtimeId: string;
-          readonly upstreamResults: readonly RuntimeResult[];
-        }[]
-      | undefined;
-    // The job that needs the dropped runtime is gone; the one that reads it
-    // optionally stays and sees it as failed.
-    expect(jobs?.map((job) => job.runtimeId)).toEqual([readsFacts.name]);
-    expect(
-      jobs?.[0]?.upstreamResults.find((item) => item.runtimeId === facts.name)
-        ?.status,
-    ).toBe("failed");
-  });
+      expect(
+        (suspended
+          ? execution.result.withheldRuntimeJobs
+          : execution.result.deferredRuntimeJobs
+        )?.map((job) => job.runtimeId),
+      ).toEqual([needsFacts.name, readsFacts.name]);
+      expect(outcome.status).toBe("committed");
+      expect(outcome.isolatedRuntimes?.map((item) => item.runtimeId)).toEqual([
+        facts.name,
+      ]);
+      const [saved] = await store.listSuspensions(SESSION);
+      const jobs = suspended
+        ? (saved?.pendingContinuation.withheldRuntimeJobs as
+            readonly DeferredRuntimeJob[] | undefined)
+        : deferredJobs;
+      // The job that needs the dropped runtime is gone; the one that reads it
+      // optionally stays and sees it as failed.
+      expect(jobs?.map((job) => job.runtimeId)).toEqual([readsFacts.name]);
+      expect(
+        jobs?.[0]?.upstreamResults.find((item) => item.runtimeId === facts.name)
+          ?.status,
+      ).toBe("failed");
+      expect(jobs?.[0]?.turnDigest.runtimeResults).toContainEqual({
+        runtimeId: facts.name,
+        status: "failed",
+      });
+    },
+  );
 
   describe("a nested continuation in a dropped unit", () => {
     const story = manifest("story", {

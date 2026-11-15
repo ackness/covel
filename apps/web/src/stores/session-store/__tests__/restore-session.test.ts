@@ -59,20 +59,19 @@ function emptySnapshot() {
   };
 }
 
-function makeDataService(order: string[]): DataService {
+function makeDataService(): DataService {
   return {
-    syncToServer: vi.fn(async () => {
-      order.push("sync");
-    }),
     listMessages: vi.fn(async () => []),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
     loadExecutionSteps: vi.fn(async () => []),
   } as unknown as DataService;
 }
 
-function makeWorkspace(ds: DataService): SessionWorkspace {
+function makeWorkspace(order: string[] = []): SessionWorkspace {
   return {
-    hydrate: (sessionId) => ds.syncToServer(sessionId),
+    hydrate: vi.fn(async () => {
+      order.push("hydrate");
+    }),
     run: (_sessionId, _actionId, mutate) => mutate(),
     checkpoint: () => Promise.resolve(),
   };
@@ -91,7 +90,7 @@ beforeEach(() => {
 
 describe("restoreSessionState workspace ordering", () => {
   it("retains cached durable control identity and sequence through restore", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const step = {
       runtimeId: "worker",
       pluginId: "worker",
@@ -106,7 +105,7 @@ describe("restoreSessionState workspace ordering", () => {
     const dispatch = vi.fn();
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -119,7 +118,7 @@ describe("restoreSessionState workspace ordering", () => {
     });
   });
   it("retains persisted retry source, actual attempt, and commit evidence", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const step = {
       runtimeId: "tracker",
       pluginId: "tracker",
@@ -135,7 +134,7 @@ describe("restoreSessionState workspace ordering", () => {
     const dispatch = vi.fn();
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -148,7 +147,7 @@ describe("restoreSessionState workspace ordering", () => {
     });
   });
   it("retains reasoning and diagnostic fields when their server trace window has expired", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const step = {
       runtimeId: "tracker",
       pluginId: "tracker",
@@ -170,7 +169,7 @@ describe("restoreSessionState workspace ordering", () => {
     const dispatch = vi.fn();
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -183,7 +182,7 @@ describe("restoreSessionState workspace ordering", () => {
     });
   });
   it("restores authoritative terminal steps and the updated session clock", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     vi.mocked(ds.loadExecutionSteps).mockResolvedValue([
       { runtimeId: "story", pluginId: "story", turnId: "t", status: "running" },
     ]);
@@ -208,7 +207,7 @@ describe("restoreSessionState workspace ordering", () => {
     const dispatch = vi.fn();
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -235,7 +234,7 @@ describe("restoreSessionState workspace ordering", () => {
   });
   it("hydrates the server workspace before publishing the session", async () => {
     const order: string[] = [];
-    const ds = makeDataService(order);
+    const ds = makeDataService();
     const dispatch = vi.fn((action: { type: string }) => {
       if (action.type === "SET_SESSION") order.push("publish");
     });
@@ -255,7 +254,7 @@ describe("restoreSessionState workspace ordering", () => {
 
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(order),
       dispatch,
       sessionIdRef,
       sessionGenerationRef,
@@ -264,7 +263,7 @@ describe("restoreSessionState workspace ordering", () => {
     });
 
     expect(order).toEqual([
-      "sync",
+      "hydrate",
       "publish",
       "snapshot",
       "plugins",
@@ -275,15 +274,16 @@ describe("restoreSessionState workspace ordering", () => {
   });
 
   it("does not expose an executable session when workspace sync fails", async () => {
-    const ds = makeDataService([]);
-    vi.mocked(ds.syncToServer).mockRejectedValueOnce(new Error("offline"));
+    const ds = makeDataService();
+    const workspace = makeWorkspace();
+    vi.mocked(workspace.hydrate).mockRejectedValueOnce(new Error("offline"));
     const dispatch = vi.fn();
     const sessionIdRef = { current: null as string | null };
 
     await expect(
       restoreSessionState({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace,
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
@@ -307,7 +307,7 @@ describe("restoreSessionState workspace ordering", () => {
 
 describe("restoreSessionState submitted interactions", () => {
   it("marks a form the server holds an answer for, and the server's values replace the browser's", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     vi.mocked(ds.loadSubmittedBlocks).mockResolvedValue({
       ids: ["m-form"],
       values: { "m-form": { name: "Stale local" } },
@@ -343,7 +343,7 @@ describe("restoreSessionState submitted interactions", () => {
     const dispatch = vi.fn();
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef: { current: null },
       sessionGenerationRef,
@@ -368,7 +368,7 @@ describe("restoreSessionState stale requests", () => {
   it.each(["snapshot", "fallback", "blocks", "steps"] as const)(
     "drops %s data after another session is selected",
     async (stage) => {
-      const ds = makeDataService([]);
+      const ds = makeDataService();
       let release!: () => void;
       const pending = new Promise<void>((resolve) => {
         release = resolve;
@@ -405,7 +405,7 @@ describe("restoreSessionState stale requests", () => {
       const sessionIdRef = { current: null as string | null };
       const restoring = restoreSessionState({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace: makeWorkspace(),
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
@@ -438,12 +438,12 @@ describe("restoreSessionState stale requests", () => {
       await pending;
       return emptySnapshot();
     });
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     const dispatch = vi.fn();
     const sessionIdRef = { current: null as string | null };
     const options = {
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch,
       sessionIdRef,
       sessionGenerationRef,
@@ -460,9 +460,10 @@ describe("restoreSessionState stale requests", () => {
   });
 
   it("publishes a restored session after React commits the reset during hydration", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
+    const workspace = makeWorkspace();
     let release!: () => void;
-    vi.mocked(ds.syncToServer).mockReturnValueOnce(
+    vi.mocked(workspace.hydrate).mockReturnValueOnce(
       new Promise((resolve) => {
         release = resolve;
       }),
@@ -479,7 +480,7 @@ describe("restoreSessionState stale requests", () => {
     act(() => {
       restoring = restoreSessionState({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace,
         dispatch: result.current.dispatch,
         sessionIdRef: result.current.refs.sessionIdRef,
         sessionGenerationRef: result.current.refs.sessionGenerationRef,
@@ -534,7 +535,7 @@ describe("restoreSessionState runtime run identities", () => {
   it.each([undefined, "", 42])(
     "keeps cached runs separate and adopts an anonymous row with raw run id %j",
     async (runId) => {
-      const ds = makeDataService([]);
+      const ds = makeDataService();
       const reasoning = [
         {
           id: "nested-reasoning",
@@ -585,7 +586,7 @@ describe("restoreSessionState runtime run identities", () => {
       let state = initialState;
       await restoreSessionState({
         ds,
-        workspace: makeWorkspace(ds),
+        workspace: makeWorkspace(),
         dispatch: (action) => {
           state = reducer(state, action);
         },
@@ -612,7 +613,7 @@ describe("restoreSessionState runtime run identities", () => {
   );
 
   it("keeps resume completion visible when restoring only cached lifecycle rows", async () => {
-    const ds = makeDataService([]);
+    const ds = makeDataService();
     vi.mocked(ds.loadExecutionSteps).mockResolvedValue([
       {
         turnId: "turn",
@@ -636,7 +637,7 @@ describe("restoreSessionState runtime run identities", () => {
     let state = initialState;
     await restoreSessionState({
       ds,
-      workspace: makeWorkspace(ds),
+      workspace: makeWorkspace(),
       dispatch: (action) => {
         state = reducer(state, action);
       },

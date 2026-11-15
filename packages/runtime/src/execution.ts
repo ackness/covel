@@ -113,8 +113,6 @@ export interface ExecutionCommitPlan extends Pick<
    * completes it. The host queues them inside the same commit.
    */
   readonly releasedRuntimeJobs?: readonly DeferredRuntimeJob[];
-  /** Restored nested event followers, queued by the host with a successful resume. */
-  readonly deferredFollowers?: TurnResult["deferredFollowers"];
 }
 
 /** Only `result` is a transport payload. The commit plan stays with the host. */
@@ -648,9 +646,6 @@ export async function resumeSuspendedRuntime(
       ...structuredClone({
         readBaselines: collectReadBaselines(results),
         eventDependencies: collectExecutionEventDependencies(carrier),
-        ...(carrier.deferredFollowers.length > 0
-          ? { deferredFollowers: carrier.deferredFollowers }
-          : {}),
         sessionId: suspension.sessionId,
         executionContext: {
           ...inherited,

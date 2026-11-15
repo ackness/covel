@@ -48,8 +48,10 @@ export function attachEventProducer<T extends object>(
 export interface ExecutionEventDependencies {
   /** Synchronous consumer run -> actual producer run. */
   readonly runs: Readonly<Record<string, string>>;
-  /** Producer run IDs in the same order as the execution's deferred followers. */
-  readonly followers: readonly string[];
+  readonly followers: readonly {
+    readonly descriptor: DeferredFollower;
+    readonly producerRunId: string;
+  }[];
 }
 
 /** Symbols do not survive the commit plan's structuredClone. */
@@ -67,36 +69,23 @@ export function collectExecutionEventDependencies(
     const source = (result as EventCarrier)[EVENT_PRODUCER];
     if (source !== undefined) runs[result.runId] = source;
   }
-  const followers: string[] = [];
-  for (const follower of turn.deferredFollowers ?? []) {
-    const source = (follower as EventCarrier)[EVENT_PRODUCER];
-    if (source === undefined)
+  const followers = (turn.deferredFollowers ?? []).map((descriptor) => {
+    const producerRunId = (descriptor as EventCarrier)[EVENT_PRODUCER];
+    if (producerRunId === undefined)
       throw new Error(
-        `Missing event producer for follower ${follower.runtimeId}`,
+        `Missing event producer for follower ${descriptor.runtimeId}`,
       );
-    followers.push(source);
-  }
+    return { descriptor, producerRunId };
+  });
   return { runs, followers };
 }
 
 /** Queue or run only followers whose selected payload's producer committed. */
-export function committedEventFollowers<
-  T extends { readonly runtimeId: string },
->(
-  followers: readonly T[],
-  sources: readonly string[],
+export function committedEventFollowers(
+  followers: ExecutionEventDependencies["followers"],
   droppedRunIds: ReadonlySet<string>,
-): T[] {
-  if (followers.length !== sources.length)
-    throw new Error(
-      "Event followers and producer run IDs must have equal lengths",
-    );
-  return followers.filter((follower, index) => {
-    const source = sources[index];
-    if (source === undefined)
-      throw new Error(
-        `Missing event producer for follower ${follower.runtimeId}`,
-      );
-    return !droppedRunIds.has(source);
-  });
+): DeferredFollower[] {
+  return followers.flatMap(({ descriptor, producerRunId }) =>
+    droppedRunIds.has(producerRunId) ? [] : [descriptor],
+  );
 }

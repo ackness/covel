@@ -4,59 +4,58 @@ import {
   SessionWorkspaceSyncError,
 } from "../workspace.js";
 import type { DataService, SessionWorkspaceOperations } from "../types.js";
+import type { MessageRecord } from "../../api.js";
 
-function makeService(order: string[]): DataService {
+const input: MessageRecord = {
+  id: "input",
+  sessionId: "sess-1",
+  role: "user",
+  content: "Continue",
+  createdAt: "2026-01-01T00:00:00Z",
+};
+
+function makeWorkspace(order: string[], mode: "local" | "remote" = "local") {
   const scope = crypto.randomUUID();
+  const operations = {
+    persistInput: vi.fn<SessionWorkspaceOperations["persistInput"]>(
+      async () => {
+        order.push("input");
+      },
+    ),
+    hydrate: vi.fn(async () => {
+      order.push("hydrate");
+    }),
+    stage: vi.fn(async (actionId: string) => {
+      order.push(`stage:${actionId}`);
+    }),
+    commit: vi.fn(async (actionId: string) => {
+      order.push(`checkpoint:${actionId}`);
+    }),
+  } satisfies SessionWorkspaceOperations;
   const service = {
     withSessionWorkspace<T>(
       sessionId: string,
       operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
     ) {
       return navigator.locks.request(`${scope}:${sessionId}`, () =>
-        operation({
-          persistInput: (message) => service.addMessage(message),
-          hydrate: () => service.syncToServer(sessionId),
-          stage: (actionId) => service.stageServerCommit(sessionId, actionId),
-          commit: (actionId) => service.commitFromServer(sessionId, actionId),
-        }),
+        operation(operations),
       );
     },
-    syncToServer: vi.fn(async () => {
-      order.push("hydrate");
-    }),
-    stageServerCommit: vi.fn(async (_sessionId, actionId) => {
-      order.push(`stage:${actionId}`);
-    }),
-    commitFromServer: vi.fn(async (_sessionId, actionId) => {
-      order.push(`checkpoint:${actionId}`);
-    }),
   } as unknown as DataService;
-  return service;
+  return { workspace: createSessionWorkspace(service, mode), operations };
 }
 
 describe("SessionWorkspace", () => {
   it("persists input inside ownership before uploading or executing", async () => {
     const order: string[] = [];
-    const service = makeService(order);
-    service.addMessage = vi.fn(async () => {
-      order.push("input");
-    });
-    const workspace = createSessionWorkspace(service, "local");
+    const { workspace } = makeWorkspace(order);
     await workspace.run(
       "sess-1",
       "action",
       async () => {
         order.push("mutate");
       },
-      {
-        input: {
-          id: "input",
-          sessionId: "sess-1",
-          role: "user",
-          content: "Continue",
-          createdAt: "2026-01-01T00:00:00Z",
-        },
-      },
+      { input },
     );
     expect(order).toEqual([
       "input",
@@ -69,9 +68,7 @@ describe("SessionWorkspace", () => {
 
   it("does not persist input or execute a superseded queued action", async () => {
     const order: string[] = [];
-    const service = makeService(order);
-    service.addMessage = vi.fn();
-    const workspace = createSessionWorkspace(service, "local");
+    const { workspace, operations } = makeWorkspace(order);
     let start!: () => void;
     let release!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -94,13 +91,7 @@ describe("SessionWorkspace", () => {
       },
       {
         isCurrent: () => current,
-        input: {
-          id: "input",
-          sessionId: "sess-1",
-          role: "user",
-          content: "Continue",
-          createdAt: "2026-01-01T00:00:00Z",
-        },
+        input,
       },
     );
     const rejected = expect(queued).rejects.toThrow("superseded");
@@ -108,7 +99,7 @@ describe("SessionWorkspace", () => {
     release();
     await first;
     await rejected;
-    expect(service.addMessage).not.toHaveBeenCalled();
+    expect(operations.persistInput).not.toHaveBeenCalled();
     expect(order).toEqual([
       "hydrate",
       "stage:first-action",
@@ -118,7 +109,7 @@ describe("SessionWorkspace", () => {
 
   it("skips a mirror recovery superseded while waiting for workspace ownership", async () => {
     const order: string[] = [];
-    const workspace = createSessionWorkspace(makeService(order), "local");
+    const { workspace } = makeWorkspace(order);
     let start!: () => void;
     let release!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -142,11 +133,9 @@ describe("SessionWorkspace", () => {
 
   it("does not dispatch an action when input persistence fails", async () => {
     const order: string[] = [];
-    const service = makeService(order);
-    service.addMessage = vi
-      .fn()
-      .mockRejectedValue(new Error("storage unavailable"));
-    const workspace = createSessionWorkspace(service, "local");
+    const { workspace, operations } = makeWorkspace(order);
+    const cause = new Error("storage unavailable");
+    operations.persistInput.mockRejectedValueOnce(cause);
     await expect(
       workspace.run(
         "sess-1",
@@ -154,65 +143,44 @@ describe("SessionWorkspace", () => {
         async () => {
           order.push("mutate");
         },
-        {
-          input: {
-            id: "input",
-            sessionId: "sess-1",
-            role: "user",
-            content: "Continue",
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        },
+        { input },
       ),
-    ).rejects.toMatchObject({ stage: "input" });
+    ).rejects.toMatchObject({ stage: "input", cause });
     expect(order).toEqual([]);
-  });
-  it("keeps local hydrate, stage, mutation, and commit in one FIFO job", async () => {
-    const order: string[] = [];
-    const workspace = createSessionWorkspace(makeService(order), "local");
-
-    await workspace.run("sess-1", "action-1", async () => {
-      order.push("mutate");
-      return "done";
-    });
-
-    expect(order).toEqual([
-      "hydrate",
-      "stage:action-1",
-      "mutate",
-      "checkpoint:action-1",
-    ]);
   });
 
   it("does not checkpoint a failed mutation", async () => {
     const order: string[] = [];
-    const workspace = createSessionWorkspace(makeService(order), "local");
+    const { workspace } = makeWorkspace(order);
+    const cause = new Error("transport failed");
 
     await expect(
       workspace.run("sess-1", "action-1", async () => {
         order.push("mutate");
-        throw new Error("transport failed");
+        throw cause;
       }),
-    ).rejects.toThrow("transport failed");
+    ).rejects.toBe(cause);
 
     expect(order).toEqual(["hydrate", "stage:action-1", "mutate"]);
   });
 
-  it("delegates failed checkpoint recovery to the next data-service hydration", async () => {
+  it("preserves the checkpoint error and releases ownership for the next mutation", async () => {
     const order: string[] = [];
-    const service = makeService(order);
-    vi.mocked(service.commitFromServer)
-      .mockRejectedValueOnce(new Error("download failed"))
-      .mockImplementation(async (_sessionId, actionId) => {
-        order.push(`checkpoint:${actionId}`);
-      });
-    const workspace = createSessionWorkspace(service, "local");
+    const { workspace, operations } = makeWorkspace(order);
+    const cause = new Error("download failed");
+    operations.commit.mockRejectedValueOnce(cause);
 
     await expect(
       workspace.run("sess-1", "action-1", async () => {
         order.push("mutate:1");
       }),
-    ).rejects.toBeInstanceOf(SessionWorkspaceSyncError);
+    ).rejects.toMatchObject({
+      name: SessionWorkspaceSyncError.name,
+      stage: "checkpoint",
+      sessionId: "sess-1",
+      actionId: "action-1",
+      cause: expect.toSatisfy((value: unknown) => value === cause),
+    });
 
     await workspace.run("sess-1", "action-2", async () => {
       order.push("mutate:2");
@@ -227,16 +195,12 @@ describe("SessionWorkspace", () => {
       "mutate:2",
       "checkpoint:action-2",
     ]);
-    expect(service.commitFromServer).toHaveBeenNthCalledWith(
-      2,
-      "sess-1",
-      "action-2",
-    );
+    expect(operations.commit).toHaveBeenNthCalledWith(2, "action-2");
   });
 
   it("serializes a terminal background checkpoint after an in-flight mutation", async () => {
     const order: string[] = [];
-    const workspace = createSessionWorkspace(makeService(order), "local");
+    const { workspace } = makeWorkspace(order);
     let releaseMutation!: () => void;
     const mutation = workspace.run("sess-1", "turn-1", async () => {
       order.push("mutate:start");
@@ -266,7 +230,7 @@ describe("SessionWorkspace", () => {
 
   it("serializes per session without blocking an independent session", async () => {
     const order: string[] = [];
-    const workspace = createSessionWorkspace(makeService(order), "local");
+    const { workspace } = makeWorkspace(order);
     let releaseFirst!: () => void;
     const first = workspace.run("sess-1", "action-1", async () => {
       order.push("mutate:1:start");
@@ -306,11 +270,19 @@ describe("SessionWorkspace", () => {
 
   it("runs remote mutations directly without mirror calls", async () => {
     const order: string[] = [];
-    const workspace = createSessionWorkspace(makeService(order), "remote");
+    const { workspace } = makeWorkspace(order, "remote");
 
-    await workspace.run("sess-1", "action-1", async () => {
-      order.push("mutate");
-    });
+    await expect(
+      workspace.run(
+        "sess-1",
+        "action-1",
+        async () => {
+          order.push("mutate");
+          return "done";
+        },
+        { input },
+      ),
+    ).resolves.toBe("done");
     await workspace.hydrate("sess-1");
     await workspace.checkpoint("sess-1", "background:event-1");
 

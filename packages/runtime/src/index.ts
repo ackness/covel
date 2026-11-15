@@ -237,11 +237,6 @@ export {
   finalizeExecution,
 } from "./commit/finalize-execution.js";
 export { updateSetupRuntimeStates } from "./commit/session-clock.js";
-export {
-  droppedUpstream,
-  settleDroppedInputs,
-} from "./commit/commit-dependencies.js";
-export { committedEventFollowers } from "./event-dependencies.js";
 export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
 export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";
 export type {

@@ -89,7 +89,9 @@ describe("runEventChain deferred-follower dedup", () => {
       }),
     ).toEqual({
       runs: { "run-relay/main": "run-seed/emitter" },
-      followers: ["run-seed/emitter"],
+      followers: [
+        { descriptor: deferred[0], producerRunId: "run-seed/emitter" },
+      ],
     });
     expect(JSON.stringify(deferred)).not.toContain("producerRunId");
 

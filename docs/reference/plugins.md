@@ -571,7 +571,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 #### 框架持有的契约
 
-有几个契约的 schema 由框架持有：`narrative-engine@2`（故事输出，内核自己读取）和 `character-actor@1`（[角色委托](#character-orchestration)）。包照常提供或读取它们，但不在根 `contracts` 里声明 schema：加载器直接用框架的 schema。写了一份相同的 schema，`pnpm validate:plugin` 警告可以删掉；写了不同的 schema，包被拒绝（`framework-owned and cannot be shadowed`）。提供框架契约的 runtime 不写 `io.output.schema` 时，框架 schema 就是它的输出 schema，所以 `recordAs` 也不用另写 schema。function 故事 runtime 例外：内核在 handler 返回之后才把返回值（包括只有 `narrativeOutput` 的返回值）整理成故事形状，所以它没有默认输出 schema，用 `recordAs` 时仍要写 `io.output.schema`。
+有几个契约的 schema 由框架持有：`narrative-engine@2`（故事输出，内核自己读取）和 `character-actor@1`（[角色委托](#character-orchestration)）。包照常提供或读取它们，但不在根 `contracts` 里声明 schema：加载器直接用框架的 schema。写了一份相同的 schema，`pnpm validate:plugin` 警告可以删掉；写了不同的 schema，安装和加载都会拒绝这个包（`framework-owned and cannot be shadowed`）。提供框架契约的 runtime 不写 `io.output.schema` 时，框架 schema 就是它的输出 schema，所以 `recordAs` 也不用另写 schema。function 故事 runtime 例外：内核在 handler 返回之后才把返回值（包括只有 `narrativeOutput` 的返回值）整理成故事形状，所以它没有默认输出 schema，用 `recordAs` 时仍要写 `io.output.schema`。
 
 `narrative-engine@2` 每局只有一个提供者包。解析器像对待只允许一个提供者的扩展点那样互斥两个提供者（`single-provider-conflict`）：两个非默认提供者之间，请求或确认顺序靠前的那个保留。玩家明确选中的替代者照常换掉默认叙事器，但要等冲突和依赖选择稳定之后；替代者在选择中失去所需提供者时，解析器会重新考虑默认提供者，再确认最终组合。提供者不用写 `conflicts: [narrative-engine@2]`；写在任何包里都被忽略，`pnpm validate:plugin` 警告可以删掉。`character-actor@1` 可以有多个提供者。
 

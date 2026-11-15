@@ -49,20 +49,20 @@ async function createSave(
 async function failedDownload() {
   const service = new LocalDataService(vault);
   await createSave(service);
-  await service.addMessage({
-    id: "durable-input",
-    sessionId: "session",
-    role: "user",
-    content: "Keep this input",
-    createdAt: "2026-09-01T00:00:00.000Z",
-  });
   const workspace = createSessionWorkspace(service, "local");
-  api.fetchBrowserCommit.mockRejectedValueOnce(
-    new ApiError(503, "/browser-commit", ""),
-  );
+  const cause = new ApiError(503, "/browser-commit", "");
+  api.fetchBrowserCommit.mockRejectedValueOnce(cause);
   await expect(
-    workspace.run("session", "pending-action", async () => {}),
-  ).rejects.toThrow();
+    workspace.run("session", "pending-action", async () => {}, {
+      input: {
+        id: "durable-input",
+        sessionId: "session",
+        role: "user",
+        content: "Keep this input",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    }),
+  ).rejects.toMatchObject({ stage: "checkpoint", cause });
   expect(await vault.getPendingCommit("session")).toBe("pending-action");
   return workspace;
 }
@@ -100,22 +100,37 @@ describe("workspace durable pending-commit recovery", () => {
   it("recovers a failed download before a new local message advances the revision", async () => {
     await failedDownload();
     const before = (await vault.getLatestCheckpoint("session"))!.revision;
-    const service = new LocalDataService(vault);
-    await service.addMessage({
-      id: "next-input",
-      sessionId: "session",
-      role: "user",
-      content: "Next",
-      createdAt: "2026-09-01T00:00:01.000Z",
+    const workspace = createSessionWorkspace(
+      new LocalDataService(vault),
+      "local",
+    );
+    await workspace.run("session", "next-action", async () => {}, {
+      input: {
+        id: "next-input",
+        sessionId: "session",
+        role: "user",
+        content: "Next",
+        createdAt: "2026-09-01T00:00:01.000Z",
+      },
     });
-    expect(api.fetchBrowserCommit).toHaveBeenLastCalledWith(
+    expect(api.fetchBrowserCommit.mock.calls).toEqual([
+      ["session", "pending-action", before],
+      ["session", "pending-action", before],
+      ["session", "next-action", before + 2],
+    ]);
+    expect(api.uploadBrowserCheckpoint).toHaveBeenLastCalledWith(
       "session",
-      "pending-action",
-      before,
+      expect.objectContaining({
+        revision: before + 2,
+        messages: [
+          expect.objectContaining({ id: "durable-input" }),
+          expect.objectContaining({ id: "next-input" }),
+        ],
+      }),
     );
     expect(await vault.getPendingCommit("session")).toBeNull();
     const checkpoint = (await vault.getLatestCheckpoint("session"))!;
-    expect(checkpoint.revision).toBe(before + 2);
+    expect(checkpoint.revision).toBe(before + 3);
     expect(checkpoint.messages.map((message) => message.id)).toEqual([
       "durable-input",
       "next-input",
@@ -171,15 +186,18 @@ describe("workspace durable pending-commit recovery", () => {
   it("restores the browser checkpoint before reconnecting a restarted server stream", async () => {
     const service = new LocalDataService(vault);
     await createSave(service);
-    await service.addMessage({
-      id: "retained",
-      sessionId: "session",
-      role: "user",
-      content: "Synthetic retained input",
-      createdAt: "2026-09-01T00:00:00.000Z",
-    });
-    const checkpoint = await vault.getLatestCheckpoint("session");
     const workspace = createSessionWorkspace(service, "local");
+    await workspace.run("session", "previous-turn", async () => {}, {
+      input: {
+        id: "retained",
+        sessionId: "session",
+        role: "user",
+        content: "Synthetic retained input",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    });
+    vi.clearAllMocks();
+    const checkpoint = await vault.getLatestCheckpoint("session");
     let mirrored = true;
     let stream!: ReadableStreamDefaultController<Uint8Array>;
     let finishUpload!: () => void;

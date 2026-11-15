@@ -1,4 +1,4 @@
-import type { MessageRecord, WorldRecord } from "../api.js";
+import type { WorldRecord } from "../api.js";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
@@ -228,9 +228,6 @@ export class RemoteDataService implements DataService {
   ) {
     return api.listMessagesPage(sessionId, opts);
   }
-  async addMessage(_msg: MessageRecord) {
-    // Remote mode: server stores messages during action SSE flow
-  }
 
   async saveSubmittedBlocks(
     sessionId: string,
@@ -247,18 +244,6 @@ export class RemoteDataService implements DataService {
 
   async loadSubmittedBlocks(sessionId: string, owner: SessionUiOwner) {
     return (await this.useCache(sessionId, owner)).submitted;
-  }
-
-  async syncToServer() {
-    // No-op: server already has the data
-  }
-
-  async stageServerCommit() {
-    // No-op: remote mode commits directly to the authoritative server store.
-  }
-
-  async commitFromServer() {
-    // No-op: remote mode commits directly to the authoritative server store.
   }
 
   async saveExecutionSteps(

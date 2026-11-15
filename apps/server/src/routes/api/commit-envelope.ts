@@ -8,23 +8,16 @@
  * runs cannot derive any, refuses it, so a commit that unexpectedly derived
  * some rolls back instead of losing it. Work derived from a runtime whose
  * writes were dropped at commit builds on output that never landed, so none
- * of it is queued. Those rules live here, for every path, instead of in each
- * route.
+ * of it is queued. The kernel selects the eligible work; the host queues it.
  *
  * Route-specific writes in the same transaction (the player's input message,
  * interjections) stay with their route.
  */
 
-import {
-  committedEventFollowers,
-  droppedUpstream,
-  settleDroppedInputs,
-  type CommitIsolation,
-} from "@covel/runtime";
+import type { CommitIsolation } from "@covel/runtime";
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
-  RuntimeResult,
   TurnResult,
 } from "@covel/shared";
 import type { SessionRecord, StoreTransaction } from "@covel/store";
@@ -58,39 +51,10 @@ export interface CommitEnqueueContext {
   readonly sourceRuntimeId?: string;
 }
 
-export type EventFollower = NonNullable<
-  TurnResult["deferredFollowers"]
->[number];
-
-/** The parts of an execution's result its follow-up work comes from. */
-export interface FollowUpSource {
-  /** The execution's turn, named by its followers as their source. */
-  readonly turnId: string;
-  /** The execution's runtime results, as executed. */
-  readonly runtimeResults: readonly Pick<
-    RuntimeResult,
-    "runtimeId" | "status"
-  >[];
-  /**
-   * Detached stage jobs the execution deferred. They are admitted under the
-   * session as the commit transaction reads it.
-   */
-  readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
-  /** Background event followers the execution emitted. */
-  readonly deferredFollowers?: readonly EventFollower[];
-}
-
 export interface CommitFollowUps extends CommitEnqueueContext {
-  /** Which runtimes' writes the commit dropped. */
-  readonly isolation: CommitIsolation;
-  /** The committed execution's result. */
-  readonly turnResult: FollowUpSource;
-  /**
-   * The followers to queue when not all the result emitted: none after an
-   * activation that failed, which chains no followers. Each descriptor must
-   * be an original member of `turnResult.deferredFollowers`.
-   */
-  readonly followers?: readonly EventFollower[];
+  readonly turnId: string;
+  readonly deferredRuntimeJobs?: CommitIsolation["deferredRuntimeJobs"];
+  readonly deferredFollowers: CommitIsolation["deferredFollowers"];
 }
 
 export interface QueuedCommitFollowUps {
@@ -135,18 +99,20 @@ export const refuseFollowUps: CommitFollowUpQueue = async (_tx, turnResult) => {
 
 /**
  * The follow-up queue of a host that queues, under `context`, the work every
- * committed result derived. `followers` narrows the followers to queue.
+ * committed result still permits. A failed activation may suppress its followers.
  */
 export function queueFollowUpsWith(
   context: CommitEnqueueContext,
-  followers?: (turnResult: TurnResult) => readonly EventFollower[],
+  suppressFollowers?: (turnResult: TurnResult) => boolean,
 ): CommitFollowUpQueue {
   return (tx, turnResult, isolation) =>
     queueCommitFollowUps(tx, {
       ...context,
-      isolation,
-      turnResult,
-      ...(followers ? { followers: followers(turnResult) } : {}),
+      ...isolation,
+      turnId: turnResult.turnId,
+      deferredFollowers: suppressFollowers?.(turnResult)
+        ? []
+        : isolation.deferredFollowers,
     });
 }
 
@@ -161,11 +127,7 @@ export class CommitSessionGoneError extends Error {
 }
 
 /**
- * Queue an execution's deferred stage jobs and event followers inside its
- * commit transaction, leaving out work derived from a dropped runtime. A
- * deferred job whose target hard-depends on a dropped runtime is not queued;
- * the others see dropped runtimes as failed in their frozen inputs. A
- * follower whose selected payload producer was dropped is not queued.
+ * Queue the work the kernel found eligible inside the commit transaction.
  * Returns what was queued, for the caller to announce after the commit.
  * Throws {@link CommitSessionGoneError}, failing the commit, when there are
  * detached jobs to queue and the session is gone.
@@ -175,58 +137,28 @@ export async function queueCommitFollowUps(
   args: CommitFollowUps,
 ): Promise<QueuedCommitFollowUps> {
   // Jobs carry the incarnation, approval scope and runtime model overrides
-  // of the session the commit lands in. Read before filtering, so whether a
-  // commit with detached jobs fails does not depend on which were dropped.
-  const deferredJobs = args.turnResult.deferredRuntimeJobs ?? [];
-  let session: SessionRecord | undefined;
-  if (deferredJobs.length > 0) {
-    session = (await tx.getSession(args.sessionId)) ?? undefined;
+  // of the session the commit lands in, even if all planned jobs were dropped.
+  const descriptors = args.deferredRuntimeJobs;
+  let runtimeJobs: readonly QueuedRuntimeJob[] = [];
+  if (descriptors !== undefined) {
+    const session = await tx.getSession(args.sessionId);
     if (!session) throw new CommitSessionGoneError(args.sessionId);
+    runtimeJobs = await enqueueDeferredRuntimeJobs(tx, {
+      sessionId: args.sessionId,
+      session,
+      activeRuntimes: args.activeRuntimes,
+      descriptors,
+      locale: args.locale,
+      ...(args.modelOverride ? { modelOverride: args.modelOverride } : {}),
+      ...(args.userSettings ? { userSettings: args.userSettings } : {}),
+      ...(args.credentials ? { credentials: args.credentials } : {}),
+    });
   }
-  const dropped = args.isolation.droppedRuntimeIds;
-  const committedView = {
-    runtimes: args.activeRuntimes,
-    results: args.turnResult.runtimeResults,
-    dropped,
-  };
-  const descriptors = deferredJobs
-    .filter((descriptor) => {
-      const target = args.activeRuntimes.find(
-        (runtime) => runtime.name === descriptor.runtimeId,
-      );
-      return !target || !droppedUpstream(target, committedView);
-    })
-    .map((descriptor) => settleDroppedInputs(descriptor, dropped));
-  const emittedFollowers = args.turnResult.deferredFollowers ?? [];
-  // Overrides select original descriptors; matching by target or payload could
-  // merge separate nested invocations and associate the wrong producer.
-  if (args.followers?.some((follower) => !emittedFollowers.includes(follower)))
-    throw new Error(
-      "Follower overrides must select original emitted descriptors",
-    );
-  const selected = args.followers ? new Set(args.followers) : undefined;
-  const followers = committedEventFollowers(
-    emittedFollowers,
-    args.isolation.followerSources,
-    args.isolation.droppedRunIds,
-  ).filter((follower) => selected === undefined || selected.has(follower));
-  const runtimeJobs = session
-    ? await enqueueDeferredRuntimeJobs(tx, {
-        sessionId: args.sessionId,
-        session,
-        activeRuntimes: args.activeRuntimes,
-        descriptors,
-        locale: args.locale,
-        ...(args.modelOverride ? { modelOverride: args.modelOverride } : {}),
-        ...(args.userSettings ? { userSettings: args.userSettings } : {}),
-        ...(args.credentials ? { credentials: args.credentials } : {}),
-      })
-    : [];
   const followerJobs = await enqueueEventFollowers(tx, {
     sessionId: args.sessionId,
     activeRuntimes: args.activeRuntimes,
-    followers,
-    sourceTurnId: args.turnResult.turnId,
+    followers: args.deferredFollowers,
+    sourceTurnId: args.turnId,
     ...(args.sourceRuntimeId ? { sourceRuntimeId: args.sourceRuntimeId } : {}),
     locale: args.locale,
     ...(args.userSettings ? { userSettings: args.userSettings } : {}),

@@ -151,8 +151,8 @@ async function runJob(committed: boolean) {
         runManualTurn: async (args: RunManualTurnArgs) => {
           const isolation = {
             droppedRuntimeIds: new Set<string>(),
-            droppedRunIds: new Set<string>(),
-            followerSources: [],
+            deferredRuntimeJobs: turnResult.deferredRuntimeJobs,
+            deferredFollowers: [],
           };
           const queued = await store.withTransaction(async (tx) => {
             const followUps = await args.followUps(tx, turnResult, isolation);

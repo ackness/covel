@@ -24,6 +24,11 @@ import {
 } from "./action-kinds.js";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 import { assertRuntimeOutputSchema } from "./runtime-output-schema.js";
+import {
+  assertDataContractSchemaPaths,
+  packageContractSchemaPath,
+  resolvePackageContractSchema,
+} from "./package-contracts.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
 export function pluginImportReferences(
@@ -214,6 +219,7 @@ export function validatePluginFiles(
     file(source, field, reference);
   const contractSchemas: Record<string, unknown> = {
     ...packageManifest.contractSchemas,
+    ...frameworkContractSchemas,
   };
   for (const [contract, declaration] of Object.entries(
     plugin.contracts ?? {},
@@ -221,14 +227,21 @@ export function validatePluginFiles(
     const document = file(
       packageManifest.sourcePath,
       `contracts.${contract}.schema`,
-      declaration.schema,
+      packageContractSchemaPath(
+        packageManifest.sourcePath,
+        contract,
+        declaration.schema,
+      ),
       true,
     );
-    if (document !== undefined) contractSchemas[contract] = document;
+    if (document !== undefined)
+      contractSchemas[contract] = resolvePackageContractSchema(
+        packageManifest.sourcePath,
+        contract,
+        document,
+      );
   }
-  // The loader resolves a framework contract to its own schema, whatever a
-  // package declares (a different one is refused when the package loads).
-  Object.assign(contractSchemas, frameworkContractSchemas);
+  assertDataContractSchemaPaths(packageManifest, packageManifest.sourcePath);
   for (const [namespace, declaration] of Object.entries(
     plugin.contributes?.data ?? {},
   ))
