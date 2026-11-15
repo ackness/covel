@@ -29,8 +29,7 @@ beforeEach(() => {
 });
 
 function makeDeps(
-  dispatch: (a: SessionAction) => void,
-  addMessage: ReturnType<typeof vi.fn>,
+  dispatch: (action: SessionAction) => void,
   currentSessionId: string | null,
 ): SseEventHandlerDeps {
   return {
@@ -65,35 +64,27 @@ function narrativeCompleted(sessionId: string): SseEnvelope {
 describe("sse-handler — foreign-session envelopes", () => {
   it("drops an envelope for a session other than the loaded one", () => {
     const dispatch = vi.fn();
-    const addMessage = vi.fn().mockResolvedValue(undefined);
-
-    createSseEventHandler(makeDeps(dispatch, addMessage, "sess-b"))(
+    createSseEventHandler(makeDeps(dispatch, "sess-b"))(
       narrativeCompleted("sess-a"),
     );
 
     expect(dispatch).not.toHaveBeenCalled();
-    expect(addMessage).not.toHaveBeenCalled();
   });
 
-  it("applies a loaded-session envelope without creating a local revision", () => {
+  it("applies an envelope for the loaded session", () => {
     const dispatch = vi.fn();
-    const addMessage = vi.fn().mockResolvedValue(undefined);
-
-    createSseEventHandler(makeDeps(dispatch, addMessage, "sess-a"))(
+    createSseEventHandler(makeDeps(dispatch, "sess-a"))(
       narrativeCompleted("sess-a"),
     );
 
     expect(dispatch.mock.calls.map(([a]) => a.type)).toContain(
       "COMPLETE_MESSAGE",
     );
-    expect(addMessage).not.toHaveBeenCalled();
   });
 
   it("does not drop events before a session is loaded", () => {
     const dispatch = vi.fn();
-    const addMessage = vi.fn().mockResolvedValue(undefined);
-
-    createSseEventHandler(makeDeps(dispatch, addMessage, null))(
+    createSseEventHandler(makeDeps(dispatch, null))(
       narrativeCompleted("sess-a"),
     );
 

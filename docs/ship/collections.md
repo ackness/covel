@@ -175,6 +175,8 @@ covel: ">=0.0.45 <0.1.0"
 
 GitHub 和离线合集里的插件都遵守[安装器的运行时依赖规则](../reference/plugin-installation.md#安装器做什么不做什么)。作者需要把依赖打进发布文件；安装器不会替玩家安装依赖。
 
+合集安装也应用[插件契约的 schema 检查](../reference/plugin-installation.md#安装器做什么不做什么)。有不合规的插件包时，不会等到重启才报错。
+
 合集成员不能携带安装器的来源回执；世界和插件共用[保留文件规则](../reference/world-installation.md#api)。
 
 ## 没有清单也能一次装多个

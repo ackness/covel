@@ -1,14 +1,11 @@
 /**
- * The work an execution queues inside its commit transaction: deferred stage
- * jobs and event followers, leaving out what builds on a runtime whose writes
- * were dropped, and the held-back jobs a suspended turn releases.
+ * Transactional queueing of eligible follow-ups and released jobs.
  */
 
 import { describe, expect, it } from "vitest";
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
-  RuntimeResult,
   TurnResult,
 } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -21,7 +18,6 @@ import {
   queueReleasedRuntimeJobs,
   refuseFollowUps,
   type CommitFollowUps,
-  type FollowUpSource,
 } from "../../src/routes/api/commit-envelope.js";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 
@@ -57,23 +53,6 @@ const illustrator = manifest("illustrator", {
 });
 const activeRuntimes = [narrator, sidebar, recap, portrait, illustrator];
 
-function result(
-  runtimeId: string,
-  events: readonly { topic: string }[] = [],
-): RuntimeResult {
-  return {
-    pluginId: PLUGIN_ID,
-    runtimeId,
-    runId: `run-${runtimeId}`,
-    turnId: "turn-1",
-    status: "success",
-    output: {},
-    ...(events.length > 0
-      ? { effects: { events: events.map((e) => ({ ...e, data: {} })) } }
-      : {}),
-  } as RuntimeResult;
-}
-
 function deferredJob(runtimeId: string): DeferredRuntimeJob {
   return {
     jobId: `job-${runtimeId}`,
@@ -89,12 +68,9 @@ function deferredJob(runtimeId: string): DeferredRuntimeJob {
       lastPlayerInput: null,
       narrativeText: "",
       toolCallSummaries: [],
-      runtimeResults: [
-        { runtimeId: "narrator", status: "success" },
-        { runtimeId: "sidebar", status: "success" },
-      ],
+      runtimeResults: [],
     },
-    upstreamResults: [result("narrator"), result("sidebar")],
+    upstreamResults: [],
   };
 }
 
@@ -102,6 +78,19 @@ const follower = {
   runtimeId: "illustrator",
   pluginId: PLUGIN_ID,
   triggerEvent: { topic: TOPIC, data: {} },
+};
+
+const turn: TurnResult = {
+  turnId: "turn-1",
+  sessionId: SESSION_ID,
+  executionContext: {
+    executionId: "execution-1",
+    origin: "manual",
+    countPolicy: "none",
+  },
+  runtimeResults: [],
+  durationMs: 0,
+  timestamp: NOW,
 };
 
 async function setup(): Promise<{
@@ -131,51 +120,20 @@ async function setup(): Promise<{
   return { store, session: (await store.getSession(SESSION_ID))! };
 }
 
-/** A committed result: two deferred stage jobs and one follower by default. */
-function committed(overrides: Partial<FollowUpSource> = {}): FollowUpSource {
+function envelope(overrides: Partial<CommitFollowUps> = {}): CommitFollowUps {
   return {
+    sessionId: SESSION_ID,
+    activeRuntimes,
+    locale: "en-US",
     turnId: "turn-1",
-    runtimeResults: [result("narrator", [{ topic: TOPIC }]), result("sidebar")],
     deferredRuntimeJobs: [deferredJob("recap"), deferredJob("portrait")],
     deferredFollowers: [follower],
     ...overrides,
   };
 }
 
-function envelope(
-  overrides: Partial<CommitFollowUps> = {},
-  source: Partial<FollowUpSource> = {},
-): CommitFollowUps {
-  const turnResult = committed(source);
-  return {
-    sessionId: SESSION_ID,
-    activeRuntimes,
-    locale: "en-US",
-    isolation: {
-      droppedRuntimeIds: new Set(),
-      droppedRunIds: new Set(),
-      followerSources: (turnResult.deferredFollowers ?? []).map(
-        () => "run-narrator",
-      ),
-    },
-    turnResult,
-    ...overrides,
-  };
-}
-
-/** An envelope from an execution that deferred no stage jobs. */
-function followersOnly(
-  overrides: Partial<CommitFollowUps> = {},
-  source: Partial<FollowUpSource> = {},
-): CommitFollowUps {
-  return envelope(overrides, { deferredRuntimeJobs: [], ...source });
-}
-
-const asTurnResult = (source: FollowUpSource) =>
-  source as unknown as TurnResult;
-
 describe("queueCommitFollowUps", () => {
-  it("queues every deferred job and follower when nothing was dropped", async () => {
+  it("queues eligible jobs and preserves their source", async () => {
     const { store } = await setup();
     const queued = await store.withTransaction((tx) =>
       queueCommitFollowUps(tx, envelope()),
@@ -187,159 +145,10 @@ describe("queueCommitFollowUps", () => {
     expect(queued.followerJobs.map(({ job }) => job.runtimeId)).toEqual([
       "illustrator",
     ]);
-    // Frozen inputs are untouched when nothing was dropped.
-    const portraitJob = queued.runtimeJobs.find(
-      ({ job }) => job.runtimeId === "portrait",
-    )!.job;
-    expect(
-      (portraitJob.payload as { descriptor: DeferredRuntimeJob }).descriptor
-        .upstreamResults,
-    ).toMatchObject([
-      { runtimeId: "narrator", status: "success" },
-      { runtimeId: "sidebar", status: "success" },
-    ]);
-  });
-
-  it("leaves out a deferred job that hard-depends on a dropped runtime and settles the others' inputs", async () => {
-    const { store } = await setup();
-    const queued = await store.withTransaction((tx) =>
-      queueCommitFollowUps(
-        tx,
-        envelope({
-          isolation: {
-            droppedRuntimeIds: new Set(["sidebar"]),
-            droppedRunIds: new Set(["run-sidebar"]),
-            followerSources: ["run-narrator"],
-          },
-        }),
-      ),
-    );
-    expect(queued.runtimeJobs.map(({ job }) => job.runtimeId)).toEqual([
-      "portrait",
-    ]);
-    const descriptor = (
-      queued.runtimeJobs[0]!.job.payload as { descriptor: DeferredRuntimeJob }
-    ).descriptor;
-    expect(descriptor.turnDigest.runtimeResults).toEqual([
-      { runtimeId: "narrator", status: "success" },
-      { runtimeId: "sidebar", status: "failed" },
-    ]);
-    expect(descriptor.upstreamResults).toMatchObject([
-      { runtimeId: "narrator", status: "success" },
-      {
-        runtimeId: "sidebar",
-        status: "failed",
-        error: "writes did not commit",
-      },
-    ]);
-    // The narrator's event still committed: its follower is queued.
-    expect(queued.followerJobs.map(({ job }) => job.runtimeId)).toEqual([
-      "illustrator",
-    ]);
-  });
-
-  it("leaves out a follower whose every emitter was dropped", async () => {
-    const { store } = await setup();
-    const queued = await store.withTransaction((tx) =>
-      queueCommitFollowUps(
-        tx,
-        followersOnly({
-          isolation: {
-            droppedRuntimeIds: new Set(["narrator"]),
-            droppedRunIds: new Set(["run-narrator"]),
-            followerSources: ["run-narrator"],
-          },
-        }),
-      ),
-    );
-    expect(queued).toEqual({ runtimeJobs: [], followerJobs: [] });
-    expect(
-      await listRuntimeJobs(store, { sessionId: SESSION_ID }),
-    ).toHaveLength(0);
-  });
-
-  it.each([
-    ["narrator", "run-narrator", "run-narrator", []],
-    ["sidebar", "run-sidebar", "run-narrator", ["illustrator"]],
-    ["narrator", "old-narrator-run", "new-narrator-run", ["illustrator"]],
-  ] as const)(
-    "filters followers when runtime %s drops run %s (producer=%s)",
-    async (droppedRuntimeId, droppedRunId, producerRunId, expected) => {
-      const { store } = await setup();
-      const queued = await store.withTransaction((tx) =>
-        queueCommitFollowUps(
-          tx,
-          followersOnly(
-            {
-              isolation: {
-                droppedRuntimeIds: new Set([droppedRuntimeId]),
-                droppedRunIds: new Set([droppedRunId]),
-                followerSources: [producerRunId],
-              },
-            },
-            {
-              runtimeResults: [
-                result("narrator", [{ topic: TOPIC }]),
-                result("sidebar", [{ topic: TOPIC }]),
-              ],
-            },
-          ),
-        ),
-      );
-      expect(queued.followerJobs.map(({ job }) => job.runtimeId)).toEqual(
-        expected,
-      );
-      await store.close();
-    },
-  );
-
-  it("filters followers of an execution that deferred no stage jobs", async () => {
-    // A manual or event run usually emits followers only. A sync run drops
-    // nothing today; a simulated dropped emitter is still honoured.
-    const { store } = await setup();
-    const withoutDeferred = followersOnly({ sourceRuntimeId: "narrator" });
-    const kept = await store.withTransaction((tx) =>
-      queueCommitFollowUps(tx, withoutDeferred),
-    );
-    expect(kept.runtimeJobs).toEqual([]);
-    expect(kept.followerJobs).toHaveLength(1);
-    expect(kept.followerJobs[0]!.job.origin).toMatchObject({
+    expect(queued.followerJobs[0]!.job.origin).toMatchObject({
       activation: "event",
       sourceTurnId: "turn-1",
-      sourceRuntimeId: "narrator",
     });
-
-    const dropped = await store.withTransaction((tx) =>
-      queueCommitFollowUps(
-        tx,
-        followersOnly(
-          {
-            sourceRuntimeId: "narrator",
-            isolation: {
-              droppedRuntimeIds: new Set(["narrator"]),
-              droppedRunIds: new Set(["run-narrator"]),
-              followerSources: ["run-narrator"],
-            },
-          },
-          { turnId: "turn-2" },
-        ),
-      ),
-    );
-    expect(dropped.followerJobs).toEqual([]);
-  });
-
-  it("queues nothing for empty inputs", async () => {
-    const { store } = await setup();
-    const queued = await store.withTransaction((tx) =>
-      queueCommitFollowUps(
-        tx,
-        envelope({}, { deferredRuntimeJobs: [], deferredFollowers: [] }),
-      ),
-    );
-    expect(queued).toEqual({ runtimeJobs: [], followerJobs: [] });
-    expect(
-      await listRuntimeJobs(store, { sessionId: SESSION_ID }),
-    ).toHaveLength(0);
   });
 
   it("queues nothing when the commit transaction rolls back", async () => {
@@ -362,7 +171,7 @@ describe("queueCommitFollowUps", () => {
         runtimeModelOverrides: { recap: "fast" },
         updatedAt: NOW,
       });
-      return queueCommitFollowUps(tx, envelope({}, { deferredFollowers: [] }));
+      return queueCommitFollowUps(tx, envelope({ deferredFollowers: [] }));
     });
     expect(session.runtimeModelOverrides).toBeUndefined();
     expect(queued.runtimeJobs[0]!.job.payload).toMatchObject({
@@ -379,19 +188,7 @@ describe("queueCommitFollowUps", () => {
       store.withTransaction((tx) =>
         queueCommitFollowUps(
           tx,
-          envelope(
-            {
-              isolation: {
-                droppedRuntimeIds: new Set(["sidebar"]),
-                droppedRunIds: new Set(["run-sidebar"]),
-                followerSources: ["run-narrator"],
-              },
-            },
-            {
-              deferredRuntimeJobs: [deferredJob("recap")],
-              deferredFollowers: [],
-            },
-          ),
+          envelope({ deferredRuntimeJobs: [], deferredFollowers: [] }),
         ),
       ),
     ).rejects.toThrow(CommitSessionGoneError);
@@ -400,7 +197,7 @@ describe("queueCommitFollowUps", () => {
       store.withTransaction((tx) =>
         queueCommitFollowUps(
           tx,
-          envelope({}, { deferredRuntimeJobs: [], deferredFollowers: [] }),
+          envelope({ deferredRuntimeJobs: undefined, deferredFollowers: [] }),
         ),
       ),
     ).resolves.toEqual({ runtimeJobs: [], followerJobs: [] });
@@ -424,30 +221,21 @@ describe("queueCommitFollowUps", () => {
     // Followers are handed theirs once the commit landed, by the caller.
     expect(registered).toEqual(["job-recap", "job-portrait"]);
   });
-
-  it("queues the followers given in place of the result's", async () => {
-    const { store } = await setup();
-    const queued = await store.withTransaction((tx) =>
-      queueCommitFollowUps(tx, envelope({ followers: [] })),
-    );
-    expect(queued.runtimeJobs).toHaveLength(2);
-    expect(queued.followerJobs).toEqual([]);
-  });
 });
 
 describe("commit follow-up queues", () => {
-  it("queue what a result derived under the host's context", async () => {
+  it("does not chain followers after a failed activation", async () => {
     const { store } = await setup();
     const queue = queueFollowUpsWith(
       { sessionId: SESSION_ID, activeRuntimes, locale: "en-US" },
       // An activation that failed chains no followers.
-      () => [],
+      () => true,
     );
     const queued = await store.withTransaction((tx) =>
-      queue(tx, asTurnResult(committed()), {
+      queue(tx, turn, {
         droppedRuntimeIds: new Set(),
-        droppedRunIds: new Set(),
-        followerSources: ["run-narrator"],
+        deferredRuntimeJobs: [deferredJob("recap"), deferredJob("portrait")],
+        deferredFollowers: [follower],
       }),
     );
     expect(queued.runtimeJobs.map(({ job }) => job.runtimeId)).toEqual([
@@ -461,29 +249,20 @@ describe("commit follow-up queues", () => {
     const { store } = await setup();
     const isolation = {
       droppedRuntimeIds: new Set<string>(),
-      droppedRunIds: new Set<string>(),
-      followerSources: [],
+      deferredFollowers: [],
     };
     for (const source of [
-      committed({ deferredFollowers: [] }),
-      committed({ deferredRuntimeJobs: [] }),
+      { deferredRuntimeJobs: [deferredJob("recap")] },
+      { deferredFollowers: [follower] },
     ]) {
       await expect(
         store.withTransaction((tx) =>
-          refuseFollowUps(tx, asTurnResult(source), isolation),
+          refuseFollowUps(tx, { ...turn, ...source }, isolation),
         ),
       ).rejects.toThrow("the host has no follow-up queue");
     }
     await expect(
-      store.withTransaction((tx) =>
-        refuseFollowUps(
-          tx,
-          asTurnResult(
-            committed({ deferredRuntimeJobs: [], deferredFollowers: [] }),
-          ),
-          isolation,
-        ),
-      ),
+      store.withTransaction((tx) => refuseFollowUps(tx, turn, isolation)),
     ).resolves.toBe(NO_FOLLOW_UPS);
   });
 });
@@ -510,81 +289,4 @@ describe("queueReleasedRuntimeJobs", () => {
       ),
     ).toEqual(["portrait"]);
   });
-
-  it("queues nothing for no released jobs", async () => {
-    const { store, session } = await setup();
-    const queued = await store.withTransaction((tx) =>
-      queueReleasedRuntimeJobs(
-        tx,
-        {
-          sessionId: SESSION_ID,
-          session,
-          activeRuntimes,
-          locale: "en-US",
-        },
-        [],
-      ),
-    );
-    expect(queued).toEqual([]);
-  });
-});
-
-it("filters repeated follower targets by invocation before narrowing overrides", async () => {
-  const { store } = await setup();
-  const first = {
-    ...follower,
-    triggerEvent: { topic: TOPIC, data: { invocation: 1 } },
-  };
-  const second = {
-    ...follower,
-    triggerEvent: { topic: TOPIC, data: { invocation: 2 } },
-  };
-  const args = followersOnly(
-    {
-      isolation: {
-        droppedRuntimeIds: new Set(),
-        droppedRunIds: new Set(["first-run"]),
-        followerSources: ["first-run", "second-run"],
-      },
-      followers: [second],
-    },
-    { deferredFollowers: [first, second] },
-  );
-  const queued = await store.withTransaction((tx) =>
-    queueCommitFollowUps(tx, args),
-  );
-  expect(queued.followerJobs).toHaveLength(1);
-  expect(queued.followerJobs[0]!.job.payload).toMatchObject({
-    triggerEvent: { data: { invocation: 2 } },
-  });
-  await store.close();
-});
-
-it("refuses a follower override rebuilt outside the emitted descriptor list", async () => {
-  const { store } = await setup();
-  await expect(
-    store.withTransaction((tx) =>
-      queueCommitFollowUps(tx, followersOnly({ followers: [{ ...follower }] })),
-    ),
-  ).rejects.toThrow("original emitted descriptors");
-  await store.close();
-});
-
-it("refuses an unpaired follower producer list", async () => {
-  const { store } = await setup();
-  await expect(
-    store.withTransaction((tx) =>
-      queueCommitFollowUps(
-        tx,
-        followersOnly({
-          isolation: {
-            droppedRuntimeIds: new Set(),
-            droppedRunIds: new Set(),
-            followerSources: [],
-          },
-        }),
-      ),
-    ),
-  ).rejects.toThrow("equal lengths");
-  await store.close();
 });

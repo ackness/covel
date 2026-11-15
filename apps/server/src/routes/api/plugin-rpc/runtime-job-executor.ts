@@ -144,7 +144,7 @@ export function createRuntimeJobExecutor(deps: {
           credentials,
           sourceRuntimeId: job.runtimeId,
         },
-        (turnResult) => settle(turnResult).followers,
+        (turnResult) => settle(turnResult).failure !== undefined,
       ),
       completeInTx: async (tx, turnResult, _isolation, queued) => {
         const settlement = settle(turnResult);

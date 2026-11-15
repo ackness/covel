@@ -7,7 +7,6 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import type { HandlerResult } from "@covel/plugin-handlers-utils";
 import {
-  committedEventFollowers,
   commitExecution,
   executeTurn,
   refuseReleasedJobs,
@@ -159,7 +158,7 @@ async function commit(
   f: Awaited<ReturnType<typeof fixture>>,
   rejectParent = false,
 ) {
-  let queued: Follower[] = [];
+  let queued: readonly Follower[] = [];
   const outcome = await commitExecution({
     store: f.store,
     execution: structuredClone(f.execution),
@@ -170,11 +169,7 @@ async function commit(
         ? "Reject parent"
         : undefined,
     extraInTx: async (_tx, isolation) => {
-      queued = committedEventFollowers(
-        f.execution.result.deferredFollowers ?? [],
-        isolation.followerSources,
-        isolation.droppedRunIds,
-      );
+      queued = isolation.deferredFollowers;
     },
   });
   return { queued, outcome };
@@ -187,10 +182,6 @@ describe("background followers from recursive calls", () => {
     expect(outcome.status).toBe("committed");
     expect(queued).toHaveLength(1);
     expect(queued[0]?.triggerEvent.data).toEqual({ n: 1 });
-    expect(f.execution.commit.eventDependencies?.followers).toEqual([
-      f.execution.commit.results.find((r) => r.runtimeId === "probe/child")!
-        .runId,
-    ]);
     await f.store.close();
   });
 
@@ -220,9 +211,6 @@ describe("background followers from recursive calls", () => {
             result.effects?.events as { data: { n: number } }[] | undefined
           )?.some((event) => event.data.n === item.triggerEvent.data.n),
         )!.runId,
-    );
-    expect(f.execution.commit.eventDependencies?.followers).toEqual(
-      expectedSources,
     );
     expect(new Set(expectedSources).size).toBe(5);
     const { outcome, queued } = await commit(f, true);
@@ -265,7 +253,7 @@ describe("background followers from recursive calls", () => {
           f.deps,
           { activeRuntimes: f.runtimes },
         );
-        let queued: Follower[] = [];
+        let queued: readonly Follower[] = [];
         const outcome = await commitExecution({
           store: f.store,
           execution: structuredClone(resumed),
@@ -278,11 +266,7 @@ describe("background followers from recursive calls", () => {
             runtimeId: f.parent.name,
           },
           extraInTx: async (_tx, isolation) => {
-            queued = committedEventFollowers(
-              resumed.commit.deferredFollowers ?? [],
-              isolation.followerSources,
-              isolation.droppedRunIds,
-            );
+            queued = isolation.deferredFollowers;
           },
         });
         expect(outcome.status).toBe("committed");
@@ -294,8 +278,8 @@ describe("background followers from recursive calls", () => {
         } else {
           expect(queued).toHaveLength(1);
           expect(queued[0]?.triggerEvent.data).toEqual({ n: 1 });
-          expect(resumed.commit.eventDependencies?.followers).toEqual([
-            sourceRun,
+          expect(resumed.commit.eventDependencies?.followers).toMatchObject([
+            { producerRunId: sourceRun },
           ]);
         }
       }

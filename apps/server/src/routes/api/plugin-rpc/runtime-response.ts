@@ -145,8 +145,6 @@ export interface ActivatedRunSettlement {
     readonly reason: "runtime-reported-failure" | "follower-not-emitted";
     readonly error: string;
   };
-  /** Background followers to queue in the same transaction. */
-  readonly followers: ManualTurnSummary["deferredFollowers"];
   readonly runtimeResults: readonly PluginRpcRuntimeResultSummary[];
 }
 
@@ -169,7 +167,7 @@ export function settleActivatedRun(args: {
   );
   const deferred = args.turnResult.deferredFollowers ?? [];
   if (args.expectFollower) {
-    if (deferred.length > 0) return { followers: deferred, runtimeResults };
+    if (deferred.length > 0) return { runtimeResults };
     const failed = runtimeResults.find((result) => result.status === "failed");
     return {
       failure: failed
@@ -181,7 +179,6 @@ export function settleActivatedRun(args: {
             reason: "follower-not-emitted",
             error: `runtime "${args.runtimeId}" completed without emitting a matching background follower event`,
           },
-      followers: [],
       runtimeResults,
     };
   }
@@ -208,8 +205,7 @@ export function settleActivatedRun(args: {
   return error
     ? {
         failure: { reason: "runtime-reported-failure", error },
-        followers: [],
         runtimeResults,
       }
-    : { followers: deferred, runtimeResults };
+    : { runtimeResults };
 }

@@ -6,6 +6,7 @@
 
 import type { StoreTransaction } from "@covel/store";
 import type { SessionEvent } from "@covel/shared";
+import { committedEventFollowers } from "../event-dependencies.js";
 import { assertSuspensionWritesUnchanged } from "../resume/suspension-baseline.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
 import {
@@ -18,7 +19,7 @@ import {
   bindDimensionProvider,
   type DimensionSettlementScope,
 } from "./dimension-finalization.js";
-import { droppedUpstream, settleDroppedInputs } from "./commit-dependencies.js";
+import { settleDeferredJobs } from "./commit-dependencies.js";
 import { applySessionClockTx } from "./session-clock.js";
 import { saveSuspensions } from "./suspension-commit.js";
 import {
@@ -180,24 +181,38 @@ async function appendJournal(ctx: CommitTxContext): Promise<void> {
 }
 
 async function runHostWrites(ctx: CommitTxContext): Promise<void> {
-  const { extraInTx } = ctx.args;
-  await extraInTx?.(ctx.tx, {
-    droppedRuntimeIds: ctx.drops.settled().rootIds,
-    droppedRunIds: ctx.drops.settled().runIds,
-    followerSources: ctx.args.eventDependencies?.followers ?? [],
+  const { extraInTx, deferredRuntimeJobs, eventDependencies } = ctx.args;
+  if (!extraInTx) return;
+  const drops = ctx.drops.settled();
+  await extraInTx(ctx.tx, {
+    droppedRuntimeIds: drops.rootIds,
+    ...(deferredRuntimeJobs?.length
+      ? {
+          deferredRuntimeJobs: settleDeferredJobs(
+            deferredRuntimeJobs,
+            commitDependencyView(ctx),
+          ),
+        }
+      : {}),
+    deferredFollowers: committedEventFollowers(
+      eventDependencies?.followers ?? [],
+      drops.runIds,
+    ),
   });
+}
+
+function commitDependencyView(ctx: CommitTxContext) {
+  return {
+    runtimes: ctx.args.runtimes,
+    results: ctx.units.map((unit) => unit.root),
+    dropped: ctx.drops.settled().rootIds,
+  };
 }
 
 async function saveContinuations(ctx: CommitTxContext): Promise<void> {
   const { args } = ctx;
-  const { runtimes } = args;
-  const { rootIds: droppedIds, runIds: droppedRunIds } = ctx.drops.settled();
-  const manifestByRuntime = new Map(runtimes.map((rt) => [rt.name, rt]));
-  const rootView = {
-    runtimes,
-    results: ctx.units.map((unit) => unit.root),
-    dropped: droppedIds,
-  };
+  const { runIds: droppedRunIds } = ctx.drops.settled();
+  const view = commitDependencyView(ctx);
   await saveSuspensions(ctx.tx, args, (fn) => ctx.postCommit.push(fn), {
     suspensionIds: new Set(
       (args.suspensions ?? [])
@@ -207,15 +222,7 @@ async function saveContinuations(ctx: CommitTxContext): Promise<void> {
         })
         .map((suspension) => suspension.id),
     ),
-    // Like the host's own deferred jobs: none that builds on a dropped
-    // runtime, and the rest see it as failed.
-    settleJobs: (jobs) =>
-      jobs
-        .filter((job) => {
-          const target = manifestByRuntime.get(job.runtimeId);
-          return !target || !droppedUpstream(target, rootView);
-        })
-        .map((job) => settleDroppedInputs(job, droppedIds)),
+    settleJobs: (jobs) => settleDeferredJobs(jobs, view),
   });
 }
 

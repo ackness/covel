@@ -1,3 +1,9 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { discoverPluginAt, loadPluginDefinition } from "@covel/plugin-loader";
+import { STORY_OUTPUT_CONTRACT } from "@covel/shared";
+import { frameworkContractSchemas } from "@covel/shared/contracts";
 import { describe, expect, it } from "vitest";
 import {
   readPluginFrontmatter,
@@ -14,6 +20,93 @@ const root = [
 ];
 
 describe("installation uses the shared manifest readers", () => {
+  it.each([
+    {
+      name: "the framework schema with its own title",
+      contracts: { [STORY_OUTPUT_CONTRACT]: { schema: "story.json" } },
+      files: {
+        "story.json": {
+          ...frameworkContractSchemas[STORY_OUTPUT_CONTRACT],
+          title: "Package copy",
+        },
+      },
+    },
+    {
+      name: "a different framework schema",
+      contracts: { [STORY_OUTPUT_CONTRACT]: { schema: "story.json" } },
+      files: { "story.json": { type: "object" } },
+      error: /framework-owned and cannot be shadowed/,
+    },
+    {
+      name: "a missing declared schema",
+      contracts: { [STORY_OUTPUT_CONTRACT]: { schema: "story.json" } },
+      files: {},
+      error: /contracts.*schema.*story\.json|story\.json.*contracts.*schema/,
+    },
+    {
+      name: "a contract reference instead of a schema file",
+      contracts: {
+        [STORY_OUTPUT_CONTRACT]: {
+          schema: `contract:${STORY_OUTPUT_CONTRACT}`,
+        },
+      },
+      files: {},
+      error: /expected a package-local schema file/,
+    },
+    {
+      name: "different schema files for one data contract",
+      contracts: { "records@1": { schema: "public.json" } },
+      data: {
+        records: { version: 1, accepts: ["records@1"], schema: "local.json" },
+      },
+      files: {
+        "public.json": { type: "object" },
+        "local.json": { type: "object" },
+      },
+      error:
+        /data namespace records must use its accepted contract records@1 schema/,
+    },
+  ])(
+    "agrees with disk loading for $name",
+    async ({ contracts, data, files, error }) => {
+      const manifest = {
+        id: "probe",
+        description: "Contract check",
+        contracts,
+        ...(data ? { contributes: { data } } : {}),
+      };
+      const filesInPackage = [
+        entry("PLUGIN.md", `---\n${JSON.stringify(manifest)}\n---\n`),
+        ...Object.entries(files).map(([name, schema]) =>
+          entry(name, JSON.stringify(schema)),
+        ),
+      ];
+      const parent = await fs.mkdtemp(
+        path.join(os.tmpdir(), "covel-contracts-"),
+      );
+      try {
+        const dir = path.join(await fs.realpath(parent), "probe");
+        await fs.mkdir(dir);
+        for (const file of filesInPackage)
+          await fs.writeFile(path.join(dir, file.relativePath), file.content);
+        const discovery = (await discoverPluginAt(dir))!;
+        if (error) {
+          await expect(loadPluginDefinition(discovery)).rejects.toThrow(error);
+          expect(() => validatePluginBundle(filesInPackage, new Set())).toThrow(
+            error,
+          );
+        } else {
+          await expect(loadPluginDefinition(discovery)).resolves.toBeDefined();
+          expect(validatePluginBundle(filesInPackage, new Set()).pluginId).toBe(
+            discovery.id,
+          );
+        }
+      } finally {
+        await fs.rm(parent, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("accepts an empty YAML block in a prompt-only translation", () => {
     expect(() =>
       validatePluginBundle(

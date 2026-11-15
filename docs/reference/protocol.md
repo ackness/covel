@@ -54,7 +54,7 @@ SSE 是服务端在一条 HTTP 连接上持续推送文本的方式。Covel 有�
 
 宿主调用 `commitExecution({ execution, store, completion, ...services })` 完成提交。宿主不用自己收集这些字段，提交时也不会重新加载插件。公开的执行入口要求 `deps.store`。
 
-给事件 follower 入队的宿主使用提交回调的 `CommitIsolation.droppedRunIds` 和 `followerSources` 调用 `committedEventFollowers`。`followerSources` 按执行结果的 `deferredFollowers` 顺序一一配对；恢复执行使用内部 `commit.deferredFollowers`。保留完整提交计划与原始 descriptor，不能按 runtime 名合并不同调用。旧的 `droppedEmitter` 导出已移除。
+宿主在 `extraInTx` 中使用 `CommitIsolation.deferredFollowers` 和 `deferredRuntimeJobs` 入队。内核已经按实际生产者筛掉不能继续的工作，也更新了延后作业的输入。恢复执行走同一条规则，宿主不用自己配对来源。没有计划安排延后作业时，`deferredRuntimeJobs` 省略；计划过但全部被筛掉时，它是空数组。
 
 ```ts
 const execution = await executeTurn(input, runtimes, deps);

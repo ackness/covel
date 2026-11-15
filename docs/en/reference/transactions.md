@@ -427,6 +427,8 @@ Who calls it:
 
 **Downstream commits only if upstream really commits.** Commit units are committed in execution order. The hard dependents of a dropped runtime are dropped with it (`commit/commit-dependencies.ts`). Dependencies are checked only between top-level runtimes: a nested result depends only on results of its own nested execution, which sit in the same unit and commit or drop with it.
 
+The kernel filters jobs queued immediately and jobs held back by a suspension by the same rules. The commit callback receives the eligible jobs and event followers with their inputs already updated; the host writes them to the queue.
+
 <!-- prettier-ignore -->
 | Relationship | When the upstream is dropped |
 | --- | --- |

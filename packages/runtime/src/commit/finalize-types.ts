@@ -22,6 +22,7 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   SessionEvent,
+  TurnResult,
 } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { HookScope } from "../hooks/hook-scope.js";
@@ -148,6 +149,7 @@ export interface FinalizeExecutionArgs {
    * no `turn_results` row (resume).
    */
   readonly turnIds: readonly string[];
+  readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
   readonly hookPipeline?: HookPipeline;
   readonly eventBus?: EventBus;
   readonly emitter?: TurnEmitter;
@@ -167,8 +169,7 @@ export interface FinalizeExecutionArgs {
    * Caller-specific writes folded into the same transaction, run after every
    * result commits and before `commit_status` settles. Resume uses it for the
    * assistant turn message + resolved marker. A throw rolls the execution back.
-   * `isolation` names the runtimes whose writes were dropped, so follow-up work
-   * derived from them is not queued.
+   * `isolation` includes the work still eligible to queue after isolation.
    */
   readonly extraInTx?: (
     tx: StoreTransaction,
@@ -304,8 +305,8 @@ export interface IsolatedRuntime {
 export interface CommitIsolation {
   /** Top-level runtimes of this execution whose writes were dropped. */
   readonly droppedRuntimeIds: ReadonlySet<string>;
-  /** Every dropped invocation, including nested runs with repeated runtime IDs. */
-  readonly droppedRunIds: ReadonlySet<string>;
-  /** Actual source run IDs, paired by position with the execution's followers. */
-  readonly followerSources: readonly string[];
+  /** Eligible stage jobs; absent when no stage jobs were planned, even before filtering. */
+  readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
+  /** Only followers whose actual producer invocation was not dropped. */
+  readonly deferredFollowers: NonNullable<TurnResult["deferredFollowers"]>;
 }

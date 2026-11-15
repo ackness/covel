@@ -26,8 +26,8 @@ export type ConnectionState =
 /**
  * Client errors that may or may not clear. They are NOT terminal on the first
  * hit: in local mode the subscription connects as soon as `SET_SESSION`
- * dispatches, while `syncToServer` only creates the server-side session a few
- * round-trips later, so the opening attempts legitimately 404 — and a token
+ * dispatches, while workspace hydration may not have created the server mirror
+ * yet, so the opening attempts legitimately 404 — and a token
  * stored after the first attempt turns a 401 into a success on the retry.
  * 408/429 are ordinary transient statuses and don't count against the streak.
  */

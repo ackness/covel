@@ -65,7 +65,7 @@ export function droppedUpstream(
  * failed in both the turn digest and the seeded upstream results, so later
  * background work never sees it as a successful upstream.
  */
-export function settleDroppedInputs(
+function settleDroppedInputs(
   job: DeferredRuntimeJob,
   dropped: ReadonlySet<string>,
 ): DeferredRuntimeJob {
@@ -90,6 +90,23 @@ export function settleDroppedInputs(
         : result,
     ),
   };
+}
+
+/** Filter jobs against the committed view and update the surviving inputs. */
+export function settleDeferredJobs(
+  jobs: readonly DeferredRuntimeJob[],
+  view: CommitDependencyView,
+): readonly DeferredRuntimeJob[] {
+  if (!view.dropped.size) return jobs;
+  const manifests = new Map(
+    view.runtimes.map((runtime) => [runtime.name, runtime]),
+  );
+  return jobs.flatMap((job) => {
+    const target = manifests.get(job.runtimeId);
+    return target && droppedUpstream(target, view)
+      ? []
+      : [settleDroppedInputs(job, view.dropped)];
+  });
 }
 
 function droppedSource(

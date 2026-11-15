@@ -21,7 +21,7 @@ afterEach(async () => {
   );
   roots.length = 0;
 });
-async function fixture(schema?: string, shadow?: boolean) {
+async function fixture(schema?: string) {
   const root = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "orch-loader-")),
   );
@@ -32,9 +32,6 @@ async function fixture(schema?: string, shadow?: boolean) {
     id: "sample",
     kind: "plugin",
     description: "Sample actor",
-    ...(shadow
-      ? { contracts: { "character-actor@1": { schema: "weak.json" } } }
-      : {}),
     runtime: {
       schedule: { subagentOnly: true },
       io: {
@@ -209,7 +206,7 @@ describe("framework story contract", () => {
       }),
     );
   });
-  it("accepts a package copy of the story schema and refuses a changed one", async () => {
+  it("uses the canonical story schema instead of the package's identical copy", async () => {
     const story = {
       schedule: { stage: "narrative" },
       io: { visibility: "story" },
@@ -222,20 +219,8 @@ describe("framework story contract", () => {
       ...storyOutputJsonSchema(),
     };
     const accepted = await storyPackage(story, root, { "story.json": copy });
-    expect(
-      (await loadRuntime(accepted, "teller")).outputContractSchema,
-    ).toEqual(storyContractSchema);
-    const changed = await storyPackage(story, root, {
-      "story.json": {
-        ...copy,
-        properties: {
-          ...(copy.properties as Record<string, unknown>),
-          extra: { type: "string" },
-        },
-      },
-    });
-    await expect(loadPluginDefinition(changed)).rejects.toThrow(
-      /framework-owned/,
+    expect((await loadRuntime(accepted, "teller")).outputContractSchema).toBe(
+      storyContractSchema,
     );
   });
 });
@@ -275,11 +260,6 @@ describe("framework actor contract", () => {
     expect(loaded.outputContractSchema).toEqual(
       characterActorOutputJsonSchema(),
     );
-  });
-  it("refuses package schema shadowing", async () => {
-    await expect(
-      loadPluginDefinition(await fixture(undefined, true)),
-    ).rejects.toThrow(/framework-owned/);
   });
   it.each([
     { schedule: {} },

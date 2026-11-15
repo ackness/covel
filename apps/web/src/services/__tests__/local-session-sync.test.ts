@@ -8,7 +8,10 @@ import type {
   BrowserCheckpoint,
   SessionCommit,
 } from "@covel/store/browser-sync";
-import { createSessionWorkspace } from "../data-service/workspace.js";
+import {
+  createSessionWorkspace,
+  SessionWorkspaceSyncError,
+} from "../data-service/workspace.js";
 import { resolveSetupRuntime } from "../../stores/session-store/setup-recovery-actions.js";
 import { createMemoryStore } from "@covel/store/memory";
 
@@ -146,7 +149,8 @@ describe("LocalDataService browser-authoritative sync", () => {
           },
         );
         await reloaded.createSession("world-1", "edited-session", [], "en-US");
-        await reloaded.syncToServer("edited-session");
+        const workspace = createSessionWorkspace(reloaded, "local");
+        await workspace.hydrate("edited-session");
         const restored = await mirror.getWorld("world-1");
         expect(restored?.dimensions).toEqual(dimensions);
         expect(restored?.metadata?.dimensions).toEqual(dimensions);
@@ -155,7 +159,7 @@ describe("LocalDataService browser-authoritative sync", () => {
           (await vault.getLatestCheckpoint("edited-session"))?.world?.metadata
             ?.dimensions,
         ).toEqual(dimensions);
-        await reloaded.commitFromServer("edited-session", "opening");
+        await workspace.checkpoint("edited-session", "opening");
         expect(
           (await new LocalDataService(vault).getWorld("world-1"))?.dimensions,
         ).toEqual(dimensions);
@@ -507,7 +511,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       await service.updateWorld("world-1", { lore: "Changed world" });
       restartServer();
       const reloaded = new LocalDataService(vault);
-      await reloaded.syncToServer("sess-1");
+      await createSessionWorkspace(reloaded, "local").hydrate("sess-1");
       expect(api.createSession).toHaveBeenCalledWith(
         "world-1",
         "sess-1",
@@ -627,13 +631,17 @@ describe("LocalDataService browser-authoritative sync", () => {
     async (mirror) => {
       const service = await serviceWithWorld();
       await createSave(service, "world-1", "sess-1", [], "en-US");
-      await service.addMessage({
-        id: "durable-message",
-        sessionId: "sess-1",
-        role: "user",
-        content: "Preserved browser history",
-        createdAt: "2026-09-01T00:00:00.000Z",
+      const workspace = createSessionWorkspace(service, "local");
+      await workspace.run("sess-1", "previous-turn", async () => {}, {
+        input: {
+          id: "durable-message",
+          sessionId: "sess-1",
+          role: "user",
+          content: "Preserved browser history",
+          createdAt: "2026-09-01T00:00:00.000Z",
+        },
       });
+      vi.clearAllMocks();
       if (mirror === "recreated") restartServer();
       api.updateWorld.mockRejectedValueOnce(
         new ApiError(
@@ -646,7 +654,7 @@ describe("LocalDataService browser-authoritative sync", () => {
         ),
       );
 
-      await service.syncToServer("sess-1");
+      await workspace.hydrate("sess-1");
 
       expect(api.createWorld).not.toHaveBeenCalled();
       expect(api.createSession).toHaveBeenCalledTimes(
@@ -685,7 +693,14 @@ describe("LocalDataService browser-authoritative sync", () => {
         error,
       );
 
-      await expect(service.syncToServer("sess-1")).rejects.toBe(error);
+      await expect(
+        createSessionWorkspace(service, "local").hydrate("sess-1"),
+      ).rejects.toMatchObject({
+        name: SessionWorkspaceSyncError.name,
+        stage: "hydrate",
+        sessionId: "sess-1",
+        cause: expect.toSatisfy((value: unknown) => value === error),
+      });
 
       expect(api.createWorld).not.toHaveBeenCalled();
       expect(api.getSession).not.toHaveBeenCalled();
@@ -709,7 +724,12 @@ describe("LocalDataService browser-authoritative sync", () => {
     );
     api.createWorld.mockRejectedValueOnce(denied);
 
-    await expect(service.syncToServer("sess-1")).rejects.toBe(denied);
+    await expect(
+      createSessionWorkspace(service, "local").hydrate("sess-1"),
+    ).rejects.toMatchObject({
+      stage: "hydrate",
+      cause: expect.toSatisfy((value: unknown) => value === denied),
+    });
 
     expect(api.updateWorld).not.toHaveBeenCalled();
     expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
@@ -769,7 +789,7 @@ describe("LocalDataService browser-authoritative sync", () => {
 
     // The next hydrate uploads that same save; nothing is recreated.
     vi.clearAllMocks();
-    await service.syncToServer("sess-1");
+    await createSessionWorkspace(service, "local").hydrate("sess-1");
     expect(api.createSession).not.toHaveBeenCalled();
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledExactlyOnceWith(
       "sess-1",
@@ -835,7 +855,9 @@ describe("LocalDataService browser-authoritative sync", () => {
 
     restartServer();
     vi.clearAllMocks();
-    await new LocalDataService(vault).syncToServer("sess-1");
+    await createSessionWorkspace(new LocalDataService(vault), "local").hydrate(
+      "sess-1",
+    );
 
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledExactlyOnceWith(
       "sess-1",
@@ -865,7 +887,7 @@ describe("LocalDataService browser-authoritative sync", () => {
     // selection must stay authoritative rather than adopting new defaults.
     restartServer();
     vi.clearAllMocks();
-    await service.syncToServer("sess-1");
+    await createSessionWorkspace(service, "local").hydrate("sess-1");
     await expect(service.getSession("sess-1")).resolves.toMatchObject({
       activePlugins: ["consumer", "provider"],
     });
@@ -890,7 +912,7 @@ describe("LocalDataService browser-authoritative sync", () => {
     } as never);
     await createSave(service, "localized-world", "sess-localized", [], "zh-CN");
 
-    await service.syncToServer("sess-localized");
+    await createSessionWorkspace(service, "local").hydrate("sess-localized");
 
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "sess-localized",
@@ -929,7 +951,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       },
     });
 
-    await service.syncToServer("sess-1");
+    await createSessionWorkspace(service, "local").hydrate("sess-1");
 
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "sess-1",
@@ -947,15 +969,20 @@ describe("LocalDataService browser-authoritative sync", () => {
     const service = await serviceWithWorld();
     const now = "2026-01-01T00:00:00.000Z";
     await createSave(service, "world-1", "sess-1", [], "en-US");
-    await service.addMessage({
-      id: "local-message-1",
-      sessionId: "sess-1",
-      role: "user",
-      content: "hello",
-      createdAt: now,
-    });
-
-    await service.syncToServer("sess-1");
+    await createSessionWorkspace(service, "local").run(
+      "sess-1",
+      "turn-1",
+      async () => {},
+      {
+        input: {
+          id: "local-message-1",
+          sessionId: "sess-1",
+          role: "user",
+          content: "hello",
+          createdAt: now,
+        },
+      },
+    );
 
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "sess-1",
@@ -981,7 +1008,9 @@ describe("LocalDataService browser-authoritative sync", () => {
       "en-US",
     );
 
-    await service.syncToServer("session_underscore");
+    await createSessionWorkspace(service, "local").hydrate(
+      "session_underscore",
+    );
 
     expect(api.getWorld).toHaveBeenCalledWith("world_underscore", {
       silentErrors: true,
@@ -1001,7 +1030,12 @@ describe("LocalDataService browser-authoritative sync", () => {
     const error = new Error("server unavailable");
     api.getWorld.mockRejectedValue(error);
 
-    await expect(service.syncToServer("sess-1")).rejects.toBe(error);
+    await expect(
+      createSessionWorkspace(service, "local").hydrate("sess-1"),
+    ).rejects.toMatchObject({
+      stage: "hydrate",
+      cause: expect.toSatisfy((value: unknown) => value === error),
+    });
     expect(api.createWorld).not.toHaveBeenCalled();
   });
 
@@ -1020,10 +1054,11 @@ describe("LocalDataService browser-authoritative sync", () => {
   it("serializes concurrent server commits against the latest browser revision", async () => {
     const service = await serviceWithWorld();
     await createSave(service, "world-1", "sess-1", [], "en-US");
+    const workspace = createSessionWorkspace(service, "local");
 
     await Promise.all([
-      service.commitFromServer("sess-1", "background-a"),
-      service.commitFromServer("sess-1", "turn-b"),
+      workspace.checkpoint("sess-1", "background-a"),
+      workspace.checkpoint("sess-1", "background-b"),
     ]);
 
     expect(api.fetchBrowserCommit.mock.calls.map((call) => call[2])).toEqual([
@@ -1031,7 +1066,7 @@ describe("LocalDataService browser-authoritative sync", () => {
     ]);
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
       revision: 3,
-      actionId: "turn-b",
+      actionId: "background-b",
     });
   });
 
@@ -1045,7 +1080,10 @@ describe("LocalDataService browser-authoritative sync", () => {
     );
     const fullRead = vi.spyOn(vault, "getLatestCheckpoint");
 
-    await service.commitFromServer("sess-1", "turn-1");
+    await createSessionWorkspace(service, "local").checkpoint(
+      "sess-1",
+      "turn-1",
+    );
 
     expect(fullRead).not.toHaveBeenCalled();
     expect(api.fetchBrowserCommit).toHaveBeenLastCalledWith(
@@ -1093,7 +1131,10 @@ describe("LocalDataService browser-authoritative sync", () => {
       },
     );
 
-    await service.commitFromServer("sess-localized", "turn-1");
+    await createSessionWorkspace(service, "local").checkpoint(
+      "sess-localized",
+      "turn-1",
+    );
 
     await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
       name: { "zh-CN": "雾港", "en-US": "Mistport" },
@@ -1110,20 +1151,26 @@ describe("LocalDataService browser-authoritative sync", () => {
   it("recovers a durably staged commit after the data service is recreated", async () => {
     const service = await serviceWithWorld();
     await createSave(service, "world-1", "sess-1", [], "en-US");
-    await service.syncToServer("sess-1");
-    await service.stageServerCommit("sess-1", "turn-pending");
+    const workspace = createSessionWorkspace(service, "local");
 
     const downloadError = new Error("connection reset");
     api.fetchBrowserCommit.mockRejectedValueOnce(downloadError);
     await expect(
-      service.commitFromServer("sess-1", "turn-pending"),
-    ).rejects.toBe(downloadError);
+      workspace.run("sess-1", "turn-pending", async () => {}),
+    ).rejects.toMatchObject({
+      stage: "checkpoint",
+      actionId: "turn-pending",
+      cause: expect.toSatisfy((value: unknown) => value === downloadError),
+    });
+    await expect(vault.getPendingCommit("sess-1")).resolves.toBe(
+      "turn-pending",
+    );
 
     api.getWorld.mockResolvedValue({ id: "world-1" });
     api.getSession.mockResolvedValue({ id: "sess-1" });
 
     const reloadedService = new LocalDataService(vault);
-    await reloadedService.syncToServer("sess-1");
+    await createSessionWorkspace(reloadedService, "local").hydrate("sess-1");
 
     // The failed download, then its recovery; the first save needs no commit.
     expect(api.fetchBrowserCommit).toHaveBeenCalledTimes(2);
@@ -1137,23 +1184,61 @@ describe("LocalDataService browser-authoritative sync", () => {
     await expect(vault.getPendingCommit("sess-1")).resolves.toBeNull();
   });
 
-  it("serializes a browser message before a concurrent server checkpoint", async () => {
+  it("keeps a concurrent background checkpoint behind the action with browser input", async () => {
     const service = await serviceWithWorld();
     await createSave(service, "world-1", "sess-1", [], "en-US");
-
-    await Promise.all([
-      service.addMessage({
+    const workspace = createSessionWorkspace(service, "local");
+    const otherWorkspace = createSessionWorkspace(
+      new LocalDataService(vault),
+      "local",
+    );
+    let releaseMutation!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseMutation = resolve;
+    });
+    const mutate = vi.fn(() => hold);
+    const turn = workspace.run("sess-1", "turn-1", mutate, {
+      input: {
         id: "message-1",
         sessionId: "sess-1",
         role: "user",
         content: "hello",
         createdAt: "2026-08-26T00:00:00.000Z",
-      }),
-      service.commitFromServer("sess-1", "background-1"),
-    ]);
+      },
+    });
+    let background: Promise<void> | undefined;
+    try {
+      await vi.waitFor(() => expect(mutate).toHaveBeenCalledOnce());
+      const { held } = await navigator.locks.query();
+      const sessionLock = held?.find(
+        (lock) =>
+          lock.mode === "exclusive" &&
+          lock.name?.includes(`local-session-sync-${sequence}`),
+      );
+      expect(sessionLock).toBeDefined();
+      background = otherWorkspace.checkpoint("sess-1", "background-1");
+      await vi.waitFor(async () => {
+        const { pending } = await navigator.locks.query();
+        expect(pending).toContainEqual(
+          expect.objectContaining({
+            name: sessionLock?.name,
+            mode: "exclusive",
+          }),
+        );
+      });
+      expect(api.fetchBrowserCommit).not.toHaveBeenCalled();
+      expect(await vault.getPendingCommit("sess-1")).toBe("turn-1");
+    } finally {
+      releaseMutation();
+      await Promise.all([turn, background]);
+    }
 
+    expect(api.fetchBrowserCommit.mock.calls).toEqual([
+      ["sess-1", "turn-1", 2],
+      ["sess-1", "background-1", 3],
+    ]);
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
-      revision: 3,
+      revision: 4,
       actionId: "background-1",
       messages: [expect.objectContaining({ id: "message-1" })],
     });

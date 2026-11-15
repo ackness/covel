@@ -1,11 +1,11 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
-  committedEventFollowers,
   commitExecution,
   executeTurn,
   refuseReleasedJobs,
   snapshotUserSettings,
+  type CommitExecutionOutcome,
   type TurnExecutorDeps,
   type ExecutedTurn,
 } from "@covel/runtime";
@@ -128,14 +128,19 @@ export async function commitDebugExecution(args: {
   readonly execution: ExecutedTurn;
   readonly deps: TurnExecutorDeps & { readonly store: DataStore };
   readonly detached: boolean;
-}) {
+}): Promise<
+  CommitExecutionOutcome & {
+    readonly deferredFollowers: readonly DeferredFollowerInput[];
+  }
+> {
   const { execution, deps } = args;
   const turn = execution.result;
   const signals = [
     deps.turnControl?.signal,
     deps.turnControl?.executionSignal,
   ].filter((signal): signal is AbortSignal => signal !== undefined);
-  return commitExecution({
+  let deferredFollowers: readonly DeferredFollowerInput[] = [];
+  const outcome = await commitExecution({
     store: deps.store,
     signal: signals.length > 0 ? AbortSignal.any(signals) : undefined,
     execution,
@@ -149,7 +154,14 @@ export async function commitDebugExecution(args: {
     // The debug runner has no durable job queue to put jobs held back by an
     // ended suspension on, so a commit that would release some rolls back.
     enqueueReleasedJobsInTx: refuseReleasedJobs,
+    extraInTx: async (_tx, isolation) => {
+      deferredFollowers = isolation.deferredFollowers;
+    },
   });
+  return {
+    ...outcome,
+    deferredFollowers: outcome.status === "committed" ? deferredFollowers : [],
+  };
 }
 
 export async function runDeferredFollower(args: {
@@ -231,17 +243,7 @@ export async function runDeferredFollower(args: {
       deps: args.deps,
       detached: true,
     });
-    // The host only chains events after their producing execution commits.
-    if (commit.status === "committed")
-      deferredFollowers = committedEventFollowers(
-        turn.deferredFollowers ?? [],
-        execution.commit.eventDependencies?.followers ?? [],
-        new Set(
-          (commit.isolatedRuntimes ?? []).flatMap((result) =>
-            result.runId ? [result.runId] : [],
-          ),
-        ),
-      );
+    deferredFollowers = commit.deferredFollowers;
     runtimeResult =
       commit.status === "committed"
         ? target

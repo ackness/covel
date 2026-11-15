@@ -101,10 +101,8 @@ export async function startGameSession({
     createdSessionId = session.id;
     if (!isCurrent()) return;
 
-    // Local mode creates the browser record first. Establish the authoritative
-    // server mirror before publishing an executable session or issuing any
-    // server-backed hydration calls. Remote mode is already
-    // authoritative and implements syncToServer as a no-op.
+    // Hydrate the transient mirror before publishing an executable session or
+    // issuing server-backed reads. Remote mode already has authoritative data.
     await workspace.hydrate(session.id);
     if (!isCurrent()) return;
     const prepBindings = await persistPrepRuntimeBindings(

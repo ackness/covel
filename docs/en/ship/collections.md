@@ -175,6 +175,8 @@ When importing from a ZIP, there is no preview step, and a problem causes the in
 
 Plugins in GitHub and offline collections follow the [installer’s runtime dependency rule](../reference/plugin-installation.md#what-the-installer-does-and-does-not-do). Authors must bundle dependencies into release files; the installer does not install dependencies for players.
 
+Collections also apply the [plugin contract schema checks](../reference/plugin-installation.md#what-the-installer-does-and-does-not-do). A package that fails these checks is reported before restart.
+
 Collection members cannot carry the installer's source receipt. Worlds and plugins share the [reserved-file rule](../reference/world-installation.md#api).
 
 ## Installing Several at Once Without a Manifest

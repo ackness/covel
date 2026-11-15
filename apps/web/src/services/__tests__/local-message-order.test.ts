@@ -26,22 +26,27 @@ beforeEach(async () => {
     createdAt: at,
   });
   await service.createSession("world", "session");
+  const base = (await vault.getLatestCheckpoint("session"))!;
   // Backfill an earlier timestamp amid ties, whose IDs oppose write order.
-  for (const [id, createdAt] of [
+  const messages = [
     ["z-story", at],
     ["old", earlier],
     ["b-card", at],
     ["a-story", at],
     ["m-card", at],
-  ] as const) {
-    await service.addMessage({
+  ] as const;
+  await vault.saveCheckpoint({
+    ...base,
+    revision: base.revision + 1,
+    actionId: "seed-history",
+    messages: messages.map(([id, createdAt]) => ({
       id,
       sessionId: "session",
       role: "assistant",
       content: id,
       createdAt,
-    });
-  }
+    })),
+  });
 });
 
 afterEach(() => vault.deleteDatabase());

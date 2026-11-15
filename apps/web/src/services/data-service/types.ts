@@ -85,8 +85,6 @@ export interface DataService {
     sessionId: string,
     opts: { limit?: number; cursor?: PageCursor },
   ): Promise<CursorPage<MessageRecord>>;
-  /** Persist a browser-authored input before its action is dispatched. */
-  addMessage(msg: MessageRecord): Promise<void>;
 
   /**
    * Atomically merge submitted block IDs and their form values into a session.
@@ -110,19 +108,6 @@ export interface DataService {
     ids: string[];
     values: Record<string, Record<string, unknown>>;
   }>;
-
-  /**
-   * Sync session context to server MemoryStore before sending actions.
-   * In remote mode this is a no-op. In local mode it pushes
-   * the complete browser checkpoint so the transient server can process work.
-   */
-  syncToServer(sessionId: string): Promise<void>;
-
-  /** Recover any different pending commit, then durably stage this mutation. */
-  stageServerCommit(sessionId: string, actionId: string): Promise<void>;
-
-  /** Persist the transient server result as the next browser checkpoint. */
-  commitFromServer(sessionId: string, actionId: string): Promise<void>;
 
   /** Merge partial history by turn/runtime. Empty batches preserve history; session/world deletion clears it. */
   saveExecutionSteps(

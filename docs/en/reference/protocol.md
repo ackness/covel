@@ -54,7 +54,7 @@ This section is for people who embed `@covel/runtime` in their own service. The 
 
 The host completes the commit by calling `commitExecution({ execution, store, completion, ...services })`. The host does not collect these fields itself, and the commit does not load plugins again. The public execution entry points require `deps.store`.
 
-A host that queues event followers calls `committedEventFollowers` with the commit callback's `CommitIsolation.droppedRunIds` and `followerSources`. The source array pairs with the execution result's `deferredFollowers` in order; a resumed execution uses internal `commit.deferredFollowers`. Preserve the full commit plan and original descriptors, keeping distinct invocations of one runtime separate. The old `droppedEmitter` export has been removed.
+In `extraInTx`, the host queues `CommitIsolation.deferredFollowers` and `deferredRuntimeJobs`. The kernel has already filtered the work by its actual producer and updated the deferred jobs' inputs. A resumed execution follows the same rule; the host does not match jobs to producer IDs. `deferredRuntimeJobs` is absent when none were planned and empty when all planned jobs were filtered out.
 
 ```ts
 const execution = await executeTurn(input, runtimes, deps);
