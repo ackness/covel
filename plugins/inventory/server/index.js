@@ -1,13 +1,11 @@
 /**
- * Unified server entry (PLUGIN.md `entry`) — registers the player-side
- * item-op RPC action (panel buttons) and the `/bag` command action, and puts
- * what the player carries into the session summary. It also offers bag lookup
- * and atomic item exchanges through public services.
+ * Unified server entry (PLUGIN.md `entry`) — registers the `/bag` command
+ * action and puts what the player carries into the session summary. It also
+ * offers bag lookup and atomic item exchanges through public services.
  */
 import { compareText } from "@covel/plugin-handlers-utils";
 import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 import { bag, change } from "../lib/inventory-services.js";
-import itemOp from "../rpc/item-op.js";
 import openBag from "../rpc/open-bag.js";
 
 /** The summary is a glance; the panel has the whole bag. */
@@ -71,9 +69,6 @@ export default function (covel) {
       ),
     }),
     handler: change,
-  });
-  covel.registerRpc("item-op", itemOp, {
-    description: "Equip, unequip, or drop an inventory item (player action)",
   });
   covel.registerRpc("open-bag", openBag, {
     description: "Count carried items and open the inventory panel",

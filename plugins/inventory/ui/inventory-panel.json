@@ -118,9 +118,9 @@
                             },
                             "on": {
                               "click": {
-                                "action": "invokePluginAction",
+                                "action": "invokeRuntime",
                                 "params": {
-                                  "action": "item-op",
+                                  "runtimeId": "inventory/item-op",
                                   "payload": {
                                     "op": "unequip",
                                     "itemId": {
@@ -140,9 +140,9 @@
                             },
                             "on": {
                               "click": {
-                                "action": "invokePluginAction",
+                                "action": "invokeRuntime",
                                 "params": {
-                                  "action": "item-op",
+                                  "runtimeId": "inventory/item-op",
                                   "payload": {
                                     "op": "drop",
                                     "itemId": {
@@ -259,9 +259,9 @@
                             },
                             "on": {
                               "click": {
-                                "action": "invokePluginAction",
+                                "action": "invokeRuntime",
                                 "params": {
-                                  "action": "item-op",
+                                  "runtimeId": "inventory/item-op",
                                   "payload": {
                                     "op": "equip",
                                     "itemId": {
@@ -281,9 +281,9 @@
                             },
                             "on": {
                               "click": {
-                                "action": "invokePluginAction",
+                                "action": "invokeRuntime",
                                 "params": {
-                                  "action": "item-op",
+                                  "runtimeId": "inventory/item-op",
                                   "payload": {
                                     "op": "drop",
                                     "itemId": {

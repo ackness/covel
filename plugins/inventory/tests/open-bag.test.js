@@ -22,7 +22,7 @@ async function makeCtx(rows, locale = "zh-CN") {
 }
 
 describe("inventory open-bag command", () => {
-  it("registers open-bag without replacing the existing item-op action", () => {
+  it("registers open-bag as the only RPC action", () => {
     const registerRpc = vi.fn();
     const registerTool = vi.fn();
     registerInventory({
@@ -35,7 +35,6 @@ describe("inventory open-bag command", () => {
 
     expect(registerTool).not.toHaveBeenCalled();
     expect(registerRpc.mock.calls.map(([action]) => action)).toEqual([
-      "item-op",
       "open-bag",
     ]);
     expect(registerRpc).toHaveBeenCalledWith(

@@ -1,136 +1,178 @@
 import { describe, expect, it, vi } from "vitest";
-import itemOp from "../rpc/item-op.js";
+import {
+  loadPluginMessages,
+  makeManualFunctionContext,
+} from "@covel/plugin-test-utils";
+import handler from "../runtimes/item-op/handler.js";
 
-function makeCtx(existing) {
+const ITEM = { name: "钩镰", quantity: 1, equipped: false };
+
+function makeCtx(existing = {}, manualPayload = {}) {
   const writes = [];
+  const pluginData = {
+    get: vi.fn(async (_ns, key) => existing[key] ?? null),
+    set: vi.fn(async (namespace, key, value) => {
+      writes.push({ namespace, key, value });
+    }),
+  };
   return {
     ctx: {
-      sessionId: "sess-1",
-      pluginId: "inventory",
-      action: "item-op",
-      store: {
-        // Full PluginDataRecord shape — the handler spreads the loaded row
-        // into its upsert, so the mock must carry the identity fields too.
-        getPluginData: vi.fn(async (_ns, key) =>
-          existing[key]
-            ? {
-                id: `row-${key}`,
-                sessionId: "sess-1",
-                pluginId: "inventory",
-                namespace: "items",
-                key,
-                value: existing[key],
-                createdAt: "2026-08-01T00:00:00.000Z",
-                updatedAt: "2026-08-01T00:00:00.000Z",
-              }
-            : null,
-        ),
-        setPluginData: vi.fn(async (record) => {
-          writes.push(record);
-        }),
-      },
+      ...makeManualFunctionContext({
+        pluginId: "inventory",
+        runtimeId: "inventory/item-op",
+        manualPayload,
+      }),
+      pluginData,
     },
+    pluginData,
     writes,
   };
 }
 
-describe("inventory item-op rpc", () => {
-  it("equips a backpack item", async () => {
+describe("inventory item-op runtime", () => {
+  it.each([
+    [
+      "en-US",
+      "That item is no longer in your bag.",
+      "That bag action is not supported.",
+    ],
+    ["zh-CN", "这件物品已经不在你的背包里了。", "不支持这项背包操作。"],
+    [
+      "ru-RU",
+      "Этого предмета больше нет в вашей сумке.",
+      "Это действие с сумкой не поддерживается.",
+    ],
+  ])(
+    "localizes both failures in %s without exposing the item id",
+    async (locale, missing, unsupported) => {
+      const { ctx, pluginData } = makeCtx();
+      const localized = {
+        ...ctx,
+        locale,
+        messages: await loadPluginMessages(
+          new URL("..", import.meta.url),
+          locale,
+        ),
+      };
+      for (const [op, error] of [
+        ["equip", missing],
+        ["use", unsupported],
+      ]) {
+        const result = await handler({
+          ...localized,
+          manualPayload: { op, itemId: "private-item-id" },
+        });
+        expect(result).toEqual({ outcome: "failed", error });
+        expect(result.error).not.toContain("private-item-id");
+      }
+      expect(pluginData.set).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["equip", { ...ITEM }, true],
+    ["unequip", { ...ITEM, equipped: true }, false],
+  ])("%s toggles the equipped flag", async (op, item, equipped) => {
     // Arrange
-    const { ctx, writes } = makeCtx({
-      "item-1": { name: "钩镰", quantity: 1, equipped: false },
-    });
+    const { ctx, writes } = makeCtx(
+      { "item-1": item },
+      { op, itemId: "item-1" },
+    );
 
     // Act
-    const result = await itemOp({ op: "equip", itemId: "item-1" }, ctx);
+    const result = await handler(ctx);
 
     // Assert
-    expect(result.ok).toBe(true);
-    expect(writes[0].value.equipped).toBe(true);
-    expect(writes[0].namespace).toBe("items");
-    expect(Object.keys(writes[0]).sort()).toEqual([
-      "key",
-      "namespace",
-      "value",
+    expect(result).toMatchObject({
+      outcome: "success",
+      value: { op, item: { ...item, equipped } },
+    });
+    expect(writes).toEqual([
+      {
+        namespace: "items",
+        key: "item-1",
+        value: expect.objectContaining({ equipped }),
+      },
     ]);
   });
 
   it("stamps updatedAt so the summary treats the change as recent", async () => {
-    const { ctx, writes } = makeCtx({
-      "item-1": {
-        name: "钩镰",
-        quantity: 1,
-        equipped: false,
-        updatedAt: "2026-08-01T00:00:00.000Z",
+    const { ctx, writes } = makeCtx(
+      {
+        "item-1": {
+          ...ITEM,
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
       },
-    });
-    await itemOp({ op: "equip", itemId: "item-1" }, ctx);
+      { op: "equip", itemId: "item-1" },
+    );
+    await handler(ctx);
     expect(writes[0].value.updatedAt > "2026-08-01T00:00:00.000Z").toBe(true);
-  });
-
-  it("unequips an equipped item", async () => {
-    // Arrange
-    const { ctx, writes } = makeCtx({
-      "item-1": { name: "钩镰", quantity: 1, equipped: true },
-    });
-
-    // Act
-    const result = await itemOp({ op: "unequip", itemId: "item-1" }, ctx);
-
-    // Assert
-    expect(result.ok).toBe(true);
-    expect(writes[0].value.equipped).toBe(false);
   });
 
   it("drops an item as the same tombstone shape the tool writes", async () => {
     // Arrange
-    const { ctx, writes } = makeCtx({
-      "item-1": { name: "火把", quantity: 3, equipped: true },
-    });
+    const item = { name: "火把", quantity: 3, equipped: true };
+    const { ctx, writes } = makeCtx(
+      { "item-1": item },
+      { op: "drop", itemId: "item-1" },
+    );
 
     // Act
-    const result = await itemOp({ op: "drop", itemId: "item-1" }, ctx);
+    const result = await handler(ctx);
 
     // Assert
-    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe("success");
     expect(writes[0].value).toMatchObject({
       name: "火把",
       quantity: 0,
       equipped: false,
       removed: true,
     });
+    expect(result.value.item).toEqual(writes[0].value);
   });
 
-  it("rejects a missing or already-removed item without writing", async () => {
+  it.each([
+    ["missing", null],
+    ["removed", { name: "旧图", quantity: 0, removed: true }],
+    ["non-object", "not an object"],
+  ])("rejects a %s item without writing", async (_label, item) => {
     // Arrange
-    const { ctx, writes } = makeCtx({
-      gone: { name: "旧图", quantity: 0, removed: true },
+    const { ctx, pluginData } = makeCtx(
+      { "item-1": item },
+      { op: "equip", itemId: "item-1" },
+    );
+
+    // Act
+    const result = await handler(ctx);
+
+    // Assert
+    expect(result).toEqual({
+      outcome: "failed",
+      error: "That item is no longer in your bag.",
     });
-
-    // Act
-    const missing = await itemOp({ op: "equip", itemId: "nope" }, ctx);
-    const removed = await itemOp({ op: "drop", itemId: "gone" }, ctx);
-
-    // Assert
-    expect(missing.ok).toBe(false);
-    expect(removed.ok).toBe(false);
-    expect(writes).toHaveLength(0);
+    expect(pluginData.get).toHaveBeenCalledWith("items", "item-1");
+    expect(pluginData.set).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed payloads without touching the store", async () => {
+  it.each([
+    ["an unsupported op", { op: "use", itemId: "item-1" }],
+    ["a missing itemId", { op: "equip" }],
+    ["a non-string itemId", { op: "equip", itemId: 7 }],
+    ["a non-object payload", "garbage"],
+  ])("rejects %s without reading or writing", async (_label, payload) => {
     // Arrange
-    const { ctx, writes } = makeCtx({});
+    const { ctx, pluginData } = makeCtx({}, payload);
 
     // Act
-    const badOp = await itemOp({ op: "use", itemId: "item-1" }, ctx);
-    const noId = await itemOp({ op: "equip" }, ctx);
-    const junk = await itemOp("garbage", ctx);
+    const result = await handler(ctx);
 
     // Assert
-    expect(badOp.ok).toBe(false);
-    expect(noId.ok).toBe(false);
-    expect(junk.ok).toBe(false);
-    expect(writes).toHaveLength(0);
-    expect(ctx.store.getPluginData).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      outcome: "failed",
+      error: "That bag action is not supported.",
+    });
+    expect(pluginData.get).not.toHaveBeenCalled();
+    expect(pluginData.set).not.toHaveBeenCalled();
   });
 });

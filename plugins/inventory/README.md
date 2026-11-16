@@ -7,6 +7,7 @@
 - `PLUGIN.md`：插件级元信息，本身不是可执行 runtime。
 - `runtimes/vocabulary/`：pre-turn function runtime，把背包里的物品名作为 `world-ir.vocabulary@1` 发布给事实抽取，让它沿用同一名称。
 - `runtimes/ledger/`：post-turn function runtime，读取本轮 WorldIR 的 `inventory_change` 事件与 `operations@1`，跳过工具已处理的变化，再补记其余变化。
+- `runtimes/item-op/`：manual function runtime，处理面板的装备、卸下和丢弃操作，经过 proposal 校验后随执行事务提交。
 - `lib/world-ir.js`：把主角持有的物品事件映射为台账变化（`gain` → add、`lose` → remove、`equip` / `unequip`）。
 - `lib/update-inventory.js`：批量提交物品变化（add / remove / set / equip / unequip）的台账逻辑。
 - `schemas/items.schema.json`：`items` 数据集与世界包导入共用的 schema（世界包可预置开局装备）。
@@ -44,7 +45,7 @@
 
 ## 玩家侧操作
 
-- `rpc/item-op.js` 经 entry 注册为 `item-op` action，面板逐物品按钮（`invokePluginAction`）触发：`equip` / `unequip` / `drop`。
+- `runtimes/item-op/` 是 manual function runtime，面板逐物品按钮通过 `invokeRuntime` 调用 `inventory/item-op`，执行 `equip` / `unequip` / `drop`。物品变化先暂存，经过 proposal 校验后随执行事务一起提交；失败时不写入。
 - `rpc/open-bag.js` 经同一 entry 注册为 `open-bag` action；只读取当前 session 的 `items` namespace，不修改背包台账。
 - 刻意只到装备位与丢弃：装备是玩家的配置选择、不经叙事；"使用物品"必须走故事输入，静默扣数量的按钮会绕过叙事引擎。
 - `drop` 写与台账 remove-to-zero 同款墓碑（`quantity: 0, removed: true`），剧情侧与玩家侧移除共享一个模型，同名再获得复活同一记录。

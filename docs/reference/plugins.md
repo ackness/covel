@@ -1426,7 +1426,7 @@ pnpm lint
 | [dm-console](../../plugins/dm-console/README.md) | 主持人面板 | `plugin` | 无 | 无 | 在一个页面里展示在场角色、等你处理的事项、故事和输入框；只有界面，不调用模型 |
 | [guide](../../plugins/guide/README.md) | 行动建议 | `plugin` | `scene-prompts@1` | 内联 | 每轮故事后回顾前情，给出可直接采用的行动短句 |
 | [history-compaction](../../plugins/history-compaction/README.md) | 长篇故事记忆 | `core` | `history.compact@2`（默认提供者） | 无 | 把较早的对话整理成分段摘要 |
-| [inventory](../../plugins/inventory/README.md) | 背包 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary` | 记录物品得失和装备变化 |
+| [inventory](../../plugins/inventory/README.md) | 背包 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary`、`item-op` | 记录物品得失和装备变化 |
 | [living-world-rules](../../plugins/living-world-rules/README.md) | 世界规则 | `plugin` | `living-world-rules@1`、`world-info@1` | 无 | 展示世界包里长期生效的规则，并让叙事遵守 |
 | [memory](../../plugins/memory/README.md) | 故事记忆 | `core` | 无 | `extract` | 记住剧情、场景、人物关系和主角状态 |
 | [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |

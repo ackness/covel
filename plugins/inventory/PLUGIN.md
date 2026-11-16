@@ -1,5 +1,5 @@
 ---
-version: 0.0.45
+version: 0.0.46
 displayName: Bag
 description: >-
   Keeps track of what you carry. Items you gain, lose or equip in the story are
@@ -52,7 +52,6 @@ contributes:
     message:
       - ./ui/inventory-message.json
   actions:
-    - item-op
     - open-bag
   extensions:
     - point: ui.slot@1
