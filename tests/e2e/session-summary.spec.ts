@@ -8,8 +8,8 @@ import {
 } from "./helpers/player.js";
 
 for (const [locale, itemName] of [
-  ["en-US", "Field radio"],
-  ["zh-CN", "外勤电台"],
+  ["en-US", "Staff key"],
+  ["zh-CN", "员工钥匙"],
 ] as const) {
   test(`bundled plugins put the objective and the pack into the status strip in ${locale}`, async ({
     page,
@@ -20,9 +20,9 @@ for (const [locale, itemName] of [
     });
     await useServerWorlds(page);
     await page.goto("/session");
-    // Emberback seeds quests and opening gear, so the summary has content
+    // Last Train Out seeds quests and opening gear, so the summary has content
     // before the first turn.
-    await selectWorldByText(page, /Emberback|余烬岭/i);
+    await selectWorldByText(page, /Last Train Out|末班地铁/i);
     await startGame(
       page,
       page.getByRole("button", { name: /^(start game|开始游戏)$/i }).first(),

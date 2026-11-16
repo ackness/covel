@@ -117,7 +117,6 @@ export async function makePlugin(options: {
       ]),
     ),
     worldProjections: options.projections,
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }
@@ -182,7 +181,6 @@ export function worldIrEntry(): PluginRegistryEntry {
       `---\n${JSON.stringify({ id: "world-ir", kind: "plugin", description: "World IR schema", contracts: { "world-ir@2": { schema: "./schemas/world-ir.schema.json" } } })}\n---`,
       path.join(rootPath, "PLUGIN.md"),
     ),
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }

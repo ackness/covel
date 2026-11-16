@@ -242,10 +242,10 @@ function Survival({ copy, beat }: SceneProps) {
         <div className="preview-card">
           <p className="preview-label">
             <Clock size={14} aria-hidden />
-            {scene.stormLabel}
+            {scene.floodLabel}
           </p>
           <p className="preview-readout">
-            {beat === 2 ? "02:50:00" : scene.storm}
+            {beat === 2 ? "02:20:00" : scene.flood}
           </p>
         </div>
         <div className="preview-card">
@@ -264,9 +264,12 @@ function Survival({ copy, beat }: SceneProps) {
               }}
             />
           </div>
+          <p className="preview-systems">
+            {beat === 2 ? `${state.elapsed} · ${state.cost}` : scene.systems}
+          </p>
         </div>
         <div
-          className="preview-rescue-task"
+          className="preview-survival-task"
           data-plugin="core-quest"
           data-focus={beat === 1}
         >
@@ -275,10 +278,23 @@ function Survival({ copy, beat }: SceneProps) {
             {state.questLabel}
           </p>
           <strong>{state.quest}</strong>
-          <p data-plugin="inventory">{state.equipment}</p>
-          <p className="preview-change">
-            {beat === 2 ? `${state.elapsed} · ${state.cost}` : state.before}
-          </p>
+          <p>{beat >= 1 ? state.after : state.before}</p>
+          <ul
+            className="preview-messages"
+            data-plugin="world-init"
+            aria-label={state.messagesLabel}
+          >
+            <li>
+              <span>{state.control}</span>
+              <em>{state.unchecked}</em>
+            </li>
+            <li>
+              <span>{state.photo}</span>
+              <em data-changed={beat >= 1}>
+                {beat >= 1 ? state.checked : state.unchecked}
+              </em>
+            </li>
+          </ul>
         </div>
         <div>
           <p className="preview-label">{scene.taskLabel}</p>

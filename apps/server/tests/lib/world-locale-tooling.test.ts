@@ -394,7 +394,7 @@ describe("world translation tooling", () => {
 describe("world translation tooling: what counts as text", () => {
   it("reads a dimensions file by its schema", async () => {
     const status = await worldTranslationStatus(
-      path.join(repoRoot, "worlds/emberback"),
+      path.join(repoRoot, "worlds/last-train"),
       "ja-JP",
     );
     const dimensions = status.files.find(
@@ -403,14 +403,14 @@ describe("world translation tooling: what counts as text", () => {
     const pointers = dimensions.missing.map((unit) => unit.pointer);
 
     // Labels the schema defines as text.
-    expect(pointers).toContain("crownfire.name");
+    expect(pointers).toContain("floodline.name");
     expect(pointers).toContain(
-      "crownfire.schema.properties.stage.x-enumLabels.distant",
+      "floodline.schema.properties.stage.x-enumLabels.trackbed",
     );
     // A value is text only at a node marked `x-i18n`.
-    expect(pointers).toContain("geography.initialValue.overview");
+    expect(pointers).toContain("messageLog.initialValue.control-2351.source");
     // An enum value is an identifier, whatever it looks like.
-    expect(pointers).not.toContain("crownfire.initialValue.stage");
+    expect(pointers).not.toContain("floodline.initialValue.stage");
   });
 
   it("names the terms a language already translates", async () => {
@@ -427,7 +427,7 @@ describe("world translation tooling: what counts as text", () => {
 
   it("counts lowercase trigger lists in both rules and lorebook entries", async () => {
     const status = await worldTranslationStatus(
-      path.join(repoRoot, "worlds/emberback"),
+      path.join(repoRoot, "worlds/last-train"),
       "ja-JP",
     );
     const rules = status.files.find(
@@ -436,26 +436,26 @@ describe("world translation tooling: what counts as text", () => {
     const keys = rules.missing
       .filter((unit) => unit.pointer.includes(".keys["))
       .map((unit) => unit.text);
-    // `storm` alone is a lowercase word; beside `Crownfire` it is a trigger.
-    expect(keys).toEqual(expect.arrayContaining(["Crownfire", "storm"]));
+    // `message` alone is a lowercase word; beside `Control` it is a trigger.
+    expect(keys).toEqual(expect.arrayContaining(["Control", "message"]));
     expect(rules.missing).toContainEqual(
       expect.objectContaining({
-        pointer: "[id=emberback-future-echoes].keys[0]",
-        text: "echo",
+        pointer: "[id=last-train-messages].keys[0]",
+        text: "message",
       }),
     );
     expect(rules.missing).toContainEqual(
       expect.objectContaining({
-        pointer: "[id=emberback-signal-evidence].keys[0]",
-        text: "radio",
+        pointer: "[id=last-train-tunnel].keys[0]",
+        text: "walkway",
       }),
     );
     expect(
       status.files.find((file) => file.file === "data/lorebook.yaml")!.missing,
     ).toContainEqual(
       expect.objectContaining({
-        pointer: "[id=echo-traffic].keys[1]",
-        text: "signal",
+        pointer: "[id=line-4].keys[1]",
+        text: "tunnel",
       }),
     );
   });

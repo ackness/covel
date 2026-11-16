@@ -1,0 +1,20 @@
+- id: dara-quinn
+  name: Dara Quinn
+  score: 8
+  notes: The train's operator. She's glad someone in a staff jacket is here, and she expects you to back her up on Control's order.
+- id: theo-marsh
+  name: Theo Marsh
+  score: 4
+  notes: Off-duty signal maintainer who walked ahead toward the crossover. You've passed each other in the depot; he likes people who don't waste his time.
+- id: nadia-haddad
+  name: Nadia Haddad
+  score: 2
+  notes: Night-shift nurse looking after an older passenger. She'll work with anyone, but she won't trade her patient's air for anyone's plan.
+- id: graham-pike
+  name: Graham Pike
+  score: -2
+  notes: Retired engineer who wants to go back to the pump room. He thinks you're being too cautious; you think he's underestimating the water.
+- id: kit-alvarez
+  name: Kit Alvarez
+  score: 6
+  notes: Delivery rider with the only phone that keeps finding signal. He wants to help and wants to be believed, maybe a little too much.

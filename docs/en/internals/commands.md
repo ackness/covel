@@ -140,7 +140,7 @@ node scripts/tests/ui-literal-baseline.test.mjs --update
 
 The first command reports 5 passing tests. The second accepts only decreases, writes the baseline, and reports `Updated UI literal baseline (counts can only decrease).` It cannot accept new text.
 
-The server's `instruction-language.test.ts` fixes `COVEL_INSTRUCTION_LOCALE=en`, loads an English Emberback session, selects every bundled runtime's body, and assembles its context without a model call. It checks the bodies, static prompt contributions, framework templates, and assembled instructions. World content is excluded before assembly, so framework notes around data blocks remain checked.
+The server's `instruction-language.test.ts` fixes `COVEL_INSTRUCTION_LOCALE=en`, loads an English Last Train Out session, selects every bundled runtime's body, and assembles its context without a model call. It checks the bodies, static prompt contributions, framework templates, and assembled instructions. World content is excluded before assembly, so framework notes around data blocks remain checked.
 
 ```bash
 pnpm --filter @covel/server exec vitest run tests/bootstrap/instruction-language.test.ts --maxWorkers=2

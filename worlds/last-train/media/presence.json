@@ -1,0 +1,157 @@
+[
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-dara-quinn",
+    "displayName": "Dara Quinn",
+    "avatar": {
+      "id": "90767687f3a8e7b122f96baee6a0a971981471fd7c9eb0043e60c7c385f68ac6",
+      "mime": "image/webp",
+      "size": 336250
+    },
+    "sprite": {
+      "id": "90767687f3a8e7b122f96baee6a0a971981471fd7c9eb0043e60c7c385f68ac6",
+      "mime": "image/webp",
+      "size": 336250
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "90767687f3a8e7b122f96baee6a0a971981471fd7c9eb0043e60c7c385f68ac6",
+            "mime": "image/webp",
+            "size": 336250
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-theo-marsh",
+    "displayName": "Theo Marsh",
+    "avatar": {
+      "id": "8d528b1c508c2aa4cdd0e311ce5f2f6a95bfbbd8492f2ee8e68979e30b1de2a6",
+      "mime": "image/webp",
+      "size": 352252
+    },
+    "sprite": {
+      "id": "8d528b1c508c2aa4cdd0e311ce5f2f6a95bfbbd8492f2ee8e68979e30b1de2a6",
+      "mime": "image/webp",
+      "size": 352252
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "8d528b1c508c2aa4cdd0e311ce5f2f6a95bfbbd8492f2ee8e68979e30b1de2a6",
+            "mime": "image/webp",
+            "size": 352252
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-nadia-haddad",
+    "displayName": "Nadia Haddad",
+    "avatar": {
+      "id": "d93ea1e69ce6e0fe1c7647c98dbd7b22883d4595bb70e31c0e3ebca39a533379",
+      "mime": "image/webp",
+      "size": 387460
+    },
+    "sprite": {
+      "id": "d93ea1e69ce6e0fe1c7647c98dbd7b22883d4595bb70e31c0e3ebca39a533379",
+      "mime": "image/webp",
+      "size": 387460
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "d93ea1e69ce6e0fe1c7647c98dbd7b22883d4595bb70e31c0e3ebca39a533379",
+            "mime": "image/webp",
+            "size": 387460
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-graham-pike",
+    "displayName": "Graham Pike",
+    "avatar": {
+      "id": "bd5320ad2fb1bb96cfc561f310646ecd1b2eaf14ca1a4d0dd4de23226247e7e5",
+      "mime": "image/webp",
+      "size": 312236
+    },
+    "sprite": {
+      "id": "bd5320ad2fb1bb96cfc561f310646ecd1b2eaf14ca1a4d0dd4de23226247e7e5",
+      "mime": "image/webp",
+      "size": 312236
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "bd5320ad2fb1bb96cfc561f310646ecd1b2eaf14ca1a4d0dd4de23226247e7e5",
+            "mime": "image/webp",
+            "size": 312236
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-kit-alvarez",
+    "displayName": "Kit Alvarez",
+    "avatar": {
+      "id": "32d23ed555a6e90c52715e99a3d5b16dfa5e001dd85cf79b67fd1d4b145a8ba1",
+      "mime": "image/webp",
+      "size": 419966
+    },
+    "sprite": {
+      "id": "32d23ed555a6e90c52715e99a3d5b16dfa5e001dd85cf79b67fd1d4b145a8ba1",
+      "mime": "image/webp",
+      "size": 419966
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "32d23ed555a6e90c52715e99a3d5b16dfa5e001dd85cf79b67fd1d4b145a8ba1",
+            "mime": "image/webp",
+            "size": 419966
+          }
+        }
+      ]
+    }
+  }
+]

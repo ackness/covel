@@ -1,0 +1,44 @@
+- id: staff-jacket
+  name: Staff jacket
+  quantity: 1
+  equipped: true
+  description: Your reflective Calder Transit jacket. It doesn't make you in charge, but everyone in the car reads it that way.
+  tags:
+    - gear
+    - uniform
+- id: staff-key
+  name: Staff key
+  quantity: 1
+  description: A triangular carriage key on a lanyard. It opens the end doors, the emergency hatches, and the cab door if Dara lets you.
+  tags:
+    - tool
+    - quest
+- id: pocket-torch
+  name: Pocket torch
+  quantity: 1
+  equipped: true
+  description: A small LED torch. Bright enough for the walkway, not for long. The battery was half full this morning.
+  tags:
+    - tool
+    - light
+- id: phone
+  name: Phone
+  quantity: 1
+  description: Twelve percent, one bar when you hold it up near the door. The group chat keeps buzzing.
+  tags:
+    - tool
+    - communication
+- id: water-bottle
+  name: Half a bottle of water
+  quantity: 1
+  description: Still water, the cap a bit chewed. Not much, but it's clean.
+  tags:
+    - supply
+    - water
+- id: track-chalk
+  name: Track chalk
+  quantity: 2
+  description: Two sticks of yellow marking crayon from work, for writing on tunnel walls. Good for marking which way you went.
+  tags:
+    - tool
+    - wayfinding

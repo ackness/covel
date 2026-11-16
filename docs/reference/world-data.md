@@ -382,15 +382,15 @@ Descriptor 可以修改或关闭这个规范来源，不能在别的路径再定
 
 世界包不必用上所有能力，让题材决定插件组合和数据。仓库里的四个世界展示了不同的组合：
 
-| 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                                                                                  | 适合参考的文件                                                                                                                     |
-| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包加角色蓝图与 `story-events`；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按语言选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                                                             | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                                                              | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
-| `worlds/emberback`      | 英文科幻救援，示范多语言（英文为主，另有中文版） | `traditional-story` 玩法包加判定、任务、物品、好感、角色蓝图与 `story-events`；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
-| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `traditional-story` 玩法包加跑团规则、判定、任务、物品、好感、角色蓝图与 `story-events`；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`            |
+| 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                                                                                                                     | 适合参考的文件                                                                                                                     |
+| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包加角色蓝图与 `story-events`；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按语言选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                                                                                                | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                                                                                                 | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
+| `worlds/last-train`     | 现代都市求生，示范多语言（英文为主，另有中文版） | `traditional-story` 玩法包与 `dice-check`；数据契约自动选入任务、物品、好感等接收插件；3 个任务、6 种物品与 5 位角色的好感种子；「Floodline / Train Battery / Messages / Theo's Group」四个实时维度，水位倒计时从 `clock.elapsedSinceStart` 用 `x-derive` 推导，电池追踪储备与供电状态；隐藏事件及事件链；`claims`、`promises` 记忆块；封面与 5 张人物卡立绘 | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `traditional-story` 玩法包加跑团规则、判定、任务、物品、好感、角色蓝图与 `story-events`；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体）                                    | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`            |
 
 - 四个世界都没有 descriptor，所有文件都在约定路径上。规则文件放在 `data/rules/` 下，每个文件一组。
-- 四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：在作者预设的隐藏事件之外，它会根据游玩中留下的线索，追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。
+- 四个世界都启用 `story-events`。雾港、末班地铁与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：在作者预设的隐藏事件之外，它会根据游玩中留下的线索，追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。
 - 做新世界时，先复制玩法最接近的那个世界的结构，再按后文各节增减角色、规则或媒体。
 
 遥风学园按主体保留单一关系账户：八人的好感只在 `affinity`；五位路线角色的阶段、信任与压力只在 `routes`（信任、压力 0–5）；三名支持角色的信任、压力与非恋爱关系状态留在角色资料（信任、压力 0–100），不作换算。八人的 `publicCloseness` 也保留在角色资料。关系记忆只记事件、承诺与细节，不存第二份当前值。角色 schema 删除 `affection`，支持角色的 `trust/pressure` 没有默认值；这防止默认值重新填回五人或玩家的数值副本，但通用建卡并未按 NPC 作用域硬排除文字字段。禁用好感插件只移除其分数维护和叙事投影，不重建角色副本。
@@ -1497,7 +1497,7 @@ sources:
 
 #### 内置 RPG 玩法种子（quests / items / affinity）
 
-三个内置 RPG 插件接受世界包预置的数据。手把手的做法见[预置开局内容](../recipes/starting-content.md)，完整的成品见 `worlds/emberback/data/`。
+三个内置 RPG 插件接受世界包预置的数据。手把手的做法见[预置开局内容](../recipes/starting-content.md)，完整的成品见 `worlds/last-train/data/`。
 
 | 插件         | schema URI                      | to                              | 记录形状                                                                                     |
 | ------------ | ------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -1633,7 +1633,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 通过时的输出：
 
 ```text
-✓ worlds/emberback/world.yaml
+✓ worlds/last-train/world.yaml
 ```
 
 - 校验器不创建会话，不执行插件代码。

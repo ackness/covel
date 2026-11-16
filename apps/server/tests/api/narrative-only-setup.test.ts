@@ -117,7 +117,7 @@ async function harness() {
   };
 }
 
-it.each(["lantern-barrow", "mistport", "haruka-academy", "emberback"])(
+it.each(["lantern-barrow", "mistport", "haruka-academy", "last-train"])(
   "begins a narrative-only adventure in %s without inferred setup",
   async (worldId) => {
     const h = await harness();

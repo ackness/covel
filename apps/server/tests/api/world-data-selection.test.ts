@@ -651,7 +651,7 @@ describe("inferred world data through host admission", () => {
     }
   });
 
-  it.each(["mistport", "haruka-academy", "emberback", "lantern-barrow"])(
+  it.each(["mistport", "haruka-academy", "last-train", "lantern-barrow"])(
     "imports %s content using real declarations after redundant requests are removed",
     async (worldId) => {
       const f = await fixture();

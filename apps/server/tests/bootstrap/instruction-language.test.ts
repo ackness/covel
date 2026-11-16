@@ -53,13 +53,13 @@ describe("English instructions for bundled runtimes", () => {
   beforeAll(async () => {
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
     const loadedWorld = await loadSingleWorld(
-      path.join(root, "worlds/emberback"),
+      path.join(root, "worlds/last-train"),
       {
         includeWorldDataOverrides: false,
       },
     );
     if (!loadedWorld)
-      throw new Error("The bundled Emberback world did not load");
+      throw new Error("The bundled Last Train Out world did not load");
     const world = instructionFixtureWorld(loadedWorld);
     expect(world.locale).toBe(locale);
     await store.createWorld(world);
@@ -88,8 +88,10 @@ describe("English instructions for bundled runtimes", () => {
         worldId: world.id,
       },
     );
-    expect(sessionContext.world.name).toBe("Emberback Relay");
-    expect(sessionContext.world.lore).toContain("Crownfire");
+    expect(sessionContext.world.name).toBe("Last Train Out");
+    for (const detail of ["Line 4", "Wharf Street", "the water", "Control"]) {
+      expect(sessionContext.world.lore).toContain(detail);
+    }
     base = {
       store,
       sessionContext,
@@ -110,12 +112,12 @@ describe("English instructions for bundled runtimes", () => {
       summaries: [
         {
           id: "summary",
-          content: "The relay received a signal.",
+          content: "The train received a message from Control.",
           focusSections: ["Events"],
         },
       ],
       executionStory: [
-        { role: "assistant", content: "Crownfire approaches the relay." },
+        { role: "assistant", content: "The water rises beneath the train." },
       ],
     };
   });

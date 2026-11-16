@@ -71,7 +71,7 @@ Optional. No built-in gameplay pack includes it, so a world has to include it.
 | World            | How it is included      |
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
-| `emberback`      | World default selection |
+| `last-train`     | World default selection |
 
 For other worlds, you can tick it on the session-prep screen, or the world author can add it to `plugins`. See [Point buy and dice checks](../recipes/point-buy.md).
 
@@ -142,7 +142,7 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 | World            | How it is included      |
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
-| `emberback`      | World default selection |
+| `last-train`     | World default selection |
 
 It has no settings you can change.
 
@@ -184,7 +184,7 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 | World            | How it is included      |
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
-| `emberback`      | World default selection |
+| `last-train`     | World default selection |
 
 It has no settings you can change.
 
@@ -237,7 +237,7 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 | World            | How it is included      |
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
-| `emberback`      | World default selection |
+| `last-train`     | World default selection |
 | `haruka-academy` | World default selection |
 
 > [!NOTE]
@@ -276,7 +276,7 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 | World            | How it is included      |
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
-| `emberback`      | World default selection |
+| `last-train`     | World default selection |
 | `mistport`       | World default selection |
 | `haruka-academy` | World default selection |
 
@@ -288,7 +288,7 @@ If a world has no hidden event data, turning this on does nothing.
 | ------------------------- | -------------------------------------------------------------------------------------------------------------- | ------- |
 | Story planner (`planner`) | Every 3 turns, calls the model to set up hidden events behind the scenes that happen later, based on the story | Off     |
 
-Turning it on adds model calls. The worlds `lantern-barrow`, `emberback` and `mistport` have already turned it on for you.
+Turning it on adds model calls. The worlds `lantern-barrow`, `last-train` and `mistport` have already turned it on for you.
 
 ### What world authors can preset
 
@@ -302,14 +302,14 @@ A misspelled dimension ID, an invalid path inside a dimension, or a candidate in
 
 ## Overview of when they are on
 
-| Plugin           | `lantern-barrow` | `emberback` | `mistport` | `haruka-academy` |
-| ---------------- | ---------------- | ----------- | ---------- | ---------------- |
-| `dice-check`     | Yes              | Yes         |            |                  |
-| `tabletop-rules` | Yes              |             |            |                  |
-| `core-quest`     | Yes              | Yes         |            |                  |
-| `inventory`      | Yes              | Yes         |            |                  |
-| `affinity`       | Yes              | Yes         |            | Yes              |
-| `story-events`   | Yes              | Yes         | Yes        | Yes              |
+| Plugin           | `lantern-barrow` | `last-train` | `mistport` | `haruka-academy` |
+| ---------------- | ---------------- | ------------ | ---------- | ---------------- |
+| `dice-check`     | Yes              | Yes          |            |                  |
+| `tabletop-rules` | Yes              |              |            |                  |
+| `core-quest`     | Yes              | Yes          |            |                  |
+| `inventory`      | Yes              | Yes          |            |                  |
+| `affinity`       | Yes              | Yes          |            | Yes              |
+| `story-events`   | Yes              | Yes          | Yes        | Yes              |
 
 The three general gameplay packs (Classic Story, Dialogue, Budget) do not themselves request these six plugins. Actual data can infer receivers; gameplay without seed data uses explicit world `plugins` requests or preparation choices.
 

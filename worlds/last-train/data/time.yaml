@@ -1,0 +1,23 @@
+id: world
+definition:
+  kind: calendar
+  name: Local time
+  calendar:
+    era: AD
+    months:
+      - { name: November, days: 30 }
+    hoursPerDay: 24
+    minutesPerHour: 60
+  initial: { year: 2026, month: 1, day: 16, hour: 0, minute: 6 }
+  evolution:
+    mode: forward
+    defaultStep: 5
+    maxStep: 90
+    prompt: >-
+      Local time is the one clock of this world, and the water reaches the
+      battery boxes under the car floor at 02:36, two and a half hours after
+      the 00:06 opening. Count the story time the turn actually spends: a
+      short conversation 2–5 minutes, an argument, a search, or working a
+      breaker 10–20, walking the walkway to the crossover 15–25 each way,
+      going back to the Wharf Street pump room 20–40. If the narrative states
+      a clock time or the remaining window, use it. Time never goes back.

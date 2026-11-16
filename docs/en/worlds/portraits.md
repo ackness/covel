@@ -307,17 +307,17 @@ When you check the images themselves, look at these things: the detail at the or
 
 The four built-in worlds each have their own art style. You can open their manifests and use them as examples:
 
-| World                             | Manifest                                                                | Art style                                                                | Framing                                                     | People |
-| --------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- | ------ |
-| Harukaze Academy `haruka-academy` | [`portraits.json`](../../../worlds/haruka-academy/media/portraits.json) | Anime visual-novel portraits, soft cel shading, spring pastels           | Portrait orientation, head to thigh, transparent background | 8      |
-| Mistport `mistport`               | [`portraits.json`](../../../worlds/mistport/media/portraits.json)       | Realistic painted noir in fog, cold grey, teal, and rust                 | Half body, three-quarter turn, grey fog background          | 7      |
-| Emberback `emberback`             | [`portraits.json`](../../../worlds/emberback/media/portraits.json)      | Bright retro sci-fi adventure poster, cream, terracotta, and cobalt blue | Full body, with an environment for each person's job        | 5      |
-| Lantern Barrow `lantern-barrow`   | [`portraits.json`](../../../worlds/lantern-barrow/media/portraits.json) | Realistic skin and worn cloth, warm key light with cool rim light        | Portrait orientation, full body, transparent background     | 6      |
+| World                             | Manifest                                                                | Art style                                                                                                 | Framing                                                                   | People |
+| --------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| Harukaze Academy `haruka-academy` | [`portraits.json`](../../../worlds/haruka-academy/media/portraits.json) | Anime visual-novel portraits, soft cel shading, spring pastels                                            | Portrait orientation, head to thigh, transparent background               | 8      |
+| Mistport `mistport`               | [`portraits.json`](../../../worlds/mistport/media/portraits.json)       | Realistic painted noir in fog, cold grey, teal, and rust                                                  | Half body, three-quarter turn, grey fog background                        | 7      |
+| Lantern Barrow `lantern-barrow`   | [`portraits.json`](../../../worlds/lantern-barrow/media/portraits.json) | Realistic skin and worn cloth, warm key light with cool rim light                                         | Portrait orientation, full body, transparent background                   | 6      |
+| Last Train Out `last-train`       | [`portraits.json`](../../../worlds/last-train/media/portraits.json)     | Contemporary graphic novel, ink line art with painted colour, amber emergency light and teal-green shadow | Portrait orientation, half body, three-quarter turn, train-car background | 5      |
 
 Two things worth learning from:
 
 - Mistport puts world details into each person's `subject`: tide-line marks on the wrist, a translucent left arm, and a fragment of a relic they keep turning in their hand. So the portraits carry the setting on their own.
-- The Emberback characters stand in their own work environments (a repair bay, a station platform, an observation deck), not on a transparent background. A transparent background suits stage view. Character cards with an environment suit traditional text narrative. Choose based on how your world is played.
+- A transparent background suits stage view. Character cards with an environment suit traditional text narrative. Choose based on how your world is played.
 
 For what each world should convey, and what must not be drawn wrong, see [world art direction](./art-direction.md).
 

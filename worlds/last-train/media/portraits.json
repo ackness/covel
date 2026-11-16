@@ -1,0 +1,52 @@
+{
+  "world": "last-train",
+  "note": "Contemporary graphic-novel character cards for a stalled metro train under a flooding river. Ordinary adults on a bad night, not action heroes. Clothing, props and age must agree with the character cards. Edits use the current portrait as the identity reference. See docs/worlds/art-direction.md.",
+  "style": {
+    "direction": "contemporary graphic-novel realism, inked linework with painted colour",
+    "prefix": "Character portrait, contemporary graphic-novel illustration, confident ink linework with painted colour, realistic proportions, inside a stalled underground metro carriage at night, dim sodium-amber emergency lighting from above, deep teal-green shadows, wet reflections on the floor, grab poles and seat edges softly out of focus behind the figure, half-body, three-quarter view, ",
+    "suffix": ", restrained palette of amber, teal and charcoal with one small warm accent, tired but grounded expression, consistent art style, one single adult character, centered composition, face and signature prop readable at thumbnail size, opaque background",
+    "negative": "anime, chibi, cartoon, glossy 3D render, fantasy armour, weapons, gore, blood, injury, horror monster, bright daylight, neon cyberpunk, text, caption, readable signage, signature, watermark, logo, frame, multiple people, crowd, extra limbs, extra fingers, deformed hands, distorted face, nsfw, minors"
+  },
+  "defaults": {
+    "size": "1024x1536",
+    "quality": "medium",
+    "mime": "image/webp"
+  },
+  "characters": [
+    {
+      "id": "dara-quinn",
+      "characterId": "npc-dara-quinn",
+      "name": "Dara Quinn",
+      "filename": "dara-quinn.webp",
+      "subject": "a steady weathered woman of about fifty-four, the train operator, short grey-streaked hair, navy operator's fleece with a small reflective stripe, reading glasses hanging on a cord at her chest, holding a coiled cab radio handset close to her mouth, calm level gaze of someone who has made a decision"
+    },
+    {
+      "id": "theo-marsh",
+      "characterId": "npc-theo-marsh",
+      "name": "Theo Marsh",
+      "filename": "theo-marsh.webp",
+      "subject": "a lean restless man of about twenty-seven, an off-duty signal maintainer, close-cropped dark hair, grey work hoodie under an open hi-vis vest, a head torch with a cracked strap pushed up on his forehead, holding a folded staff rota with a hand-drawn tunnel map in pencil on the back, impatient forward-leaning stance"
+    },
+    {
+      "id": "nadia-haddad",
+      "characterId": "npc-nadia-haddad",
+      "name": "Nadia Haddad",
+      "filename": "nadia-haddad.webp",
+      "subject": "a composed practical woman of about thirty-eight, a night-shift nurse on her way to work, dark hair tied back, blue scrubs under an unzipped rain-darkened raincoat, a lanyard with a ring of hospital keys, a canvas tote bag on her shoulder, sleeves pushed up, watchful and kind but unhurried"
+    },
+    {
+      "id": "graham-pike",
+      "characterId": "npc-graham-pike",
+      "name": "Graham Pike",
+      "filename": "graham-pike.webp",
+      "subject": "a tall stiff man of about sixty-one, a retired civil engineer, neatly trimmed white beard, olive waxed jacket buttoned to the collar, a yellow folding ruler sticking out of the breast pocket, one hand resting on the neck of a hard black cello case standing beside him, skeptical raised eyebrow"
+    },
+    {
+      "id": "kit-alvarez",
+      "characterId": "npc-kit-alvarez",
+      "name": "Kit Alvarez",
+      "filename": "kit-alvarez.webp",
+      "subject": "a wiry young adult man of about twenty, a food-delivery rider, messy dark curls, fluorescent yellow courier jacket with no logo, a phone with a cracked screen inside a clear waterproof pouch on a cord, a power bank wrapped in electrical tape in his other hand, eager smile that does not quite reach his eyes"
+    }
+  ]
+}

@@ -91,9 +91,9 @@ Two things are worth noting:
 
 ### Give the world its own default voice
 
-Describe how this world tells its stories in `WORLD.md`. Mistport favors Gothic investigation, Haruka Academy favors restrained dialogue, Emberback uses technical detail and dry humor, and Lantern Barrow reads like a brisk game master. The default voice belongs to the world; the worlds do not all need the same tone.
+Describe how this world tells its stories in `WORLD.md`. Mistport favors Gothic investigation, Haruka Academy favors restrained dialogue, Last Train Out uses plain, practical language and quiet danger, and Lantern Barrow reads like a brisk game master. The default voice belongs to the world; the worlds do not all need the same tone.
 
-The bundled worlds also keep these directions in `tone.initialValue.narrativeStyle` in `data/dimensions.yaml`. The author chose the names `tone` and `narrativeStyle`; they are not kernel-reserved fields. See [world dimensions](../reference/world-data.md#dynamic-world-dimensions-dimensions) for definitions and translation markers. Put each character's way of speaking in their profile or `blueprint`, so occupation, relationships, and the immediate situation shape their words.
+Some bundled worlds also keep these directions in `tone.initialValue.narrativeStyle` in `data/dimensions.yaml`; Last Train Out puts them in `WORLD.md` and `data/rules/world-rules.yaml`. The author chose the names `tone` and `narrativeStyle`; they are not kernel-reserved fields. See [world dimensions](../reference/world-data.md#dynamic-world-dimensions-dimensions) for definitions and translation markers. Put each character's way of speaking in their profile or `blueprint`, so occupation, relationships, and the immediate situation shape their words.
 
 Check naturalness together with voice: a character should not know a secret without a reason, an item in a pocket should not return to the table on the next turn, and initial records should not say the player has paid or agreed to something they have not chosen. Check the same facts in both languages. Passing validation establishes structural validity; it does not replace reading and playing consecutive turns.
 
@@ -229,7 +229,7 @@ You now have a world you can play. You can keep going in these directions:
 
 - **Try a different style of play.** Change the first reference to `pack:dialogue-mode`. Or add `plugin:dice-check`, `plugin:core-quest`, `plugin:inventory`, and `plugin:affinity` to `plugins`, so the world becomes an adventure with checks and quests.
 - **Add more preset content.** Run `pnpm describe:authoring` in the repository. It lists every kind of content you can preset in the current version, the path each file goes in, and a valid example.
-- **See a finished world.** The repository's `worlds/` folder has four complete worlds. `worlds/emberback` is a reference that uses checks, quests, inventory, and affinity.
+- **See a finished world.** The repository's `worlds/` folder has four complete worlds. `worlds/last-train` is a reference that uses checks, quests, inventory, and affinity.
 - **Add pictures.** See [world portraits](./portraits.md) and [world scenes](./scenes.md).
 
 For all the content you can preset and the import rules, see the [world data reference](../reference/world-data.md).

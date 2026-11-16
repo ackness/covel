@@ -1,0 +1,32 @@
+- id: two-messages
+  name: 两条消息
+  description: 调度说原地等待，救援队从码头街过来。基特手机上的照片说码头街已经被淹了。在车里的人自己拿主意之前，弄清该照哪条走。
+  giver: 这节车厢
+  reward: 一个全车人真能照着做的计划
+  objectives:
+    - id: reach-control
+      text: 通过驾驶室电台从调度那里问到明确答复
+    - id: check-the-photo
+      text: 查清那张站厅被淹的照片是在哪、什么时候拍的
+    - id: tell-the-car
+      text: 把你知道的、不知道的，都告诉车里的人
+- id: the-three-who-walked
+  name: 先走的三个人
+  description: 西奥带着两个学生，拿着车上两盏灯中的一盏，沿疏散平台往渡线室去了。之后再没人听到他们的消息。在他们独自赶到渡线室之前追上他们，或者把话递过去。
+  giver: 达拉·奎因
+  reward: 西奥对这条隧道的了解，和三个有着落的人
+  objectives:
+    - id: reach-theo
+      text: 把话传到西奥那组人
+    - id: meet-or-recall
+      text: 在渡线室和他们会合，或者把他们叫回来
+- id: one-battery
+  name: 一块电池
+  description: 地板下那块应急电池要供照明、车门、电台、风扇和手机充电口，可它供不起全部。水正往它那里涨。
+  giver: 达拉·奎因
+  reward: 一辆在要紧时刻还亮着灯的车
+  objectives:
+    - id: read-the-gauge
+      text: 和达拉一起在驾驶室看电池表
+    - id: choose-priorities
+      text: 决定电池给什么供电

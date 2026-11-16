@@ -137,7 +137,7 @@ It is not the Gregorian calendar.
 | World                   | Model      | What to look at                             |
 | ----------------------- | ---------- | ------------------------------------------- |
 | `worlds/haruka-academy` | `calendar` | Twelve months, weekdays, four periods a day |
-| `worlds/emberback`      | `calendar` | Works with a countdown dimension            |
+| `worlds/last-train`     | `calendar` | Works with a countdown dimension            |
 | `worlds/mistport`       | `phases`   | Uses the tides for its phases               |
 | `worlds/lantern-barrow` | `phases`   | Phases for dungeon exploration              |
 

@@ -936,7 +936,7 @@
 .preview-stage-state,
 .preview-roll,
 .preview-evidence,
-.preview-rescue-task {
+.preview-survival-task {
   transition:
     border-color 400ms,
     background 400ms,
@@ -945,7 +945,7 @@
 .preview-stage-state[data-focus="true"],
 .preview-roll[data-focus="true"],
 .preview-evidence[data-focus="true"],
-.preview-rescue-task[data-focus="true"] {
+.preview-survival-task[data-focus="true"] {
   border-color: var(--mode);
   box-shadow: 0 0 0 1px color-mix(in oklch, var(--mode) 20%, transparent);
 }
@@ -984,25 +984,47 @@
   line-height: 1.7;
   margin-top: 0.4rem;
 }
-.preview-rescue-task {
+.preview-survival-task {
   padding: 0.8rem;
   border: 1px solid var(--line);
   border-radius: 0.6rem;
   background: var(--raised);
 }
-.preview-rescue-task strong {
+.preview-survival-task strong {
   display: block;
   font-size: 0.8rem;
   margin-top: 0.4rem;
 }
-.preview-rescue-task > p:not(.preview-label) {
+.preview-survival-task > p:not(.preview-label) {
   font-size: 0.65rem;
   line-height: 1.7;
   margin-top: 0.4rem;
   color: var(--muted);
 }
-.preview-rescue-task .preview-change {
-  min-height: 2.2rem;
+.preview-systems {
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.7;
+  margin-top: 0.6rem;
+}
+.preview-messages {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+  font-size: 0.65rem;
+}
+.preview-messages li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.preview-messages em {
+  font-style: normal;
+  color: var(--muted);
+  transition: color 400ms;
+}
+.preview-messages em[data-changed="true"] {
+  color: var(--mode);
 }
 @media (max-width: 639px) {
   .preview-journey {

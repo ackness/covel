@@ -440,7 +440,7 @@ The `<world-lore>` that the kernel writes itself only rewrites a `</world-lore>`
 
 **The form is read only once.** During one execution, `getLatestPlayerInput` reads the latest form once. That row is reused in the context snapshot.
 
-**The scan range of lorebook entries.** A lorebook entry can use `extra.scanDepth` to choose to scan a number of messages already committed before (0–20). The current player message is always scanned. The scan reads a bounded tail of history from the database, including messages that have already been compacted. The built-in Emberback world activates lorebook entries by keyword, and it leaves out character biographies that are already in the character records.
+**The scan range of lorebook entries.** A lorebook entry can use `extra.scanDepth` to choose to scan a number of messages already committed before (0–20). The current player message is always scanned. The scan reads a bounded tail of history from the database, including messages that have already been compacted. The built-in Last Train Out world uses `strategy: selective` to activate lorebook entries by keyword; biographies stay in character records and are not repeated in the lorebook.
 
 ## 5. Token budget and cache
 

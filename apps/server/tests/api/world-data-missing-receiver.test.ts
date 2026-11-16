@@ -37,7 +37,6 @@ describe("session creation without installed world-data receivers", () => {
           runtimeCount: definition.manifests.length,
         },
         ...definition,
-        loadedRuntimes: new Map(),
         status: "registered",
       });
       expect([...registry.getAll().keys()]).toEqual(["narrator"]);

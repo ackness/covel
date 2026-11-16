@@ -1,0 +1,205 @@
+floodline:
+  name: Floodline
+  description: Minutes until the water reaches the battery boxes under the car floor, and how deep it is now.
+  schema:
+    type: object
+    properties:
+      # The water reaches the battery boxes at 02:36, 150 minutes after the
+      # 00:06 opening. Both fields are computed from the clock.
+      minutesRemaining:
+        type: integer
+        title: Minutes left
+        minimum: 0
+        maximum: 150
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 150
+          perUnit: -1
+          min: 0
+          max: 150
+      stage:
+        type: string
+        title: Water
+        enum: [trackbed, ankle, knee, battery]
+        x-enumLabels:
+          trackbed: Over the track bed
+          ankle: Ankle-deep
+          knee: Knee-deep
+          battery: At the battery boxes
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 150
+          perUnit: -1
+          min: 0
+          ranges:
+            - { from: 91, value: trackbed }
+            - { from: 41, value: ankle }
+            - { from: 1, value: knee }
+            - { value: battery }
+      carEmpty:
+        type: boolean
+        title: Everyone off the train
+    required: [minutesRemaining, stage, carEmpty]
+    additionalProperties: false
+  initialValue:
+    minutesRemaining: 150
+    stage: trackbed
+    carEmpty: false
+  updateRule: >-
+    Set carEmpty to true only when the narrative shows every passenger has left the train. Never set it back to false.
+
+battery:
+  name: Train Battery
+  description: The emergency battery under the floor and what it is feeding. Nothing important can run at full at once.
+  schema:
+    type: object
+    properties:
+      reserve:
+        type: integer
+        title: Charge %
+        minimum: 0
+        maximum: 100
+      systems:
+        type: object
+        title: Systems
+        properties:
+          lighting:
+            type: string
+            title: Cabin lights
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          doors:
+            type: string
+            title: Powered doors
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          radio:
+            type: string
+            title: Cab radio
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          ventilation:
+            type: string
+            title: Ventilation
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          chargers:
+            type: string
+            title: Phone charging rail
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+        required: [lighting, doors, radio, ventilation, chargers]
+        additionalProperties: false
+    required: [reserve, systems]
+    additionalProperties: false
+  initialValue:
+    reserve: 72
+    systems:
+      lighting: low
+      doors: off
+      radio: low
+      ventilation: low
+      chargers: off
+  updateRule: >-
+    Change a system only when the narrative switches it up or down. Over roughly half an hour of story time, each system at full drains 6–10 charge and each at low drains 2–4; switching everything off for a stretch or a successful fix at the breaker panel can recover 3–8. Settle the drain for the time this turn actually spent. At 0 charge every system drops to off. If the floodline reaches the battery boxes, every system drops to off and the charge to 0.
+
+messageLog:
+  name: Messages
+  description: Every message, call, and rumor worth keeping, and how far each has been checked.
+  schema:
+    type: object
+    additionalProperties:
+      type: object
+      properties:
+        source:
+          type: string
+          title: From
+          x-i18n: true
+        channel:
+          type: string
+          title: How it came
+          x-i18n: true
+        timestamp:
+          type: string
+          title: Time
+          x-i18n: true
+        status:
+          type: string
+          title: Status
+          enum: [unchecked, checked, confirmed, wrong]
+          x-enumLabels:
+            unchecked: Unchecked
+            checked: Checked
+            confirmed: Confirmed
+            wrong: Wrong
+        note:
+          type: string
+          title: Note
+          maxLength: 240
+          x-i18n: true
+      required: [source, channel, timestamp, status]
+      additionalProperties: false
+  initialValue:
+    control-2351:
+      source: Line 4 Control
+      channel: Cab radio, through Dara
+      timestamp: "23:51"
+      status: unchecked
+      note: Hold position. Do not detrain. A rescue team is coming from Wharf Street.
+    photo-2356:
+      source: Kit's phone — he says it came from his sister
+      channel: Group chat screenshot
+      timestamp: "23:56"
+      status: unchecked
+      note: Wharf Street concourse flooded to the ticket gates. "Nobody's getting through here."
+  updateRule: >-
+    Add an entry (short kebab-case ID) when the narrative receives a new call, message, photo, or rumor that matters. Set checked when someone confirms where or when it came from, confirmed when an independent source agrees with it, wrong when it is shown to be false, out of date, or misread. Once a fact about a message is established, do not change it unless the narrative explicitly overturns it. Never delete entries.
+
+walkers:
+  name: Theo's Group
+  description: The three people who walked ahead toward the crossover, and the lamp they took.
+  schema:
+    type: object
+    properties:
+      position:
+        type: string
+        title: Position
+        enum:
+          [
+            walking,
+            at-crossover,
+            at-stair-door,
+            out,
+            coming-back,
+            stuck,
+            back-on-train,
+          ]
+        x-enumLabels:
+          walking: On the walkway
+          at-crossover: At the crossover
+          at-stair-door: At the stair door
+          out: Out on the street
+          coming-back: Heading back
+          stuck: Stuck
+          back-on-train: Back on the train
+      contact:
+        type: string
+        title: Contact
+        enum: [none, intermittent, open]
+        x-enumLabels:
+          none: No contact
+          intermittent: Shouts and torch signals
+          open: Open line
+      lamps:
+        type: integer
+        title: Working lamps
+        minimum: 0
+        maximum: 2
+    required: [position, contact, lamps]
+    additionalProperties: false
+  initialValue:
+    position: walking
+    contact: none
+    lamps: 1
+  updateRule: >-
+    Change position only when the narrative shows the group stopping, turning, reaching a place, or getting stuck. Set contact from what actually gets through this turn. Change lamps only when the narrative explicitly shows a lamp handed over, dropped, drowned, or dead.

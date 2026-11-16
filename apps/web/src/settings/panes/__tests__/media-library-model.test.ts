@@ -76,12 +76,12 @@ describe("media library texts", () => {
     const used = itemDeleteConfirmation(
       t,
       item("a", "used"),
-      ["Lantern Harbor · Turn 3", "Emberback · Turn 9"],
+      ["Lantern Harbor · Turn 3", "Last Train Out · Turn 9"],
       "en-US",
     );
     expect(used.destructive).toBe(true);
     expect(used.message).toContain(
-      "• Lantern Harbor · Turn 3\n• Emberback · Turn 9",
+      "• Lantern Harbor · Turn 3\n• Last Train Out · Turn 9",
     );
 
     const messages = (["unused", "used", "held", "unknown"] as const).map(

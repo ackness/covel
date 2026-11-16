@@ -1,0 +1,115 @@
+floodline:
+  name: 水位线
+  description: 水还有几分钟漫到车厢地板下的电池箱，以及现在有多深。
+  schema:
+    properties:
+      minutesRemaining:
+        title: 剩余分钟
+      stage:
+        title: 水位
+        x-enumLabels:
+          trackbed: 没过道床
+          ankle: 到脚踝
+          knee: 到膝盖
+          battery: 到电池箱
+      carEmpty:
+        title: 乘客已全部下车
+  updateRule: 只有当叙事写明每一位乘客都已经离开列车时，才把 carEmpty 设为 true。之后不要再改回 false。
+battery:
+  name: 列车电池
+  description: 地板下的应急电池，以及它眼下在给什么供电。要紧的东西没法同时开满。
+  schema:
+    properties:
+      reserve:
+        title: 电量 %
+      systems:
+        title: 系统
+        properties:
+          lighting:
+            title: 车厢照明
+            x-enumLabels:
+              off: 关闭
+              low: 低档
+              full: 全开
+          doors:
+            title: 电动车门
+            x-enumLabels:
+              off: 关闭
+              low: 低档
+              full: 全开
+          radio:
+            title: 驾驶室电台
+            x-enumLabels:
+              off: 关闭
+              low: 低档
+              full: 全开
+          ventilation:
+            title: 通风
+            x-enumLabels:
+              off: 关闭
+              low: 低档
+              full: 全开
+          chargers:
+            title: 手机充电口
+            x-enumLabels:
+              off: 关闭
+              low: 低档
+              full: 全开
+  updateRule: 只有当叙事里打开或关掉某个系统时，才改它的状态。故事时间每过大约半小时，每个 full 的系统消耗 6–10 点电量，每个 low 的系统消耗 2–4 点；全部关掉歇一阵，或者在断路器面板上修好一处，能恢复 3–8 点。按本回合实际花掉的时间结算消耗。电量降到 0 时所有系统变为 off。水位线一旦到达电池箱，所有系统变为 off，电量归 0。
+messageLog:
+  name: 消息
+  description: 每一条值得留下的通话、消息和传言，以及各自核实到了哪一步。
+  schema:
+    additionalProperties:
+      properties:
+        source:
+          title: 来自
+        channel:
+          title: 怎么来的
+        timestamp:
+          title: 时间
+        status:
+          title: 状态
+          x-enumLabels:
+            unchecked: 未核实
+            checked: 已查来源
+            confirmed: 已证实
+            wrong: 不对
+        note:
+          title: 备注
+  initialValue:
+    control-2351:
+      source: 四号线调度中心
+      channel: 驾驶室电台，经达拉转述
+      timestamp: "23:51"
+      note: 原地等待。不要下车。救援队正从码头街过来。
+    photo-2356:
+      source: 基特的手机——他说是他姐姐发的
+      channel: 群聊截图
+      timestamp: "23:56"
+      note: 码头街站厅被淹，水漫到闸机。“这边谁也过不去。”
+  updateRule: 叙事里收到一条要紧的新通话、消息、照片或传言时，新增一条（短横线小写 ID）。有人确认了它从哪来、什么时候发的，设为 checked；有独立来源印证，设为 confirmed；证明它是假的、过时的或看错了，设为 wrong。一条消息的事实一旦确定，除非叙事明确推翻，否则不要改。不要删除条目。
+walkers:
+  name: 西奥一行
+  description: 往渡线室先走的三个人，以及他们带走的那盏灯。
+  schema:
+    properties:
+      position:
+        title: 位置
+        x-enumLabels:
+          walking: 在疏散平台上
+          at-crossover: 到了渡线室
+          at-stair-door: 到了楼梯门口
+          out: 已上到街面
+          coming-back: 正往回走
+          stuck: 被困住了
+          back-on-train: 回到车上
+      contact:
+        title: 联络
+        x-enumLabels:
+          none: 联系不上
+          intermittent: 喊话和手电信号
+          open: 线路畅通
+      lamps:
+        title: 能用的灯
+  updateRule: 只有叙事写明这组人停下、转向、到了某处或被困时，才改 position。contact 按本回合实际传过去了什么来定。只有叙事明确写到灯被递过去、掉了、泡水了或没电了，才改 lamps。

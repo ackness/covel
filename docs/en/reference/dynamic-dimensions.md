@@ -68,43 +68,44 @@ File packages use only the canonical dimension table `data/dimensions.yaml`; gen
 Some values depend only on world time: a countdown, a deadline, or a stage that advances with time. Write `x-derive` in the field's schema, and the value is calculated by code, not by the model:
 
 ```yaml
-crownfire:
-  name: Crownfire Countdown
+floodline:
+  name: Floodline
   schema:
     type: object
     properties:
       minutesRemaining:
         type: integer
         minimum: 0
-        maximum: 180
+        maximum: 150
         x-derive:
           source: clock.elapsedSinceStart
-          start: 180
+          start: 150
           perUnit: -1
           min: 0
-          max: 180
+          max: 150
       stage:
         type: string
-        enum: [distant, approaching, imminent, overhead]
+        enum: [trackbed, ankle, knee, battery]
         x-derive:
           source: clock.elapsedSinceStart
-          start: 180
+          start: 150
           perUnit: -1
           min: 0
           ranges:
-            - { from: 121, value: distant }
-            - { from: 31, value: approaching }
-            - { from: 1, value: imminent }
-            - { value: overhead }
-      frontPassed:
+            - { from: 91, value: trackbed }
+            - { from: 41, value: ankle }
+            - { from: 1, value: knee }
+            - { value: battery }
+      carEmpty:
         type: boolean
-    required: [minutesRemaining, stage, frontPassed]
+    required: [minutesRemaining, stage, carEmpty]
     additionalProperties: false
-  initialValue: { minutesRemaining: 180, stage: distant, frontPassed: false }
-  updateRule: Set frontPassed to true only when the narrative says the storm front has moved on.
+  initialValue: { minutesRemaining: 150, stage: trackbed, carEmpty: false }
+  updateRule: >-
+    Set carEmpty to true only when the narrative shows every passenger has left the train. Never set it back to false.
 ```
 
-In this example, `minutesRemaining` starts at 180. It goes down by 1 for every minute of world time, and it stops at 0. `stage` uses the same number to pick one of four labels. `frontPassed` has no `x-derive`, so the model maintains it using `updateRule`.
+This example comes from Last Train Out's `data/dimensions.yaml`, with display labels omitted. `minutesRemaining` starts at 150. It goes down by 1 for every minute of world time, and it stops at 0. `stage` uses the same number to pick one of four water-level labels. `carEmpty` has no `x-derive`, so the model maintains it using `updateRule`.
 
 | Field     | Required | Description                                                                                                                                                                                                                                                                       |
 | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -145,7 +146,7 @@ There is no expression language. A world file contains no code.
 **The model does not write derived fields.**
 
 - The schema and values that the tracker sees do not include these fields. Whether or not `update-dimensions` receives them, it keeps the current value when it writes.
-- One dimension can have both derived fields and fields maintained by `updateRule` (like `frontPassed` in the example above).
+- One dimension can have both derived fields and fields maintained by `updateRule` (like `carEmpty` in the example above).
 - A dimension with only derived fields and no `updateRule` makes no model call. It still counts as a dimension that "changes with the turn", and it appears in the per-turn update section of the narrative prompt.
 - If the player changes a derived field with `edit-dimensions`, the change is not rejected. The next time the clock moves, the recalculated value overwrites it.
 

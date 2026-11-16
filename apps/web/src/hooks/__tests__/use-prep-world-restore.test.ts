@@ -2,7 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePrepWorldRestore } from "../use-prep-world-restore.js";
 
-const worlds = [{ id: "mistport" }, { id: "emberback" }];
+const worlds = [{ id: "mistport" }, { id: "last-train" }];
 
 afterEach(() => sessionStorage.clear());
 
@@ -20,7 +20,7 @@ describe("usePrepWorldRestore", () => {
         }),
       { initialProps: {} },
     );
-    first.rerender({ prepWorldId: "emberback" });
+    first.rerender({ prepWorldId: "last-train" });
     first.unmount();
 
     const selectWorld = vi.fn();
@@ -35,7 +35,7 @@ describe("usePrepWorldRestore", () => {
         reloaded: true,
       }),
     );
-    expect(selectWorld).toHaveBeenCalledWith("emberback");
+    expect(selectWorld).toHaveBeenCalledWith("last-train");
   });
 
   it("starts on the world list when the app is opened anew", () => {

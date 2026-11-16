@@ -1,0 +1,42 @@
+- id: two-messages
+  name: Two Messages
+  description: Control says hold position and wait for a rescue team from Wharf Street. A photo on Kit's phone says Wharf Street is underwater. Find out which one to act on before the car decides for itself.
+  status: active
+  giver: The car
+  reward: A plan the car can actually follow
+  objectives:
+    - id: reach-control
+      text: Get a clear answer from Control over the cab radio
+      done: false
+    - id: check-the-photo
+      text: Find out where and when the flooded-station photo was taken
+      done: false
+    - id: tell-the-car
+      text: Tell the car what you know, and what you don't
+      done: false
+- id: the-three-who-walked
+  name: The Three Who Walked Ahead
+  description: Theo and two students set off along the walkway toward the crossover with one of the train's two lamps. Nobody has heard from them since. Reach them, or get a message to them, before they reach the crossover alone.
+  status: active
+  giver: Dara Quinn
+  reward: Theo's knowledge of the tunnel, and three people accounted for
+  objectives:
+    - id: reach-theo
+      text: Get word to Theo's group
+      done: false
+    - id: meet-or-recall
+      text: Meet them at the crossover, or bring them back
+      done: false
+- id: one-battery
+  name: One Battery
+  description: The emergency battery under the floor has to run the lights, the doors, the radio, the fans, and the phone chargers, and it can't run them all. The water is rising toward it.
+  status: active
+  giver: Dara Quinn
+  reward: A train that still has light when it matters
+  objectives:
+    - id: read-the-gauge
+      text: Read the battery gauge with Dara in the cab
+      done: false
+    - id: choose-priorities
+      text: Decide what the battery runs
+      done: false

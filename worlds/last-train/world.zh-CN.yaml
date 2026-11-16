@@ -1,0 +1,23 @@
+name: 末班地铁
+summary: 全城停电，末班车停在了河底，水正在往里灌。调度说原地等待，群聊里说没人能过来。
+pluginPitch:
+  label: 末班地铁
+  description: 传统故事模式，带骰子判定、任务、随身物品和与其他乘客的关系，另有水位、列车电池、收到的消息和先走的三个人的实时面板。
+  reason: 水漫到电池箱之前，每个选择都要花掉点什么——几分钟、一格电、一支手电，或者某个人的信任——面板上清清楚楚写着还剩多少。
+characterSchema:
+  attributes:
+    - id: stamina
+      name: 体力
+      description: 蹚水、攀爬、背人，还有凌晨两点浑身湿冷时继续往前走。
+    - id: mechanics
+      name: 动手
+      description: 车门、断路器、电台、手摇泵，任何能撬开、改线或者哄着重新转起来的东西。
+    - id: wayfinding
+      name: 认路
+      description: 在地下知道自己在哪：认隧道标记，数联络通道，摸黑也不转向。
+    - id: insight
+      name: 洞察
+      description: 看出哪里不对劲，分清真消息和传言，读懂别人没说出口的话。
+    - id: rapport
+      name: 人缘
+      description: 让一车受惊的人稳住，让陌生人一起干活，说服别人又不让人觉得被摆布。

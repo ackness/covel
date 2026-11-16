@@ -564,7 +564,7 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
   });
 });
 
-it.each(["mistport", "lantern-barrow", "emberback"])(
+it.each(["mistport", "lantern-barrow", "last-train"])(
   "preserves %s relationship and ability data in both real editions",
   async (worldId) => {
     const editions = await Promise.all(
@@ -635,16 +635,16 @@ it.each(["mistport", "lantern-barrow", "emberback"])(
     } else {
       expect(attrs).toEqual(
         expect.arrayContaining([
-          "grit",
-          "systems",
-          "fieldcraft",
+          "stamina",
+          "mechanics",
+          "wayfinding",
           "insight",
           "rapport",
         ]),
       );
       expect(
         Object.values(snapshots[0].affinity).sort((a, b) => a - b),
-      ).toEqual([-2, 4, 6, 10, 12]);
+      ).toEqual([-2, 2, 4, 6, 8]);
     }
   },
 );

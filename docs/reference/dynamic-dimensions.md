@@ -68,43 +68,44 @@ study:
 有些值只取决于世界时间：倒计时、期限、随时间推进的阶段。在字段的 schema 上写 `x-derive`，这个值就由代码计算，不经过模型：
 
 ```yaml
-crownfire:
-  name: Crownfire Countdown
+floodline:
+  name: Floodline
   schema:
     type: object
     properties:
       minutesRemaining:
         type: integer
         minimum: 0
-        maximum: 180
+        maximum: 150
         x-derive:
           source: clock.elapsedSinceStart
-          start: 180
+          start: 150
           perUnit: -1
           min: 0
-          max: 180
+          max: 150
       stage:
         type: string
-        enum: [distant, approaching, imminent, overhead]
+        enum: [trackbed, ankle, knee, battery]
         x-derive:
           source: clock.elapsedSinceStart
-          start: 180
+          start: 150
           perUnit: -1
           min: 0
           ranges:
-            - { from: 121, value: distant }
-            - { from: 31, value: approaching }
-            - { from: 1, value: imminent }
-            - { value: overhead }
-      frontPassed:
+            - { from: 91, value: trackbed }
+            - { from: 41, value: ankle }
+            - { from: 1, value: knee }
+            - { value: battery }
+      carEmpty:
         type: boolean
-    required: [minutesRemaining, stage, frontPassed]
+    required: [minutesRemaining, stage, carEmpty]
     additionalProperties: false
-  initialValue: { minutesRemaining: 180, stage: distant, frontPassed: false }
-  updateRule: Set frontPassed to true only when the narrative says the storm front has moved on.
+  initialValue: { minutesRemaining: 150, stage: trackbed, carEmpty: false }
+  updateRule: >-
+    Set carEmpty to true only when the narrative shows every passenger has left the train. Never set it back to false.
 ```
 
-这个例子里，`minutesRemaining` 从 180 开始，世界时间每过一分钟减 1，减到 0 为止。`stage` 用同一个数换成四个标签之一。`frontPassed` 没有 `x-derive`，由模型按 `updateRule` 维护。
+这个例子来自末班地铁的 `data/dimensions.yaml`，省略了显示标签。`minutesRemaining` 从 150 开始，世界时间每过一分钟减 1，减到 0 为止。`stage` 用同一个数换成四个水位标签之一。`carEmpty` 没有 `x-derive`，由模型按 `updateRule` 维护。
 
 | 字段      | 必填 | 说明                                                                                                                                                     |
 | --------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -145,7 +146,7 @@ crownfire:
 **模型不写推导字段。**
 
 - tracker 看到的 schema 和值里没有这些字段。`update-dimensions` 收到的值不管带不带它们，写入时都保留当前值。
-- 一个维度可以同时有推导字段和由 `updateRule` 维护的字段（上例的 `frontPassed`）。
+- 一个维度可以同时有推导字段和由 `updateRule` 维护的字段（上例的 `carEmpty`）。
 - 只有推导字段、没有 `updateRule` 的维度不产生模型调用。但它仍然算作“随回合变化”的维度，会进入叙事提示词里每回合更新的那一段。
 - 玩家通过 `edit-dimensions` 改动推导字段不会被拒绝。时钟下一次走动时，它会被重新算出的值覆盖。
 

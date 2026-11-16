@@ -794,7 +794,7 @@ worldData: data/world.data.yaml
     for (const worldId of [
       "haruka-academy",
       "mistport",
-      "emberback",
+      "last-train",
       "lantern-barrow",
     ]) {
       const directory = path.join(worldsRoot, worldId);
@@ -874,7 +874,7 @@ worldData: data/world.data.yaml
       mistport: ["clues", "commitments", "relics", "tides"],
       // Promises, rumors and festival prep are structured dimensions now.
       "haruka-academy": ["campus_schedule", "relationships"],
-      emberback: ["promises", "signal_log"],
+      "last-train": ["claims", "promises"],
       "lantern-barrow": ["clues", "party"],
     } as const;
     for (const [worldId, labels] of Object.entries(memoryBlocksByWorld)) {

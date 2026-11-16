@@ -112,14 +112,14 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 ## The four built-in worlds
 
-Mistport, Harukaze Academy and Lantern Barrow each show one play style: Mistport shows traditional narrative, Harukaze Academy shows stage mode, and Lantern Barrow shows tabletop rules. Emberback is written in English and shows how a world can offer editions in several languages.
+Mistport, Harukaze Academy and Lantern Barrow each show one play style: Mistport shows traditional narrative, Harukaze Academy shows stage mode, and Lantern Barrow shows tabletop rules. Last Train Out is a survival sandbox: the floodline counts down with world time, the lights, doors and radio share one battery, and Control's orders and the photos passengers pass around have to be checked one by one. It is written in English and also shows how a world can offer editions in several languages.
 
-| World                                                       | Gameplay                                                        | What is worth a look                                                                    |
-| ----------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in the traditional narrative style | Hidden story events, memory for investigation, portraits                                |
-| Harukaze Academy (遥风学园) `haruka-academy`                | A campus ensemble in stage mode                                 | Campus timetable, dialogue narration, day/night scenes, transparent portraits           |
-| Emberback Relay `emberback`                                 | Sci-fi frontier mystery, written in English                     | Shows how one world can carry several languages (English first, with a Chinese edition) |
-| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration                            | Point buy at the start, dice checks, dungeon panel                                      |
+| World                                                       | Gameplay                                                        | What is worth a look                                                                                                     |
+| ----------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in the traditional narrative style | Hidden story events, memory for investigation, portraits                                                                 |
+| Harukaze Academy (遥风学园) `haruka-academy`                | A campus ensemble in stage mode                                 | Campus timetable, dialogue narration, day/night scenes, transparent portraits                                            |
+| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English                       | Floodline countdown, a shared battery, message checking, character-card portraits; English first, with a Chinese edition |
+| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration                            | Point buy at the start, dice checks, dungeon panel                                                                       |
 
 To build your own world based on these, the files are in the repository's [`worlds/`](../../../worlds) directory.
 

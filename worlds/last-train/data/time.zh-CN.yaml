@@ -1,0 +1,13 @@
+# zh-CN text for time.yaml. Only translated text; structure and ids come from time.yaml.
+definition:
+  name: 本地时间
+  calendar:
+    era: 公元
+    months:
+      - name: 十一月
+  evolution:
+    prompt: >-
+      本地时间是这个世界唯一的时钟。水在 02:36 漫到车厢地板下的电池箱，也就是 00:06
+      开场之后两个半小时。按本回合故事里实际花掉的时间推进时钟：一段简短对话 2–5 分钟；一次争论、搜查或摆弄断路器
+      10–20 分钟；沿疏散平台走到渡线室单程 15–25 分钟；往回走到码头街泵房 20–40
+      分钟。如果叙事里说出了钟点或剩下的时间，就照它来。时间只往前走。

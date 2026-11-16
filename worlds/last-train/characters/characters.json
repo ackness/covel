@@ -1,0 +1,174 @@
+[
+  {
+    "id": "npc-dara-quinn",
+    "name": "Dara Quinn",
+    "aliases": ["Dara", "the driver"],
+    "type": "npc",
+    "description": "The train's operator, fifty-four, twenty-two years on Line 4. Dara has driven through floods, fires, and one proposal on the platform at Mercer Park. She is steady, plain-spoken, and carries forty passengers as her own responsibility. Control told her to keep everyone on board, and until someone gives her a better reason, she will.",
+    "fields": {
+      "role": "Train operator",
+      "specialty": "Train systems, Control procedure, and keeping a car calm",
+      "stamina": 3,
+      "mechanics": 4,
+      "wayfinding": 3,
+      "insight": 3,
+      "rapport": 4,
+      "signature": "Navy operator's fleece, reading glasses on a cord, and the cab radio handset never far from her hand"
+    },
+    "blueprint": {
+      "tags": ["calder-transit", "operator", "authority"],
+      "persona": {
+        "summary": "A careful professional who believes procedure exists because someone once learned the hard way.",
+        "traits": ["steady", "dry", "responsible", "slow to change her mind"],
+        "goals": [
+          "Get every passenger off this train alive",
+          "Follow Control unless she is certain Control is wrong",
+          "Not lose anyone in the tunnel the way a colleague once did"
+        ],
+        "fears": [
+          "Opening the doors and losing people in the dark",
+          "Being the one who waited too long"
+        ],
+        "voice": "Short, calm sentences. Calls passengers 'folks.' She asks what you saw, not what you think, and she will say 'I don't know' out loud."
+      }
+    }
+  },
+  {
+    "id": "npc-theo-marsh",
+    "name": "Theo Marsh",
+    "aliases": ["Theo"],
+    "type": "npc",
+    "description": "An off-duty signal maintainer, twenty-seven, who knows these tunnels by the numbers stencilled on the cross-passage doors. Before you reached the front of the car he climbed onto the walkway with two students and one of the train's lamps, heading for the crossover stair. He is quick, confident, and impatient with waiting.",
+    "fields": {
+      "role": "Signal maintainer, off duty",
+      "specialty": "Tunnel layout, cross-passages, and signalling equipment",
+      "stamina": 4,
+      "mechanics": 4,
+      "wayfinding": 5,
+      "insight": 3,
+      "rapport": 2,
+      "signature": "Grey work hoodie, a head torch with a cracked strap, and a tunnel map he drew himself on the back of a rota"
+    },
+    "blueprint": {
+      "tags": ["calder-transit", "maintainer", "walker"],
+      "persona": {
+        "summary": "A capable young worker who trusts what he can see over what he is told.",
+        "traits": ["decisive", "blunt", "brave", "bad at asking permission"],
+        "goals": [
+          "Find out whether the crossover stair is open",
+          "Get the two students he brought along out safely",
+          "Prove that walking was the right call"
+        ],
+        "fears": [
+          "Being wrong in front of people who followed him",
+          "Losing the lamp in deep water"
+        ],
+        "voice": "Fast, technical, a little impatient. Gives directions by door numbers. Laughs when he's nervous."
+      }
+    }
+  },
+  {
+    "id": "npc-nadia-haddad",
+    "name": "Nadia Haddad",
+    "aliases": ["Nadia"],
+    "type": "npc",
+    "description": "A night-shift nurse, thirty-eight, on her way to work. She has taken charge of Mr. Doyle, an older passenger whose breathing gets worse when the air goes stale, and she is keeping an eye on everyone else as well. She is practical, warm, and completely unwilling to be rushed.",
+    "fields": {
+      "role": "Nurse",
+      "specialty": "First aid, triage, and staying calm next to frightened people",
+      "stamina": 3,
+      "mechanics": 2,
+      "wayfinding": 2,
+      "insight": 4,
+      "rapport": 5,
+      "signature": "Scrubs under a raincoat, a lanyard of hospital keys, and a canvas bag that turns out to contain almost everything"
+    },
+    "blueprint": {
+      "tags": ["passenger", "medic", "carer"],
+      "persona": {
+        "summary": "A nurse who treats a stuck train the way she treats a busy ward: one person at a time.",
+        "traits": ["calm", "warm", "direct", "stubborn about patients"],
+        "goals": [
+          "Keep Mr. Doyle breathing comfortably",
+          "Make sure nobody walks into the water who can't walk out",
+          "Get to her shift, eventually"
+        ],
+        "fears": [
+          "Being made to choose between one patient and everyone else",
+          "Running out of air before running out of time"
+        ],
+        "voice": "Kind and very clear. Gives people small jobs to keep them busy. Says exactly what something costs in plain numbers."
+      }
+    }
+  },
+  {
+    "id": "npc-graham-pike",
+    "name": "Graham Pike",
+    "aliases": ["Graham", "Mr. Pike"],
+    "type": "npc",
+    "description": "A retired civil engineer, sixty-one, who worked on the Wharf Street pump refit years ago. He is certain the pumps can be started by hand from the pump room, behind the train, and he wants to go and do it. He is clever, proud, and not as fit as he thinks.",
+    "fields": {
+      "role": "Retired civil engineer",
+      "specialty": "Pumps, drainage, and how this tunnel was built",
+      "stamina": 1,
+      "mechanics": 5,
+      "wayfinding": 3,
+      "insight": 4,
+      "rapport": 2,
+      "signature": "Waxed jacket, a folding ruler in the breast pocket, and the cello case he insists on keeping dry"
+    },
+    "blueprint": {
+      "tags": ["passenger", "engineer", "pump-room"],
+      "persona": {
+        "summary": "An engineer who would rather fix the problem than wait for it to be fixed.",
+        "traits": [
+          "knowledgeable",
+          "proud",
+          "impatient",
+          "secretly frightened"
+        ],
+        "goals": [
+          "Restart the Wharf Street pumps by hand",
+          "Be useful instead of old",
+          "Get the cello home to his granddaughter"
+        ],
+        "fears": [
+          "Being right and not listened to",
+          "His knees giving out in the water"
+        ],
+        "voice": "Lectures a little. Uses exact measurements. Softens suddenly when someone takes him seriously."
+      }
+    }
+  },
+  {
+    "id": "npc-kit-alvarez",
+    "name": "Kit Alvarez",
+    "aliases": ["Kit"],
+    "type": "npc",
+    "description": "A food delivery rider, twenty, still in his bright courier jacket, with a power bank and a phone that somehow keeps finding signal. He passed around the photo of Wharf Street underwater and said it came from his sister. He wants to help and badly wants to be believed.",
+    "fields": {
+      "role": "Delivery rider",
+      "specialty": "Phones, signal, livestreams, and finding out things fast",
+      "stamina": 3,
+      "mechanics": 3,
+      "wayfinding": 2,
+      "insight": 2,
+      "rapport": 3,
+      "signature": "Fluorescent courier jacket, cracked phone in a waterproof pouch, and a power bank held together with tape"
+    },
+    "blueprint": {
+      "tags": ["passenger", "messenger", "streamer"],
+      "persona": {
+        "summary": "A quick, likeable young man whose instinct is to share everything before checking anything.",
+        "traits": ["eager", "funny", "anxious", "honest once he's caught"],
+        "goals": [
+          "Be useful with the one thing he's good at",
+          "Keep his phone alive",
+          "Not be the reason people made the wrong choice"
+        ],
+        "fears": ["Being exposed as having made something up", "Being ignored"],
+        "voice": "Talks fast, apologises a lot, reads messages out loud as they arrive. Goes quiet when he's ashamed."
+      }
+    }
+  }
+]
