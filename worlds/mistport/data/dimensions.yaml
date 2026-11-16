@@ -1,6 +1,6 @@
 caseBoard:
   name: 案情板
-  description: 齐老失踪案的线索与可信度。线索会被佐证，也会被潮水、伪造或走漏污染。
+  description: 齐老失踪案的线索、来源与疑点。佐证要能追到出处，证据也可能被潮水、伪造或泄密污染。
   schema:
     type: object
     additionalProperties:
@@ -24,33 +24,85 @@ caseBoard:
           title: 当前判断
           maxLength: 240
           x-i18n: true
-      required: [lead, status]
+        sources:
+          type: array
+          title: 来源
+          items:
+            type: object
+            properties:
+              from: { type: string, title: 出处, x-i18n: true }
+              kind:
+                type: string
+                title: 类别
+                enum: [physical, witness, document, tide-mark]
+                x-enumLabels:
+                  physical: 物证
+                  witness: 证词
+                  document: 文书
+                  tide-mark: 潮纹
+              detail: { type: string, title: 所见所闻, x-i18n: true }
+              retracted: { type: boolean, title: 已撤回 }
+            required: [from, kind, detail, retracted]
+            additionalProperties: false
+        contradictions:
+          type: array
+          title: 矛盾
+          items:
+            type: object
+            properties:
+              a: { type: string, title: 一方说法, x-i18n: true }
+              b: { type: string, title: 另一方说法, x-i18n: true }
+              why: { type: string, title: 冲突所在, x-i18n: true }
+            required: [a, b, why]
+            additionalProperties: false
+        secured: { type: boolean, title: 已固定 }
+      required: [lead, status, sources, contradictions, secured]
       additionalProperties: false
   initialValue:
     torn-letter:
       lead: 半封信
       status: unverified
-      note: 苏窈手中，写着“钥匙不能落到他手里”。纸边有只在退潮遗迹结晶的黑潮盐，可齐老是在满潮时离开的。
+      note: 苏窈手里有半封信，写着“钥匙不能落到他手里”。纸边沾着只在退潮遗迹结晶的黑潮盐，可齐老是在满潮时离开的。
+      sources: []
+      contradictions:
+        - a: 纸边的黑潮盐只在退潮遗迹结晶。
+          b: 齐老在满潮时离开。
+          why: 信上的盐与他离开的潮时对不上，还不知道盐何时沾上。
+      secured: false
     report-74:
       lead: 第七十四号鉴定报告
       status: unverified
-      note: 公会封档库缺了一页，目录仍写着“铰齿状灰色碎片”；同日访客簿也被无损取页。
+      note: 封档库的报告缺了一页，目录还留着“铰齿状灰色碎片”。同日访客簿也被无损取页。
+      sources: []
+      contradictions: []
+      secured: false
     echo-gallery:
       lead: 回声廊的三种痕迹
       status: unverified
-      note: 齐老的潮纹、灰隼私队的新绳索、刻着童谣的铜片——出现时间互相矛盾。
+      note: 齐老的潮纹、灰隼私队的新绳痕和刻着童谣的铜片，留下的时间对不上。
+      sources: []
+      contradictions: []
+      secured: false
     stilltide-survivor:
       lead: 静潮病院的幸存者
       status: unverified
-      note: 三年前深潜队唯一归来者，被议会隔离。“它在下面醒了”并不是他最初说的原句。
-  updateRule:
-    只记录本轮叙事明确发生的变化。发现新的具名物证、证词或矛盾时新增一条（ID 用简短英文 kebab-case），状态为
-    unverified。有独立证词或潮纹记录印证时改为 corroborated；被涨潮冲刷、被伪造或公开走漏时改为
-    contaminated；真相被确认且不再有争议时改为 resolved。潮水带走证据不等于证实任何一方的解释。不删除条目；note 只写一句当前判断。
+      note: 三年前深潜队唯一归来的人被议会隔离。“它在下面醒了”并非他最初说的原句。
+      sources: []
+      contradictions: []
+      secured: false
+  updateRule: >-
+    只按本轮叙事里实际取得的物证、亲闻的证词、查阅的文书或辨读的潮纹添加来源；初始线索只是待查方向，不能据此补造来源。
+    出处写人名、地点或文书名称，所见所闻写具体内容。来源类别只写 physical（物证）、witness（证词）、document（文书）或 tide-mark（潮纹）。同一证人重复说话、转述同一个人或抄录同一文书，都只算一个来源；类别不同也不一定独立。
+    发现矛盾时分别记下两方说法和冲突所在，不替任何一方下结论。证人明确翻供时保留原证词并标为已撤回，不把转述当成亲闻。
+    状态按证据维护：有效且互相独立的来源至少两条，才可设为 corroborated（已佐证）；不足两条时为 unverified（未核实）。证据遭伪造、损毁或公开走漏时设为 contaminated（已污染），并在当前判断里写明原因。
+    只有查清真相、解释了矛盾且争议已消除，才设为 resolved（已解决）。翻供后重新检查其余来源，不能沿用失去依据的佐证。
+    固定证据须在叙事中花一次行动完成：将物证或副本封存到公会封档库、随身防水保存，或请具名证人确认并留下可复核的记录，随后标为已固定。
+    深退潮急涨时，只污染仍在潮水可及处且未固定的证据；单纯传闻、上城档案和证人记忆不会被水冲走。固定过的证据若另遭伪造或泄密，仍可污染。
+    不删除线索、来源或矛盾；新线索沿用同一结构。当前判断只写一句话，说明判断的依据和仍待查的问题。潮水带走证据不证明任何人的解释。
 
 deepWithdrawal:
   name: 深退潮
-  description: 罕见的深退潮会让下潮区完全暴露——也只给人很短的撤离时间。
+  description: 罕见的深退潮让下潮区完全露出，返潮警铃一响，撤离通常只剩约半小时。
   schema:
     type: object
     properties:
@@ -82,16 +134,14 @@ deepWithdrawal:
     additionalProperties: false
   initialValue:
     stage: triple-warning
-    note: 潮钟三鸣。深退潮比往常提前，没人说得清为什么。
-  updateRule:
-    只按叙事中明确出现的潮讯推进，顺序为 triple-warning → step-ninety（海水退过褪水阶第九十级）→
-    full-exposure（遗迹完全暴露）→ return-bell（返潮警铃，通常只剩约半小时）→ flood（急涨）→
-    receded（本次深退潮结束）。不跳级、不倒退；receded 之后只有叙事明确出现新的三连预警才回到
-    triple-warning。普通涨落潮由世界时间负责，不在此记录。
+    note: 潮钟三鸣。深退潮提前了，没人说得清缘由。
+  updateRule: >-
+    只随叙事明确写出的潮讯推进，阶段依次为 triple-warning（三连预警）、step-ninety（海水退过褪水阶第九十级）、full-exposure（遗迹完全暴露）、return-bell（返潮警铃）、flood（急涨）、receded（潮水复归）。
+    return-bell 后通常只剩约半小时。不跳级、不倒退；receded 之后，只有新的三连预警才回到 triple-warning。普通涨落潮由世界时间记录。
 
 factionStanding:
   name: 四方立场
-  description: 议会、验潮师公会、盐牙会与雾中教会怎么看你。没有不留痕迹的中立。
+  description: 议会、公会、盐牙会与雾中教会对你的态度，以及彼此欠下的人情。
   schema:
     type: object
     properties:
@@ -99,11 +149,7 @@ factionStanding:
         type: object
         title: 雾港议会
         properties:
-          attitude:
-            type: integer
-            title: 态度
-            minimum: -3
-            maximum: 3
+          attitude: { type: integer, title: 态度, minimum: -3, maximum: 3 }
           marks:
             type: array
             title: 记录
@@ -122,69 +168,51 @@ factionStanding:
         type: object
         title: 验潮师公会
         properties:
-          attitude:
-            type: integer
-            title: 态度
-            minimum: -3
-            maximum: 3
+          attitude: { type: integer, title: 态度, minimum: -3, maximum: 3 }
           marks:
             type: array
             title: 记录
             maxItems: 4
             items:
               type: string
-              enum: [permit, owes-you, you-owe, warrant]
+              enum: [owes-you, you-owe]
               x-enumLabels:
-                permit: 持有许可
                 owes-you: 欠你人情
                 you-owe: 你欠人情
-                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
       saltFangs:
         type: object
         title: 盐牙会
         properties:
-          attitude:
-            type: integer
-            title: 态度
-            minimum: -3
-            maximum: 3
+          attitude: { type: integer, title: 态度, minimum: -3, maximum: 3 }
           marks:
             type: array
             title: 记录
             maxItems: 4
             items:
               type: string
-              enum: [permit, owes-you, you-owe, warrant]
+              enum: [owes-you, you-owe]
               x-enumLabels:
-                permit: 持有许可
                 owes-you: 欠你人情
                 you-owe: 你欠人情
-                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
       congregation:
         type: object
         title: 雾中教会
         properties:
-          attitude:
-            type: integer
-            title: 态度
-            minimum: -3
-            maximum: 3
+          attitude: { type: integer, title: 态度, minimum: -3, maximum: 3 }
           marks:
             type: array
             title: 记录
             maxItems: 4
             items:
               type: string
-              enum: [permit, owes-you, you-owe, warrant]
+              enum: [owes-you, you-owe]
               x-enumLabels:
-                permit: 持有许可
                 owes-you: 欠你人情
                 you-owe: 你欠人情
-                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
     required: [council, guild, saltFangs, congregation]
@@ -194,27 +222,21 @@ factionStanding:
     guild: { attitude: 0, marks: [] }
     saltFangs: { attitude: 0, marks: [] }
     congregation: { attitude: 0, marks: [] }
-  updateRule:
-    attitude 从 -3（敌视）到 3（倚重），开局中立。玩家明确帮助、出卖、与之交易或公开违抗某方时调整 1，重大事件最多
-    2。议会与盐牙会处于冷战：讨好一方且被另一方得知时，另一方 -1。获得许可证、被欠或欠下人情、遭到通缉时加入对应
-    marks（不重复），偿还、撤销或解除后移除。只按本轮叙事明确发生的事件结算。
+  updateRule: >-
+    态度从 -3（敌视）到 3（倚重），开局为中立。玩家明确帮助、出卖、交易或公开违抗某方时调整 1，重大事件最多调整 2。
+    议会与盐牙会长期冷战；玩家取悦一方且被另一方得知，另一方态度减 1。具体人情只记在相关势力名下，不重复添加，偿还后移除。
+    许可证用 permit、通缉用 warrant，只记在议会名下，须有明确签发、撤销或解除的情节。人情用 owes-you（对方欠你）或 you-owe（你欠对方），其余三方只用这两种标记。只结算本轮叙事已发生的事。
 
 keyFragments:
   name: 钥匙碎片
-  description: 铁姑、陈远山和灰隼都在找的“钥匙”零件。它能打开什么，没人肯说。
+  description: 铁姑、陈远山和灰隼都在找“钥匙”的零件，谁也不肯说它能开什么。
   schema:
     type: object
     additionalProperties:
       type: object
       properties:
-        fragment:
-          type: string
-          title: 碎片
-          x-i18n: true
-        holder:
-          type: string
-          title: 持有者
-          x-i18n: true
+        fragment: { type: string, title: 碎片, x-i18n: true }
+        holder: { type: string, title: 持有者, x-i18n: true }
         status:
           type: string
           title: 状态
@@ -230,547 +252,52 @@ keyFragments:
   initialValue:
     meg-collection:
       fragment: 铁姑暗中收集的遗物碎片
-      holder: 铁姑（盐牙会）
+      holder: 据说在铁姑手里；随身一枚，其余存于隐潮窟，尚待核实。
       status: rumored
     archive-fragment:
       fragment: 铰齿状灰色碎片
-      holder: 不明——报告那一页被取走了
+      holder: 不明，鉴定报告的那一页被取走了。
       status: rumored
-  updateRule:
-    只记录叙事中明确出现的钥匙碎片，新碎片用简短英文 kebab-case ID。找到下落时改为 located，落入玩家手中为
-    held-by-you，被他人夺走为 taken 并更新 holder，下落彻底断绝为 lost。不凭空增加碎片，也不揭示钥匙能打开什么。
+  updateRule: >-
+    只记录叙事明确提到的钥匙碎片，传闻用 rumored，不当成已找到的东西。查到下落后设为 located；到玩家手里后设为 held-by-you；遭人夺走后设为 taken，并写明新的持有者；线索彻底中断才设为 lost。
+    铁姑随身的一枚与隐潮窟里的收藏不能重复计数；尚未比对之前，不断言其中哪枚就是报告里的铰齿状碎片。不凭空增加碎片，也不提前揭示钥匙的用途。
 
-geography:
-  name: 地理
-  schema:
-    type: object
-    properties:
-      overview:
-        type: string
-        x-i18n: true
-        title: 概况
-      regions:
-        type: array
-        items:
-          type: object
-          properties:
-            name:
-              type: string
-              x-i18n: true
-              title: 名称
-            description:
-              type: string
-              x-i18n: true
-              title: 描述
-            climate:
-              type: string
-              x-i18n: true
-              title: 气候
-            landmarks:
-              type: array
-              items:
-                type: object
-                properties:
-                  name:
-                    type: string
-                    x-i18n: true
-                    title: 名称
-                  description:
-                    type: string
-                    x-i18n: true
-                    title: 描述
-                additionalProperties: false
-              title: 地标
-          additionalProperties: false
-        title: 地区
-    additionalProperties: false
-  initialValue:
-    overview: 悬崖与海面之间的港口城市，永恒灰白浓雾笼罩，能见度不超过五十步。城市垂直分上城、中港、下潮区三层。
-    regions:
-      - name: 上城
-        description: 议会与商会所在地，位于悬崖顶部，建筑以石砌为主，是合法遗物贸易的中枢。
-        climate: 雾气稀薄，偶见天光
-        landmarks:
-          - name: 议事厅
-            description: 议会权力中枢，穹顶嵌有不靠火焰发光的远古潮石灯。
-          - name: 验潮师公会塔
-            description: 鉴定远古遗物的学术要地，也是雾港唯一的图书馆与档案库。
-          - name: 封档库
-            description: 公会塔地下的禁阅档案室。齐老失踪当日，第七十四号鉴定报告与访客簿各少了一页，门锁却没有被撬动。
-          - name: 静潮病院
-            description: 名义上收治重度雾蚀患者，实际由议会严密看守；三年前深潜队唯一的幸存者被关在最下层病房。
-      - name: 中港
-        description: 码头、工坊和旅店聚集地，城市的经济心脏，也是各方势力公开与暗中交锋的舞台。
-        climate: 浓雾常驻，潮湿闷热
-        landmarks:
-          - name: 主栈桥
-            description: 雾港唯一的大型泊位，渡船与货船在此停靠，新来者从这里踏入雾港。
-          - name: 钟塔
-            description: 以潮汐驱动的机械钟，每六小时鸣响一次；三连击代表深退潮预警。
-          - name: 盐市
-            description: 中港背巷里半公开的市集，盐牙会在此放货与招募；持盐牙筹者才听得到真正的价。
-          - name: 无声栈
-            description: 探险者常住的低顶旅店，墙壁填了吸音雾菌。老板不问来路，却会把未归者的雾灯挂在门梁上。
-          - name: 封潮关
-            description: 中港通往下潮区褪水阶的检查站，灰隼在此核验许可证、没收明火与未登记遗物；栈桥暗门可绕行，但欠盐牙会一份人情。
-      - name: 下潮区
-        description: 潮退后暴露的远古遗迹区域，地形每次退潮都会改变，无图可循；最深处从未有人到达。
-        climate: 阴冷，弥漫盐雾与腐蚀气息
-        landmarks:
-          - name: 骨拱门
-            description: 半淹没的巨大拱形结构，来源不明；六年前的深退潮中暴露，带走了十七条人命。
-          - name: 沉钟堂
-            description: 退潮时才露出的半沉建筑，雾中教会在此聚会礼拜，相信这里离"雾之主"最近。
-          - name: 隐潮窟
-            description: 涨潮也淹不到的洞窟群，盐牙会的根据地，铁姑在此存放她搜集的遗物碎片。
-          - name: 褪水阶
-            description: 封潮关下方通往遗迹的长阶，每一级刻着撤离刻度。海水退过第九十级才算深退潮；返潮警铃后，安全窗口只剩约半小时。
-          - name: 回声廊
-            description: 本次深退潮最先露出的环形廊道，石壁会延迟复述脚步与耳语。齐老的潮纹印记、灰隼私队的新绳痕与一枚陌生童谣铜片同时出现在这里。
-factions:
-  name: 势力
-  schema:
-    type: array
-    items:
-      type: object
-      properties:
-        id:
-          type: string
-          title: ID
-        name:
-          type: string
-          x-i18n: true
-          title: 名称
-        description:
-          type: string
-          x-i18n: true
-          title: 描述
-        type:
-          type: string
-          title: 类型
-        influence:
-          type: string
-          title: 影响力
-        leader:
-          type: string
-          x-i18n: true
-          title: 领袖
-        headquarters:
-          type: string
-          x-i18n: true
-          title: 据点
-        relations:
-          type: array
-          items:
-            type: object
-            properties:
-              targetId:
-                type: string
-                title: 对象
-              type:
-                type: string
-                title: 类型
-              description:
-                type: string
-                x-i18n: true
-                title: 描述
-            additionalProperties: false
-          title: 关系
-      additionalProperties: false
-  initialValue:
-    - id: council
-      name: 雾港议会
-      description: 统治上城的政治实体，试图以"封潮令"限制平民进入下潮区，垄断合法遗物贸易；内部鸽鹰两派分裂。
-      type: political
-      influence: major
-      leader: 议长・陈远山
-      headquarters: 上城・议事厅
-      relations:
-        - targetId: salt-fangs
-          type: hostile
-          description: 视盐牙会为非法组织，长期冷战
-        - targetId: tide-readers
-          type: patron
-          description: 拨款资助公会，也借此施加影响
-        - targetId: fog-church
-          type: hostile
-          description: 斥雾中教会为邪教，警惕其在底层迅速扩张
-    - id: tide-readers
-      name: 验潮师公会
-      description: 唯一有资质鉴定远古遗物、研究裂潮规律的学术组织；高层刻意压制某些鉴定报告，年轻验潮师日渐不安。
-      type: guild
-      influence: major
-      leader: 公会长・齐老
-      headquarters: 上城・验潮师公会塔
-      relations:
-        - targetId: council
-          type: allied
-          description: 依赖议会资金，提供遗物鉴定，保持名义独立
-        - targetId: salt-fangs
-          type: complicated
-          description: 公开敌对走私
-    - id: salt-fangs
-      name: 盐牙会
-      description: 控制下潮区遗物黑市的走私帮派，势力深植底层；二当家铁姑守信，暗中搜集遗物碎片。
-      type: criminal
-      influence: major
-      leader: 二当家・铁姑
-      headquarters: 下潮区・隐潮窟
-      relations:
-        - targetId: council
-          type: hostile
-          description: 长期对抗议会封锁政策
-        - targetId: fog-church
-          type: neutral
-          description: 不信其教义，但容许信徒在下潮区借道，偶尔交易情报
-    - id: fog-church
-      name: 雾中教会
-      description: 崇拜"雾之主"的新兴教团，相信雾是有意识的存在、遗迹是其身体，宣讲"雾蚀是升华"；信众在底层激增。
-      type: religious
-      influence: minor
-      leader: 雾使・小霜
-      headquarters: 下潮区・沉钟堂
-      relations:
-        - targetId: council
-          type: defiant
-          description: 被议会列为邪教，却以底层信众为盾顽强生长
-        - targetId: tide-readers
-          type: rival
-          description: 以"信仰"解释潮力与雾蚀，与公会的"科学"立场针锋相对
-powerSystem:
-  name: 力量体系
-  schema:
-    type: object
-    properties:
-      name:
-        type: string
-        x-i18n: true
-        title: 名称
-      type:
-        type: string
-        title: 类型
-      description:
-        type: string
-        x-i18n: true
-        title: 描述
-      rules:
-        type: array
-        items:
-          type: string
-          x-i18n: true
-        title: 规则
-      tiers:
-        type: array
-        items:
-          type: object
-          properties:
-            name:
-              type: string
-              x-i18n: true
-              title: 名称
-            rank:
-              type: integer
-              title: 等级
-            description:
-              type: string
-              x-i18n: true
-              title: 描述
-          additionalProperties: false
-        title: 层级
-    additionalProperties: false
-  initialValue:
-    name: 潮力
-    type: magic
-    description: 远古遗物蕴含的不可预测能量，与潮汐周期共振，退潮时最强。验潮师以"潮纹"引导稳定，过度使用招致雾蚀。
-    rules:
-      - 遗物效果因潮汐相位而异——满潮时最强、退潮时最稳
-      - 未经鉴定的遗物直接使用可能产生反噬，轻则失能、重则致命
-      - 雾兽被潮力波动吸引，大规模使用遗物会引来雾兽群
-      - 验潮师通过"潮纹"手法引导能量，需要长期训练，官方却否认潮力存在
-      - 过度使用潮力引发"雾蚀"：身体逐渐半透明，最终溶入雾中，不可逆
-      - 极少数人无需遗物也能感知潮力，这种天赋被公会视为危险，被教会奉为神迹
-      - 雾蚀以 0-100 记录且不可逆：25 起出现可见异变，50 起伴随持续失能，75 以上随时可能溶入雾中
-    tiers:
-      - name: 学徒
-        rank: 1
-        description: 能感知遗物是否活性
-      - name: 验潮师
-        rank: 2
-        description: 可鉴定并稳定常规遗物
-      - name: 御潮者
-        rank: 3
-        description: 能主动引导潮力，极为罕见，多已显雾蚀
-history:
-  name: 历史
-  schema:
-    type: array
-    items:
-      type: object
-      properties:
-        era:
-          type: string
-          x-i18n: true
-          title: 时代
-        name:
-          type: string
-          x-i18n: true
-          title: 名称
-        description:
-          type: string
-          x-i18n: true
-          title: 描述
-        significance:
-          type: string
-          title: 重要性
-        year:
-          type: string
-          x-i18n: true
-          title: 年份
-      additionalProperties: false
-  initialValue:
-    - era: 远古
-      name: 造者时代
-      description: 下潮区遗迹的建造者文明，已无文字记录，仅余建筑残骸；其碑文比雾港古老一万年。
-      significance: major
-    - era: 建城纪
-      year: 约三百年前
-      name: 雾港建城
-      description: 流民在悬崖间搭建栈道定居，发现退潮暴露的遗物可以交易。
-      significance: major
-    - era: 当代
-      year: 六年前
-      name: 骨拱门深退潮
-      description: 上一次深退潮暴露出"骨拱门"，多支探险队涌入，十七人葬身涨潮，至今为忌讳。
-      significance: major
-    - era: 当代
-      year: 三年前
-      name: 失踪的探险队
-      description: 一支议会探险队深入下潮区后全队失踪，唯一幸存者发疯，反复念叨"它在下面醒了"。
-      significance: major
-    - era: 近年
-      name: 雾中教会兴起
-      description: 雾蚀患者激增，雾中教会以"升华"教义吸纳底层贫民，雾使小霜的预言屡屡应验。
-      significance: minor
-    - era: 当代
-      year: 去年
-      name: 封潮令草案
-      description: 陈议长提出封潮令，禁止无证者进入下潮区，引发底层激烈反对。
-      significance: minor
-    - era: 当下
-      name: 雾在变浓
-      description: 最敏感的验潮师察觉雾正逐月变浓、退潮间隔拉长；齐老的笔记称之为"周期的临界点"。
-      significance: major
-economy:
-  name: 经济
-  schema:
-    type: object
-    properties:
-      currencies:
-        type: array
-        items:
-          type: object
-          properties:
-            name:
-              type: string
-              x-i18n: true
-              title: 名称
-            symbol:
-              type: string
-              title: 符号
-            description:
-              type: string
-              x-i18n: true
-              title: 描述
-          additionalProperties: false
-        title: 货币
-      resources:
-        type: array
-        items:
-          type: string
-          x-i18n: true
-        title: 资源
-      tradeNotes:
-        type: string
-        x-i18n: true
-        title: 贸易
-    additionalProperties: false
-  initialValue:
-    currencies:
-      - name: 潮币
-        symbol: ₮
-        description: 议会发行的标准货币
-      - name: 盐牙筹
-        description: 盐牙会在黑市流通的不可追踪代币
-    resources:
-      - 远古遗物
-      - 遗物碎片
-      - 潮盐
-      - 雾菌（可食用真菌）
-      - 崖铁
-    tradeNotes: 遗物交易是雾港经济的核心。合法渠道走验潮师公会鉴定后拍卖，黑市走盐牙会；遗物碎片在黑市价格离奇，因为有人在高价收购。
-socialStructure:
-  name: 社会结构
-  schema:
-    type: object
-    properties:
-      classes:
-        type: array
-        items:
-          type: object
-          properties:
-            name:
-              type: string
-              x-i18n: true
-              title: 名称
-            rank:
-              type: integer
-              title: 等级
-            description:
-              type: string
-              x-i18n: true
-              title: 描述
-          additionalProperties: false
-        title: 阶层
-      notes:
-        type: string
-        x-i18n: true
-        title: 备注
-    additionalProperties: false
-  initialValue:
-    classes:
-      - name: 议员与商会
-        rank: 1
-        description: 上城精英，掌握政治与合法贸易权
-      - name: 中港市民
-        rank: 2
-        description: 码头工人、工匠、旅店主，城市运转的中坚
-      - name: 潮民
-        rank: 3
-        description: 下潮区边缘居民，靠拾荒和走私为生，也是雾中教会的主要信众
-    notes: 验潮师公会成员不受阶层限制，凭技术获得跨阶层通行权；雾蚀患者则被各阶层排斥，逐渐流向教会。
-tone:
-  name: 基调
-  schema:
-    type: object
-    properties:
-      genres:
-        type: array
-        items:
-          type: string
-        title: 类型
-      contentRating:
-        type: string
-        title: 分级
-      narrativeStyle:
-        type: string
-        x-i18n: true
-        title: 叙事风格
-      themes:
-        type: array
-        items:
-          type: string
-          x-i18n: true
-        title: 主题
-    additionalProperties: false
-  initialValue:
-    genres:
-      - dark-fantasy
-      - mystery
-      - exploration
-    contentRating: teen
-    narrativeStyle: 雾气氤氲的哥特悬疑风格，节奏舒缓但暗流涌动，真相一层层剥开、代价一点点累积。
-    themes:
-      - 阶层对立
-      - 未知探索
-      - 秩序与自由
-      - 信仰与异化
-      - 真相的代价
-      - 身体的边界
-mechanics:
-  name: 玩法
-  schema:
-    type: object
-    properties:
-      combatStyle:
-        type: string
-        title: 战斗
-      skillSystem:
-        type: string
-        x-i18n: true
-        title: 检定规则
-      difficulty:
-        type: string
-        title: 难度
-      customRules:
-        type: array
-        items:
-          type: string
-          x-i18n: true
-        title: 附加规则
-    additionalProperties: false
-  initialValue:
-    combatStyle: narrative
-    skillSystem: 以职业技能树为核心：验潮（鉴定/引导遗物）、潜行（雾中行动）、交涉（社交）、格斗。
-    difficulty: normal
-    customRules:
-      - 雾中行动需声音/光源检定，失败则引来雾兽
-      - 遗物使用前必须鉴定，否则触发随机效果表
-      - 潮汐周期影响下潮区可探索范围，涨潮预警必须撤退
-      - 引导潮力或使用活性遗物会累积雾蚀值，过线则身体不可逆地变化
-      - 四方势力（议会/公会/盐牙会/教会）对玩家的遗物与下潮区行动各有反应，立场此消彼长
-      - 线索按「未核实 / 已佐证 / 已污染 / 已解决」演化；潮水可能带走物证，却不会自动证明任何人的解释
-      - 有代价的行动应更新至少一项可见状态：潮时、地点、伤势/雾蚀、角色态度、阵营压力或线索可信度
 startingConditions:
   name: 开局
   schema:
     type: object
     properties:
-      openingScenario:
-        type: string
-        x-i18n: true
-        title: 开场
-      openingHook:
-        type: string
-        x-i18n: true
-        title: 引子
+      openingScenario: { type: string, title: 开场, x-i18n: true }
+      openingHook: { type: string, title: 引子, x-i18n: true }
       openingChips:
         type: array
-        items:
-          type: string
-          x-i18n: true
         title: 开局行动
+        items: { type: string, x-i18n: true }
       playerConstraints:
         type: array
-        items:
-          type: string
-          x-i18n: true
         title: 开局限制
-      startingLocation:
-        type: string
-        x-i18n: true
-        title: 起点
+        items: { type: string, x-i18n: true }
+      startingLocation: { type: string, title: 起点, x-i18n: true }
       startingResources:
         type: object
-        properties:
-          潮币:
-            type: integer
-          雾灯:
-            type: integer
-        additionalProperties: false
         title: 初始资源
+        properties:
+          潮币: { type: integer }
+          雾灯: { type: integer }
+        additionalProperties: false
     additionalProperties: false
   initialValue:
-    openingScenario: 黄昏，你刚抵达中港主栈桥。潮汐钟敲响罕见的三连击——深退潮预警。码头上盐牙会在招募探险者，议会在张贴封潮令；验潮师苏窈挤过人群。若你是新学徒，她认得你的考核潮纹；若你是潮民，她带着齐老点名寻找熟路人的便笺。她告诉你：齐老今早走进了下潮区，而那时正是涨潮期。
-    openingHook: 潮钟三鸣，齐老失踪，下潜还是封港？
+    openingScenario: 黄昏，你刚到中港主栈桥，潮钟便敲了三下：深退潮预警。盐牙会在码头招募探险者，议会的人贴起封潮令。苏窈挤过人群；你是新学徒，她认得你考核留下的潮纹；你是潮民，她带着齐老点名找熟路人的便笺。她告诉你，齐老今早走进下潮区时还在涨潮。眼下，海水已经开始后退。
+    openingHook: 潮钟三鸣，齐老失踪。下潜，还是封港？
     openingChips:
       - 深退潮
       - 封潮令
       - 齐老失踪
       - 半封失踪信
     playerConstraints:
-      - 初始为验潮师学徒或普通潮民
-      - 不可携带明火进入雾区
-      - 无证进入下潮区违反封潮令，会被议会追责
+      - 以验潮师学徒或普通潮民的身份开始。
+      - 不可携带明火进入雾区。
+      - 无证进入下潮区违反封潮令，会被议会追责。
     startingLocation: 中港・主栈桥
     startingResources:
       潮币: 50

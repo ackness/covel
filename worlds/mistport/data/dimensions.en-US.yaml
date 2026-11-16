@@ -1,10 +1,6 @@
-# en-US text for dimensions.yaml. Only translated text; structure and ids come from dimensions.yaml.
 caseBoard:
   name: Case Board
-  description:
-    The leads in Guildmaster Qi's disappearance, and how far each can be
-    trusted. A lead can be corroborated — or contaminated by the tide, a
-    forgery or a leak.
+  description: Leads, sources and unanswered questions in Qi's disappearance. Every claim needs a source; tides, forgery and leaks can spoil the evidence.
   schema:
     additionalProperties:
       properties:
@@ -18,46 +14,65 @@ caseBoard:
             contaminated: Contaminated
             resolved: Resolved
         note:
-          title: Current read
+          title: Current assessment
+        sources:
+          title: Sources
+          items:
+            properties:
+              from:
+                title: Origin
+              kind:
+                title: Kind
+                x-enumLabels:
+                  physical: Physical evidence
+                  witness: Testimony
+                  document: Document
+                  tide-mark: Tide-sigil
+              detail:
+                title: What was found or heard
+              retracted:
+                title: Retracted
+        contradictions:
+          title: Contradictions
+          items:
+            properties:
+              a:
+                title: One account
+              b:
+                title: Other account
+              why:
+                title: Point of conflict
+        secured:
+          title: Secured
   initialValue:
     torn-letter:
       lead: The torn letter
-      note:
-        Su Yao has it — “The Key must not fall into his hands.” Its edge carries
-        black tide-salt, which crystallizes only in ruins the ebb uncovers, yet
-        Qi left at high tide.
+      note: 'Su Yao holds half a letter: "The Key must not fall into his hands." Black tide-salt clings to its edge. It forms only in ruins exposed at ebb, yet Qi left at high tide.'
+      contradictions:
+        - a: The black tide-salt on the paper forms only in ruins exposed at ebb.
+          b: Qi left at high tide.
+          why: The salt does not fit the tide at his departure; when it reached the letter is still unknown.
     report-74:
       lead: Appraisal Report 74
-      note:
-        A page is missing in the Guild's Sealed Archive; the catalog still says
-        “hinged-tooth grey fragment.” A page was also removed cleanly from that
-        day's visitor ledger.
+      note: 'A page is missing from the report in the Sealed Archive. The catalog still reads "hinged-tooth grey fragment." A page was also removed cleanly from that day''s visitor ledger.'
     echo-gallery:
       lead: Three traces in the Echo Gallery
-      note:
-        Qi's tide-sigil, new rope from Grey Falcon's private unit, a copper plate
-        engraved with a nursery rhyme — and their timings contradict one
-        another.
+      note: Qi's tide-sigil, fresh rope marks from Grey Falcon's unit and a copper plate bearing a nursery rhyme were left at times that do not agree.
     stilltide-survivor:
       lead: The Stilltide survivor
-      note:
-        The only one to come back from the deep-dive team three years ago, held
-        in isolation by the Council. “It woke up down there” is not what he
-        first said.
-  updateRule:
-    Record only changes the narrative makes explicit this turn. When a new
-    named piece of evidence, testimony or contradiction turns up, add an entry
-    (short English kebab-case ID) with status unverified. Set corroborated when
-    independent testimony or a tide-sigil record backs it up; contaminated when
-    the flood washes it over, it is forged, or it leaks publicly; resolved when
-    the truth is confirmed and no longer disputed. The tide carrying evidence
-    away does not prove anyone's explanation. Never delete an entry; keep note
-    to one sentence, the current read.
+      note: 'The Council has isolated the sole survivor of the deep-dive team lost three years ago. "It woke up down there" was not what he first said.'
+  updateRule: >-
+    Add sources only for evidence actually collected, testimony heard firsthand, documents read or tide-sigils examined in this turn's narrative. The starting leads are avenues of inquiry, not grounds for inventing sources.
+    Name the person, place or document and record what was found or heard. Use physical for physical evidence, witness for testimony, document for written records and tide-mark for examined tide-sigils. Repeated statements by one witness, secondhand versions of the same account and copies of one document count as a single source. Different kinds of source are not necessarily independent.
+    Record both accounts and the point of conflict when a contradiction appears; do not settle it for either side. When a witness explicitly recants, keep the original testimony and mark it retracted. Hearsay is not firsthand testimony.
+    Assess status from the evidence. A lead needs at least two valid, independent sources to be corroborated; with fewer, it is unverified. Mark it contaminated after forgery, damage or a public leak, and state the reason in the current assessment.
+    Mark a lead resolved only when the truth is established, its contradictions explained and the dispute settled. After a retraction, reassess the remaining sources instead of keeping unsupported corroboration.
+    Securing evidence takes an action in the narrative: deposit the original or a copy in the Sealed Archive, carry it in waterproof protection, or have a named witness confirm it and leave a record that can be checked. Then mark it secured.
+    During the deep ebb's sudden flood, contaminate only unsecured evidence still within reach of the water. Rumors, Upper City records and a witness's memory cannot be washed away. Secured evidence can still be spoiled by a later forgery or leak.
+    Keep every lead, source and contradiction. Give new leads the same structure. Use one sentence for the current assessment, stating its basis and what remains to be checked. Lost evidence proves no one's explanation.
 deepWithdrawal:
   name: Deep Ebb
-  description:
-    A rare deep ebb lays the Undertow completely bare — and leaves very
-    little time to get out.
+  description: A rare deep ebb lays the Undertow bare. Once the flood bell sounds, there is usually about half an hour to get out.
   schema:
     properties:
       stage:
@@ -72,26 +87,17 @@ deepWithdrawal:
       note:
         title: Tide report
   initialValue:
-    note: The tide bell has struck three times. The deep ebb has come early,
-      and no one can say why.
-  updateRule:
-    Advance only on tide signals the narrative states outright, in this order —
-    triple-warning → step-ninety (the sea has fallen past the ninetieth
-    Drawdown Step) → full-exposure (the ruins lie fully exposed) → return-bell
-    (the flood bell; usually about half an hour remains) → flood (the sudden
-    flood) → receded (this deep ebb is over). Never skip a stage or go
-    back. After receded, return to triple-warning only if the narrative clearly
-    sounds a new triple warning. Ordinary tides belong to world time and are
-    not recorded here.
+    note: Three strikes of the tide bell. The deep ebb has come early, and no one knows why.
+  updateRule: >-
+    Advance only on explicit tide signals, using these stage values in order: triple-warning (the triple warning), step-ninety (water below the ninetieth Drawdown Step), full-exposure (fully exposed ruins), return-bell (the flood bell), flood (the sudden flood) and receded (the tide's return).
+    return-bell usually leaves about half an hour. Never skip a stage or go backwards. After receded, return to triple-warning only when another triple warning sounds. World time records the ordinary tides.
 factionStanding:
   name: Faction Standing
-  description:
-    How the Council, the Tide-Reader Guild, the Salt Fangs and the Congregation
-    of the Mist see you. No one stays neutral without leaving a trace.
+  description: How the Council, Guild, Salt Fangs and Congregation see you, and the favors owed on either side.
   schema:
     properties:
       council:
-        title: Council
+        title: Mistport Council
         properties:
           attitude:
             title: Attitude
@@ -99,10 +105,10 @@ factionStanding:
             title: Marks
             items:
               x-enumLabels:
-                permit: Permit
+                permit: Permit held
                 owes-you: Owes you
                 you-owe: You owe
-                warrant: Warrant
+                warrant: Wanted
       guild:
         title: Tide-Reader Guild
         properties:
@@ -112,10 +118,8 @@ factionStanding:
             title: Marks
             items:
               x-enumLabels:
-                permit: Permit
                 owes-you: Owes you
                 you-owe: You owe
-                warrant: Warrant
       saltFangs:
         title: Salt Fangs
         properties:
@@ -125,10 +129,8 @@ factionStanding:
             title: Marks
             items:
               x-enumLabels:
-                permit: Permit
                 owes-you: Owes you
                 you-owe: You owe
-                warrant: Warrant
       congregation:
         title: Congregation of the Mist
         properties:
@@ -138,24 +140,15 @@ factionStanding:
             title: Marks
             items:
               x-enumLabels:
-                permit: Permit
                 owes-you: Owes you
                 you-owe: You owe
-                warrant: Warrant
-  updateRule:
-    attitude runs from -3 (hostile) to 3 (relies on you) and starts neutral.
-    Shift it by 1 when the player clearly helps, betrays, trades with or openly
-    defies a faction; by 2 at most for a major event. The Council and the Salt
-    Fangs are in a cold war — when the player wins favor with one and the other
-    finds out, the other drops by 1. Add the matching mark (no duplicates) when
-    the player gets a permit, is owed a favor, owes one, or is made wanted;
-    remove it once repaid, revoked or lifted. Settle only events the narrative
-    makes explicit this turn.
+  updateRule: >-
+    Attitude runs from -3 (hostile) to 3 (relies on you), starting at neutral. Shift it by 1 when the player clearly helps, betrays, trades with or openly defies a faction, or by at most 2 for a major event.
+    The Council and Salt Fangs are in a cold war. If the player wins favor with one and the other learns of it, reduce the other's attitude by 1. Record each favor under the faction concerned, without duplicates, and remove it when repaid.
+    Use permit for a permit and warrant for being wanted, only under the Council and only after an explicit issue, revocation or lifting in the story. Use owes-you when the faction owes the player and you-owe when the player owes it. The other three factions use only these two favor marks. Settle only what happened in this turn's narrative.
 keyFragments:
   name: Key Fragments
-  description:
-    Pieces of the “Key” that Iron Meg, Chen Yuanshan and Grey Falcon are all
-    looking for. What it opens, no one will say.
+  description: Iron Meg, Chen Yuanshan and Grey Falcon are all searching for pieces of the Key. None will say what it opens.
   schema:
     additionalProperties:
       properties:
@@ -168,464 +161,19 @@ keyFragments:
           x-enumLabels:
             rumored: Rumored
             located: Located
-            held-by-you: Yours
+            held-by-you: In your hands
             taken: Taken
             lost: Lost
   initialValue:
     meg-collection:
       fragment: The relic fragments Iron Meg collects in secret
-      holder: Iron Meg (Salt Fangs)
+      holder: Said to be with Iron Meg; one on her person, the rest in the Hidden Grotto. Not yet checked.
     archive-fragment:
       fragment: Hinged-tooth grey fragment
-      holder: Unknown — the page of the report was taken
-  updateRule:
-    Record only Key fragments that appear explicitly in the narrative; give a
-    new one a short English kebab-case ID. Set located when its whereabouts are
-    found, held-by-you when it is in the player's hands, taken (and update
-    holder) when someone else seizes it, lost when every trail to it has gone
-    cold. Never invent fragments, and never reveal what the Key opens.
-geography:
-  name: Geography
-  schema:
-    properties:
-      overview:
-        title: Overview
-      regions:
-        items:
-          properties:
-            name:
-              title: Name
-            description:
-              title: Description
-            climate:
-              title: Climate
-            landmarks:
-              items:
-                properties:
-                  name:
-                    title: Name
-                  description:
-                    title: Description
-              title: Landmarks
-        title: Regions
-  initialValue:
-    overview:
-      A harbor city between cliff and sea, buried in a pale grey fog that never
-      lifts; no one can see more than fifty paces. The city is stacked in three
-      tiers — the Upper City, Mid-Harbor and the Undertow.
-    regions:
-      - name: Upper City
-        description:
-          Seat of the Council and the merchant houses, on top of the cliff.
-          Built mostly of stone, it is the center of the legal relic trade.
-        climate: Thin fog; now and then a little daylight
-        landmarks:
-          - name: Council Hall
-            description:
-              The seat of the Council's power. An ancient tide-stone lamp that needs no flame is set
-              in its dome.
-          - name: Tide-Reader Guild Tower
-            description:
-              The scholarly center for appraising ancient relics, and Mistport's
-              only library and archive.
-          - name: Sealed Archive
-            description:
-              A restricted records room beneath the Guild Tower. On the day Qi
-              disappeared, a page went missing from Appraisal Report 74 and
-              another from the visitor ledger, yet the lock was never forced.
-          - name: Stilltide Asylum
-            description:
-              Officially it cares for patients with severe fog-rot; in fact the
-              Council keeps it under close guard. The only survivor of the
-              deep-dive team three years ago is locked in a ward on its lowest
-              floor.
-      - name: Mid-Harbor
-        description:
-          Docks, workshops and inns crowded together — the city's economic
-          heart, and the stage where the factions clash in the open and in
-          secret.
-        climate: Thick fog that never leaves; damp and muggy
-        landmarks:
-          - name: Main Pier
-            description:
-              Mistport's only large berth. Ferries and cargo ships tie up here,
-              and newcomers take their first step into Mistport.
-          - name: Clocktower
-            description:
-              A mechanical clock driven by the tides that strikes once every six
-              hours; three quick strikes mean a deep ebb warning.
-          - name: The Salt Market
-            description:
-              A semi-public market in Mid-Harbor's back alleys where the Salt
-              Fangs sell goods and recruit. Only those carrying Salt Chips are
-              told the real prices.
-          - name: The Soundless Inn
-            description:
-              A low-ceilinged inn where explorers lodge, its walls packed with
-              sound-deadening fog fungus. The keeper never asks where you came
-              from, but when a guest doesn't come back, their fog-lamp goes up
-              on the beam over the door.
-          - name: Tide-Seal Gate
-            description:
-              The checkpoint on the way from Mid-Harbor down to the Drawdown
-              Steps. Grey Falcon checks permits here and confiscates open flames
-              and unregistered relics. The hidden hatch in the pier gets you
-              around it, at the price of a favor owed to the Salt Fangs.
-      - name: The Undertow
-        description:
-          The ancient ruins the ebb uncovers. The ground changes with every
-          ebb, so no map holds; no one has ever reached its deepest part.
-        climate: Cold and clammy, thick with salt mist and the smell of corrosion
-        landmarks:
-          - name: Bone Arch
-            description:
-              A huge, half-drowned arch of unknown origin. It was uncovered in the
-              deep ebb six years ago, which cost seventeen lives.
-          - name: The Sunken Bell Hall
-            description:
-              A half-sunken building that surfaces only at ebb. The Congregation
-              of the Mist holds its services here, believing this is the place
-              closest to the Mist Lord.
-          - name: The Hidden Grotto
-            description:
-              A network of caves that even the flood tide never reaches — the Salt
-              Fangs' base, where Iron Meg keeps the relic fragments she has
-              gathered.
-          - name: Drawdown Steps
-            description:
-              A long stair below the Tide-Seal Gate leading down to the ruins,
-              each step cut with evacuation marks. It only counts as a deep
-              ebb once the sea has fallen past the ninetieth step; after
-              the flood bell, the safe window is down to about half an hour.
-          - name: Echo Gallery
-            description: A ring-shaped corridor, the first thing this deep ebb
-              uncovered. Its stone walls repeat footsteps and whispers after a
-              delay. Qi's tide-sigil, fresh rope marks from Grey Falcon's private
-              unit and a strange copper plate engraved with a nursery rhyme have
-              all turned up here together.
-factions:
-  name: Factions
-  schema:
-    items:
-      properties:
-        name:
-          title: Name
-        description:
-          title: Description
-        type:
-          title: Type
-        influence:
-          title: Influence
-        leader:
-          title: Leader
-        headquarters:
-          title: Headquarters
-        relations:
-          items:
-            properties:
-              targetId:
-                title: Target
-              type:
-                title: Type
-              description:
-                title: Description
-          title: Relations
-  initialValue:
-    - id: council
-      name: Mistport Council
-      description:
-        The political power that rules the Upper City. It is trying to restrict
-        civilian access to the Undertow through the Tide-Seal Decree and to
-        monopolize the legal relic trade; inside, it is split between doves and
-        hawks.
-      leader: Council Chair Chen Yuanshan
-      headquarters: Upper City — Council Hall
-      relations:
-        - description: Sees the Salt Fangs as outlaws; a long cold war
-        - description: Funds the Guild, and uses the money to sway it
-        - description:
-            Brands the Congregation a cult and watches its rapid spread through
-            the lower city with alarm
-    - id: tide-readers
-      name: Tide-Reader Guild
-      description:
-        The only scholarly body qualified to appraise ancient relics and study
-        the patterns of the Riftide. Its leadership deliberately suppresses
-        certain appraisal reports, and its young Tide-Readers grow more uneasy
-        by the day.
-      leader: Guildmaster Qi
-      headquarters: Upper City — Guild Tower
-      relations:
-        - description:
-            Depends on Council money and appraises relics, while keeping its
-            independence in name
-        - description: Openly hostile to smuggling
-    - id: salt-fangs
-      name: Salt Fangs
-      description:
-        A smuggling gang that controls the relic black market in the Undertow,
-        deeply rooted in the lower city. Its second-in-command, Iron Meg, keeps
-        her word and is quietly gathering relic fragments.
-      leader: Iron Meg, second-in-command
-      headquarters: The Undertow — Hidden Grotto
-      relations:
-        - description: Has long fought the Council's lockdown
-        - description:
-            Doesn't believe the doctrine, but lets the faithful pass through the
-            Undertow and now and then trades information with them
-    - id: fog-church
-      name: Congregation of the Mist
-      description:
-        A new sect that worships the Mist Lord. It holds that the fog is a
-        conscious being and the ruins are its body, and preaches that fog-rot is
-        ascension; its following is surging in the lower city.
-      leader: Mist-Speaker Frost
-      headquarters: The Undertow — Sunken Bell Hall
-      relations:
-        - description:
-            Branded a cult by the Council, yet it keeps growing, shielded by its
-            followers in the lower city
-        - description:
-            Explains Tide-Force and fog-rot through faith, in open conflict with
-            the Guild's “scientific” position
-powerSystem:
-  name: Power System
-  schema:
-    properties:
-      name:
-        title: Name
-      type:
-        title: Type
-      description:
-        title: Description
-      rules:
-        title: Rules
-      tiers:
-        items:
-          properties:
-            name:
-              title: Name
-            rank:
-              title: Rank
-            description:
-              title: Description
-        title: Tiers
-  initialValue:
-    name: Tide-Force
-    description:
-      An unpredictable energy held in ancient relics. It resonates with the
-      tidal cycle and is strongest at ebb. Tide-Readers guide and steady it with
-      tide-sigils; overuse brings on fog-rot.
-    rules:
-      - Relic effects change with the phase of the tide — strongest at high
-        tide, most stable at ebb
-      - Using an unappraised relic can backfire — at best it disables you, at
-        worst it kills
-      - Fog beasts are drawn to fluctuations in Tide-Force; using relics on a
-        large scale brings whole packs of them
-      - Tide-Readers guide the energy with the tide-sigil technique, which takes
-        long training — yet the official position denies Tide-Force exists
-      - Overusing Tide-Force brings on fog-rot — the body slowly turns
-        translucent and finally dissolves into the fog, and it cannot be
-        reversed
-      - A very few people can sense Tide-Force without any relic — a gift the
-        Guild treats as dangerous and the Congregation hails as a miracle
-      - "Fog-rot is tracked from 0 to 100 and never goes down: visible changes
-        begin at 25, lasting impairment at 50, and at 75 and above the body may
-        dissolve into the fog at any moment"
-    tiers:
-      - name: Apprentice
-        description: Can tell whether a relic is active
-      - name: Tide-Reader
-        description: Can appraise and steady ordinary relics
-      - name: Tidewielder
-        description:
-          Can actively guide Tide-Force — extremely rare, and most already show
-          fog-rot
-history:
-  name: History
-  schema:
-    items:
-      properties:
-        era:
-          title: Era
-        name:
-          title: Name
-        description:
-          title: Description
-        significance:
-          title: Significance
-        year:
-          title: Year
-  initialValue:
-    - era: Ancient
-      name: The Builders' Era
-      description:
-        The civilization that built the ruins of the Undertow. No written records
-        survive, only the remains of its buildings; its inscriptions are ten
-        thousand years older than Mistport.
-    - era: Founding
-      year: About 300 years ago
-      name: Founding of Mistport
-      description:
-        Drifters built walkways along the cliffs, settled, and found that the
-        relics the ebb uncovered could be sold.
-    - era: Modern
-      year: Six years ago
-      name: The Bone Arch Ebb
-      description:
-        The last deep ebb uncovered the Bone Arch. Expeditions poured in,
-        and seventeen people died in the returning flood. People still avoid
-        speaking of it.
-    - era: Modern
-      year: Three years ago
-      name: The Vanished Expedition
-      description:
-        A Council expedition went deep into the Undertow and was lost. The only
-        survivor went mad and keeps repeating, “It woke up down there.”
-    - era: Recent years
-      name: Rise of the Congregation
-      description:
-        As fog-rot cases soared, the Congregation of the Mist drew in the poor
-        of the lower city with its doctrine of ascension, and the prophecies of
-        Mist-Speaker Frost kept coming true.
-    - era: Modern
-      year: Last year
-      name: The Tide-Seal Decree Is Drafted
-      description:
-        Council Chair Chen proposed the Tide-Seal Decree to bar anyone without a
-        permit from the Undertow, and the lower city rose in fierce opposition.
-    - era: Now
-      name: The Thickening Fog
-      description:
-        The most sensitive Tide-Readers can tell the fog is getting thicker
-        month by month and the ebbs are coming further apart; Qi's notes call it
-        “the tipping point of the cycle.”
-economy:
-  name: Economy
-  schema:
-    properties:
-      currencies:
-        items:
-          properties:
-            name:
-              title: Name
-            symbol:
-              title: Symbol
-            description:
-              title: Description
-        title: Currencies
-      resources:
-        title: Resources
-      tradeNotes:
-        title: Trade
-  initialValue:
-    currencies:
-      - name: Tide Coin
-        description: The standard currency, issued by the Council
-      - name: Salt Chip
-        description: An untraceable token the Salt Fangs use on the black market
-    resources:
-      - Ancient relics
-      - Relic fragments
-      - Tide salt
-      - Fog fungus (edible)
-      - Cliff iron
-    tradeNotes:
-      The relic trade is the core of Mistport's economy. Legal relics are
-      appraised by the Tide-Reader Guild and then auctioned; the black market
-      runs through the Salt Fangs. Relic fragments fetch absurd prices on the
-      black market, because someone is buying them up at a premium.
-socialStructure:
-  name: Society
-  schema:
-    properties:
-      classes:
-        items:
-          properties:
-            name:
-              title: Name
-            rank:
-              title: Rank
-            description:
-              title: Description
-        title: Classes
-      notes:
-        title: Notes
-  initialValue:
-    classes:
-      - name: Councilors & Merchants
-        description:
-          The Upper City elite, who hold political power and the right to trade
-          legally
-      - name: Mid-Harbor Citizens
-        description:
-          Dockworkers, craftsmen and innkeepers — the people who keep the city
-          running
-      - name: Undertow Locals
-        description:
-          People on the edge of the Undertow who get by on scavenging and
-          smuggling; also the Congregation's main following
-    notes: Members of the Tide-Reader Guild can move between tiers regardless of
-      class, thanks to their skills. People with fog-rot are shunned by every
-      class and drift, one by one, to the Congregation.
-tone:
-  name: Tone
-  schema:
-    properties:
-      genres:
-        title: Genres
-      contentRating:
-        title: Rating
-      narrativeStyle:
-        title: Narrative style
-      themes:
-        title: Themes
-  initialValue:
-    narrativeStyle:
-      Gothic mystery wrapped in fog — an unhurried pace with dangerous currents
-      underneath; the truth is uncovered layer by layer, and the cost mounts bit
-      by bit.
-    themes:
-      - class conflict
-      - exploring the unknown
-      - order versus freedom
-      - faith and alienation
-      - the price of truth
-      - where the body ends
-mechanics:
-  name: Mechanics
-  schema:
-    properties:
-      combatStyle:
-        title: Combat
-      skillSystem:
-        title: Checks
-      difficulty:
-        title: Difficulty
-      customRules:
-        title: House rules
-  initialValue:
-    skillSystem:
-      "Built on vocational skill trees: Tide-Reading (appraising and guiding
-      relics), Stealth (moving through fog), Diplomacy (social), Combat."
-    customRules:
-      - Actions in fog require noise/light checks; a failure draws fog beasts
-      - Relics must be appraised before use; otherwise roll on the random-effect
-        table
-      - The tide cycle limits how much of the Undertow can be explored; when the
-        flood warning sounds, you must retreat
-      - Guiding Tide-Force or using an active relic builds up fog-rot; past a
-        threshold, the body changes for good
-      - The four factions (Council / Guild / Salt Fangs / Congregation) each
-        react to the player's relic dealings and Undertow activity; when one
-        gains standing, another loses it
-      - Leads move through unverified / corroborated / contaminated / resolved;
-        the tide may carry evidence away, but that never proves anyone's
-        explanation on its own
-      - "A costly action should update at least one visible state: tide time,
-        location, injury or fog-rot, a character's attitude, faction pressure,
-        or confidence in a lead"
+      holder: Unknown. The page of the appraisal report was removed.
+  updateRule: >-
+    Record only Key fragments mentioned in the narrative. Use rumored for an unconfirmed report, located when its whereabouts are established, held-by-you when the player acquires it, taken when someone seizes it, and lost only when the trail has gone cold. Update the holder after a seizure.
+    Do not count the fragment Meg carries again as part of her stored collection. Until someone compares them, do not identify any of her pieces as the hinged-tooth fragment from the report. Never invent fragments or reveal the Key's purpose ahead of the story.
 startingConditions:
   name: Opening
   schema:
@@ -643,24 +191,15 @@ startingConditions:
       startingResources:
         title: Starting resources
   initialValue:
-    openingScenario:
-      "Dusk. You have just arrived on the main pier in Mid-Harbor. The tide
-      clock sounds three quick strikes — the rare deep ebb warning. On the docks
-      the Salt Fangs are recruiting explorers and the Council is posting the
-      Tide-Seal Decree. Tide-Reader Su Yao pushes through the crowd. If you are
-      a new apprentice, she knows the tide-sigil from your exam; if you are an
-      Undertow local, she carries a note in which Qi asked for someone who knows
-      the way. She tells you Guildmaster Qi walked into the Undertow this
-      morning — at flood tide."
-    openingHook: Three bells, a missing Guildmaster — go down, or seal the harbor?
+    openingScenario: Dusk. You have just reached Mid-Harbor's Main Pier when the tide bell strikes three times, warning of a deep ebb. The Salt Fangs recruit explorers on the docks while the Council's people post the Tide-Seal Decree. Su Yao pushes through the crowd. If you are an apprentice, she recognizes your exam tide-sigil; if you are an Undertow local, she carries Qi's note asking for someone who knows the way. She tells you Qi entered the Undertow this morning, while the tide was rising. Now the water has begun to retreat.
+    openingHook: Three bells. Qi is missing. Go down, or seal the harbor?
     openingChips:
       - Deep ebb
       - Tide-Seal Decree
       - Qi's disappearance
       - A torn letter
     playerConstraints:
-      - You start as a Tide-Reader apprentice or an ordinary Undertow local
-      - You may not carry an open flame into the fog
-      - Entering the Undertow without a permit breaks the Tide-Seal Decree, and
-        the Council will hold you to account
-    startingLocation: Mid-Harbor — Main Pier
+      - Begin as a Tide-Reader apprentice or an ordinary Undertow local.
+      - Do not carry an open flame into the fog.
+      - Entering the Undertow without a permit breaks the Tide-Seal Decree; the Council will hold you to account.
+    startingLocation: Mid-Harbor · Main Pier

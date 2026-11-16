@@ -306,7 +306,7 @@ A misspelled dimension ID, an invalid path inside a dimension, or a candidate in
 | ---------------- | ---------------- | ------------ | ---------- | ---------------- |
 | `dice-check`     | Yes              | Yes          |            |                  |
 | `tabletop-rules` | Yes              |              |            |                  |
-| `core-quest`     | Yes              | Yes          |            |                  |
+| `core-quest`     | Yes              | Yes          | Yes        |                  |
 | `inventory`      | Yes              | Yes          |            |                  |
 | `affinity`       | Yes              | Yes          |            | Yes              |
 | `story-events`   | Yes              | Yes          | Yes        | Yes              |

@@ -4,28 +4,28 @@
     {
       "label": "clues",
       "displayName": "证词与推理",
-      "extractionHint": "证词原话、互相矛盾的细节、推理过程与尚未验证的猜测。每条线索的核实状态由「案情板」维度记录，这里不重复状态。",
+      "extractionHint": "记下证人原话、互相冲突的细节、推理过程和未证实的猜测。案情板已存来源、矛盾、固定方式和核实状态，这里只补谈话经过与推理，不再记一份当前值。",
       "icon": "Search",
       "maxChars": 3600
     },
     {
       "label": "relics",
       "displayName": "遗物",
-      "extractionHint": "已获得或见识过的远古遗物、其鉴定结果、效果、风险与归属。",
+      "extractionHint": "记下获得或见过的远古遗物，以及鉴定结果、效果、风险和归属。",
       "icon": "Gem",
       "maxChars": 2400
     },
     {
       "label": "tides",
       "displayName": "潮讯",
-      "extractionHint": "关于退潮时间、雾兽出没与安全/危险窗口的观察和传闻。深退潮阶段由「深退潮」维度记录，主角雾蚀由角色属性记录，这里不重复。",
+      "extractionHint": "记下关于退潮时间、雾兽出没和安全窗口的观察、传闻。深退潮记录阶段，角色属性记录雾蚀，这里不重复。",
       "icon": "Waves",
       "maxChars": 2400
     },
     {
       "label": "commitments",
       "displayName": "立场与人情",
-      "extractionHint": "玩家对议会、公会、盐牙会、雾中教会作出的具体承诺与交易的来龙去脉：谁、为了什么、条件是什么。各方态度数值与许可/通缉/人情标记由「四方立场」维度记录。",
+      "extractionHint": "记下玩家与四方势力承诺、交易的经过：答应了谁，换来什么，条件是什么。当前态度、许可、通缉和人情由四方立场记录。",
       "icon": "Scale",
       "maxChars": 3000
     }

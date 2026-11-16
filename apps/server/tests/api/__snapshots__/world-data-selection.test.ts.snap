@@ -126,6 +126,7 @@ exports[`inferred world data through host admission > imports mistport content u
     "char-creator",
     "character-blueprint",
     "codex",
+    "core-quest",
     "guide",
     "history-compaction",
     "living-world-rules",
@@ -144,6 +145,7 @@ exports[`inferred world data through host admission > imports mistport content u
   "requiredDataContracts": [
     "character.portrait-assets@1",
     "character.portraits@1",
+    "quests@1",
     "world.rules@1",
     "memory.blocks@1",
     "story.events@1",

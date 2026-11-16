@@ -262,7 +262,7 @@ describe("world data session importer", () => {
           kind: worldId === "mistport" ? "phases" : "calendar",
           initial:
             worldId === "mistport"
-              ? { cycle: 1, phase: 0 }
+              ? { cycle: 1, phase: 2 }
               : { year: 1, month: 4, day: 8, hour: 8, minute: 20, weekday: 0 },
         },
       });
@@ -2857,7 +2857,7 @@ describe("world data session importer", () => {
     expect(
       await store.listPluginData(sessionId, "living-world-rules", "rules"),
     ).toHaveLength(9);
-    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(9);
+    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(17);
     expect(
       (await store.listWorldDataImportLedger(sessionId)).map(
         (row) => row.sourceId,

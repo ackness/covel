@@ -3,22 +3,22 @@
     {
       "label": "clues",
       "displayName": "Testimony & Reasoning",
-      "extractionHint": "Testimony in the speaker's own words, details that contradict each other, lines of reasoning, and guesses not yet checked. Each lead's verification status is kept in the Case Board dimension; do not repeat it here."
+      "extractionHint": "Keep witnesses' exact words, conflicting details, reasoning and untested guesses. The Case Board already holds sources, contradictions, preservation and verification status; add the course of conversations and reasoning here without another copy of current values."
     },
     {
       "label": "relics",
       "displayName": "Relics",
-      "extractionHint": "Ancient relics obtained or seen: their appraisal results, effects, risks, and ownership."
+      "extractionHint": "Record ancient relics obtained or seen, with their appraisals, effects, risks and ownership."
     },
     {
       "label": "tides",
       "displayName": "Tide Watch",
-      "extractionHint": "Observations and rumors about when the ebbs come, where fog beasts appear, and windows of safety and danger. The deep ebb stage is kept in the Deep Ebb dimension and the player character's fog-rot in their character attributes; do not repeat them here."
+      "extractionHint": "Keep observations and rumors about ebbs, fog beasts and safe windows. The Deep Ebb records its stage and character attributes record fog-rot; do not duplicate them here."
     },
     {
       "label": "commitments",
       "displayName": "Allegiances & Favors",
-      "extractionHint": "The full story of specific promises and deals the player has made with the Council, the Guild, the Salt Fangs and the Congregation of the Mist: with whom, for what, and on what terms. Each faction's attitude score and its permit, warrant and favor marks are kept in the Faction Standing dimension."
+      "extractionHint": "Keep the history of promises and trades with the four factions: who was promised what, what was received and on which terms. Faction Standing records current attitudes, permits, warrants and favors."
     }
   ]
 }
