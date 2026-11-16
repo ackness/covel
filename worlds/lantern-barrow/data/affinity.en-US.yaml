@@ -1,8 +1,6 @@
 - id: brannoc-hale
   name: Brannoc Hale
-  notes:
-    The veteran in the tavern corner. He's still sizing you up, deciding whether you're
-    worth going down with.
+  notes: The veteran in the tavern corner is still weighing up whether to enter the barrow with you.
 - id: sister-wren
   name: Sister Wren
   notes:

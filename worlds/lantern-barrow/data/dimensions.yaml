@@ -25,28 +25,70 @@ delveMap:
           title: 记录
           maxLength: 200
           x-i18n: true
-      required: [room, status]
+        exits:
+          type: array
+          title: 相邻地点
+          items: { type: string }
+      required: [room, status, exits]
       additionalProperties: false
   initialValue:
     bronze-doors:
       room: 青铜墓门
       status: rumored
-      note: 灯灭那晚之后一直洞开。门上的封印被人从里面推开了。
+      note: 灯灭那晚起就一直洞开，封印有从里面被推开的痕迹。
+      exits: [keepers-cottage, summit-lantern, hall-of-lamps]
     hall-of-lamps:
       room: 千灯廊
       status: rumored
-      note: 守灯人说过，墓里第一条走廊两侧全是壁灯。
-  updateRule:
-    叙事中第一次进入、看见或从可靠来源得知一个具名房间时新增条目（ID 用简短英文 kebab-case），只听说时为
-    rumored。玩家亲自进入并查看后改为 explored；危险被解决后为 cleared；门被封上为 sealed；塌了为
-    collapsed。note 写一句最重要的发现（出口、陷阱、遗物或危险）。不删除条目，不替玩家探索没去过的房间。
+      note: 守灯人说过，进墓后的第一条走廊两侧都是壁灯。
+      exits: [bronze-doors, bone-hall, flooded-chamber]
+    keepers-cottage:
+      room: 守灯人小屋
+      status: rumored
+      note: 山脚的石屋，伊索德在这里住了四十年。
+      exits: [bronze-doors]
+    summit-lantern:
+      room: 山顶古灯
+      status: rumored
+      note: 守了百年的古灯已经熄灭。
+      exits: [bronze-doors]
+    bone-hall:
+      room: 骸骨堂
+      status: rumored
+      note: 还没亲自探过，只知道墓里有这么一处地方。
+      exits: [hall-of-lamps, choir-gallery]
+    flooded-chamber:
+      room: 水淹墓室
+      status: rumored
+      note: 还没亲自探过，只知道墓里有积水的墓室。
+      exits: [hall-of-lamps, choir-gallery]
+    choir-gallery:
+      room: 合唱廊
+      status: rumored
+      note: 亡者在墓中的长廊里唱歌，里面的情形尚不清楚。
+      exits: [bone-hall, flooded-chamber, throne-room]
+    throne-room:
+      room: 王座厅
+      status: rumored
+      note: 王座在山心深处，还没人带回里面的消息。
+      exits: [choir-gallery]
+  updateRule: >-
+    只维护地图上已有的地点，不新增、删除或改名，不改相邻地点。
+    队伍亲自进入并查看后 status 标为 explored，排除危险后标为 cleared；
+    门被封住时标为 sealed，地点坍塌时标为 collapsed。只听说过的地点保持 rumored。
+    记录栏只写本回合确认的发现，如陷阱、遗物、危险或通路是否可走；不要替玩家探索。
+    相邻地点是固定通路，封门与坍塌只改状态并注明受阻通路，不删除出口，也不凭空开路。
 
 barrowAlarm:
   name: 古冢警戒
-  description: 古冢有多清醒。走到 6，古冢之王就会睁开眼睛。
+  description: 古冢正一点点醒来。在墓里待得越久，动静越大；警戒到 6，古冢之王就睁眼。
   schema:
     type: object
     properties:
+      phasesInside:
+        type: integer
+        title: 墓内累计时辰
+        minimum: 0
       level:
         type: integer
         title: 警戒
@@ -63,15 +105,22 @@ barrowAlarm:
           singing: 合唱响起
           stirring: 王座震动
           awake: 古冢之王苏醒
-    required: [level, stage]
+    required: [level, stage, phasesInside]
     additionalProperties: false
   initialValue:
     level: 1
     stage: murmuring
-  updateRule:
-    只在玩家一行人进入古冢后结算。本轮叙事出现打斗、破门、大声喧哗、在合唱廊点亮火光、检定大失败或在墓中长时间休息时 level
-    +1（一回合最多 +2）；重燃一盏壁灯、安静绕开危险或安抚亡者时 -1。stage 随 level 对应：0 沉睡，1 低语，2 躁动，3–4
-    合唱响起，5 王座震动，6 苏醒。灯心被放回古灯并重新点燃后归零。
+    phasesInside: 0
+  updateRule: >-
+    按本回合结算后的世界时钟维护，列为随时钟变化的维度。
+    本回合一旦有入墓或墓内行动，就把时钟给出的本回合经过阶段数全部计入“墓内累计时辰”；
+    包含出墓行动的回合也这样计时，整回合都在墓外时不累加。不要按消息条数或自行估计时间。
+    累计时辰每跨过一个三的倍数，警戒自然增加 1；一次跨过几档就加几次，但自然增加最多推到 5，
+    已经为 6 时保持 6。撤出后保留累计时辰，再次入墓接着计，不重复结算已经跨过的档位。
+    再按本回合墓内发生的事调整：打斗、破门、大声喧哗、在合唱廊点火、检定大失败或长时间休息，
+    每项加 1，这部分每回合最多加 2，可以推到 6；重燃一盏壁灯、安静绕过危险或安抚亡者，每项减 1。
+    最终警戒限制在 0–6。stage 随警戒变化：0 sleeping，1 murmuring，2 restless，3–4 singing，5 stirring，6 awake。
+    灯心放回古灯并点燃后，警戒和累计时辰都归零，stage 为 sleeping；古灯持续燃烧时保持这个状态。
 
 lantern:
   name: 古冢之灯
@@ -113,10 +162,10 @@ lantern:
     heart: missing
     lamp: dark
     keeper: missing
-  updateRule:
-    只按叙事明确发生的事推进。得知灯心下落为 traced，拿到手为 recovered，放回古灯为 returned，被毁为
-    shattered，交给古冢之王或他人为 bargained-away。灯心放回并点燃后 lamp 为 burning，只靠临时火种勉强点亮为
-    flickering。见到伊索德为 found，带她离开古冢为 rescued，她死去为 lost。
+  updateRule: >-
+    只记录叙事已经确认的变化。得知灯心下落时 heart 标为 traced，拿到手后为 recovered，放回古灯后为 returned，
+    毁掉后为 shattered，交给古冢之王或他人后为 bargained-away。灯心归位并点燃后，lamp 为 burning；
+    只靠临时火种勉强维持时为 flickering。见到伊索德后 keeper 标为 found，带她离开古冢后为 rescued，她死去后为 lost。
 
 renown:
   name: 名望
@@ -152,10 +201,11 @@ renown:
     score: 0
     title: stranger
     deeds: []
-  updateRule:
-    村民亲眼看见或确实听说玩家的作为时调整：帮村民解决具体麻烦 +1，救回守灯人或重燃古灯 +2，欺骗、勒索或连累村民 -1。每次变化在
-    deeds 加一句话。称号随 score：0–1 外乡人，2–3 拿钱办事的，4–6 可靠的人，7–8 灰苇村的英雄，9–10
-    传说。没人知道的事不计入名望。
+  updateRule: >-
+    村民亲眼看见或确实听说后才调整名望：替村民解决一件具体麻烦加 1，救回守灯人或重燃古灯加 2，
+    欺骗、勒索或连累村民减 1。每次变化在事迹栏记一句缘由。
+    title 按名望设置：0–1 stranger，2–3 sellsword，4–6 trusted，7–8 hero-of-greyreed，9–10 legend。
+    没传到村民耳里的事不影响名望。
 
 geography:
   name: 地理
@@ -268,9 +318,8 @@ mechanics:
   initialValue:
     combatStyle: turn-based
     difficulty: normal
-    skillSystem:
-      六项属性（力量、敏捷、体魄、智识、感知、魅力）开局各 1 点，再自由分配 6 点，单项最高 4。检定为 d20 + 属性修正（每点属性 +2，5 点为 +10），对抗难度
-      8/12/16/20；天然 20 大成功，天然 1 大失败。
+    # Point buy: data/tabletop-rules.json. Dice rules: plugins/dice-check/lib/check-rules.js.
+    skillSystem: 配点按开局表单填写；属性修正、难度与检定结果以“属性检定”面板及骰池回执为准。
     customRules:
       - 生命降到 0 会倒下而不是立刻死亡；队友可以把你拖回来。
       - 火把约烧一个时辰。古冢里没有光就看不见路和陷阱。

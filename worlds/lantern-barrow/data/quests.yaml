@@ -19,7 +19,7 @@
       done: false
 - id: the-lantern-heart
   name: 消失的灯心
-  description: 古冢之灯不是自己熄灭的——点燃它的灯心被人取走了。查清是谁、为什么，然后决定它该回到哪里。
+  description: 有人取走了灯心，古冢之灯才熄灭。查清是谁拿的、为什么拿，再决定灯心的去处。
   status: active
   giver: 雷恩修女
   reward: 黎明灯修会的认可，以及古冢重新沉睡

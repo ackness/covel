@@ -9,9 +9,8 @@ definition:
     - Night
     - Dead of night
   evolution:
-    prompt:
-      Track time by phases of the day. Keep the current phase during short tavern
-      conversations. Advance one phase for a round of visits in the village, an
-      investigation of the cottage, or a stretch of exploration in the tomb. Camping in
-      the barrow advances one or two phases. There is no daylight underground, but time
-      still passes.
+    prompt: >-
+      Count time in phases. A short tavern conversation does not advance the clock.
+      A round of village visits, a search of the cottage, or a stretch of exploration
+      in the tomb advances it by one phase. Camping in the tomb takes one or two phases.
+      Time still passes underground, even without daylight.

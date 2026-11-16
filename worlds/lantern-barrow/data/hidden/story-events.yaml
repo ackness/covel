@@ -1,5 +1,5 @@
-# Hidden encounters for the game master (visibility: hidden in world.data.yaml).
-# Payloads are GM briefs: stage the scene and its stakes, never the outcome.
+# Hidden encounters, imported by the story-events convention.
+# Payloads give the GM a scene and its stakes, never its outcome.
 - id: night-singing
   title: 歌声到了村子
   when:
@@ -9,7 +9,7 @@
       - dimension: lantern
         path: lamp
         equals: dark
-  payload: 深夜，歌声越过了古冢山。磨坊主的女儿赤着脚、闭着眼走出家门，嘴里跟着地底的调子哼着她祖父的名字，朝山上走去。村里的狗一声不叫。演出这一幕和村民的惊慌，给队伍拦下她、跟上她或去找源头的机会；不要揭示歌声的来历。
+  payload: 深夜，歌声越过古冢山，传到村里。磨坊主的女儿赤脚走出家门，双眼紧闭，跟着地底的曲调哼祖父的名字，朝山上走。村里的狗一声不吠。写出村民看见她时的惊慌，留出拦住她、跟上她或寻找歌声源头的机会。不要揭示歌声的来历。
   priority: 5
 - id: corvin-cornered
   title: 学者的困境
@@ -21,7 +21,7 @@
       - dimension: lantern
         path: heart
         in: [missing, traced]
-  payload: 前方的黑暗里传来一个人在和合唱争吵——是科尔文・艾什。他被一圈不再唱歌、只是转头盯着他的亡者困在一间墓室角落，怀里死死抱着一块发着微光的晶石：灯心。他认出队伍，先是求救，再是讲条件，坚持灯心"还没研究完"。演出这场遭遇和他的傲慢与恐惧，让队伍决定救他、夺灯心还是谈判；需要时要求检定，不要替玩家做选择。
+  payload: 前面的黑暗里，有人在和合唱争吵，是科尔文・艾什。亡者围了一圈，停了歌，转头盯着他，把他堵在墓室角落。他紧抱着一块微亮的晶石：灯心。认出队伍后，他先求救，接着又谈条件，坚持说“还没研究完”。让他的傲慢和恐惧都露出来，留给队伍救人、夺灯心或谈判的余地。需要时要求检定，不替玩家决定。
   priority: 10
 - id: king-wakes
   title: 古冢之王
@@ -29,7 +29,7 @@
     dimension: barrowAlarm
     path: level
     gte: 6
-  payload: 合唱戛然而止。山心深处，一个比墓室更古老的声音念出了沼泽之王自己的名字，王座厅的方向亮起冷绿色的光。古冢之王醒了：他不急着动手，先用村民的声音和队伍说话，提出交易。演出他的压迫感和条件，明确危险程度；把战斗、逃跑或交易的选择留给玩家，需要时要求检定。
+  payload: 合唱突然停了。山心深处，一个比墓室还古老的声音念出沼泽之王自己的名字，王座厅那边亮起冷绿色的光。古冢之王醒来，先借村民的声音向队伍开出交易条件，没有立即进攻。写清他的威势、条件和眼前的危险，让玩家决定战斗、逃跑还是交易，需要时要求检定。
   priority: 20
 - id: keeper-in-the-choir
   title: 合唱里的守灯人
@@ -40,5 +40,5 @@
       - dimension: lantern
         path: keeper
         equals: missing
-  payload: 歌声里多了一个熟悉的苍老声音——守灯人伊索德。她没有跟着合唱，而是用守灯人巡山时哼的调子一遍遍压着那段旋律，像是在拖住什么。只要队伍靠近古冢或身处墓中，就能辨认出她的声音从更深处传来。演出这条线索带来的紧迫感；不要说明她在做什么、还能撑多久。
+  payload: 合唱里传出一个熟悉的苍老声音，是守灯人伊索德。她反复哼着守灯人巡山的调子，压过亡者的旋律，像在拖住什么。队伍靠近古冢或身处墓中时，能辨认出她的声音来自更深处。让这条线索催着队伍去找她，但别解释她正在做什么，也别透露还能撑多久。
   priority: 7

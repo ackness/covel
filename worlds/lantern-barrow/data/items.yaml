@@ -35,6 +35,6 @@
   name: 随身短剑
   quantity: 1
   equipped: true
-  description: 普通但趁手的短剑。不管你是什么职业，下墓总得带把刀。
+  description: 一把普通、趁手的短剑，供各行当的冒险者下墓防身。
   tags:
     - 武器

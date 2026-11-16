@@ -4,7 +4,7 @@
     {
       "label": "clues",
       "displayName": "线索与推理",
-      "extractionHint": "关于灯心、守灯人、科尔文与古冢真相的线索、证词和推理过程。",
+      "extractionHint": "记下涉及灯心、守灯人、科尔文和古冢真相的线索、证词，以及如何据此推理。",
       "icon": "Search",
       "maxChars": 3000
     },

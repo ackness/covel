@@ -9,7 +9,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "A gruff veteran with a soft heart who steps in front of others first and complains later.",
+        "summary": "A gruff, softhearted veteran. He gets between his companions and danger, then complains afterward.",
         "traits": ["dependable", "taciturn", "stubborn", "protective"],
         "goals": [
           "Fight one last battle worth fighting",
@@ -27,7 +27,7 @@
     "id": "npc-sister-wren",
     "name": "Sister Wren",
     "aliases": ["Wren"],
-    "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to Greyreed to inspect the barrow lantern. She arrived three days late. She can heal wounds and read the ancient lantern inscriptions, and hides a question about her faith.",
+    "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to inspect Greyreed's barrow lantern. She arrived three days late. She can tend wounds and read the old lantern inscriptions, but keeps a question about her faith to herself.",
     "fields": {
       "calling": "Acolyte"
     },
@@ -57,7 +57,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "Shrewd and warm; she hands you the truth only once she's sure you're worth it.",
+        "summary": "Warm and shrewd. She tells you what she knows once she decides she can trust you.",
         "traits": ["shrewd", "welcoming", "cautious"],
         "goals": [
           "Get the village through the winter",
@@ -81,7 +81,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "Respectable and anxious. Habitually hides his own mistakes behind rules and procedure.",
+        "summary": "He keeps up a respectable front while worrying, and hides his mistakes behind rules and procedure.",
         "traits": ["respectable", "anxious", "image-conscious"],
         "goals": [
           "Settle the matter before the lord's letter arrives",
@@ -105,7 +105,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "A stubborn, clear-headed old woman who knows the truth about the barrow. She would rather shoulder the burden herself than frighten the villagers.",
+        "summary": "Stubborn and clearheaded, she knows the truth about the barrow. She would carry the burden alone to spare the villagers the fear.",
         "traits": ["steadfast", "quiet", "stern"],
         "goals": [
           "Return the Lantern Heart to the lantern",
@@ -126,7 +126,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "Clever, charming, and dangerously self-assured. He believes knowledge is its own justification.",
+        "summary": "Clever and charming, with dangerous confidence in his own judgment. He thinks the pursuit of knowledge justifies his actions.",
         "traits": ["clever", "charming", "arrogant"],
         "goals": [
           "Study what is sealed inside the Lantern Heart",

@@ -31,9 +31,9 @@
       text: Recover the Lantern Heart and decide where it should go
 - id: the-singing-below
   name: The Singing Below
-  description:
-    The miller's daughter says she hears singing underground at night — singing
-    her dead grandfather's name. Mirelle hopes you'll look into it on your way.
+  description: >-
+    The miller's daughter says she hears voices beneath the ground at night, singing her dead
+    grandfather's name. Mirelle asks you to look into it along the way.
   giver: Mirelle Voss, innkeeper
   reward: One free night's food and lodging, and a favor from Mirelle
   objectives:
