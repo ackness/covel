@@ -102,7 +102,6 @@ function plugin(
       `${id}/PLUGIN.md`,
     ),
     manifests: [],
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }

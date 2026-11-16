@@ -116,7 +116,6 @@ describe("POST /api/actions — a run dropped for what it read", () => {
         promptTemplate: "",
         rawFrontmatter: {},
       })),
-      loadedRuntimes: loaded,
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);

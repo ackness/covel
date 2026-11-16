@@ -75,7 +75,6 @@ function registryWithPlugin(): PluginRegistry {
         rawFrontmatter: {},
       },
     ],
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   return registry;

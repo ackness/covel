@@ -78,7 +78,6 @@ runtime:
       status: "registered",
       packageManifest: definition.packageManifest,
       manifests: definition.manifests,
-      loadedRuntimes: new Map(),
     });
     const store = createMemoryStore();
     const now = new Date().toISOString();

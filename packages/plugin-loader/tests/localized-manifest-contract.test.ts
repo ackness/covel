@@ -297,7 +297,7 @@ runtime:
     const definition = await loadPluginDefinition(discovery);
     const entry = await loadPluginEntryDefinition(
       discovery,
-      [definition.packageManifest],
+      definition.packageManifest,
       definition.manifests,
     );
     expect(entry.staticPromptSegments[0]!.content).toBe("English");

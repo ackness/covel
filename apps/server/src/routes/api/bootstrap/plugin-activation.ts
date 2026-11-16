@@ -7,7 +7,7 @@
  * until the player approves their server code.
  */
 
-import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
+import { hasServerCodeGrant } from "../approval-verdict.js";
 import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
 import {
   conventionsOfPlugins,
@@ -15,7 +15,6 @@ import {
 } from "../../../world-data/conventions.js";
 import type { UiSlotHost } from "../../../ui-slots/host.js";
 import { createPluginDiagnostics } from "../plugin-diagnostics.js";
-import { sessionApprovalScope } from "../session/session-guard.js";
 import type { BootstrapOwned } from "./event-infrastructure.js";
 import type { BootstrapPluginCatalog } from "./plugin-catalog.js";
 import {
@@ -79,13 +78,7 @@ export async function activatePluginEntries(args: {
     await trust.current?.ensureFresh(pluginId);
     const session = await store.getSession(sessionId);
     return Boolean(
-      session &&
-      rpcApprovalGate.hasGrant(
-        sessionId,
-        pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        sessionApprovalScope(session, pluginId),
-      ),
+      session && hasServerCodeGrant(rpcApprovalGate, session, pluginId),
     );
   };
   const isCommunityHookApproved = async (
@@ -95,13 +88,7 @@ export async function activatePluginEntries(args: {
     await trust.current?.ensureFresh(pluginId);
     const session = await store.getSession(sessionId);
     return Boolean(
-      session &&
-      rpcApprovalGate.hasGrant(
-        sessionId,
-        pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        sessionApprovalScope(session, pluginId),
-      ),
+      session && hasServerCodeGrant(rpcApprovalGate, session, pluginId),
     );
   };
 
@@ -171,12 +158,7 @@ export async function activatePluginEntries(args: {
     calls: host.serviceCalls,
     isEntryPublished: pluginEntries.isEntryPublished,
     isServerCodeApproved: (session, pluginId) =>
-      rpcApprovalGate.hasGrant(
-        session.id,
-        pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        sessionApprovalScope(session, pluginId),
-      ),
+      hasServerCodeGrant(rpcApprovalGate, session, pluginId),
   });
 
   // For the routes that take the player's approval: the plugin's runtimes are

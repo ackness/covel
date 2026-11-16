@@ -118,16 +118,11 @@ describe("bootstrap UI-spec declaration discovery", () => {
     const g = globalThis as Record<string, unknown>;
     expect(g[COMMUNITY_HANDLER_FLAG]).toBeUndefined();
     expect(g[COMMUNITY_ENTRY_FLAG]).toBeUndefined();
-    expect(
-      result.registry.get("community-ui-plugin")?.loadedRuntimes.size,
-    ).toBe(0);
   });
 
   it("reads builtin UI declarations without loading the runtime", async () => {
     const g = globalThis as Record<string, unknown>;
     expect(g[BUILTIN_FLAG]).toBeUndefined();
-    const entry = result.registry.get("builtin-ui-plugin");
-    expect(entry?.loadedRuntimes.size).toBe(0);
 
     const response = await buildUiSpecsResponse({
       registry: result.registry,

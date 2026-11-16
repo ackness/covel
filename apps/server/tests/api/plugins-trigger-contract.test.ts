@@ -46,7 +46,6 @@ describe("plugin trigger discovery contract", () => {
             rawFrontmatter: {},
           },
         ],
-        loadedRuntimes: new Map(),
       });
 
       const wire: unknown = JSON.parse(JSON.stringify({ items: [summary] }));

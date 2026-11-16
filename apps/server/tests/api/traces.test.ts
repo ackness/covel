@@ -124,7 +124,6 @@ function makeEntry(
         schema: "./schemas/images.json",
       },
     },
-    loadedRuntimes: new Map(),
     status: "registered",
     ...overrides,
   };

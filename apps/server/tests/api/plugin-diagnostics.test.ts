@@ -166,7 +166,6 @@ function fixture() {
           rawFrontmatter: { secret: "private-frontmatter" },
         },
       ],
-      loadedRuntimes: new Map(),
       status: "registered",
       ...overrides,
     });

@@ -84,7 +84,6 @@ beforeAll(async () => {
         kind: "plugin",
         runtimeCount: manifests.length,
       },
-      loadedRuntimes: new Map(),
       status: "registered",
     });
   }

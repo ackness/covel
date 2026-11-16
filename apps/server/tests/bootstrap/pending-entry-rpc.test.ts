@@ -79,7 +79,6 @@ it.each(
         status: "registered",
         packageManifest: parsed,
         manifests: [],
-        loadedRuntimes: new Map(),
         summary: {
           id: pluginId,
           name: pluginId,

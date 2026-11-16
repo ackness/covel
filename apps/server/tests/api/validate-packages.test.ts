@@ -56,7 +56,6 @@ async function plugin(extra: Record<string, unknown> = {}, register = false) {
       rootPath: dir,
       ...definition,
       summary: await loadPluginSummary(discovery, undefined, definition),
-      loadedRuntimes: new Map(),
       status: "registered",
     });
   }

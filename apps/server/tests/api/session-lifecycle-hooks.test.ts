@@ -167,7 +167,6 @@ function registerCommunityPlugin(
         rawFrontmatter: {},
       },
     ],
-    loadedRuntimes: new Map(),
     status: "registered",
   });
 }
@@ -232,7 +231,6 @@ describe("Session lifecycle hooks", () => {
         id: pluginId,
         source: "builtin",
         status: "registered",
-        loadedRuntimes: new Map(),
         summary: {
           id: pluginId,
           name: "Configured",

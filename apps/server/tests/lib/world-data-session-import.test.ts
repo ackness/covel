@@ -158,7 +158,6 @@ function registry(entries: Record<string, readonly string[]>) {
           },
         ]),
       ),
-      loadedRuntimes: new Map(),
       status: "registered",
     })),
   );
@@ -198,7 +197,6 @@ function registryWithSchema(entries: {
           },
         ]),
       ),
-      loadedRuntimes: new Map(),
       status: "registered",
     })),
   );
@@ -225,7 +223,6 @@ async function builtinPluginRegistry() {
       source: "builtin",
       manifests,
       packageManifest,
-      loadedRuntimes: new Map(),
       status: "registered",
     });
   }
@@ -3147,7 +3144,6 @@ describe("plugin data in character records", () => {
         source: "builtin",
         manifests,
         packageManifest,
-        loadedRuntimes: new Map(),
         status: "registered",
       });
     }

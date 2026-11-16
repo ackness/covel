@@ -377,7 +377,6 @@ describe("plugin RPC detached-stage runner", () => {
           promptTemplate: "",
           rawFrontmatter: {},
         })),
-        loadedRuntimes: new Map(),
         status: "registered",
       });
       await registry.applyPersistedActivations(
@@ -583,7 +582,6 @@ describe("plugin RPC detached-stage runner", () => {
           promptTemplate: "",
           rawFrontmatter: {},
         })),
-        loadedRuntimes: new Map(),
         status: "registered",
       });
       registry.syncSessionActivations(SESSION_ID, [PLUGIN_ID]);

@@ -95,7 +95,6 @@ for (const discovery of discoveries) {
     summary: await loadPluginSummary(discovery, undefined, definition),
     packageManifest: definition.packageManifest,
     manifests: definition.manifests,
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   manifestCache.set(discovery.id, definition.manifests);

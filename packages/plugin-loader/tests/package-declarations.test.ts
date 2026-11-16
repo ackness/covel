@@ -41,7 +41,6 @@ function entry(overrides: Partial<PluginRegistryEntry>): PluginRegistryEntry {
       runtimeCount: 0,
     },
     status: "registered",
-    loadedRuntimes: new Map(),
     ...overrides,
   };
 }

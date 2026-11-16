@@ -131,7 +131,6 @@ async function buildScenario(options: ScenarioOptions) {
       promptTemplate: "",
       rawFrontmatter: {},
     })),
-    loadedRuntimes: loaded,
     status: "registered",
   } as PluginRegistryEntry);
 

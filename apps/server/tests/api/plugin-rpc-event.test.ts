@@ -91,12 +91,6 @@ function register(
       runtimeCount: manifests.length,
     },
     manifests,
-    loadedRuntimes: new Map(
-      args.runtimes.map((manifest) => [
-        manifest.name,
-        { manifest, promptTemplate: "" },
-      ]),
-    ),
     status: "registered",
     source: args.source ?? "builtin",
   } as unknown as PluginRegistryEntry);

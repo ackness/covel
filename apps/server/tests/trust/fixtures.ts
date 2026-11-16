@@ -106,7 +106,6 @@ export async function packageFixture(
       runtimeCount: runtimes.length,
     },
     status: "discovered",
-    loadedRuntimes: new Map(),
   };
   return {
     directory,

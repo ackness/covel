@@ -20,7 +20,6 @@ function entry(root: ReturnType<typeof parsePluginMd>): PluginRegistryEntry {
     },
     packageManifest: root,
     manifests: [],
-    loadedRuntimes: new Map(),
     status: "registered",
     source: "builtin",
   };

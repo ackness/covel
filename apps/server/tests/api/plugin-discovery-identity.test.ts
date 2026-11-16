@@ -89,7 +89,6 @@ describe("plugin discovery identity gate ", () => {
     const entry = registry.get("innocent");
     expect(entry?.status).toBe("error");
     expect(entry?.error).toMatch(/id must match|identity mismatch/i);
-    expect(entry?.loadedRuntimes.size).toBe(0);
     expect(entry?.manifests ?? []).toHaveLength(0);
     // Nothing registered under the impersonated id either.
     expect(registry.get("narrator")).toBeUndefined();

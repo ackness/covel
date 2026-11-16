@@ -54,7 +54,6 @@ function makeEntry(args: {
     summary,
 
     manifests: [parsed],
-    loadedRuntimes: new Map([[args.loaded.manifest.name, args.loaded]]),
     status: "registered",
   } as PluginRegistryEntry;
 }
@@ -102,6 +101,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
 
   let store: DataStore;
   let registry: PluginRegistry;
+  let loaded: LoadedRuntime;
   let app: Hono;
   let eventBus: ReturnType<typeof createEventBus>;
   let hookPipeline: ReturnType<typeof createHookPipeline> | undefined;
@@ -116,7 +116,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       c.set("llmAdapter", llm as any);
       c.set("loadRuntimeFn", async (m) =>
-        registry.get(RUNTIME_ID)?.loadedRuntimes.get(m.name),
+        m.name === loaded.manifest.name ? loaded : undefined,
       );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       c.set("toolExecutor", undefined as any);
@@ -135,7 +135,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
     registry = createPluginRegistry();
     hookPipeline = undefined;
 
-    const loaded = makeFakeLoadedRuntime({
+    loaded = makeFakeLoadedRuntime({
       name: RUNTIME_ID,
       pluginId: RUNTIME_ID,
       outputKind: "story",

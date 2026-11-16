@@ -256,7 +256,6 @@ describe("fork with a bound dimension provider", () => {
       source,
       status: "registered",
       manifests: [],
-      loadedRuntimes: new Map(),
       summary: {
         id: PROVIDER,
         name: "Dimension Provider",

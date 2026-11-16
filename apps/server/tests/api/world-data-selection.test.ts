@@ -144,7 +144,6 @@ function declarationEntry(
       },
     },
     summary: { ...base.summary, id, name: id },
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }
@@ -668,7 +667,6 @@ describe("inferred world data through host admission", () => {
             source: "builtin",
             rootPath: discovery.rootPath,
             ...definition,
-            loadedRuntimes: new Map(),
             status: "registered",
             summary: {
               id: discovery.id,

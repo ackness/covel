@@ -2,7 +2,7 @@
  * Plugin loader types — parsed results of PLUGIN.md files.
  */
 
-import type { LoadedRuntime, PluginSource } from "@covel/shared/plugin-runtime";
+import type { PluginSource } from "@covel/shared/plugin-runtime";
 export type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
@@ -157,10 +157,9 @@ export interface PluginDiscoveryResult {
 /**
  * Declaration-time server entry definition for one plugin package.
  *
- * This is metadata only: `entryPaths` are validated manifest declarations and
- * no plugin module has been imported. Keeping this separate from
- * {@link LoadedRuntime} prevents discovery/approval decisions from depending on
- * which executable runtime artifacts happen to be loaded.
+ * This is metadata only: `entryPath` is a validated manifest declaration and
+ * no plugin module has been imported. Discovery and approval use these
+ * declarations independently of executable runtime artifacts.
  */
 export interface PluginEntryDefinition {
   readonly contributions: NonNullable<
@@ -175,8 +174,8 @@ export interface PluginEntryDefinition {
   readonly extensions: readonly import("@covel/shared").ExtensionDeclaration[];
   readonly pluginId: string;
   readonly pluginRoot: string;
-  /** Plugin-root-relative entry module paths, deduplicated in declaration order. */
-  readonly entryPaths: readonly string[];
+  /** Plugin-root-relative entry module path, when the package has server code. */
+  readonly entryPath?: string;
   /**
    * Origins the package's entry code may reach through `covel.http` when the
    * package is community: the root `permissions.http` and every runtime's.
@@ -236,11 +235,6 @@ export interface PluginRegistryEntry {
   readonly datasets?: Readonly<Record<string, PluginDatasetDecl>>;
   /** Normalized package world projections. */
   readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
-  /**
-   * Executable artifacts loaded on demand.
-   * Declaration-time discovery must use `manifests`, never this partial cache.
-   */
-  readonly loadedRuntimes: ReadonlyMap<string, LoadedRuntime>;
   readonly status: PluginEntryStatus;
   readonly error?: string;
   /** Host-authenticated registration diagnostic; never parsed from error text. */

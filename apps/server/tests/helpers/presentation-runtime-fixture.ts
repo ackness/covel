@@ -107,7 +107,6 @@ export async function presentationFixture(
           rawFrontmatter: {},
         },
       ],
-      loadedRuntimes: new Map(),
       status: "registered",
     });
   registry.syncSessionActivations(sessionId, session.activePlugins);

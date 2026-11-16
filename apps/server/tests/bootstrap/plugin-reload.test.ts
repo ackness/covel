@@ -96,7 +96,6 @@ async function fixture(withRuntime = false, activateEntry = true) {
     packageManifest: definition.packageManifest,
     manifests: definition.manifests,
     summary: await loadPluginSummary(discovery, undefined, definition),
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   let approved = true;
@@ -408,7 +407,6 @@ describe("plugin generation reload", () => {
       buildPluginSummary(f.registry.get(f.id)!, f.manager.isEntryPublished);
     expect(summary().hostState).toBe("installed");
     await f.manager.ensurePluginEntry(f.id, "session");
-    expect(f.registry.get(f.id)!.loadedRuntimes.size).toBe(0);
     expect(summary().hostState).toBe("loaded");
     await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2, true));
     await expect(f.manager.reload(f.id, "session")).rejects.toThrow(

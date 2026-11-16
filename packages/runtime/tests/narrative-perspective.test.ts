@@ -6,7 +6,6 @@ import {
   loadPluginManifest,
   loadPluginEntryDefinition,
   loadPluginDefinition,
-  pluginDeclarations,
   resolvePluginRuntimeManifest,
 } from "@covel/plugin-loader";
 import { resolveUserSettings } from "../src/turn-executor/turn-executor-helpers.js";
@@ -30,7 +29,7 @@ describe.each(["narrator", "chat-mode-narrator"])("%s perspective", (id) => {
       );
       const { staticPromptSegments } = await loadPluginEntryDefinition(
         discovery,
-        pluginDeclarations(definition),
+        definition.packageManifest,
         definition.manifests,
       );
       for (const [supplied, expected] of [

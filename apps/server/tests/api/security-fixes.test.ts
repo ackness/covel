@@ -463,7 +463,6 @@ contributes:
         schema: "./schemas/assets.schema.json",
       },
     },
-    loadedRuntimes: new Map(),
     status: "registered",
     source: "builtin",
   });
@@ -496,7 +495,6 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
         kind: "plugin",
         runtimeCount: 0,
       },
-      loadedRuntimes: new Map(),
       status: "registered",
       source: "builtin",
     });

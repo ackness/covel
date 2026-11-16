@@ -39,7 +39,10 @@ interface ActionEnvelope {
   payload?: Record<string, unknown>;
 }
 
-function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
+function makeRuntimeFixture(handler: FunctionHandler): {
+  entry: PluginRegistryEntry;
+  loaded: LoadedRuntime;
+} {
   const manifest = {
     name: RUNTIME,
     pluginId: PLUGIN_ID,
@@ -65,14 +68,15 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     runtimeCount: 1,
   };
   return {
-    id: PLUGIN_ID,
-    summary,
-
-    manifests: [parsed],
-    loadedRuntimes: new Map([[RUNTIME, loaded]]),
-    status: "registered",
-    source: "builtin",
-  } as PluginRegistryEntry;
+    entry: {
+      id: PLUGIN_ID,
+      summary,
+      manifests: [parsed],
+      status: "registered",
+      source: "builtin",
+    } as PluginRegistryEntry,
+    loaded,
+  };
 }
 
 /** Read SSE frames until one matching `predicate` arrives; returns it. */
@@ -123,7 +127,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       outcome: "success" as const,
       value: {},
     }));
-    const entry = makeRegistryEntry(handler);
+    const { entry, loaded } = makeRuntimeFixture(handler);
     registry.register(entry);
     const sessionLock = createInProcessSessionLock();
     const eventBus = createEventBus(store);
@@ -133,7 +137,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       c.set("pluginRegistry", registry);
       c.set("sessionLock", sessionLock);
       c.set("eventBus", eventBus);
-      c.set("loadRuntimeFn", async () => entry.loadedRuntimes.get(RUNTIME));
+      c.set("loadRuntimeFn", async () => loaded);
       c.set("resolveModel", () => undefined);
       await next();
     });
@@ -225,7 +229,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       outcome: "success" as const,
       value: {},
     }));
-    const entry = makeRegistryEntry(handler);
+    const { entry, loaded } = makeRuntimeFixture(handler);
     registry.register(entry);
     const sessionLock = createInProcessSessionLock();
     const work = createApplicationWork();
@@ -237,7 +241,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       c.set("pluginRegistry", registry);
       c.set("sessionLock", sessionLock);
       c.set("eventBus", eventBus);
-      c.set("loadRuntimeFn", async () => entry.loadedRuntimes.get(RUNTIME));
+      c.set("loadRuntimeFn", async () => loaded);
       c.set("resolveModel", () => undefined);
       await next();
     });
@@ -316,11 +320,11 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       }
       return { outcome: "success", value: { ok: true } };
     };
-    pluginRegistry.register(makeRegistryEntry(handler));
+    const { entry, loaded } = makeRuntimeFixture(handler);
+    pluginRegistry.register(entry);
 
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
-    const loaded = pluginRegistry.get(PLUGIN_ID)?.loadedRuntimes.get(RUNTIME);
     const app = new Hono();
     app.use("*", async (c, next) => {
       c.set("store", store);

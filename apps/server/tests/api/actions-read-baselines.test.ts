@@ -237,7 +237,6 @@ describe("action read-baseline corrections and projections", () => {
           promptTemplate: "",
           rawFrontmatter: {},
         })),
-        loadedRuntimes: loaded,
         status: "registered",
         source: "builtin",
       } as PluginRegistryEntry);
@@ -251,7 +250,6 @@ describe("action read-baseline corrections and projections", () => {
           runtimeCount: 0,
         },
         manifests: [],
-        loadedRuntimes: new Map(),
         status: "registered",
         source: "builtin",
       } as PluginRegistryEntry);

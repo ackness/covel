@@ -127,7 +127,6 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
         runtimeCount: manifests.length,
       },
       manifests: parsed,
-      loadedRuntimes: loaded,
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);

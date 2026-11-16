@@ -145,7 +145,6 @@ describe("contributes.datasets compile", () => {
         runtimeCount: 2,
       },
       status: "registered",
-      loadedRuntimes: new Map(),
       packageManifest: root,
       manifests: [runtime("a"), runtime("b")],
     };

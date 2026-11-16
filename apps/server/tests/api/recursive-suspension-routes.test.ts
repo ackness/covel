@@ -129,7 +129,6 @@ async function fixture() {
     id: "probe",
     source: "builtin",
     status: "registered",
-    loadedRuntimes: new Map(),
     summary: {
       id: "probe",
       name: "Probe",

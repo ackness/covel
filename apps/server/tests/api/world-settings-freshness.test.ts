@@ -16,7 +16,6 @@ it("resolves hook settings for an active package with no runtimes", () => {
     id: pluginId,
     source: "builtin",
     status: "registered",
-    loadedRuntimes: new Map(),
     summary: {
       id: pluginId,
       name: pluginId,
@@ -71,7 +70,6 @@ describe.each(["memory", "sqlite"])(
       id: pluginId,
       source: "builtin",
       status: "registered",
-      loadedRuntimes: new Map(),
       summary: {
         id: pluginId,
         name: "Configured",

@@ -175,7 +175,6 @@ async function registryWithDataPlugin(
       `---\nid: ${id}\nkind: plugin\ndescription: Fixture\ncontributes:\n  data:\n    ${namespace}:\n      version: 1\n      schema: ./schemas/${namespace}.schema.json\n      accepts: [${contract}]\n---\n`,
       `${id}/PLUGIN.md`,
     ),
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   return registry;

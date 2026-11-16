@@ -119,7 +119,6 @@ function installPackage(
     ),
     manifests: [],
     summary: makeSummary(id),
-    loadedRuntimes: new Map(),
     status: "registered",
     source: options.source ?? "builtin",
   });
@@ -406,9 +405,6 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       },
 
       manifests: [parsed],
-      loadedRuntimes: new Map([
-        [runtime.name, { manifest: runtime, promptTemplate: "" }],
-      ]),
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);
@@ -1175,7 +1171,6 @@ function makeFunctionEntry(args: {
     summary: makeSummary(args.pluginId),
 
     manifests: [parsed],
-    loadedRuntimes: new Map([[args.runtimeId, loaded]]),
     status: "registered",
     source: args.source ?? "builtin",
   } as PluginRegistryEntry;
@@ -1219,7 +1214,6 @@ function makeAgentEntry(args: {
     summary: makeSummary(args.pluginId),
 
     manifests: [parsed],
-    loadedRuntimes: new Map([[args.runtimeId, loaded]]),
     status: "registered",
     source: args.source ?? "builtin",
   } as PluginRegistryEntry;
@@ -2643,10 +2637,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       summary: makeSummary(PLUGIN_ID),
 
       manifests: [parsedTarget, parsedFollower],
-      loadedRuntimes: new Map([
-        [TARGET, targetLoaded],
-        [FOLLOWER, followerLoaded],
-      ]),
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);
@@ -2894,10 +2884,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       summary: makeSummary(PLUGIN_ID),
 
       manifests: [parsedTarget, parsedFollower],
-      loadedRuntimes: new Map([
-        [TARGET, targetLoaded],
-        [FOLLOWER, followerLoaded],
-      ]),
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);

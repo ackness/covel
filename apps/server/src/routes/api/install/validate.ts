@@ -44,7 +44,6 @@ async function bundledCatalogue(): Promise<PluginCatalogue> {
         rootPath: discovery.rootPath,
         summary: await loadPluginSummary(discovery, undefined, definition),
         ...definition,
-        loadedRuntimes: new Map(),
         status: "registered",
       });
     } catch {

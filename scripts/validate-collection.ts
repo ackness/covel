@@ -130,7 +130,6 @@ for (const pluginDir of includedPluginDirs) {
     ...definition,
     source: "community",
     status: "discovered",
-    loadedRuntimes: new Map(),
     summary: {
       id: discovery.id,
       name: discovery.id,

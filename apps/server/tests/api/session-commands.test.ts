@@ -70,7 +70,6 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
     },
     status: "registered",
     source: "builtin",
-    loadedRuntimes: new Map(),
     manifests: manifests.map((runtime): ParsedRuntimeMd => ({
       runtime: runtime.runtimeType === "function" ? { function: {} } : {},
       manifest: runtime,

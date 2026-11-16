@@ -5,7 +5,6 @@ import {
   loadPluginDefinition,
   loadPluginEntryDefinition,
   loadPluginSummary,
-  pluginDeclarations,
   type PluginDiscoveryResult,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -70,7 +69,6 @@ export async function preparePluginReload(
     languages: definition.languages,
     disabledRuntimes: definition.disabledRuntimes,
     ignoredFields: definition.ignoredFields,
-    loadedRuntimes: new Map(),
     status: "registered",
     ...(discovery.source ? { source: discovery.source } : {}),
   };
@@ -81,7 +79,7 @@ export async function preparePluginReload(
   validation.register(entry);
   const entryDefinition = await loadPluginEntryDefinition(
     discovery,
-    pluginDeclarations(definition),
+    definition.packageManifest,
     definition.manifests,
   );
   return { discovery, definition, entry, entryDefinition };

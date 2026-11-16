@@ -35,7 +35,6 @@ import {
   assertInsideRoot,
   getPluginTrustInfo,
   loadPluginEntryDefinition,
-  pluginDeclarations,
   loadPluginDefinition,
   provideHostModules,
   trackReloadGeneration,
@@ -243,7 +242,7 @@ export async function createBootstrapPluginEntries(
       const declared = registryEntry ?? (await loadPluginDefinition(discovery));
       const definition = await loadPluginEntryDefinition(
         discovery,
-        pluginDeclarations(declared),
+        declared.packageManifest,
         declared.manifests ?? [],
       );
       entryDefinitions.set(pluginId, definition);
@@ -304,7 +303,8 @@ export async function createBootstrapPluginEntries(
     let currentEntry = "";
     try {
       const factories = (async () => {
-        for (const entryPath of definition.entryPaths) {
+        if (definition.entryPath) {
+          const entryPath = definition.entryPath;
           batch.signal.throwIfAborted();
           currentEntry = entryPath;
           const fullPath = path.resolve(definition.pluginRoot, entryPath);
@@ -533,7 +533,7 @@ export async function createBootstrapPluginEntries(
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return false;
     // Failed builtin activations remain retryable, just like deferred entries.
-    return (entryDefinitions.get(pluginId)?.entryPaths.length ?? 0) > 0;
+    return Boolean(entryDefinitions.get(pluginId)?.entryPath);
   };
 
   const reload: BootstrapPluginEntries["reload"] = (

@@ -68,7 +68,6 @@ function makeEntry(
     packageManifest: root,
     manifests: [],
     summary: makeSummary(),
-    loadedRuntimes: new Map(),
     status: "registered",
     ...overrides,
   };

@@ -43,7 +43,6 @@ it("publishes and disposes every real builtin entry against its root declaration
       packageManifest: definition.packageManifest,
       manifests: definition.manifests,
 
-      loadedRuntimes: new Map(),
       status: "registered",
     });
     manifestCache.set(discovery.id, definition.manifests);

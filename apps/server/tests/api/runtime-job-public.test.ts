@@ -66,7 +66,6 @@ describe("runtime job public projections", () => {
         kind: "plugin",
         runtimeCount: 0,
       },
-      loadedRuntimes: new Map(),
       status: "registered",
     });
     app = new Hono();

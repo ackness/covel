@@ -61,7 +61,6 @@ function entry(
         rawFrontmatter: {},
       },
     ],
-    loadedRuntimes: new Map(),
     status: "registered",
     source,
   } as unknown as PluginRegistryEntry;

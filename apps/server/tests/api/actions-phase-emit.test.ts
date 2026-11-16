@@ -56,7 +56,6 @@ function makeEntry(args: {
     summary: makeSummary({ id: args.id, name: args.id }),
 
     manifests: [parsed],
-    loadedRuntimes: new Map([[args.loaded.manifest.name, args.loaded]]),
     status: "registered",
   } as PluginRegistryEntry;
 }

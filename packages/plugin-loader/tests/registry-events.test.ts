@@ -23,7 +23,6 @@ function makeEntry(id: string): PluginRegistryEntry {
   return {
     id,
     summary: makeSummary(id),
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }

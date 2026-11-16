@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import { loadPluginDefinition } from "@covel/plugin-loader";
-import { PluginServiceRegistry } from "@covel/runtime";
+import { PluginServiceRegistry, PluginExtensionHost } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store/memory";
 import { z } from "@covel/tools";
 
@@ -141,6 +141,52 @@ describe("test-runtime runtime loading helpers", () => {
     }
   });
 
+  it.each([false, true])(
+    "publishes static prompts and validates extensions without an entry, missing=%s",
+    async (missing) => {
+      const rootPath = await fs.mkdtemp(
+        path.join(os.tmpdir(), "covel-static-entry-"),
+      );
+      const services = new PluginServiceRegistry({
+        list: async () => ["probe"],
+        ensure: async () => {},
+      });
+      const extensions = new PluginExtensionHost(services);
+      try {
+        await fs.writeFile(
+          path.join(rootPath, "PLUGIN.md"),
+          `---\nid: probe\nkind: plugin\ndescription: Static\ncontributes:\n  prompt: [{id: note, content: Static, position: pre-history}]\n${missing ? "  extensions: [{point: 'prompt.history-transform@1', id: missing}]\n" : ""}---\n`,
+        );
+        const discovery = {
+          id: "probe",
+          rootPath,
+          isMultiRuntime: false,
+          pluginMdPaths: [],
+        };
+        const loading = loadEntryTools(
+          discovery,
+          await loadPluginDefinition(discovery),
+          services,
+          extensions,
+        );
+        if (missing) {
+          await expect(loading).rejects.toThrow(/extension/i);
+          expect(extensions.list()).toEqual([]);
+        } else {
+          const entry = await loading;
+          try {
+            expect(entry.tools).toEqual([]);
+            expect(extensions.list()).toHaveLength(1);
+          } finally {
+            await entry.close();
+          }
+          expect(extensions.list()).toEqual([]);
+        }
+      } finally {
+        await fs.rm(rootPath, { recursive: true, force: true });
+      }
+    },
+  );
   it("loads entry tools declared only by a multi-runtime root manifest", async () => {
     const rootPath = await fs.mkdtemp(
       path.join(os.tmpdir(), "covel-test-runtime-entry-"),

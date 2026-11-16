@@ -60,7 +60,6 @@ it("resolves root events and runtime-private output schemas at their different d
       summary: await loadPluginSummary(discovery, undefined, definition),
       rootPath: root,
       ...definition,
-      loadedRuntimes: new Map(),
       status: "registered",
     });
     registry.syncSessionActivations(SESSION_ID, [discovery.id]);
@@ -100,7 +99,6 @@ async function setupSceneStageDirectory() {
     summary: await loadPluginSummary(discovery, undefined, definition),
     rootPath: discovery.rootPath,
     ...definition,
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   registry.syncSessionActivations(SESSION_ID, [discovery.id]);
