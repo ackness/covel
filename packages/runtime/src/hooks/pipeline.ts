@@ -32,6 +32,7 @@ import {
   isHookInScope,
   requireHookScope,
   scopedOwnSettings,
+  type HookScope,
 } from "./hook-scope.js";
 import type {
   ConfinedHookFailure,
@@ -79,6 +80,7 @@ interface HookPipelineRunOptions {
 }
 
 export interface HookHandlerOutcome {
+  readonly executionOrigin?: HookScope["executionOrigin"];
   readonly sessionId: string;
   readonly turnId?: string;
   readonly logicalKey?: string;
@@ -107,6 +109,8 @@ export class HookPipeline {
     if (!reg.pluginId || ctx.signal?.aborted) return;
     try {
       await this.options.onHandlerOutcome?.({
+        executionOrigin: requireHookScope("HookPipeline.handlerOutcome()")
+          .executionOrigin,
         emitter,
         sessionId: ctx.sessionId,
         turnId: ctx.turnId,

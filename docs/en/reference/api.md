@@ -1539,6 +1539,8 @@ Optional `credentials=1` also checks whether a custom connection can use existin
 | GET    | `/api/traces/:sessionId/turns`      | The same window, grouped by turn                                                               |
 | GET    | `/api/traces/:sessionId/turns/page` | The recent event window grouped into turns, plus a cursor (load older ones going up)           |
 
+The debugger's header reads its turn count from `session.completedPlayerTurns` in the session view, counting only committed player turns. Trace groups also include manual runs, setup, openings and failed attempts; their number does not determine the story-turn count. Pagination affects only how complete the event count is.
+
 ### Media management
 
 | Method | Path                                | Description                                                                           |
@@ -3205,7 +3207,7 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 
 ##### Runtime level
 
-Runs one target runtime by hand. It goes through the full turn flow: it builds the prompt, runs the tool loop, and submits proposals. Downstream runtimes triggered by an event keep running in the same turn. When one event has several subscribers, they run in order of `name`.
+Runs one target runtime by hand. Manual attempts neither add to nor clear the [plugin fault ledger](./protocol.md#plugin-fault-latch). It goes through the full turn flow: it builds the prompt, runs the tool loop, and submits proposals. Downstream runtimes triggered by an event keep running in the same turn. When one event has several subscribers, they run in order of `name`.
 
 A target with `schedule.subagentOnly` returns `409 runtime_subagent_only` and nothing runs: it runs only as a [sub-agent](./plugins.md#sub-agents) inside another runtime. The plugin detail and the execution flow mark such a runtime with `subagentOnly: true`.
 

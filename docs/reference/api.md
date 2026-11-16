@@ -1539,6 +1539,8 @@ fork 和社区插件的授权：
 | GET  | `/api/traces/:sessionId/turns`      | 同一窗口按 Turn 分组                                        |
 | GET  | `/api/traces/:sessionId/turns/page` | 最近事件窗口分组为 Turn + 游标（向上加载更旧）              |
 
+调试页顶部的回合数读取会话视图的 `session.completedPlayerTurns`，只计已提交的玩家回合。trace 分组还包含手动运行、准备、开场和失败尝试，分组数量不用于计算故事回合数；分页只影响事件计数的完整性。
+
 ### 媒体管理
 
 | 方法 | 路径                                | 描述                                                    |
@@ -3205,7 +3207,7 @@ action 与插件支持的 command 的 scoped store 按[数据集规则](./plugin
 
 ##### runtime 级
 
-手动运行一次目标 runtime。它走完整的回合流程：组装 prompt、工具循环、提交 proposal。由事件触发的下游 runtime 会在同一回合内接着运行；同一事件有多个订阅者时按 `name` 排序。
+手动运行一次目标 runtime。手动尝试不增加也不清零[插件故障台账](./protocol.md#插件故障熔断)。它走完整的回合流程：组装 prompt、工具循环、提交 proposal。由事件触发的下游 runtime 会在同一回合内接着运行；同一事件有多个订阅者时按 `name` 排序。
 
 目标是 `schedule.subagentOnly` 的 runtime 时返回 `409 runtime_subagent_only`，什么都不执行：它只作为[子 agent](./plugins.md#子-agent) 在别的 runtime 里运行。插件详情和执行流程里这样的 runtime 带 `subagentOnly: true`。
 

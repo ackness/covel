@@ -254,6 +254,7 @@ export async function executeTurn(
     createOperationExecutionScope(deps.loadPluginDatasets);
   const userSettings = snapshotUserSettings(input.userSettings);
   const hookScope = {
+    executionOrigin: deps.hookScope?.executionOrigin ?? input.origin,
     logicalKey: input.logicalTurnId ?? input.turnId,
     logicalTurn: input.logicalTurn,
     activePluginIds: new Set(
@@ -482,6 +483,7 @@ export async function resumeSuspendedRuntime(
   const captured = captureSchemas(deps);
   const userSettings = snapshotUserSettings(options?.userSettings);
   const hookScope = {
+    executionOrigin: suspension.pendingContinuation.executionContext.origin,
     logicalTurn: suspension.pendingContinuation.logicalTurn,
     logicalKey:
       suspension.pendingContinuation.executionContext.logicalTurnId ??
