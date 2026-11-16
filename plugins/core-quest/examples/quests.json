@@ -15,7 +15,12 @@
       {
         "id": "question-watch",
         "text": "Question the night watch",
-        "done": false
+        "done": false,
+        "deadline": {
+          "when": { "turnGte": 6 },
+          "label": "Before the watch changes shift",
+          "missed": "The night watch has gone home, and the day shift saw nothing."
+        }
       }
     ]
   }

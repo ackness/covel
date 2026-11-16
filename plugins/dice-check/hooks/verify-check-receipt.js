@@ -1,8 +1,8 @@
+import { judgeCheck } from "../lib/check-plan.js";
 import {
   isDifficulty,
   isModifier,
   OUTCOMES,
-  resolveCheck,
   rollText,
 } from "../lib/check-rules.js";
 import { acceptReceipt, poolOf } from "../lib/turn-pool.js";
@@ -29,11 +29,12 @@ export default function verifyCheckReceipt(ctx, payload) {
   }
   if (args?.topic !== TOPIC) return { action: "continue" };
   const checks = args.data?.checks;
-  const dice = poolOf(ctx.sessionId, ctx.turnId);
+  const pool = poolOf(ctx.sessionId, ctx.turnId);
   // No dice in this process, or a payload the event schema will reject with
   // its own message: let it through.
-  if (!dice || !Array.isArray(checks) || checks.length === 0)
+  if (!pool || !Array.isArray(checks) || checks.length === 0)
     return { action: "continue" };
+  const { dice, checkPlan } = pool;
   if (
     checks.some(
       (check) =>
@@ -52,31 +53,39 @@ export default function verifyCheckReceipt(ctx, payload) {
       reason: `check.resolved was not sent: this turn has ${dice.length} checks and the event reports ${checks.length}. Report at most ${dice.length} checks, in order, and send the event again.`,
     };
 
-  const results = checks.map((check, index) =>
-    resolveCheck(dice[index], check.modifier, check.difficulty),
+  const judged = checks.map((check, index) =>
+    judgeCheck(dice[index], check, checkPlan),
   );
-  const wrong = results.flatMap((result, index) =>
-    result.outcome === checks[index].outcome ? [] : [index],
+  const wrong = judged.flatMap(({ result }, index) =>
+    result.outcome === checks[index].outcome &&
+    result.modifier === checks[index].modifier
+      ? []
+      : [index],
   );
   // Not marked as accepted here: the event catalogue can still refuse the
   // payload, and the receipt sent after that must be checked as well.
   if (wrong.length === 0) return { action: "continue" };
 
+  const problem = (index) => {
+    const { result } = judged[index];
+    const check = checks[index];
+    return result.modifier !== check.modifier
+      ? `check ${index + 1} reports modifier ${check.modifier} and the modifier list gives ${result.modifier} for ${check.attribute}`
+      : `check ${index + 1} reports "${check.outcome}" and the dice give "${result.outcome}"`;
+  };
   const line = (index) => {
-    const result = results[index];
-    return `check ${index + 1} (${result.difficulty}): d20 ${rollText(result)} -> ${result.outcome}`;
+    const { result, chosen, reasons } = judged[index];
+    const harder = chosen
+      ? ` (${chosen} made ${result.difficulty} by ${reasons.map((reason) => reason.text).join(", ")})`
+      : "";
+    return `check ${index + 1} (${result.difficulty}${harder}): d20 ${rollText(result)} -> ${result.outcome}`;
   };
   return {
     action: "abort",
     reason: [
-      `check.resolved was not sent: ${wrong
-        .map(
-          (index) =>
-            `check ${index + 1} reports "${checks[index].outcome}" and the dice give "${results[index].outcome}"`,
-        )
-        .join("; ")}.`,
-      `The outcomes of this turn are: ${results.map((_, index) => line(index)).join("; ")}.`,
-      "Send check.resolved again with these outcomes and the same actions, modifiers and difficulties. Then write the prose to match these outcomes.",
+      `check.resolved was not sent: ${wrong.map(problem).join("; ")}.`,
+      `The results of this turn are: ${judged.map((_, index) => line(index)).join("; ")}.`,
+      "Send check.resolved again with these modifiers and outcomes and the same actions, difficulties and people. Then write the prose to match these outcomes.",
     ].join(" "),
   };
 }
@@ -96,6 +105,11 @@ export function acceptRecordedReceipt(ctx, payload) {
   } catch {
     return { action: "continue" };
   }
-  if (args?.topic === TOPIC) acceptReceipt(ctx.sessionId, ctx.turnId);
+  // The review hook reads the receipt to find the costs of failed checks.
+  if (args?.topic === TOPIC && Array.isArray(args.data?.checks))
+    acceptReceipt(ctx.sessionId, ctx.turnId, {
+      runtimeId: ctx.runtimeId,
+      checks: args.data.checks,
+    });
   return { action: "continue" };
 }

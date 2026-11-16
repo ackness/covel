@@ -110,6 +110,37 @@ describe("inventory bag service", () => {
     expect((await call("bag", {})).output.total).toBe(56);
     noIds(output);
   });
+  it("reports a well-formed check effect and drops a malformed one", async () => {
+    const { call } = await fixture([
+      {
+        id: "item-torch",
+        name: "Torch",
+        quantity: 1,
+        effects: { check: { attribute: " wayfinding ", modifier: 2 } },
+      },
+      {
+        id: "item-zero",
+        name: "Charm",
+        quantity: 1,
+        effects: { check: { attribute: "luck", modifier: 0 } },
+      },
+      {
+        id: "item-text",
+        name: "Map",
+        quantity: 1,
+        effects: { check: { attribute: "wayfinding", modifier: "2" } },
+      },
+    ]);
+    const { output } = await call("bag", {});
+    expect(output.items).toEqual([
+      expect.not.objectContaining({ effects: expect.anything() }),
+      expect.not.objectContaining({ effects: expect.anything() }),
+      expect.objectContaining({
+        name: "Torch",
+        effects: { check: { attribute: "wayfinding", modifier: 2 } },
+      }),
+    ]);
+  });
 });
 
 describe("inventory change service", () => {

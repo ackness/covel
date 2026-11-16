@@ -3,6 +3,9 @@
   description: 调度说原地等待，救援队从码头街过来。基特手机上的照片说码头街已经被淹了。在车里的人自己拿主意之前，弄清该照哪条走。
   giver: 这节车厢
   reward: 一个全车人真能照着做的计划
+  deadline:
+    label: 在水漫到电池箱之前
+    missed: 水漫到了电池箱，车厢在还没人弄清该信哪条消息时就黑了。从现在起，车里的人在黑暗里争吵。
   objectives:
     - id: reach-control
       text: 通过驾驶室电台从调度那里问到明确答复
@@ -18,6 +21,9 @@
   objectives:
     - id: reach-theo
       text: 把话传到西奥那组人
+      deadline:
+        label: 在他们走到渡线室之前，大约 00:51
+        missed: 西奥那组人没等到你的消息就到了渡线室，自己选了路往前走。疏散平台上看不见他们的灯了，你只能去找他们。
     - id: meet-or-recall
       text: 在渡线室和他们会合，或者把他们叫回来
 - id: one-battery
@@ -28,5 +34,15 @@
   objectives:
     - id: read-the-gauge
       text: 和达拉一起在驾驶室看电池表
+    - id: keep-graham
+      text: 让格雷厄姆留在车上，别去泵房
+      deadline:
+        # The affinity record keeps its English name in this edition too.
+        when: { affinity: Graham Pike }
+        label: 趁格雷厄姆还听你的
+        missed: 格雷厄姆不再听你的了，拿着备用灯独自往码头街泵房去了。要么有人去追他，要么就随他去。
     - id: choose-priorities
       text: 决定电池给什么供电
+      deadline:
+        label: 在水没到膝盖之前
+        missed: 没人及时拿主意。达拉自己切掉了车门和手机充电口，好保住电台，半车人都怪到你头上。

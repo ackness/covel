@@ -76,14 +76,14 @@ A session may have several player characters. The two narrator plugins follow th
 
 [Bag](./rpg.md#inventory-inventory) checks changes already handled by tools, including batches with long descriptions, to avoid duplicate bookkeeping.
 
-| Plugin                                        | What it does                                                                                  | On by default |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------- |
-| [Dice Check](./rpg.md) `dice-check`           | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |
-| [Ability Checks](./rpg.md) `tabletop-rules`   | Assigns attribute points at the start, and lets the player start attribute checks             |               |
-| [Quest Log](./rpg.md) `core-quest`            | Records quests and objectives, with localized status badges                                   |               |
-| [Bag](./rpg.md) `inventory`                   | Looks up carried items, settles trades, and records item changes                              |               |
-| [Affinity](./rpg.md) `affinity`               | Tracks numeric player–NPC affinity and supplies current scores to narration                   |               |
-| [Hidden Plot Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                   |               |
+| Plugin                                        | What it does                                                                                                                          | On by default |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| [Dice Check](./rpg.md) `dice-check`           | Pre-rolled dice decide risky actions; carried items add to modifiers, and a failure loses an item or advances a clock from world data |               |
+| [Ability Checks](./rpg.md) `tabletop-rules`   | Assigns attribute points at the start, and lets the player start attribute checks                                                     |               |
+| [Quest Log](./rpg.md) `core-quest`            | Records quests and objectives; a quest or objective past its deadline fails on its own                                                |               |
+| [Bag](./rpg.md) `inventory`                   | Looks up carried items, settles trades, and records item changes; an item can help one kind of check                                  |               |
+| [Affinity](./rpg.md) `affinity`               | Tracks numeric player–NPC affinity and supplies it to narration; NPCs who have gone cold will not cooperate with checks               |               |
+| [Hidden Plot Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                                                           |               |
 
 Bag and affinity world-seeded records pass dataset validation; sync can remove seeded records deleted from their authoritative source.
 

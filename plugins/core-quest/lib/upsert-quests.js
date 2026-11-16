@@ -31,12 +31,14 @@ import {
 
 const MAX_QUESTS_PER_CALL = 5;
 
-// Badge color for the message block, keyed by change kind.
-const CHANGE_COLOR = {
+// Badge color for the message block, keyed by change kind. `missed` is an
+// objective whose deadline passed (`runtimes/deadline`).
+export const CHANGE_COLOR = {
   new: "blue",
   progress: "cyan",
   completed: "green",
   failed: "red",
+  missed: "amber",
 };
 
 /**
@@ -115,7 +117,10 @@ export default async function upsertQuests(params, context) {
         previous.id ?? match.key,
       );
       const previousStatus = previous.status ?? "active";
-      const status = quest.status ?? previousStatus;
+      // A quest whose deadline passed stays failed: it is too late.
+      const status = previous.missed
+        ? previousStatus
+        : (quest.status ?? previousStatus);
       stored = {
         ...previous,
         id: previous.id ?? match.key,
@@ -264,7 +269,10 @@ function mergeObjectives(previous, incoming, questId) {
     if (index >= 0) {
       merged[index] = {
         ...merged[index],
-        done: objective.done ?? merged[index].done,
+        // A missed objective cannot be done any more.
+        done: merged[index].missed
+          ? false
+          : (objective.done ?? merged[index].done),
       };
     } else {
       merged.push({
@@ -487,12 +495,22 @@ function countCommonBigrams(left, right) {
 
 /**
  * Derive the language-neutral chip strings the right panel renders:
- * one ✓/☐ chip per objective, plus ⚑ giver and ✦ reward when present.
+ * one ✓/☐/✗ chip per objective (✗ when its deadline passed), the open
+ * deadlines (⌛), plus ⚑ giver and ✦ reward when present.
  */
-function toChips(quest) {
-  const chips = (quest.objectives ?? []).map(
-    (objective) => `${objective.done ? "✓" : "☐"} ${objective.text}`,
+export function toChips(quest) {
+  const open = (deadline) =>
+    typeof deadline?.label === "string" ? ` ⌛ ${deadline.label}` : "";
+  const chips = (quest.objectives ?? []).map((objective) =>
+    objective.missed
+      ? `✗ ${objective.text}`
+      : objective.done
+        ? `✓ ${objective.text}`
+        : `☐ ${objective.text}${open(objective.deadline)}`,
   );
+  if (quest.missed) chips.push(`✗ ${quest.missed.label}`);
+  else if ((quest.status ?? "active") === "active" && open(quest.deadline))
+    chips.push(open(quest.deadline).trim());
   if (quest.giver) chips.push(`⚑ ${quest.giver}`);
   if (quest.reward) chips.push(`✦ ${quest.reward}`);
   return chips;

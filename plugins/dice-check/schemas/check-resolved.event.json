@@ -27,11 +27,17 @@
             "type": "integer",
             "minimum": -10,
             "maximum": 10,
-            "description": "Attribute modifier of the action, derived from the numeric attribute on the player character's sheet."
+            "description": "The modifier of the attribute from the turn's modifier list, including the item listed with it."
           },
           "difficulty": {
             "enum": ["easy", "normal", "hard", "extreme"],
-            "description": "Difficulty chosen from the fiction: easy (DC 8), normal (DC 12), hard (DC 16), extreme (DC 20)."
+            "description": "Difficulty chosen from the fiction: easy (DC 8), normal (DC 12), hard (DC 16), extreme (DC 20). Report the chosen one; the system makes it harder when the turn's check rules say so."
+          },
+          "with": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "The person whose help or agreement the action needs, by name. Only for a person the turn's harder checks list."
           },
           "outcome": {
             "enum": [

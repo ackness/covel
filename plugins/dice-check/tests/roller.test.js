@@ -276,11 +276,12 @@ describe("dice-check roller handler", () => {
     expect(result.value.checkContext).not.toContain("Luck 3");
   });
 
-  it("keeps the turn's dice for the guard that checks the receipt", async () => {
+  it("keeps the turn's dice and check plan for the guard that checks the receipt", async () => {
     const result = await handler(makeCtx({ turnId: "turn-guard" }));
-    expect(poolOf("sess-1", "turn-guard")).toEqual(
-      result.effects.pluginData[0].value.dice,
-    );
+    expect(poolOf("sess-1", "turn-guard")).toEqual({
+      dice: result.effects.pluginData[0].value.dice,
+      checkPlan: result.value.checkPlan,
+    });
   });
 
   it("gives no dice table in a turn that a tabletop form settled", async () => {

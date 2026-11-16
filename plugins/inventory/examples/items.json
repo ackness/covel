@@ -12,6 +12,7 @@
     "quantity": 1,
     "description": "A hooded lantern with enough oil for one night.",
     "tags": ["tool"],
-    "equipped": true
+    "equipped": true,
+    "effects": { "check": { "attribute": "perception", "modifier": 1 } }
   }
 ]

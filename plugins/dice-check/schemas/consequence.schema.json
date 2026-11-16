@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://dice-check/consequence",
+  "title": "What a failed check costs",
+  "type": "object",
+  "required": ["id", "text", "cost"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "attribute": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The id of the check attribute this cost is for. Omit it for a cost of any failed check."
+    },
+    "outcome": {
+      "enum": ["failure", "critical-failure"],
+      "description": "The failed outcome this cost is for. Omit it for both."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "What happens, in one or two sentences. The narrative is told it and the player sees it."
+    },
+    "cues": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 1, "maxLength": 40 },
+      "description": "Words that prose showing this cost would use. A story that uses none of them is sent back once."
+    },
+    "cost": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "item"],
+          "properties": {
+            "kind": { "const": "item" },
+            "item": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The name of a starting item, as the player sees it."
+            },
+            "quantity": { "type": "integer", "minimum": 1, "maximum": 99 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "clock"],
+          "properties": {
+            "kind": { "const": "clock" },
+            "clock": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The id of a clock of check.clocks@1."
+            },
+            "ticks": { "type": "integer", "minimum": 1, "maximum": 12 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

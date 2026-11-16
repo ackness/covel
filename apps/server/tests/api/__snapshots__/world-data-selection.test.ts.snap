@@ -110,6 +110,8 @@ exports[`inferred world data through host admission > imports last-train content
     "character.affinity@1",
     "character.portraits@1",
     "quests@1",
+    "check.consequences@1",
+    "check.clocks@1",
     "inventory.items@1",
     "world.rules@1",
     "memory.blocks@1",

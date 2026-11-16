@@ -6,21 +6,27 @@
   tags:
     - gear
     - uniform
+  effects:
+    check: { attribute: rapport, modifier: 1 }
 - id: staff-key
   name: Staff key
   quantity: 1
-  description: A triangular carriage key on a lanyard. It opens the end doors, the emergency hatches, and the cab door if Dara lets you.
+  description: A triangular carriage key on a lanyard. It opens the end doors, the emergency hatches, and the cab door if Dara lets you. With it, the panels under the seats open in seconds instead of minutes.
   tags:
     - tool
     - quest
+  effects:
+    check: { attribute: mechanics, modifier: 2 }
 - id: pocket-torch
   name: Pocket torch
   quantity: 1
   equipped: true
-  description: A small LED torch. Bright enough for the walkway, not for long. The battery was half full this morning.
+  description: A small LED torch. Bright enough for the walkway, not for long. The battery was half full this morning. In the tunnel, it is the difference between reading a sign and guessing.
   tags:
     - tool
     - light
+  effects:
+    check: { attribute: wayfinding, modifier: 2 }
 - id: phone
   name: Phone
   quantity: 1

@@ -537,6 +537,8 @@ describe("world data session importer", () => {
       "character-blueprint/blueprints",
       "character-blueprint/presence",
       "core-quest/quests",
+      "dice-check/clocks",
+      "dice-check/consequences",
       "inventory/items",
       "living-world-rules/rules",
       "memory/blocks",

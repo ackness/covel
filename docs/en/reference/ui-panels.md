@@ -171,7 +171,8 @@ The second column is the panel ID, which is the `id` in the UI spec. Every right
 | character-blueprint | character-presence | image | character-art | presence | Character portrait gallery (`PortraitGallery`, read-only display, the player can upload to replace an avatar, `alwaysRender`) |
 | codex | codex | book-open | codex | entries | Knowledge codex |
 | core-quest | core-quest | scroll-text | core-quest | quests | Quest log (in progress, with a checklist of objectives / completed / failed groups) |
-| dice-check | dice-check-panel | dices | (none) | checks | Check records (a reverse-order list of receipts: dice formula / success or failure colors / critical emphasis, `alwaysRender`) |
+| dice-check | dice-check-panel | dices | (none) | checks | Check records (a reverse-order list of receipts: dice formula / success or failure colors / critical emphasis / the cost a failure paid, `alwaysRender`) |
+| dice-check | dice-check-clocks | skull | (none) | clock-progress | Clocks (failure clocks defined by the world: progress bar + `filled/segments` badge, with the consequence shown once full) |
 | inventory | inventory | backpack | inventory | items | Inventory (equipped group + backpack list, quantity badge + tags pill, `alwaysRender`) |
 | dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | Story illustration gallery (`MediaGallery`, `alwaysRender`); each of the two image plugins has its own, and both group IDs are `image-studio`. Both provide the single-provider extension point `media.image-flow@1`, so only one of them can be enabled in the same session |
 | dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | Generation job view (`JobList`, `alwaysRender`) |

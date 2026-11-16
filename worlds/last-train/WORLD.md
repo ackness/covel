@@ -54,7 +54,7 @@ This is an ordinary group of strangers having the worst night of their year, not
 
 <!-- /narrator-only -->
 
-Risky actions use `dice-check`. A failed check costs time, battery, a light, someone's trust, or your place in the tunnel.
+Risky actions use `dice-check`. A failed check always costs something you can see: the car's panic or your cold rises on the Clocks panel, or your torch, chalk or phone is gone from your pockets. What you carry helps: the torch for finding your way, the staff key for the panels, the jacket when you talk to the car. Lose the torch and the tunnel gets harder to read. People who have stopped trusting you won't make it easy either: a check that needs someone who has gone cold on you is harder, and a full clock makes some checks harder for the rest of the night. Quests have deadlines too: miss one, and the quest log says what you lost. Let Graham go cold on you and he walks off to the pump room.
 
 The right-hand panels track what's at stake: how long until the water reaches the battery boxes, what the battery is powering, every message that has come in and how far it has been checked, and where Theo's group is now. The narrator reads those values; make your choices with them in view.
 

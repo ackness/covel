@@ -4,6 +4,10 @@
     "ru": {
       "PLUGIN.md#contributes.commands[name=roll].arguments[name=notation].description": "034e1ea66c4357ec",
       "PLUGIN.md#contributes.commands[name=roll].description": "53de034a3fdb7257",
+      "PLUGIN.md#contributes.data.clocks.authoring.summary": "651a7114ba81c01a",
+      "PLUGIN.md#contributes.data.clocks.authoring.title": "71b06fb6f2af5a9e",
+      "PLUGIN.md#contributes.data.consequences.authoring.summary": "ddf8c139d226445a",
+      "PLUGIN.md#contributes.data.consequences.authoring.title": "2bf933ea68ab09bb",
       "PLUGIN.md#description": "6b40966df84ebd9d",
       "PLUGIN.md#displayName": "27260491575f53f8",
       "runtimes/recorder/RUNTIME.md#description": "ad7b6cbd3590d9d6",
@@ -12,6 +16,10 @@
     "zh": {
       "PLUGIN.md#contributes.commands[name=roll].arguments[name=notation].description": "034e1ea66c4357ec",
       "PLUGIN.md#contributes.commands[name=roll].description": "53de034a3fdb7257",
+      "PLUGIN.md#contributes.data.clocks.authoring.summary": "651a7114ba81c01a",
+      "PLUGIN.md#contributes.data.clocks.authoring.title": "71b06fb6f2af5a9e",
+      "PLUGIN.md#contributes.data.consequences.authoring.summary": "ddf8c139d226445a",
+      "PLUGIN.md#contributes.data.consequences.authoring.title": "2bf933ea68ab09bb",
       "PLUGIN.md#description": "6b40966df84ebd9d",
       "PLUGIN.md#displayName": "27260491575f53f8",
       "runtimes/recorder/RUNTIME.md#description": "ad7b6cbd3590d9d6",

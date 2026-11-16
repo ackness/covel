@@ -1,0 +1,24 @@
+- id: soaked
+  text: 水渗进衣服里，寒意咬得更深了。
+  cues: [冷, 湿, 湿透, 发抖, 冻, 麻]
+- id: torch-goes-under
+  text: 手电从你指间滑落，沉进水里。现在你只能靠别人手里的光了。
+  cues: [手电, 黑]
+  cost: { item: 袖珍手电 }
+- id: chalk-worn-down
+  text: 你标错了一个岔口，只好把记号擦掉；一根标记笔磨到了头。
+  cues: [标记笔, 记号, 标错]
+  cost: { item: 轨道标记笔 }
+- id: phone-drowned
+  text: 手机从你手里滑进黑水里，再也没亮起来。
+  cues: [手机]
+  cost: { item: 手机 }
+- id: breaker-sparks
+  text: 配电盘迸出火花，车厢灯闪了几下，人们往后缩，躲着你。
+  cues: [火花, 闪, 缩]
+- id: words-land-wrong
+  text: 你的话说砸了。有人嚷了起来，车厢里的人开始各站一边。
+  cues: [嚷, 喊, 吵, 站一边]
+- id: car-hears-it
+  text: 出岔子的消息在车厢里传开，大家更害怕了。
+  cues: [害怕, 慌, 恐慌, 议论, 紧张, 不安]

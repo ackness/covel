@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://dice-check/clock",
+  "title": "A clock that failed checks fill",
+  "type": "object",
+  "required": ["id", "name", "segments", "full"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+    "segments": { "type": "integer", "minimum": 2, "maximum": 12 },
+    "full": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "What is true from the moment the clock is full. The narrative keeps it for the rest of the story."
+    },
+    "raises": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Check attribute ids whose checks are one difficulty step harder once the clock is full."
+    }
+  },
+  "additionalProperties": false
+}

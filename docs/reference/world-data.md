@@ -382,12 +382,12 @@ Descriptor 可以修改或关闭这个规范来源，不能在别的路径再定
 
 世界包不必用上所有能力，让题材决定插件组合和数据。仓库里的四个世界展示了不同的组合：
 
-| 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                                                                                                                     | 适合参考的文件                                                                                                                            |
-| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包；4 条任务由 `quests@1` 推导接收者；案情板记录来源、矛盾与证据固定；四方立场、深退潮、钥匙碎片随叙事维护；8 条隐藏事件；8 项静态设定移到 lorebook，维度仅保留 4 项演化数据与开局；中英角色、规则与立绘                                                                                                                             | `data/dimensions.yaml`、`data/quests.yaml`、`data/lorebook.yaml`、`data/hidden/story-events.yaml`、`data/rules/`、`characters/`、`media/` |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                                                                                                 | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json`        |
-| `worlds/last-train`     | 现代都市求生，示范多语言（英文为主，另有中文版） | `traditional-story` 玩法包与 `dice-check`；数据契约自动选入任务、物品、好感等接收插件；3 个任务、6 种物品与 5 位角色的好感种子；「Floodline / Train Battery / Messages / Theo's Group」四个实时维度，水位倒计时从 `clock.elapsedSinceStart` 用 `x-derive` 推导，电池追踪储备与供电状态；隐藏事件及事件链；`claims`、`promises` 记忆块；封面与 5 张人物卡立绘 | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                        |
-| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `traditional-story` 玩法包加跑团规则、判定、任务、物品、好感、角色蓝图与 `story-events`；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体）                                    | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`                   |
+| 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                                                                                                                                                                                          | 适合参考的文件                                                                                                                                               |
+| ----------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包；4 条任务由 `quests@1` 推导接收者；案情板记录来源、矛盾与证据固定；四方立场、深退潮、钥匙碎片随叙事维护；8 条隐藏事件；8 项静态设定移到 lorebook，维度仅保留 4 项演化数据与开局；中英角色、规则与立绘                                                                                                                                                                                                  | `data/dimensions.yaml`、`data/quests.yaml`、`data/lorebook.yaml`、`data/hidden/story-events.yaml`、`data/rules/`、`characters/`、`media/`                    |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                                                                                                                                                                      | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json`                           |
+| `worlds/last-train`     | 现代都市求生，示范多语言（英文为主，另有中文版） | `traditional-story` 玩法包与 `dice-check`；数据契约自动选入任务、物品、好感等接收插件；3 个任务（其中三处带期限）、6 种物品与 5 位角色的好感种子；7 项失败代价与「车厢恐慌 / 又冷又湿」两个失败时钟；「Floodline / Train Battery / Messages / Theo's Group」四个实时维度，水位倒计时从 `clock.elapsedSinceStart` 用 `x-derive` 推导，电池追踪储备与供电状态；隐藏事件及事件链；`claims`、`promises` 记忆块；封面与 5 张人物卡立绘 | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`data/check-consequences.yaml`、`data/check-clocks.yaml`、`characters/` |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `traditional-story` 玩法包加跑团规则、判定、任务、物品、好感、角色蓝图与 `story-events`；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体）                                                                                                         | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`                                      |
 
 - 四个世界都没有 descriptor，所有文件都在约定路径上。规则文件放在 `data/rules/` 下，每个文件一组。
 - 提灯古冢的地图预置 8 个地点与双向出口，含山脚小屋、山顶古灯和 6 个墓内地点。维护时只改状态与发现记录，不改通路。警戒按结算后的时钟累计墓内时辰，每满 3 格自然增加 1，最多推到 5，噪音仍可推到 6；墓外回合不累计，撤出再入墓继续计时，重燃古灯后清零。这部分由 `updateRule` 维护，因为它取决于队伍是否在墓内，不能直接用开局以来的时钟读数推导。开局配点由 `data/tabletop-rules.json` 声明，结构化文案里的检定修正和难度引用面板及骰池回执。
@@ -626,9 +626,9 @@ sources:
 ```text
 ### Starting quests — `quests@1` (plugin `core-quest`)
 
-Importable quest records — world packs may preseed main/side quests; the quest log advances them by name.
+Quests the player already has when the story begins.
 
-How to write it: Seed the main quest and, at most, a few side quests. `status` is `active`, `completed` or `failed`. Each objective has `text` and `done`; give it an `id` so later updates can address it. The quest log advances quests by name, so use the quest and giver names that the lore uses.
+How to write it: Seed the main quest and, at most, a few side quests. `status` is `active`, `completed` or `failed`. Each objective has `text` and `done`; give it an `id` so later updates can address it. The quest log advances quests by name, so use the quest and giver names that the lore uses. A quest or an objective may have a `deadline`: `when` is one condition that holds once it is too late (a dimension, as in `{ dimension: floodline, path: stage, in: [knee] }`, or world time, as in `{ time: elapsedSinceStart, gte: 45 }`), `label` says the deadline to the player, and `missed` says what happens then. A quest fails when its deadline passes; an objective is missed.
 
 Put the file at `data/quests.yaml`: it is imported without a descriptor. The same source in a descriptor:
 
@@ -1504,16 +1504,33 @@ sources:
 
 三个内置 RPG 插件接受世界包预置的数据。手把手的做法见[预置开局内容](../recipes/starting-content.md)，完整的成品见 `worlds/last-train/data/`。
 
-| 插件         | schema URI                      | to                              | 记录形状                                                                                     |
-| ------------ | ------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------- |
-| `core-quest` | `contract:quests@1`             | `contract:quests@1`             | `{ id, name, description, status?, objectives?: [{id?, text, done?}], giver?, reward? }`     |
-| `inventory`  | `contract:inventory.items@1`    | `contract:inventory.items@1`    | `{ id, name, quantity, description?, tags?: string[], equipped?: boolean }`                  |
-| `affinity`   | `contract:character.affinity@1` | `contract:character.affinity@1` | `{ id, name, score (int -100..100), notes? }`（tier/history 等派生字段由工具首次写入时补齐） |
+| 插件         | schema URI                      | to                              | 记录形状                                                                                                                           |
+| ------------ | ------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `core-quest` | `contract:quests@1`             | `contract:quests@1`             | `{ id, name, description, status?, deadline?, objectives?: [{id?, text, done?, deadline?}], giver?, reward? }`                     |
+| `inventory`  | `contract:inventory.items@1`    | `contract:inventory.items@1`    | `{ id, name, quantity, description?, tags?: string[], equipped?: boolean, effects?: { check?: { attribute, modifier (-5..5) } } }` |
+| `affinity`   | `contract:character.affinity@1` | `contract:character.affinity@1` | `{ id, name, score (int -100..100), notes? }`（tier/history 等派生字段由工具首次写入时补齐）                                       |
 
 - 三者都用 `key: id`。约定路径分别是 `data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`。
 - 预置的任务由 `core-quest` 只推进、不重建。建议给每个任务目标写一个任务内稳定的 `id`：之后推进时即使 `text` 被略微改写，也能勾到同一个目标。
-- 预置的物品就是开局行囊。
+- 任务和目标的 `deadline` 是 `{ when, label, missed? }`。`when` 是一个条件：`{ dimension, path?, <运算符> }`、`{ time, <运算符> }`（读 `world-time-context@1` 的一个数，例如 `elapsedSinceStart`）、`{ affinity, path?, <运算符> }`（按名字读 `affinity.tier@1` 返回的 `{ score, tier }`）或 `{ turnGte }`，运算符同隐藏剧情条件。`when` 里的维度 ID、路径和候选值由 `pnpm validate:world` 检查。期限怎样判定见[内置插件 · 任务期限](../builtin/rpg.md#任务期限)。
+- 预置的物品就是开局行囊。物品的 `effects.check` 让主角带着它时给某个属性的检定加修正；`attribute` 是 `characterSchema` 里一个数值属性的 `id`，写错时 `pnpm validate:world` 报错。用法见[内置插件 · 物品和关系怎样影响检定](../builtin/rpg.md#物品和关系怎样影响检定)。
 - 预置的好感给关键 NPC 一个非零的起点，正负都可以。
+
+<a id="check-consequences"></a>
+
+#### 失败的代价（`check.consequences@1` / `check.clocks@1`，插件 `dice-check`）
+
+`dice-check` 接收两份数据，让失败的判定有代价。规则和玩家看到什么见[内置插件 · 失败的代价](../builtin/rpg.md#失败的代价)。
+
+| 契约                   | 约定路径                       | 记录形状                                                                                                                                                    |
+| ---------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check.consequences@1` | `data/check-consequences.yaml` | `{ id, text, cues?: string[], attribute?, outcome?: failure \| critical-failure, cost: { kind: item, item, quantity? } \| { kind: clock, clock, ticks? } }` |
+| `check.clocks@1`       | `data/check-clocks.yaml`       | `{ id, name, segments (2..12), full, raises?: string[] }`                                                                                                   |
+
+- 两者都用 `key: id`。`attribute` 是 `characterSchema` 里一个数值属性的 `id`，写错时 `pnpm validate:world` 报错。时钟的 `raises` 也是这样的属性 `id` 列表，填满后这些属性的检定难一档。
+- `cost.item` 写物品给玩家看的名字，和背包里的一致；语言文件里一起翻译。`cost.clock` 写 `check.clocks@1` 里一个时钟的 `id`。
+- `cues` 是纯文本列表，语言文件整列替换，要用会话语言里的词。
+- 时钟的进度不在这两份数据里，而在 `dice-check` 自己的 `clock-progress` 数据集，所以重新同步世界数据不会把时钟清零。
 
 ### Preflight 与 Sync
 

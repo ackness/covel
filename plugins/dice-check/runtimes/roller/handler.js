@@ -2,8 +2,19 @@ import {
   actingCharacterOf,
   pickLocaleText,
 } from "@covel/plugin-handlers-utils";
-import { attributeName, checkAttributes } from "../../lib/attributes.js";
+import {
+  harderContext,
+  loadCheckPlan,
+  modifierLine,
+  readBag,
+} from "../../lib/check-plan.js";
 import { DIFFICULTY_DCS, MODIFIER_LIMIT } from "../../lib/check-rules.js";
+import {
+  costContext,
+  loadCostPlan,
+  PROGRESS_NAMESPACE,
+  progressRecord,
+} from "../../lib/consequences.js";
 import { rememberPool } from "../../lib/turn-pool.js";
 
 const DICE_COUNT = 3;
@@ -28,31 +39,65 @@ export default async function handler(ctx) {
   const sourceTurnId = ctx.execution?.sourceTurnId ?? ctx.turnId;
   const owned =
     ctx.inputs?.tabletopCheck?.value?.resolvedTurnId === sourceTurnId;
-  // For the guard that checks the receipt while the narrative still runs.
-  if (!owned) rememberPool(ctx.sessionId, ctx.turnId, dice);
-
   const player = actingCharacterOf(
     ctx.playerActions ?? [],
     ctx.world?.characters ?? [],
     ctx.world?.seats ?? [],
   );
+  const bag = owned ? null : await readBag(ctx);
+  const costPlan = owned ? null : await loadCostPlan(ctx, bag);
+  const checkPlan = owned
+    ? null
+    : await loadCheckPlan(ctx, { player, bag, clocks: costPlan?.clocks });
+  // For the guard that checks the receipt while the narrative still runs.
+  if (!owned)
+    rememberPool(ctx.sessionId, ctx.turnId, dice, { costPlan, checkPlan });
+
   return {
     outcome: "success",
     value: {
       // Same-execution source for recorder's declared `inputs.dicePool`. Not
       // part of `action-check@1`: other plugins read only `checkContext`.
       dice,
+      // Private too: the modifiers and harder checks the narrative is told,
+      // and what a failed check of this turn costs, for the recorder.
+      ...(checkPlan ? { checkPlan } : {}),
+      ...(costPlan ? { costPlan } : {}),
       checkContext: owned
         ? ownedContext(ctx.locale)
-        : buildCheckContext(dice, ctx.locale, ctx.world, player),
+        : [
+            buildCheckContext(dice, ctx.locale, checkPlan),
+            harderContext(checkPlan, ctx.locale),
+            costContext(costPlan, ctx.world, ctx.locale),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
     },
     effects: {
-      // Audit trail: the raw pool survives even when the narrative never uses it.
       pluginData: [
+        // Audit trail: the raw pool survives even when the narrative never uses it.
         { namespace: ROLLS_NAMESPACE, key: ctx.turnId, value: { dice } },
+        ...(await clockDisplays(ctx, costPlan)),
       ],
     },
   };
+}
+
+/**
+ * The clock records the panel draws, written only when the world changed
+ * one (a new clock, another name or size). Their progress is changed by the
+ * recorder alone.
+ */
+async function clockDisplays(ctx, plan) {
+  if (!plan || !ctx.pluginData?.get) return [];
+  const writes = [];
+  for (const clock of Object.values(plan.clocks)) {
+    const stored = await ctx.pluginData.get(PROGRESS_NAMESPACE, clock.id);
+    const value = progressRecord(clock, clock.filled, stored?.fullTurn);
+    if (JSON.stringify(stored) !== JSON.stringify(value))
+      writes.push({ namespace: PROGRESS_NAMESPACE, key: clock.id, value });
+  }
+  return writes;
 }
 
 /** What the narrative reads in a turn whose check a tabletop form settled. */
@@ -69,51 +114,38 @@ function signed(value) {
 }
 
 /**
- * The player character's check attributes (`checkAttributes` in
- * `lib/attributes.js`) with the modifier each converts to:
- * `round((value - min) / (max - min) * MODIFIER_LIMIT)`. The narrative reads
- * the modifier here instead of guessing one from a bare value — a 2/5 is +4,
- * not +2. `tabletop-rules` converts the same way (`checkModifier` in its
- * `lib/rules.js`); change both together.
+ * The player character's check attributes with the modifier each converts
+ * to (`loadCheckPlan` in `lib/check-plan.js`), and the item that adds to it.
+ * The narrative reads the modifier here instead of guessing one from a bare
+ * value — a 2/5 is +4, not +2.
+ *
+ * @param {any} plan The check plan.
  */
-function playerModifiers(world, locale, player) {
-  if (!player?.fields) return [];
-  const lines = [];
-  for (const attr of checkAttributes(world)) {
-    const value = player.fields[attr.id];
-    if (typeof value !== "number") continue;
-    const min = typeof attr.min === "number" ? attr.min : 0;
-    const modifier = Math.round(
-      ((Math.min(Math.max(value, min), attr.max) - min) / (attr.max - min)) *
-        MODIFIER_LIMIT,
-    );
-    lines.push({
-      name: attributeName(attr, locale),
-      value,
-      min,
-      max: attr.max,
-      modifier,
-    });
-  }
-  return lines;
-}
-
-/** @param {ReadonlyArray<{name: string, value: number, min: number, max: number, modifier: number}>} modifiers */
-function modifierBlock(modifiers, locale) {
-  if (modifiers.length === 0) return "";
-  const items = modifiers.map(
-    (m) => `- ${m.name} ${m.value}/${m.max} → ${signed(m.modifier)}`,
-  );
+function modifierBlock(plan, locale) {
+  const entries = Object.values(plan?.modifiers ?? {});
+  if (entries.length === 0) return "";
+  const items = entries.map((entry) => modifierLine(entry, locale));
+  const carried = entries.some((entry) => entry.item);
   return pickLocaleText(
     locale,
     [
       "玩家角色检定属性的修正（已按量程换算：修正 = (数值 − 下限) ÷ 量程 × 10）：",
       ...items,
+      ...(carried
+        ? [
+            "括号里是属性本身的修正和随身物品带来的修正，箭头后的总修正已经算进去了。",
+          ]
+        : []),
       "检定只用表中的属性，修正按此表读取。生命、信任这类不在表中的数值不用来检定。",
     ],
     [
       "Modifiers of the player character's check attributes (converted from their range: modifier = (value - min) ÷ range × 10):",
       ...items,
+      ...(carried
+        ? [
+            "In brackets: the attribute's own modifier and the item the player carries that adds to it. The total after the arrow already includes the item.",
+          ]
+        : []),
       "A check uses only an attribute in this list, with the modifier given here. Values that are not listed, such as health or trust, are not used for checks.",
     ],
   ).join("\n");
@@ -164,14 +196,12 @@ function table(dice, header, words) {
  *
  * @param {ReadonlyArray<number>} dice
  * @param {string | undefined} locale
+ * @param {any} plan The check plan of the turn.
  * @returns {string}
  */
-function buildCheckContext(dice, locale, world, player) {
+function buildCheckContext(dice, locale, plan) {
   const dcs = Object.entries(DIFFICULTY_DCS);
-  const modifiers = modifierBlock(
-    playerModifiers(world, locale, player),
-    locale,
-  );
+  const modifiers = modifierBlock(plan, locale);
   const step2 = modifiers
     ? pickLocaleText(
         locale,

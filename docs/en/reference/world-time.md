@@ -155,6 +155,7 @@ It is not the Gregorian calendar.
 The built-in `world-time` is a core plugin, and it has two runtimes:
 
 1. **`world-time/context`** (runs at the start of a turn, does not call a model): reads the clock of this game. If there is no clock yet, it reads the initial value from the world definition. It publishes the result as the contract `world-time-context@1`. The initial value and the display text in each language are saved through a proposal.
+   - The published value also carries `elapsedSinceStart`: the number of base units since the story began, with the same meaning as the field of that name in `summary` below. It is computed from the tick and not stored. Hidden plot `time` conditions and quest deadlines can read it, for example `{ time: elapsedSinceStart, gte: 45 }`.
    - For a world that has an imported definition, the panel shows the rules before the first narrative.
    - When there is no imported definition, the panel shows the description of the default calendar.
 2. **`world-time/advance`** (runs after the narrative, calls a model): reads the successful narrative of this turn and the start of the time, and then calls the tool `advance-world-time`.

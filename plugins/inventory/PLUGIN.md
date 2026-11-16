@@ -1,5 +1,5 @@
 ---
-version: 0.0.46
+version: 0.0.47
 displayName: Bag
 description: >-
   Keeps track of what you carry. Items you gain, lose or equip in the story are
@@ -42,10 +42,17 @@ contributes:
           number. Players see the tags, so write them in the world's language
           and tag money as currency in that language. Set `equipped` to true for
           gear the player is wearing or holding. Keep the list short; items
-          gained in play are tracked automatically.
+          gained in play are tracked automatically. An item can help one
+          kind of check while it is carried: `effects: { check: { attribute:
+          <check attribute id>, modifier: 2 } }` (from -5 to 5); say why in
+          its `description`.
         example: ./examples/items.json
         source:
           path: data/items.yaml
+        references:
+          - path: effects.check.attribute
+            to: character-attribute
+            type: number
   ui:
     right:
       - ./ui/inventory-panel.json
@@ -64,4 +71,4 @@ contributes:
 
 # Inventory
 
-Keeps the protagonist's bag. The `ledger` runtime applies each turn's item gains, losses, and equipment changes from the shared WorldIR extraction without a model call; the `vocabulary` runtime publishes the carried item names before extraction so the extractor reuses them. Players can equip, unequip, or drop items from the panel, and `/bag` opens it. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.
+Keeps the protagonist's bag. The `ledger` runtime applies each turn's item gains, losses, and equipment changes from the shared WorldIR extraction without a model call; the `vocabulary` runtime publishes the carried item names before extraction so the extractor reuses them. Players can equip, unequip, or drop items from the panel, and `/bag` opens it. A world can give an item `effects.check`, a modifier that checks of one attribute get while the item is carried; `inventory.bag@1` reports it, and a check plugin can add it. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.

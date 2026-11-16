@@ -13,6 +13,8 @@ runtimes/log/RUNTIME.md:
   description: После каждого хода записывает новые задания, успехи и итоги по тексту истории.
 runtimes/vocabulary/RUNTIME.md:
   description: Запоминает текущие задания и невыполненные цели, чтобы дальше они назывались одинаково.
+runtimes/deadline/RUNTIME.md:
+  description: Проваливает задания и пропускает цели, срок которых вышел, и говорит истории, какие сроки близко.
 messages:
   Quest changes: Изменения в заданиях
   No quest changes this turn.: В этом ходу задания не менялись.
@@ -30,4 +32,5 @@ messages:
   Updated: Есть успехи
   Completed: Выполнено
   Failed: Провалено
+  Missed: Пропущено
   Objective: Текущая цель

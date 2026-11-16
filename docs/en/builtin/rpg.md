@@ -45,6 +45,9 @@ Check modifiers use the action’s actor’s attributes, falling back to the pri
 
 - A check block in the story text: the action, the calculation, and the result, for example `14 + 4 = 18 vs DC 12`. Critical successes and critical failures are highlighted.
 - A "Check Log" panel on the right, listing every check with its turn number and the attribute used (by the world's name for it). The panel has two quick buttons, "Roll d20" and "Roll 2d6".
+- When the world sets costs for failure, a failed check gets one more line in its check block and in the "Check Log": the cost, for example "The water gets inside your clothes, and the cold bites deeper." with "Cold and wet +1 (2/4)". In the turn a clock fills, the check block also states the consequence that holds from then on.
+- When a carried item adds to the check's modifier, the check block and the "Check Log" show a green badge, for example "Pocket torch +2". When a check is harder because someone will not cooperate or a clock is full, they show one more line with the reason and a red badge, for example "Graham Pike (Cold)" and "DC 12 → 16".
+- When the world has failure clocks, a "Clocks" panel appears on the right with one progress bar per clock. A full clock shows its consequence.
 - You can roll dice yourself by typing `/roll` in the input box. `/roll 2d6` rolls two six-sided dice. If you do not write a dice expression, it rolls `1d20`. `/r` is a short form. Dice are written as `NdM`: 1 to 100 dice at a time, each with 2 to 1000 sides.
 
 Dice you roll yourself are shown as a result only. They do not change the checks in the story.
@@ -64,9 +67,17 @@ If the d20 plus the attribute modifier reaches the target, the check succeeds. A
 
 If a numeric attribute of the player character is in the `abilities` category and has minimum and maximum values, the plugin scales it to a modifier from 0 to +10 and lists it for the narrator. Values such as health or trust (`stats`, `social`) are not used for checks. So put the attributes checks use in `abilities` and give them proper `min` and `max` values. If no ranged ability is available or character data is missing, checks still roll with modifier 0 and show no attribute label.
 
+### How items and relationships change a check
+
+- **Carried items**: an item in the bag with `effects.check` adds to that attribute's modifier while the player character carries it (the best item for each attribute). The modifier list shows it as `Wayfinding 3/5 → +8 (+6, Pocket torch +2)`, and the total stays within ±10. Once the item is gone, the next turn no longer adds it.
+- **People who will not cooperate**: an NPC whose affinity tier is below "Neutral" does not want to help the player character. When an action needs that person's help or agreement, the narrator puts the name in `with` in the receipt, and the check is one step harder for each tier below neutral ("Cold" one step, "Hostile" two), up to extreme.
+- **Full clocks**: a clock with `raises` makes checks of those attributes one step harder once it is full.
+
+The narrator chooses the difficulty from the fiction and reports it as usual, then reads the outcome as many columns to the right as the "Harder checks" section of the check rules says. The guard and the recorder check the receipt against the same data: a modifier without the item, or a difficulty that was not raised, sends the receipt back. Item data comes from the bag's read service `inventory.bag@1`, and affinity tiers from Affinity's read service `affinity.tier@1`; without the matching plugin, that part has no effect.
+
 ### When it is on
 
-Optional. No built-in gameplay pack includes it, so a world has to include it.
+Optional. No built-in gameplay pack includes it, so a world has to include it. A world that brings cost-of-failure data also infers it under the [receiver rules](../reference/world-data.md#data-receivers).
 
 | World            | How it is included      |
 | ---------------- | ----------------------- |
@@ -77,9 +88,28 @@ For other worlds, you can tick it on the session-prep screen, or the world autho
 
 It has no settings you can change.
 
+### Cost of failure
+
+A world can make every failed check pay a cost the player can see: an item is lost, or a clock advances by some segments.
+
+1. At the start of a turn, the plugin writes the costs this turn can still pay into the check rules for the narrator, one line per attribute. An item must still be on the player character, and a clock must not be full yet. Whether the item is still there is asked through the bag's public service.
+2. After the narrator sends the check receipt, the recorder settles a cost for each failed check, whatever the prose says. A clock advances in this plugin's own `clock-progress` dataset. An item is taken through the bag's write service `inventory.change@1`; when it cannot be taken (for example, it was given away this turn), the check pays its next cost instead.
+3. When the prose uses none of a cost's words (`cues`), the story is sent back once to be rewritten, with a note naming the cost to add. The second submission is accepted as usual.
+
+A failed check pays one cost only, the most specific one: a cost with an attribute comes before one without, and a cost with an `outcome` comes before one for both kinds of failure; between equally specific costs, the one earlier in the file wins. Once a clock is full, its consequence is written into the check rules every turn, and the narrator must keep to it.
+
+Without these two data files, a failure shows only in the prose, as before.
+
 ### What world authors can preset
 
-It takes no world data. What a world can do is define the player character's numeric attributes, and write a clear `description` for each one. The model uses these descriptions to decide which attribute applies.
+Define the player character's numeric attributes, and write a clear `description` for each one. The model uses these descriptions to decide which attribute applies. A world can also set costs for failure:
+
+| Data             | File                           | Notes                                                                                                                                                                                                                                                                          |
+| ---------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Costs of failure | `data/check-consequences.yaml` | Each entry has `id`, `text` (what happens), `cues` (words that prose showing this cost would use) and `cost`: `{ kind: item, item: <item name> }` or `{ kind: clock, clock: <clock id> }`. Optional `attribute` and `outcome` limit it to one attribute or one kind of failure |
+| Failure clocks   | `data/check-clocks.yaml`       | Each clock has an `id`, a `name` shown to the player, a number of `segments`, and `full`, which becomes true once it fills; the optional `raises` lists attribute ids whose checks are one step harder once it is full                                                         |
+
+Write at least one cost without `attribute` or `outcome`, so every failure has something to pay. `pnpm validate:world` reports a wrong `attribute`. For the fields, see [world data](../reference/world-data.md#check-consequences).
 
 ### Works with
 
@@ -131,8 +161,8 @@ When the story clearly gives a commission or an objective, it is logged as a que
 
 ### What you will see
 
-- A "Quest Log" panel on the right. You can search it, or filter by "All", "Active", "Completed" and "Failed". Each quest shows its objective, the person who gave it, and the reward. Status badges use the same localized names as the filter tabs.
-- In a turn where a quest changes, a "Quest Log" block appears in the story text, marked "New", "Progress", "Completed" or "Failed". If nothing changed, it shows "No quest changes this turn."
+- A "Quest Log" panel on the right. You can search it, or filter by "All", "Active", "Completed" and "Failed". Each quest shows its objective, the person who gave it, and the reward. Status badges use the same localized names as the filter tabs. Quests and objectives with a deadline carry a `⌛ <deadline>` chip; a missed objective is marked `✗`.
+- In a turn where a quest changes, a "Quest Log" block appears in the story text, marked "New", "Progress", "Completed" or "Failed". A quest past its deadline is marked "Failed" and a missed objective "Missed", followed by what missing it means. If nothing changed, it shows "No quest changes this turn."
 - The session summary also includes a short overview of the quests.
 
 ### When it is on
@@ -153,6 +183,24 @@ It has no settings you can change.
 | Starting quests | `data/quests.yaml` | The main quest, plus up to a few side quests. `status` is `active`, `completed` or `failed`. Each objective has `text` and `done`. |
 
 Quests are matched by name, so quest names and the names of people who give them must match what the setting says. For how to write them, see [Starting content](../recipes/starting-content.md).
+
+### Quest deadlines
+
+Quests and objectives can both have a `deadline`:
+
+```yaml
+deadline:
+  when: { dimension: floodline, path: stage, in: [knee, battery] }
+  label: Before the water is knee-deep
+  missed: Nobody chose in time, and Dara cut the doors herself.
+```
+
+- `when` is a condition that holds once the deadline has passed. It can read a dimension (`{ dimension, path, <operator> }`), a number from world time (`{ time: elapsedSinceStart, gte: 45 }`, in the clock's base unit), how an NPC feels about the player character (`{ affinity: Graham Pike, path: tier, in: [cold, hostile] }`, reading `tier` or `score`, with Affinity on), or the turn number (`{ turnGte: 6 }`). The operators are the same as in hidden plot conditions.
+- `label` is the deadline that the player and the narrator see, and `missed` is what happens once it is missed.
+
+Each turn, before the story is written, the `deadline` runtime checks deadlines against this turn's dimensions, world time and affinity tiers. An active quest past its deadline becomes "Failed", and later story notes cannot move it back to active or completed. A missed objective can no longer be completed, while the quest itself goes on. The story reads through `story-context@1` what was just missed and that it must happen this turn, along with the deadlines still open (time deadlines say roughly how much time is left). When the condition cannot be read (for example, the session has no such dimension, or Affinity is off), the deadline has not passed.
+
+Dimensions, world time and affinity settle after the turn ends, so a deadline is judged in the turn after time runs out, and that turn's story is the first to write the consequence. This is on purpose: failing a quest after the story was written would put a failure in the quest log that no prose has shown.
 
 ### Works with
 
@@ -192,9 +240,9 @@ It has no settings you can change.
 
 Seeded items must pass the dataset’s `set` and record-schema checks. Sync may delete seeded items removed from their authoritative source.
 
-| Data           | File              | Notes                                                                                                                                                                                      |
-| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Starting items | `data/items.yaml` | Things the player starts with. `quantity` is a number. Players see the tags, so write them in the world's language, and give currency a tag that says so. Worn items get `equipped: true`. |
+| Data           | File              | Notes                                                                                                                                                                                                                                                                                                                 |
+| -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting items | `data/items.yaml` | Things the player starts with. `quantity` is a number. Players see the tags, so write them in the world's language, and give currency a tag that says so. Worn items get `equipped: true`. An item that helps one kind of check gets `effects: { check: { attribute: <attribute id>, modifier: 2 } }` (from -5 to 5). |
 
 Keep the list short. Items gained during play are recorded automatically. For how to write them, see [Starting content](../recipes/starting-content.md).
 
@@ -203,6 +251,8 @@ Keep the list short. Items gained during play are recorded automatically. For ho
 Both Storyteller (`narrator`) and Chat Storyteller (`chat-mode-narrator`) use the bag lookup and change tools when Bag is active. Without Bag, they continue telling the story as usual.
 
 Bag adds the story's other item changes from the facts that "Story Notes" (`world-ir`) sorts out. Without Story Notes it adds none, and the bag changes only through the storyteller's bag tools and actions in the panel.
+
+Dice Check (`dice-check`) reads an item's `effects.check` through the read service `inventory.bag@1`; see [How items and relationships change a check](#how-items-and-relationships-change-a-check).
 
 ## Affinity (`affinity`)
 
@@ -256,6 +306,10 @@ Seeded affinity records must pass the dataset’s `set` and record-schema checks
 | Starting affinity | `data/affinity.yaml` | Key NPCs who already have a relationship with the player at the start. `score` is an integer from -100 to 100. `notes` explains the score in a sentence or two. |
 
 The `id` and `name` must match the NPC's character setting. Later updates are matched by name. For how to write them, see [Starting content](../recipes/starting-content.md).
+
+### Works with
+
+Affinity provides the read service `affinity.tier@1`: it returns NPCs' scores and tiers by name (or a known alias), and `tiers` lists the tiers from lowest to highest. Dice Check uses it so that people who have gone cold do not cooperate, and Quest Log uses it as a condition of [quest deadlines](#quest-deadlines).
 
 ## Hidden Plot Events (`story-events`)
 

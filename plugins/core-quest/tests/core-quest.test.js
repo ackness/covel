@@ -695,6 +695,7 @@ describe("core-quest plugin manifest", () => {
   /** @type {import('@covel/shared').RuntimeManifest} */
   let manifest;
   let vocabularyManifest;
+  let deadlineManifest;
   let loaded;
   let declaration;
   let packageManifest;
@@ -716,6 +717,9 @@ describe("core-quest plugin manifest", () => {
     ).manifest;
     vocabularyManifest = manifests.find(
       (entry) => entry.manifest.name === "core-quest/vocabulary",
+    ).manifest;
+    deadlineManifest = manifests.find(
+      (entry) => entry.manifest.name === "core-quest/deadline",
     ).manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
@@ -759,6 +763,18 @@ describe("core-quest plugin manifest", () => {
       outputContract: "world-ir.vocabulary@1",
     });
     expect(declaration.provides).toContain("world-ir.vocabulary@1");
+  });
+
+  it("checks deadlines before the story and before the vocabulary", () => {
+    expect(deadlineManifest).toMatchObject({
+      runtimeType: "function",
+      stage: "pre-turn",
+      storyContext: { select: "/storyContext", priority: "high" },
+    });
+    expect(deadlineManifest.inputs?.worldTime).toMatchObject({
+      required: false,
+    });
+    expect(vocabularyManifest.after).toContain("core-quest/deadline");
   });
 
   it("accepts world-data imports into the quests namespace", () => {

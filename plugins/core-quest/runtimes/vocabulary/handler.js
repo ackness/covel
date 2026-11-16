@@ -24,6 +24,7 @@ export default async function handler(ctx) {
         .filter(
           (objective) =>
             objective?.done !== true &&
+            !objective?.missed &&
             typeof objective?.text === "string" &&
             objective.text.trim(),
         )

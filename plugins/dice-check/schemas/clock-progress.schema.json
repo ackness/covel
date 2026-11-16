@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://dice-check/clock-progress",
+  "title": "How full a clock is",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "segments",
+    "filled",
+    "progressText",
+    "isFull",
+    "whenFull"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "name": { "type": "string", "minLength": 1 },
+    "segments": { "type": "integer", "minimum": 2, "maximum": 12 },
+    "filled": { "type": "integer", "minimum": 0, "maximum": 12 },
+    "progressText": { "type": "string" },
+    "isFull": { "type": "boolean" },
+    "whenFull": { "type": "string" },
+    "fullTurn": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

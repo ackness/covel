@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: last-train
 name: Last Train Out
-version: 2.0.0
+version: 2.2.0
 summary: The city goes dark, the last train stops under the river, and the
   water is coming in. Control says stay put. The group chat says nobody is
   coming.

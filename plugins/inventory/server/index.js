@@ -34,7 +34,7 @@ export default function (covel) {
     contract: "inventory.bag@1",
     modelFacing: true,
     description:
-      "Look up what the player character carries now. Optionally filter by a name or tag; equipped items come first. Returns at most 50 items and the full matching count.",
+      "Look up what the player character carries now. Optionally filter by a name or tag; equipped items come first. Returns at most 50 items and the full matching count. An item with `effects.check` gives checks of that attribute its modifier while it is carried.",
     input: z.object({ query: z.string().max(80).optional() }),
     output: z.object({
       items: z.array(
@@ -44,6 +44,14 @@ export default function (covel) {
           equipped: z.boolean(),
           tags: z.array(z.string()),
           description: z.string().optional(),
+          effects: z
+            .object({
+              check: z.object({
+                attribute: z.string(),
+                modifier: z.number().int(),
+              }),
+            })
+            .optional(),
         }),
       ),
       total: z.number().int(),

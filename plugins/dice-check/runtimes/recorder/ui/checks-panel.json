@@ -122,6 +122,74 @@
                 ]
               },
               {
+                "component": "Row",
+                "visible": { "$item": "value/bonusText" },
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "backpack", "size": "xs" }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/bonusText" },
+                      "color": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "component": "Row",
+                "visible": { "$item": "value/harderText" },
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "shield", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/harderText" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/harderDetail" },
+                      "color": "red"
+                    }
+                  }
+                ]
+              },
+              {
+                "component": "Row",
+                "visible": { "$item": "value/costText" },
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "x-circle", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/costText" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/costDetail" },
+                      "color": "amber"
+                    }
+                  }
+                ]
+              },
+              {
                 "component": "Text",
                 "visible": { "$item": "value/turnLabel" },
                 "props": {

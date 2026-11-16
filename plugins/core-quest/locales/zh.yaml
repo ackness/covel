@@ -13,6 +13,8 @@ runtimes/log/RUNTIME.md:
   description: 每回合根据故事内容记录新任务、任务进展和任务结果。
 runtimes/vocabulary/RUNTIME.md:
   description: 记录进行中的任务和未完成的目标，让后续记录沿用同一个叫法。
+runtimes/deadline/RUNTIME.md:
+  description: 期限已过的任务判为失败、目标判为错过，并告诉故事哪些期限快到了。
 messages:
   Quest changes: 任务变化
   No quest changes this turn.: 这一回合任务没有变化。
@@ -30,4 +32,5 @@ messages:
   Updated: 有进展
   Completed: 已完成
   Failed: 已失败
+  Missed: 已错过
   Objective: 当前目标

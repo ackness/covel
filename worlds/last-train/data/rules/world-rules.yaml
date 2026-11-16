@@ -47,7 +47,7 @@
 - schemaVersion: 1
   id: last-train-tunnel
   title: The Tunnel Is Not Empty Space
-  content: "Moving through the tunnel needs light, a plan, and someone counting the cross-passage doors. Distances matter: about four hundred meters to the crossover, more to Mercer Park, and the pump room is back toward the deep water. On a failed check, use consequences such as lost time, a torch dying, a soaked phone, someone separated, or arriving after the others left — never teleport anyone or end the story."
+  content: "Moving through the tunnel needs light, a plan, and someone counting the cross-passage doors. Distances matter: about four hundred meters to the crossover, more to Mercer Park, and the pump room is back toward the deep water. A failed check already has its cost from the dice rules (a clock that fills, or a torch, chalk or phone lost); write that cost into the scene, and add lost time, someone separated, or arriving after the others left only on top of it — never teleport anyone or end the story."
   kind: triggered
   category: world
   enabled: true

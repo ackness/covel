@@ -214,6 +214,8 @@ describe(`${PLUGIN_ID} package`, () => {
             select: "/checkContext",
             required: false,
           },
+          // Notes of this turn, such as quest deadlines, from any provider.
+          context: { from: { kernel: "story-context@1" } },
         },
         visibility: "story",
       },

@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.13
+version: 0.0.14
 displayName: World Time
 description: >-
   Keeps the date and time of the world and moves the clock forward as the story

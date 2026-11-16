@@ -17,7 +17,33 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "equipped": { "type": "boolean" }
+    "equipped": { "type": "boolean" },
+    "effects": {
+      "type": "object",
+      "description": "What carrying the item changes in the rules.",
+      "additionalProperties": false,
+      "properties": {
+        "check": {
+          "type": "object",
+          "description": "A modifier that checks of one attribute get while the item is carried.",
+          "additionalProperties": false,
+          "required": ["attribute", "modifier"],
+          "properties": {
+            "attribute": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The id of a check attribute of the player character."
+            },
+            "modifier": {
+              "type": "integer",
+              "minimum": -5,
+              "maximum": 5,
+              "not": { "const": 0 }
+            }
+          }
+        }
+      }
+    }
   },
   "additionalProperties": true,
   "if": {
