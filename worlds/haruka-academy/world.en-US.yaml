@@ -13,10 +13,8 @@ characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description: Your character's personality and way of speaking (the voice
-        follows from the personality) — e.g. "cautious and introverted, goes quiet
-        when nervous, polite but has opinions of their own." Shapes how the story
-        portrays your character and their lines.
+      description: >-
+        Your character's personality and way of speaking, such as "cautious and introverted, quiet when nervous, polite but has opinions of their own." The narrative draws on this when writing your actions and dialogue.
     - id: club
       name: Club
       description: The club they belong to

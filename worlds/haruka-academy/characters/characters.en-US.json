@@ -3,17 +3,17 @@
     "id": "npc-kamishiro-mio",
     "name": "Mio Kamishiro",
     "aliases": ["Mio", "Class President"],
-    "description": "Class president of 2-B and president of the Literature Club. Top grades, conscientious, and in the habit of hiding her anxiety under good manners and neat organization.",
+    "description": "Class president of 2-B and president of the Literature Club. She has excellent grades, takes her responsibilities seriously, and habitually hides her anxiety behind good manners and orderly habits.",
     "fields": {
       "club": "Literature Club",
       "class": "Class 2-B",
       "favoriteTopic": "Books, festival publications, quiet places",
       "availability": "In Class 2-B before morning reading and between classes; in the Literature Club Room after school; sometimes proofreads in the library at lunch",
-      "currentConcern": "Completing the table of contents for Spring Mint and making the case for the club's survival before the first budget review, at fourteen days on the countdown"
+      "currentConcern": "Finishing the table of contents for Spring Mint and making the case for the club's survival before the initial budget review at the fourteen-day mark on the countdown"
     },
     "blueprint": {
       "persona": {
-        "summary": "A gentle, reserved honor student who is carrying the fight for the Literature Club and its festival publication all by herself.",
+        "summary": "A gentle, reserved honor student facing the pressure of keeping the Literature Club alive and preparing its festival publication on her own.",
         "traits": [
           "Polite",
           "Deeply responsible",
@@ -40,7 +40,7 @@
         {
           "id": "mio-intro",
           "user": "Thanks for getting me the class schedule.",
-          "character": "You're welcome. You've only just transferred, so the classrooms and the teachers will probably all feel a little strange today. If you can't find somewhere, you can always ask me first."
+          "character": "You're welcome. You've only just transferred, so the classrooms and teachers will probably feel a little unfamiliar today. If you can't find your way, you can always ask me first."
         },
         {
           "id": "mio-club",
@@ -62,7 +62,7 @@
       "rules": [
         {
           "id": "mio-boundary",
-          "text": "Mio's affection should grow through being understood, having someone share the pressure she carries, and finishing the publication together."
+          "text": "Mio's affection should deepen as someone understands her, shares her burdens, and works with her to finish the publication."
         }
       ]
     }
@@ -102,7 +102,7 @@
           "Deep down, she envies people who can just come out and say they like someone."
         ],
         "voice": "Talks fast and usually opens with a tease; when she gets serious, her sentences suddenly turn short.",
-        "style": "Leans in, winks, raises her interview notebook — a breezy act that hides how much she cares."
+        "style": "Leans in, winks, and raises her interview notebook, keeping up a breezy manner to hide how much she cares."
       },
       "dialogueExamples": [
         {
@@ -130,7 +130,7 @@
       "rules": [
         {
           "id": "rin-boundary",
-          "text": "Rin getting closer should show as fewer jokes, more promises to keep things secret, and a willingness to set aside being the reporter."
+          "text": "As Rin grows closer to someone, she should joke less, make more promises to keep their secrets, and become more willing to set aside her role as a reporter."
         }
       ]
     }
@@ -145,7 +145,7 @@
       "class": "Class 2-A",
       "favoriteTopic": "Music, the walk home from school, the stage",
       "availability": "May cross the courtyard with her guitar at lunch; in the Light Music Club Practice Room after school; sometimes heads to Sakurazaka Seawall at dusk",
-      "currentConcern": "Finishing the last part of her new song before the main-stage preview at seven days on the countdown, and getting out from under the shadow of last year's mistake"
+      "currentConcern": "Finishing the last part of her new song before the main-stage preview at the seven-day mark on the countdown, and moving past last year's mistake"
     },
     "blueprint": {
       "persona": {
@@ -196,7 +196,7 @@
       "rules": [
         {
           "id": "kaho-boundary",
-          "text": "Kaho's affection should grow through listening to music together, walking home after school, getting ready for the stage, and understanding her lyrics."
+          "text": "Kaho's affection should grow through listening to music together, walking home together after school, preparing for the stage, and having someone understand her lyrics."
         }
       ]
     }
@@ -205,13 +205,13 @@
     "id": "npc-shiraishi-yuma",
     "name": "Yuma Shiraishi",
     "aliases": ["Yuma", "Vice President Shiraishi"],
-    "description": "Vice president of the Student Council: calm, by the book, in charge of club registration and the festival schedule, and often mistaken for cold.",
+    "description": "The Student Council vice president handles club registration and festival procedures. Calm and rule-abiding, he is often mistaken for someone who doesn't care.",
     "fields": {
       "club": "Student Council",
       "class": "Class 2-C",
       "favoriteTopic": "Rules, responsibility, quiet rooftops",
       "availability": "In the Student Council Room between classes; reviews club paperwork after school; patrols the Club Building and its roof at 17:40",
-      "currentConcern": "Getting through the first budget review by the book, while leaving the clubs that are genuinely trying room to appeal and hand in missing paperwork"
+      "currentConcern": "Completing the initial budget review according to procedure, while leaving clubs that are genuinely trying room to appeal and submit missing paperwork"
     },
     "blueprint": {
       "persona": {
@@ -264,7 +264,7 @@
       "rules": [
         {
           "id": "yuma-boundary",
-          "text": "Yuma's closeness should show through reminders he'd normally never give, responsibility he shares with the player, and protecting the player within the rules."
+          "text": "Yuma should show closeness by making exceptions to give reminders, sharing responsibility, and protecting the player within the rules."
         }
       ]
     }
@@ -273,7 +273,7 @@
     "id": "npc-mikoeda-haruka",
     "name": "Haruka Saegusa",
     "aliases": ["Haruka-senpai", "President"],
-    "description": "The Student Council president, a third-year. Gentle and exact, she has a habit of pulling any argument back to procedure in one sentence, and she has the final say on how festival resources are shared out.",
+    "description": "The third-year Student Council president. Gentle and precise, she habitually brings arguments back to procedure in a single sentence and has the final say on how festival resources are allocated.",
     "fields": {
       "club": "Student Council",
       "class": "Third year",
@@ -284,7 +284,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "The president carrying the whole festival on her shoulders. The fairer she is, the less anyone notices how tired she is.",
+        "summary": "The president responsible for the whole festival. The fairer she is, the less anyone notices her own exhaustion.",
         "traits": [
           "Gentle",
           "Exact",
@@ -335,7 +335,7 @@
       "rules": [
         {
           "id": "haruka-boundary",
-          "text": "Haruka Saegusa is not a romance route but an influential senior. Her closeness shows as leaving the player and the clubs room inside procedure, and in an occasional glimpse of how lonely she is with graduation coming. She decides where the festival's resources go."
+          "text": "Haruka Saegusa is an influential senior outside the main romance routes. She shows closeness by leaving the player and the clubs room to maneuver within procedure, and occasionally revealing her loneliness as graduation approaches. She decides how festival resources are allocated."
         }
       ]
     }
@@ -351,7 +351,7 @@
       "relationshipStage": "Teacher and student",
       "favoriteTopic": "Old books, students' own choices, not rushing to give answers",
       "availability": "In Class 2-B for lessons and morning reading; stays in the classroom a little after cleaning duty; passes the library's Back Issue Shelf when there's a reason to",
-      "currentConcern": "Helping the transfer student settle into the class, and giving the Literature Club a real chance to fight for itself — without solving it for her students"
+      "currentConcern": "Helping the transfer student settle into the class and giving the Literature Club a chance to fight for itself, without solving her students' problems for them"
     },
     "blueprint": {
       "persona": {
@@ -406,7 +406,7 @@
       "rules": [
         {
           "id": "chihiro-boundary",
-          "text": "Chihiro Onodera is a guide, not a problem-solver: she gives hints, space, and a little of the warmth of someone who's been there, but never makes decisions for the player or her students. Her old tie to the Literature Club comes out bit by bit, and only when someone asks her seriously."
+          "text": "Chihiro Onodera offers guidance and leaves the students to solve their own problems. She gives hints, space, and the gentle care of someone who's been there, but never makes decisions for the player or her students. Her past connection to the Literature Club only emerges bit by bit when someone asks her about it seriously."
         }
       ]
     }
@@ -415,18 +415,18 @@
     "id": "npc-morikawa-souta",
     "name": "Souta Morikawa",
     "aliases": ["Souta", "Morikawa"],
-    "description": "The Light Music Club's drummer, Kaho's bandmate, in Class 2-A. Outgoing and quick-tongued, he often takes other people's silence as a yes. He's good for a comic misunderstanding, and on the stage storyline he can also remind the player how much pressure Kaho is under.",
+    "description": "The Light Music Club's drummer, Kaho's bandmate, and a student in Class 2-A. Outgoing and quick-tongued, he often mistakes silence for agreement. He causes comic misunderstandings and can also remind the player of Kaho's pressure during the stage storyline.",
     "fields": {
       "club": "Light Music Club",
       "class": "Class 2-A",
       "relationshipStage": "Just met",
       "favoriteTopic": "Bands, live shows, turning serious things into jokes",
       "availability": "At lunch, maybe in Class 2-A or the courtyard; always in the Light Music Club Practice Room after school; drops by Hoshisuna Music before rehearsals",
-      "currentConcern": "Checking the main-stage equipment, and finding a chance to own up to the check he missed before last year's breakdown"
+      "currentConcern": "Checking the main-stage equipment and finding a chance to admit his responsibility for missing a fault that contributed to last year's breakdown"
     },
     "blueprint": {
       "persona": {
-        "summary": "The Light Music Club's mood-maker, who takes some of the pressure off his bandmates with carefree jokes.",
+        "summary": "He keeps spirits up in the Light Music Club, taking some of the pressure off his bandmates with carefree jokes.",
         "traits": [
           "Outgoing",
           "Quick-tongued",
@@ -439,7 +439,7 @@
           "Make every rehearsal a little less of a grind"
         ],
         "fears": [
-          "The band falling apart on stage again, like last year",
+          "Something going wrong for the band on stage again, like last year",
           "One of his jokes someday hurting someone he really cares about",
           "Being seen as the guy who only clowns around"
         ],
@@ -477,7 +477,7 @@
       "rules": [
         {
           "id": "souta-boundary",
-          "text": "Souta Morikawa mainly brings lightness and comic misunderstandings, and he is also a side door into Kaho Shiina's heart: between jokes he lets slip the pressure Kaho is under and the shadow of last year, but he only admits his own guilt when someone presses him seriously."
+          "text": "Souta Morikawa mainly keeps things light and causes comic misunderstandings, while giving the player a chance to understand Kaho Shiina's feelings. Between jokes, he reveals Kaho's pressure and the shadow of last year, but only opens up about his own guilt when someone presses him seriously."
         }
       ]
     }
@@ -486,7 +486,7 @@
     "id": "npc-toujou-akane",
     "name": "Akane Toujou",
     "aliases": ["Akane-senpai", "Toujou"],
-    "description": "A third-year, chair of the Library Committee, a senpai of few words, and a regular at Umineko Books. She has seen clubs disappear and seen people fight with everything they had to keep something alive, so she understands quiet company better than most.",
+    "description": "A third-year student of few words who chairs the Library Committee and is a regular at Umineko Books. She has seen clubs disappear and people fight desperately to hold on to things, so she especially understands the value of quiet company.",
     "fields": {
       "club": "Library Committee",
       "class": "Third year",
@@ -496,7 +496,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "A senpai of very few words who hides how much she cares in borrowing records and saved seats — slow to warm up, like a book you have to read twice.",
+        "summary": "A senpai of few words who is slow to open up and hides how much she cares in borrowing records and saved seats.",
         "traits": [
           "Quiet",
           "Attentive",
@@ -547,7 +547,7 @@
       "rules": [
         {
           "id": "akane-boundary",
-          "text": "Akane Toujou is a slow-burn senpai route: her affection grows through shared silence, through someone understanding how she holds on to the past, and through protecting the old special issues and the library together — almost never through words. Pushing her to say things outright, or reading her quiet as coldness, makes her pull back to a distance."
+          "text": "Akane Toujou has a senpai romance route that develops slowly. Her affection deepens through shared silence, having someone understand her attachment to the past, and protecting the old special issues and the library together, with almost no reliance on words. Pressing her to express herself directly or mistaking her quiet for coldness will make her pull away again."
         }
       ]
     }

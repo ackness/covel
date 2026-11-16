@@ -1,6 +1,6 @@
 routes:
   name: Heart Routes
-  description: The sole record of stage, trust and pressure for the five romanceable characters; trust and pressure range from 0 to 5. Affinity is shown in the Affinity panel, and Public Closeness in character profiles. An affinity tier is not a route stage.
+  description: Stage, Trust and Pressure for the five romance routes are kept here, with Trust and Pressure from 0 to 5. See the Affinity panel for affinity and character profiles for Public Closeness. Affinity tiers do not represent route stages.
   schema:
     properties:
       mio:
@@ -78,12 +78,17 @@ routes:
             title: Trust
           pressure:
             title: Pressure
-  updateRule: Settle only interactions between the player and that character that this turn's narrative actually shows. trust +1 for keeping a promise, remembering a detail, respecting a silence, or sharing a secret. pressure +1 for favoritism in public, a joke that goes too far, pushing for their feelings, or leaving them to carry something alone; pressure -1 for sharing the load or clearing up a misunderstanding. stage moves up one step only after a memorable event — something finished together, a secret shared, a misunderstanding cleared up, or an explicit promise — and only when trust is at least 1 for acquaintance → familiar, 2 for familiar → heartbeat, and 4 for heartbeat → confession-eve. together is reached only on or after festival day, when both of them explicitly confirm their feelings. Never skip a stage or move up on numbers alone; real hurt can drop the stage by one. Affection is not tracked here.
+  updateRule: >-
+    Settle only interactions between the player and this character shown in the current turn's narrative. Add 1 trust for keeping a promise, remembering a detail, respecting a silence, or confiding a secret. Add 1 pressure for public favoritism, a joke that crosses a boundary, pressing for someone's feelings, or leaving them to carry a burden alone. Subtract 1 pressure for sharing the load or clearing up a misunderstanding.
+    stage can advance once after a task finished together, a secret confided, a misunderstanding resolved, or an explicit promise. It requires trust of at least 1 for acquaintance → familiar, 2 for familiar → heartbeat, and 4 for heartbeat → confession-eve.
+    Set stage to together only when both characters confirm their feelings on or after festival day. Never skip stages or advance on numbers alone. Clear harm can set the route back one stage. Track affinity separately.
 festival:
   name: Festival Prep
-  description: Progress on the four festival projects and the countdown milestones. The number of days left comes from world time.
+  description: Progress and milestone results for the four festival projects, with the days until the festival counted from world time.
   schema:
     properties:
+      daysRemaining:
+        title: Days until the festival
       projects:
         title: Projects
         properties:
@@ -198,7 +203,10 @@ festival:
         note: Rin is collecting the first anonymous submissions.
       closingSong:
         note: Kaho's new song is still missing its last verse.
-  updateRule: Raise progress only when this turn's narrative shows the player or a character actually doing prep work — +5 to +10 for one concrete job, +15 for a whole stretch of working together, +20 at most in one turn; an accident, an argument, or a rejected manuscript can lower it. Set blocked when the work is stuck, struggling when it is clearly hard going, and done with progress 100 when it is finished. Mark a milestone only once it has actually happened in the narrative — passed when it goes well, rough when it barely scrapes through, missed when it is missed. Days are tracked by world time, not here. Keep note to one sentence about the latest news.
+  updateRule: >-
+    Increase progress only when this turn's narrative shows the player or a character completing prep work: +5 to +10 for a specific job, +15 for a stretch of working together, and at most +20 per turn. Accidents, arguments, or a rejected manuscript can reduce progress.
+    Set status to blocked when stuck, struggling when work is clearly difficult, and done with progress 100 when finished. Once a milestone happens in the narrative, set it to passed if it went well, rough if it scraped by, or missed if it was missed.
+    The clock calculates the days remaining. Do not edit that field or list it among fields the model must settle from the clock. Write one sentence for the latest news.
 clubReview:
   name: Literature Club Review
   description: The Literature Club is on the merger list for lack of members. Spring Mint and how people respond to it are its last chance.
@@ -216,7 +224,9 @@ clubReview:
         title: Support
       evidence:
         title: Points in favor
-  updateRule: When the narrative shows the player or a character winning concrete support that can be made public — a new member joining, an old-issue story turning up, a good reaction to a Spring Mint preview, someone on the Student Council softening, signatures or letters — add 1–2 support and one sentence to evidence; a scandal, a missed deadline, or a conflict going public can cost 1. Switch to building-case the first time someone actively prepares to argue for the club's survival. After the first budget review happens in the narrative, set hearing-passed if support is 4 or more, otherwise leave it at under-review; after the festival, set saved or merged by the final outcome. If the truth about the renovation that Mio has been hiding comes out, record it in evidence.
+  updateRule: >-
+    Add 1 to 2 Support when this turn's narrative shows concrete backing that can be made public, and add a sentence to Points in favor. This includes a new member, a story found in an old issue, a good response to a special-issue preview, a council member softening, signatures, or letters. A scandal, missed deadline, or conflict made public can cost 1 Support.
+    Set status to building-case when someone first prepares to argue for the club's survival. After the first budget review, set status to hearing-passed if support is at least 4; otherwise keep under-review. After the festival, set saved or merged according to the outcome. Add Mio's hidden renovation plan to evidence if the truth becomes public.
 promises:
   name: Promises
   description: What you promised, to whom, and whether you kept it.
@@ -234,10 +244,12 @@ promises:
             kept: Kept
             broken: Broken
             released: Called off
-  updateRule: Add an entry when the player explicitly agrees to do something specific for a character in this turn's narrative — walking home together, helping out, keeping a secret, showing up somewhere — with a short English kebab-case ID and status pending. Polite noises and a vague "maybe next time" don't count. Set kept when it is fulfilled in the narrative, broken when it is missed or betrayed, and released when the other person clearly says it isn't needed anymore. Never delete entries.
+  updateRule: >-
+    Add a promise, keyed with a short English kebab-case name and with status pending, when this turn's narrative shows the player explicitly agreeing to something specific for a character, such as walking home together, helping, keeping a secret, or meeting them. Politeness and a vague "maybe next time" do not count.
+    Set status to kept when fulfilled in the narrative, broken when missed or betrayed, and released when the other person clearly says it is no longer needed. Keep every entry.
 rumors:
   name: Campus Rumors
-  description: Seireki is small, and rumors travel fast — who said it first, who believes it, who moves closer or backs away because of it.
+  description: Seireki is small and rumors travel fast. Track who started a story, who believes it, and who moves closer or backs away because of it.
   schema:
     additionalProperties:
       properties:
@@ -261,7 +273,9 @@ rumors:
       rumor: A Club Building window still lit after 18:00 keeps someone's wish secret.
     window-seat:
       rumor: Toujou-senpai only saves the window seat for someone special.
-  updateRule: Rumors move seed → spreading → heating → cleared / confirmed / redirected, and advance only when the narrative clearly shows a rumor spreading, being cleared up, or being proven. Add a new rumor (for example, one about the transfer student) the first time someone says it in the narrative, with a short English kebab-case ID, stage seed, and heat 1. heat +1 for being seen alone together in public, obvious favoritism, or ending up in the Newspaper Club's notes; heat -1 when Rin sits on the story, the people involved clear it up through their actions, or a newer event pushes it out of the conversation. Never make a rumor known across the whole school out of nowhere.
+  updateRule: >-
+    stage starts at seed, then moves through spreading and heating before becoming cleared, confirmed, or redirected. Advance only when this turn's narrative shows the rumor spreading, being cleared up, or being proven.
+    Add a new rumor when someone first voices it, with stage seed and heat 1. Add 1 heat for public time alone together, obvious favoritism, or appearing in the Newspaper Club's notes. Subtract 1 when Rin holds the story, the people involved clear things up through action, or a newer event takes over the conversation. Never make a rumor common knowledge across the school without showing how it spread.
 geography:
   name: Geography
   schema:
@@ -287,7 +301,7 @@ geography:
               title: Landmarks
         title: Regions
   initialValue:
-    overview: A private high school on the seaside slopes of Seireki. Most of the story happens in the classroom building, the Club Building, the library, the shopping streets by the station, and Sakurazaka, the slope down to the seawall. Everything is close together, so the route the player picks between the lunch bell and the 18:00 closing announcement decides who they run into, and chance meetings and rumors happen naturally.
+    overview: Harukaze Academy is a private high school on the seaside slopes of Seireki. The classroom building, Club Building, library, station shopping streets, and Sakurazaka, the slope down to the seawall, are all close together. Between the lunch bell and the 18:00 closing announcement, your route decides whom you meet. A chance encounter may leave a new rumor behind.
     regions:
       - name: Class 2-B
         description: The class the player transfers into; from the back row by the window you can see the sports field and the sea in the distance. Before morning reading, the ten-minute breaks, lunch at 12:20, cleaning duty after 15:40, and the blank minutes before a quiz are all openings for a conversation.
@@ -386,14 +400,14 @@ factions:
         - description: Class 2-B's Sea Breeze Post has to get its courtyard booth and the content of its anonymous messages approved.
     - id: literature-club
       name: Literature Club
-      description: An old, small club with few members that still insists on making a festival special issue, this year titled Spring Mint. The old clubroom, the back issues, and the recycled paper from Umineko Books are the heart of the club.
+      description: A small, longstanding club with few members that still insists on making a festival special issue, this year called Spring Mint. Its members treasure the old room, their back issues, and the recycled paper Umineko Books has set aside for them.
       leader: Mio Kamishiro
       headquarters: 3rd Floor, Club Building · Literature Club Room
       relations:
         - description: Often competes with the Newspaper Club for the same interviewees because their topics overlap; this year the two clubs could swap a page, so that short stories, interviews, and rumor-busting together help the Literature Club pass the review.
     - id: news-club
       name: Newspaper Club
-      description: Has its finger on every campus rumor and holds the right to report on the festival; it's planning the Fact-or-Rumor Wall. Very driven, with a sense of boundaries that comes and goes — one interview can open a door or blow a misunderstanding up.
+      description: The Newspaper Club follows campus rumors and controls festival coverage. It is preparing the Fact-or-Rumor Wall. Its members act fast and sometimes misjudge boundaries; an interview can bring an opportunity or make a misunderstanding worse.
       leader: Rin Asakura
       headquarters: 2nd Floor, Club Building · Newspaper Club Editorial Office
       relations:
@@ -442,14 +456,14 @@ powerSystem:
         title: Stages
   initialValue:
     name: Affection and Distance
-    description: Change in this world comes from how the characters feel toward the player — trust, curiosity, reliance, jealousy, pressure, and a sense of boundaries. The five stages below describe only the five romance routes, not the Affinity panel’s tiers or the supporting characters’ non-romantic relationships.
+    description: Trust, curiosity, dependence, jealousy, pressure, and personal boundaries shape how the characters relate to the player. The five stages below apply to the five romance routes. The Affinity panel has its own tiers, and the supporting characters' non-romantic relationships are tracked separately.
     rules:
       - Relationships move forward through concrete events and dialogue choices; for the five route characters, boundary violations raise Pressure under the Heart Routes rules, and clear harm can set a route back one stage.
       - A character's Affection, Pressure, and Public Closeness don't have to change together.
       - Festival preparations, exams, club crises, and rumors push relationships from one stage to the next.
       - Affinity is goodwill and closeness, which can include attraction on a romance route; Trust is willingness to confide a secret, Pressure is the real-world weight they carry, and Public Closeness is how the classmates around them read the relationship.
       - When the player keeps promises, remembers details, and respects silences, Trust goes up first; favoritism in public, jokes that go too far, or pushing for someone's feelings raise Pressure and Rumor Heat first.
-      - A single everyday choice usually moves the numbers only a little. A relationship stage has to be moved by a memorable event — a task finished together, a secret confided, a misunderstanding cleared up, or an explicit promise — never by numbers alone.
+      - A single everyday choice usually changes the numbers only a little. A stage advances after a memorable event, such as finishing a task together, confiding a secret, resolving a misunderstanding, or making an explicit promise. Numbers alone cannot advance it.
       - After a relationship stage changes, there must be visible differences in what the character calls the player, whether they offer invitations, where they're willing to show up, and how close they stand in public.
     tiers:
       - name: Just met
@@ -521,7 +535,7 @@ economy:
         symbol: ¥
         description: For drinks, bento, club supplies, and little things for after-school dates.
       - name: Favors
-        description: A soft currency you build up by covering cleaning duty, carrying equipment, keeping secrets, and keeping someone company at practice.
+        description: Favors earned by covering cleaning duty, carrying equipment, keeping secrets, and keeping someone company at practice.
     resources:
       - Club budget
       - Festival booth slot
@@ -573,7 +587,7 @@ socialStructure:
       - name: Student Council members
         description: Stand for rules and order, and take pressure from both the teachers and the students.
       - name: Familiar faces on the shopping street
-        description: People off campus — the bookstore owner, the music shop clerk, the family restaurant staff — who are a source of chance meetings and news.
+        description: Familiar people off campus, including the bookstore owner, music shop clerk, and family restaurant staff. The player may run into them or hear news from them.
     races:
       - name: Ordinary students
         description: No supernatural identities; the main conflicts come from feelings, grades, family, and choices about the future.
@@ -581,7 +595,7 @@ socialStructure:
           - Sensitive to what others think of them
           - Hide what they really think in group life
           - Wrap their anxieties in clubs, grades, and jokes
-    notes: Relationships run through classes, clubs, the Student Council, and the routes people take after school. Who saves a seat at lunch, who swaps cleaning duty, who leaves together before the closing announcement — these all become quiet public signals. Private promises, shared tasks, and a change in what someone calls you build trust and closeness.
+    notes: Classes, clubs, the Student Council, and the places people go after school bring the characters together. Others may notice whom you save a seat for at lunch, whose cleaning duty you cover, or who leaves with you before the closing announcement. Private promises, things done together, and a change in how someone addresses you build trust and closeness.
 tone:
   name: Tone
   schema:
@@ -642,7 +656,7 @@ mechanics:
       - When a scene is first established, the location changes, or the scene changes between day and night, emit scene.set with a standard location name; the classroom, Club Building, Library, Sakurazaka Seawall, and Seireki Town Shopping Street should match the world's built-in day and night backdrops first.
       - Use day before sunset, and night after sunset, after the closing announcement, or in a clearly nighttime passage; when the variant switches, the lighting, the color of the sea outside the window, and whether characters should have gone home change with it.
       - Emit stage.direction when characters enter, leave, become the focus of the conversation, change position, or change outfit, expression, or pose; merge every change in a turn into one cues array, and when there is no matching visual variant, leave out the visual fields and use the default portrait.
-      - A character's entrance must fit their Usual Schedule or be explained by a one-off task; each turn focuses on one or two speaking characters, and the others come in by passing by, through notes, rumors, or the next appointment — never cram all eight into one scene.
+      - A character's entrance must fit their usual schedule or have a temporary task to explain it. Keep one or two speakers per turn; others can pass by, leave notes, appear in rumors, or arrange a later meeting. Do not put all eight in one scene.
       - "The key festival milestones on the countdown are: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the special-issue deadline and the dress rehearsal at three, festival-eve setup at one, and at zero the festival itself and the Evening Breeze Lanterns."
       - Rumors go seed → spreading → heating up → cleared / confirmed / redirected; every rumor needs a source, a place where it spread, and the characters it affects, and it never becomes known across the whole school out of nowhere.
 startingConditions:
@@ -671,7 +685,7 @@ startingConditions:
       - The player is a second-year transfer student.
       - The player has no club at the start.
       - All romance must stay teen-rated.
-      - At the start, the player is at the acquaintance stage with all four opening-focus characters — Mio Kamishiro, Rin Asakura, Kaho Shiina, and Yuma Shiraishi; Akane Toujou hasn't appeared yet, and the player gets to know her naturally after walking into the library.
+      - The four opening characters are Mio Kamishiro, Rin Asakura, Kaho Shiina, and Yuma Shiraishi. Each starts at Just met with the player. Akane Toujou has yet to appear; they meet naturally when the player visits the library.
       - The player can choose why they transferred, but the reason should serve everyday school life and the relationships.
     openingHook: Before the morning reading bell, do you answer the class president's offer to show you around, or the Newspaper Club's lunchtime interview first?
     openingChips:

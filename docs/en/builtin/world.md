@@ -116,7 +116,7 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 
 For an explicit destination, the tool calculates the difference from the current clock; otherwise it estimates activity duration. The model reads only this turn's story and current clock, excluding previous explanations.
 
-Harukaze Academy's time rules include its lunch, dismissal and club timetable so the model can resolve these transitions to destination times and include skipped classes and waiting.
+Harukaze Academy's time rules give exact times for lunch, dismissal, and club activities, so the model can resolve transitions to destination times and include skipped classes and waiting. Period labels use whole hours: classes may still be running between 12:00 and 12:20, so the "Midday" label does not mean lunch has started. Days until the festival decrease with world time in the Festival Prep dimension. Project progress and milestone results still record what actually happened.
 
 **What you will see**
 
