@@ -1,4 +1,4 @@
-# 5004 models; levels: provider-default disabled automatic none minimal low medium high xhigh max
+# 6127 models; levels: provider-default disabled automatic none minimal low medium high xhigh max
 
 # Offered levels and the fields each level sends, per provider and protocol
 
@@ -92,7 +92,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 0723c54b (7 models, e.g. baseten/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B)
+## fields 0723c54b (8 models, e.g. baseten/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B)
 provider custom:
   (no protocol)
     profile: compatible default=- [none low medium high]
@@ -427,7 +427,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 08b51db5 (76 models, e.g. aihubmix/command-a-plus-05-2026)
+## fields 08b51db5 (78 models, e.g. aihubmix/command-a-plus-05-2026)
 provider custom:
   (no protocol)
     profile: compatible default=automatic [disabled automatic]
@@ -699,7 +699,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 0bf3e86c (27 models, e.g. azure/eu/gpt-5.1)
+## fields 0bf3e86c (28 models, e.g. azure/eu/gpt-5.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=none [none low medium high]
@@ -806,7 +806,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 0cda455e (1 models, e.g. github_copilot/claude-sonnet-4.6)
+## fields 0cda455e (2 models, e.g. github_copilot/claude-sonnet-4.6)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high max]
@@ -2207,7 +2207,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 12053068 (159 models, e.g. alibaba/unknown-model)
+## fields 12053068 (230 models, e.g. alibaba/unknown-model)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -2974,7 +2974,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 264adbd5 (11 models, e.g. aihubmix/gemini-3-flash-preview)
+## fields 264adbd5 (12 models, e.g. aihubmix/gemini-3-flash-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [minimal low medium high]
@@ -3027,7 +3027,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 270c9c7a (25 models, e.g. anthropic.claude-haiku-5-5)
+## fields 270c9c7a (26 models, e.g. anthropic.claude-haiku-5-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high xhigh max]
@@ -3082,7 +3082,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 292f9743 (76 models, e.g. DeepSeek-V4-Flash)
+## fields 292f9743 (77 models, e.g. DeepSeek-V4-Flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=high [disabled low high max]
@@ -3227,7 +3227,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 32d1de14 (3 models, e.g. gemini-3.1-flash-image)
+## fields 32d1de14 (5 models, e.g. gemini-3.1-flash-image)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=- [minimal high]
@@ -3272,7 +3272,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 33c4e8ba (67 models, e.g. aihubmix/agnes-2.5-flash)
+## fields 33c4e8ba (68 models, e.g. aihubmix/agnes-2.5-flash)
 provider custom:
   (no protocol)
     profile: compatible default=- [disabled automatic]
@@ -3901,7 +3901,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 374a63ed (19 models, e.g. aihubmix/step-3.7-flash)
+## fields 374a63ed (20 models, e.g. aihubmix/step-3.7-flash)
 provider custom:
   (no protocol)
     profile: compatible default=- [low medium high]
@@ -5063,7 +5063,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 50665211 (146 models, e.g. aiand/openai/gpt-oss-120b)
+## fields 50665211 (151 models, e.g. aiand/openai/gpt-oss-120b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [low medium high]
@@ -6046,7 +6046,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 70600c84 (7 models, e.g. aihubmix/hy3)
+## fields 70600c84 (8 models, e.g. aihubmix/hy3)
 provider custom:
   (no protocol)
     profile: compatible default=- [none low high]
@@ -6359,7 +6359,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7339b065 (9 models, e.g. empiriolabs/minimax-m3-1-flash)
+## fields 7339b065 (10 models, e.g. empiriolabs/minimax-m3-1-flash)
 provider custom:
   (no protocol)
     profile: compatible default=- [low medium high xhigh max]
@@ -7070,7 +7070,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 79863098 (5 models, e.g. azure/eu/gpt-5-pro)
+## fields 79863098 (6 models, e.g. azure/eu/gpt-5-pro)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=high [high]
@@ -7110,7 +7110,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: high (<model> cannot disable thinking; using its lowest supported setting (high).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7af22a68 (325 models, e.g. aihubmix/claude-haiku-4-5)
+## fields 7af22a68 (372 models, e.g. aihubmix/claude-haiku-4-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -7438,7 +7438,7 @@ provider dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7cd6eaf6 (111 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
+## fields 7cd6eaf6 (112 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=high [disabled high max]
@@ -7484,7 +7484,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7d4c23ed (1758 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
+## fields 7d4c23ed (2671 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
 provider custom:
   (no protocol)
     profile: none
@@ -7762,7 +7762,7 @@ provider dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7d8e3822 (84 models, e.g. aihubmix/claude-fable-5)
+## fields 7d8e3822 (116 models, e.g. aihubmix/claude-fable-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [low medium high xhigh max]
@@ -8315,7 +8315,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8a110220 (181 models, e.g. aihubmix/gpt-5.3-codex)
+## fields 8a110220 (187 models, e.g. aihubmix/gpt-5.3-codex)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [none minimal low medium high xhigh]
@@ -8707,7 +8707,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8dda78e5 (66 models, e.g. aiand/moonshotai/kimi-k3)
+## fields 8dda78e5 (67 models, e.g. aiand/moonshotai/kimi-k3)
 provider custom:
   (no protocol)
     profile: compatible default=max [low high max]
@@ -9158,7 +9158,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 94a111ce (243 models, e.g. aiand/qwen/qwen3.6-27b)
+## fields 94a111ce (245 models, e.g. aiand/qwen/qwen3.6-27b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [disabled automatic]
@@ -9891,7 +9891,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9a276813 (504 models, e.g. 1024-x-1024/gpt-image-1.5)
+## fields 9a276813 (506 models, e.g. 1024-x-1024/gpt-image-1.5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -9937,7 +9937,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9ccac5f1 (27 models, e.g. azure_ai/deepseek-v3.1)
+## fields 9ccac5f1 (26 models, e.g. azure_ai/deepseek-v3.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=- [disabled automatic]
@@ -9978,7 +9978,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9f8e939c (43 models, e.g. aihubmix/grok-build-0.1)
+## fields 9f8e939c (65 models, e.g. aihubmix/grok-build-0.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -10113,7 +10113,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields ae431ad8 (9 models, e.g. aihubmix/gemini-3.1-pro-preview)
+## fields ae431ad8 (10 models, e.g. aihubmix/gemini-3.1-pro-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [low medium high]
@@ -11185,7 +11185,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields c454043e (29 models, e.g. abliteration/abliterated-model-large-v2)
+## fields c454043e (32 models, e.g. abliteration/abliterated-model-large-v2)
 provider custom:
   (no protocol)
     profile: compatible default=- [low high max]
@@ -11552,7 +11552,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields cb2d68dd (83 models, e.g. aihubmix/claude-opus-4-8-think)
+## fields cb2d68dd (84 models, e.g. aihubmix/claude-opus-4-8-think)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high xhigh max]
@@ -11907,7 +11907,7 @@ provider dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d08f0d07 (15 models, e.g. deepinfra/google/gemini-3.5-flash)
+## fields d08f0d07 (16 models, e.g. deepinfra/google/gemini-3.5-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=medium [minimal low medium high]
@@ -14909,7 +14909,7 @@ provider dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields ef6e238b (12 models, e.g. chatgpt/gpt-6-astra-law)
+## fields ef6e238b (13 models, e.g. chatgpt/gpt-6-astra-law)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=- [none low medium high xhigh max]
@@ -16124,7 +16124,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 17fa4568 (9 models, e.g. aihubmix/claude-fable-5)
+## bodies 17fa4568 (10 models, e.g. aihubmix/claude-fable-5)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -16256,7 +16256,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 1edb4060 (773 models, e.g. aihubmix/claude-haiku-4-5)
+## bodies 1edb4060 (908 models, e.g. aihubmix/claude-haiku-4-5)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16269,7 +16269,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 20be23da (14 models, e.g. azure/gpt-4o-mini-transcribe)
+## bodies 20be23da (16 models, e.g. azure/gpt-4o-mini-transcribe)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required"}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto"}
@@ -16377,7 +16377,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 262c2595 (7 models, e.g. azure/eu/gpt-5.1)
+## bodies 262c2595 (8 models, e.g. azure/eu/gpt-5.1)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"tool_choice":"auto","top_p":0.9}
@@ -16477,7 +16477,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 29b3dc77 (12 models, e.g. abliteration/abliterated-model-large-v2)
+## bodies 29b3dc77 (13 models, e.g. abliteration/abliterated-model-large-v2)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16499,7 +16499,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 29b7b224 (124 models, e.g. aiand/openai/gpt-oss-120b)
+## bodies 29b7b224 (128 models, e.g. aiand/openai/gpt-oss-120b)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16587,7 +16587,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 2c52eb91 (1 models, e.g. databricks/databricks-claude-fable-5)
+## bodies 2c52eb91 (19 models, e.g. azure_ai/claude-fable-5-2)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16675,7 +16675,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 31fe7b7b (6 models, e.g. aihubmix/hy3)
+## bodies 31fe7b7b (7 models, e.g. aihubmix/hy3)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16723,7 +16723,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 32814560 (41 models, e.g. aiand/zai-org/glm-5.3)
+## bodies 32814560 (42 models, e.g. aiand/zai-org/glm-5.3)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"auto","top_p":0.9}
     provider-default,disabled,automatic,none,minimal,medium,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -16912,7 +16912,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 3830fd6d (8 models, e.g. azure/whisper-1)
+## bodies 3830fd6d (9 models, e.g. azure/whisper-1)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required"}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto"}
@@ -16988,7 +16988,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 3e88aa0e (107 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
+## bodies 3e88aa0e (108 models, e.g. azure_ai/FW-DeepSeek-V4-Flash)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17228,7 +17228,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 48429573 (250 models, e.g. aiand/qwen/qwen3.6-27b)
+## bodies 48429573 (252 models, e.g. aiand/qwen/qwen3.6-27b)
   openai-chat-v1
     runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17289,7 +17289,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 4bda7ae1 (59 models, e.g. aihubmix/gpt-5.3-codex)
+## bodies 4bda7ae1 (61 models, e.g. aihubmix/gpt-5.3-codex)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17320,7 +17320,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 4d309c78 (44 models, e.g. aihubmix/claude-opus-4-8-think)
+## bodies 4d309c78 (45 models, e.g. aihubmix/claude-opus-4-8-think)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -17488,7 +17488,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 552da0e2 (2 models, e.g. chatgpt/gpt-6-astra-law)
+## bodies 552da0e2 (3 models, e.g. chatgpt/gpt-6-astra-law)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -17758,7 +17758,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 60f187a5 (52 models, e.g. aiand/deepseek-ai/deepseek-v4-flash)
+## bodies 60f187a5 (53 models, e.g. aiand/deepseek-ai/deepseek-v4-flash)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default,automatic,none,minimal,medium,xhigh: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18001,7 +18001,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 69abcd9d (15 models, e.g. azure_ai/glm-latest)
+## bodies 69abcd9d (17 models, e.g. azure_ai/glm-latest)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"tool_choice":"auto","top_p":0.9}
@@ -18082,7 +18082,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 6eacf031 (41 models, e.g. amazon-nova/nova-lite-v1)
+## bodies 6eacf031 (42 models, e.g. amazon-nova/nova-lite-v1)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"tool_choice":"auto","top_p":0.9}
@@ -18285,7 +18285,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 72fb2567 (4 models, e.g. bedrock_mantle/openai.gpt-5.4)
+## bodies 72fb2567 (5 models, e.g. bedrock_mantle/openai.gpt-5.4)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18357,7 +18357,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 78c20816 (11 models, e.g. azure_ai/claude-haiku-5-5)
+## bodies 78c20816 (12 models, e.g. azure_ai/claude-haiku-5-5)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -18423,7 +18423,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 78e41205 (7 models, e.g. empiriolabs/minimax-m3-1-flash)
+## bodies 78e41205 (8 models, e.g. empiriolabs/minimax-m3-1-flash)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18553,7 +18553,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 8330afc8 (15 models, e.g. aihubmix/kimi-k2.6)
+## bodies 8330afc8 (16 models, e.g. aihubmix/kimi-k2.6)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"tool_choice":"auto"}
@@ -18685,7 +18685,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 87c5ce34 (138 models, e.g. 1024-x-1024/gpt-image-1.5)
+## bodies 87c5ce34 (143 models, e.g. 1024-x-1024/gpt-image-1.5)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -18698,7 +18698,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 88b30671 (60 models, e.g. aihubmix/command-a-plus-05-2026)
+## bodies 88b30671 (61 models, e.g. aihubmix/command-a-plus-05-2026)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18816,7 +18816,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 8e102126 (1468 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
+## bodies 8e102126 (2375 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18937,7 +18937,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 932f0b01 (13 models, e.g. azure/codex-mini)
+## bodies 932f0b01 (14 models, e.g. azure/codex-mini)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"tool_choice":"auto","top_p":0.9}
@@ -18959,7 +18959,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 93e95360 (13 models, e.g. azure_ai/grok-4.3)
+## bodies 93e95360 (14 models, e.g. azure_ai/grok-4.3)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -18984,7 +18984,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 95111d05 (3 models, e.g. fal_ai/fal-ai/nano-banana-2)
+## bodies 95111d05 (5 models, e.g. fal_ai/fal-ai/nano-banana-2)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19251,7 +19251,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies a70e0255 (29 models, e.g. azure_ai/claude-fable-5-1)
+## bodies a70e0255 (30 models, e.g. azure_ai/claude-fable-5-1)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -19332,7 +19332,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"medium"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"high"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies ae2de969 (4 models, e.g. aiand/meta/muse-spark-open)
+## bodies ae2de969 (5 models, e.g. aiand/meta/muse-spark-open)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19381,7 +19381,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies b1731b06 (3 models, e.g. apac.anthropic.claude-fable-5)
+## bodies b1731b06 (15 models, e.g. anthropic.claude-fable-5-2)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19410,7 +19410,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies b18ee8ef (6 models, e.g. azure_ai/kimi-k2.5)
+## bodies b18ee8ef (7 models, e.g. azure_ai/kimi-k2.5)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -19515,7 +19515,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"medium"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"high"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies bc3938d3 (91 models, e.g. aiand/moonshotai/kimi-k2.7-code)
+## bodies bc3938d3 (95 models, e.g. aiand/moonshotai/kimi-k2.7-code)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"tool_choice":"required"}
     provider-default: {"max_tokens":1000,"tool_choice":"auto"}
@@ -19718,7 +19718,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies c9071d93 (34 models, e.g. aihubmix/gemini-3-flash-preview)
+## bodies c9071d93 (36 models, e.g. aihubmix/gemini-3-flash-preview)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -19934,7 +19934,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies d29204c4 (26 models, e.g. azure_ai/deepseek-v3.1)
+## bodies d29204c4 (25 models, e.g. azure_ai/deepseek-v3.1)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -20098,7 +20098,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies d8c109ab (3 models, e.g. azure/eu/gpt-5-pro)
+## bodies d8c109ab (4 models, e.g. azure/eu/gpt-5-pro)
   openai-chat-v1
     runtime default off,high: {"max_completion_tokens":1000,"reasoning_effort":"high","tool_choice":"required"}
     provider-default: {"max_completion_tokens":1000,"tool_choice":"auto"}
@@ -20192,7 +20192,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e100688d (74 models, e.g. aihubmix/gpt-5.5)
+## bodies e100688d (77 models, e.g. aihubmix/gpt-5.5)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","tool_choice":"required"}
     provider-default: {"max_completion_tokens":1000,"tool_choice":"auto"}
@@ -20249,7 +20249,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies e1541ff5 (15 models, e.g. azure/eu/o1)
+## bodies e1541ff5 (16 models, e.g. azure/eu/o1)
   openai-chat-v1
     runtime default off,low: {"max_completion_tokens":1000,"reasoning_effort":"low","tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"tool_choice":"auto","top_p":0.9}
@@ -20587,7 +20587,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies f250f9bc (11 models, e.g. aihubmix/gemini-3.1-pro-preview)
+## bodies f250f9bc (12 models, e.g. aihubmix/gemini-3.1-pro-preview)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -20996,11 +20996,13 @@ anthropic.claude-3-7-sonnet-20250219-v1:0	7af22a68	1edb4060
 anthropic.claude-3-opus-20240229-v1:0	7af22a68	1edb4060
 anthropic.claude-fable-5	7d8e3822	32d35b3b
 anthropic.claude-fable-5-1	7d8e3822	e409a03e
+anthropic.claude-fable-5-2	7d8e3822	b1731b06
 anthropic.claude-haiku-4-5-20251001-v1:0	a23e2c66	cd1a0e5f
 anthropic.claude-haiku-4-5@20251001	7af22a68	1edb4060
 anthropic.claude-haiku-5-5	270c9c7a	217fb36d
 anthropic.claude-instant-v1	7af22a68	bda9263a
 anthropic.claude-mythos-5-1	7d8e3822	46fba062
+anthropic.claude-mythos-5-2	7d8e3822	b1731b06
 anthropic.claude-mythos-preview	7af22a68	bda9263a
 anthropic.claude-opus-4-1-20250805-v1:0	a23e2c66	cd1a0e5f
 anthropic.claude-opus-4-20250514-v1:0	7af22a68	1edb4060
@@ -21451,11 +21453,15 @@ azure_ai/Phi-4-multimodal-instruct	7d4c23ed	8e102126
 azure_ai/Phi-4-reasoning	7d4c23ed	8e102126
 azure_ai/claude-fable-5	7d8e3822	17fa4568
 azure_ai/claude-fable-5-1	7d8e3822	a70e0255
+azure_ai/claude-fable-5-2	7d8e3822	2c52eb91
+azure_ai/claude-fable-5-2-fast	7d8e3822	2c52eb91
 azure_ai/claude-fable-latest	7af22a68	1edb4060
 azure_ai/claude-haiku-4-5	7af22a68	1edb4060
 azure_ai/claude-haiku-5-5	270c9c7a	78c20816
 azure_ai/claude-haiku-latest	7af22a68	1edb4060
 azure_ai/claude-mythos-5-1	7d8e3822	cbb882e7
+azure_ai/claude-mythos-5-2	7d8e3822	2c52eb91
+azure_ai/claude-mythos-5-2-fast	7d8e3822	2c52eb91
 azure_ai/claude-opus-4-5	890864de	ccbf4d97
 azure_ai/claude-opus-4-6	aeebecb0	dd588f9f
 azure_ai/claude-opus-4-7	cb2d68dd	4d309c78
@@ -21485,6 +21491,7 @@ azure_ai/deepseek-v3.2-speciale	e7f5c7af	1edb4060
 azure_ai/deepseek-v4-flash	292f9743	60f187a5
 azure_ai/deepseek-v4-pro	292f9743	60f187a5
 azure_ai/deepseek-v4.1-flash	292f9743	83ae2dde
+azure_ai/deepseek-v4.1-flash-1017	292f9743	60f187a5
 azure_ai/doc-intelligence/prebuilt-document	7d4c23ed	8e102126
 azure_ai/doc-intelligence/prebuilt-layout	7d4c23ed	8e102126
 azure_ai/doc-intelligence/prebuilt-read	7d4c23ed	8e102126
@@ -21540,6 +21547,7 @@ azure_ai/minimax-latest	374a63ed	932f0b01
 azure_ai/ministral-3b	7d4c23ed	8e102126
 azure_ai/mistral-document-ai-2512	7d4c23ed	8e102126
 azure_ai/mistral-large-3	7d4c23ed	8e102126
+azure_ai/mistral-large-4-latest	7d4c23ed	8e102126
 azure_ai/mistral-large-latest	7d4c23ed	8e102126
 azure_ai/mistral-medium-2505	7d4c23ed	8e102126
 azure_ai/mistral-medium-3-5	842edcd7	e6ada834
@@ -21641,6 +21649,7 @@ bedrock/claude-opus-latest	270c9c7a	d960f758
 bedrock/claude-sonnet-latest	7af22a68	1edb4060
 bedrock/claude_platform/claude-fable-5	7d8e3822	17fa4568
 bedrock/claude_platform/claude-fable-5-1	7d8e3822	a70e0255
+bedrock/claude_platform/claude-fable-5-2	7d8e3822	2c52eb91
 bedrock/claude_platform/claude-haiku-4-5	7af22a68	1edb4060
 bedrock/claude_platform/claude-haiku-5-5	270c9c7a	78c20816
 bedrock/claude_platform/claude-opus-4-5	890864de	ccbf4d97
@@ -21747,8 +21756,10 @@ bedrock/us-gov-east-1/anthropic.claude-3-5-sonnet-20240620-v1:0	7af22a68	1edb406
 bedrock/us-gov-east-1/anthropic.claude-3-7-sonnet-20250219-v1:0	7af22a68	1edb4060
 bedrock/us-gov-east-1/anthropic.claude-3-haiku-20240307-v1:0	7af22a68	1edb4060
 bedrock/us-gov-east-1/anthropic.claude-fable-5-1	7d8e3822	a70e0255
+bedrock/us-gov-east-1/anthropic.claude-fable-5-2	7d8e3822	2c52eb91
 bedrock/us-gov-east-1/anthropic.claude-haiku-4-5-20251001-v1:0	a23e2c66	cd1a0e5f
 bedrock/us-gov-east-1/anthropic.claude-haiku-5-5	270c9c7a	78c20816
+bedrock/us-gov-east-1/anthropic.claude-mythos-5-2	7d8e3822	2c52eb91
 bedrock/us-gov-east-1/anthropic.claude-opus-4-8	cb2d68dd	4d309c78
 bedrock/us-gov-east-1/anthropic.claude-opus-5	cb2d68dd	4d309c78
 bedrock/us-gov-east-1/anthropic.claude-opus-5-5	7d8e3822	a70e0255
@@ -21778,8 +21789,10 @@ bedrock/us-gov-west-1/anthropic.claude-3-5-sonnet-20240620-v1:0	7af22a68	1edb406
 bedrock/us-gov-west-1/anthropic.claude-3-7-sonnet-20250219-v1:0	7af22a68	1edb4060
 bedrock/us-gov-west-1/anthropic.claude-3-haiku-20240307-v1:0	7af22a68	1edb4060
 bedrock/us-gov-west-1/anthropic.claude-fable-5-1	7d8e3822	a70e0255
+bedrock/us-gov-west-1/anthropic.claude-fable-5-2	7d8e3822	2c52eb91
 bedrock/us-gov-west-1/anthropic.claude-haiku-4-5-20251001-v1:0	a23e2c66	cd1a0e5f
 bedrock/us-gov-west-1/anthropic.claude-haiku-5-5	270c9c7a	78c20816
+bedrock/us-gov-west-1/anthropic.claude-mythos-5-2	7d8e3822	2c52eb91
 bedrock/us-gov-west-1/anthropic.claude-opus-4-8	cb2d68dd	4d309c78
 bedrock/us-gov-west-1/anthropic.claude-opus-5	cb2d68dd	4d309c78
 bedrock/us-gov-west-1/anthropic.claude-opus-5-5	7d8e3822	a70e0255
@@ -21862,6 +21875,7 @@ bedrock_mantle/us-gov-east-1/nvidia.nemotron-nano-3-30b	7d4c23ed	8e102126
 bedrock_mantle/us-gov-east-1/nvidia.nemotron-nano-9b-v2	7d4c23ed	8e102126
 bedrock_mantle/us-gov-east-1/nvidia.nemotron-super-3-120b	7d4c23ed	8e102126
 bedrock_mantle/us-gov-east-1/openai.gpt-5.4	8a110220	72fb2567
+bedrock_mantle/us-gov-east-1/openai.gpt-5.6-cyber	8a110220	72fb2567
 bedrock_mantle/us-gov-east-1/openai.gpt-oss-120b	50665211	29b7b224
 bedrock_mantle/us-gov-east-1/openai.gpt-oss-20b	50665211	29b7b224
 bedrock_mantle/us-gov-east-1/xai.grok-4.6	3e731a43	98325674
@@ -21949,6 +21963,7 @@ claude-3-opus	7af22a68	bda9263a
 claude-3-opus-20240229	7af22a68	bda9263a
 claude-fable-5	7d8e3822	32d35b3b
 claude-fable-5-1	7d8e3822	e409a03e
+claude-fable-5-2	7d8e3822	b1731b06
 claude-fable-5.1	7d8e3822	e409a03e
 claude-fable-latest	7af22a68	bda9263a
 claude-haiku-4-5	7af22a68	bda9263a
@@ -21958,6 +21973,7 @@ claude-haiku-5-5	270c9c7a	217fb36d
 claude-haiku-latest	7af22a68	bda9263a
 claude-mythos-5	7d8e3822	32d35b3b
 claude-mythos-5-1	7d8e3822	46fba062
+claude-mythos-5-2	7d8e3822	b1731b06
 claude-mythos-preview	7af22a68	bda9263a
 claude-opus-4-0	7af22a68	bda9263a
 claude-opus-4-1	a23e2c66	3e52d737
@@ -22149,6 +22165,7 @@ databricks/claude-sonnet-latest	7af22a68	1edb4060
 databricks/databricks-bge-large-en	7d4c23ed	8e102126
 databricks/databricks-claude-fable-5	7d8e3822	2c52eb91
 databricks/databricks-claude-fable-5-1	7d8e3822	cbb882e7
+databricks/databricks-claude-fable-5-2	7d8e3822	2c52eb91
 databricks/databricks-claude-haiku-4-5	7af22a68	1edb4060
 databricks/databricks-claude-haiku-5-5	7af22a68	1edb4060
 databricks/databricks-claude-opus-4	7af22a68	1edb4060
@@ -22185,6 +22202,7 @@ databricks/databricks-gemini-3-flash	85e2f5df	c9071d93
 databricks/databricks-gemini-3-pro	ecd991f9	29b7b224
 databricks/databricks-gemini-3-pro-image	7af22a68	1edb4060
 databricks/databricks-gemini-4-argon	7af22a68	1edb4060
+databricks/databricks-gemini-4-carbon	7af22a68	1edb4060
 databricks/databricks-gemma-3-12b	7d4c23ed	8e102126
 databricks/databricks-glm-5-2	100a6ab8	86f26855
 databricks/databricks-glm-5-3	7d4c23ed	8e102126
@@ -22239,7 +22257,9 @@ databricks/gpt-sol-latest	50665211	932f0b01
 databricks/gpt-terra-latest	9a276813	1edb4060
 databricks/grok-latest	9f8e939c	1edb4060
 databricks/kimi-latest	c454043e	69abcd9d
+databricks/system.ai.claude-fable-5-2	7d8e3822	2c52eb91
 databricks/system.ai.deepseek-v4-flash-0731	7cd6eaf6	3e88aa0e
+databricks/system.ai.gemini-4-carbon	7af22a68	1edb4060
 databricks/system.ai.kimi-k3	7d4c23ed	8e102126
 dataforseo/search	7d4c23ed	8e102126
 davinci-002	7d4c23ed	2cb3ce58
@@ -22335,6 +22355,7 @@ deepinfra/Sao10K/L3.1-70B-Euryale-v2.2	7d4c23ed	8e102126
 deepinfra/Sao10K/L3.3-70B-Euryale-v2.3	7d4c23ed	8e102126
 deepinfra/XiaomiMiMo/MiMo-V2.5	08b51db5	88b30671
 deepinfra/XiaomiMiMo/MiMo-V2.5-Pro	08b51db5	88b30671
+deepinfra/XiaomiMiMo/MiMo-V2.6-Flash	08b51db5	88b30671
 deepinfra/allenai/olmOCR-7B-0725-FP8	7d4c23ed	8e102126
 deepinfra/anthropic/claude-3-7-sonnet-latest	7af22a68	1edb4060
 deepinfra/anthropic/claude-4-opus	7af22a68	1edb4060
@@ -22409,6 +22430,7 @@ deepinfra/nvidia/Llama-3.3-Nemotron-Super-49B-v1.5	7d4c23ed	8e102126
 deepinfra/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B	842edcd7	e6ada834
 deepinfra/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B	0723c54b	93e95360
 deepinfra/nvidia/NVIDIA-Nemotron-3.5-Lightning	7d4c23ed	8e102126
+deepinfra/nvidia/NVIDIA-Nemotron-3.5-Super-VL	7d4c23ed	8e102126
 deepinfra/nvidia/NVIDIA-Nemotron-Nano-9B-v2	7d4c23ed	8e102126
 deepinfra/nvidia/Nemotron-3-Nano-30B-A3B	7d4c23ed	8e102126
 deepinfra/nvidia/Nemotron-Content-Safety-3.5	7d4c23ed	8e102126
@@ -22418,6 +22440,7 @@ deepinfra/openai/gpt-oss-120b-Ultra	9a276813	1edb4060
 deepinfra/openai/gpt-oss-20b	50665211	29b7b224
 deepinfra/stepfun-ai/Step-3.7-Flash	374a63ed	29b7b224
 deepinfra/tencent/Hy3	70600c84	31fe7b7b
+deepinfra/tencent/Hy4-preview	70600c84	31fe7b7b
 deepinfra/thinkingmachines/Inkling	f9d47486	5d5f7689
 deepinfra/thinkingmachines/Inkling-Small	f9d47486	5d5f7689
 deepinfra/zai-org/GLM-4.5	08b51db5	88b30671
@@ -22427,6 +22450,7 @@ deepinfra/zai-org/GLM-4.7-Flash	7d4c23ed	8e102126
 deepinfra/zai-org/GLM-5	08b51db5	88b30671
 deepinfra/zai-org/GLM-5.1	08b51db5	88b30671
 deepinfra/zai-org/GLM-5.2	0f922369	09d01540
+deepinfra/zai-org/GLM-5.3-Flash	8dda78e5	32814560
 deepseek-chat	7cd6eaf6	83b6ca11
 deepseek-chat-v3	7cd6eaf6	83b6ca11
 deepseek-coder	e7f5c7af	bda9263a
@@ -22585,8 +22609,10 @@ eu.anthropic.claude-3-7-sonnet-20250219-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-3-opus-20240229-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-fable-5	7d8e3822	32d35b3b
 eu.anthropic.claude-fable-5-1	7d8e3822	46fba062
+eu.anthropic.claude-fable-5-2	7d8e3822	b1731b06
 eu.anthropic.claude-haiku-4-5-20251001-v1:0	a23e2c66	cd1a0e5f
 eu.anthropic.claude-haiku-5-5	270c9c7a	217fb36d
+eu.anthropic.claude-mythos-5-2	7d8e3822	b1731b06
 eu.anthropic.claude-opus-4-1-20250805-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-opus-4-20250514-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-opus-4-5-20251101-v1:0	890864de	ccbf4d97
@@ -22610,34 +22636,672 @@ eu.twelvelabs.pegasus-1-2-v1:0	7d4c23ed	8e102126
 eu_jev/eu-jeff-1.0.0	7d4c23ed	8e102126
 eu_jev/eu-jeff-latest	7d4c23ed	8e102126
 exa_ai/search	7d4c23ed	8e102126
+fal_ai/alibaba/happy-horse/image-to-video	12053068	1edb4060
+fal_ai/alibaba/happy-horse/reference-to-video	12053068	1edb4060
+fal_ai/alibaba/happy-horse/text-to-video	12053068	1edb4060
+fal_ai/alibaba/happy-horse/v1.1/image-to-video	12053068	1edb4060
+fal_ai/alibaba/happy-horse/v1.1/reference-to-video	12053068	1edb4060
+fal_ai/alibaba/happy-horse/v1.1/text-to-video	12053068	1edb4060
+fal_ai/alibaba/wan-3.0-prime/image-to-video	12053068	1edb4060
+fal_ai/alibaba/wan-3.0-prime/reference-to-video	12053068	1edb4060
+fal_ai/alibaba/wan-3.0-prime/text-to-video	12053068	1edb4060
+fal_ai/alibaba/wan-3.0/image-to-video	12053068	1edb4060
+fal_ai/alibaba/wan-3.0/reference-to-video	12053068	1edb4060
+fal_ai/alibaba/wan-3.0/text-to-video	12053068	1edb4060
+fal_ai/blackforestlabs/flux-3-max/image-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3-max/keyframes-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3-max/text-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/draft-enhance	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/edit-image	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/edit-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/extend-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/extend-video/draft	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/first-last-frame-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/first-last-frame-to-video/draft	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/image-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/image-to-video/draft	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/keyframes-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/keyframes-to-video/draft	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/klein/base/edit-image/lora	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/klein/base/text-to-image/lora	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/klein/edit-image	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/klein/edit-image/lora	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/klein/text-to-image	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/klein/text-to-image/lora	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/text-to-image	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/text-to-video	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-3/text-to-video/draft	7d4c23ed	8e102126
+fal_ai/blackforestlabs/flux-video-upscale	7d4c23ed	8e102126
+fal_ai/bria/bria_video_eraser/erase/keypoints	7d4c23ed	8e102126
+fal_ai/bria/bria_video_eraser/erase/mask	7d4c23ed	8e102126
+fal_ai/bria/bria_video_eraser/erase/prompt	7d4c23ed	8e102126
+fal_ai/bria/embed-product	7d4c23ed	8e102126
+fal_ai/bria/extract-object	7d4c23ed	8e102126
+fal_ai/bria/fibo-2/edit	7d4c23ed	8e102126
+fal_ai/bria/fibo-2/generate	7d4c23ed	8e102126
+fal_ai/bria/fibo-bbq-preview/generate	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit-1.5/edit	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit-1.5/expand	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit-1.5/product-holding	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit-1.5/virtual-try-on	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/add_object_by_text	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/blend	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/colorize	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/edit	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/erase_by_text	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/relight	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/replace_object_by_text	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/reseason	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/restore	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/restyle	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/rewrite_text	7d4c23ed	8e102126
+fal_ai/bria/fibo-edit/sketch_to_colored_image	7d4c23ed	8e102126
+fal_ai/bria/fibo-gen-1.5/text-to-image	7d4c23ed	8e102126
+fal_ai/bria/fibo-lite/generate	7d4c23ed	8e102126
+fal_ai/bria/fibo/generate	7d4c23ed	8e102126
+fal_ai/bria/genfill/v2	7d4c23ed	8e102126
+fal_ai/bria/guided-remove-background	7d4c23ed	8e102126
+fal_ai/bria/increase-resolution	7d4c23ed	8e102126
+fal_ai/bria/product-dimensions	7d4c23ed	8e102126
+fal_ai/bria/replace-background	7d4c23ed	8e102126
 fal_ai/bria/text-to-image/3.2	7d4c23ed	8e102126
+fal_ai/bria/upscale/creative	7d4c23ed	8e102126
+fal_ai/bria/video/background-removal	7d4c23ed	8e102126
+fal_ai/bria/video/background-removal/green-screen-despill	7d4c23ed	8e102126
+fal_ai/bria/video/background-removal/realtime	7d4c23ed	8e102126
+fal_ai/bria/video/background-removal/v3	7d4c23ed	8e102126
+fal_ai/bria/video/erase/keypoints	7d4c23ed	8e102126
+fal_ai/bria/video/erase/mask	7d4c23ed	8e102126
+fal_ai/bria/video/erase/prompt	7d4c23ed	8e102126
+fal_ai/bria/video/increase-resolution	7d4c23ed	8e102126
+fal_ai/bytedance/omnihuman/v2	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/fast/image-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/fast/reference-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/fast/text-to-video	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.0/image-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/mini/image-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/mini/reference-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/mini/text-to-video	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.0/reference-to-video	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.0/text-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/us/image-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/us/reference-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.0/us/text-to-video	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.5/image-to-video	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.5/reference-to-video	7d4c23ed	8e102126
 fal_ai/bytedance/seedance-2.5/text-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.5/us/draft/complete	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.5/us/image-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.5/us/reference-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-2.5/us/text-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-latest/image-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-latest/reference-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedance-latest/text-to-video	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5.5/edit	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5.5/layerize	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5.5/text-to-image	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/flash/edit	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/flash/layerize	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/flash/text-to-image	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/lite/edit	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/lite/text-to-image	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/pro/layerize	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/pro/us/edit	7d4c23ed	8e102126
+fal_ai/bytedance/seedream/v5/pro/us/text-to-image	7d4c23ed	8e102126
+fal_ai/clarityai/crystal-upscaler	7d4c23ed	8e102126
+fal_ai/creatify/boreal	7d4c23ed	8e102126
+fal_ai/decart/lucy-2-5/realtime	7d4c23ed	8e102126
+fal_ai/decart/lucy-2-6/realtime	7d4c23ed	8e102126
+fal_ai/decart/lucy-5b/image-to-video	7d4c23ed	8e102126
+fal_ai/decart/lucy-restyle	7d4c23ed	8e102126
+fal_ai/decart/lucy2-vton/realtime	7d4c23ed	8e102126
+fal_ai/fal-ai/ai-avatar/multi	7d4c23ed	8e102126
+fal_ai/fal-ai/ai-avatar/multi-text	7d4c23ed	8e102126
+fal_ai/fal-ai/ai-avatar/single-text	7d4c23ed	8e102126
+fal_ai/fal-ai/auto-caption	7d4c23ed	8e102126
+fal_ai/fal-ai/bagel	7d4c23ed	8e102126
+fal_ai/fal-ai/bagel/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/ben/v2/image	7d4c23ed	8e102126
+fal_ai/fal-ai/boogu-image	7d4c23ed	8e102126
+fal_ai/fal-ai/boogu-image/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/background/remove	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/background/replace	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/eraser	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/expand	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/genfill	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/product-shot	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/reimagine	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/text-to-image/base	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/text-to-image/fast	7d4c23ed	8e102126
+fal_ai/fal-ai/bria/text-to-image/hd	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance-upscaler/upscale/video	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/dreamactor/v2	7d4c23ed	8e102126
 fal_ai/fal-ai/bytedance/dreamina/v3.1/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/omnihuman	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/omnihuman/v1.5	7d4c23ed	8e102126
 fal_ai/fal-ai/bytedance/seedream/v3/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/seedream/v4.5/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/seedream/v4.5/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/seedream/v4/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/bytedance/seedream/v4/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/clarity-upscaler	7d4c23ed	8e102126
+fal_ai/fal-ai/codeformer	7d4c23ed	8e102126
+fal_ai/fal-ai/control-light	7d4c23ed	8e102126
+fal_ai/fal-ai/creatify/aurora	7d4c23ed	8e102126
+fal_ai/fal-ai/davinci-magihuman	7d4c23ed	8e102126
+fal_ai/fal-ai/ddcolor	7d4c23ed	8e102126
+fal_ai/fal-ai/decart/lucy-5b/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/depth-anything-video	7d4c23ed	8e102126
+fal_ai/fal-ai/echomimic-v3	7d4c23ed	8e102126
+fal_ai/fal-ai/emu-3.5-image/edit-image	7d4c23ed	8e102126
+fal_ai/fal-ai/emu-3.5-image/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/ernie-image	7d4c23ed	8e102126
+fal_ai/fal-ai/ernie-image/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/ernie-image/lora/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/ernie-image/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/fashn/tryon/v1.5	7d4c23ed	8e102126
+fal_ai/fal-ai/fashn/tryon/v1.6	7d4c23ed	8e102126
+fal_ai/fal-ai/feynobg	7d4c23ed	8e102126
+fal_ai/fal-ai/ffmpeg-api/compose	7d4c23ed	8e102126
+fal_ai/fal-ai/ffmpeg-api/merge-audio-video	7d4c23ed	8e102126
+fal_ai/fal-ai/finegrain-eraser	7d4c23ed	8e102126
+fal_ai/fal-ai/finegrain-eraser/bbox	7d4c23ed	8e102126
+fal_ai/fal-ai/finegrain-eraser/mask	7d4c23ed	8e102126
+fal_ai/fal-ai/firered-image-edit-v1.1	7d4c23ed	8e102126
+fal_ai/fal-ai/flashhead	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/dev	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/dev/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/dev/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/krea	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/krea/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/krea/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/schnell	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/schnell/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/srpo	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-1/srpo/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-flex	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-flex/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/add-background	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/apartment-staging	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/ballpoint-pen-sketch	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/digital-comic-art	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/face-to-full-portrait	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/hdr-style	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/multiple-angles	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/realism	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/satellite-view-style	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/sepia-vintage	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-lora-gallery/virtual-tryon	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-max	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-max/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-pro	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-pro/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2-pro/outpaint	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/flash	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/flash/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/base	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/base/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/base/edit/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/base/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/edit/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/4b/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/base	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/base/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/base/edit/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/base/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/edit/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/klein/9b/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/lora/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-2/turbo/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-general	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-general/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-general/inpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-kontext-lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-kontext-lora/inpaint	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-kontext-lora/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-kontext/dev	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-krea-lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-krea-lora/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-krea-lora/inpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-krea-lora/stream	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-lora	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-lora-canny	7d4c23ed	8e102126
 fal_ai/fal-ai/flux-lora-depth	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-lora-fill	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-lora/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-lora/inpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-lora/stream	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/kontext	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/kontext/max	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/kontext/max/multi	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/kontext/max/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/kontext/multi	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/kontext/text-to-image	7d4c23ed	8e102126
 fal_ai/fal-ai/flux-pro/v1.1	7d4c23ed	8e102126
 fal_ai/fal-ai/flux-pro/v1.1-ultra	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1.1-ultra-finetuned	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1.1-ultra/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1.1/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1/erase	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1/fill	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1/fill-finetuned	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pro/v1/vto	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-pulid	7d4c23ed	8e102126
+fal_ai/fal-ai/flux-vision-upscaler	7d4c23ed	8e102126
 fal_ai/fal-ai/flux/dev	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/dev/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/dev/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/krea	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/krea/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/krea/redux	7d4c23ed	8e102126
 fal_ai/fal-ai/flux/schnell	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/schnell/redux	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/srpo	7d4c23ed	8e102126
+fal_ai/fal-ai/flux/srpo/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/framepack	7d4c23ed	8e102126
+fal_ai/fal-ai/framepack/f1	7d4c23ed	8e102126
+fal_ai/fal-ai/framepack/flf2v	7d4c23ed	8e102126
 fal_ai/fal-ai/gemini-25-flash-image	7af22a68	1edb4060
+fal_ai/fal-ai/gemini-25-flash-image/edit	7af22a68	1edb4060
+fal_ai/fal-ai/gemini-3-pro-image-preview	7af22a68	1edb4060
+fal_ai/fal-ai/gemini-3-pro-image-preview/edit	7af22a68	1edb4060
+fal_ai/fal-ai/gemini-3.1-flash-image-preview	7af22a68	1edb4060
+fal_ai/fal-ai/gemini-3.1-flash-image-preview/edit	7af22a68	1edb4060
+fal_ai/fal-ai/glm-image	7d4c23ed	bc3938d3
+fal_ai/fal-ai/glm-image/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/avatar3/digital-twin	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/avatar4/digital-twin	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/avatar4/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/avatar5/digital-twin	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v2/translate/precision	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v2/translate/speed	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v2/video-agent	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v3/filler-word-removal	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v3/lipsync/precision	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v3/lipsync/speed	7d4c23ed	8e102126
+fal_ai/fal-ai/heygen/v3/video-agent	7d4c23ed	8e102126
+fal_ai/fal-ai/hidream-i1-fast	7d4c23ed	8e102126
+fal_ai/fal-ai/hidream-i1-full	7d4c23ed	8e102126
+fal_ai/fal-ai/hidream-i1-full/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/hidream-o1-image	50665211	29b7b224
+fal_ai/fal-ai/hidream-o1-image/dev	50665211	29b7b224
+fal_ai/fal-ai/hidream-o1-image/dev/edit	50665211	29b7b224
+fal_ai/fal-ai/hidream-o1-image/edit	50665211	29b7b224
+fal_ai/fal-ai/hunyuan-image/v2.1/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-image/v3/instruct/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-image/v3/instruct/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-image/v3/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-video	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-video-image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-video-v1.5/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan-video-v1.5/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/hunyuan_world	7d4c23ed	8e102126
+fal_ai/fal-ai/iclight-v2	7d4c23ed	8e102126
+fal_ai/fal-ai/id-v2v	7d4c23ed	8e102126
+fal_ai/fal-ai/id-v2v/relight	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/character	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/character/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/character/remix	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/object-removal	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/remove-background	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/upscale	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2/remix	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2/turbo/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2/turbo/remix	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2a	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2a/remix	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2a/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v2a/turbo/remix	7d4c23ed	8e102126
 fal_ai/fal-ai/ideogram/v3	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v3/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v3/generate-transparent	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v3/layerize-text	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v3/reframe	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v3/remix	7d4c23ed	8e102126
+fal_ai/fal-ai/ideogram/v3/replace-background	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/age-modify	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/city-teleport	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/expression-change	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/hair-change	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/headshot-photo	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/makeup-application	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/object-removal	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/outpaint	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/perspective	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/photo-restoration	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/photography-effects	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/portrait-enhance	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/product-holding	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/product-photography	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/relighting	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/style-transfer	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/texture-transform	7d4c23ed	8e102126
+fal_ai/fal-ai/image-apps-v2/virtual-try-on	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/age-progression	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/baby-version	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/background-change	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/broccoli-haircut	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/cartoonify	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/color-correction	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/expression-change	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/face-enhancement	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/hair-change	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/object-removal	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/photo-restoration	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/plushie-style	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/professional-photo	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/realism	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/reframe	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/retouch	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/scene-composition	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/style-transfer	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/text-removal	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/time-of-day	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/weather-effect	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/wojak-style	7d4c23ed	8e102126
+fal_ai/fal-ai/image-editing/youtube-thumbnails	7d4c23ed	8e102126
+fal_ai/fal-ai/image2svg	7d4c23ed	8e102126
 fal_ai/fal-ai/imagen4/preview	7d4c23ed	8e102126
 fal_ai/fal-ai/imagen4/preview/fast	7d4c23ed	8e102126
 fal_ai/fal-ai/imagen4/preview/ultra	7d4c23ed	8e102126
+fal_ai/fal-ai/infinity-star/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/instant-character	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-image/o1	50665211	e1541ff5
+fal_ai/fal-ai/kling-image/o3/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-image/o3/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-image/v3/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-image/v3/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/ai-avatar/v2/pro	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/ai-avatar/v2/standard	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/reference-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/standard/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/standard/reference-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/standard/video-to-video/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/standard/video-to-video/reference	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/video-to-video/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o1/video-to-video/reference	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/4k/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/4k/reference-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/4k/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/4k/video-to-video/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/4k/video-to-video/reference	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/pro/video-to-video/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/pro/video-to-video/reference	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/standard/video-to-video/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/o3/standard/video-to-video/reference	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v1.5/pro/effects	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v1.6/pro/effects	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v1.6/standard/effects	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v1/pro/ai-avatar	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v1/standard/ai-avatar	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v1/standard/effects	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v2.5-turbo/pro/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v2.5-turbo/pro/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v2.5-turbo/standard/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v2.6/pro/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v2.6/pro/motion-control	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v2.6/standard/motion-control	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/4k/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/4k/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/pro/motion-control	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/standard/motion-control	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/turbo/pro/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/turbo/pro/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/turbo/standard/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/kling-video/v3/turbo/standard/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/krea-2/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/krea-2/turbo/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/krea-2/turbo/style	7d4c23ed	8e102126
+fal_ai/fal-ai/krea-wan-14b/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/krea-wan-14b/video-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/latentsync	7d4c23ed	8e102126
+fal_ai/fal-ai/leffa/pose-transfer	7d4c23ed	8e102126
+fal_ai/fal-ai/leffa/virtual-tryon	7d4c23ed	8e102126
+fal_ai/fal-ai/lightx/recamera	7d4c23ed	8e102126
+fal_ai/fal-ai/lightx/relight	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-image	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-image/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/distilled/image-to-video/480p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/distilled/image-to-video/720p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/distilled/text-to-video/480p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/distilled/text-to-video/720p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/image-to-video/480p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/image-to-video/720p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/text-to-video/480p	7d4c23ed	8e102126
+fal_ai/fal-ai/longcat-video/text-to-video/720p	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/audio-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/extend-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/image-to-video/fast	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/reframe	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/retake-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-2.3/text-to-video/fast	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-video-13b-distilled	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-video-13b-distilled/extend	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-video-13b-distilled/multiconditioning	7d4c23ed	8e102126
+fal_ai/fal-ai/ltx-video/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltxv-13b-098-distilled	7d4c23ed	8e102126
+fal_ai/fal-ai/ltxv-13b-098-distilled/extend	7d4c23ed	8e102126
+fal_ai/fal-ai/ltxv-13b-098-distilled/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/ltxv-13b-098-distilled/multiconditioning	7d4c23ed	8e102126
+fal_ai/fal-ai/lumina-image/v2	7d4c23ed	8e102126
+fal_ai/fal-ai/marigold-v2	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/hailuo-02-fast/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/hailuo-02/pro/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/hailuo-02/pro/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/hailuo-02/standard/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/hailuo-02/standard/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/image-01	7d4c23ed	bc3938d3
+fal_ai/fal-ai/minimax/image-01/subject-reference	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01-director	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01-director/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01-live	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01-live/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01-subject-reference	7d4c23ed	8e102126
+fal_ai/fal-ai/minimax/video-01/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/mmaudio-v2	7d4c23ed	8e102126
 fal_ai/fal-ai/moondream3-preview/query	7d4c23ed	8e102126
+fal_ai/fal-ai/moss-image	7d4c23ed	8e102126
+fal_ai/fal-ai/nafnet/deblur	7d4c23ed	8e102126
+fal_ai/fal-ai/nafnet/denoise	7d4c23ed	8e102126
 fal_ai/fal-ai/nano-banana	7d4c23ed	8e102126
 fal_ai/fal-ai/nano-banana-2	73f0ce5b	95111d05
+fal_ai/fal-ai/nano-banana-2/edit	7d4c23ed	8e102126
 fal_ai/fal-ai/nano-banana-pro	cea6174e	d94899fc
+fal_ai/fal-ai/nano-banana-pro/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/nano-banana/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/nucleus-image	7d4c23ed	8e102126
+fal_ai/fal-ai/object-removal	7d4c23ed	8e102126
+fal_ai/fal-ai/object-removal/bbox	7d4c23ed	8e102126
+fal_ai/fal-ai/object-removal/mask	7d4c23ed	8e102126
+fal_ai/fal-ai/omnigen-v2	7d4c23ed	8e102126
+fal_ai/fal-ai/one-to-all-animation/1.3b	7d4c23ed	8e102126
+fal_ai/fal-ai/one-to-all-animation/14b	7d4c23ed	8e102126
+fal_ai/fal-ai/ovi	7d4c23ed	8e102126
+fal_ai/fal-ai/ovi/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/patina	7d4c23ed	8e102126
+fal_ai/fal-ai/patina/material	7d4c23ed	8e102126
+fal_ai/fal-ai/patina/material/extract	7d4c23ed	8e102126
+fal_ai/fal-ai/phota/enhance	7d4c23ed	8e102126
+fal_ai/fal-ai/pixverse/lipsync	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/blur	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/chromatic-aberration	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/color-correction	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/color-tint	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/desaturate	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/dissolve	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/dodge-burn	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/grain	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/parabolize	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/sharpen	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/solarize	7d4c23ed	8e102126
+fal_ai/fal-ai/post-processing/vignette	7d4c23ed	8e102126
+fal_ai/fal-ai/qwen-image	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-2512	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-2512/lora	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/add-background	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/face-to-full-portrait	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/group-photo	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/integrate-product	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/lighting-restoration	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/next-scene	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/remove-element	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/remove-lighting	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2509-lora-gallery/shirt-design	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2511	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2511-multiple-angles	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-2511/lora	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-lora	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/add-background	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/face-to-full-portrait	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/group-photo	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/integrate-product	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/lighting-restoration	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/multiple-angles	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/next-scene	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/remove-element	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/remove-lighting	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit-plus-lora-gallery/shirt-design	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit/image-to-image	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-edit/inpaint	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-layered	12053068	1edb4060
+fal_ai/fal-ai/qwen-image-layered/lora	12053068	1edb4060
+fal_ai/fal-ai/qwen-image/image-to-image	12053068	1edb4060
+fal_ai/fal-ai/recraft-20b	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/upscale/creative	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/upscale/crisp	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v3/image-to-image	7d4c23ed	8e102126
 fal_ai/fal-ai/recraft/v3/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4.1/pro/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4.1/pro/text-to-vector	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4.1/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4.1/text-to-vector	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4.1/utility/pro/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4.1/utility/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4/pro/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4/pro/text-to-vector	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/v4/text-to-vector	7d4c23ed	8e102126
+fal_ai/fal-ai/recraft/vectorize	7d4c23ed	8e102126
+fal_ai/fal-ai/sana	7d4c23ed	8e102126
+fal_ai/fal-ai/sana/sprint	7d4c23ed	8e102126
+fal_ai/fal-ai/sana/v1.5/1.6b	7d4c23ed	8e102126
+fal_ai/fal-ai/sana/v1.5/4.8b	7d4c23ed	8e102126
+fal_ai/fal-ai/scail-2	7d4c23ed	8e102126
+fal_ai/fal-ai/seedvr/upscale/image	7d4c23ed	8e102126
+fal_ai/fal-ai/seedvr/upscale/image/seamless	7d4c23ed	8e102126
+fal_ai/fal-ai/smart-resize	7d4c23ed	8e102126
+fal_ai/fal-ai/stable-diffusion-v3-medium	7d4c23ed	8e102126
+fal_ai/fal-ai/stable-diffusion-v3-medium/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/stable-diffusion-v35-large	7d4c23ed	8e102126
 fal_ai/fal-ai/stable-diffusion-v35-medium	7d4c23ed	8e102126
+fal_ai/fal-ai/stepx-edit2	7d4c23ed	8e102126
+fal_ai/fal-ai/telestyle-v2	7d4c23ed	8e102126
 fal_ai/fal-ai/trellis	7d4c23ed	8e102126
 fal_ai/fal-ai/trellis-2	7d4c23ed	8e102126
+fal_ai/fal-ai/uso	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/q2/reference-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/q2/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/q4/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/q4/reference-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/reference-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/reference-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/start-end-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/vidu/template-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-22-vace-fun-a14b/depth	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-22-vace-fun-a14b/inpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-22-vace-fun-a14b/outpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-22-vace-fun-a14b/reframe	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-25-preview/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-25-preview/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-25-preview/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-25-preview/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-i2v-lora	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-pro/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-t2v-lora	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-14b	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-14b/depth	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-14b/inpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-14b/outpainting	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-14b/pose	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-14b/reframe	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-apps/long-reframe	7d4c23ed	8e102126
+fal_ai/fal-ai/wan-vace-apps/video-edit	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-14b/animate/move	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-14b/animate/replace	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-14b/speech-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-5b/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-5b/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-5b/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/image-to-video/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/text-to-image/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/text-to-video/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.2-a14b/video-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/edit-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/image-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/pro/edit	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/pro/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/reference-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/text-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/wan/v2.7/text-to-video	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/base	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/base/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/controlnet	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/controlnet/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/image-to-image	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/image-to-image/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/inpaint	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/inpaint/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/lora	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/tiling	7d4c23ed	8e102126
+fal_ai/fal-ai/z-image/turbo/tiling/lora	7d4c23ed	8e102126
+fal_ai/google/gemini-omni-flash/v1.1/edit	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.1/image-to-video	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.1/reference-to-video	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.1/text-to-video	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.2/edit	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.2/extend	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.2/image-to-video	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.2/reference-to-video	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.2/text-to-video	7af22a68	1edb4060
+fal_ai/google/gemini-omni-flash/v1.2/upscale	7af22a68	1edb4060
+fal_ai/google/nano-banana-2.1	7af22a68	1edb4060
+fal_ai/google/nano-banana-2.1/edit	7af22a68	1edb4060
+fal_ai/google/nano-banana-latest	7af22a68	1edb4060
+fal_ai/google/nano-banana-latest/edit	7af22a68	1edb4060
+fal_ai/google/virtual-try-on	7af22a68	1edb4060
 fal_ai/gpt-image-2	9a276813	87c5ce34
+fal_ai/heygen/heygen-video/image-to-video	7d4c23ed	8e102126
+fal_ai/heygen/heygen-video/reference-to-video	7d4c23ed	8e102126
+fal_ai/heygen/heygen-video/text-to-video	7d4c23ed	8e102126
 fal_ai/high/1024-x-1024/gpt-image-2	9a276813	87c5ce34
 fal_ai/high/1024-x-1024/openai/gpt-image-2	9a276813	87c5ce34
 fal_ai/high/1024-x-1024/openai/gpt-image-2.5/flare/edit	9a276813	1edb4060
@@ -22680,6 +23344,25 @@ fal_ai/high/3840-x-2160/openai/gpt-image-2.5/flare/text-to-image	9a276813	1edb40
 fal_ai/high/3840-x-2160/openai/gpt-image-2.5/sunburst/edit	9a276813	1edb4060
 fal_ai/high/3840-x-2160/openai/gpt-image-2.5/sunburst/text-to-image	9a276813	1edb4060
 fal_ai/high/3840-x-2160/openai/gpt-image-2/edit	9a276813	1edb4060
+fal_ai/ideogram/v4.5	7d4c23ed	8e102126
+fal_ai/ideogram/v4.5/edit	7d4c23ed	8e102126
+fal_ai/ideogram/v4/instant	7d4c23ed	8e102126
+fal_ai/ideogram/v4/tiling	7d4c23ed	8e102126
+fal_ai/ideogram/v4/tiling/lora	7d4c23ed	8e102126
+fal_ai/kling/v4/flash/image-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/flash/reference-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/flash/text-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/flash/video-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/image-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/reference-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/text-to-video	7d4c23ed	8e102126
+fal_ai/kling/v4/video-to-video/edit	7d4c23ed	8e102126
+fal_ai/krea/v3/edit	7d4c23ed	8e102126
+fal_ai/krea/v3/text-to-image	7d4c23ed	8e102126
+fal_ai/lightricks/ltx-2.5/image-to-video/fast	7d4c23ed	8e102126
+fal_ai/lightricks/ltx-2.5/image-to-video/pro	7d4c23ed	8e102126
+fal_ai/lightricks/ltx-2.5/text-to-video/fast	7d4c23ed	8e102126
+fal_ai/lightricks/ltx-2.5/text-to-video/pro	7d4c23ed	8e102126
 fal_ai/low/1024-x-1024/gpt-image-2	9a276813	87c5ce34
 fal_ai/low/1024-x-1024/openai/gpt-image-2	9a276813	87c5ce34
 fal_ai/low/1024-x-1024/openai/gpt-image-2.5/flare/edit	9a276813	1edb4060
@@ -22722,6 +23405,14 @@ fal_ai/low/3840-x-2160/openai/gpt-image-2.5/flare/text-to-image	9a276813	1edb406
 fal_ai/low/3840-x-2160/openai/gpt-image-2.5/sunburst/edit	9a276813	1edb4060
 fal_ai/low/3840-x-2160/openai/gpt-image-2.5/sunburst/text-to-image	9a276813	1edb4060
 fal_ai/low/3840-x-2160/openai/gpt-image-2/edit	9a276813	1edb4060
+fal_ai/luma/agent/ray/v3.2/image-to-video	7d4c23ed	8e102126
+fal_ai/luma/agent/ray/v3.2/reframe	7d4c23ed	8e102126
+fal_ai/luma/agent/ray/v3.2/text-to-video	7d4c23ed	8e102126
+fal_ai/luma/agent/ray/v3.2/video-to-video	7d4c23ed	8e102126
+fal_ai/luma/agent/uni-1/v1/edit	7d4c23ed	8e102126
+fal_ai/luma/agent/uni-1/v1/max	7d4c23ed	8e102126
+fal_ai/luma/agent/uni-1/v1/max/edit	7d4c23ed	8e102126
+fal_ai/luma/agent/uni-1/v1/text-to-image	7d4c23ed	8e102126
 fal_ai/max/1024-x-1024/openai/gpt-image-2.5/flare/edit	9a276813	1edb4060
 fal_ai/max/1024-x-1024/openai/gpt-image-2.5/flare/text-to-image	9a276813	1edb4060
 fal_ai/max/1024-x-1024/openai/gpt-image-2.5/sunburst/edit	9a276813	1edb4060
@@ -22788,14 +23479,90 @@ fal_ai/medium/3840-x-2160/openai/gpt-image-2.5/flare/text-to-image	9a276813	1edb
 fal_ai/medium/3840-x-2160/openai/gpt-image-2.5/sunburst/edit	9a276813	1edb4060
 fal_ai/medium/3840-x-2160/openai/gpt-image-2.5/sunburst/text-to-image	9a276813	1edb4060
 fal_ai/medium/3840-x-2160/openai/gpt-image-2/edit	9a276813	1edb4060
+fal_ai/meta/muse-image/edit	7d4c23ed	8e102126
+fal_ai/meta/muse-image/text-to-image	7d4c23ed	8e102126
+fal_ai/minimax/h3-max-turbo/extend-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max-turbo/image-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max-turbo/reference-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max-turbo/text-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/camera-controls	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/extend-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/image-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/insert-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/lip-sync/image-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/recast	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/reference-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/reframe-video	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/relight	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/styles/16bit-pixel	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/styles/hand-drawn	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/styles/low-poly	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/styles/retro-toon-70s	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/styles/vhs	7d4c23ed	8e102126
+fal_ai/minimax/h3-max/text-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3/image-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3/image-to-video/lora	7d4c23ed	8e102126
 fal_ai/minimax/h3/reference-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3/reference-to-video/lora	7d4c23ed	8e102126
 fal_ai/minimax/h3/text-to-video	7d4c23ed	8e102126
+fal_ai/minimax/h3/text-to-video/lora	7d4c23ed	8e102126
+fal_ai/mirelo-ai/sfx2.0/video-to-video	7d4c23ed	8e102126
+fal_ai/moonvalley/marey/motion-transfer	7d4c23ed	8e102126
+fal_ai/moonvalley/marey/pose-transfer	7d4c23ed	8e102126
+fal_ai/mureka/api/generate/lyrics-video	7d4c23ed	8e102126
+fal_ai/nvidia/cosmos-3-super/image-to-video	7d4c23ed	8e102126
+fal_ai/nvidia/cosmos-3-super/text-to-image	7d4c23ed	8e102126
 fal_ai/openai/gpt-image-2	9a276813	87c5ce34
 fal_ai/openai/gpt-image-2.5/flare/edit	9a276813	1edb4060
 fal_ai/openai/gpt-image-2.5/flare/text-to-image	9a276813	1edb4060
 fal_ai/openai/gpt-image-2.5/sunburst/edit	9a276813	1edb4060
 fal_ai/openai/gpt-image-2.5/sunburst/text-to-image	9a276813	1edb4060
 fal_ai/openai/gpt-image-2/edit	9a276813	1edb4060
+fal_ai/pixelcut/background-removal	7d4c23ed	8e102126
+fal_ai/pixelcut/looping-video	7d4c23ed	8e102126
+fal_ai/pixelcut/product-photo	7d4c23ed	8e102126
+fal_ai/pixverse/music-video/vibemv	7d4c23ed	8e102126
+fal_ai/pixverse/v6/max/image-to-video	7d4c23ed	8e102126
+fal_ai/pixverse/v6/max/text-to-video	7d4c23ed	8e102126
+fal_ai/recraft/v4.1/flash/text-to-image	7d4c23ed	8e102126
+fal_ai/recraft/v4/style/pro/text-to-image	7d4c23ed	8e102126
+fal_ai/recraft/v4/style/pro/text-to-vector	7d4c23ed	8e102126
+fal_ai/recraft/v4/style/text-to-image	7d4c23ed	8e102126
+fal_ai/recraft/v4/style/text-to-vector	7d4c23ed	8e102126
+fal_ai/rundiffusion-fal/juggernaut-flux/base	7d4c23ed	8e102126
+fal_ai/rundiffusion-fal/juggernaut-flux/base/image-to-image	7d4c23ed	8e102126
+fal_ai/rundiffusion-fal/juggernaut-flux/lightning	7d4c23ed	8e102126
+fal_ai/rundiffusion-fal/juggernaut-flux/pro	7d4c23ed	8e102126
+fal_ai/rundiffusion-fal/juggernaut-flux/pro/image-to-image	7d4c23ed	8e102126
+fal_ai/rundiffusion-fal/rundiffusion-photo-flux	7d4c23ed	8e102126
+fal_ai/smoretalk-ai/rembg-enhance	7d4c23ed	8e102126
+fal_ai/sonilo/v1.1/video-to-video-music	7d4c23ed	8e102126
+fal_ai/sonilo/v1.1/video-to-video-sound-effects	7d4c23ed	8e102126
+fal_ai/tbc/mischief-1/image-to-video	7d4c23ed	8e102126
+fal_ai/vast/eden-live-14b-video	7d4c23ed	8e102126
+fal_ai/vast/eden-live-5b-video	7d4c23ed	8e102126
+fal_ai/veed/fabric-1.0	7d4c23ed	8e102126
+fal_ai/veed/fabric-1.0/fast	7d4c23ed	8e102126
+fal_ai/veed/fabric-1.0/text	7d4c23ed	8e102126
+fal_ai/wan/v2.6/image-to-image	7d4c23ed	8e102126
+fal_ai/wan/v2.6/image-to-video	7d4c23ed	8e102126
+fal_ai/wan/v2.6/image-to-video/flash	7d4c23ed	8e102126
+fal_ai/wan/v2.6/reference-to-video	7d4c23ed	8e102126
+fal_ai/wan/v2.6/reference-to-video/flash	7d4c23ed	8e102126
+fal_ai/wan/v2.6/text-to-image	7d4c23ed	8e102126
+fal_ai/wan/v2.6/text-to-video	7d4c23ed	8e102126
+fal_ai/xai/grok-imagine-image	9f8e939c	87c5ce34
+fal_ai/xai/grok-imagine-image/edit	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/edit-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/extend-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/image-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/reference-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/text-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/v1.5/image-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/v1.5/lite/image-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/v1.5/lite/text-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/v1.5/reference-to-video	9f8e939c	1edb4060
+fal_ai/xai/grok-imagine-video/v1.5/text-to-video	9f8e939c	1edb4060
 fal_ai/xhigh/1024-x-1024/openai/gpt-image-2.5/flare/edit	9a276813	1edb4060
 fal_ai/xhigh/1024-x-1024/openai/gpt-image-2.5/flare/text-to-image	9a276813	1edb4060
 fal_ai/xhigh/1024-x-1024/openai/gpt-image-2.5/sunburst/edit	9a276813	1edb4060
@@ -23122,6 +23889,7 @@ fireworks_ai/accounts/fireworks/models/yi-large	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/models/zephyr-7b-beta	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/auto	7d4c23ed	6eacf031
 fireworks_ai/accounts/fireworks/routers/auto-instant	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/deepseek-flash-latest	7cd6eaf6	3e88aa0e
 fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot	7cd6eaf6	3e88aa0e
 fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast	7cd6eaf6	3e88aa0e
 fireworks_ai/accounts/fireworks/routers/deepseek-v4p1-flash-spot	7cd6eaf6	3e88aa0e
@@ -23134,11 +23902,18 @@ fireworks_ai/accounts/fireworks/routers/glm-5p3-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p3-flash-us	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p3-spot	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/glm-5p3-us	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/glm-fast-latest	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/glm-flash-latest	c454043e	29b3dc77
+fireworks_ai/accounts/fireworks/routers/glm-latest	c454043e	69abcd9d
+fireworks_ai/accounts/fireworks/routers/kimi-fast-latest	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k2p6-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k2p7-code-fast	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k3-fast	7d4c23ed	bc3938d3
 fireworks_ai/accounts/fireworks/routers/kimi-k3-spot	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/kimi-k3-us	7d4c23ed	8e102126
+fireworks_ai/accounts/fireworks/routers/kimi-latest	c454043e	69abcd9d
+fireworks_ai/accounts/fireworks/routers/minimax-latest	374a63ed	932f0b01
+fireworks_ai/accounts/fireworks/routers/qwen-max-latest	12053068	1edb4060
 fireworks_ai/accounts/fireworks/routers/rune	7d4c23ed	8e102126
 fireworks_ai/accounts/fireworks/routers/spot-deepseek-v4-flash	7cd6eaf6	3e88aa0e
 fireworks_ai/deepseek-v4-flash	292f9743	60f187a5
@@ -23182,8 +23957,6 @@ fireworks_ai/qwen3p8-max	94a111ce	48429573
 fireworks_ai/thenlper/gte-base	7d4c23ed	8e102126
 fireworks_ai/thenlper/gte-large	7d4c23ed	8e102126
 flux-1.1-pro	7d4c23ed	2cb3ce58
-friendliai/MiniMaxAI/MiniMax-M2.5	7d4c23ed	8e102126
-friendliai/deepseek-ai/DeepSeek-V3.2	9ccac5f1	d29204c4
 friendliai/google/gemma-4-31B-it	7dc075a1	cd1a0e5f
 friendliai/zai-org/GLM-5.1	08b51db5	88b30671
 friendliai/zai-org/GLM-5.2	0f922369	09d01540
@@ -23302,6 +24075,9 @@ gemini/gemini-3.8-flash-tts	7af22a68	1edb4060
 gemini/gemini-3.8-live	7af22a68	1edb4060
 gemini/gemini-3.8-live-extended-thinking	ecd991f9	29b7b224
 gemini/gemini-4-argon	ecd991f9	41c78f27
+gemini/gemini-4-carbon	7af22a68	1edb4060
+gemini/gemini-4-hydrogen	7af22a68	1edb4060
+gemini/gemini-decision-1	7af22a68	1edb4060
 gemini/gemini-embedding-001	7af22a68	87c5ce34
 gemini/gemini-embedding-2	7af22a68	87c5ce34
 gemini/gemini-embedding-2-preview	7af22a68	1edb4060
@@ -23331,6 +24107,7 @@ gemini/lyria-3.5	7af22a68	1edb4060
 gemini/lyria-3.5-clip-preview	7af22a68	1edb4060
 gemini/lyria-3.5-pro-preview	7af22a68	1edb4060
 gemini/lyria-realtime-exp	7af22a68	20be23da
+gemini/nano-banana-latest	7af22a68	1edb4060
 gemini/nano-banana-pro-preview	7af22a68	1edb4060
 gemini/veo-3.1-fast-generate-001	7af22a68	1edb4060
 gemini/veo-3.1-fast-generate-preview	7af22a68	1edb4060
@@ -23346,6 +24123,7 @@ gigachat/GigaChat-2-Pro	7d4c23ed	8e102126
 gigachat/GigaEmbeddings-3B-2025-09	7d4c23ed	8e102126
 github_copilot/claude-fable-5	7d8e3822	17fa4568
 github_copilot/claude-fable-5.1	7d8e3822	a70e0255
+github_copilot/claude-fable-5.2	7d8e3822	2c52eb91
 github_copilot/claude-fable-latest	7af22a68	1edb4060
 github_copilot/claude-haiku-4.5	7af22a68	1edb4060
 github_copilot/claude-haiku-5.5	890864de	cc8ee188
@@ -23362,6 +24140,8 @@ github_copilot/claude-sonnet-latest	7af22a68	1edb4060
 github_copilot/gemini-3.7-flash	d0fa1e3c	29b7b224
 github_copilot/gemini-3.8-flash	d0fa1e3c	b0a532b9
 github_copilot/gemini-4-argon	d0fa1e3c	9220eeb2
+github_copilot/gemini-4-carbon	7af22a68	1edb4060
+github_copilot/gemini-4-hydrogen	7af22a68	1edb4060
 github_copilot/gpt-3.5-turbo	9a276813	1edb4060
 github_copilot/gpt-3.5-turbo-0613	9a276813	1edb4060
 github_copilot/gpt-4	9a276813	1edb4060
@@ -23409,9 +24189,11 @@ glm-5.2	0f922369	d5555892
 global.amazon.nova-2-lite-v1:0	94bbb5ab	ccbf4d97
 global.anthropic.claude-fable-5	7d8e3822	32d35b3b
 global.anthropic.claude-fable-5-1	7d8e3822	e409a03e
+global.anthropic.claude-fable-5-2	7d8e3822	b1731b06
 global.anthropic.claude-haiku-4-5-20251001-v1:0	a23e2c66	cd1a0e5f
 global.anthropic.claude-haiku-5-5	270c9c7a	217fb36d
 global.anthropic.claude-mythos-5-1	7d8e3822	46fba062
+global.anthropic.claude-mythos-5-2	7d8e3822	b1731b06
 global.anthropic.claude-opus-4-5-20251101-v1:0	890864de	ccbf4d97
 global.anthropic.claude-opus-4-6-v1	aeebecb0	6543a34c
 global.anthropic.claude-opus-4-7	cb2d68dd	592f5614
@@ -23506,6 +24288,7 @@ gmi/google/gemini-3.6-flash	d08f0d07	e66c5443
 gmi/google/gemini-3.7-flash	d0fa1e3c	29b7b224
 gmi/google/gemini-3.8-flash	d0fa1e3c	b0a532b9
 gmi/google/gemini-4-argon	d0fa1e3c	9220eeb2
+gmi/google/gemini-4-carbon	7af22a68	1edb4060
 gmi/google/gemma-4-26b-a4b-it	62f25eb7	1edb4060
 gmi/google/gemma-4-31b-it	7dc075a1	cd1a0e5f
 gmi/meta-llama/Llama-3.3-70B-Instruct	7d4c23ed	8e102126
@@ -23550,6 +24333,7 @@ gmi/tencent/hy4	7d4c23ed	8e102126
 gmi/tencent/hy4-preview	8a49d307	1e23948e
 gmi/x-ai/grok-4.5	3e731a43	75cb9506
 gmi/xai/grok4.6	9f8e939c	1edb4060
+gmi/xai/grok4.7	9f8e939c	1edb4060
 gmi/zai-org/GLM-4.5-Air-FP8	7d4c23ed	8e102126
 gmi/zai-org/GLM-4.5-FP8	7d4c23ed	8e102126
 gmi/zai-org/GLM-4.6	08b51db5	88b30671
@@ -24026,6 +24810,7 @@ meta.llama3-70b-instruct-v1:0	7d4c23ed	8e102126
 meta.llama3-8b-instruct-v1:0	7d4c23ed	8e102126
 meta.llama4-maverick-17b-instruct-v1:0	7d4c23ed	8e102126
 meta.llama4-scout-17b-instruct-v1:0	7d4c23ed	8e102126
+meta/muse-ember-1.0	7d4c23ed	8e102126
 meta/muse-image-1.0	7d4c23ed	bc3938d3
 meta/muse-spark-1.1	d2a58336	eb73dd32
 meta/muse-spark-1.2	d2a58336	eb73dd32
@@ -24051,6 +24836,7 @@ minimax/MiniMax-M2.1-lightning	7d4c23ed	8e102126
 minimax/MiniMax-M2.5	7d4c23ed	8e102126
 minimax/MiniMax-M2.5-lightning	7d4c23ed	8e102126
 minimax/MiniMax-M3	33c4e8ba	cd1a0e5f
+minimax/MiniMax-M3.1-Flash	7339b065	78e41205
 minimax/minimax-latest	33c4e8ba	cd1a0e5f
 minimax/speech-02-hd	7d4c23ed	8e102126
 minimax/speech-02-turbo	7d4c23ed	8e102126
@@ -24186,6 +24972,8 @@ morph/morph-v3-large	7d4c23ed	3830fd6d
 multimodalembedding	7d4c23ed	2cb3ce58
 multimodalembedding@001	7d4c23ed	8e102126
 nace/drex-latest	7d4c23ed	8e102126
+nace/drex-max	7d4c23ed	8e102126
+nace/drex-max-v1.1	7d4c23ed	8e102126
 nace/drex-v1.0	7d4c23ed	8e102126
 nace/drex-v1.5	7d4c23ed	8e102126
 nace/drex-v2.0	7d4c23ed	8e102126
@@ -24585,6 +25373,7 @@ parallel_ai/search-pro	7d4c23ed	8e102126
 parallel_ai/search-turbo	7d4c23ed	8e102126
 perplexity/anthropic/claude-fable-5	7d8e3822	17fa4568
 perplexity/anthropic/claude-fable-5-1	7d8e3822	a70e0255
+perplexity/anthropic/claude-fable-5-2	7d8e3822	2c52eb91
 perplexity/anthropic/claude-haiku-4-5	7af22a68	1edb4060
 perplexity/anthropic/claude-haiku-5-5	270c9c7a	78c20816
 perplexity/anthropic/claude-opus-4-5	890864de	ccbf4d97
@@ -24611,6 +25400,8 @@ perplexity/google/gemini-3.6-flash	d08f0d07	e66c5443
 perplexity/google/gemini-3.7-flash	d0fa1e3c	29b7b224
 perplexity/google/gemini-3.8-flash	d0fa1e3c	b0a532b9
 perplexity/google/gemini-4-argon	d0fa1e3c	9220eeb2
+perplexity/google/gemini-4-carbon	7af22a68	1edb4060
+perplexity/google/gemini-4-hydrogen	7af22a68	1edb4060
 perplexity/llama-2-70b-chat	7d4c23ed	8e102126
 perplexity/llama-3.1-70b-instruct	7d4c23ed	8e102126
 perplexity/llama-3.1-8b-instruct	7d4c23ed	8e102126
@@ -24867,18 +25658,169 @@ refuseless/deepseek-v4.1-flash-fast	40163ab7	a6b734c3
 refuseless/glm-5.3-abliterated	7d4c23ed	8e102126
 refuseless/glm-5.3-flash-abliterated	7d4c23ed	8e102126
 refuseless/minimax-m3.1-flash	eeeb3b91	e12fe8e9
+replicate/alibaba/happyhorse-1.0	12053068	1edb4060
+replicate/alibaba/happyhorse-1.1	12053068	1edb4060
+replicate/alibaba/qwen-image-3	12053068	1edb4060
+replicate/alibaba/qwen-image-3-pro	12053068	1edb4060
+replicate/alibaba/wan-3	12053068	1edb4060
+replicate/alibaba/wan-3-prime	12053068	1edb4060
 replicate/anthropic/claude-3.5-haiku	7af22a68	1edb4060
 replicate/anthropic/claude-3.5-sonnet	7af22a68	1edb4060
 replicate/anthropic/claude-3.7-sonnet	a23e2c66	cd1a0e5f
 replicate/anthropic/claude-4-sonnet	7af22a68	1edb4060
 replicate/anthropic/claude-4.5-haiku	a23e2c66	cd1a0e5f
 replicate/anthropic/claude-4.5-sonnet	a23e2c66	cd1a0e5f
+replicate/anthropic/claude-fable-5	7d8e3822	17fa4568
+replicate/anthropic/claude-fable-5.2	7d8e3822	2c52eb91
+replicate/anthropic/claude-opus-4.6	7af22a68	1edb4060
+replicate/anthropic/claude-opus-4.7	270c9c7a	78c20816
+replicate/anthropic/claude-opus-5.5	7d8e3822	a70e0255
+replicate/anthropic/claude-sonnet-4.6	0cda455e	ae2de969
+replicate/anthropic/claude-sonnet-5	cb2d68dd	4d309c78
+replicate/black-forest-labs/flux-1.1-pro	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-1.1-pro-ultra	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-1.1-pro-ultra-finetuned	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-flex	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-klein-4b	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-klein-4b-base	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-klein-4b-base-lora	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-klein-9b	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-klein-9b-base	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-2-klein-9b-base-lora	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-canny-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-canny-pro	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-depth-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-depth-pro	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-dev-lora	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-fill-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-fill-pro	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-kontext-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-kontext-dev-lora	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-kontext-max	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-kontext-pro	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-krea-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-pro	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-pro-finetuned	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-redux-dev	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-redux-schnell	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-schnell	7d4c23ed	8e102126
+replicate/black-forest-labs/flux-schnell-lora	7d4c23ed	8e102126
+replicate/bria/eraser	7d4c23ed	8e102126
+replicate/bria/expand-image	7d4c23ed	8e102126
+replicate/bria/fibo	7d4c23ed	8e102126
+replicate/bria/fibo-edit	7d4c23ed	8e102126
+replicate/bria/generate-background	7d4c23ed	8e102126
+replicate/bria/genfill	7d4c23ed	8e102126
+replicate/bria/image-3.2	7d4c23ed	8e102126
+replicate/bria/increase-resolution	7d4c23ed	8e102126
+replicate/bria/product-cutout	7d4c23ed	8e102126
+replicate/bria/product-packshot	7d4c23ed	8e102126
+replicate/bria/product-shadow	7d4c23ed	8e102126
+replicate/bria/remove-background	7d4c23ed	8e102126
+replicate/bria/video-erase-object	7d4c23ed	8e102126
+replicate/bria/video-increase-resolution	7d4c23ed	8e102126
+replicate/bria/video-remove-background	7d4c23ed	8e102126
+replicate/bytedance/dreamactor-m2.0	7d4c23ed	8e102126
+replicate/bytedance/dreamina-3.1	7d4c23ed	8e102126
+replicate/bytedance/omni-human	7d4c23ed	8e102126
+replicate/bytedance/omni-human-1.5	7d4c23ed	8e102126
+replicate/bytedance/seedance-1-lite	7d4c23ed	8e102126
+replicate/bytedance/seedance-1-pro	7d4c23ed	8e102126
+replicate/bytedance/seedance-1-pro-fast	7d4c23ed	8e102126
+replicate/bytedance/seedream-3	7d4c23ed	8e102126
+replicate/bytedance/seedream-4	7d4c23ed	8e102126
+replicate/bytedance/seedream-4.5	7d4c23ed	8e102126
+replicate/bytedance/seedream-5-lite	7d4c23ed	8e102126
+replicate/datalab-to/ocr	7d4c23ed	8e102126
+replicate/decart/lucy-edit-2	7d4c23ed	8e102126
 replicate/deepseek-ai/deepseek-r1	7cd6eaf6	3e88aa0e
 replicate/deepseek-ai/deepseek-v3	e7f5c7af	1edb4060
 replicate/deepseek-ai/deepseek-v3.1	9ccac5f1	d29204c4
+replicate/easel/ai-avatars	7d4c23ed	8e102126
+replicate/elevenlabs/dubbing	7d4c23ed	8e102126
+replicate/elevenlabs/flash-v2.5	7d4c23ed	8e102126
+replicate/elevenlabs/turbo-v2.5	7d4c23ed	8e102126
+replicate/elevenlabs/v2-multilingual	7d4c23ed	8e102126
+replicate/elevenlabs/v3	7d4c23ed	8e102126
+replicate/flux-kontext-apps/cartoonify	7d4c23ed	8e102126
+replicate/flux-kontext-apps/change-haircut	7d4c23ed	8e102126
+replicate/flux-kontext-apps/depth-of-field	7d4c23ed	8e102126
+replicate/flux-kontext-apps/face-to-many-kontext	7d4c23ed	8e102126
+replicate/flux-kontext-apps/filters	7d4c23ed	8e102126
+replicate/flux-kontext-apps/iconic-locations	7d4c23ed	8e102126
+replicate/flux-kontext-apps/impossible-scenarios	7d4c23ed	8e102126
+replicate/flux-kontext-apps/multi-image-kontext-max	7d4c23ed	8e102126
+replicate/flux-kontext-apps/multi-image-kontext-pro	7d4c23ed	8e102126
+replicate/flux-kontext-apps/multi-image-list	7d4c23ed	8e102126
+replicate/flux-kontext-apps/portrait-series	7d4c23ed	8e102126
+replicate/flux-kontext-apps/professional-headshot	7d4c23ed	8e102126
+replicate/flux-kontext-apps/restore-image	7d4c23ed	8e102126
+replicate/flux-kontext-apps/restyle-video-frame	7d4c23ed	8e102126
+replicate/flux-kontext-apps/text-removal	7d4c23ed	8e102126
 replicate/google/gemini-2.5-flash	5fcc95b5	83f84e66
+replicate/google/gemini-2.5-flash-image	7af22a68	1edb4060
+replicate/google/gemini-3-flash	264adbd5	c9071d93
 replicate/google/gemini-3-pro	75cb1551	d94899fc
+replicate/google/gemini-3.1-flash-tts	7af22a68	1edb4060
+replicate/google/gemini-3.1-pro	ae431ad8	f250f9bc
+replicate/google/gemini-3.5-flash	d08f0d07	c9071d93
+replicate/google/gemini-3.8-flash-lite-tts	7af22a68	1edb4060
+replicate/google/gemini-3.8-flash-tts	7af22a68	1edb4060
+replicate/google/gemini-4-carbon	7af22a68	1edb4060
+replicate/google/nano-banana	7af22a68	1edb4060
+replicate/google/nano-banana-2	32d1de14	95111d05
+replicate/google/nano-banana-2-lite	32d1de14	95111d05
+replicate/google/nano-banana-2.1	7af22a68	1edb4060
+replicate/google/nano-banana-latest	7af22a68	1edb4060
+replicate/heygen/avatar-iv	7d4c23ed	8e102126
+replicate/heygen/avatar-v	7d4c23ed	8e102126
+replicate/heygen/lipsync-precision	7d4c23ed	8e102126
+replicate/heygen/lipsync-speed	7d4c23ed	8e102126
+replicate/heygen/video-agent	7d4c23ed	8e102126
+replicate/ibm-granite/granite-20b-code-instruct-8k	7d4c23ed	8e102126
+replicate/ibm-granite/granite-3.0-2b-instruct	7d4c23ed	8e102126
+replicate/ibm-granite/granite-3.0-8b-instruct	7d4c23ed	8e102126
+replicate/ibm-granite/granite-3.1-2b-instruct	7d4c23ed	8e102126
+replicate/ibm-granite/granite-3.1-8b-instruct	7d4c23ed	8e102126
+replicate/ibm-granite/granite-3.2-8b-instruct	7d4c23ed	8e102126
 replicate/ibm-granite/granite-3.3-8b-instruct	7d4c23ed	8e102126
+replicate/ibm-granite/granite-4.0-h-small	7d4c23ed	8e102126
+replicate/ibm-granite/granite-4.1-8b	7d4c23ed	8e102126
+replicate/ibm-granite/granite-4.2-8b	0723c54b	93e95360
+replicate/ibm-granite/granite-8b-code-instruct-128k	7d4c23ed	8e102126
+replicate/ibm-granite/granite-speech-3.3-8b	7d4c23ed	8e102126
+replicate/ibm-granite/granite-speech-4.1-2b	7d4c23ed	8e102126
+replicate/ibm-granite/granite-vision-3.3-2b	7d4c23ed	8e102126
+replicate/ibm-granite/granite-vision-4.1-4b	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v2	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v2-turbo	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v2a	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v2a-turbo	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v3-balanced	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v3-quality	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v3-turbo	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v4-balanced	7d4c23ed	8e102126
+replicate/ideogram-ai/ideogram-v4-quality	7d4c23ed	8e102126
+replicate/ideogram-ai/layerize	7d4c23ed	8e102126
+replicate/intelligent-utilities/html-to-image	7d4c23ed	8e102126
+replicate/inworld/realtime-tts-1.5-max	7d4c23ed	8e102126
+replicate/inworld/realtime-tts-1.5-mini	7d4c23ed	8e102126
+replicate/inworld/realtime-tts-2	7d4c23ed	8e102126
+replicate/kwaivgi/kling-lip-sync	7d4c23ed	8e102126
+replicate/kwaivgi/kling-v2.1-master	7d4c23ed	8e102126
+replicate/kwaivgi/kling-v2.5-turbo-pro	7d4c23ed	8e102126
+replicate/lightricks/audio-to-video	7d4c23ed	8e102126
+replicate/lightricks/ltx-2-distilled	7d4c23ed	8e102126
+replicate/lightricks/ltx-2-fast	7d4c23ed	8e102126
+replicate/lightricks/ltx-2-pro	7d4c23ed	8e102126
+replicate/lightricks/ltx-2-retake	7d4c23ed	8e102126
+replicate/lightricks/ltx-2.3-fast	7d4c23ed	8e102126
+replicate/lightricks/ltx-2.3-pro	7d4c23ed	8e102126
+replicate/lightricks/ltx-2.5-fast	7d4c23ed	8e102126
+replicate/luma/photon	7d4c23ed	8e102126
+replicate/luma/photon-flash	7d4c23ed	8e102126
+replicate/luma/reframe-video	7d4c23ed	8e102126
 replicate/meta/llama-2-13b	7d4c23ed	8e102126
 replicate/meta/llama-2-13b-chat	7d4c23ed	8e102126
 replicate/meta/llama-2-70b	7d4c23ed	8e102126
@@ -24889,24 +25831,157 @@ replicate/meta/llama-3-70b	7d4c23ed	8e102126
 replicate/meta/llama-3-70b-instruct	7d4c23ed	8e102126
 replicate/meta/llama-3-8b	7d4c23ed	8e102126
 replicate/meta/llama-3-8b-instruct	7d4c23ed	8e102126
+replicate/meta/llama-4-maverick-instruct	7d4c23ed	8e102126
+replicate/meta/llama-4-scout-instruct	7d4c23ed	8e102126
+replicate/meta/llama-guard-4-12b	7d4c23ed	8e102126
+replicate/meta/meta-llama-3-70b	7d4c23ed	8e102126
+replicate/meta/meta-llama-3-70b-instruct	7d4c23ed	8e102126
+replicate/meta/meta-llama-3-8b	7d4c23ed	8e102126
+replicate/meta/meta-llama-3-8b-instruct	7d4c23ed	8e102126
+replicate/minimax/h3	7d4c23ed	8e102126
+replicate/minimax/h3-highspeed	7d4c23ed	8e102126
+replicate/minimax/h3-lite	7d4c23ed	8e102126
+replicate/minimax/image-01	7d4c23ed	bc3938d3
+replicate/minimax/speech-02-hd	7d4c23ed	8e102126
+replicate/minimax/speech-02-turbo	7d4c23ed	8e102126
+replicate/minimax/speech-2.6-hd	7d4c23ed	8e102126
+replicate/minimax/speech-2.6-turbo	7d4c23ed	8e102126
+replicate/minimax/speech-2.8-hd	7d4c23ed	8e102126
+replicate/minimax/speech-2.8-turbo	7d4c23ed	8e102126
 replicate/mistralai/mistral-7b-instruct-v0.2	7d4c23ed	6eacf031
 replicate/mistralai/mistral-7b-v0.1	7d4c23ed	8e102126
 replicate/mistralai/mixtral-8x7b-instruct-v0.1	7d4c23ed	8e102126
+replicate/moonshotai/kimi-k2-thinking	7d4c23ed	8e102126
+replicate/moonshotai/kimi-k2.5	33c4e8ba	b18ee8ef
+replicate/moonshotai/kimi-k2.6	08b51db5	8330afc8
+replicate/nightmareai/real-esrgan	7d4c23ed	8e102126
 replicate/openai/gpt-4.1	9a276813	1edb4060
 replicate/openai/gpt-4.1-mini	9a276813	1edb4060
 replicate/openai/gpt-4.1-nano	9a276813	1edb4060
 replicate/openai/gpt-4o	9a276813	1edb4060
 replicate/openai/gpt-4o-mini	9a276813	1edb4060
+replicate/openai/gpt-4o-mini-transcribe	9a276813	20be23da
+replicate/openai/gpt-4o-transcribe	9a276813	20be23da
 replicate/openai/gpt-5	48046c0e	f764ee3a
 replicate/openai/gpt-5-mini	48046c0e	f764ee3a
 replicate/openai/gpt-5-nano	48046c0e	f764ee3a
+replicate/openai/gpt-5-pro	79863098	d8c109ab
+replicate/openai/gpt-5.1	0bf3e86c	262c2595
+replicate/openai/gpt-5.2	8a110220	4bda7ae1
+replicate/openai/gpt-5.4	8a110220	4bda7ae1
+replicate/openai/gpt-5.6-luna	8a110220	e100688d
+replicate/openai/gpt-5.6-sol	8a110220	e100688d
+replicate/openai/gpt-5.6-terra	8a110220	e100688d
 replicate/openai/gpt-oss-120b	50665211	29b7b224
 replicate/openai/gpt-oss-20b	50665211	29b7b224
 replicate/openai/o1	50665211	e1541ff5
 replicate/openai/o1-mini	50665211	e1541ff5
 replicate/openai/o4-mini	50665211	6589f9d8
+replicate/perceptron-ai-inc/isaac-0.1	7d4c23ed	8e102126
+replicate/philz1337x/clarity-pro-upscaler	7d4c23ed	8e102126
+replicate/pixverse/lipsync	7d4c23ed	8e102126
+replicate/playht/play-dialog	7d4c23ed	8e102126
+replicate/prunaai/flux-fast	7d4c23ed	8e102126
+replicate/prunaai/flux-kontext-fast	7d4c23ed	8e102126
+replicate/prunaai/hidream-l1-fast	7d4c23ed	8e102126
+replicate/prunaai/p-image	7d4c23ed	8e102126
+replicate/prunaai/p-image-edit	7d4c23ed	8e102126
+replicate/prunaai/p-image-edit-lora	7d4c23ed	8e102126
+replicate/prunaai/p-image-lora	7d4c23ed	8e102126
+replicate/prunaai/p-video-2-pro-avatar	7d4c23ed	8e102126
+replicate/prunaai/p-video-2-pro-replace	7d4c23ed	8e102126
+replicate/prunaai/p-video-animate	7d4c23ed	8e102126
+replicate/prunaai/p-video-avatar	7d4c23ed	8e102126
+replicate/prunaai/p-video-replace	7d4c23ed	8e102126
+replicate/prunaai/wan-2.2-image	7d4c23ed	8e102126
+replicate/quiverai/arrow-1.1	7d4c23ed	8e102126
+replicate/quiverai/arrow-1.1-max	7d4c23ed	8e102126
+replicate/quiverai/arrow-1.1-max-vectorize	7d4c23ed	8e102126
+replicate/quiverai/arrow-1.1-vectorize	7d4c23ed	8e102126
+replicate/qwen-edit-apps/qwen-image-edit-plus-lora-fusion	12053068	1edb4060
+replicate/qwen-edit-apps/qwen-image-edit-plus-lora-next-scene	12053068	1edb4060
+replicate/qwen-edit-apps/qwen-image-edit-plus-lora-photo-to-anime	12053068	1edb4060
+replicate/qwen-edit-apps/qwen-image-edit-plus-lora-relight	12053068	1edb4060
+replicate/qwen-edit-apps/qwen-image-edit-plus-lora-skin	12053068	1edb4060
+replicate/qwen-edit-apps/qwen-image-edit-plus-lora-upscale	12053068	1edb4060
+replicate/qwen/qwen-edit-multiangle	12053068	1edb4060
+replicate/qwen/qwen-image	12053068	1edb4060
+replicate/qwen/qwen-image-2	12053068	1edb4060
+replicate/qwen/qwen-image-2-pro	12053068	1edb4060
+replicate/qwen/qwen-image-2512	12053068	1edb4060
+replicate/qwen/qwen-image-edit	12053068	1edb4060
+replicate/qwen/qwen-image-edit-2511	12053068	1edb4060
+replicate/qwen/qwen-image-edit-plus	12053068	1edb4060
+replicate/qwen/qwen-image-edit-plus-lora	12053068	1edb4060
 replicate/qwen/qwen3-235b-a22b-instruct-2507	94a111ce	48429573
+replicate/qwen/qwen3-7-plus	94a111ce	48429573
+replicate/qwen/qwen3-tts	94a111ce	48429573
+replicate/recraft-ai/recraft-20b	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-20b-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-creative-upscale	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-crisp-upscale	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-remove-background	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v3	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v3-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4-pro	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4-pro-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4-styles-pro	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4-styles-pro-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4.1	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4.1-pro	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4.1-pro-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4.1-svg	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4.1-utility	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-v4.1-utility-pro	7d4c23ed	8e102126
+replicate/recraft-ai/recraft-vectorize	7d4c23ed	8e102126
+replicate/resemble-ai/chatterbox	7d4c23ed	8e102126
+replicate/resemble-ai/chatterbox-pro	7d4c23ed	8e102126
+replicate/resemble-ai/chatterbox-turbo	7d4c23ed	8e102126
+replicate/retro-diffusion/rd-animation	7d4c23ed	8e102126
+replicate/runwayml/aleph-2	7d4c23ed	8e102126
+replicate/runwayml/gen-4.5	7d4c23ed	8e102126
+replicate/runwayml/gen4-image-turbo	7d4c23ed	8e102126
+replicate/runwayml/gen4-turbo	7d4c23ed	8e102126
+replicate/snowflake/snowflake-arctic-instruct	7d4c23ed	8e102126
+replicate/stability-ai/stable-diffusion-3	7d4c23ed	8e102126
+replicate/stability-ai/stable-diffusion-3.5-large	7d4c23ed	6eacf031
+replicate/stability-ai/stable-diffusion-3.5-large-turbo	7d4c23ed	8e102126
+replicate/stability-ai/stable-diffusion-3.5-medium	7d4c23ed	8e102126
+replicate/sync/lipsync-2	7d4c23ed	8e102126
+replicate/sync/lipsync-2-pro	7d4c23ed	8e102126
+replicate/sync/react-1	7d4c23ed	8e102126
+replicate/tencent/hunyuan-image-2.1	7d4c23ed	8e102126
+replicate/tencent/hunyuan-image-3	7d4c23ed	8e102126
+replicate/veed/fabric-1.0	7d4c23ed	8e102126
+replicate/wan-video/wan-2.2-s2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.5-i2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.5-i2v-fast	7d4c23ed	8e102126
+replicate/wan-video/wan-2.5-t2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.5-t2v-fast	7d4c23ed	8e102126
+replicate/wan-video/wan-2.6-i2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.6-t2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.7-i2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.7-image	7d4c23ed	8e102126
+replicate/wan-video/wan-2.7-image-pro	7d4c23ed	8e102126
+replicate/wan-video/wan-2.7-r2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.7-t2v	7d4c23ed	8e102126
+replicate/wan-video/wan-2.7-videoedit	7d4c23ed	8e102126
+replicate/wan-video/wan2.6-i2v-flash	7d4c23ed	8e102126
+replicate/wavespeedai/qwen-image	12053068	1edb4060
+replicate/wavespeedai/wan-2.1-i2v-480p	7d4c23ed	8e102126
+replicate/wavespeedai/wan-2.1-i2v-720p	7d4c23ed	8e102126
+replicate/wavespeedai/wan-2.1-t2v-480p	7d4c23ed	8e102126
+replicate/wavespeedai/wan-2.1-t2v-720p	7d4c23ed	8e102126
 replicate/xai/grok-4	8a7ba322	29b7b224
+replicate/xai/grok-imagine-image	9f8e939c	87c5ce34
+replicate/xai/grok-imagine-image-quality	9f8e939c	87c5ce34
+replicate/xai/grok-imagine-r2v	9f8e939c	1edb4060
+replicate/xai/grok-imagine-video	9f8e939c	87c5ce34
+replicate/xai/grok-imagine-video-1.5	9f8e939c	87c5ce34
+replicate/xai/grok-imagine-video-extension	9f8e939c	1edb4060
+replicate/xai/grok-text-to-speech	9f8e939c	1edb4060
 rerank-english-v3.0	7d4c23ed	8fe82389
 rerank-multilingual-v3.0	7d4c23ed	8fe82389
 rerank-v3.5	7d4c23ed	8fe82389
@@ -24915,19 +25990,45 @@ rerank-v4.0-pro	7d4c23ed	8fe82389
 rerank-v5.0-fast	7d4c23ed	2cb3ce58
 rerank-v5.0-pro	7d4c23ed	2cb3ce58
 runwayml/aleph2	7d4c23ed	8e102126
+runwayml/bria_fibo_edit_1_5	7d4c23ed	8e102126
 runwayml/eleven_multilingual_v2	7d4c23ed	8e102126
+runwayml/eleven_v3	7d4c23ed	8e102126
+runwayml/eleven_v4	7d4c23ed	8e102126
+runwayml/gemini_2.5_flash	7af22a68	1edb4060
+runwayml/gemini_image3.1_flash_lite	7af22a68	1edb4060
 runwayml/gemini_omni_flash	7af22a68	1edb4060
+runwayml/gemini_omni_flash_1.1	7af22a68	1edb4060
+runwayml/gemini_omni_flash_1.2	7af22a68	1edb4060
 runwayml/gen4.5	7d4c23ed	8e102126
 runwayml/gen4_image	7d4c23ed	8e102126
 runwayml/gen4_image_turbo	7d4c23ed	8e102126
 runwayml/gen4_turbo	7d4c23ed	8e102126
+runwayml/grok_imagine_1_5	9f8e939c	1edb4060
+runwayml/grok_imagine_1_5_lite	9f8e939c	1edb4060
+runwayml/h3_max	7d4c23ed	8e102126
 runwayml/hailuo3	7d4c23ed	8e102126
+runwayml/happyhorse_1_0	7d4c23ed	8e102126
+runwayml/kling2.5_turbo_pro	7d4c23ed	8e102126
+runwayml/kling3.0_4k	7d4c23ed	8e102126
+runwayml/kling3.0_pro	7d4c23ed	8e102126
+runwayml/kling3.0_standard	7d4c23ed	8e102126
+runwayml/klingO3_4k	7d4c23ed	8e102126
+runwayml/klingO3_pro	7d4c23ed	8e102126
+runwayml/klingO3_standard	7d4c23ed	8e102126
+runwayml/kling_4	7d4c23ed	8e102126
+runwayml/kling_4_flash	7d4c23ed	8e102126
+runwayml/muse_image	7d4c23ed	8e102126
+runwayml/seedance-latest	7d4c23ed	8e102126
 runwayml/seedance2	7d4c23ed	8e102126
 runwayml/seedance2_5	7d4c23ed	8e102126
 runwayml/seedance2_fast	7d4c23ed	8e102126
 runwayml/seedance2_mini	7d4c23ed	8e102126
+runwayml/seedream5_flash	7d4c23ed	8e102126
+runwayml/seedream5_lite	7d4c23ed	8e102126
 runwayml/veo3.1	7d4c23ed	8e102126
 runwayml/veo3.1_fast	7d4c23ed	8e102126
+runwayml/wan3	7d4c23ed	8e102126
+runwayml/wan3_prime	7d4c23ed	8e102126
 sagemaker/meta-textgeneration-llama-2-13b	7d4c23ed	8e102126
 sagemaker/meta-textgeneration-llama-2-13b-f	7d4c23ed	8e102126
 sagemaker/meta-textgeneration-llama-2-70b	7d4c23ed	8e102126
@@ -25021,12 +26122,14 @@ snowflake/snowflake-llama-3.1-405b	7d4c23ed	8e102126
 snowflake/snowflake-llama-3.3-70b	7d4c23ed	8e102126
 soniox/stt-async-v4	7d4c23ed	8e102126
 soniox/stt-async-v5	7d4c23ed	8e102126
+soniox/stt-async-v6	7d4c23ed	8e102126
 soniox/stt-rt-preview	7d4c23ed	8e102126
 soniox/stt-rt-preview-v2	7d4c23ed	8e102126
 soniox/stt-rt-v3	7d4c23ed	8e102126
 soniox/stt-rt-v3-preview	7d4c23ed	8e102126
 soniox/stt-rt-v4	7d4c23ed	8e102126
 soniox/stt-rt-v5	7d4c23ed	8e102126
+soniox/stt-rt-v6	7d4c23ed	8e102126
 sora-2	7d4c23ed	2cb3ce58
 sora-2-pro	7d4c23ed	2cb3ce58
 sora-2-pro-high-res	7d4c23ed	2cb3ce58
@@ -25194,6 +26297,7 @@ together_ai/deepseek-ai/DeepSeek-V4-Pro-0813	40163ab7	a6b734c3
 together_ai/deepseek-ai/DeepSeek-V4.1-Flash	40163ab7	a6b734c3
 together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017	40163ab7	a6b734c3
 together_ai/deepseek-pro-latest	ee461aaa	c6a05312
+together_ai/elorian-labs/glimpse-1.0	7d4c23ed	8e102126
 together_ai/essentialai/rnj-1-instruct	7d4c23ed	8e102126
 together_ai/glm-flash-latest	c454043e	29b3dc77
 together_ai/glm-latest	c454043e	69abcd9d
@@ -25228,6 +26332,7 @@ together_ai/qwen-flash-latest	12053068	1edb4060
 together_ai/reflection/Beam-1.0-501B-A23B	7339b065	78e41205
 together_ai/ricursive-ai/Ripple-65B-Preview	7d4c23ed	8e102126
 together_ai/thinkingmachines/Inkling	f9d47486	5d5f7689
+together_ai/thinkingmachines/Inkling-2-Small	7d4c23ed	8e102126
 together_ai/together/Tev1-4B-experimental	7d4c23ed	8e102126
 together_ai/togethercomputer/CodeLlama-34b-Instruct	7d4c23ed	8e102126
 together_ai/zai-org/GLM-4.5-Air-FP8	7d4c23ed	8e102126
@@ -25253,7 +26358,9 @@ typesafe/jev-latest	7d4c23ed	bc3938d3
 typesafe/jev-preview	7d4c23ed	8e102126
 unknown-model	7d4c23ed	2cb3ce58
 us-gov.anthropic.claude-fable-5-1	7d8e3822	46fba062
+us-gov.anthropic.claude-fable-5-2	7d8e3822	b1731b06
 us-gov.anthropic.claude-haiku-5-5	7af22a68	bda9263a
+us-gov.anthropic.claude-mythos-5-2	7d8e3822	b1731b06
 us-gov.anthropic.claude-opus-4-8	cb2d68dd	0c062668
 us-gov.anthropic.claude-opus-5	cb2d68dd	0c062668
 us-gov.anthropic.claude-opus-5-5	7d8e3822	46fba062
@@ -25281,10 +26388,12 @@ us.anthropic.claude-3-7-sonnet-20250219-v1:0	7af22a68	1edb4060
 us.anthropic.claude-3-opus-20240229-v1:0	7af22a68	1edb4060
 us.anthropic.claude-fable-5	7d8e3822	32d35b3b
 us.anthropic.claude-fable-5-1	7d8e3822	e409a03e
+us.anthropic.claude-fable-5-2	7d8e3822	b1731b06
 us.anthropic.claude-haiku-4-5-20251001-v1:0	a23e2c66	cd1a0e5f
 us.anthropic.claude-haiku-5-5	270c9c7a	217fb36d
 us.anthropic.claude-mythos-5	7d8e3822	b1731b06
 us.anthropic.claude-mythos-5-1	7d8e3822	46fba062
+us.anthropic.claude-mythos-5-2	7d8e3822	b1731b06
 us.anthropic.claude-mythos-preview	7af22a68	bda9263a
 us.anthropic.claude-opus-4-1-20250805-v1:0	a23e2c66	cd1a0e5f
 us.anthropic.claude-opus-4-20250514-v1:0	7af22a68	1edb4060
@@ -25427,6 +26536,7 @@ vercel_ai_gateway/openai/gpt-4.1-mini	9a276813	1edb4060
 vercel_ai_gateway/openai/gpt-4.1-nano	9a276813	1edb4060
 vercel_ai_gateway/openai/gpt-4o	9a276813	1edb4060
 vercel_ai_gateway/openai/gpt-4o-mini	9a276813	1edb4060
+vercel_ai_gateway/openai/gpt-6-luna-decisions	ef6e238b	552da0e2
 vercel_ai_gateway/openai/o1	50665211	e1541ff5
 vercel_ai_gateway/openai/o3	50665211	6589f9d8
 vercel_ai_gateway/openai/o3-mini	50665211	6589f9d8
@@ -25438,6 +26548,9 @@ vercel_ai_gateway/perplexity/sonar	7d4c23ed	8e102126
 vercel_ai_gateway/perplexity/sonar-pro	7d4c23ed	8e102126
 vercel_ai_gateway/perplexity/sonar-reasoning	7d4c23ed	8e102126
 vercel_ai_gateway/perplexity/sonar-reasoning-pro	e86fa504	c9071d93
+vercel_ai_gateway/typesafe-ai/jev	7d4c23ed	bc3938d3
+vercel_ai_gateway/typesafe-ai/jev-1.13.0	7d4c23ed	8e102126
+vercel_ai_gateway/typesafe-ai/jev-1.14.0	7d4c23ed	8e102126
 vercel_ai_gateway/vercel/v0-1.0-md	7d4c23ed	8e102126
 vercel_ai_gateway/vercel/v0-1.5-md	7d4c23ed	8e102126
 vercel_ai_gateway/xai/grok-2	9f8e939c	1edb4060
@@ -25464,6 +26577,8 @@ vertex_ai/claude-3-sonnet@20240229	7af22a68	1edb4060
 vertex_ai/claude-fable-5	7d8e3822	17fa4568
 vertex_ai/claude-fable-5-1	7d8e3822	a70e0255
 vertex_ai/claude-fable-5-1@default	7d8e3822	17fa4568
+vertex_ai/claude-fable-5-2	7d8e3822	2c52eb91
+vertex_ai/claude-fable-5-2@default	7d8e3822	2c52eb91
 vertex_ai/claude-fable-5@default	cb2d68dd	4d309c78
 vertex_ai/claude-fable-latest	7af22a68	1edb4060
 vertex_ai/claude-haiku-4-5	7af22a68	1edb4060
@@ -25471,6 +26586,8 @@ vertex_ai/claude-haiku-4-5@20251001	7af22a68	1edb4060
 vertex_ai/claude-haiku-5-5	270c9c7a	78c20816
 vertex_ai/claude-haiku-5-5@default	270c9c7a	78c20816
 vertex_ai/claude-haiku-latest	7af22a68	1edb4060
+vertex_ai/claude-mythos-5-2	7d8e3822	2c52eb91
+vertex_ai/claude-mythos-5-2@default	7d8e3822	2c52eb91
 vertex_ai/claude-opus-4-5	890864de	ccbf4d97
 vertex_ai/claude-opus-4-5@20251101	890864de	ccbf4d97
 vertex_ai/claude-opus-4-6	aeebecb0	dd588f9f
@@ -25498,6 +26615,7 @@ vertex_ai/codestral-2501	7d4c23ed	8e102126
 vertex_ai/codestral-2@001	7d4c23ed	8e102126
 vertex_ai/codestral@2405	7d4c23ed	8e102126
 vertex_ai/codestral@latest	7d4c23ed	8e102126
+vertex_ai/deep-research-preview-04-2026	7d4c23ed	3830fd6d
 vertex_ai/deep-research-pro-preview-12-2025	7d4c23ed	8e102126
 vertex_ai/deepseek-ai/deepseek-ocr-maas	e7f5c7af	1edb4060
 vertex_ai/deepseek-ai/deepseek-r1-0528-maas	7cd6eaf6	3e88aa0e
@@ -25539,6 +26657,9 @@ vertex_ai/gemini-3.8-flash-tts	7af22a68	1edb4060
 vertex_ai/gemini-3.8-live	7af22a68	1edb4060
 vertex_ai/gemini-4-argon	d0fa1e3c	9220eeb2
 vertex_ai/gemini-4-argon-cyber-permissive	7af22a68	1edb4060
+vertex_ai/gemini-4-carbon	7af22a68	1edb4060
+vertex_ai/gemini-4-carbon-cyber-permissive	7af22a68	1edb4060
+vertex_ai/gemini-4-hydrogen	7af22a68	1edb4060
 vertex_ai/gemini-embedding-2	7af22a68	87c5ce34
 vertex_ai/gemini-embedding-2-preview	7af22a68	1edb4060
 vertex_ai/gemini-nano-banana-2.1	0034641d	35aaf44b
@@ -25586,6 +26707,7 @@ vertex_ai/mistralai/codestral-2@001	7d4c23ed	8e102126
 vertex_ai/mistralai/mistral-medium-3	7d4c23ed	8e102126
 vertex_ai/mistralai/mistral-medium-3@001	7d4c23ed	8e102126
 vertex_ai/moonshotai/kimi-k2-thinking-maas	7d4c23ed	8e102126
+vertex_ai/nano-banana-latest	7d4c23ed	8e102126
 vertex_ai/openai/gpt-oss-120b-maas	9a276813	1edb4060
 vertex_ai/openai/gpt-oss-20b-maas	9a276813	1edb4060
 vertex_ai/qwen/qwen3-235b-a22b-instruct-2507-maas	94a111ce	48429573
@@ -25738,6 +26860,7 @@ watsonx/mistralai/pixtral-12b-2409	7d4c23ed	8e102126
 watsonx/openai/gpt-oss-120b	50665211	29b7b224
 watsonx/sdaia/allam-1-13b-instruct	7d4c23ed	8e102126
 watsonx/whisper-large-v3-turbo	7d4c23ed	3830fd6d
+webiq/search	7d4c23ed	8e102126
 whisper-1	7d4c23ed	78d5e5c0
 writer.palmyra-vision-7b	7d4c23ed	2cb3ce58
 writer.palmyra-x4-v1:0	7d4c23ed	8e102126
