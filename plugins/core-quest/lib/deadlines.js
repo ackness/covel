@@ -1,4 +1,8 @@
-import { dimensionsJsonEqual } from "@covel/plugin-handlers-utils/dimensions";
+import {
+  compareCondition,
+  conditionOperatorOf,
+  readConditionPath,
+} from "@covel/plugin-handlers-utils/conditions";
 
 /**
  * Deadlines of quests and objectives. A deadline is `{ when, label, missed? }`:
@@ -15,66 +19,8 @@ import { dimensionsJsonEqual } from "@covel/plugin-handlers-utils/dimensions";
  *   `{ score, tier }` from `affinity.tier@1` (`path: tier` or `path: score`);
  * - `{ turnGte: n }`: from session turn `n` on.
  *
- * The operators are those of story-events conditions: `equals`, `notEquals`,
- * `in`, `gte`, `gt`, `lte`, `lt`, `exists`. That plugin cannot be imported
- * here, so this file repeats the leaf part of `story-events/lib/conditions.js`;
- * change both together.
+ * Leaf comparisons use the public SDK; this plugin supplies their values.
  */
-
-export const OPERATORS = [
-  "equals",
-  "notEquals",
-  "in",
-  "gte",
-  "gt",
-  "lte",
-  "lt",
-  "exists",
-];
-
-function readPath(value, path) {
-  const segments =
-    typeof path === "string" && path.length ? path.split(".") : [];
-  let current = value;
-  for (const segment of segments) {
-    if (current === null || typeof current !== "object") return undefined;
-    current = Array.isArray(current)
-      ? current[Number(segment)]
-      : current[segment];
-  }
-  return current;
-}
-
-function compare(operator, actual, expected) {
-  switch (operator) {
-    case "exists":
-      return (actual !== undefined && actual !== null) === (expected !== false);
-    case "equals":
-      return dimensionsJsonEqual(actual, expected);
-    case "notEquals":
-      return !dimensionsJsonEqual(actual, expected);
-    case "in":
-      return (
-        Array.isArray(expected) &&
-        expected.some((item) => dimensionsJsonEqual(actual, item))
-      );
-    case "gte":
-      return typeof actual === "number" && actual >= expected;
-    case "gt":
-      return typeof actual === "number" && actual > expected;
-    case "lte":
-      return typeof actual === "number" && actual <= expected;
-    case "lt":
-      return typeof actual === "number" && actual < expected;
-    default:
-      return false;
-  }
-}
-
-function operatorOf(when) {
-  const found = OPERATORS.filter((operator) => Object.hasOwn(when, operator));
-  return found.length === 1 ? found[0] : null;
-}
 
 /**
  * Whether a deadline has passed: `true`, `false`, or `null` when it cannot be
@@ -88,21 +34,29 @@ export function deadlinePassed(when, state) {
   if (!when || typeof when !== "object" || Array.isArray(when)) return null;
   if (Number.isInteger(when.turnGte))
     return Number.isInteger(state.turn) ? state.turn >= when.turnGte : null;
-  const operator = operatorOf(when);
+  const operator = conditionOperatorOf(when);
   if (!operator) return null;
   if (typeof when.dimension === "string") {
     const entry = state.dimensions?.[when.dimension];
     if (!entry) return null;
-    return compare(operator, readPath(entry.value, when.path), when[operator]);
+    return compareCondition(
+      operator,
+      readConditionPath(entry.value, when.path),
+      when[operator],
+    );
   }
   if (typeof when.time === "string") {
     if (!state.time) return null;
-    return compare(operator, state.time[when.time], when[operator]);
+    return compareCondition(operator, state.time[when.time], when[operator]);
   }
   if (typeof when.affinity === "string") {
     const entry = state.affinity?.get(when.affinity.trim().toLowerCase());
     if (!entry) return null;
-    return compare(operator, readPath(entry, when.path), when[operator]);
+    return compareCondition(
+      operator,
+      readConditionPath(entry, when.path),
+      when[operator],
+    );
   }
   return null;
 }
