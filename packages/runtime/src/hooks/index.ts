@@ -2,7 +2,11 @@
  * Hook lifecycle pipeline — barrel export.
  */
 
-export { HookPipeline, createHookPipeline } from "./pipeline.js";
+export {
+  HookPipeline,
+  createHookPipeline,
+  type HookHandlerOutcome,
+} from "./pipeline.js";
 export { HOOK_SEMANTICS } from "./types.js";
 export {
   runSessionStartHook,

@@ -77,6 +77,9 @@ describe("debugger refresh", () => {
     await waitFor(() =>
       expect(result.current.snapshotData?.session.phase).toBe("setup"),
     );
+    // Trace groups include manual/setup/failed executions and can be partial.
+    // Only the committed session clock defines the story-turn count.
+    expect(result.current.storyTurnCount).toBe(0);
     act(() => result.current.setDebugView("data"));
     mocks.getSessionView.mockResolvedValue(snapshot("session-a", 2));
     mocks.getSessionExecution.mockResolvedValue({
@@ -85,6 +88,7 @@ describe("debugger refresh", () => {
     });
     await act(async () => result.current.refresh());
     expect(result.current.snapshotData?.session.completedPlayerTurns).toBe(2);
+    expect(result.current.storyTurnCount).toBe(2);
     expect(result.current.sessions[0]?.completedPlayerTurns).toBe(2);
     expect(result.current.sessions[0]?.phase).toBe("playing");
     expect(result.current.snapshotUpdatedAt).toBeTruthy();

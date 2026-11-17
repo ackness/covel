@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type * as api from "@/services/api.js";
 import { validateDebugSearch } from "../../debug.js";
 import {
-  getStoryTurnCount,
   getVisibleTurns,
   mergeTurnPages,
   traceEventMatchesCategory,
@@ -81,7 +80,7 @@ describe("debug route model", () => {
     });
   });
 
-  it("counts story turns while retaining manual invocation placement", () => {
+  it("retains manual invocation placement in the trace timeline", () => {
     const storyA = turn("story-a", [traceEvent("turn.started")]);
     const manual = turn("manual", [
       traceEvent("turn.started", {
@@ -90,7 +89,6 @@ describe("debug route model", () => {
     ]);
     const storyB = turn("story-b", [traceEvent("turn.started")]);
 
-    expect(getStoryTurnCount([storyA, manual, storyB])).toBe(2);
     expect(
       getVisibleTurns([storyA, manual, storyB]).map((item) => item.turnIndex),
     ).toEqual([1, 1, 2]);

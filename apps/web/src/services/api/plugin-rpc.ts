@@ -28,6 +28,8 @@ export async function postPluginRpc(
       method: "POST",
       body: JSON.stringify(req),
       operatorAuth: true,
+      // RPC callers render transport and business failures in their own UI.
+      silentErrors: true,
       canDispatch,
     },
   );
