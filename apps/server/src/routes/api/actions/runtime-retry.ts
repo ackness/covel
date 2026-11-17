@@ -5,10 +5,11 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   RuntimeRetryScope,
+  TurnInput,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { ActionRejectedError } from "./action-rejection.js";
-import { capturePresentationRecovery } from "@covel/runtime";
+import { capturePresentationRecovery, deliveredEventOf } from "@covel/runtime";
 
 type RuntimeRetryAction = Extract<
   ActionRequest,
@@ -17,12 +18,17 @@ type RuntimeRetryAction = Extract<
   }
 >;
 
+type RetryTargets = NonNullable<
+  NonNullable<TurnInput["manualTrigger"]>["retryTargets"]
+>;
+
 export interface RuntimeRetryPlan {
   readonly presentationJobs?: readonly import("@covel/shared").DeferredRuntimeJob[];
   readonly presentationSnapshots?: readonly import("@covel/shared").PresentationSnapshot[];
   readonly scope?: RuntimeRetryScope;
   readonly seedResults: readonly RuntimeResult[];
   readonly sourceRuntimeIds: readonly string[];
+  readonly targets?: RetryTargets;
 }
 
 /** Called under the session lock, before any execution or preparation writes. */
@@ -106,22 +112,30 @@ export async function prepareRuntimeRetry(
       "retry_source_not_original",
     );
   }
-  // Attempts are oldest-first. Only a committed attempt can supersede
-  // source state: a successful runtime whose transaction rolled back is not healed.
+  // Attempts are oldest-first. Only a committed recovery the host admitted
+  // can supersede source state: a successful runtime whose transaction rolled
+  // back is not healed, and a plugin RPC or job that names the source ran
+  // without the source's event and write services, so it neither ends nor
+  // renews the failure. A committed success is final: its writes and
+  // operations landed, so no later failure can make the target retriable
+  // again and pay twice.
   for (const row of rows) {
     const scope = row.retryScope;
     if (
       row.commitStatus !== "committed" ||
-      scope?.sourceTurnId !== source.turnId
+      scope?.sourceTurnId !== source.turnId ||
+      scope.recovery !== true
     )
       continue;
     for (const result of (Array.isArray(row.runtimeResults)
       ? row.runtimeResults
       : []) as RuntimeResult[]) {
+      const current = results.get(result.runtimeId);
       if (
         scope.runtimeIds.includes(result.runtimeId) &&
-        results.has(result.runtimeId) &&
-        (result.status === "success" || result.status === "failed")
+        current !== undefined &&
+        (result.status === "success" ||
+          (result.status === "failed" && current.status !== "success"))
       ) {
         results.set(result.runtimeId, result);
       }
@@ -192,6 +206,7 @@ export async function prepareRuntimeRetry(
   return {
     presentationSnapshots,
     presentationJobs,
+    targets: retryTargets(runtimeIds, results, sourceResults, activeRuntimes),
     sourceRuntimeIds: [
       ...new Set([
         ...results.keys(),
@@ -218,6 +233,49 @@ export async function prepareRuntimeRetry(
         !runtimeIds.includes(result.runtimeId),
     ),
   };
+}
+
+/**
+ * What each target may do in this retry: stage write-service operations only
+ * while its recovered state is still failed, and receive the event the source
+ * turn delivered to it. The event is read from the target's own result in the
+ * original source row, never from a later attempt that ran without it, and
+ * comes from the producer that result names, only when that producer
+ * succeeded; otherwise the target gets none.
+ */
+function retryTargets(
+  runtimeIds: readonly string[],
+  results: ReadonlyMap<string, RuntimeResult>,
+  sourceResults: readonly RuntimeResult[],
+  activeRuntimes: readonly RuntimeManifest[],
+): RetryTargets {
+  return Object.fromEntries(
+    runtimeIds.map((runtimeId) => {
+      const trigger = sourceResults.find(
+        (result) => result.runtimeId === runtimeId,
+      )?.trigger;
+      const subscribed = activeRuntimes.find(
+        (runtime) => runtime.name === runtimeId,
+      )?.trigger;
+      const producer =
+        trigger &&
+        subscribed?.type === "event" &&
+        subscribed.topic === trigger.topic
+          ? sourceResults.find((r) => r.runId === trigger.producerRunId)
+          : undefined;
+      const data =
+        trigger && producer
+          ? deliveredEventOf(producer, trigger.topic)
+          : undefined;
+      return [
+        runtimeId,
+        {
+          sourceFailed: results.get(runtimeId)?.status === "failed",
+          ...(trigger && data ? { triggerEvent: { ...trigger, data } } : {}),
+        },
+      ];
+    }),
+  );
 }
 
 /** Runtime success only changes the durable failure ledger after commit. */

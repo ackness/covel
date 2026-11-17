@@ -9,7 +9,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mirrorSetupDone } from "@covel/shared";
 import type { JsonValue, RuntimeManifest, RuntimeResult } from "@covel/shared";
-import { runEventChain } from "../src/trigger/turn-event-chain.js";
+import {
+  deliveredEventOf,
+  runEventChain,
+} from "../src/trigger/turn-event-chain.js";
 import { collectExecutionEventDependencies } from "../src/event-dependencies.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -371,5 +374,38 @@ describe("runEventChain same-topic delivery", () => {
 
     expect(delivered).toEqual([{ n: 1 }]);
     expect(dropped).toEqual([["topic-x", "b/emitter"]]);
+    // The follower's result names the producer whose payload it received,
+    // and that producer gives the same payload back for a retry.
+    const relayed = completedResults.get(relay.name)!;
+    expect(relayed.trigger).toEqual({
+      topic: "topic-x",
+      producerRunId: "run-a/emitter",
+    });
+    expect(JSON.parse(JSON.stringify(relayed)).trigger).toEqual(
+      relayed.trigger,
+    );
+    expect(
+      deliveredEventOf(completedResults.get("a/emitter")!, "topic-x"),
+    ).toEqual(delivered[0]);
+  });
+
+  it("gives back a producer's first payload of a topic, only from a successful producer", () => {
+    const producer: RuntimeResult = {
+      ...resultEmitting("a/emitter", "topic-y", { n: 0 }),
+      effects: {
+        events: [
+          { topic: "topic-y", data: { n: 0 } },
+          { topic: "topic-x", data: { n: 1 } },
+          { topic: "topic-x", data: { n: 2 } },
+          { topic: "topic-z" },
+        ],
+      },
+    };
+    expect(deliveredEventOf(producer, "topic-x")).toEqual({ n: 1 });
+    expect(deliveredEventOf(producer, "topic-z")).toEqual({});
+    expect(deliveredEventOf(producer, "missing")).toBeUndefined();
+    expect(
+      deliveredEventOf({ ...producer, status: "failed" }, "topic-x"),
+    ).toBeUndefined();
   });
 });

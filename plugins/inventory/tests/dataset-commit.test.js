@@ -339,7 +339,9 @@ describe("inventory dataset commits through the real ledger", () => {
       skipped: 0,
     });
     const updates = getPendingProposals(result).filter(
-      (proposal) => proposal.type === "plugin.data.update",
+      (proposal) =>
+        proposal.type === "plugin.data.update" &&
+        proposal.payload.namespace === "items",
     );
     expect(updates).toHaveLength(2);
     const outcome = await commit(execution);

@@ -418,7 +418,7 @@ covel.registerService({
 
 #### 写服务能拿到什么
 
-写服务继承读服务的 `random`，去掉 `gateway` 和 `utils`，把 `pluginData` 换成读写接口，并增加 `turnId`：
+写服务继承读服务的 `random`，去掉 `gateway` 和 `utils`，把 `pluginData` 换成读写接口，并增加 `turnId` 和 `sourceTurnId`：
 
 <!-- prettier-ignore -->
 | 字段 | 含义 |
@@ -426,6 +426,7 @@ covel.registerService({
 | `pluginData` | 提供者自己数据的读写：`get`、`list`、`set`、`delete`、`update`。读到的是已提交数据，叠加本次执行里提供者上游的写入、同一调用方此前调用暂存的写入，以及这次调用自己的写入。 |
 | `random` | 确定性的随机数，流名是 `service:<服务名>`。 |
 | `turnId` | 调用方的回合。 |
+| `sourceTurnId` | 调用方是对一个已提交回合的限定重试时，那个原回合的 ID，与 runtime 的 `ctx.execution.sourceTurnId` 相同；其他时候没有。按回合记账的提供者用它找到原回合记下的内容，避免重试把同一笔交易再结算一次。 |
 
 - 即使调用方有模型或 HTTP 能力，写服务也拿不到：写服务应当短小、确定。
 - 不能写任何 `_` 开头的命名空间，包括提供者自己的 `_hidden.*`，抛出 `invalid-input`。
@@ -452,7 +453,8 @@ covel.registerService({
 以下位置调用写服务得到 `unavailable`（“Write services cannot be called here.”），什么都不暂存：
 
 - 脱离回合的后台 runtime（`detached`）和 `background` 执行；
-- 恢复执行（`resume`）和只修复内容的重试（带源回合的手动重试）：它们会把一笔交易结算两次；
+- 恢复执行（`resume`）：它会把一笔交易结算两次；
+- 带源回合的重试里，除“本次选中、来源结果为 `failed` 的目标”以外的 runtime：已提交的结果再暂存就会结算两次。目标只要在原回合或某次已提交的恢复里成功过，之后的失败不会让它重新算作失败。失败的目标原来的写入和操作都没有提交，所以可以暂存，见[回合管线 · 失败任务恢复](../internals/flow.md)；
 - agent 的 guard、Hook、RPC handler 和扩展点提供者；
 - 能挂起（`tools.builtin` 含 `suspend`）的 agent：它的写服务导入不出现，原因是 `not-allowed`。
 

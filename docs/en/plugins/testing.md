@@ -226,6 +226,7 @@ it("takes the coins and adds the item", async () => {
 
 - `store` holds the provider's committed data; the write service reads it with this call's own writes on top.
 - The result's `operations` are the operations the call staged: `record` is the [operation record](../reference/transactions.md#operation-records), and `writes` are the writes with the provider's identity. Nothing is saved.
+- To test behaviour in a retry, add `sourceTurnId` to `caller`: the write service sees it as `ctx.sourceTurnId`.
 - When the handler throws or returns invalid output, `callTestService` throws that error and nothing is staged; when it writes nothing, `operations` is empty.
 
 ### Test a function

@@ -2,10 +2,15 @@ import {
   actingCharacterOf,
   getPendingProposals,
   getToolContent,
+  makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
 import { unappliedInventoryChanges } from "../../lib/applied-operations.js";
+import {
+  PROSE_LOSSES_NAMESPACE,
+  proseLossCredits,
+} from "../../lib/prose-losses.js";
 import updateInventory from "../../lib/update-inventory.js";
 import {
   MAX_CHANGES,
@@ -44,11 +49,12 @@ export default async function handler(ctx) {
       value: { applied: 0, skipped: 0, results: [], ...appliedNotice },
     };
   const result = await updateInventory({ changes }, ctx);
+  const summary = getToolContent(result);
   return withPendingProposals(
     {
       outcome: "success",
       value: {
-        ...getToolContent(result),
+        ...summary,
         ...appliedNotice,
         ...(notRecorded > 0 && {
           notRecorded,
@@ -56,6 +62,30 @@ export default async function handler(ctx) {
         }),
       },
     },
-    getPendingProposals(result),
+    [
+      ...getPendingProposals(result),
+      ...proseLossProposals(ctx, summary.results),
+    ],
+  );
+}
+
+/**
+ * Credit the losses this run took from the prose to the story turn, so a
+ * retry of that turn does not take them again through `inventory.change@1`.
+ * A retry's ledger credits its source turn. Blind `inc` writes add to
+ * whatever another run committed meanwhile.
+ */
+function proseLossProposals(ctx, results) {
+  const taken = (results ?? [])
+    .filter((result) => result.op === "remove" && result.lost > 0)
+    .map(({ name, lost }) => ({ name, quantity: lost }));
+  const now = new Date().toISOString();
+  return proseLossCredits(ctx.execution?.sourceTurnId ?? ctx.turnId, taken).map(
+    ({ key, by }) =>
+      makeProposal(ctx, now, "plugin.data.update", {
+        namespace: PROSE_LOSSES_NAMESPACE,
+        key,
+        ops: [{ op: "inc", by }],
+      }),
   );
 }

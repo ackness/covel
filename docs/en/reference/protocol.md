@@ -1009,6 +1009,7 @@ Scoped selector retries use host-validated committed public sources; manual call
 - The same action runs by stage / DAG and is committed as one unit. It does not count a new turn.
 - Both batch recovery and single-task recovery with a source run only the selected targets. Event subscribers, recursion, and background dispatch are not allowed to widen the scope. Ordinary manual / plugin-RPC behavior without a source does not change.
 - The original story and the non-target results that were committed successfully are used only as context. They are not committed again.
+- An event-triggered target gets back the event the original turn delivered to it; only a target whose source result is `failed` can call write services. Both rules apply to single-task and batch recovery alike; see [API](./api.md#limits-of-a-batch-recovery).
 - If one target fails and another is skipped because it depends on the first, both remain waiting for recovery.
 - If the whole turn was interrupted and there is no committed source, the original action should be recovered first. A "success" in the trace must not be treated as committed data.
 

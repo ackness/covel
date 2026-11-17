@@ -413,6 +413,76 @@ describe("inventory change service", () => {
   });
 });
 
+describe("inventory change service in a retry", () => {
+  const chalk = { id: "chalk", name: "Chalk", quantity: 1 };
+  it.each([
+    {
+      name: "settles a removal the source turn's ledger already took",
+      sourceTurnId: "source",
+      quantity: 1,
+      results: [{ op: "remove", item: "Chalk", status: "skipped" }],
+      untouched: true,
+      claim: [{ op: "inc", by: -1, min: 0 }],
+    },
+    {
+      name: "takes only the part the ledger did not",
+      sourceTurnId: "source",
+      quantity: 2,
+      results: [{ op: "remove", item: "Chalk", status: "removed" }],
+      untouched: false,
+      claim: [{ op: "inc", by: -1, min: 0 }],
+    },
+    {
+      name: "leaves the credit alone outside a retry",
+      quantity: 1,
+      results: [{ op: "remove", item: "Chalk", status: "removed" }],
+      untouched: false,
+      claim: undefined,
+    },
+    {
+      name: "claims nothing from another turn's credit",
+      sourceTurnId: "other",
+      quantity: 1,
+      results: [{ op: "remove", item: "Chalk", status: "removed" }],
+      untouched: false,
+      claim: undefined,
+    },
+  ])("$name", async ({ sourceTurnId, quantity, results, untouched, claim }) => {
+    const { registry, request, store } = await fixture([chalk]);
+    // The source turn's ledger already took one chalk from the prose.
+    await store.setPluginData({
+      id: "prose-losses",
+      sessionId: caller.sessionId,
+      pluginId: "inventory",
+      namespace: "prose-losses",
+      key: "source/chalk",
+      value: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+    const { output, operations } = await callTestService({
+      registry,
+      caller: {
+        ...caller,
+        turnId: "attempt",
+        ...(sourceTurnId ? { sourceTurnId } : {}),
+      },
+      request: request("change", {
+        changes: [{ op: "remove", item: "Chalk", quantity }],
+      }),
+      store,
+    });
+    expect(output.results).toEqual(results);
+    const writes = operations.flatMap((operation) => operation.writes);
+    const claimed = writes.find(
+      (write) => write.payload.namespace === "prose-losses",
+    );
+    expect(claimed?.payload.ops).toEqual(claim);
+    const taken = writes.find((write) => write.payload.namespace === "items");
+    expect(taken === undefined).toBe(untouched);
+  });
+});
+
 it("deduplicates a successful exchange when long descriptions truncate its request", async () => {
   const { registry, request, store } = await fixture();
   const stage = createRootOperationStage({

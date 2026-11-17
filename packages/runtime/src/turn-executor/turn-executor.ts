@@ -46,6 +46,7 @@ import {
   runPostCompactionHook,
 } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
+import { attachEventTrigger } from "../event-dependencies.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
@@ -1014,6 +1015,17 @@ async function executeTurnImpl(
     const results = await executeParallel(
       foregroundRuntimes,
       async (manifest, identity) => {
+        // A scoped retry hands each target the event its source delivered.
+        const retried = scopedRecovery
+          ? input.manualTrigger?.retryTargets?.[manifest.name]?.triggerEvent
+          : undefined;
+        if (retried && targetedRuntimeIds.has(manifest.name)) {
+          const { producerRunId, ...triggerEvent } = retried;
+          return attachEventTrigger(
+            await invoke(manifest, triggerEvent, identity),
+            { topic: triggerEvent.topic, producerRunId },
+          );
+        }
         const triggerEventForRuntime =
           manualTarget &&
           manualTriggerEventPayload &&

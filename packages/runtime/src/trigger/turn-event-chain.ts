@@ -13,7 +13,7 @@ import { makeSkippedResult } from "../turn-executor/turn-executor-helpers.js";
 import { isRequiredUpstreamSatisfied } from "../turn-executor/turn-output-helpers.js";
 import { shouldTrigger } from "./trigger.js";
 import {
-  attachEventProducer,
+  attachEventTrigger,
   deferEventFollower,
 } from "../event-dependencies.js";
 import type { TriggerContext } from "../types.js";
@@ -113,26 +113,50 @@ interface SelectedEvent {
   readonly producer: RuntimeResult;
 }
 
+/** The deliverable events of a result, in emission order. */
+function* deliverableEvents(
+  result: RuntimeResult,
+): Generator<{ topic: string; data: Record<string, unknown> }> {
+  // Domain events belong only to successful producers, including at later depths.
+  if (result.status !== "success") return;
+  const events = result.effects?.events as
+    Array<Record<string, unknown>> | undefined;
+  for (const evt of events ?? []) {
+    const topic = evt?.topic;
+    if (typeof topic !== "string" || topic.length === 0) continue;
+    yield {
+      topic,
+      data: (evt?.data as Record<string, unknown> | undefined) ?? {},
+    };
+  }
+}
+
 function collectEventsFrom(
   result: RuntimeResult,
   sink: Map<string, SelectedEvent>,
   onDropped?: (topic: string, runtimeId: string) => void,
 ): void {
-  // Domain events belong only to successful producers, including at later depths.
-  if (result.status !== "success") return;
-  const events = result.effects?.events as
-    Array<Record<string, unknown>> | undefined;
-  if (!events) return;
-  for (const evt of events) {
-    const topic = evt?.topic;
-    if (typeof topic !== "string" || topic.length === 0) continue;
+  for (const { topic, data } of deliverableEvents(result)) {
     if (sink.has(topic)) {
       onDropped?.(topic, result.runtimeId);
       continue;
     }
-    const data = (evt?.data as Record<string, unknown> | undefined) ?? {};
     sink.set(topic, { data, producer: result });
   }
+}
+
+/**
+ * The payload the chain selects from `producer` for `topic`: its first
+ * emission of the topic, and only from a successful producer. A scoped retry
+ * uses it to hand a target the event its source turn delivered.
+ */
+export function deliveredEventOf(
+  producer: RuntimeResult,
+  topic: string,
+): Record<string, unknown> | undefined {
+  for (const event of deliverableEvents(producer))
+    if (event.topic === topic) return event.data;
+  return undefined;
 }
 
 export async function runEventChain({
@@ -267,8 +291,11 @@ export async function runEventChain({
               ? { topic, data: matchedEvent.data }
               : undefined;
           const result = await executeRuntime(manifest, triggerEvent, identity);
-          return matchedEvent
-            ? attachEventProducer(result, matchedEvent.producer.runId)
+          return triggerEvent && matchedEvent
+            ? attachEventTrigger(result, {
+                topic: triggerEvent.topic,
+                producerRunId: matchedEvent.producer.runId,
+              })
             : result;
         },
         turnId,

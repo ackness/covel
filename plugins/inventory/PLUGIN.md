@@ -1,5 +1,5 @@
 ---
-version: 0.0.47
+version: 0.0.48
 displayName: Bag
 description: >-
   Keeps track of what you carry. Items you gain, lose or equip in the story are

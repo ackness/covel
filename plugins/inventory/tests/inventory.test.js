@@ -979,6 +979,59 @@ describe("inventory from WorldIR", () => {
     });
   });
 
+  it("credits the losses it took from the prose to the story turn", async () => {
+    const torch = { id: "torch", name: "Torch", quantity: 3 };
+    const result = await ledger({
+      sessionId: "sess-1",
+      turnId: "attempt",
+      execution: { origin: "manual", sourceTurnId: "source" },
+      pluginId: "inventory",
+      runtimeId: "inventory/ledger",
+      random: makeRandom(),
+      store: {
+        listPluginData: async () => [{ key: torch.id, value: torch }],
+        getPluginData: async () => null,
+      },
+      world: {
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        characters: [player],
+      },
+      inputs: {
+        worldIR: {
+          value: worldIR([
+            change({
+              item: "torch",
+              holder: "sess-1-player",
+              operation: "lose",
+              quantity: 2,
+            }),
+          ]),
+        },
+      },
+    });
+    const credits = getPendingProposals(result).filter(
+      (proposal) => proposal.payload.namespace === "prose-losses",
+    );
+    // A blind increment: it adds to whatever another run committed.
+    expect(credits.map(({ type, payload }) => ({ type, payload }))).toEqual([
+      {
+        type: "plugin.data.update",
+        payload: {
+          namespace: "prose-losses",
+          key: "source/torch",
+          ops: [{ op: "inc", by: 2 }],
+        },
+      },
+    ]);
+  });
+
   it("avoids any store read when operations already cover every extracted change", async () => {
     const store = {
       listPluginData: vi.fn(() => {
@@ -1242,6 +1295,7 @@ it("preserves the ledger proposals for a representative item exchange", async ()
             "results": [
               {
                 "itemId": "gold",
+                "lost": 10,
                 "name": "Gold",
                 "op": "remove",
                 "quantity": 2,
@@ -1356,6 +1410,27 @@ it("preserves the ledger proposals for a representative item exchange", async ()
             "timestamp": "2026-01-02T03:04:05.000Z",
             "turnId": "turn",
             "type": "plugin.data.batch",
+          },
+          {
+            "id": "[proposal-id]",
+            "payload": {
+              "key": "turn/gold",
+              "namespace": "prose-losses",
+              "ops": [
+                {
+                  "by": 10,
+                  "op": "inc",
+                },
+              ],
+            },
+            "sessionId": "session",
+            "source": {
+              "pluginId": "inventory",
+              "runtimeId": "inventory/ledger",
+            },
+            "timestamp": "2026-01-02T03:04:05.000Z",
+            "turnId": "turn",
+            "type": "plugin.data.update",
           },
         ],
       }

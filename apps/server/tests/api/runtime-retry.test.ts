@@ -162,6 +162,78 @@ describe("committed runtime recovery projection", () => {
     ).toEqual(failedIds.filter((id) => id !== "a"));
   });
 
+  it("hands each event target the payload its source chain selected, only from a successful producer", async () => {
+    const f = await batchRetryFixture();
+    const producer = (
+      runtimeId: string,
+      status: RuntimeResult["status"],
+    ): RuntimeResult => ({
+      ...seedResult(runtimeId, status),
+      effects: {
+        events: [
+          { topic: "found", data: { n: 1 } },
+          { topic: "found", data: { n: 2 } },
+        ],
+      },
+    });
+    const follower = (runtimeId: string, producerRunId: string) => ({
+      ...seedResult(runtimeId, "failed"),
+      trigger: { topic: "found", producerRunId },
+    });
+    await f.store.saveTurnResult({
+      id: "event-source",
+      sessionId: f.sessionId,
+      turnId: "event-source",
+      origin: "player",
+      commitStatus: "committed",
+      durationMs: 1,
+      createdAt: "2026-01-02T00:00:00Z",
+      runtimeResults: [
+        producer("first", "success"),
+        producer("second", "success"),
+        producer("dropped", "failed"),
+        follower("a", "source-second"),
+        follower("b", "source-dropped"),
+        follower("c", "source-missing"),
+        seedResult("d", "failed"),
+        follower("moved", "source-first"),
+      ],
+    });
+    const subscriber = (name: string, topic = "found") =>
+      ({ name, trigger: { type: "event", topic } }) as RuntimeManifest;
+    const ids = ["a", "b", "c", "d", "moved"];
+    const plan = await prepareRuntimeRetry(
+      f.store,
+      f.sessionId,
+      {
+        type: "retry_failed_runtimes",
+        requestId: "request",
+        sessionId: f.sessionId,
+        payload: { runtimeIds: ids, retryFromTurnId: "event-source" },
+      },
+      [
+        ...ids.slice(0, 4).map((id) => subscriber(id)),
+        subscriber("moved", "lost"),
+      ],
+    );
+    expect(plan.targets).toEqual({
+      // The producer the source chain selected, not the first with the topic.
+      a: {
+        sourceFailed: true,
+        triggerEvent: {
+          topic: "found",
+          producerRunId: "source-second",
+          data: { n: 1 },
+        },
+      },
+      // A failed or missing producer, no recorded trigger, or a target that
+      // no longer subscribes to the topic: no event.
+      b: { sourceFailed: true },
+      c: { sourceFailed: true },
+      d: { sourceFailed: true },
+      moved: { sourceFailed: true },
+    });
+  });
   it("preserves a skipped dependency as failed while reusing only committed successful siblings", async () => {
     const f = await batchRetryFixture();
     const results: RuntimeResult[] = [
@@ -179,7 +251,11 @@ describe("committed runtime recovery projection", () => {
       origin: "manual",
       commitStatus: "committed",
       runtimeResults: results,
-      retryScope: { sourceTurnId: "source", runtimeIds: ["a", "b"] },
+      retryScope: {
+        sourceTurnId: "source",
+        runtimeIds: ["a", "b"],
+        recovery: true,
+      },
       durationMs: 1,
       createdAt: "2026-01-02T00:00:00Z",
     });

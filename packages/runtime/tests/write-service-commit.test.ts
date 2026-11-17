@@ -1214,14 +1214,21 @@ describe("where write services cannot be called", () => {
     expect(await items()).toEqual([]);
   });
 
-  it("answers unavailable in a scoped retry", async () => {
+  it.each([
+    ["without a recorded source result", undefined],
+    ["for a target whose source result succeeded", { sourceFailed: false }],
+  ])("answers unavailable in a scoped retry %s", async (_case, target) => {
     const shop = fn("shop", "buy");
     let answer: unknown;
     const { items } = await run({
       runtimes: [shop],
       input: {
         origin: "manual",
-        manualTrigger: { runtimeId: shop.name, sourceTurnId: "older-turn" },
+        manualTrigger: {
+          runtimeId: shop.name,
+          sourceTurnId: "older-turn",
+          ...(target ? { retryTargets: { [shop.name]: target } } : {}),
+        },
       },
       handlers: {
         [shop.name]: async (ctx) => {
@@ -1235,6 +1242,51 @@ describe("where write services cannot be called", () => {
       "Write services cannot be called here.",
     );
     expect(await items()).toEqual([]);
+  });
+
+  it("lets a retry target whose source result failed stage, and names the source turn to the provider", async () => {
+    const shop = fn("shop", "buy");
+    const seen: (string | undefined)[] = [];
+    const f = await run({
+      runtimes: [shop],
+      input: {
+        origin: "manual",
+        manualTrigger: {
+          runtimeIds: [shop.name],
+          sourceTurnId: "older-turn",
+          retryTargets: { [shop.name]: { sourceFailed: true } },
+        },
+      },
+      services: (registry) =>
+        registry.register("bank", {
+          name: "probe",
+          contract: "bank.probe@1",
+          access: "write",
+          input: z.object({}),
+          output: z.unknown(),
+          handler: async (_input, ctx) => {
+            seen.push(ctx.sourceTurnId);
+            return {};
+          },
+        }),
+      handlers: {
+        [shop.name]: async (ctx) => {
+          await trade(ctx, "a", 5);
+          await ctx.services!.call({
+            pluginId: "bank",
+            name: "probe",
+            contract: "bank.probe@1",
+            input: {},
+          });
+          return ok();
+        },
+      },
+    });
+    expect(f.outcome.status).toBe("committed");
+    expect(settled(f.outcome.operations)).toEqual(["committed"]);
+    expect(seen).toEqual(["older-turn"]);
+    expect(await f.items()).toEqual(["a"]);
+    expect(await f.gold()).toBe(95);
   });
 
   it("refuses write services when a queued detached runtime actually executes", async () => {
@@ -1403,6 +1455,69 @@ describe("where write services cannot be called", () => {
         } as RuntimeManifest,
         input,
         context("player"),
+        live,
+      ),
+    ).toBe(false);
+  });
+
+  it("gives a stage in a scoped retry only to a selected target whose source result failed", () => {
+    const manifest = fn("shop", "buy");
+    const other = fn("shop", "other");
+    const retry = (
+      manualTrigger: NonNullable<TurnInput["manualTrigger"]>,
+      extra: Partial<TurnInput> = {},
+    ) =>
+      ({
+        sessionId: SESSION,
+        turnId: "attempt",
+        playerMessage: "",
+        origin: "manual",
+        manualTrigger,
+        ...extra,
+      }) as TurnInput;
+    const context = {
+      executionId: "x",
+      origin: "manual",
+      countPolicy: "none",
+      sourceTurnId: "older-turn",
+    } as never;
+    const live = { detached: false };
+    const failed = {
+      [manifest.name]: { sourceFailed: true },
+      [other.name]: { sourceFailed: true },
+    };
+    const selected = retry({
+      runtimeIds: [manifest.name],
+      sourceTurnId: "older-turn",
+      retryTargets: failed,
+    });
+    expect(canStageOperations(manifest, selected, context, live)).toBe(true);
+    // A runtime outside the selection, a nested execution, a detached run
+    // and a presentation selector stay without a stage.
+    expect(canStageOperations(other, selected, context, live)).toBe(false);
+    expect(
+      canStageOperations(
+        manifest,
+        retry(
+          {
+            runtimeId: manifest.name,
+            sourceTurnId: "older-turn",
+            retryTargets: failed,
+          },
+          { parentTurnId: "attempt" },
+        ),
+        context,
+        live,
+      ),
+    ).toBe(false);
+    expect(
+      canStageOperations(manifest, selected, context, { detached: true }),
+    ).toBe(false);
+    expect(
+      canStageOperations(
+        { ...manifest, presentation: {} } as RuntimeManifest,
+        selected,
+        context,
         live,
       ),
     ).toBe(false);

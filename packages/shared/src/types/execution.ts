@@ -136,7 +136,39 @@ export interface RuntimeResult {
    * and guard runtimes and for an internal error no call site classified.
    */
   readonly stop?: LoopStop;
+  /**
+   * The event the event chain delivered to this synchronous follower: its
+   * topic and the `runId` of the result whose payload was selected. Persisted
+   * with the result so a scoped retry can hand the same event back.
+   */
+  readonly trigger?: RuntimeEventTrigger;
   readonly timestamp: string;
+}
+
+/** Which emission activated an event-triggered run. */
+export interface RuntimeEventTrigger {
+  readonly topic: string;
+  readonly producerRunId: string;
+}
+
+/**
+ * Host-verified facts about one target of a scoped retry, read from its
+ * committed source turn.
+ */
+export interface RuntimeRetryTarget {
+  /**
+   * The target's latest committed result for the source failed, so none of
+   * its writes or write-service operations committed. Only such a target may
+   * stage write-service operations in the retry.
+   */
+  readonly sourceFailed: boolean;
+  /**
+   * The event the source turn actually delivered to the target, recovered
+   * from its committed, successful producer. Absent when it had none.
+   */
+  readonly triggerEvent?: RuntimeEventTrigger & {
+    readonly data: Readonly<Record<string, unknown>>;
+  };
 }
 
 /** Durable link between a scoped recovery attempt and its committed source. */
@@ -259,6 +291,13 @@ export interface TurnInput {
      * finalizing, so the retry turn's artifact records only what actually ran.
      */
     readonly retrySeedResults?: readonly RuntimeResult[];
+    /**
+     * Scoped retries only: what the committed source recorded for each
+     * target, by runtime ID. Built by the host under the session lock when
+     * it admits the execution as a recovery of the source's failed runtimes;
+     * its presence records the attempt as that recovery (`retryScope.recovery`).
+     */
+    readonly retryTargets?: Readonly<Record<string, RuntimeRetryTarget>>;
     /** Host-validated original public sources for detached presentation retries. */
     readonly presentationJobs?: readonly DeferredRuntimeJob[];
     /** Host-owned committed public sources for failed inline selectors only. */

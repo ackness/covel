@@ -95,6 +95,8 @@ export async function callTestService(options: {
     readonly runtimeId?: string;
     readonly sessionId?: string;
     readonly turnId?: string;
+    /** The committed turn a scoped retry settles, as the write service sees it. */
+    readonly sourceTurnId?: string;
     readonly locale?: string;
   };
   readonly request: Parameters<
@@ -114,6 +116,9 @@ export async function callTestService(options: {
     caller: { pluginId: caller.pluginId, runtimeId },
     sessionId,
     turnId,
+    ...(caller.sourceTurnId !== undefined
+      ? { sourceTurnId: caller.sourceTurnId }
+      : {}),
   });
   const client = options.registry.createClient({
     sessionId,

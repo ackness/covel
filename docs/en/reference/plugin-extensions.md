@@ -418,7 +418,7 @@ The capability snapshot records a write service as `"<contract> (write)"`: a pac
 
 #### What a write service can access
 
-A write service inherits the read service's `random`, removes `gateway` and `utils`, replaces `pluginData` with a writer, and adds `turnId`:
+A write service inherits the read service's `random`, removes `gateway` and `utils`, replaces `pluginData` with a writer, and adds `turnId` and `sourceTurnId`:
 
 <!-- prettier-ignore -->
 | Field | Meaning |
@@ -426,6 +426,7 @@ A write service inherits the read service's `random`, removes `gateway` and `uti
 | `pluginData` | Reads and writes the provider's own data: `get`, `list`, `set`, `delete`, `update`. Reads see committed data with the provider's upstream writes in this execution, the writes the same caller's earlier calls staged, and this call's own writes. |
 | `random` | Deterministic randomness on the stream `service:<service name>`. |
 | `turnId` | The caller's turn. |
+| `sourceTurnId` | When the caller is a scoped retry of a committed turn, that original turn's ID, the same as a runtime's `ctx.execution.sourceTurnId`; absent otherwise. A provider that keeps per-turn records uses it to find what the original turn recorded, so a retry does not settle the same trade again. |
 
 - A write service gets no model or HTTP access, even when its caller has it: a write service should be short and deterministic.
 - It cannot write any namespace that starts with `_`, the provider's own `_hidden.*` included; such a write throws `invalid-input`.
@@ -452,7 +453,8 @@ Each provider call retains its own external read basis, including earlier accept
 A call from these places answers `unavailable` ("Write services cannot be called here.") and stages nothing:
 
 - detached runtimes and `background` executions;
-- resumed executions (`resume`) and retries that only repair content (a manual retry with a source turn): they would settle one trade twice;
+- resumed executions (`resume`): they would settle one trade twice;
+- in a retry with a source turn, every runtime except a target selected for this retry whose source result is `failed`: staging again for a committed result would settle it twice. Once the target succeeded in the source turn or a committed recovery, a later failure does not count it as failed again. A failed target's original writes and operations never committed, so it can stage; see [Turn flow · Recovering failed tasks](../internals/flow.md);
 - agent guards, hooks, RPC handlers and extension providers;
 - an agent that can suspend (`suspend` in `tools.builtin`): its write-service imports are absent with the reason `not-allowed`.
 

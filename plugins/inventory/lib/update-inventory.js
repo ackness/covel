@@ -278,6 +278,7 @@ export function planInventoryChanges(
             name: live.name,
             itemId: key,
             status: "removed",
+            lost,
             ...(amount > base
               ? { note: `only ${base} held — removed all` }
               : {}),
@@ -293,6 +294,7 @@ export function planInventoryChanges(
             itemId: key,
             status: "updated",
             quantity: remaining,
+            lost,
           });
         }
         if (lost > 0) pushMessage("remove", live.name, lost);

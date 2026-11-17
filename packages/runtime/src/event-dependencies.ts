@@ -32,8 +32,8 @@ export function deferredFollowersOf(
   );
 }
 
-/** The source invocation, captured when the chain selected its payload. */
-export function attachEventProducer<T extends object>(
+/** The source invocation of a background follower's payload. */
+function attachEventProducer<T extends object>(
   target: T,
   producerRunId: string,
 ): T {
@@ -43,6 +43,21 @@ export function attachEventProducer<T extends object>(
     configurable: true,
   });
   return target;
+}
+
+/**
+ * Record on a synchronous follower's result the event the chain delivered.
+ * The field is public and persisted: a scoped retry reads it back from
+ * `turn_results` to hand the target the same event.
+ */
+export function attachEventTrigger(
+  result: RuntimeResult,
+  trigger: NonNullable<RuntimeResult["trigger"]>,
+): RuntimeResult {
+  // In place: the result may carry kernel-only symbols a copy would lose.
+  return Object.assign(result, {
+    trigger: { topic: trigger.topic, producerRunId: trigger.producerRunId },
+  });
 }
 
 export interface ExecutionEventDependencies {
@@ -66,7 +81,7 @@ export function collectExecutionEventDependencies(
     ...turn.runtimeResults,
     ...(turn.nestedRuntimeResults ?? []),
   ])) {
-    const source = (result as EventCarrier)[EVENT_PRODUCER];
+    const source = result.trigger?.producerRunId;
     if (source !== undefined) runs[result.runId] = source;
   }
   const followers = (turn.deferredFollowers ?? []).map((descriptor) => {

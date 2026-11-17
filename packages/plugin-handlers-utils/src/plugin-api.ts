@@ -368,6 +368,12 @@ export interface PluginWriteServiceContext extends Omit<
   readonly random: import("./function-runtime.js").PluginRandom;
   /** The calling execution's turn. */
   readonly turnId: string;
+  /**
+   * Set when the caller is a scoped retry of an earlier committed turn: the
+   * ID of that turn, like `ctx.execution.sourceTurnId` in a runtime. Key a
+   * per-turn settlement by it so the retry finds what its source recorded.
+   */
+  readonly sourceTurnId?: string;
 }
 export type PluginEvaluationJson =
   | string

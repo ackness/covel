@@ -8,6 +8,7 @@ import {
   newInventoryNames,
   planInventoryChanges,
 } from "./update-inventory.js";
+import { claimProseLosses, PROSE_LOSSES_NAMESPACE } from "./prose-losses.js";
 
 /**
  * The `effects` of an item as the bag reports them: only a well-formed check
@@ -104,10 +105,10 @@ function checkHoldings(changes, items) {
 }
 
 export async function change({ changes: requested }, ctx) {
-  const changes = requested.map(({ item, ...rest }) => ({
-    ...rest,
-    name: item,
-  }));
+  const { changes, settled } = await settleRetriedLosses(
+    requested.map(({ item, ...rest }) => ({ ...rest, name: item })),
+    ctx,
+  );
   const items = await ctx.pluginData.list("items");
   checkHoldings(changes, items);
   const previous = await ctx.pluginData.get("message", ctx.turnId);
@@ -142,11 +143,33 @@ export async function change({ changes: requested }, ctx) {
     });
   }
   return {
-    results: plan.summary.results.map(({ op, name, status, quantity }) => ({
-      op,
-      item: name,
-      status,
-      ...(quantity !== undefined ? { quantity } : {}),
-    })),
+    results: [
+      ...plan.summary.results.map(({ op, name, status, quantity }) => ({
+        op,
+        item: name,
+        status,
+        ...(quantity !== undefined ? { quantity } : {}),
+      })),
+      // Already taken from the bag by this turn's ledger.
+      ...settled.map(({ op, name }) => ({ op, item: name, status: "skipped" })),
+    ],
   };
+}
+
+/**
+ * In a retry of an earlier turn, a removal the ledger of that turn already
+ * took from the prose is not taken again: claim it from the turn's credit.
+ * The claim commits with this operation and must still fit the credit at
+ * commit, so each unit is claimed at most once.
+ */
+async function settleRetriedLosses(changes, ctx) {
+  if (!ctx.sourceTurnId) return { changes, settled: [] };
+  const settlement = await claimProseLosses(ctx.sourceTurnId, changes, (key) =>
+    ctx.pluginData.get(PROSE_LOSSES_NAMESPACE, key),
+  );
+  for (const { key, by } of settlement.claims)
+    await ctx.pluginData.update(PROSE_LOSSES_NAMESPACE, key, [
+      { op: "inc", by, min: 0 },
+    ]);
+  return settlement;
 }

@@ -508,7 +508,11 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         turnId: "attempt",
         origin: "manual",
         createdAt: ts(0),
-        retryScope: { sourceTurnId: "source", runtimeIds: ["worker"] },
+        retryScope: {
+          sourceTurnId: "source",
+          runtimeIds: ["worker"],
+          recovery: true,
+        },
       });
       await store.saveTurnResult(source);
       await store.saveTurnResult(attempt);
@@ -600,6 +604,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         runId: "run-top",
         status: "success",
         output: { n: 1 },
+        // The event that activated the run, which a scoped retry reads back.
+        trigger: { topic: "found", producerRunId: "run-producer" },
       };
       const nestedRun = { ...topRun, runId: "run-nested" };
       const top = makeTurnResult({

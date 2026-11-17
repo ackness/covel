@@ -24,10 +24,7 @@ import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import {
-  attachEventProducer,
-  collectExecutionEventDependencies,
-} from "../src/event-dependencies.js";
+import { collectExecutionEventDependencies } from "../src/event-dependencies.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
@@ -1187,10 +1184,9 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
         producer,
         makeResult("reader", {}, pluginData("reader", 1)),
         makeResult("optional-reader", {}, pluginData("optional", 1)),
-        attachEventProducer(
-          makeResult("follower", {}, pluginData("follower", 1)),
-          producer.runId,
-        ),
+        Object.assign(makeResult("follower", {}, pluginData("follower", 1)), {
+          trigger: { topic: "found", producerRunId: producer.runId },
+        }),
       ],
     );
 
