@@ -8,6 +8,10 @@ import {
   newInventoryNames,
   planInventoryChanges,
 } from "./update-inventory.js";
+import {
+  PROSE_LOSSES_NAMESPACE,
+  settleWithProseLosses,
+} from "./prose-losses.js";
 
 /**
  * The `effects` of an item as the bag reports them: only a well-formed check
@@ -104,10 +108,10 @@ function checkHoldings(changes, items) {
 }
 
 export async function change({ changes: requested }, ctx) {
-  const changes = requested.map(({ item, ...rest }) => ({
-    ...rest,
-    name: item,
-  }));
+  const { changes, settled } = await settleRetriedLosses(
+    requested.map(({ item, ...rest }) => ({ ...rest, name: item })),
+    ctx,
+  );
   const items = await ctx.pluginData.list("items");
   checkHoldings(changes, items);
   const previous = await ctx.pluginData.get("message", ctx.turnId);
@@ -142,11 +146,36 @@ export async function change({ changes: requested }, ctx) {
     });
   }
   return {
-    results: plan.summary.results.map(({ op, name, status, quantity }) => ({
-      op,
-      item: name,
-      status,
-      ...(quantity !== undefined ? { quantity } : {}),
-    })),
+    results: [
+      ...plan.summary.results.map(({ op, name, status, quantity }) => ({
+        op,
+        item: name,
+        status,
+        ...(quantity !== undefined ? { quantity } : {}),
+      })),
+      // Already taken from the bag by this turn's ledger.
+      ...settled.map(({ op, name }) => ({ op, item: name, status: "skipped" })),
+    ],
   };
+}
+
+/**
+ * In a retry of an earlier turn, a removal the ledger of that turn already
+ * took from the prose is not taken again: claim it from the turn's record.
+ * The claim commits with this operation, so it is made at most once.
+ */
+async function settleRetriedLosses(changes, ctx) {
+  if (!ctx.sourceTurnId) return { changes, settled: [] };
+  const settlement = settleWithProseLosses(
+    await ctx.pluginData.get(PROSE_LOSSES_NAMESPACE, ctx.sourceTurnId),
+    changes,
+    ctx.turnId,
+  );
+  if (settlement.record)
+    await ctx.pluginData.set(
+      PROSE_LOSSES_NAMESPACE,
+      ctx.sourceTurnId,
+      settlement.record,
+    );
+  return settlement;
 }

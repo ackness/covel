@@ -71,6 +71,8 @@ export interface PluginWriteServiceContext extends Omit<
   readonly random: import("./handler.js").PluginRandom;
   /** The calling execution's turn. */
   readonly turnId: string;
+  /** The committed turn a scoped retry settles; absent otherwise. */
+  readonly sourceTurnId?: string;
 }
 
 interface PluginServiceDefinitionFields<Input, Output> {

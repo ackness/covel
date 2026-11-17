@@ -193,7 +193,8 @@ const OPERATION_ORIGINS: ReadonlySet<ExecutionContext["origin"]> = new Set([
  * Not when its operations could settle twice or have nowhere to wait: a
  * detached or background run, a retry of committed work, a resume (which
  * never comes through here), a nested run of a run that could not, and an
- * agent that can suspend.
+ * agent that can suspend. A scoped retry may stage only for a target whose
+ * committed source result failed: none of that run's operations committed.
  */
 export function canStageOperations(
   manifest: RuntimeManifest,
@@ -206,14 +207,29 @@ export function canStageOperations(
   if (input.detachedStage !== undefined || activation.detached) return false;
   if (!OPERATION_ORIGINS.has(executionContext.origin)) return false;
   if (
-    executionContext.sourceTurnId !== undefined ||
-    isScopedRuntimeRecovery(input)
+    (executionContext.sourceTurnId !== undefined ||
+      isScopedRuntimeRecovery(input)) &&
+    !retriesFailedSource(manifest, input)
   )
     return false;
   return !(
     manifest.runtimeType !== "function" &&
     (manifest.tools?.builtin ?? []).includes("suspend")
   );
+}
+
+/** A selected target of this scoped retry whose source result failed. */
+function retriesFailedSource(
+  manifest: RuntimeManifest,
+  input: TurnInput,
+): boolean {
+  const trigger = input.manualTrigger;
+  if (!trigger?.sourceTurnId || input.parentTurnId !== undefined)
+    return false;
+  const selected =
+    trigger.runtimeId === manifest.name ||
+    trigger.runtimeIds?.includes(manifest.name) === true;
+  return selected && trigger.retryTargets?.[manifest.name]?.sourceFailed === true;
 }
 
 export async function executeOneRuntime(
@@ -1100,6 +1116,9 @@ async function executeRuntime(
         },
         sessionId: input.sessionId,
         turnId: input.turnId,
+        ...(executionContext.sourceTurnId !== undefined
+          ? { sourceTurnId: executionContext.sourceTurnId }
+          : {}),
         scope:
           deps.operationScope ??
           createOperationExecutionScope(deps.loadPluginDatasets),

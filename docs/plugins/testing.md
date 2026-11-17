@@ -226,6 +226,7 @@ it("takes the coins and adds the item", async () => {
 
 - `store` 里是提供方已经提交的数据；写服务读到的是它加上这次调用自己的写入。
 - 结果的 `operations` 是这次调用暂存的操作：`record` 是[操作记录](../reference/transactions.md#操作记录)，`writes` 是带提供方身份的写入。什么都不会保存。
+- 要测重试里的行为，在 `caller` 里加上 `sourceTurnId`：写服务的 `ctx.sourceTurnId` 就是它。
 - handler 抛错或输出不合规时，`callTestService` 抛出这个错误，什么都不暂存；什么都没写时，`operations` 是空的。
 
 ### 测一个函数

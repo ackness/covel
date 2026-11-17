@@ -600,6 +600,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         runId: "run-top",
         status: "success",
         output: { n: 1 },
+        // The event that activated the run, which a scoped retry reads back.
+        trigger: { topic: "found", producerRunId: "run-producer" },
       };
       const nestedRun = { ...topRun, runId: "run-nested" };
       const top = makeTurnResult({

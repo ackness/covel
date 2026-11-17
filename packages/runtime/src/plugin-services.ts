@@ -1148,6 +1148,9 @@ export class PluginServiceRegistry {
                   callerPluginId: caller.pluginId,
                   sessionId: caller.sessionId,
                   turnId: stage.turnId,
+                  ...(stage.sourceTurnId !== undefined
+                    ? { sourceTurnId: stage.sourceTurnId }
+                    : {}),
                   locale: caller.reads?.locale,
                   messages: pluginMessagesFor(
                     this.messagesOf?.(entry.pluginId),

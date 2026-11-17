@@ -155,6 +155,8 @@ export interface OperationStage {
   readonly owner: OperationCaller;
   readonly sessionId: string;
   readonly turnId: string;
+  /** The committed turn a scoped retry settles; absent otherwise. */
+  readonly sourceTurnId?: string;
   readonly scope: OperationExecutionScope;
   /**
    * A stage for one tool invocation or sub-agent run inside this one. A
@@ -193,7 +195,10 @@ function within(node: Node, ancestor: Node): boolean {
 function makeStage(
   ledger: Ledger,
   node: Node,
-  identity: Pick<OperationStage, "caller" | "owner" | "sessionId" | "turnId">,
+  identity: Pick<
+    OperationStage,
+    "caller" | "owner" | "sessionId" | "turnId" | "sourceTurnId"
+  >,
 ): OperationStage {
   return {
     ...identity,
@@ -284,6 +289,7 @@ export function createRootOperationStage(args: {
   readonly caller: OperationCaller;
   readonly sessionId: string;
   readonly turnId: string;
+  readonly sourceTurnId?: string;
   readonly scope?: OperationExecutionScope;
 }): RootOperationStage {
   const root: Node = { closed: false };
@@ -299,6 +305,9 @@ export function createRootOperationStage(args: {
     owner: args.caller,
     sessionId: args.sessionId,
     turnId: args.turnId,
+    ...(args.sourceTurnId !== undefined
+      ? { sourceTurnId: args.sourceTurnId }
+      : {}),
   });
   return {
     ...stage,

@@ -1,0 +1,9 @@
+### Added
+
+- **A write service knows which turn a retry repeats.** Its context carries `sourceTurnId` when the caller is a scoped retry of a committed turn, so a provider that books costs per turn can avoid settling the same transaction twice. `callTestService` accepts `caller.sourceTurnId` to test this. See [what a write service can access](../en/reference/plugin-extensions.md#what-a-write-service-can-access).
+
+### Fixed
+
+- **Retrying an event follower gives it the event the original turn gave it.** A runtime result now records `trigger: { topic, producerRunId }` for a synchronous event follower. A scoped retry of that runtime hands it the first payload of that topic from the same producer, if the producer succeeded; other runtimes do not run again and no event is emitted. Results saved before this change have no `trigger`, so their followers are retried without an event. See [limits of a batch recovery](../en/reference/api.md#limits-of-a-batch-recovery).
+- **A retried runtime that failed can call write services again.** In a scoped retry, a selected runtime whose result in the original turn failed may stage write-service operations; every other runtime still gets `unavailable`. Retrying a rejected dice-check receipt now settles its cost once, and retrying a target that already succeeded is refused, so it cannot charge twice. See [where write services cannot be called](../en/reference/plugin-extensions.md#where-write-services-cannot-be-called).
+- **The inventory does not take a cost twice when a check is retried.** The ledger records the losses it takes from the prose under the story turn, and `inventory.change@1` claims them first in a retry of that turn, reporting the removal as `skipped`. Inventory is 0.0.48. See [built-in plugins · inventory](../en/builtin/rpg.md).

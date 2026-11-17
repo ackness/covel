@@ -308,6 +308,7 @@ export async function startPreparedTurn(
               ? { sourceTurnId: stream.retryScope.sourceTurnId }
               : {}),
             retrySeedResults: retryPlan?.seedResults,
+            retryTargets: retryPlan?.targets,
             presentationJobs: retryPlan?.presentationJobs,
             presentationSnapshots: retryPlan?.presentationSnapshots,
           },

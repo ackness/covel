@@ -20,6 +20,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import path from "node:path";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import type { Proposal, RuntimeResult } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
@@ -121,14 +122,64 @@ describe("gameplay chains in a turn", () => {
   let boot: Awaited<ReturnType<typeof bootstrapApi>>;
   const narrator = new ScriptedNarrator();
   const store = createMemoryStore();
+  /**
+   * How the recorder fails in the next turn: its receipt is rejected at
+   * commit after it staged the item cost, or its run fails before anything
+   * of it can commit.
+   */
+  let failRecorder: "commit" | "run" | undefined;
+  let requests = 0;
 
   beforeAll(async () => {
     vi.stubEnv("COVEL_RANDOM_SEED", "11");
+    let hookRegistered = false;
     boot = await bootstrapApi({
       pluginsDir: PLUGINS_DIR,
       llmAdapter: narrator,
       store,
       storeBackend: "memory",
+      perRequestMiddleware: [
+        async (context, next) => {
+          if (!hookRegistered) {
+            const hooks = context.get("hookPipeline");
+            if (!hooks) throw new Error("Missing hook pipeline");
+            hooks.register<{ proposal: Proposal }>({
+              id: "reject-dice-receipt",
+              pluginId: "dice-check",
+              event: "PreStateCommit",
+              handler: async (_context, { proposal }) =>
+                failRecorder === "commit" &&
+                proposal.source.runtimeId === "dice-check/recorder"
+                  ? {
+                      action: "abort",
+                      reason: "Temporary receipt commit failure",
+                    }
+                  : { action: "continue" },
+            });
+            hooks.register<{ result: RuntimeResult }>({
+              id: "fail-dice-recorder",
+              pluginId: "dice-check",
+              event: "PostRuntime",
+              handler: async (_context, { result }) =>
+                failRecorder === "run" &&
+                result.runtimeId === "dice-check/recorder"
+                  ? {
+                      action: "continue",
+                      replace: {
+                        result: {
+                          ...result,
+                          status: "failed",
+                          error: "Temporary recorder failure",
+                        },
+                      },
+                    }
+                  : { action: "continue" },
+            });
+            hookRegistered = true;
+          }
+          await next();
+        },
+      ],
     });
   });
 
@@ -453,6 +504,214 @@ describe("gameplay chains in a turn", () => {
           expect.objectContaining({ name: "Rope", quantity: 1 }),
         ]),
       );
+    },
+  );
+
+  /**
+   * A turn whose one failed check costs a chalk, played while the recorder
+   * fails as `mode` says. With `prose`, the story also says a chalk is lost
+   * and a rope found, which the inventory ledger reads from WorldIR.
+   */
+  async function failedReceiptTurn(
+    mode: "commit" | "run",
+    { prose = false } = {},
+  ) {
+    const sessionId = await playingSession([
+      "narrator",
+      "dice-check",
+      "inventory",
+      ...(prose ? ["world-ir"] : []),
+    ]);
+    await seed(sessionId, "dice-check", "consequences", [
+      {
+        id: "chalk",
+        text: "A stick of chalk crumbles in your fist.",
+        cues: ["chalk"],
+        cost: { kind: "item", item: "Chalk" },
+      },
+    ]);
+    await seed(sessionId, "inventory", "items", [
+      { id: "chalk", name: "Chalk", quantity: 2 },
+    ]);
+    narrator.receipt = (dice) => wadeOn(dice.slice(0, 1));
+    narrator.corrected = false;
+    narrator.facts = prose
+      ? {
+          schemaVersion: 1,
+          entities: [
+            { id: "sam", type: "character", name: "Sam" },
+            { id: "chalk", type: "item", name: "Chalk" },
+            { id: "rope", type: "item", name: "Rope" },
+          ],
+          relations: [],
+          statements: [],
+          events: [
+            {
+              id: "lost-chalk",
+              type: "inventory_change",
+              attributes: { holder: "sam", item: "chalk", operation: "lose" },
+            },
+            {
+              id: "found-rope",
+              type: "inventory_change",
+              attributes: { holder: "sam", item: "rope", operation: "gain" },
+            },
+          ],
+        }
+      : {};
+    failRecorder = mode;
+    try {
+      await playTurn(sessionId, `failed-receipt-${++requests}`);
+    } finally {
+      failRecorder = undefined;
+    }
+    const source = (await store.listTurnResults(sessionId)).at(-1)!;
+    expect(source.commitStatus).toBe("committed");
+    const status = (runtimeId: string) =>
+      (source.runtimeResults as RuntimeResult[]).find(
+        (result) => result.runtimeId === runtimeId,
+      )?.status;
+    expect(status("dice-check/recorder")).toBe("failed");
+    return { sessionId, sourceTurnId: source.turnId, status };
+  }
+
+  /** Retry `runtimeIds` of the source turn; one ID goes through `retry_runtime`. */
+  async function retry(
+    sessionId: string,
+    sourceTurnId: string,
+    runtimeIds: readonly string[],
+    type = runtimeIds.length === 1 ? "retry_runtime" : "retry_failed_runtimes",
+  ) {
+    const response = await boot.app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        sessionId,
+        requestId: `retry-${++requests}`,
+        payload: {
+          retryFromTurnId: sourceTurnId,
+          ...(type === "retry_runtime"
+            ? { runtimeId: runtimeIds[0] }
+            : { runtimeIds }),
+        },
+      }),
+    });
+    return { status: response.status, stream: await response.text() };
+  }
+
+  async function holdings(sessionId: string) {
+    const items = await store.listPluginData(sessionId, "inventory", "items");
+    return Object.fromEntries(
+      items.map(({ value }) => {
+        const item = value as { name: string; quantity: number };
+        return [item.name, item.quantity];
+      }),
+    );
+  }
+
+  it.each(["retry_runtime", "retry_failed_runtimes"])(
+    "recovers a rejected dice receipt through %s, once",
+    async (type) => {
+      const { sessionId, sourceTurnId } = await failedReceiptTurn("commit");
+      // The cost the rejected receipt staged was taken back with it.
+      expect(await holdings(sessionId)).toEqual({ Chalk: 2 });
+
+      const first = await retry(
+        sessionId,
+        sourceTurnId,
+        ["dice-check/recorder"],
+        type,
+      );
+      expect(first.status, first.stream).toBe(200);
+      expect(first.stream).not.toContain("No check event to record");
+      expect(
+        await store.listPluginData(sessionId, "dice-check", "checks"),
+      ).toHaveLength(1);
+      expect(await holdings(sessionId)).toEqual({ Chalk: 1 });
+
+      // The recovered receipt is no longer failed: the same retry again
+      // is refused and pays nothing.
+      const again = await retry(
+        sessionId,
+        sourceTurnId,
+        ["dice-check/recorder"],
+        type,
+      );
+      expect(`${again.status} ${again.stream}`).toContain(
+        "retry_target_not_failed",
+      );
+      expect(
+        await store.listPluginData(sessionId, "dice-check", "checks"),
+      ).toHaveLength(1);
+      expect(await holdings(sessionId)).toEqual({ Chalk: 1 });
+    },
+  );
+
+  it("does not take a cost again that the ledger already took from the prose", async () => {
+    const { sessionId, sourceTurnId, status } = await failedReceiptTurn(
+      "run",
+      { prose: true },
+    );
+    // The recorder failed before paying; the ledger took the chalk the
+    // story lost.
+    expect(status("inventory/ledger")).toBe("success");
+    expect(await holdings(sessionId)).toEqual({ Chalk: 1, Rope: 1 });
+
+    const recovered = await retry(sessionId, sourceTurnId, [
+      "dice-check/recorder",
+    ]);
+    expect(recovered.status, recovered.stream).toBe(200);
+    expect(
+      (await store.listPluginData(sessionId, "dice-check", "checks")).map(
+        ({ value }) => value,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        costText: "A stick of chalk crumbles in your fist.",
+      }),
+    ]);
+    expect(await holdings(sessionId)).toEqual({ Chalk: 1, Rope: 1 });
+  });
+
+  it.each([
+    { order: [["dice-check/recorder", "inventory/ledger"]] },
+    { order: [["dice-check/recorder"], ["inventory/ledger"]] },
+    { order: [["inventory/ledger"], ["dice-check/recorder"]] },
+  ])(
+    "pays a rejected receipt's cost once when the ledger that read it is retried too: $order",
+    async ({ order }) => {
+      const { sessionId, sourceTurnId, status } = await failedReceiptTurn(
+        "commit",
+        { prose: true },
+      );
+      // The ledger built on the receipt's dropped payment, so it was
+      // dropped too.
+      expect(status("inventory/ledger")).toBe("failed");
+      expect(await holdings(sessionId)).toEqual({ Chalk: 2 });
+
+      for (const runtimeIds of order) {
+        const attempt = await retry(sessionId, sourceTurnId, runtimeIds);
+        expect(attempt.status, attempt.stream).toBe(200);
+      }
+      const attempts = (await store.listTurnResults(sessionId)).filter(
+        (row) => row.retryScope?.sourceTurnId === sourceTurnId,
+      );
+      expect(attempts.map((row) => row.commitStatus)).toEqual(
+        order.map(() => "committed"),
+      );
+      // In one batch the ledger reads the payment the retried recorder
+      // staged through `operations@1` and leaves that loss to it.
+      if (order.length === 1)
+        expect(
+          (attempts[0]!.runtimeResults as RuntimeResult[]).find(
+            (result) => result.runtimeId === "inventory/ledger",
+          )?.output,
+        ).toMatchObject({ alreadyApplied: 1 });
+      expect(
+        await store.listPluginData(sessionId, "dice-check", "checks"),
+      ).toHaveLength(1);
+      expect(await holdings(sessionId)).toEqual({ Chalk: 1, Rope: 1 });
     },
   );
 

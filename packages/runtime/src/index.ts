@@ -17,6 +17,7 @@ export {
 } from "./function-runtime/world-model-view.js";
 // ── Trigger Router ───────────────────────────────────────────────
 export { shouldTrigger } from "./trigger/trigger.js";
+export { deliveredEventOf } from "./trigger/turn-event-chain.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
 export { scheduleByDag } from "./schedule/dag-scheduler.js";

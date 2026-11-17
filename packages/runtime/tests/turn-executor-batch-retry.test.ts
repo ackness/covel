@@ -51,6 +51,9 @@ async function run(
   seeds: RuntimeResult[] = [],
   scoped = true,
   runtimeEffects: Record<string, import("@covel/shared").RuntimeEffects> = {},
+  retryTargets?: NonNullable<
+    import("@covel/shared").TurnInput["manualTrigger"]
+  >["retryTargets"],
 ) {
   const store = createMemoryStore();
   await store.createSession({
@@ -78,6 +81,7 @@ async function run(
         ...(typeof ids === "string" ? { runtimeId: ids } : { runtimeIds: ids }),
         ...(scoped ? { sourceTurnId: "source" } : {}),
         retrySeedResults: seeds,
+        ...(retryTargets ? { retryTargets } : {}),
       },
     },
     runtimes,
@@ -182,6 +186,68 @@ describe("batch runtime recovery", () => {
     expect(result.deferredFollowers ?? []).toEqual([]);
     expect(result.executionContext?.countPolicy).toBe("none");
     expect(await store.listTurnMessages(sessionId)).toEqual([]);
+  });
+
+  it("hands each event-triggered target the event its source delivered, without fanning out", async () => {
+    const seen: Record<string, unknown> = {};
+    const record = async (ctx: FunctionHandlerContext) => {
+      seen[ctx.runtimeId] = {
+        triggerEvent: ctx.triggerEvent,
+        activation: ctx.activation,
+      };
+      return { ok: true };
+    };
+    const { result, calls } = await run(
+      [
+        manifest("a", { trigger: { type: "event", topic: "x" } }),
+        manifest("b", { trigger: { type: "event", topic: "y" } }),
+        manifest("c", { trigger: { type: "event", topic: "x" } }),
+        manifest("follower", { trigger: { type: "event", topic: "x" } }),
+      ],
+      ["a", "b", "c"],
+      { a: record, b: record, c: record },
+      [],
+      true,
+      { a: { events: [{ topic: "x", data: { again: true } }] } },
+      {
+        a: {
+          sourceFailed: true,
+          triggerEvent: { topic: "x", producerRunId: "p1", data: { n: 1 } },
+        },
+        b: {
+          sourceFailed: true,
+          triggerEvent: { topic: "y", producerRunId: "p2", data: { n: 2 } },
+        },
+        // The source recovered no event for this one.
+        c: { sourceFailed: true },
+      },
+    );
+    expect(calls.sort()).toEqual(["a", "b", "c"]);
+    expect(seen).toEqual({
+      a: {
+        triggerEvent: { topic: "x", data: { n: 1 } },
+        activation: { source: "event", detached: false, payload: { n: 1 } },
+      },
+      b: {
+        triggerEvent: { topic: "y", data: { n: 2 } },
+        activation: { source: "event", detached: false, payload: { n: 2 } },
+      },
+      c: {
+        triggerEvent: undefined,
+        activation: { source: "stage", detached: false, payload: null },
+      },
+    });
+    // Each retried result keeps its source trigger for a later retry.
+    expect(
+      Object.fromEntries(
+        result.runtimeResults.map((rr) => [rr.runtimeId, rr.trigger]),
+      ),
+    ).toEqual({
+      a: { topic: "x", producerRunId: "p1" },
+      b: { topic: "y", producerRunId: "p2" },
+      c: undefined,
+    });
+    expect(result.deferredFollowers ?? []).toEqual([]);
   });
 
   it("orders selected dependencies and excludes all target seeds", async () => {

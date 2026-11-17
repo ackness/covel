@@ -413,6 +413,78 @@ describe("inventory change service", () => {
   });
 });
 
+describe("inventory change service in a retry", () => {
+  const chalk = { id: "chalk", name: "Chalk", quantity: 1 };
+  // The source turn's ledger already took one chalk from the prose.
+  const sourceLoss = { item: "chalk", quantity: 1, attempt: "source" };
+  it.each([
+    {
+      name: "settles a removal the source turn's ledger already took",
+      sourceTurnId: "source",
+      quantity: 1,
+      results: [{ op: "remove", item: "Chalk", status: "skipped" }],
+      untouched: true,
+      left: [],
+    },
+    {
+      name: "takes only the part the ledger did not",
+      sourceTurnId: "source",
+      quantity: 2,
+      results: [{ op: "remove", item: "Chalk", status: "removed" }],
+      untouched: false,
+      left: [],
+    },
+    {
+      name: "leaves the record alone outside a retry",
+      quantity: 1,
+      results: [{ op: "remove", item: "Chalk", status: "removed" }],
+      untouched: false,
+      left: undefined,
+    },
+    {
+      name: "does not settle against a loss of the same execution",
+      sourceTurnId: "source",
+      turnId: "source",
+      quantity: 1,
+      results: [{ op: "remove", item: "Chalk", status: "removed" }],
+      untouched: false,
+      left: undefined,
+    },
+  ])("$name", async ({ sourceTurnId, turnId, quantity, results, untouched, left }) => {
+    const { registry, request, store } = await fixture([chalk]);
+    await store.setPluginData({
+      id: "prose-losses",
+      sessionId: caller.sessionId,
+      pluginId: "inventory",
+      namespace: "prose-losses",
+      key: "source",
+      value: { losses: [sourceLoss] },
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+    const { output, operations } = await callTestService({
+      registry,
+      caller: {
+        ...caller,
+        turnId: turnId ?? "attempt",
+        ...(sourceTurnId ? { sourceTurnId } : {}),
+      },
+      request: request("change", {
+        changes: [{ op: "remove", item: "Chalk", quantity }],
+      }),
+      store,
+    });
+    expect(output.results).toEqual(results);
+    const writes = operations.flatMap((operation) => operation.writes);
+    const claimed = writes.find(
+      (write) => write.payload.namespace === "prose-losses",
+    );
+    expect(claimed?.payload.value.losses).toEqual(left);
+    const taken = writes.find((write) => write.payload.namespace === "items");
+    expect(taken === undefined).toBe(untouched);
+  });
+});
+
 it("deduplicates a successful exchange when long descriptions truncate its request", async () => {
   const { registry, request, store } = await fixture();
   const stage = createRootOperationStage({

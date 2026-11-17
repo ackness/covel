@@ -346,6 +346,8 @@ flowchart TB
 - 可以当作上游“种子”的只有两种：来源回合和已提交的重试里成功的非目标结果；guard 明确返回 `skip: true` 的输出。
 - 因为依赖失败而产生的 skipped 不满足依赖。
 - 种子不会重复提交。重试不重写已完成的正文，不增加玩家回合数。
+- 事件触发的目标拿回来源回合实际投递给它的事件。事件链给同步 follower 的结果记下 `trigger: { topic, producerRunId }`，随 `turn_results.runtimeResults` 保存；重试时宿主在原来源回合的记录里按 `producerRunId` 找到生产者，生产者必须成功，取它 `effects.events` 中这个 topic 的第一条（与事件链的选择规则相同），交给目标的 `ctx.triggerEvent`，激活来源是 `event`。找不到、生产者失败、没有 `trigger`，或目标已不再订阅这个 topic，就不给事件。重试不重跑订阅者，也不重发事件。
+- 写服务：只有本次选中、并且来源回合（含已提交的重试）里结果为 `failed` 的目标可以暂存写服务操作。失败结果的写入和操作都没有提交，所以不会结算两次。种子、呈现、detached 和 resume 仍然不行。
 - 插件消息在提交时关联原来的故事锚点。舞台的快捷回复和刷新后的恢复使用同一条归属规则。
 
 ### 2.3 Staged Runtime 后台流水线
