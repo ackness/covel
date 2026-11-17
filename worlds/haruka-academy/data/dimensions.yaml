@@ -158,11 +158,10 @@ festival:
         title: 距学园祭天数
         minimum: 0
         maximum: 21
-        # Integers are rounded. 21.1528 = 20.5 + 940/1440: the opening clock (08:20) is 940 minutes
-        # before midnight, so the count drops at midnight and reaches 0 on festival day (day 21).
+        # Start just below 20.5 + 940/1440 so rounding drops the count at midnight, not a minute later.
         x-derive:
           source: clock.elapsedSinceStart
-          start: 21.1528
+          start: 21.1527
           perUnit: -0.0006944444444444445
           min: 0
           max: 21

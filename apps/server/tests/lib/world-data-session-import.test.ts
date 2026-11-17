@@ -20,7 +20,10 @@ import {
   loadPluginDefinition,
 } from "@covel/plugin-loader";
 import type { PluginRegistryEntry } from "@covel/plugin-loader";
-import { MAX_PLUGIN_DATA_VALUE_BYTES } from "@covel/shared";
+import {
+  dimensionRecordSchema,
+  MAX_PLUGIN_DATA_VALUE_BYTES,
+} from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
@@ -2771,6 +2774,9 @@ describe("world data session importer", () => {
       updatedAt: NOW,
     });
     const pluginRegistry = await builtinPluginRegistry();
+    const world = await loadSingleWorld(path.join(worldsDir, worldId));
+    if (!world) throw new Error("Bundled world did not load");
+    await store.createWorld(world);
 
     const result = await importWorldDataForSession({
       store,
@@ -2787,6 +2793,27 @@ describe("world data session importer", () => {
     expect(result.written).toBeGreaterThan(0);
     expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
     expect(await store.listCharacters("sess-haruka")).not.toHaveLength(0);
+    const festival = dimensionRecordSchema.parse(
+      (
+        await store.getPluginData(
+          "sess-haruka",
+          "world-init",
+          "_dimensions",
+          "festival",
+        )
+      )?.value,
+    );
+    const derive =
+      festival.definition.schema.properties?.daysRemaining?.["x-derive"];
+    if (derive?.start === undefined || derive.perUnit === undefined)
+      throw new Error("Missing festival countdown derivation");
+    const { start, perUnit } = derive;
+    const remaining = (minute: number) => Math.round(start + perUnit * minute);
+    for (let day = 0; day < 21; day += 1) {
+      const midnight = 940 + day * 1440;
+      expect(remaining(midnight - 1)).toBe(21 - day);
+      expect(remaining(midnight)).toBe(20 - day);
+    }
     expect(
       await store.listPluginData(
         "sess-haruka",
