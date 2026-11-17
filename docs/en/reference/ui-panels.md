@@ -95,6 +95,7 @@ Everything the app tells the player goes through one channel with three looks. N
 - **What stays elsewhere.** Notices that belong to one turn stay in the story: the error box in a turn, the execution timeline, the "N actions from this turn did not take effect" footer (it no longer also pops up a toast), the line of feedback under the composer. Notices that belong to the settings dialog stay in the dialog, because a modal dialog blocks anything outside it. Confirmation dialogs and the overlays for "the whole app is unavailable" are not part of the notice center.
 - **Host controls.** The notice area carries `data-covel-host-controls`, so plugin themes cannot restyle it. Its top edge follows `--covel-notice-top`: notices sit under the lowest of the app bar, the session header and a plugin page's bar, so they never cover them. On a phone the area spans the width with a 16px gutter.
 - **Layers.** Cards are drawn inside the app, under the session header's menus, popovers and dialogs, so an open menu is never hidden by a card. Toasts stay only a few seconds and often report an action taken inside a dialog, so they are attached to the page body and sit above everything.
+- **Failed panel actions.** The calling UI displays an error once for `invokeRuntime`, `invokePluginAction`, `invokeCommand` and `emitEvent`, including HTTP 500/503 and network failures. The RPC HTTP layer does not add a second generic error toast; business failures still use the existing result notices.
 - **Who publishes.** Each feature in a session registers its own notice while its condition holds and withdraws it when the condition ends. `emitToast(kind, message, detail?)` still works and publishes a one-shot toast.
 
 ## Navigation Across Pages
@@ -1338,14 +1339,14 @@ After an agent runtime calls `suspend`, a "Waiting for you · N" chip appears on
 
 Each card uses `reason` as its title, and it picks the answer control from `resumeSchema` (`suspension-input.ts`):
 
-| `resumeSchema`                                                      | Control                                                                          |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `boolean`                                                           | Yes / No buttons                                                                 |
-| `enum`, or `const` in `oneOf`                                       | Option buttons                                                                   |
-| `string`                                                            | Text box                                                                         |
-| Object schema compiled from `suspend.fields`                        | Form controls labelled with each property's `title`; answer keys are field names |
-| An object / number schema that the dimension value editor can cover | A form (reusing `DimensionValueEditor`)                                          |
-| No schema, or no control can cover it                               | A raw JSON text box inside the "Advanced" collapsible section in Developer mode; otherwise one line of explanation and Abandon                    |
+| `resumeSchema`                                                      | Control                                                                                                                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `boolean`                                                           | Yes / No buttons                                                                                                               |
+| `enum`, or `const` in `oneOf`                                       | Option buttons                                                                                                                 |
+| `string`                                                            | Text box                                                                                                                       |
+| Object schema compiled from `suspend.fields`                        | Form controls labelled with each property's `title`; answer keys are field names                                               |
+| An object / number schema that the dimension value editor can cover | A form (reusing `DimensionValueEditor`)                                                                                        |
+| No schema, or no control can cover it                               | A raw JSON text box inside the "Advanced" collapsible section in Developer mode; otherwise one line of explanation and Abandon |
 
 ### Loading Older Messages and Execution Status
 

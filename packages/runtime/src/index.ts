@@ -290,6 +290,7 @@ export {
   MissingHookScopeError,
 } from "./hooks/index.js";
 export type {
+  HookHandlerOutcome,
   HookScope,
   SessionStartPayload,
   SessionEndPayload,

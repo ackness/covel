@@ -182,7 +182,11 @@ export async function runTurnPipeline(
   const subagents =
     deps.subagents ?? createSubagentRunner({ activeRuntimes, delegation });
   return runWithHookScope(
-    { ...hookScope, locale: hookScope.locale ?? input.locale },
+    {
+      ...hookScope,
+      executionOrigin: hookScope.executionOrigin ?? input.origin,
+      locale: hookScope.locale ?? input.locale,
+    },
     () =>
       executeTurnImpl(
         { ...input, userSettings },

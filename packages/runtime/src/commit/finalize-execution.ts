@@ -124,6 +124,9 @@ export async function finalizeExecution(
   // Commit (Pre/PostStateCommit) fires outside executeTurn's own hook scope, so
   // re-establish it here — session-scoped like every other commit site.
   const scope: HookScope = {
+    executionOrigin:
+      args.resumedSuspension?.pendingContinuation.executionContext.origin ??
+      executionContext.origin,
     logicalTurn: executionContext.logicalTurn,
     activePluginIds,
     logicalKey:

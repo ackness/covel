@@ -17,6 +17,7 @@ import {
   sessionApprovalScope,
 } from "../../src/routes/api/session/session-guard.js";
 import { refuseFollowUps } from "../../src/routes/api/commit-envelope.js";
+import { createHostPluginFaults } from "../../src/routes/api/plugin-faults.js";
 
 const SESSION_ID = "sess-background-lock";
 const PLUGIN_ID = "image-plugin";
@@ -96,9 +97,15 @@ describe("detached runtime cross-process lock boundary", () => {
     const { lock, requestedKeys } = trackingLock();
     const session = await store.getSession(SESSION_ID);
     if (!session) throw new Error("expected session");
+    const eventBus = createEventBus(store);
+    const host = createHostPluginFaults({
+      store,
+      eventBus,
+      registry: { getActiveRuntimes: () => runtimes },
+    });
     const runner = createPluginRpcRuntimeTurnRunner({
       store,
-      eventBus: createEventBus(store),
+      eventBus,
       sessionLock: lock,
       sessionId: SESSION_ID,
       session: { locale: "en" },
@@ -107,6 +114,7 @@ describe("detached runtime cross-process lock boundary", () => {
         [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
       ]),
       deps: {
+        pluginFaults: host.latch,
         loadRuntime: async (
           runtime: RuntimeManifest,
         ): Promise<LoadedRuntime> => ({
@@ -119,8 +127,41 @@ describe("detached runtime cross-process lock boundary", () => {
         typeof createPluginRpcRuntimeTurnRunner
       >[0]["deps"],
     });
-    return { runner, lock, requestedKeys, store, session };
+    return { runner, host, lock, requestedKeys, store, session };
   }
+
+  it.each([false, true])(
+    "manual attempts remain neutral at the RPC runner boundary (detached=%s)",
+    async (detached) => {
+      const handler = vi.fn<FunctionHandler>(async () => {
+        throw new Error("manual failure");
+      });
+      const { runner, host, store } = await setup(handler);
+      host.latch.recordHookFault(SESSION_ID, PLUGIN_ID, "auto-one", "hook");
+      host.latch.recordHookFault(SESSION_ID, PLUGIN_ID, "auto-two", "hook");
+      try {
+        for (const turnId of ["one", "two", "three"])
+          await runner.runManualTurn({
+            followUps: refuseFollowUps,
+            turnId,
+            runtimeId: RUNTIME_A,
+            detached,
+          });
+        expect(handler).toHaveBeenCalledTimes(3);
+        expect(host.latch.isLatched(SESSION_ID, PLUGIN_ID)).toBe(false);
+        expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(
+          1,
+        );
+        expect(
+          (await store.listTraceEvents(SESSION_ID)).filter((event) =>
+            event.type.startsWith("plugin.fault."),
+          ),
+        ).toEqual([]);
+      } finally {
+        await store.close();
+      }
+    },
+  );
 
   const triggerEvent = {
     topic: "image.generate",
