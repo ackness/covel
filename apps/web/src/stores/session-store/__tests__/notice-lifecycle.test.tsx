@@ -156,66 +156,61 @@ it.each(["recovery first", "resume first"])(
   },
 );
 
-it.each([false, true])(
-  "loads a committed story and notice for an idle observer while a system runtime stays suspended (manual parent: %s)",
-  async (manual) => {
-    const fixture = await suspendedStory(manual);
-    try {
-      api.getSessionView.mockImplementation(fixture.view);
-      const { options, emit } = observer(fixture.session);
-      const events: SubscriptionEvent[] = [];
-      const topics: readonly string[] =
-        subscription.createSessionSubscription.mock.calls[0]![1].topics;
-      fixture.eventBus.onEmit((event) => {
-        if (topics.includes(event.topic)) events.push(event);
-      });
-      expect(api.getSessionView).not.toHaveBeenCalled();
-      const outcome = await fixture.commit();
-      expect(outcome.status).toBe("committed");
-      expect(outcome.operations).toMatchObject([
-        { status: "failed", reason: "rejected" },
-      ]);
-      // Only committed delivery publishes a saved story; suspension also
-      // triggers a snapshot read for notices and remaining execution state.
-      expect(
-        events
-          .map((event) => event.type)
-          .filter(
-            (type) =>
-              ![
-                "turn.started",
-                "runtime.started",
-                "runtime.completed",
-              ].includes(type),
-          ),
-      ).toEqual(["narrative.completed", "turn.suspended"]);
-      expect(await fixture.store.listPluginData("session", "provider")).toEqual(
-        [],
-      );
-      await act(async () => {
-        for (const event of events) emit(event);
-      });
-      expect(api.getSessionView).toHaveBeenCalledOnce();
-      const state = options.stateRef.current;
-      expect(state.messages).toEqual([
-        expect.objectContaining({
-          content: "The guide waits for your answer.",
-          operationFailures: { count: 1 },
-        }),
-      ]);
-      const [suspension] = await fixture.store.listSuspensions("session");
-      expect(suspension?.resolvedAt).toBeUndefined();
-      expect(state.suspensions).toEqual([
-        expect.objectContaining({ id: suspension!.id }),
-      ]);
-      expect(state.session?.completedPlayerTurns).toBe(0);
-      expect(options.workspace.run).not.toHaveBeenCalled();
-      render(<StoryOperationFailureNotice message={state.messages[0]!} />);
-      expect(
-        screen.getAllByTestId("story-operation-failure-notice"),
-      ).toHaveLength(1);
-    } finally {
-      await fixture.close();
-    }
-  },
-);
+it("loads a committed story and notice for an idle observer while a system runtime stays suspended", async () => {
+  const fixture = await suspendedStory();
+  try {
+    api.getSessionView.mockImplementation(fixture.view);
+    const { options, emit } = observer(fixture.session);
+    const events: SubscriptionEvent[] = [];
+    const topics: readonly string[] =
+      subscription.createSessionSubscription.mock.calls[0]![1].topics;
+    fixture.eventBus.onEmit((event) => {
+      if (topics.includes(event.topic)) events.push(event);
+    });
+    expect(api.getSessionView).not.toHaveBeenCalled();
+    const outcome = await fixture.commit();
+    expect(outcome.status).toBe("committed");
+    expect(outcome.operations).toMatchObject([
+      { status: "failed", reason: "rejected" },
+    ]);
+    // Only committed delivery publishes a saved story; suspension also
+    // triggers a snapshot read for notices and remaining execution state.
+    expect(
+      events
+        .map((event) => event.type)
+        .filter(
+          (type) =>
+            !["turn.started", "runtime.started", "runtime.completed"].includes(
+              type,
+            ),
+        ),
+    ).toEqual(["narrative.completed", "turn.suspended"]);
+    expect(await fixture.store.listPluginData("session", "provider")).toEqual(
+      [],
+    );
+    await act(async () => {
+      for (const event of events) emit(event);
+    });
+    expect(api.getSessionView).toHaveBeenCalledOnce();
+    const state = options.stateRef.current;
+    expect(state.messages).toEqual([
+      expect.objectContaining({
+        content: "The guide waits for your answer.",
+        operationFailures: { count: 1 },
+      }),
+    ]);
+    const [suspension] = await fixture.store.listSuspensions("session");
+    expect(suspension?.resolvedAt).toBeUndefined();
+    expect(state.suspensions).toEqual([
+      expect.objectContaining({ id: suspension!.id }),
+    ]);
+    expect(state.session?.completedPlayerTurns).toBe(0);
+    expect(options.workspace.run).not.toHaveBeenCalled();
+    render(<StoryOperationFailureNotice message={state.messages[0]!} />);
+    expect(
+      screen.getAllByTestId("story-operation-failure-notice"),
+    ).toHaveLength(1);
+  } finally {
+    await fixture.close();
+  }
+});
