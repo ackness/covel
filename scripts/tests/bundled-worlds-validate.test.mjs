@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // then fails here instead of at release time.
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const BUNDLED_WORLDS = [
-  "emberback",
+  "last-train",
   "haruka-academy",
   "lantern-barrow",
   "mistport",

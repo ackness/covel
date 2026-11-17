@@ -1066,8 +1066,8 @@ rooms:
     const parent = await mkdtemp(
       path.join(tmpdir(), "covel-condition-values-"),
     );
-    const worldDir = path.join(parent, "emberback");
-    await cp(path.join(repoRoot, "worlds/emberback"), worldDir, {
+    const worldDir = path.join(parent, "last-train");
+    await cp(path.join(repoRoot, "worlds/last-train"), worldDir, {
       recursive: true,
     });
     const file = path.join(worldDir, "data/hidden/story-events.yaml");
@@ -1080,8 +1080,8 @@ rooms:
     await writeFile(
       file,
       original.replace(
-        "in: [imminent, overhead]",
-        "in: [impossible-weather, impossible-weather]",
+        "in: [ankle, knee]",
+        "in: [impossible-depth, impossible-depth]",
       ),
     );
     expect(

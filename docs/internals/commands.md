@@ -140,7 +140,7 @@ node scripts/tests/ui-literal-baseline.test.mjs --update
 
 第一条命令通过时报告 5 个测试通过。第二条只接受数量减少，写入基线并报告 `Updated UI literal baseline (counts can only decrease).`；它不能用来接受新增文字。
 
-服务端的 `instruction-language.test.ts` 固定 `COVEL_INSTRUCTION_LOCALE=en`，加载 Emberback 的 English 会话数据，为每个内置 runtime 选择正文并组装 context，不调用模型。它检查正文、固定扩展段、框架模板和组装后的指令；世界内容在组装前排除，不会连同数据块的框架说明一起被忽略。
+服务端的 `instruction-language.test.ts` 固定 `COVEL_INSTRUCTION_LOCALE=en`，加载末班地铁的 English 会话数据，为每个内置 runtime 选择正文并组装 context，不调用模型。它检查正文、固定扩展段、框架模板和组装后的指令；世界内容在组装前排除，不会连同数据块的框架说明一起被忽略。
 
 ```bash
 pnpm --filter @covel/server exec vitest run tests/bootstrap/instruction-language.test.ts --maxWorkers=2

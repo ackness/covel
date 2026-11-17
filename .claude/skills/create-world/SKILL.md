@@ -49,7 +49,7 @@ pnpm describe:authoring
 | ----------------------- | ---------------------------- |
 | `worlds/mistport`       | 传统叙事调查剧，含隐藏剧情   |
 | `worlds/haruka-academy` | 视觉小说，立绘加场景背景     |
-| `worlds/emberback`      | 英文世界，多语言示范  |
+| `worlds/last-train`      | 英文世界，多语言示范  |
 | `worlds/lantern-barrow` | 跑团：开局配点加掷骰检定     |
 
 ### 4. 写文件

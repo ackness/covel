@@ -219,7 +219,6 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     expect(entry?.source).toBe("community");
     expect(entry?.status).toBe("registered");
     expect(entry?.manifests).toHaveLength(5);
-    expect(entry?.loadedRuntimes.size).toBe(0);
     const details = await request(`/api/plugins/${pluginId}`, "GET");
     expect(details.status).toBe(200);
     expect(await details.text()).toContain("voice");
@@ -385,7 +384,6 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       ]),
       calls: [],
     });
-    expect(boot.registry.get(pluginId)?.loadedRuntimes.size).toBe(0);
     expect(
       (await boot.app.request(`${sessionPath}/plugin-diagnostics`)).status,
     ).toBe(401);

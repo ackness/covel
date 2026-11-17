@@ -74,7 +74,6 @@ async function entry(
         },
       ]),
     ),
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }

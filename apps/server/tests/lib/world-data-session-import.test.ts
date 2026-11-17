@@ -158,7 +158,6 @@ function registry(entries: Record<string, readonly string[]>) {
           },
         ]),
       ),
-      loadedRuntimes: new Map(),
       status: "registered",
     })),
   );
@@ -198,7 +197,6 @@ function registryWithSchema(entries: {
           },
         ]),
       ),
-      loadedRuntimes: new Map(),
       status: "registered",
     })),
   );
@@ -225,7 +223,6 @@ async function builtinPluginRegistry() {
       source: "builtin",
       manifests,
       packageManifest,
-      loadedRuntimes: new Map(),
       status: "registered",
     });
   }
@@ -280,9 +277,9 @@ describe("world data session importer", () => {
     const worldsDir = await mkdtemp(
       path.join(tmpdir(), "covel-condition-import-"),
     );
-    const worldRoot = path.join(worldsDir, "emberback");
+    const worldRoot = path.join(worldsDir, "last-train");
     await cp(
-      path.resolve(import.meta.dirname, "../../../../worlds/emberback"),
+      path.resolve(import.meta.dirname, "../../../../worlds/last-train"),
       worldRoot,
       { recursive: true },
     );
@@ -296,7 +293,7 @@ describe("world data session importer", () => {
     const options = {
       store,
       sessionId: "sess-1",
-      worldId: "emberback",
+      worldId: "last-train",
       world,
       worldsDirs: [worldsDir],
       now: NOW,
@@ -310,10 +307,7 @@ describe("world data session importer", () => {
     ).toEqual([]);
     await writeFile(
       file,
-      original.replace(
-        "in: [imminent, overhead]",
-        "in: [imminent, impossible-weather]",
-      ),
+      original.replace("in: [ankle, knee]", "in: [ankle, impossible-depth]"),
     );
     expect(
       (await preflightWorldDataForSession(options)).diagnostics,
@@ -338,18 +332,18 @@ describe("world data session importer", () => {
         "sess-1",
         "story-events",
         "_hidden.events",
-        "second-echo",
+        "second-train",
       ),
     ).not.toBeNull();
   });
 
-  it("imports Emberback's station time, which its storm countdown is counted against", async () => {
+  it("imports Last Train Out's calendar time, which its floodline countdown is counted against", async () => {
     const registry = await builtinPluginRegistry();
     const store = await makeStore(["world-init", "world-time"]);
     const result = await importWorldDataForSession({
       store,
       sessionId: "sess-1",
-      worldId: "emberback",
+      worldId: "last-train",
       worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
       now: NOW,
       preflight: { registry, activePlugins: ["world-init", "world-time"] },
@@ -370,12 +364,45 @@ describe("world data session importer", () => {
       id: "world",
       definition: {
         kind: "calendar",
-        initial: { year: 1, month: 1, day: 1, hour: 6, minute: 14 },
+        initial: { year: 2026, month: 1, day: 16, hour: 0, minute: 6 },
       },
     });
   });
 
-  it.each(["emberback", "haruka-academy", "lantern-barrow", "mistport"])(
+  it("imports Last Train Out's Chinese affinity seeds under the localized character names", async () => {
+    const registry = await builtinPluginRegistry();
+    const activePlugins = ["world-init", "affinity"];
+    const store = await makeStore(activePlugins);
+    const sessionId = "sess-1";
+    const result = await importWorldDataForSession({
+      store,
+      sessionId,
+      worldId: "last-train",
+      worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+      now: NOW,
+      locale: "zh-CN",
+      preflight: { registry, activePlugins },
+    });
+    expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
+      [],
+    );
+    const names = new Map(
+      (await store.listCharacters(sessionId)).map(({ id, name }) => [id, name]),
+    );
+    const affinity = await store.listPluginData(
+      sessionId,
+      "affinity",
+      "affinity",
+    );
+    expect(affinity).toHaveLength(5);
+    for (const { key, value } of affinity) {
+      const name = names.get(`npc-${key}`);
+      expect(name).toBeDefined();
+      expect(value).toMatchObject({ name });
+    }
+  });
+
+  it.each(["last-train", "haruka-academy", "lantern-barrow", "mistport"])(
     "starts %s with the narrative-only pack and only the narrator active",
     async (worldId) => {
       const registry = await builtinPluginRegistry();
@@ -2873,11 +2900,12 @@ describe("world data session importer", () => {
   });
 
   it.each([
-    ["emberback", "en-US", 5],
     ["lantern-barrow", "zh-CN", 6],
     ["mistport", "zh-CN", 7],
     ["mistport", "en-US", 7],
     ["haruka-academy", "zh-CN", 8],
+    ["last-train", "en-US", 5],
+    ["last-train", "zh-CN", 5],
   ] as const)(
     "materializes bundled %s portraits (%s) into the media store and links presence",
     async (worldId, locale, portraitCount) => {
@@ -2892,7 +2920,7 @@ describe("world data session importer", () => {
       ];
       const sessionId = `sess-portraits-${worldId}-${locale}`;
       const worldRoot = path.join(worldsDir, worldId);
-      // emberback has no descriptor: its files are read by convention.
+      // Bundled portrait assets are read through world-data conventions.
       const descriptor = await loadWorldDataDescriptor({
         worldRoot,
         worldId,
@@ -3147,7 +3175,6 @@ describe("plugin data in character records", () => {
         source: "builtin",
         manifests,
         packageManifest,
-        loadedRuntimes: new Map(),
         status: "registered",
       });
     }

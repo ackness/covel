@@ -1426,7 +1426,7 @@ Below are all the plugins that ship with Covel from [plugins/](../../../plugins/
 | [dm-console](../../../plugins/dm-console/README.md) | Game Master Panel | `plugin` | none | none | Shows the characters in the scene, what is waiting for you, the story and the input box on one page. It is only a view and makes no model calls. |
 | [guide](../../../plugins/guide/README.md) | Action Suggestions | `plugin` | `scene-prompts@1` | inline | After each story turn, reviews what has happened so far and offers short actions the player can use as they are. |
 | [history-compaction](../../../plugins/history-compaction/README.md) | Long-Story Memory | `core` | `history.compact@2` (default provider) | none | Organizes earlier conversation into segmented summaries. |
-| [inventory](../../../plugins/inventory/README.md) | Inventory | `plugin` | `world-ir.vocabulary@1` | `ledger`, `vocabulary` | Records items gained and lost, and changes of equipment. |
+| [inventory](../../../plugins/inventory/README.md) | Inventory | `plugin` | `world-ir.vocabulary@1` | `ledger`, `vocabulary`, `item-op` | Records items gained and lost, and changes of equipment. |
 | [living-world-rules](../../../plugins/living-world-rules/README.md) | World Rules | `plugin` | `living-world-rules@1`, `world-info@1` | none | Shows the rules in a world package that apply over the long term, and keeps the narrative to them. |
 | [memory](../../../plugins/memory/README.md) | Story Memory | `core` | none | `extract` | Remembers the plot, scenes, character relationships, and the protagonist's state. |
 | [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@2` (default provider) | inline | Advances the story based on the player's actions. |

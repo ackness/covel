@@ -427,25 +427,25 @@ describe("upsert-quests", () => {
       sessionId: "sess-1",
       pluginId: "core-quest",
       namespace: "quests",
-      key: "call-from-tomorrow",
+      key: "two-messages",
       value: {
-        id: "call-from-tomorrow",
-        name: "The Call from Tomorrow",
+        id: "two-messages",
+        name: "Two Messages",
         status: "active",
         objectives: [
           {
-            id: "preserve-recording",
-            text: "Make an isolated copy of the future transmission",
+            id: "reach-control",
+            text: "Get a clear answer from Control over the cab radio",
             done: false,
           },
           {
-            id: "compare-voiceprint",
-            text: "Compare the signal against your station voiceprint",
+            id: "check-the-photo",
+            text: "Find out where and when the flooded-station photo was taken",
             done: false,
           },
           {
-            id: "trace-echo",
-            text: "Trace the echo's time and location signature",
+            id: "tell-the-car",
+            text: "Tell the car what you know, and what you don't",
             done: false,
           },
         ],
@@ -459,10 +459,10 @@ describe("upsert-quests", () => {
       {
         quests: [
           {
-            name: "The Call from Tomorrow",
+            name: "Two Messages",
             objectives: [
               {
-                text: "Compare the signal with the station voiceprint",
+                text: "Find where and when the flooded-station photo was taken",
                 done: true,
               },
             ],
@@ -473,11 +473,11 @@ describe("upsert-quests", () => {
       mockStore,
     );
 
-    const stored = await findQuestByName("The Call from Tomorrow");
+    const stored = await findQuestByName("Two Messages");
     expect(stored.value.objectives.map(({ id, done }) => [id, done])).toEqual([
-      ["preserve-recording", false],
-      ["compare-voiceprint", true],
-      ["trace-echo", false],
+      ["reach-control", false],
+      ["check-the-photo", true],
+      ["tell-the-car", false],
     ]);
   });
 
@@ -808,12 +808,15 @@ describe("quests from WorldIR", () => {
   });
 
   it("resolves names exactly first, then by a unique containment", () => {
-    const known = ["The Call from Tomorrow", "Stop the Convoy"];
-    expect(resolveQuestName("the call from tomorrow", known)).toBe(
-      "The Call from Tomorrow",
-    );
-    expect(resolveQuestName("Convoy", known)).toBe("Stop the Convoy");
-    expect(resolveQuestName("the", ["The Call", "The Convoy"])).toBeUndefined();
+    const known = ["Two Messages", "One Battery"];
+    expect(resolveQuestName("two messages", known)).toBe("Two Messages");
+    expect(resolveQuestName("Battery", known)).toBe("One Battery");
+    expect(
+      resolveQuestName("the", [
+        "The Three Who Walked Ahead",
+        "Find the keeper",
+      ]),
+    ).toBeUndefined();
   });
 
   it("creates only explicitly accepted quests and advances known ones", () => {
@@ -833,11 +836,11 @@ describe("quests from WorldIR", () => {
           status: "progressed",
           completedObjectives: ["Ask at the pier"],
         }),
-        quest({ quest: "stop the convoy", status: "completed" }),
+        quest({ quest: "one battery", status: "completed" }),
         quest({ quest: "A rumor about gold", status: "progressed" }),
-        quest({ quest: "Stop the Convoy", status: "toString" }),
+        quest({ quest: "One Battery", status: "toString" }),
       ]),
-      ["Stop the Convoy"],
+      ["One Battery"],
     );
     expect(updates).toEqual([
       {
@@ -850,7 +853,7 @@ describe("quests from WorldIR", () => {
         name: "Find the keeper",
         objectives: [{ text: "Ask at the pier", done: true }],
       },
-      { name: "Stop the Convoy", status: "completed" },
+      { name: "One Battery", status: "completed" },
     ]);
   });
 

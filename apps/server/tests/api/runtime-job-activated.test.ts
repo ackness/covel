@@ -84,7 +84,6 @@ async function setup(handlers: {
         promptTemplate: "",
         rawFrontmatter: {},
       })),
-      loadedRuntimes: runtimes,
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);

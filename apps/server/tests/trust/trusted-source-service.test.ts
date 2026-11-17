@@ -374,7 +374,6 @@ it("refreshes an earlier package republished while a later package is being insp
     },
     source: "community",
     status: "registered",
-    loadedRuntimes: new Map(),
   });
   const original = files.checkPackageIntegrity;
   vi.spyOn(files, "checkPackageIntegrity").mockImplementation(

@@ -61,7 +61,6 @@ describe("resume commit composition", () => {
         id: "producer",
         source: "builtin",
         status: "registered",
-        loadedRuntimes: new Map(),
         summary: {
           id: "producer",
           name: "Producer",
@@ -263,7 +262,6 @@ describe("resume commit composition", () => {
         id: "setup",
         source: "builtin",
         status: "registered",
-        loadedRuntimes: new Map(),
         summary: {
           id: "setup",
           name: "Setup",

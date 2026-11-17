@@ -7,7 +7,7 @@ import { type PluginId, type Visual } from "./copy.js";
 // - stage: worlds/haruka-academy/world.yaml, `pack:dialogue-mode`
 // - tabletop: worlds/lantern-barrow/world.yaml, `pack:traditional-story`
 // - story: worlds/mistport/world.yaml, `pack:traditional-story`
-// - survival: worlds/emberback/world.yaml, `pack:traditional-story`
+// - survival: worlds/last-train/world.yaml, `pack:traditional-story`
 
 export const PACKS: Record<Visual, readonly PluginId[]> = {
   stage: [
@@ -74,7 +74,7 @@ export const WORLD_IDS: Record<Visual, string> = {
   stage: "haruka-academy",
   tabletop: "lantern-barrow",
   story: "mistport",
-  survival: "emberback",
+  survival: "last-train",
 };
 
 /** Plugins responsible for each moment, in the same order as journey copy. */
@@ -93,7 +93,7 @@ export const MOMENT_PLUGINS: Record<Visual, readonly (readonly PluginId[])[]> =
     story: [["narrator", "guide"], ["codex", "memory"], ["world-init"]],
     survival: [
       ["narrator", "world-init"],
-      ["core-quest", "inventory"],
+      ["core-quest", "world-init"],
       ["world-time", "world-init"],
     ],
   };

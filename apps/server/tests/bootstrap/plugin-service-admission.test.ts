@@ -25,7 +25,6 @@ async function fixture() {
       kind: "plugin",
       runtimeCount: 0,
     },
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   const now = new Date().toISOString();
@@ -152,7 +151,6 @@ describe("production plugin service admission", () => {
         kind: "plugin",
         runtimeCount: 0,
       },
-      loadedRuntimes: new Map(),
       status: "registered",
     });
     await f.store.updateSession("session", {

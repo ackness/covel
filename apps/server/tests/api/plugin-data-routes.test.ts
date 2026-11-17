@@ -67,7 +67,6 @@ function registerPlugin(
       kind,
       runtimeCount: 1,
     },
-    loadedRuntimes: new Map(),
     status: "registered",
 
     manifests: [parsed],

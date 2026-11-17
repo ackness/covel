@@ -30,8 +30,7 @@ import {
 
 /**
  * Complete declaration-time runtime definitions for a registry entry.
- * `loadedRuntimes` is deliberately excluded: it is only a partial executable
- * artifact cache and must not influence discovery or session activation.
+ * Executable artifacts must not influence discovery or session activation.
  * Registration replaces the entry object, so old snapshots retain their
  * manifests while the new registration gets a fresh cache entry.
  */

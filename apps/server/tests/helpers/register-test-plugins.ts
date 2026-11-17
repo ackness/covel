@@ -29,7 +29,6 @@ export async function registerTestPlugins(
       packageManifest,
 
       manifests,
-      loadedRuntimes: new Map(),
       status: "registered",
       ...(discovery.source ? { source: discovery.source } : {}),
     });

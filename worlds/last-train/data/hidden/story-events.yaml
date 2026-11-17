@@ -1,0 +1,36 @@
+# Hidden story events (visibility: hidden in world.data.yaml). Payloads are
+# briefs for the narrator; they open situations, never fix outcomes.
+- id: second-train
+  title: The Train Behind
+  when:
+    all:
+      - dimension: floodline
+        path: stage
+        in: [ankle, knee]
+      - dimension: battery
+        path: systems.radio
+        in: [low, full]
+  payload: >-
+    With the cab radio powered, Control comes through clearly for the first time in an hour. There is a second Line 4 train stopped behind this one, close to Wharf Street, in deeper water. The rescue team from Wharf Street is going to that train first. Control does not say how long after that. Let Dara hear it first, let her decide whether to tell the car, and let the player see what it costs her; do not resolve whether anyone is coming soon.
+  priority: 10
+- id: kit-tells-the-truth
+  title: Where the Photo Came From
+  when:
+    dimension: messageLog
+    path: photo-2356.status
+    in: [checked, confirmed, wrong]
+  payload: >-
+    Once someone has checked the flooded-station photo, Kit pulls the player aside. It didn't come from his sister. It came from a viewer in his livestream chat who said they were standing at Wharf Street. He said "my sister" because he thought nobody would listen to a stranger online. He's embarrassed and a little scared. Play his nerves and his relief at saying it; whether the photo was real is still whatever the checking showed.
+  priority: 5
+- id: chained-door
+  title: The Stair Door
+  when:
+    all:
+      - revealed: second-train
+        turnsSinceGte: 1
+      - dimension: walkers
+        path: position
+        equals: at-crossover
+  payload: >-
+    Theo's group reaches the top of the crossover stair and finds the emergency door won't open. Through the gap at the edge they can see a contractor's chain looped around the outside bar, and they can feel cold, dry air and hear a siren somewhere above. Make the physical facts concrete — the chain, the bar, the gap, the lamp — and let the group react; do not decide how the door gets opened or who opens it.
+  priority: 12

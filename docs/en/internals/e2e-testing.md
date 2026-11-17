@@ -351,7 +351,7 @@ Do not record keys, tokens, authentication headers, environment file contents, b
 
 ### Screenshots and README updates
 
-1. Capture real acceptance saves using fictional character details. Emberback works for text play and Harukaze Academy for stage play. Complete a player turn and confirm that default plugins settle successfully first.
+1. Capture real acceptance saves using fictional character details. Last Train Out works for text play and Harukaze Academy for stage play. Complete a player turn and confirm that default plugins settle successfully first.
 2. Use a consistent output of **1600 × 1000 pixels, 100% zoom, device scale 1**. Use the dark **Panel** scheme for feature images. Each README uses its matching UI and content language. Content language is fixed when a session is created, so English captures need an English save, not just English labels over a Chinese save. Exclude browser chrome, native window borders, extension overlays, and the session's "Jump to latest" button.
 3. Take story and dice captures from the same save within each language, but give each image a distinct focus: for example, narration with the quest log, and checks or item actions with inventory. Stage images show actual backgrounds, sprites, and fully revealed dialogue.
 4. Wait for models, fonts, images, and transitions before capturing. Frame through normal navigation, panel selection, folding, and scrolling; do not rewrite the DOM, story, or execution status to manufacture success. A narration capture may use a taller viewport and the browser's native screenshot clipping to frame the content; keep the main subject complete and readable, exclude tooltips and temporary menus, and record the actual viewport and clipping rectangle.

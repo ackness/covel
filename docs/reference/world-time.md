@@ -137,7 +137,7 @@ evolution:
 | 世界                    | 模型       | 看点                         |
 | ----------------------- | ---------- | ---------------------------- |
 | `worlds/haruka-academy` | `calendar` | 十二个月、星期、一天四个时段 |
-| `worlds/emberback`      | `calendar` | 配合倒计时维度               |
+| `worlds/last-train`     | `calendar` | 配合倒计时维度               |
 | `worlds/mistport`       | `phases`   | 用潮汐做时段                 |
 | `worlds/lantern-barrow` | `phases`   | 地城探索的时段               |
 

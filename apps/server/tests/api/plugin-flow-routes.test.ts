@@ -71,7 +71,6 @@ describe("plugin flow routes", () => {
           runtimeCount: 1,
         },
         manifests: [parsed],
-        loadedRuntimes: new Map(),
         status: "registered",
         source: "builtin",
       });
@@ -202,7 +201,6 @@ describe("plugin flow routes", () => {
         "test-package/PLUGIN.md",
       ),
       manifests: [parsed],
-      loadedRuntimes: new Map(),
       status: "registered",
       source: "builtin",
     };

@@ -307,17 +307,17 @@ pnpm validate:world worlds/tidelamp
 
 四个内置世界各有自己的画风，可以打开它们的清单当例子看：
 
-| 世界                      | 清单                                                                 | 画风                                         | 取景                         | 人数 |
-| ------------------------- | -------------------------------------------------------------------- | -------------------------------------------- | ---------------------------- | ---- |
-| 遥风学园 `haruka-academy` | [`portraits.json`](../../worlds/haruka-academy/media/portraits.json) | 动漫视觉小说立绘，柔和的赛璐珞上色，春日粉彩 | 竖图，头到大腿，透明背景     | 8    |
-| 雾港 `mistport`           | [`portraits.json`](../../worlds/mistport/media/portraits.json)       | 写实绘画感的雾中 noir，冷灰、青、锈色        | 半身像，四分之三侧，灰雾背景 | 7    |
-| Emberback `emberback`     | [`portraits.json`](../../worlds/emberback/media/portraits.json)      | 明亮的复古科幻冒险海报，奶油、陶土、钴蓝     | 全身，带各自职业的环境       | 5    |
-| 提灯古冢 `lantern-barrow` | [`portraits.json`](../../worlds/lantern-barrow/media/portraits.json) | 写实的皮肤和旧衣料，暖色主光加冷色轮廓光     | 竖图，全身，透明背景         | 6    |
+| 世界                      | 清单                                                                 | 画风                                             | 取景                             | 人数 |
+| ------------------------- | -------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------- | ---- |
+| 遥风学园 `haruka-academy` | [`portraits.json`](../../worlds/haruka-academy/media/portraits.json) | 动漫视觉小说立绘，柔和的赛璐珞上色，春日粉彩     | 竖图，头到大腿，透明背景         | 8    |
+| 雾港 `mistport`           | [`portraits.json`](../../worlds/mistport/media/portraits.json)       | 写实绘画感的雾中 noir，冷灰、青、锈色            | 半身像，四分之三侧，灰雾背景     | 7    |
+| 提灯古冢 `lantern-barrow` | [`portraits.json`](../../worlds/lantern-barrow/media/portraits.json) | 写实的皮肤和旧衣料，暖色主光加冷色轮廓光         | 竖图，全身，透明背景             | 6    |
+| 末班地铁 `last-train`     | [`portraits.json`](../../worlds/last-train/media/portraits.json)     | 当代图像小说，墨线加上色，琥珀色应急灯配青绿阴影 | 竖图，半身，四分之三侧，车厢背景 | 5    |
 
 值得学的两点：
 
 - 雾港把世界观细节写进了每个人的 `subject`：手腕上的潮纹、半透明的左臂、把玩着的遗物碎片。立绘因此自带设定。
-- Emberback 的人物带着各自的工作环境（维修间、车站坪、观测台），而不是透明背景。透明背景适合舞台视图，带环境的人物卡适合传统的文字叙事。按你的世界怎么玩来选。
+- 透明背景适合舞台视图，带环境的人物卡适合传统的文字叙事。按你的世界怎么玩来选。
 
 每个世界应该传达什么、哪些地方不能画错，见[世界美术方向](./art-direction.md)。
 

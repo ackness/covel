@@ -61,8 +61,8 @@ describe("world-ir extraction context", () => {
   it("names characters by word handles instead of their session ids", async () => {
     const roster = [
       { id: "char-9f2c-player", name: "Ren Ito", type: "player" },
-      { id: "emberback-1a2b-char-lin-b", name: "Lin", type: "npc" },
-      { id: "emberback-1a2b-char-lin-a", name: "Lin", type: "npc" },
+      { id: "last-train-1a2b-char-lin-b", name: "Lin", type: "npc" },
+      { id: "last-train-1a2b-char-lin-a", name: "Lin", type: "npc" },
     ];
     const handlesOf = async (characters) => {
       const result = await extractionContext(worldIr, {

@@ -60,7 +60,6 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
     summary: makeSummary({ id: loaded.manifest.pluginId }),
 
     manifests: [parsed],
-    loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",
   } as PluginRegistryEntry;
 }
@@ -325,7 +324,6 @@ describe("POST /api/actions — turn commit barrier", () => {
       id: pluginId,
       source: "builtin",
       status: "registered",
-      loadedRuntimes: new Map(),
       manifests: [],
       summary: {
         id: pluginId,

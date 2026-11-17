@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "world": "last-train",
+  "defaultLocale": "en-US",
+  "note": "Editorial gallery assets, not a runtime import contract. Descriptions follow the world and the reviewed images; the cover and portraits were generated with gpt-image-2 from media/portraits.json and checked against the character cards.",
+  "images": [
+    {
+      "id": "world-cover",
+      "kind": "hero",
+      "filename": "gallery/world-cover.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "The Last Train Under the River",
+      "description": "A stalled Line 4 train waits in a brick tunnel under the River Calder, its windows on low amber light. Dark water has just covered the track bed, and far along the walkway three people walk away with one torch.",
+      "background": "At 23:47 a blackout stopped the last train of the night under the river. Water is coming in, Wharf Street is behind, and a crossover with a stair to the street is about 400 metres ahead.",
+      "storyContext": "Key art for the opening: water over the track bed, the battery on low, and Theo's group already on the walkway. It does not show where the group ends up.",
+      "visualNotes": [
+        "The water is still below the wheels; at the opening it has only covered the track bed.",
+        "There are exactly three walkers and one lamp: Theo, the two students he took along, and one of the train's lamps."
+      ],
+      "relatedCharacters": ["npc-theo-marsh"],
+      "depiction": "setting-illustration",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md", "data/dimensions.yaml"],
+      "sha256": "e1d944f4cd5dc922d44818d852e2dcf10fc2f509302d401dd2ad76d7088c5867",
+      "bytes": 331126
+    },
+    {
+      "id": "dara-quinn",
+      "kind": "portrait",
+      "filename": "portraits/dara-quinn.webp",
+      "width": 1024,
+      "height": 1536,
+      "name": "Dara Quinn",
+      "description": "Dara stands in the dim car with the cab radio handset to her mouth, reading glasses hanging on a cord over her navy fleece.",
+      "background": "Dara Quinn has driven Line 4 for twenty-two years and counts every passenger as her responsibility. Control told her at 23:51 to keep everyone on board, and until someone gives her a better reason, she will.",
+      "storyContext": "Use when the player first talks to the driver or when the radio comes up. The picture does not settle whether Control's order to hold still stands.",
+      "visualNotes": [
+        "The handset is the cab radio; the train has no other working line out.",
+        "The amber light is the low emergency setting, not the full cabin lights."
+      ],
+      "relatedCharacters": ["npc-dara-quinn"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/characters.json",
+        "media/portraits.json"
+      ],
+      "sha256": "90767687f3a8e7b122f96baee6a0a971981471fd7c9eb0043e60c7c385f68ac6",
+      "bytes": 336250
+    },
+    {
+      "id": "theo-marsh",
+      "kind": "portrait",
+      "filename": "portraits/theo-marsh.webp",
+      "width": 1024,
+      "height": 1536,
+      "name": "Theo Marsh",
+      "description": "Theo, an off-duty signal maintainer in a grey hoodie and hi-vis vest, studies a pencil map of the tunnel drawn on the back of a staff rota, a head torch pushed up on his forehead.",
+      "background": "Theo Marsh is an off-duty signal maintainer who knows these tunnels by the numbers stencilled on the cross-passage doors. Before the player reached the front of the car, he climbed onto the walkway with two students and one of the train's lamps, heading for the crossover stair.",
+      "storyContext": "Use for the first argument about walking out, or before Theo's group leaves. The hand-drawn map is his memory of the tunnel, not a verified route.",
+      "visualNotes": [
+        "The map is pencil on the back of a rota; it is his sketch, not an official plan.",
+        "The head torch strap is cracked; it is not the lamp the group carries."
+      ],
+      "relatedCharacters": ["npc-theo-marsh"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/characters.json",
+        "media/portraits.json"
+      ],
+      "sha256": "8d528b1c508c2aa4cdd0e311ce5f2f6a95bfbbd8492f2ee8e68979e30b1de2a6",
+      "bytes": 352252
+    },
+    {
+      "id": "nadia-haddad",
+      "kind": "portrait",
+      "filename": "portraits/nadia-haddad.webp",
+      "width": 1024,
+      "height": 1536,
+      "name": "Nadia Haddad",
+      "description": "Nadia, still in blue scrubs under a wet raincoat, carries a canvas tote and a ring of hospital keys on her lanyard.",
+      "background": "Nadia Haddad is a night-shift nurse on her way to work. She has taken charge of an older passenger whose breathing gets worse when the air goes stale, and she keeps an eye on everyone else as well.",
+      "storyContext": "Use when someone in the car needs looking after, or when the player asks her to judge who can walk. The picture does not show what is in her bag.",
+      "visualNotes": [
+        "The keys are hospital keys; none of them open anything on the railway.",
+        "She is tired but not hurt."
+      ],
+      "relatedCharacters": ["npc-nadia-haddad"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/characters.json",
+        "media/portraits.json"
+      ],
+      "sha256": "d93ea1e69ce6e0fe1c7647c98dbd7b22883d4595bb70e31c0e3ebca39a533379",
+      "bytes": 387460
+    },
+    {
+      "id": "graham-pike",
+      "kind": "portrait",
+      "filename": "portraits/graham-pike.webp",
+      "width": 1024,
+      "height": 1536,
+      "name": "Graham Pike",
+      "description": "Graham, a white-bearded retired engineer in a buttoned waxed jacket, rests one hand on a black cello case, a folding ruler in his breast pocket.",
+      "background": "Graham Pike is a retired civil engineer who worked on the Wharf Street pump refit years ago. He is certain the pumps can be started by hand from the pump room behind the train, and he wants to go and do it.",
+      "storyContext": "Use when the talk turns to the pumps, the tunnel's structure, or what to carry out. He means to get the cello home to his granddaughter; the case is not a puzzle item.",
+      "visualNotes": [
+        "The ruler marks him as an engineer; it is not a tool for the walkway.",
+        "The cello case is hard-shelled and heavy, which matters if anyone tries to carry it along the walkway."
+      ],
+      "relatedCharacters": ["npc-graham-pike"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/characters.json",
+        "media/portraits.json"
+      ],
+      "sha256": "bd5320ad2fb1bb96cfc561f310646ecd1b2eaf14ca1a4d0dd4de23226247e7e5",
+      "bytes": 312236
+    },
+    {
+      "id": "kit-alvarez",
+      "kind": "portrait",
+      "filename": "portraits/kit-alvarez.webp",
+      "width": 1024,
+      "height": 1536,
+      "name": "Kit Alvarez",
+      "description": "Kit, a young delivery rider in a fluorescent courier jacket, grins with a cracked phone in a waterproof pouch round his neck and a taped-up power bank in his hand.",
+      "background": "Kit Alvarez is twenty, a delivery rider whose phone somehow keeps finding signal. He passed around the photo of Wharf Street underwater and said it came from his sister.",
+      "storyContext": "Use when the player looks at the phone, the photo, or the power bank. The smile is friendly; the picture does not reveal whether his story about the photo is true.",
+      "visualNotes": [
+        "The power bank is wrapped in electrical tape and does not belong to the train's charging rail.",
+        "The phone screen is cracked but works inside the pouch."
+      ],
+      "relatedCharacters": ["npc-kit-alvarez"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/characters.json",
+        "media/portraits.json"
+      ],
+      "sha256": "32d23ed555a6e90c52715e99a3d5b16dfa5e001dd85cf79b67fd1d4b145a8ba1",
+      "bytes": 419966
+    }
+  ]
+}

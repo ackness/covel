@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
+id: last-train
+name: Last Train Out
+version: 2.0.0
+summary: The city goes dark, the last train stops under the river, and the
+  water is coming in. Control says stay put. The group chat says nobody is
+  coming.
+defaultLocale: en-US
+tags:
+  - modern
+  - survival
+  - urban
+  - drama
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
+cover: media/gallery/world-cover.webp
+accentColor: "oklch(82% 0.16 92)"
+plugins:
+  - pack:traditional-story
+  - plugin:dice-check
+pluginPitch:
+  label: Last Train Out
+  description: >-
+    A traditional story with dice checks, quests, the things in your pockets,
+    relationships with the other passengers, and live panels for the water,
+    the train battery, the messages coming in, and the three people who
+    walked ahead.
+  reason: >-
+    Every choice before the water reaches the battery boxes spends something
+    — minutes, charge, a torch, or someone's trust — and the panels show
+    exactly what is left.
+pluginSettings:
+  story-events:
+    planner: true
+characterSchema:
+  attributes:
+    - id: stamina
+      name: Stamina
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description:
+        Wading, climbing, carrying someone, and keeping going when you are cold
+        and wet and it is two in the morning.
+    - id: mechanics
+      name: Mechanics
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description:
+        Doors, breakers, radios, hand pumps, and anything else that can be
+        forced, rewired, or talked back into working.
+    - id: wayfinding
+      name: Wayfinding
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description:
+        Knowing where you are underground, reading tunnel markers, counting
+        cross-passages, and not getting turned around in the dark.
+    - id: insight
+      name: Insight
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description:
+        Noticing what doesn't fit, telling a real message from a rumor, and
+        reading what people aren't saying.
+    - id: rapport
+      name: Rapport
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description:
+        Keeping a frightened car calm, getting strangers to work together, and
+        persuading someone without making them feel handled.

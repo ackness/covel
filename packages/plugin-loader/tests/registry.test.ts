@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import type {
-  LoadedRuntime,
   PluginRegistryEntry,
   PluginSummary,
   ParsedRuntimeMd,
@@ -90,7 +89,6 @@ function makeEntry(
   return {
     id,
     summary: makeSummary(id),
-    loadedRuntimes: new Map(),
     status: "registered",
     ...overrides,
   };
@@ -458,7 +456,6 @@ describe("PluginRegistry", () => {
               outputContract: "image-generator@1",
             }),
           ],
-          loadedRuntimes: new Map(),
         }),
       );
       registry.syncSessionActivations("session-capability", ["image-plugin"]);
@@ -471,27 +468,21 @@ describe("PluginRegistry", () => {
       ).toBe("image-plugin");
     });
 
-    it("does not infer declared capabilities from loaded artifacts", () => {
-      const loadedOnly = {
-        manifest: makeRuntimeManifest("artifact-only/runtime", 500, {
-          outputContract: "artifact-only@1",
-        }),
-        promptTemplate: "",
-      } satisfies LoadedRuntime;
+    it("does not advertise output contracts a runtime has not declared", () => {
       registry.register(
-        makeEntry("artifact-only", {
-          manifests: [makeParsedRuntimeMd("artifact-only/runtime", 500)],
-          loadedRuntimes: new Map([["artifact-only/runtime", loadedOnly]]),
+        makeEntry("no-contract", {
+          manifests: [makeParsedRuntimeMd("no-contract/runtime", 500)],
         }),
       );
-      registry.syncSessionActivations("session-artifact", ["artifact-only"]);
+      registry.syncSessionActivations("session-no-contract", ["no-contract"]);
 
-      expect(
-        registry
-          .getActiveRuntimes("session-artifact")
-          .find((manifest) => manifest.outputContract === "artifact-only@1")
-          ?.pluginId,
-      ).toBeUndefined();
+      const active = registry.getActiveRuntimes("session-no-contract");
+      expect(active.map((manifest) => manifest.name)).toEqual([
+        "no-contract/runtime",
+      ]);
+      expect(active.map((manifest) => manifest.outputContract)).toEqual([
+        undefined,
+      ]);
     });
   });
 

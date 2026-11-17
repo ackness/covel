@@ -25,7 +25,6 @@ import {
   loadPluginDefinition,
   loadPluginEntryDefinition,
   loadPluginSummary,
-  pluginDeclarations,
   resolvePluginRuntimeManifest,
   type PluginDefinition,
   loadRuntime,
@@ -198,7 +197,6 @@ export async function loadRuntimeBundle(args: {
       summary: await loadPluginSummary(discovery, args.locale, definition),
       packageManifest: definition.packageManifest,
       manifests: definition.manifests,
-      loadedRuntimes: new Map(),
       status: "registered",
     });
   }
@@ -360,18 +358,18 @@ export async function loadEntryTools(
   close(): Promise<void>;
 }> {
   const {
-    entryPaths,
+    entryPath,
     extensions: declarations,
     staticPromptSegments,
     staticPromptVariants,
     contributions,
   } = await loadPluginEntryDefinition(
     discovery,
-    pluginDeclarations(definition),
+    definition.packageManifest,
     definition.manifests,
   );
   if (
-    entryPaths.length === 0 &&
+    !entryPath &&
     declarations.length === 0 &&
     staticPromptSegments.length === 0
   )
@@ -522,7 +520,7 @@ export async function loadEntryTools(
   const checked = enforcePluginRegistrationContract(covel, contributions);
   try {
     const realRoot = await fs.promises.realpath(discovery.rootPath);
-    for (const entryPath of entryPaths) {
+    if (entryPath) {
       const fullPath = path.resolve(discovery.rootPath, entryPath);
       if (!isPathInside(discovery.rootPath, fullPath, { allowRoot: true })) {
         throw new Error(`entry path escapes plugin root: ${entryPath}`);

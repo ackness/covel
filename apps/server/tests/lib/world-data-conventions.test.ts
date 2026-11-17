@@ -94,7 +94,7 @@ describe("world data conventions", () => {
 
   it("reads the bundled worlds by convention alone, every rule file included", async () => {
     for (const id of [
-      "emberback",
+      "last-train",
       "haruka-academy",
       "lantern-barrow",
       "mistport",

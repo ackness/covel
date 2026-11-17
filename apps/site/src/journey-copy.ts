@@ -46,16 +46,16 @@ export const journeyEn = {
   ],
   survival: [
     {
-      title: "Hear the call",
-      body: "The Storyteller brings a future distress call into the present. The relay’s world panels show what is at stake.",
+      title: "Read the messages",
+      body: "The Storyteller brings Control’s order and Kit’s photo into the car. World State logs both as unchecked.",
     },
     {
-      title: "Take the assignment",
-      body: "The quest log follows the rescue; the field inventory holds the equipment you can bring.",
+      title: "Ask where it came from",
+      body: "Kit tells you who sent the photo. The quest log ticks off an objective; the photo is checked, not yet confirmed.",
     },
     {
       title: "See the cost",
-      body: "World Time advances the storm countdown; World State records the shared grid’s running cost.",
+      body: "World Time moves the clock on ten minutes and the floodline follows it. World State charges the battery for what was left running.",
     },
   ],
   stageState: {
@@ -83,11 +83,16 @@ export const journeyEn = {
   },
   survivalState: {
     questLabel: "Quest log",
-    quest: "Three Hours of Power",
-    equipment: "Field inventory · field radio, linekeeper kit",
-    cost: "Shared grid running · reserve −3",
+    quest: "Two Messages",
+    before: "0 of 3 objectives",
+    after: "1 of 3 objectives",
+    messagesLabel: "Messages",
+    control: "Control · 23:51",
+    photo: "Kit’s photo · 23:56",
+    unchecked: "Unchecked",
+    checked: "Checked",
+    cost: "Reserve −3",
     elapsed: "Ten minutes later",
-    before: "Clinic at full power · other systems on standby",
   },
 };
 
@@ -138,16 +143,16 @@ export const journeyZh: typeof journeyEn = {
   ],
   survival: [
     {
-      title: "远方来电",
-      body: "讲述者把未来的求救送到此刻，中继站的世界面板呈现眼前的危机。",
+      title: "核对消息",
+      body: "讲述者把调度的指令和基特的照片带进车厢，世界状态把两条消息都记为“未核实”。",
     },
     {
-      title: "接下救援",
-      body: "任务日志记着诊所的安危，行囊里装着能带去现场的工具。",
+      title: "追问来源",
+      body: "基特说出照片是谁发来的。任务日志勾掉一项目标，照片标为“已查来源”，还不算证实。",
     },
     {
       title: "代价可见",
-      body: "世界时间推动风暴倒计时，世界状态记下共享电网运转所花去的储备。",
+      body: "世界时间往前走了十分钟，水位倒计时跟着减少；世界状态按开着的系统扣掉电池储备。",
     },
   ],
   stageState: {
@@ -175,10 +180,15 @@ export const journeyZh: typeof journeyEn = {
   },
   survivalState: {
     questLabel: "任务日志",
-    quest: "三小时的电力",
-    equipment: "行囊 · 野外电台、线路维护工具包",
-    cost: "共享电网运转 · 电力储备 −3",
+    quest: "两条消息",
+    before: "已完成 0 / 3 项目标",
+    after: "已完成 1 / 3 项目标",
+    messagesLabel: "消息",
+    control: "调度 · 23:51",
+    photo: "基特的照片 · 23:56",
+    unchecked: "未核实",
+    checked: "已查来源",
+    cost: "电池储备 −3",
     elapsed: "十分钟后",
-    before: "诊所全功率 · 其余系统待命",
   },
 };

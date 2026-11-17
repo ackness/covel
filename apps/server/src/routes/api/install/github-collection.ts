@@ -154,7 +154,6 @@ async function collectionDataRequirements(
       id: plugin.id,
       packageManifest: root,
       manifests: [],
-      loadedRuntimes: new Map(),
       status: "discovered",
       source: "community",
       summary: {

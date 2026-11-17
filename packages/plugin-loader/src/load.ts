@@ -28,11 +28,7 @@ import {
   type PluginExecutionProof,
 } from "./execution-assessment.js";
 import { provideHostModules } from "./host-modules.js";
-import {
-  pluginImportReferences,
-  validateRuntimeDeclarations,
-} from "./static-validation.js";
-import { resolvePluginDeclarations } from "./declarations.js";
+import { validateRuntimeDeclarations } from "./static-validation.js";
 import { readMessageCatalogs } from "./locale-messages.js";
 import { pluginLanguages } from "./plugin-languages.js";
 import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
@@ -569,7 +565,7 @@ export async function loadPluginManifest(
 /** Freeze entry metadata and root prompt translations before execution. */
 export async function loadPluginEntryDefinition(
   discovery: PluginDiscoveryResult,
-  declarations: readonly ParsedPluginMd[],
+  root: ParsedPluginMd | undefined,
   runtimes: readonly ParsedRuntimeMd[],
 ): Promise<PluginEntryDefinition> {
   const staticPromptVariants: Record<
@@ -592,22 +588,14 @@ export async function loadPluginEntryDefinition(
   }
   return {
     staticPromptVariants,
-    contributions: declarations[0]?.plugin.contributes ?? {},
-    staticPromptSegments: declarations[0]?.plugin.contributes?.prompt ?? [],
-    extensions: resolvePluginDeclarations(declarations).extensions,
+    contributions: root?.plugin.contributes ?? {},
+    staticPromptSegments: root?.plugin.contributes?.prompt ?? [],
+    extensions: root?.manifest.extensions ?? [],
     pluginId: discovery.id,
     pluginRoot: discovery.rootPath,
-    entryPaths: [
-      ...new Set(
-        declarations.flatMap((declaration) =>
-          pluginImportReferences(declaration, [])
-            .filter(({ field }) => field === "entry")
-            .map(({ reference }) => reference),
-        ),
-      ),
-    ],
+    entryPath: root?.plugin.entry || undefined,
     httpPermissions: [
-      ...(declarations[0]?.plugin.permissions?.http ?? []),
+      ...(root?.plugin.permissions?.http ?? []),
       ...runtimes.flatMap(({ manifest }) => manifest.permissions?.http ?? []),
     ],
   };

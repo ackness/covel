@@ -104,7 +104,6 @@ describe("form provider authorization", () => {
           "PLUGIN.md",
         ),
         manifests: [parsed],
-        loadedRuntimes: new Map([[id, loaded]]),
       });
       rpc.rpcRegistry.registerFormValidator(id, "check", async () =>
         validate(),

@@ -57,7 +57,6 @@ function entry(
       rawFrontmatter: {},
     } as ParsedPluginMd,
     manifests,
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }
@@ -78,7 +77,6 @@ describe("contractReferenceDiagnostics", () => {
         },
         packageManifest: definition.packageManifest,
         manifests: definition.manifests,
-        loadedRuntimes: new Map(),
         status: "registered",
       });
     }

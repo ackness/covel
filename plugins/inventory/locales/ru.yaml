@@ -12,11 +12,15 @@ PLUGIN.md:
       items:
         authoring:
           title: Начальные предметы
+runtimes/item-op/RUNTIME.md:
+  description: Надеть, снять или выбросить предмет из сумки.
 runtimes/ledger/RUNTIME.md:
   description: После каждого хода записывает предметы, которые вы получили, потеряли или надели.
 runtimes/vocabulary/RUNTIME.md:
   description: Запоминает названия предметов из сумки, чтобы дальше они назывались одинаково.
 messages:
+  That item is no longer in your bag.: Этого предмета больше нет в вашей сумке.
+  That bag action is not supported.: Это действие с сумкой не поддерживается.
   Bag changes: Изменения в сумке
   Bag: Сумка
   Your bag is empty. Items you pick up in the story will appear here.: Сумка пуста. Предметы, найденные в истории, появятся здесь сами.

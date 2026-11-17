@@ -91,9 +91,9 @@ defaultLocale: zh-CN
 
 ### 给世界自己的默认文体
 
-在 `WORLD.md` 里说明这个世界怎样讲故事。例如雾港偏哥特调查，遥风学园偏细腻对白，余烬岭有技术细节和冷幽默，提灯古冢则像一位节奏利落的主持人。默认文体跟着世界走，不需要把所有世界改成同一种口吻。
+在 `WORLD.md` 里说明这个世界怎样讲故事。例如雾港偏哥特调查，遥风学园偏细腻对白，末班地铁用朴实、务实的语言写出安静的危险，提灯古冢则像一位节奏利落的主持人。默认文体跟着世界走，不需要把所有世界改成同一种口吻。
 
-内置世界还把这些要求放在 `data/dimensions.yaml` 的 `tone.initialValue.narrativeStyle` 中。`tone` 和 `narrativeStyle` 是作者选的名字，不是内核专有字段；维度定义和可翻译文字的标记见[世界状态](../reference/world-data.md#动态世界状态dimensions)。角色自己的说话方式则写在档案或 `blueprint` 里，让职业、关系和眼下的处境影响措辞。
+部分内置世界还把这些要求放在 `data/dimensions.yaml` 的 `tone.initialValue.narrativeStyle` 中；末班地铁则写在 `WORLD.md` 和 `data/rules/world-rules.yaml` 中。`tone` 和 `narrativeStyle` 是作者选的名字，不是内核专有字段；维度定义和可翻译文字的标记见[世界状态](../reference/world-data.md#动态世界状态dimensions)。角色自己的说话方式则写在档案或 `blueprint` 里，让职业、关系和眼下的处境影响措辞。
 
 自然度与文体要一起检查：一个人物不该无缘无故知道秘密，手里的物件不能下一回合又回到桌上，初始记录也不能说玩家已经付钱或答应了尚未选择的事。中英文都要核对同一组事实。校验通过只说明包的结构合法，不能替代连续游玩和阅读。
 
@@ -229,7 +229,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 
 - **换一种玩法。** 把列表的第一个引用换成 `pack:dialogue-mode`，或者加上 `plugin:dice-check`、`plugin:core-quest`、`plugin:inventory`、`plugin:affinity`，让它变成一场带判定和任务的冒险。
 - **预置更多内容。** 在仓库里运行 `pnpm describe:authoring`，它列出当前版本能预置的每一种内容、文件该放的路径和一份合法的示例。
-- **看成品。** 仓库的 `worlds/` 目录里有四个完整的世界，`worlds/emberback` 是带判定、任务、背包和好感的参考。
+- **看成品。** 仓库的 `worlds/` 目录里有四个完整的世界，`worlds/last-train` 是带判定、任务、背包和好感的参考。
 - **加上画面。** 见[世界立绘](./portraits.md)和[世界场景](./scenes.md)。
 
 全部可预置的内容和导入规则见[世界数据参考](../reference/world-data.md)。

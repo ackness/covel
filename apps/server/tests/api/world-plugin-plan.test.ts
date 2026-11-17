@@ -56,7 +56,6 @@ describe("real bundled compositions", () => {
           manifests: definition.manifests,
           summary: await loadPluginSummary(discovery, "en-US", definition),
           status: "registered",
-          loadedRuntimes: new Map(),
         });
       }
       registry.register(
@@ -150,7 +149,6 @@ function entry(
     },
     packageManifest: root,
     manifests: [],
-    loadedRuntimes: new Map(),
     status: "registered",
     source,
   };

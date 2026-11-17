@@ -335,7 +335,6 @@ function makeDefaultDeps(
       promptTemplate: "Test prompt",
       rawFrontmatter: {},
     })),
-    loadedRuntimes: new Map(),
     status: "registered",
   });
 

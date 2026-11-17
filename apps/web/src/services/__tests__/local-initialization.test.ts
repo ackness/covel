@@ -37,8 +37,8 @@ const catalog: WorldRecord[] = [
     createdAt: "2026-01-01T00:00:00.000Z",
   },
   {
-    id: "emberback",
-    name: "Emberback",
+    id: "last-train",
+    name: "Last Train Out",
     description: "Another catalog world",
     createdAt: "2026-01-02T00:00:00.000Z",
   },
@@ -77,8 +77,8 @@ it("imports the actual catalog with stable IDs and full package content into bro
   const service = new LocalDataService(vault);
   const worlds = await service.listWorlds();
   expect(worlds.map((world) => world.id).sort()).toEqual([
-    "emberback",
     "haruka-academy",
+    "last-train",
   ]);
   // The list is summaries; the vault and `getWorld` hold the full record.
   expect(

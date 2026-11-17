@@ -121,7 +121,6 @@ function narratorEntry(loaded: LoadedRuntime): PluginRegistryEntry {
         rawFrontmatter: {},
       },
     ],
-    loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",
   } as PluginRegistryEntry;
 }
@@ -146,7 +145,6 @@ function whisperEntry(): PluginRegistryEntry {
       actionKinds: [whisperKind, passKind, offerKind],
     },
     manifests: [],
-    loadedRuntimes: new Map(),
     status: "registered",
   } as PluginRegistryEntry;
 }

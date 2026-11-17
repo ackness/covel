@@ -123,8 +123,8 @@ const en = {
       {
         visual: "survival",
         word: "survival sandbox.",
-        body: "A storm is three hours away. The clinic, the convoy and the radio all need power. Choose what to protect, and live with the world your choices leave behind.",
-        alt: "Power, storm and rescue decisions at Emberback Relay",
+        body: "The last train is stopped under the river, and water is rising. Lights, doors and radio share one battery. Decide which message to trust, and how to get everyone out.",
+        alt: "Water, battery and escape decisions in Last Train Out",
       },
     ] satisfies Mode[],
     modesLabel: "Ways to play",
@@ -163,7 +163,7 @@ const en = {
       stage: "Harukaze Academy · visual novel",
       tabletop: "Lantern Barrow · classic tabletop",
       story: "Classic Story",
-      survival: "Emberback Relay · survival sandbox",
+      survival: "Last Train Out · survival sandbox",
     } satisfies Record<Visual, string>,
     names: {
       narrator: "Storyteller",
@@ -190,7 +190,7 @@ const en = {
   worlds: {
     eyebrow: "Built-in worlds",
     title: "Four worlds. Four first pages.",
-    body: "A harbour in fog, a school by the sea, a lantern gone dark, a voice from tomorrow. Each original world comes with its own art and a chosen set of plugins. Where will you begin?",
+    body: "A harbour in fog, a school by the sea, a lantern gone dark, a train under rising water. Each original world comes with its own art and a chosen set of plugins. Where will you begin?",
     list: [
       {
         id: "mistport",
@@ -214,11 +214,11 @@ const en = {
           "For a hundred years, the lantern kept its watch. Now it is dark, and the bronze doors stand open. Gather your party, build your characters, and take the first roll into the depths.",
       },
       {
-        id: "emberback",
-        name: "Emberback Relay",
-        genre: "Science fiction · Survival",
+        id: "last-train",
+        name: "Last Train Out",
+        genre: "Modern city · Survival",
         summary:
-          "On a world where day and night never trade places, an isolated relay receives a distress call. The voice is yours. The timestamp is seventy-two hours from now.",
+          "A citywide blackout stops the last train in a flooding river tunnel. Control says stay put. A photo says help cannot get through. One battery powers everything you need.",
       },
     ] satisfies WorldCopy[],
   },
@@ -311,8 +311,8 @@ const zh: Copy = {
       {
         visual: "survival",
         word: "生存沙盒",
-        body: "风暴将在三小时后抵达。诊所、车队与电台，都在等同一份电力。选择要守住的东西，让有限的资源，续上更多人的明天。",
-        alt: "余烬岭中继站的电力、风暴与救援抉择",
+        body: "末班地铁停在河底隧道，水正在上涨。照明、车门和无线电共用一块电池。判断哪条消息可信，带着车里的人寻找出路。",
+        alt: "末班地铁的水位、电池与逃生抉择",
       },
     ],
     modesLabel: "玩法",
@@ -348,7 +348,7 @@ const zh: Copy = {
       stage: "遥风学园 · 视觉小说",
       tabletop: "提灯古冢 · 经典跑团",
       story: "经典故事",
-      survival: "余烬岭中继站 · 生存沙盒",
+      survival: "末班地铁 · 生存沙盒",
     },
     names: {
       narrator: "讲述者",
@@ -375,7 +375,7 @@ const zh: Copy = {
   worlds: {
     eyebrow: "内置世界",
     title: "四个世界，四种启程。",
-    body: "雾里的港口，海边的学园，熄灭的提灯，来自明日的声音。每个原创世界都备好了美术与插件。你想从哪一页开始？",
+    body: "雾里的港口，海边的学园，熄灭的提灯，困在涨水隧道里的列车。每个原创世界都备好了美术与插件。你想从哪一页开始？",
     list: [
       {
         id: "mistport",
@@ -399,11 +399,11 @@ const zh: Copy = {
           "守望百年的提灯终于熄灭，青铜墓门向黑暗敞开。集结同伴，分配属性，让第一枚骰子带你走进古冢深处。",
       },
       {
-        id: "emberback",
-        name: "余烬岭中继站",
-        genre: "科幻 · 生存",
+        id: "last-train",
+        name: "末班地铁",
+        genre: "现代都市 · 生存",
         summary:
-          "在昼夜不再交替的星球，一座孤立中继站收到求救信号。声音是你自己的，时间却来自七十二小时之后。",
+          "全城停电，末班地铁困在涨水的河底隧道。调度让你原地等待，一张照片却说救援过不来。一块电池，撑着车里所有人的需要。",
       },
     ],
   },

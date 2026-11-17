@@ -80,7 +80,6 @@ async function fixture(
       kind: "plugin",
       runtimeCount: runtimes.length,
     },
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   const now = new Date().toISOString();

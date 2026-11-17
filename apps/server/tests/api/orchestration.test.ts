@@ -49,7 +49,6 @@ async function fixture() {
     source: "builtin",
     packageManifest: root,
     manifests: [],
-    loadedRuntimes: new Map(),
     status: "registered",
     summary: {
       id: "sample",

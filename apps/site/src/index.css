@@ -123,7 +123,7 @@ body {
   --mode: oklch(52% 0.11 205);
 }
 [data-mode="survival"] {
-  --mode: oklch(55% 0.17 290);
+  --mode: oklch(55% 0.13 150);
 }
 :root[data-theme="dark"] [data-mode="stage"] {
   --mode: oklch(78% 0.13 350);
@@ -135,7 +135,7 @@ body {
   --mode: oklch(83% 0.09 200);
 }
 :root[data-theme="dark"] [data-mode="survival"] {
-  --mode: oklch(76% 0.13 290);
+  --mode: oklch(78% 0.14 150);
 }
 
 @property --mode {

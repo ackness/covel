@@ -71,7 +71,6 @@ function installedPlugins(): PluginRegistry {
       kind: "plugin",
       runtimeCount: 0,
     },
-    loadedRuntimes: new Map(),
     status: "registered",
   });
   return registry;

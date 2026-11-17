@@ -143,10 +143,6 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       summary: makeSummary(PLUGIN_ID),
 
       manifests: [parsedTarget, parsedFollower],
-      loadedRuntimes: new Map([
-        [TARGET, targetLoaded],
-        [FOLLOWER, followerLoaded],
-      ]),
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);
@@ -340,10 +336,6 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       summary: makeSummary(PLUGIN_ID),
 
       manifests: [parsedTarget, parsedFollower],
-      loadedRuntimes: new Map([
-        [TARGET, targetLoaded],
-        [FOLLOWER, followerLoaded],
-      ]),
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);
@@ -549,7 +541,6 @@ describe("POST /api/actions — deferred background followers (main path)", () =
         promptTemplate: "",
         rawFrontmatter: {},
       })),
-      loadedRuntimes: loaded,
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);

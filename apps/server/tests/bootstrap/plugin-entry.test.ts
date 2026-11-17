@@ -24,6 +24,8 @@ import {
   createHookPipeline,
   createToolExecutor,
   createPluginRpcRegistry,
+  PluginServiceRegistry,
+  PluginExtensionHost,
   type HookContext,
 } from "@covel/runtime";
 import type { PluginManifest, RuntimeManifest } from "@covel/shared";
@@ -126,7 +128,6 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
       packageManifest: entry.parsed,
       manifests: [],
       status: "registered",
-      loadedRuntimes: new Map(),
       source: entry.discovery.source,
     });
   }
@@ -181,6 +182,51 @@ export default function (covel) {
 const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
+  it.each([false, true])(
+    "publishes static prompts and validates missing registrations without an entry, missing=%s",
+    async (missing) => {
+      const pluginId = `static-only-${missing}`;
+      const plugin = writePlugin(pluginId, null, { entryPath: "" });
+      plugin.parsed = {
+        ...plugin.parsed,
+        plugin: {
+          ...plugin.parsed.plugin,
+          contributes: {
+            prompt: [
+              { id: "note", content: "Static", position: "pre-history" },
+            ],
+            ...(missing ? { tools: ["unimplemented"] } : {}),
+          },
+        },
+      };
+      const params = makeParams([plugin]);
+      const extensions = new PluginExtensionHost(
+        new PluginServiceRegistry({
+          list: async () => [pluginId],
+          ensure: async () => {},
+        }),
+      );
+      const entries = await createBootstrapPluginEntries({
+        ...params,
+        extensions,
+      });
+      try {
+        expect(entries.hasPendingEntry(pluginId)).toBe(false);
+        expect(entries.isEntryPublished(pluginId)).toBe(!missing);
+        expect(extensions.list()).toHaveLength(missing ? 0 : 1);
+        if (missing) {
+          expect(
+            params.pluginRegistry.get(pluginId)?.registrationError,
+          ).toMatchObject({
+            registration: "declarations",
+          });
+        }
+      } finally {
+        await entries.close();
+        await params.store.close();
+      }
+    },
+  );
   it.each([false, true])(
     "closes pending package factories and runs their cleanup, cleanupFailure=%s",
     async (cleanupFailure) => {
@@ -843,7 +889,6 @@ describe("createBootstrapPluginEntries", () => {
       summary: await loadPluginSummary(discovery),
       ...definition,
       status: "registered",
-      loadedRuntimes: new Map(),
       source: discovery.source,
     });
 
@@ -900,7 +945,6 @@ describe("createBootstrapPluginEntries", () => {
       summary: await loadPluginSummary(discovery),
       ...definition,
       status: "registered",
-      loadedRuntimes: new Map(),
       source: discovery.source,
     });
 

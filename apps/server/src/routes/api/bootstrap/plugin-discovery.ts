@@ -10,7 +10,6 @@ import {
   loadPluginDefinition,
   loadPluginEntryDefinition,
   loadPluginSummary,
-  pluginDeclarations,
   type ParsedRuntimeMd,
   type PluginDiscoveryResult,
   type PluginRegistry,
@@ -84,7 +83,7 @@ export async function discoverAndRegisterPlugins(
       // and not later at entry bootstrap, where it stopped the server.
       await loadPluginEntryDefinition(
         discovery,
-        pluginDeclarations(definition),
+        definition.packageManifest,
         definition.manifests,
       );
       const { packageManifest, manifests } = definition;
@@ -144,7 +143,6 @@ export async function discoverAndRegisterPlugins(
         languages: definition.languages,
         disabledRuntimes: definition.disabledRuntimes,
         ignoredFields: definition.ignoredFields,
-        loadedRuntimes: new Map(),
         status: "registered",
         ...(discovery.source ? { source: discovery.source } : {}),
       });
@@ -174,7 +172,6 @@ export async function discoverAndRegisterPlugins(
           kind: "plugin",
           runtimeCount: 0,
         },
-        loadedRuntimes: new Map(),
         status: "error",
         error: publicPluginError(message, discovery.rootPath),
         ...(discovery.source ? { source: discovery.source } : {}),

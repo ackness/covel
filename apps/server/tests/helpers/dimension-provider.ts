@@ -32,7 +32,6 @@ export async function registerDimensionProvider(
     },
     manifests,
     packageManifest,
-    loadedRuntimes: new Map(),
     status: "registered",
     ...(source ? { source } : {}),
   });

@@ -51,7 +51,6 @@ function makeEntry(
     id: "plugin",
     status: "registered",
     summary: makeSummary(),
-    loadedRuntimes: new Map(),
     ...overrides,
   } as PluginRegistryEntry;
 }

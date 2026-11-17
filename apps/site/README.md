@@ -42,8 +42,8 @@ pnpm --filter @covel/site test
 - Each scene advances through three four-second moments before changing worlds.
   `journey-copy.ts` holds captions and sample outcomes; `MOMENT_PLUGINS` maps each
   moment to the responsible plugins and highlights them in the rack. Selecting a
-  moment pauses autoplay. World-specific panels (routes, case board, power grid)
-  are attributed to `world-init`, with storm time also supplied by `world-time`.
+  moment pauses autoplay. World-specific panels (routes, case board, floodline, battery, messages)
+  are attributed to `world-init`, with the floodline countdown also driven by `world-time`.
   `PACKS` is a curated presentation subset of each world's initial `pack:` requests,
   explicit `plugin:` references, conventional data receivers and core defaults,
   not the complete resolved runtime registry. The ordered `plugins` field selects
@@ -55,7 +55,7 @@ pnpm --filter @covel/site test
 - The carousel presents four curated play experiences: visual novel, tabletop
   campaign, interactive fiction and survival sandbox. These are examples built
   from plugins and world settings, not four exclusive engine modes. The survival
-  scene uses Emberback Relay's storm, power and rescue setting; its plugin rack
+  scene uses Last Train Out's flooding tunnel, shared battery and messages; its plugin rack
   follows that world's initial pack, explicit plugins and data receivers. Language support is a shared feature
   in `LanguageFeature.tsx`, outside the play carousel, with text in
   `preview-copy.ts` under `languages`.

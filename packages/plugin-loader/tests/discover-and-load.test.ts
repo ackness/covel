@@ -9,7 +9,6 @@ import {
   loadPluginSummary,
   loadRuntime,
   loadPluginEntryDefinition,
-  pluginDeclarations,
 } from "../src/index.js";
 let temp: string;
 beforeEach(async () => {
@@ -53,15 +52,38 @@ describe("current package discovery and loading", () => {
     expect(
       await loadPluginEntryDefinition(
         d!,
-        pluginDeclarations(definition),
+        definition.packageManifest,
         definition.manifests,
       ),
     ).toMatchObject({
-      entryPaths: ["./throws.js"],
+      entryPath: "./throws.js",
       contributions: { tools: ["probe"] },
       staticPromptSegments: [{ id: "note" }],
     });
   });
+  it.each([
+    [undefined, true, "./server/index.js"],
+    ["./custom.js", true, "./custom.js"],
+    [undefined, false, undefined],
+  ])(
+    "resolves the single entry %s with conventional file=%s",
+    async (entry, conventional, expected) => {
+      await root(entry ? { entry } : {});
+      if (conventional)
+        await write(
+          path.join(temp, "probe/server/index.js"),
+          "throw new Error('must not import');",
+        );
+      const [discovery] = await discoverPlugins(temp);
+      const definition = await loadPluginDefinition(discovery!);
+      const metadata = await loadPluginEntryDefinition(
+        discovery!,
+        definition.packageManifest,
+        definition.manifests,
+      );
+      expect(metadata.entryPath).toBe(expected);
+    },
+  );
   it("loads inline runtime prompt from a frozen parsed definition", async () => {
     await root({ runtime: agent });
     const [d] = await discoverPlugins(temp);

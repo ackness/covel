@@ -27,12 +27,6 @@ function makeEntry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
     },
     manifests: parsed,
 
-    loadedRuntimes: new Map(
-      parsed.map((item) => [
-        item.manifest.name,
-        { manifest: item.manifest, promptTemplate: "" },
-      ]),
-    ),
     status: "registered",
     source: "builtin",
   };
@@ -90,12 +84,7 @@ describe("runtime turnCompletion discovery", () => {
 
   it("exposes the same effective policy in the session plugin list", () => {
     const registry = createPluginRegistry();
-    registry.register({
-      ...makeEntry([awaited, detached]),
-      // Catalog projection must describe declarations, regardless of whether
-      // executable artifacts have been loaded for this process.
-      loadedRuntimes: new Map(),
-    });
+    registry.register(makeEntry([awaited, detached]));
 
     const [plugin] = buildAvailablePluginList(["media-tools"], registry);
 

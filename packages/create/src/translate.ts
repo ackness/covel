@@ -333,7 +333,7 @@ export async function extractGlossary(options: {
           `List its proper nouns and invented terms: people, places, organizations, objects and concepts that the setting names. Give each one translation into ${languageName(options.to)}.`,
           "",
           "Rules:",
-          "- Write each term as it is written in the text, in its shortest form: `Emberback`, not `Emberback Relay`, when both occur.",
+          "- Write each term as it is written in the text, in its shortest form: `Wharf Street`, not `Wharf Street station`, when both occur.",
           "- A person gets the full name and, as a second entry, the name people call them by.",
           "- Do not list common words.",
           "- At most 80 terms. The most frequent ones first.",

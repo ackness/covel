@@ -854,7 +854,6 @@ protocol = "openai-chat-v1"
         },
         manifests: [],
         packageManifest: definition.packageManifest,
-        loadedRuntimes: new Map(),
         status: "registered",
       });
       await registerDimensionProvider(registry);
@@ -984,7 +983,6 @@ protocol = "openai-chat-v1"
           `---\n${JSON.stringify({ ...definition.packageManifest.plugin, id: pluginId, contributes: { ...definition.packageManifest.plugin.contributes, data: { [namespace]: acceptedData } } })}\n---`,
           "fixture/PLUGIN.md",
         ),
-        loadedRuntimes: new Map(),
         status: "registered",
       });
       await registerDimensionProvider(registry);
@@ -1697,7 +1695,6 @@ protocol = "openai-chat-v1"
             },
             rootPath: discovery.rootPath,
             manifests: [],
-            loadedRuntimes: new Map(),
             status: "registered",
             packageManifest: parsePluginMd(
               `---\n${JSON.stringify({ ...definition.packageManifest.plugin, contributes: { data: { definitions: { ...data, authoring: { ...data.authoring, generate: generate ? "offer" : undefined } } } } })}\n---`,

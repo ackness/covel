@@ -113,7 +113,6 @@ async function fixture(
     },
 
     manifests: [parsed],
-    loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",
   });
   const action = async (committed = true) => {

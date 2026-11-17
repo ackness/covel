@@ -78,6 +78,7 @@ describe("bundled inventory services through the action API", () => {
   let refused: boolean;
   let foundTorch: boolean;
   let rejectLedger: boolean;
+  let rejectItemOp: boolean;
   let beforeProse: (() => Promise<void>) | undefined;
   const requests = new Map<string, Parameters<LLMAdapter["generate"]>[0][]>();
   const generate: LLMAdapter["generate"] = async (request) => {
@@ -242,6 +243,7 @@ describe("bundled inventory services through the action API", () => {
     refused = false;
     foundTorch = false;
     rejectLedger = false;
+    rejectItemOp = false;
     beforeProse = undefined;
     store = createSqliteStore(path.join(root, "session.sqlite"));
     const now = new Date().toISOString();
@@ -297,15 +299,21 @@ describe("bundled inventory services through the action API", () => {
               id: "check-ledger",
               pluginId: "inventory",
               event: "PreStateCommit",
-              handler: async (_ctx, { proposal }) =>
-                rejectLedger &&
-                proposal.source.runtimeId === "inventory/ledger" &&
-                proposal.type === "plugin.data.update"
+              handler: async (_ctx, { proposal }) => {
+                const rejected =
+                  (rejectLedger &&
+                    proposal.source.runtimeId === "inventory/ledger" &&
+                    proposal.type === "plugin.data.update") ||
+                  (rejectItemOp &&
+                    proposal.source.runtimeId === "inventory/item-op" &&
+                    proposal.type === "plugin.data");
+                return rejected
                   ? {
                       action: "abort",
                       reason: "The Torch change needs correction.",
                     }
-                  : { action: "continue" },
+                  : { action: "continue" };
+              },
             });
             guardRegistered = true;
           }
@@ -398,6 +406,28 @@ describe("bundled inventory services through the action API", () => {
       ({ value }) =>
         value as { name: string; quantity: number; removed?: boolean },
     );
+  }
+  async function itemOp(payload: Record<string, unknown>) {
+    const response = await boot!.app.request(
+      `/api/sessions/${sessionId}/plugin-rpc`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          kind: "runtime",
+          pluginId: "inventory",
+          runtimeId: "inventory/item-op",
+          payload,
+        }),
+      },
+    );
+    const body = (await response.json()) as {
+      error?: string;
+      code?: string;
+      turnId?: string;
+      runtimeResults?: { runtimeId: string; status: string; error?: string }[];
+    };
+    return { response, body };
   }
 
   it("commits one sword and one payment when extraction reports the same exchange", async () => {
@@ -554,6 +584,92 @@ describe("bundled inventory services through the action API", () => {
       /<operations-not-applied>([\s\S]*?)<\/operations-not-applied>/,
     )?.[1];
     expect(notice).toContain(operations[0]!.summary);
+  });
+  it("commits an equip from the panel through the manual runtime", async () => {
+    const { response, body } = await itemOp({ op: "equip", itemId: "gold" });
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body).toMatchObject({
+      status: "ok",
+      runtimeResults: [
+        expect.objectContaining({
+          runtimeId: "inventory/item-op",
+          status: "success",
+          output: {
+            op: "equip",
+            item: expect.objectContaining({
+              id: "gold",
+              name: "Gold coin",
+              quantity: 12,
+              equipped: true,
+            }),
+          },
+        }),
+      ],
+    });
+    expect(
+      (await store.getPluginData(sessionId, "inventory", "items", "gold"))
+        ?.value,
+    ).toMatchObject({ equipped: true });
+    expect((await store.listTurnResults(sessionId)).at(-1)?.commitStatus).toBe(
+      "committed",
+    );
+  });
+  it("reports a missing item as a failed runtime result without writing", async () => {
+    const before = await items();
+    const { response, body } = await itemOp({ op: "equip", itemId: "nope" });
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body).toMatchObject({
+      status: "ok",
+      runtimeResults: [
+        expect.objectContaining({
+          runtimeId: "inventory/item-op",
+          status: "failed",
+          error: "That item is no longer in your bag.",
+          output: {
+            outcome: "failed",
+            error: "That item is no longer in your bag.",
+          },
+        }),
+      ],
+    });
+    expect(await items()).toEqual(before);
+    expect((await store.listTurnResults(sessionId)).at(-1)?.commitStatus).toBe(
+      "committed",
+    );
+  });
+  it("leaves the item unchanged when the item-op commit is rejected", async () => {
+    rejectItemOp = true;
+    const before = await store.getPluginData(
+      sessionId,
+      "inventory",
+      "items",
+      "gold",
+    );
+    expect(before?.value).toMatchObject({ equipped: false });
+    const { response, body } = await itemOp({ op: "equip", itemId: "gold" });
+    expect(response.status, JSON.stringify(body)).toBe(500);
+    expect(body).toMatchObject({
+      error: "1 proposal(s) failed to commit",
+      code: "turn_commit_failed",
+      details: {
+        turnId: expect.any(String),
+        runtimeResults: [
+          expect.objectContaining({
+            runtimeId: "inventory/item-op",
+            status: "success",
+            output: {
+              op: "equip",
+              item: expect.objectContaining({ equipped: true }),
+            },
+          }),
+        ],
+      },
+    });
+    expect(
+      await store.getPluginData(sessionId, "inventory", "items", "gold"),
+    ).toEqual(before);
+    const row = (await store.listTurnResults(sessionId)).at(-1)!;
+    expect(row.commitStatus).toBe("failed");
   });
   it("offers neither bag import when inventory is inactive and still commits the turn", async () => {
     await store.updateSession(sessionId, {

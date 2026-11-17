@@ -12,11 +12,15 @@ PLUGIN.md:
       items:
         authoring:
           title: 初始物品
+runtimes/item-op/RUNTIME.md:
+  description: 装备、卸下或丢弃背包里的物品。
 runtimes/ledger/RUNTIME.md:
   description: 每回合根据故事内容记录你获得、失去或装备的物品。
 runtimes/vocabulary/RUNTIME.md:
   description: 记录背包里已有的物品名，让后续记录沿用同一个叫法。
 messages:
+  That item is no longer in your bag.: 这件物品已经不在你的背包里了。
+  That bag action is not supported.: 不支持这项背包操作。
   Bag changes: 背包变化
   Bag: 背包
   Your bag is empty. Items you pick up in the story will appear here.: 背包是空的。故事里拿到的东西会自动出现在这里。

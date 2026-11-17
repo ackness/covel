@@ -144,7 +144,6 @@ function declarationEntry(
       },
     },
     summary: { ...base.summary, id, name: id },
-    loadedRuntimes: new Map(),
     status: "registered",
   };
 }
@@ -652,7 +651,7 @@ describe("inferred world data through host admission", () => {
     }
   });
 
-  it.each(["mistport", "haruka-academy", "emberback", "lantern-barrow"])(
+  it.each(["mistport", "haruka-academy", "last-train", "lantern-barrow"])(
     "imports %s content using real declarations after redundant requests are removed",
     async (worldId) => {
       const f = await fixture();
@@ -668,7 +667,6 @@ describe("inferred world data through host admission", () => {
             source: "builtin",
             rootPath: discovery.rootPath,
             ...definition,
-            loadedRuntimes: new Map(),
             status: "registered",
             summary: {
               id: discovery.id,

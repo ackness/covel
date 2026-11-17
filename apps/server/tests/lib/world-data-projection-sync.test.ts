@@ -50,7 +50,6 @@ describe("world data projections", () => {
 
       manifests,
       packageManifest,
-      loadedRuntimes: new Map(),
       status: "registered",
     });
 

@@ -15,7 +15,6 @@ it("creates a schema-less portable session with contract data, characters and lo
     id: pluginId,
     source: "builtin",
     status: "registered",
-    loadedRuntimes: new Map(),
     manifests: [],
     summary: {
       id: pluginId,

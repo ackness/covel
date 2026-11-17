@@ -65,7 +65,6 @@ function registerPlugin(
     rootPath,
     packageManifest: manifest,
     manifests: [],
-    loadedRuntimes: new Map(),
     status: "registered",
   });
 }

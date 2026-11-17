@@ -1,0 +1,17 @@
+{
+  "id": "world",
+  "blocks": [
+    {
+      "label": "claims",
+      "displayName": "Who Said What",
+      "extractionHint": "What each person believes about the situation — whether to stay or go, whether help is coming, what the photo shows — and why. Each message's sender, channel, time, and status live in the Messages dimension; do not repeat them.",
+      "icon": "MessagesSquare"
+    },
+    {
+      "label": "promises",
+      "displayName": "Promises & Debts",
+      "extractionHint": "What the player promised, owes, or was promised by Dara, Theo, Nadia, Graham, Kit, or anyone else in the car — and whether it was kept. Numeric relationship scores belong to the affinity panel.",
+      "icon": "Handshake"
+    }
+  ]
+}

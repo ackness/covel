@@ -57,7 +57,6 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
         rawFrontmatter: {},
       },
     ],
-    loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",
   } as PluginRegistryEntry;
 }

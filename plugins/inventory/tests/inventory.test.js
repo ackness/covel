@@ -3,7 +3,7 @@ import {
   getPendingProposals,
   applyDataOps,
 } from "@covel/plugin-handlers-utils";
-import { readFileSync as readContractFile } from "node:fs";
+import { existsSync, readFileSync as readContractFile } from "node:fs";
 import {
   bindToolStore,
   createPluginTestStore,
@@ -788,6 +788,29 @@ describe("inventory plugin manifest", () => {
     expect(packageManifest.ui?.message).toContain(
       "./ui/inventory-message.json",
     );
+  });
+
+  it("points every panel runtime action to an existing inventory runtime", () => {
+    const targets = [];
+    JSON.parse(
+      readContractFile(
+        new URL("../ui/inventory-panel.json", import.meta.url),
+        "utf8",
+      ),
+      (_key, value) => {
+        if (value?.action === "invokeRuntime")
+          targets.push(value.params.runtimeId);
+        return value;
+      },
+    );
+    expect(targets).toHaveLength(4);
+    for (const runtimeId of targets) {
+      const dir = runtimeId.split("/")[1];
+      expect(runtimeId).toBe("inventory/" + dir);
+      expect(
+        existsSync(new URL(`../runtimes/${dir}/RUNTIME.md`, import.meta.url)),
+      ).toBe(true);
+    }
   });
 
   it("loads UI spec JSON with panel metadata", () => {

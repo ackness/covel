@@ -201,7 +201,6 @@ describe("POST /api/actions — runs dropped with a nested unit", () => {
         promptTemplate: "",
         rawFrontmatter: {},
       })),
-      loadedRuntimes: loaded,
       status: "registered",
       source: "builtin",
     } as PluginRegistryEntry);

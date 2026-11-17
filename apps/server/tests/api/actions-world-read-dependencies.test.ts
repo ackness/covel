@@ -149,7 +149,6 @@ describe("action streams for rejected world producers", () => {
           promptTemplate: "",
           rawFrontmatter: {},
         })),
-        loadedRuntimes: loaded,
         status: "registered",
         source: "builtin",
       } as PluginRegistryEntry);

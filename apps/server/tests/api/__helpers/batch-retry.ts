@@ -92,7 +92,6 @@ export async function batchRetryFixture() {
       },
 
       manifests: [parsed],
-      loadedRuntimes: new Map([[name, loaded]]),
       status: "registered",
     } as PluginRegistryEntry);
   }

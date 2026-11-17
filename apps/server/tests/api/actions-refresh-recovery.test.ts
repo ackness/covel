@@ -40,7 +40,6 @@ async function fixture() {
     },
 
     manifests: [parsed],
-    loadedRuntimes: new Map([["test-story", loaded]]),
     status: "registered",
   } as PluginRegistryEntry);
   await store.createSession({

@@ -71,7 +71,6 @@ describe("a minimal world", () => {
         runtimeCount: definition.manifests.length,
       },
       ...definition,
-      loadedRuntimes: new Map(),
       status: "registered",
     });
     const store = createMemoryStore();
@@ -152,7 +151,6 @@ it("commits story-only opening and player turns despite an unavailable world con
         rawFrontmatter: {},
       },
     ],
-    loadedRuntimes: new Map([[manifest.name, loaded]]),
     status: "registered",
   } as PluginRegistryEntry);
   const llm: LLMAdapter = {

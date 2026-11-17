@@ -54,7 +54,6 @@ export async function datasetWriteFixture() {
       kind: "plugin" as const,
       runtimeCount: 0,
     },
-    loadedRuntimes: new Map(),
     status: "registered" as const,
   };
   registry.register(entry);

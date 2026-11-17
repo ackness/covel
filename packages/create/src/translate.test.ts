@@ -90,21 +90,21 @@ describe("translateTexts", () => {
   });
 
   it("translates a repeated text once and uses only the glossary terms in it", async () => {
-    const { llm, prompts } = scripted(['{"1": "琼·奥卡福"}']);
+    const { llm, prompts } = scripted(['{"1": "达拉·奎因"}']);
     const result = await translateTexts({
       ...base,
       llm,
       units: [
-        { id: "a", text: "June Okafor" },
-        { id: "b", text: "June Okafor" },
+        { id: "a", text: "Dara Quinn" },
+        { id: "b", text: "Dara Quinn" },
       ],
-      glossary: { June: "琼", Crownfire: "冠火" },
+      glossary: { Dara: "达拉", "Wharf Street": "码头街" },
     });
 
-    expect(result.translations).toEqual({ a: "琼·奥卡福", b: "琼·奥卡福" });
+    expect(result.translations).toEqual({ a: "达拉·奎因", b: "达拉·奎因" });
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain("June → 琼");
-    expect(prompts[0]).not.toContain("Crownfire");
+    expect(prompts[0]).toContain("Dara → 达拉");
+    expect(prompts[0]).not.toContain("Wharf Street");
   });
 
   it("shows the model short numbers instead of the caller's ids", async () => {
@@ -222,23 +222,23 @@ describe("translateTexts", () => {
 describe("extractGlossary", () => {
   it("lists the terms of a text and keeps the translations that exist", async () => {
     const { llm, prompts } = scripted([
-      '{"Emberback": "余烬站", "Crownfire": "冠火", "x": "", "Vesper": "薇丝珀"}',
+      '{"Line 4": "四号线", "Wharf Street": "码头街", "x": "", "Calder": "卡尔德"}',
     ]);
     const glossary = await extractGlossary({
       llm,
       signal: base.signal,
-      text: "Emberback Relay stands on Vesper. Crownfire comes.",
+      text: "Line 4 runs under Calder. The train left Wharf Street.",
       from: "en-US",
       to: "zh-CN",
-      known: { Vesper: "维斯珀" },
+      known: { Calder: "考尔德" },
     });
 
     // An existing translation wins; an empty one is dropped.
     expect(glossary).toEqual({
-      Vesper: "维斯珀",
-      Emberback: "余烬站",
-      Crownfire: "冠火",
+      Calder: "考尔德",
+      "Line 4": "四号线",
+      "Wharf Street": "码头街",
     });
-    expect(prompts[0]).toContain("Vesper → 维斯珀");
+    expect(prompts[0]).toContain("Calder → 考尔德");
   });
 });

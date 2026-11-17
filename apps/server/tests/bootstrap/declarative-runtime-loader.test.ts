@@ -52,7 +52,6 @@ it("requires real grants for cached code-era agents after the live package becom
         rootPath: root,
         source: "community",
         status: "registered",
-        loadedRuntimes: new Map(),
         summary: {
           id: discovery.id,
           name: discovery.id,

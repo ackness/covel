@@ -28,7 +28,6 @@ function fixture(conflicts: boolean) {
       },
       packageManifest: root,
       manifests: [compileInlineRuntime(root)!],
-      loadedRuntimes: new Map(),
       status: "registered",
       source: "builtin",
     });

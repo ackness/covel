@@ -1,0 +1,75 @@
+- schemaVersion: 1
+  id: last-train-one-battery
+  title: One Battery, Out Loud
+  content: The train has one emergency battery. Cabin lights, powered doors, the cab radio, ventilation, and the phone charging rail all draw from it. The Train Battery panel holds the authoritative charge and which systems are on. When a system is switched, say so plainly on the page and say who loses what; never contradict the current battery values.
+  kind: constant
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  insertionOrder: 410
+- schemaVersion: 1
+  id: last-train-messages
+  title: Messages Are Evidence, Not Orders
+  content: Every call, text, photo, and rumor is evidence of what someone somewhere said, not proof of what is true right now. Messages arrive late, out of order, and secondhand. Let the player check them — who sent it, when, from where — and keep established facts consistent. Contradictions are clues. Control can be out of date; a stranger's photo can be right.
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - message
+    - Control
+    - photo
+    - radio
+    - group chat
+    - signal
+  insertionOrder: 420
+- schemaVersion: 1
+  id: last-train-floodline
+  title: The Water Keeps Its Own Time
+  content: The water reaches the battery boxes under the car floor at 02:36, two and a half hours after the 00:06 opening. Talking, searching, arguing, and walking the tunnel all take time. The clock is the source of truth and the Floodline panel is that clock expressed as minutes left; mention it when it matters and never contradict it. As the water rises it gets colder, hides the track, and makes the walkway slick.
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - water
+    - flood
+    - floodline
+    - battery
+    - rising
+  insertionOrder: 430
+- schemaVersion: 1
+  id: last-train-tunnel
+  title: The Tunnel Is Not Empty Space
+  content: "Moving through the tunnel needs light, a plan, and someone counting the cross-passage doors. Distances matter: about four hundred meters to the crossover, more to Mercer Park, and the pump room is back toward the deep water. On a failed check, use consequences such as lost time, a torch dying, a soaked phone, someone separated, or arriving after the others left — never teleport anyone or end the story."
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - walkway
+    - tunnel
+    - crossover
+    - cross-passage
+    - stair
+    - pump room
+  insertionOrder: 440
+- schemaVersion: 1
+  id: last-train-tone
+  title: Ordinary People, Bad Night
+  content: The passengers are ordinary people, not disaster-film types. They can be frightened, stubborn, wrong, or kind without becoming cruel caricatures. Keep danger real and quiet — cold water, failing light, a door that won't open — and never put serious injury or death on the page for spectacle. Include small cooperation, dry jokes, and shared things alongside the fear. Conflict should come from competing responsibilities and missing information.
+  kind: constant
+  category: style
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  insertionOrder: 450

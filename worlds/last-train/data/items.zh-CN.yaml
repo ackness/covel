@@ -1,0 +1,36 @@
+- id: staff-jacket
+  name: 员工外套
+  description: 你那件考尔德交通的反光外套。穿着它不代表你说了算，可车里每个人都这么看。
+  tags:
+    - 装备
+    - 制服
+- id: staff-key
+  name: 员工钥匙
+  description: 挂在挂绳上的三角车厢钥匙。能开车厢端门、紧急舱口，达拉同意的话还能开驾驶室门。
+  tags:
+    - 工具
+    - 任务
+- id: pocket-torch
+  name: 袖珍手电
+  description: 一支小 LED 手电。照疏散平台够亮，但撑不久。今天早上电池还剩一半。
+  tags:
+    - 工具
+    - 照明
+- id: phone
+  name: 手机
+  description: 百分之十二的电，举到车门边能有一格信号。群聊一直在震。
+  tags:
+    - 工具
+    - 通讯
+- id: water-bottle
+  name: 半瓶水
+  description: 纯净水，瓶盖有点被咬过。不多，但干净。
+  tags:
+    - 补给
+    - 饮水
+- id: track-chalk
+  name: 轨道标记笔
+  description: 两根工作用的黄色标记蜡笔，能在隧道墙上写字。拿来标记自己往哪走了正合适。
+  tags:
+    - 工具
+    - 认路

@@ -1,0 +1,20 @@
+- id: line-4
+  strategy: selective
+  keys: [Line 4, tunnel]
+  content: Line 4 crosses under the River Calder between Wharf Street on the low bank and Mercer Park nine hundred meters ahead and uphill. The tunnel dips under the river and climbs back out. Cross-passages to the parallel tunnel sit every hundred and twenty meters behind heavy numbered doors.
+- id: wharf-street
+  strategy: selective
+  keys: [Wharf Street, pump room]
+  content: Wharf Street is the station on the low bank, behind the train. Its pump room is supposed to keep the dip under the river dry. During the blackout the pumps stopped. Whether they can be started by hand, and how deep the water is between the train and the pump room, nobody on the train knows for sure.
+- id: crossover
+  strategy: selective
+  keys: [crossover, Mercer Park, stair]
+  content: About four hundred meters ahead of the train, the two Line 4 tunnels meet in a wide crossover chamber with an emergency stair up to street level. Mercer Park station is another five hundred meters beyond it, uphill. The stair door at the top opens outward and is meant to stay unlocked.
+- id: blackout
+  strategy: selective
+  keys: [blackout, storm, surge]
+  content: A storm surge came over the river wall at 23:47 and took out the city grid. Phone masts are running on backup, if at all; signal comes and goes. Control is on its own emergency power and is trying to track every stopped train at once.
+- id: tunnel-safety
+  strategy: selective
+  keys: [walkway, track, third rail]
+  content: The walkway is a concrete ledge along the tunnel wall, wide enough for one person. The power rail is dead in a blackout, but staff are trained to treat it as live until Control confirms isolation. Water on the track bed hides the sleepers and the drainage channel.

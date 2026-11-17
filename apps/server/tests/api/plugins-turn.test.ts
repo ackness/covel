@@ -38,7 +38,6 @@ function makeEntry(
   return {
     id: "test-plugin",
     summary: makeSummary(),
-    loadedRuntimes: new Map(),
     status: "registered",
     ...overrides,
   };

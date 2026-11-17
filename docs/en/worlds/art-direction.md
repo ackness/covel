@@ -2,7 +2,7 @@
 
 This page describes what the pictures for a world should look like, and what to check before you deliver them. It is written for the people who illustrate worlds: world authors, painters, and the people who maintain the built-in worlds. You do not need to know how to program.
 
-It has three parts: how to set a direction for your own world, the direction set for each of the four built-in worlds, and how pictures appear in the world list (the gallery). For how to make the pictures, see [Illustrate characters](./portraits.md) and [Make scene pictures for a world](./scenes.md).
+It has three parts: how to set a direction for your own world, the direction set for the built-in worlds that have art, and how pictures appear in the world list (the gallery). For how to make the pictures, see [Illustrate characters](./portraits.md) and [Make scene pictures for a world](./scenes.md).
 
 ## Decide what the pictures are for first
 
@@ -11,7 +11,7 @@ A world's pictures have two jobs:
 - **When the player chooses a world**, they show at a glance how the world is played.
 - **After the player enters the world**, they make the characters, places, and rules look believable and consistent.
 
-So different worlds should have different art styles. The four built-in worlds aim for the same level of finish, not the same way of drawing. When you set a direction for your own world, answer these four questions:
+So different worlds should have different art styles. Art for the built-in worlds should share a level of finish, with a style suited to each world's genre. When you set a direction for your own world, answer these four questions:
 
 | Question                             | Example                                                                                                                                      |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -26,17 +26,14 @@ The answer to the last question is called an **invariant**: the things that must
 
 The table below is the design position set from the genre and the pictures that already exist. It was not checked by player interviews or data, and it does not limit players by age, gender, or cultural background.
 
-| World                       | The play it conveys, and the players who will like it                                                                                               | Style and colors                                                                                                                                      | How the pictures appear                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 遥风学园 (Harukaze Academy) | Dialogue, a slow-burning relationship, a group of characters, and the school festival. For people who like visual novels and everyday companionship | Clean anime line art, soft cel shading. Sea blue, mint green, and cherry pink. At night, blue-violet ambient light with warm lamps                    | Portraits with transparent backgrounds, and five fixed-camera scenes for day and night                       |
-| 雾港 (Mistport)             | Clues, factions, risk, and the unknown. For people who like mystery investigation, dark fantasy, and exploration                                    | Realistic painted harbor noir. Cold grey, blue-grey, old bronze, and rust. In the fog, near things are clear and far things disappear                 | Half-body character cards and one cover of a ruined harbor, with a text narrative                            |
-| Emberback                   | Repairing facilities, cooperative survival, and time puzzles. For people who like science fiction exploration and technical adventure               | Bright retro industrial science fiction illustration. Cream white, terracotta, and cobalt blue. Low-angle bright side light, with cool dark rim light | Adult full-body figures with their work environment, and one cover of a relay station, with a text narrative |
-| 提灯古冢 (Lantern Barrow)   | Classic tabletop adventure and folk fantasy. For people who like tabletop role-playing                                                              | Realistic skin and worn cloth. Warm oil-lamp key light, cool rim light. Cold, damp late autumn                                                        | Full-body portraits with transparent backgrounds, a landmark diagram, and several scene pictures             |
+| World                       | The play it conveys, and the players who will like it                                                                                                    | Style and colors                                                                                                                                | How the pictures appear                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 遥风学园 (Harukaze Academy) | Dialogue, a slow-burning relationship, a group of characters, and the school festival. For people who like visual novels and everyday companionship      | Clean anime line art, soft cel shading. Sea blue, mint green, and cherry pink. At night, blue-violet ambient light with warm lamps              | Portraits with transparent backgrounds, and five fixed-camera scenes for day and night            |
+| 雾港 (Mistport)             | Clues, factions, risk, and the unknown. For people who like mystery investigation, dark fantasy, and exploration                                         | Realistic painted harbor noir. Cold grey, blue-grey, old bronze, and rust. In the fog, near things are clear and far things disappear           | Half-body character cards and one cover of a ruined harbor, with a text narrative                 |
+| 提灯古冢 (Lantern Barrow)   | Classic tabletop adventure and folk fantasy. For people who like tabletop role-playing                                                                   | Realistic skin and worn cloth. Warm oil-lamp key light, cool rim light. Cold, damp late autumn                                                  | Full-body portraits with transparent backgrounds, a landmark diagram, and several scene pictures  |
+| Last Train Out              | A countdown, one shared battery, messages that disagree, and whether to walk or wait. For people who like survival choices and grounded ensemble stories | Contemporary graphic novel: ink line art with painted colour. Amber emergency light, teal-green shadow and charcoal, reflections on a wet floor | Half-body character cards inside the car and one cover of the river tunnel, with a text narrative |
 
-Two reminders:
-
-- The names and narrative setting of 雾港 do not mean that the existing faces must be replaced, or that everyone must be changed to period costume.
-- Emberback's warmth, practicality, and sense of community are features of its genre. Do not turn it into a cold starship bridge, military uniforms, or neon just because it is "science fiction".
+Reminder: the names and narrative setting of 雾港 do not mean that the existing faces must be replaced, or that everyone must be changed to period costume.
 
 The archived Cloudmere and Neonridge are not in the current playable worlds. When they are listed again, check each one separately against its own setting.
 
@@ -61,20 +58,21 @@ The archived Cloudmere and Neonridge are not in the current playable worlds. Whe
 - At the start, 小霜's fog-erosion only lets light through occasionally at her fingertips. 齐老's hands are much more translucent. Do not draw everyone as the same glowing mage. The exact degree follows the character card.
 - Use clothing to show identity: the strict guild, the old authority of the council, the practicality and wear of 盐牙, and the plainness of the Fog Walkers. Keep the differences in age and experience. Do not make everyone a generic beauty.
 
-### Emberback
-
-- This is a planet that always keeps one face toward the sun. The bright side, the twilight band, and the dark side are areas of space, not time. Do not use the template of "a different sky for day and night". When a scene variant is needed later, prefer showing the state of storms, electricity, and communications.
-- The identifying marks of the characters: Tomas's enamel mug and radio, June's scarf and car keys, Mina's spectrum analyzer. Keep each person's age, skin tone, face shape, and professional posture.
-- What best expresses this world is: the ceramic heat shields of the relay station, equipment that has been repaired many times, analog gauges, six-wheeled crawler vehicles, and basalt landforms. Gears, armor, and space suits that have no use are not.
-- The workshop, station yard, and observation deck around the characters are part of the character card. They are not transparent cut-out material for the stage. Do not cut out the environment just to make things tidy.
-- Bright does not mean safe. Alarms, damaged equipment, the edge of a storm, and long shadows provide suspense, while the characters remain people that are easy to approach and part of a community.
-
 ### 提灯古冢
 
 - Keep these: the village of 灰苇村, the northern burial mound, the ancient lamp at the mountaintop that has gone out, and the bronze tomb door standing open. A cold, damp late autumn, old bronze, and warm oil lamps are what set it apart from the cool tide-stone glow of 雾港.
 - Keep the age, identity, and personality differences on the six character cards. 伊索德 is a woman in her seventies, 雷恩 is a nineteen-year-old apprentice priest, and 布兰诺克 is a fifty-year-old veteran.
 - Full-body transparent portraits use the same frame size, similar figure size, and light from the same direction. The avatar and the stage portrait come from the same image.
 - The landmark map shows only the rough relations between known places. It does not fix streets, distances, or the layout of the tomb that the source text does not write down. Lighting the lamp gallery is an exploration scene that may happen. It does not mean the lamps are already lit at the start.
+
+### Last Train Out
+
+- At the opening the water has only covered the track bed; the wheels are still above it. Deeper water must match a stage the floodline has actually reached; do not use it as opening atmosphere.
+- The main light in the car is the amber emergency lighting on low. Light must agree with the battery: once the battery is flat, the car has no light.
+- Theo's group is three people with one lamp. The three figures far along the walkway on the cover only show that they have left; they do not say where they end up.
+- All five characters are adults: Dara is fifty-four, Theo twenty-seven, Nadia thirty-eight, Graham sixty-one, and Kit twenty. Signature props follow each card's `signature`: Dara's cab radio handset and glasses on a cord, Theo's head torch with a cracked strap and the tunnel map on the back of a rota, Nadia's hospital keys and canvas bag, Graham's folding ruler and cello case, and Kit's cracked phone in a waterproof pouch and taped-up power bank.
+- No wounds, blood, or monsters. The pressure comes from the water, the clock, and the people disagreeing.
+- No readable station names, signs, or text in the picture. City and line names appear only in the prose.
 
 ## Making and delivering pictures
 
@@ -100,13 +98,13 @@ When a portrait or scene file changes (redrawn, replaced, or recompressed), the 
 ```bash
 node scripts/emit-presence.mjs mistport
 node scripts/emit-scenes.mjs haruka-academy
-pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy worlds/lantern-barrow
+pnpm validate:world worlds/last-train worlds/mistport worlds/haruka-academy worlds/lantern-barrow
 ```
 
 When all validation passes, each world prints one line:
 
 ```text
-✓ worlds/emberback/world.yaml
+✓ worlds/last-train/world.yaml
 ✓ worlds/mistport/world.yaml
 ✓ worlds/haruka-academy/world.yaml
 ✓ worlds/lantern-barrow/world.yaml
@@ -208,23 +206,23 @@ The interface actually reads `id`, `kind`, `filename`, `webFilename`, `name`, `d
 
 ### What the built-in worlds have now
 
-The gallery manifests of the four built-in worlds have 54 entries in total:
+The gallery manifests of the four built-in worlds have 52 entries in total:
 
-| World     | Entries | Content                                                                                                                                                |
-| --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 遥风学园  | 25      | Twelve character pictures (four of them are variants), ten day and night scenes, a cover, and a new literary-club scene and a still of 澪 proofreading |
-| 提灯古冢  | 11      | Six character pictures, a home-page exterior picture, a diagram of known landmarks, and the tavern, the tomb door, and the lamp gallery                |
-| 雾港      | 10      | Seven character pictures, a cover, and a new waterfront passage and a still of 苏窈 appraising                                                         |
-| Emberback | 8       | Three existing character pictures, a cover, and two new character pictures, and stills of 第十七里 and of Tomas monitoring                             |
+| World          | Entries | Content                                                                                                                                                |
+| -------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 遥风学园       | 25      | Twelve character pictures (four of them are variants), ten day and night scenes, a cover, and a new literary-club scene and a still of 澪 proofreading |
+| 提灯古冢       | 11      | Six character pictures, a home-page exterior picture, a diagram of known landmarks, and the tavern, the tomb door, and the lamp gallery                |
+| 雾港           | 10      | Seven character pictures, a cover, and a new waterfront passage and a still of 苏窈 appraising                                                         |
+| Last Train Out | 6       | Five character pictures and a cover                                                                                                                    |
 
-Of these, 35 entries are existing material that was checked picture by picture, and 19 are new.
+In the first three worlds, 31 entries are existing material that was checked picture by picture, and 15 are new; the 6 entries of Last Train Out were all generated with the new world.
 
 - The existing portraits and scenes refer to their original files directly. They were not copied.
-- The existing covers of 遥风学园, 雾港, and Emberback were copied unchanged to each world's `media/gallery/world-cover.webp`, and `world.yaml`'s `cover` points to it. When you change a cover in future, also update the checksum information in the gallery manifest.
+- The existing covers of 遥风学园 and 雾港 were copied unchanged to each world's `media/gallery/world-cover.webp`, and `world.yaml`'s `cover` points to it. When you change a cover in future, also update the checksum information in the gallery manifest.
+- The cover of Last Train Out was generated directly as `media/gallery/world-cover.webp`; it has no separate `hero` picture.
 - The `cover` of 提灯古冢 points to `media/gallery/lantern-barrow-hero.webp`, which is the WebP version of its `hero` picture.
 - The new banner pictures are `1536x1024` PNG files, each with a WebP copy.
 - Maps are best shown in full. Scenes and stills should also be shown in full where possible. When cropping, keep the characters and the key props.
-- The glowing waveform on the Emberback cover is a visual image, not a physical object in the setting.
 
 For the interface, see `GET /api/worlds/:id/gallery` in the [API reference](../reference/api.md). For the world data side, see [World data reference](../reference/world-data.md#images-visible-before-a-session).
 
@@ -232,11 +230,10 @@ For the interface, see `GET /api/worlds/:id/gallery` in the [API reference](../r
 
 Below are suggestions that have not been verified. They are not content that has been finished or connected.
 
-| World     | What to add first                                                                                                                                              | How to tell whether it helps                                                                                           |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 遥风学园  | Restrained emotional variants of 澪, 悠真, and 茜, and changes to the decorations on the eve of the school festival                                            | Can a player, without reading labels, recognize the same person, the emotion, and how far the festival has progressed? |
-| 雾港      | Clue illustrations such as the main pier, the guild appraisal table, and the low-tide entrance. Use the tide level rather than day and night to show the state | Can a player see what is being investigated, where the safe boundary is, and the pressure to get out?                  |
-| Emberback | The signal repair room, the crawler station yard, and Nightglass. Use normal, power cut, and approaching storm to show the state                               | Can a player understand the state of the equipment and where they can go next?                                         |
+| World    | What to add first                                                                                                                                              | How to tell whether it helps                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 遥风学园 | Restrained emotional variants of 澪, 悠真, and 茜, and changes to the decorations on the eve of the school festival                                            | Can a player, without reading labels, recognize the same person, the emotion, and how far the festival has progressed? |
+| 雾港     | Clue illustrations such as the main pier, the guild appraisal table, and the low-tide entrance. Use the tide level rather than day and night to show the state | Can a player see what is being investigated, where the safe boundary is, and the pressure to get out?                  |
 
 The suggested order is: first look at the reasons that players with different interests choose these worlds, and then look at whether, once inside, they feel the game matches what they expected, and whether they want to finish the first goal. An aesthetic judgment cannot replace this evidence. Do not change a world's original play just to fill up the number of pictures in a common visual-novel set.
 
