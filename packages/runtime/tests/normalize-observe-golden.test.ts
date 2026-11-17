@@ -183,6 +183,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "branch-reply",
       "char-creator/character-tracker",
       "guide",
+      "inventory/reconcile",
       "memory/extract",
       "scene-stage/story-cues",
       "soundtrack/story-cues",
@@ -193,7 +194,6 @@ describe("normalize golden (bundled plugin set)", () => {
       "affinity",
       "codex",
       "core-quest/log",
-      "inventory/ledger",
       "npc-graph/extractor",
       "story-events/plot",
       "world-init/dimension-tracker",
@@ -264,9 +264,7 @@ describe("normalize golden (bundled plugin set)", () => {
 
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
-    expect(manifestOf(manifests, "world-ir").outputContract).toBe(
-      "world-ir@2",
-    );
+    expect(manifestOf(manifests, "world-ir").outputContract).toBe("world-ir@2");
     // `cardinality: one` and `required: true` are the defaults the manifests
     // leave out; the scheduler reads an absent value as them.
     expect(worldIr.bindings.narrative).toEqual({
@@ -285,7 +283,8 @@ describe("normalize golden (bundled plugin set)", () => {
       "npc-graph/extractor",
     ]) {
       const spec = requireSpec(specs, id);
-      expect(spec.stage).toBe("post-turn");
+      // The ledger runs in the event batch after check settlement.
+      if (id !== "inventory/ledger") expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([]);
       expect(spec.bindings.worldIR).toEqual({
         from: { capability: "world-ir@2" },

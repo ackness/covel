@@ -205,8 +205,8 @@ function buildCheckContext(dice, locale, plan) {
   const step2 = modifiers
     ? pickLocaleText(
         locale,
-        "2. 从下方修正表选出这个行动用到的属性，读取它的修正。",
-        "2. Choose the attribute in the modifier list below that the action uses, and read its modifier there.",
+        "2. 从下方修正表选出这个行动用到的属性，把它填入回执的 attribute，修正从该表读取。",
+        "2. Choose the attribute in the modifier list below that the action uses, put it in the receipt's `attribute`, and read its modifier in that list.",
       )
     : pickLocaleText(
         locale,

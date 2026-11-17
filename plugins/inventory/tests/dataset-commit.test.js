@@ -134,9 +134,11 @@ async function fixture(invalidWrite) {
     { "world-ir@2": worldIRSchema },
   );
   const recorded = [];
+  const reconcile = await loadRuntime(discovery, "inventory/reconcile");
   let rejected;
   const handler = ledger.handler;
   const loaded = new Map([
+    [reconcile.manifest.name, reconcile],
     [
       ledger.manifest.name,
       {
@@ -217,7 +219,7 @@ async function fixture(invalidWrite) {
         playerMessage: "Gather supplies.",
         locale: "en",
       },
-      [story, facts, ledger.manifest],
+      [story, facts, reconcile.manifest, ledger.manifest],
       {
         store,
         llm: {
@@ -324,6 +326,7 @@ describe("inventory dataset commits through the real ledger", () => {
     ).toEqual([
       ["story", "success"],
       ["facts", "success"],
+      ["inventory/reconcile", "success"],
       ["inventory/ledger", "success"],
     ]);
     expect(

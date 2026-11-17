@@ -74,7 +74,7 @@ A session may have several player characters. The two narrator plugins follow th
 
 ### RPG mechanics
 
-[Bag](./rpg.md#inventory-inventory) checks changes already handled by tools, including batches with long descriptions, to avoid duplicate bookkeeping.
+[Bag](./rpg.md#inventory-inventory) checks changes already handled by tools and items already paid for a dice check, to avoid duplicate bookkeeping.
 
 | Plugin                                        | What it does                                                                                                                          | On by default |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------- |

@@ -10,7 +10,7 @@
 - `hooks/verify-check-receipt.js`：`PreToolUse` 守卫，在叙事发出回执时对照骰子。
 - `lib/check-rules.js`：判定规则（难度对应的 DC、成败与大成功/大失败），roller、守卫和 recorder 共用。
 - `lib/attributes.js`：读取世界角色 schema 的属性：roller 用它列出检定属性，recorder 用它显示回执所用属性的名称。
-- `runtimes/recorder/`：event function runtime，订阅 `check.resolved` 回执并落库。
+- `runtimes/recorder/`：event function runtime，订阅 `check.resolved`、结算失败代价并发布 `check-settlement@1`。背包等到代价结算后才从正文补记物品变化。
 - `schemas/check-resolved.event.json`：判定回执 payload schema（emit-event 按它校验）。payload 是批量形（`{ checks: [...] }`，1-3 项）——`emit-event` 对同 topic 每回合去重，逐次发射会丢第二条，因此整回合的判定合并进一次发射。
 - `runtimes/recorder/ui/check-message.json`：消息区判定结果块（🎲 行动 → 骰式 → 成败配色，critical 强调）。
 - `runtimes/recorder/ui/checks-panel.json`：右侧「判定记录」面板（倒序），提供 d20 / 2d6 快速按钮；按钮通过 JSON-RENDER `invokeCommand` 复用 `/roll`，不另建 action 旁路。
@@ -19,7 +19,7 @@
 
 - 骰池通过 roller 的 `dice` runtime output 在同回合绑定给 recorder（`inputs.dicePool`），同时把审计轨写入 `plugin_data[dice-check][rolls]`（key = turnId，`{ dice: [n1, n2, n3] }`）；后者到 turn finalizer 才提交，供事后审计与重试兜底。
 - 玩家从输入框执行 `/roll` 或点击快速掷骰按钮，都会归一化为同一个 `dice-check:roll` 命令并由 RPC 返回结果；命令生命周期写入统一 `command.*` trace，但不写入 `rolls` namespace，避免与回合预掷审计轨混用。
-- 判定回执写入 `plugin_data[dice-check][checks]`（key = `<turnId>-<序号>`，含展示字段）。面板按回合号显示“第 N 回合”，不显示内部 turnId；回执的 `attribute` 按 id 或名称对上世界的角色属性时，显示该属性在会话语言里的名称，对不上时照原文显示。
+- 判定回执写入 `plugin_data[dice-check][checks]`（key = `<turnId>-<序号>`，含展示字段）。面板按回合号显示“第 N 回合”，不显示内部 turnId；回执的 `attribute` 必须按 id 或名称对上本回合的一项修正，结果显示会话语言里的名称。没有修正列表时，回执省略属性。
 - 本回合判定数组写入 `plugin_data[dice-check][message]`（key = turnId，值带 `__turnId`，消息层 block 数据源）。
 - 回执只含叙事自己决定的内容：`action`、`modifier`、`difficulty`，以及它写出的 `outcome`；使用属性时另填 `attribute`。骰子不在回执里：第一项用本回合第一颗骰，第二项用第二颗，叙事无法挑骰。DC、合计与真实结果由 `lib/check-rules.js` 计算；`outcome` 与骰子给出的结果不一致的项不落库（它的骰子仍算已用），有效项照常落库，缺少预掷审计轨时整体 fail-closed。
 - 叙事在写正文之前发出回执。本插件的 `PreToolUse` 守卫（`hooks/verify-check-receipt.js`）在发出当场对照骰子：结果不符就退回，并在退回消息里给出每次判定的正确结果，叙事据此重发，再按真实结果写正文。守卫用的是 roller 留在进程内的骰子副本（`lib/turn-pool.js`）；副本不在时守卫放行，仍由 recorder 在回合末校验。

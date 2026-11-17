@@ -1,4 +1,8 @@
-import { submittedStory } from "../helpers/output-submission.js";
+import {
+  completedBusinessOutput,
+  submittedOutput,
+  submittedStory,
+} from "../helpers/output-submission.js";
 /**
  * The two gameplay chains of the bundled plugins in a real turn:
  *
@@ -10,7 +14,7 @@ import { submittedStory } from "../helpers/output-submission.js";
  * - A quest whose deadline has passed fails before the story, and the story
  *   is told so through `story-context@1`.
  * - A carried item adds its modifier to a check and an NPC who has gone cold
- *   makes a check that needs them harder, read through `inventory.bag@1` and
+ *   makes a check that needs them harder, read through `inventory.bag@2` and
  *   `affinity.tier@1`; the receipt is held to both.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -50,10 +54,27 @@ class ScriptedNarrator implements LLMAdapter {
   corrected = false;
   storyPrompts: string[] = [];
   receipt: Receipt = wadeOn;
+  facts: Record<string, unknown> = {};
 
   async generate(
     params: Parameters<LLMAdapter["generate"]>[0],
   ): Promise<LLMResponse> {
+    if (params.tools?.some(({ name }) => name === "submit-world-facts")) {
+      if (completedBusinessOutput(params.messages, "submit-world-facts"))
+        return submittedOutput({});
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: "facts",
+            name: "submit-world-facts",
+            arguments: JSON.stringify(this.facts),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    }
     // Other runtimes of the session (character creation, world time) get a
     // plain answer; only the story is scripted.
     if (!params.tools?.some((tool) => tool.name === "emit-event"))
@@ -118,7 +139,10 @@ describe("gameplay chains in a turn", () => {
   });
 
   /** A session in play with these plugins and stamina and wayfinding abilities. */
-  async function playingSession(plugins: readonly string[]) {
+  async function playingSession(
+    plugins: readonly string[],
+    fields = { stamina: 0, wayfinding: 0 },
+  ) {
     const created = await boot.app.request("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -130,7 +154,7 @@ describe("gameplay chains in a turn", () => {
     await store.upsertCharacterSchema({
       sessionId,
       version: 1,
-      types: ["player", "npc", "companion"],
+      types: ["npc", "companion"],
       attributes: [
         ["stamina", "Stamina"],
         ["wayfinding", "Wayfinding"],
@@ -142,6 +166,16 @@ describe("gameplay chains in a turn", () => {
         max: 5,
         category: "abilities",
       })),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.upsertCharacter({
+      id: `player-${sessionId}`,
+      sessionId,
+      name: "Sam",
+      type: "player",
+      fields,
+      version: 1,
       createdAt: now,
       updatedAt: now,
     });
@@ -280,34 +314,30 @@ describe("gameplay chains in a turn", () => {
   });
 
   it("adds a carried item to a check and makes a check that needs a cold NPC harder", async () => {
-    const sessionId = await playingSession([
-      "narrator",
-      "dice-check",
-      "inventory",
-      "affinity",
-    ]);
-    const now = new Date().toISOString();
-    await store.upsertCharacter({
-      id: "player-sam",
-      sessionId,
-      name: "Sam",
-      type: "player",
-      // Wayfinding 3/5 is +6 and stamina 2/5 is +4 before items.
-      fields: { stamina: 2, wayfinding: 3 },
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const sessionId = await playingSession(
+      ["narrator", "dice-check", "inventory", "affinity"],
+      { stamina: 2, wayfinding: 3 },
+    );
     await seed(sessionId, "inventory", "items", [
+      ...Array.from({ length: 100 }, (_, index) => ({
+        id: `filler-${index}`,
+        name: `Book ${index % 50}`,
+        quantity: 1,
+        equipped: true,
+      })),
       {
         id: "pocket-torch",
         name: "Pocket torch",
         quantity: 1,
-        equipped: true,
         effects: { check: { attribute: "wayfinding", modifier: 2 } },
       },
     ]);
     await seed(sessionId, "affinity", "affinity", [
+      ...Array.from({ length: 8 }, (_, index) => ({
+        id: `hostile-${index}`,
+        name: `Hostile character ${index}`,
+        score: -100,
+      })),
       { id: "graham-pike", name: "Graham Pike", score: -35 },
     ]);
     narrator.storyPrompts = [];
@@ -347,6 +377,84 @@ describe("gameplay chains in a turn", () => {
       }),
     ]);
   });
+
+  it.each([
+    { quantity: 1, loss: 1 },
+    { quantity: 2, loss: 1 },
+    { quantity: 3, loss: 2 },
+  ])(
+    "settles a check cost included in a loss of $loss from $quantity chalk",
+    async ({ quantity, loss }) => {
+      const sessionId = await playingSession([
+        "narrator",
+        "dice-check",
+        "inventory",
+        "world-ir",
+      ]);
+      await seed(sessionId, "dice-check", "consequences", [
+        {
+          id: "chalk",
+          text: "A stick of chalk crumbles in your fist.",
+          cues: ["chalk"],
+          cost: { kind: "item", item: "Chalk" },
+        },
+      ]);
+      await seed(sessionId, "inventory", "items", [
+        { id: "chalk", name: "Chalk", quantity },
+      ]);
+      narrator.receipt = (dice) => wadeOn(dice.slice(0, 1));
+      narrator.corrected = false;
+      narrator.facts = {
+        schemaVersion: 1,
+        entities: [
+          { id: "sam", type: "character", name: "Sam" },
+          { id: "chalk", type: "item", name: "Chalk" },
+          { id: "rope", type: "item", name: "Rope" },
+        ],
+        relations: [],
+        statements: [],
+        events: [
+          {
+            id: "lost-chalk",
+            type: "inventory_change",
+            attributes: {
+              holder: "sam",
+              item: "chalk",
+              operation: "lose",
+              quantity: loss,
+            },
+          },
+          {
+            id: "found-rope",
+            type: "inventory_change",
+            attributes: { holder: "sam", item: "rope", operation: "gain" },
+          },
+        ],
+      };
+
+      await playTurn(sessionId, `req-extracted-cost-${quantity}`);
+
+      expect(
+        await store.listPluginData(sessionId, "dice-check", "checks"),
+      ).toEqual([
+        expect.objectContaining({
+          value: expect.objectContaining({
+            costText: "A stick of chalk crumbles in your fist.",
+          }),
+        }),
+      ]);
+      expect(
+        (await store.listPluginData(sessionId, "inventory", "items")).map(
+          ({ value }) => value,
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Chalk", quantity: quantity - loss }),
+          expect.objectContaining({ name: "Rope", quantity: 1 }),
+        ]),
+      );
+    },
+  );
 
   it("fails an overdue quest before the story and tells the story", async () => {
     const sessionId = await playingSession([

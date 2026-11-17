@@ -73,7 +73,7 @@ If a numeric attribute of the player character is in the `abilities` category an
 - **People who will not cooperate**: an NPC whose affinity tier is below "Neutral" does not want to help the player character. When an action needs that person's help or agreement, the narrator puts the name in `with` in the receipt, and the check is one step harder for each tier below neutral ("Cold" one step, "Hostile" two), up to extreme.
 - **Full clocks**: a clock with `raises` makes checks of those attributes one step harder once it is full.
 
-The narrator chooses the difficulty from the fiction and reports it as usual, then reads the outcome as many columns to the right as the "Harder checks" section of the check rules says. The guard and the recorder check the receipt against the same data: a modifier without the item, or a difficulty that was not raised, sends the receipt back. Item data comes from the bag's read service `inventory.bag@1`, and affinity tiers from Affinity's read service `affinity.tier@1`; without the matching plugin, that part has no effect.
+The narrator chooses the difficulty from the fiction and reports it as usual, then reads the outcome as many columns to the right as the "Harder checks" section of the check rules says. The guard and the recorder check the receipt against the same data: a modifier without the item, or a difficulty that was not raised, sends the receipt back. Item data comes from the bag's read service `inventory.bag@2`, and affinity tiers from Affinity's read service `affinity.tier@1`; without the matching plugin, that part has no effect.
 
 ### When it is on
 
@@ -93,7 +93,7 @@ It has no settings you can change.
 A world can make every failed check pay a cost the player can see: an item is lost, or a clock advances by some segments.
 
 1. At the start of a turn, the plugin writes the costs this turn can still pay into the check rules for the narrator, one line per attribute. An item must still be on the player character, and a clock must not be full yet. Whether the item is still there is asked through the bag's public service.
-2. After the narrator sends the check receipt, the recorder settles a cost for each failed check, whatever the prose says. A clock advances in this plugin's own `clock-progress` dataset. An item is taken through the bag's write service `inventory.change@1`; when it cannot be taken (for example, it was given away this turn), the check pays its next cost instead.
+2. After the narrator sends the check receipt, the recorder settles a cost for each failed check. Clocks advance in `clock-progress`; items are taken through `inventory.change@1`. If the item cannot be taken (for example, it was given away this turn), the check pays its next cost. The bag reconciles changes from the prose afterward and does not charge the same cost again.
 3. When the prose uses none of a cost's words (`cues`), the story is sent back once to be rewritten, with a note naming the cost to add. The second submission is accepted as usual.
 
 A failed check pays one cost only, the most specific one: a cost with an attribute comes before one without, and a cost with an `outcome` comes before one for both kinds of failure; between equally specific costs, the one earlier in the file wins. Once a clock is full, its consequence is written into the check rules every turn, and the narrator must keep to it.
@@ -198,7 +198,7 @@ deadline:
 - `when` is a condition that holds once the deadline has passed. It can read a dimension (`{ dimension, path, <operator> }`), a number from world time (`{ time: elapsedSinceStart, gte: 45 }`, in the clock's base unit), how an NPC feels about the player character (`{ affinity: Graham Pike, path: tier, in: [cold, hostile] }`, reading `tier` or `score`, with Affinity on), or the turn number (`{ turnGte: 6 }`). The operators are the same as in hidden plot conditions.
 - `label` is the deadline that the player and the narrator see, and `missed` is what happens once it is missed.
 
-Each turn, before the story is written, the `deadline` runtime checks deadlines against this turn's dimensions, world time and affinity tiers. An active quest past its deadline becomes "Failed", and later story notes cannot move it back to active or completed. A missed objective can no longer be completed, while the quest itself goes on. The story reads through `story-context@1` what was just missed and that it must happen this turn, along with the deadlines still open (time deadlines say roughly how much time is left). When the condition cannot be read (for example, the session has no such dimension, or Affinity is off), the deadline has not passed.
+Each turn, before the story is written, the `deadline` runtime checks deadlines against this turn's dimensions, world time and affinity tiers. An active quest past its deadline becomes "Failed", and later story notes cannot move it back to active or completed. A missed objective can no longer be completed, while the quest itself goes on. The story reads through `story-context@1` what was just missed and that it must happen this turn, along with the deadlines still open. A whole-number time threshold in the clock's base unit can show a countdown. When the condition cannot be read (for example, the session has no such dimension, or Affinity is off), the deadline has not passed.
 
 Dimensions, world time and affinity settle after the turn ends, so a deadline is judged in the turn after time runs out, and that turn's story is the first to write the consequence. This is on purpose: failing a quest after the story was written would put a failure in the quest log that no prose has shown.
 
@@ -252,7 +252,7 @@ Both Storyteller (`narrator`) and Chat Storyteller (`chat-mode-narrator`) use th
 
 Bag adds the story's other item changes from the facts that "Story Notes" (`world-ir`) sorts out. Without Story Notes it adds none, and the bag changes only through the storyteller's bag tools and actions in the panel.
 
-Dice Check (`dice-check`) reads an item's `effects.check` through the read service `inventory.bag@1`; see [How items and relationships change a check](#how-items-and-relationships-change-a-check).
+Dice Check (`dice-check`) reads an item's `effects.check` through the paginated read service `inventory.bag@2`; see [How items and relationships change a check](#how-items-and-relationships-change-a-check).
 
 ## Affinity (`affinity`)
 

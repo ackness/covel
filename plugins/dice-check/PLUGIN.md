@@ -10,6 +10,8 @@ license: MIT
 contracts:
   action-check@1:
     schema: ./schemas/action-check.schema.json
+  check-settlement@1:
+    schema: ./schemas/check-settlement.schema.json
 contributes:
   data:
     consequences:
@@ -74,7 +76,8 @@ contributes:
         this turn, and only ONCE per turn — put every resolved check into the
         checks array, in the order the checks were used (resolve all first,
         then emit once). Per item: action = short description of the attempt;
-        attribute = the attribute used (omit when none is used); modifier = its
+        attribute = an attribute from the turn's modifier list (omit only when
+        the list is empty); modifier = its
         modifier from the turn's list (an item listed with it is included), or
         0 when no ranged ability is available; difficulty = easy, normal,
         hard or extreme, as chosen from the fiction; with = the person whose
@@ -111,6 +114,6 @@ Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle int
 
 A world can make failure cost something. `check.consequences@1` lists costs (an item lost or a clock filled) by attribute and outcome, and `check.clocks@1` lists the clocks. The roller adds the costs that can be paid this turn, and how full each clock is, to `checkContext`. The recorder pays the cost of each verified failed check whatever the prose says: it fills the clock in this plugin's `clock-progress` dataset, or takes the item through the `inventory.change@1` write service; an item that cannot be taken passes the check on to its next cost. The check's block in the chat and the roll log show the cost, and the Clocks panel shows each clock. A `ReviewAgentOutput` hook sends the story back once when its prose uses none of the cost's `cues`. Without this data, failed checks cost nothing beyond the prose, as before.
 
-Other plugins can change a check through versioned services. An item that `inventory.bag@1` reports with `effects.check` adds its modifier to that attribute while it is carried (the best one for each attribute), and the modifier list says which item it is. An NPC whose `affinity.tier@1` tier is below neutral will not cooperate: a check whose receipt names that person in `with` is one difficulty step harder for each tier below neutral. A full clock makes the attributes in its `raises` one step harder. The guard and the recorder hold the receipt to the same modifiers and difficulties, and the check's block shows the item and the reason it was harder. Without those services, checks use the attribute alone.
+Other plugins can change a check through versioned services. An item that `inventory.bag@2` reports with `effects.check` adds its modifier to that attribute while it is carried (the best one for each attribute), and the modifier list says which item it is. An NPC whose `affinity.tier@1` tier is below neutral will not cooperate: a check whose receipt names that person in `with` is one difficulty step harder for each tier below neutral. A full clock makes the attributes in its `raises` one step harder. The guard and the recorder hold the receipt to the same modifiers and difficulties, and the check's block shows the item and the reason it was harder. Without those services, checks use the attribute alone.
 
 The root entry exposes player-facing dice actions; see `runtimes/roller/RUNTIME.md` (the pre-roll injector) and `runtimes/recorder/RUNTIME.md` (the receipt recorder + UI) for the executable runtimes.

@@ -6,7 +6,7 @@
 
 - `PLUGIN.md`：插件级元信息，本身不是可执行 runtime。
 - `runtimes/vocabulary/`：pre-turn function runtime，把背包里的物品名作为 `world-ir.vocabulary@1` 发布给事实抽取，让它沿用同一名称。
-- `runtimes/ledger/`：post-turn function runtime，读取本轮 WorldIR 的 `inventory_change` 事件与 `operations@1`，跳过工具已处理的变化，再补记其余变化。
+- `runtimes/reconcile/` 在 post-turn 发出记账信号；`runtimes/ledger/` 在同一事件层的 `check-settlement@1` 之后读取 WorldIR 与 `operations@1`，跳过服务已处理的变化，再补记其余变化。没有检定也照常记账。
 - `runtimes/item-op/`：manual function runtime，处理面板的装备、卸下和丢弃操作，经过 proposal 校验后随执行事务提交。
 - `lib/world-ir.js`：把主角持有的物品事件映射为台账变化（`gain` → add、`lose` → remove、`equip` / `unequip`）。
 - `lib/update-inventory.js`：批量提交物品变化（add / remove / set / equip / unequip）的台账逻辑。
@@ -30,18 +30,18 @@
 
 两项服务都向模型开放。`narrator` 与 `chat-mode-narrator` 可选导入为 `check-bag` 和 `change-inventory`；未启用背包时不提供这两个工具，故事照常运行。买卖、赠送或消耗发生时，叙事先调用变更工具、再写正文，付款排在前面。
 
-| 服务名   | 契约                       | 输入                                                                  | 输出                                                                                                                                                                             |
-| -------- | -------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bag`    | `inventory.bag@1`          | `{ query?: string }`，至多 80 字符，按名称或标签忽略大小写筛选        | `{ items: [{ name, quantity, equipped, tags, description? }], total }`；只含数量大于 0 的非墓碑记录，已装备优先、再按名称排序，最多 50 项，`total` 是筛选后的完整数量，无记录 ID |
-| `change` | `inventory.change@1`（写） | `{ changes: [{ op, item, quantity?, description?, tags? }] }`，1–8 项 | `{ results: [{ op, item, status, quantity? }] }`，无记录 ID                                                                                                                      |
+| 服务名   | 契约                       | 输入                                                                                              | 输出                                                                                                                                                                                           |
+| -------- | -------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bag`    | `inventory.bag@2`          | `{ query?: string, offset?: number }`；`query` 按名称或标签筛选，至多 80 字符；`offset` 从 0 开始 | `{ items: [{ name, quantity, equipped, tags, description?, effects? }], total }`；只含数量大于 0 的非墓碑记录，已装备优先、再按名称排序，每页最多 50 项，`total` 是筛选后的完整数量，无记录 ID |
+| `change` | `inventory.change@1`（写） | `{ changes: [{ op, item, quantity?, description?, tags? }] }`，1–8 项                             | `{ results: [{ op, item, status, quantity? }] }`，无记录 ID                                                                                                                                    |
 
 `op` 是 `add`、`remove`、`equip` 或 `unequip`；`item` 去掉首尾空白后须为 1–80 字符。`quantity` 只用于增减，是 1–999 的整数，默认 1；`description`（至多 200 字符）与 `tags`（至多 5 项）只用于添加。货币也是带货币标签的物品；不知道准确名称时先查背包。
 
 写服务先检查整组变化。移除未持有或数量不足的物品、装备或卸下未持有的物品，都以 `refused` 拒绝整次调用，不暂存任何部分。成功调用把物品变更和同款聊天摘要暂存为一个操作；同一调用方后续调用可以看到这些变化。提交时数量不足会以 `conflict` 单独撤回操作，故事仍保存，玩家收到提示，下回合叙事收到未生效摘要。购买失败时，同回合其他背包变化也可能跳过。
 
-台账按动作和忽略大小写、首尾空白的物品名逐项扣除操作已处理的变化，不比较数量。优先读取保留的 `request.changes`；请求因长描述被省略时，读取保留的 `result.results`，两份视图不会重复计数。结果中的数量是结算后的库存，不是增减量；`skipped` 表示服务已处理但无需改动的装备请求，也参与去重。其他契约和两份明细都缺失的操作不参与。事实提取仍为正文呈现的变化保留事件，供其他插件读取。数据契约 `inventory.items@1` 仍只用于世界种子。
+台账按动作和忽略大小写、首尾空白的物品名逐项扣除操作已处理的变化。优先读取保留的 `request.changes`；抽取把多次损失合成一项时，台账从中减去请求已经扣掉的数量。请求因长描述被省略时，改读 `result.results` 并按动作和名称匹配：结果的数量是结算后的库存，不能拿来算差额。`skipped` 表示服务已处理但无需改动的装备请求，也参与去重。两份视图不重复计数；其他契约和两份明细都缺失的操作不参与。数据契约 `inventory.items@1` 仍只用于世界种子。
 
-能力快照新增 `services: ["inventory.bag@1", "inventory.change@1 (write)"]`。内置插件无需审批；社区提供方遵循正常的服务审批策略。
+能力快照列出 `services: ["inventory.bag@2", "inventory.change@1 (write)"]`。自定义提供方和调用方都要改用 `inventory.bag@2`，并支持 `offset` 分页。背包数据不用重建。内置插件无需审批；社区提供方遵循正常的服务审批策略。
 
 ## 玩家侧操作
 

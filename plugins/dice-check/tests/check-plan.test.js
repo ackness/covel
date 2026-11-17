@@ -92,7 +92,7 @@ function services() {
       { pluginId: contract.split(".")[0], name: "service", contract },
     ]),
     call: vi.fn(async ({ contract }) => {
-      if (contract === "inventory.bag@1")
+      if (contract === "inventory.bag@2")
         return {
           total: 3,
           items: [
@@ -304,6 +304,22 @@ describe("dice-check items and harder checks", () => {
       costDetail: "Panic +1 (2/4)",
     });
   });
+
+  it.each([undefined, "unlisted"])(
+    "rejects bypassing a full clock with attribute %s",
+    async (attribute) => {
+      await rollTurn();
+      const result = guard([
+        { ...numbCheck, attribute, modifier: 10, outcome: "success" },
+      ]);
+      expect(result).toMatchObject({
+        action: "abort",
+        reason: expect.stringContaining(
+          "choose an attribute from the modifier list",
+        ),
+      });
+    },
+  );
 
   it("records nothing and pays nothing for a receipt that leaves out the item", async () => {
     const { value } = await rollTurn();

@@ -1064,7 +1064,7 @@ Execution limits:
 **Static data and extraction during play** use the same `contract:world-ir@2`, but they run in different ways:
 
 - Static world data uses the handlers described above.
-- During play, the `world-ir` agent extracts facts from the narrative output (`narrative-engine@2`) once. Then `codex`, `core-quest/log`, `affinity`, `inventory/ledger` and `npc-graph/extractor` read that one result in parallel. Each binds `world-ir@2` with `required: false` and does not list it in its package `requires`: when the session has the provider, they read after it; when it does not, they still run.
+- During play, the `world-ir` agent extracts facts from the narrative output (`narrative-engine@2`) once. Then `codex`, `core-quest/log`, `affinity` and `npc-graph/extractor` read the result in parallel. `inventory/ledger` reads the same result in the event chain, after check settlement if it ran. Each binds `world-ir@2` with `required: false` and does not list it in its package `requires`.
   - Quests and items are function runtimes that read fixed fields only. They do not call a model.
   - Affinity is still judged by the agent. For its fields, see [tools.md · submit-world-facts](./tools.md#submit-world-facts).
   - `inventory/vocabulary` and `core-quest/vocabulary` announce, in the pre-turn stage through `world-ir.vocabulary@1`, the item names, quest names and open objectives being tracked. The extraction uses the same names. [Per-objective assessment](./tools.md#per-objective-assessment) checks coverage and consistency with quest events.

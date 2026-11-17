@@ -9,6 +9,17 @@ import { forgetPool } from "../lib/turn-pool.js";
 const messages = await loadPluginMessages(new URL("..", import.meta.url), "en");
 
 const world = {
+  seats: [
+    { id: "main", controller: "human", role: "player", characters: "auto" },
+  ],
+  characters: [
+    {
+      id: "player",
+      name: "Sam",
+      type: "player",
+      fields: { stamina: 0, wayfinding: 0 },
+    },
+  ],
   characterSchema: {
     attributes: [
       {
@@ -96,7 +107,7 @@ function inventory(held) {
         : [],
     ),
     call: vi.fn(async ({ contract, input }) => {
-      if (contract === "inventory.bag@1") {
+      if (contract === "inventory.bag@2") {
         const query = input.query ?? "";
         return {
           items: [...bag]
@@ -133,13 +144,17 @@ async function rollTurn({ pluginData = storeOf(), services } = {}) {
   });
 }
 
-function record(checks, { plan, dice, pluginData = storeOf(), services }) {
+function record(
+  checks,
+  { plan, checkPlan, dice, pluginData = storeOf(), services },
+) {
   return recorder({
     ...base,
     runtimeId: "dice-check/recorder",
     triggerEvent: { topic: "check.resolved", data: { checks } },
     inputs: {
       dicePool: { value: dice },
+      checkPlan: { value: checkPlan },
       ...(plan ? { costPlan: { value: plan } } : {}),
     },
     pluginData,
@@ -228,7 +243,7 @@ describe("dice-check costs of failure", () => {
       "- Panic: full. The car panics. This stays true for the rest of the story.",
     );
     // Wayfinding has no cost left: its chalk needs a bag, the panic clock is full.
-    expect(context).not.toContain("Wayfinding");
+    expect(context).not.toContain("Wayfinding, failure");
     expect(context).not.toContain("Any other check");
     expect(result.value.costPlan.entries.map((entry) => entry.id)).toEqual([
       "soaked",
@@ -255,10 +270,14 @@ describe("dice-check costs of failure", () => {
           ...failed("stamina"),
           outcome: "success",
           difficulty: "easy",
-          modifier: 5,
         },
       ],
-      { plan: value.costPlan, dice: [5, 6, 15], services },
+      {
+        plan: value.costPlan,
+        checkPlan: value.checkPlan,
+        dice: [5, 6, 15],
+        services,
+      },
     );
     expect(result.outcome).toBe("success");
     const checks = result.effects.pluginData.filter(
@@ -315,6 +334,7 @@ describe("dice-check costs of failure", () => {
     });
     const plan = value.costPlan;
     const result = await record([failed("wayfinding"), failed("wayfinding")], {
+      checkPlan: value.checkPlan,
       plan: {
         ...plan,
         clocks: { ...plan.clocks, panic: { ...plan.clocks.panic, filled: 3 } },
@@ -347,6 +367,7 @@ describe("dice-check costs of failure", () => {
       [{ ...failed("stamina"), outcome: "success" }],
       {
         plan: value.costPlan,
+        checkPlan: value.checkPlan,
         dice: [5],
         services,
       },
@@ -370,9 +391,7 @@ describe("dice-check review of the cost in the prose", () => {
     toolResults: [],
   });
 
-  async function recordedTurn(checks) {
-    // The roller keeps the dice and the cost plan for the hooks.
-    await rollTurn({ services: inventory({}) });
+  function accept(checks) {
     acceptRecordedReceipt(ctx, {
       toolCall: {
         id: "emit",
@@ -384,6 +403,11 @@ describe("dice-check review of the cost in the prose", () => {
       },
       result: { success: true },
     });
+  }
+
+  async function recordedTurn(checks) {
+    await rollTurn({ services: inventory({}) });
+    accept(checks);
   }
 
   it("sends a story back once when it skips the cost of a failed check", async () => {
@@ -428,5 +452,14 @@ describe("dice-check review of the cost in the prose", () => {
     expect(reviewCostProse(ctx, story("Nothing."))).toEqual({
       action: "continue",
     });
+  });
+
+  it("reviews the accepted receipt, not the payload of a successful duplicate no-op", async () => {
+    await recordedTurn([failed("stamina")]);
+    accept([{ ...failed("stamina"), outcome: "success" }]);
+    expect(reviewCostProse(ctx, story("Nothing."))).toHaveProperty(
+      "replace.correction",
+      expect.stringContaining("Cold water soaks you to the waist"),
+    );
   });
 });

@@ -29,7 +29,7 @@ function effectsOf(item) {
   };
 }
 
-export async function bag({ query }, ctx) {
+export async function bag({ query, offset = 0 }, ctx) {
   const needle = query?.toLowerCase();
   const items = (await ctx.pluginData.list("items"))
     .map(({ value }) => value)
@@ -61,7 +61,7 @@ export async function bag({ query }, ctx) {
       (a, b) =>
         Number(b.equipped) - Number(a.equipped) || compareText(a.name, b.name),
     );
-  return { items: items.slice(0, 50), total: items.length };
+  return { items: items.slice(offset, offset + 50), total: items.length };
 }
 
 /** Validate the whole exchange before the writer receives its first change. */

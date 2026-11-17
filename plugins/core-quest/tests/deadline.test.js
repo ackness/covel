@@ -107,6 +107,35 @@ async function quests(store) {
 }
 
 describe("core-quest deadlines", () => {
+  it.each([
+    { time: "hour", gte: 9 },
+    { time: "elapsedSinceStart", gte: 30.5 },
+  ])("shows only the deadline label for $time >= $gte", async (when) => {
+    const ctx = turnContext({ elapsed: 30, stage: "trackbed" });
+    ctx.inputs.worldTime.value.hour = 8;
+    const store = await createPluginTestStore(ctx);
+    await seed(store);
+    const quest = (await quests(store))["reach-theo"];
+    await store.setPluginData({
+      id: quest.id,
+      sessionId: ctx.sessionId,
+      pluginId: ctx.pluginId,
+      namespace: "quests",
+      key: quest.id,
+      value: {
+        ...quest,
+        deadline: { ...quest.deadline, when },
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const note = getToolContent(await run(store, ctx)).value.storyContext
+      .content;
+    expect(note.split("\n").at(-1)).toBe(
+      "- The three who walked: Before their lamps are out of sight",
+    );
+  });
+
   it("tells the story the open deadlines and shows them on the quests from the first turn", async () => {
     const ctx = turnContext({ elapsed: 30, stage: "trackbed" });
     const store = await createPluginTestStore(ctx);

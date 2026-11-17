@@ -6,6 +6,10 @@ import { forgetPool, rememberPool } from "../lib/turn-pool.js";
 
 const ctx = { sessionId: "sess-1", turnId: "turn-7" };
 const recorded = { success: true, result: { _text: "emitted" } };
+const checkPlan = {
+  attributes: { strength: "strength" },
+  modifiers: { strength: { name: "Strength", total: 2 } },
+};
 
 function emit(checks, topic = "check.resolved") {
   return {
@@ -36,7 +40,34 @@ const check = (patch = {}) => ({
 describe("dice-check receipt guard", () => {
   beforeEach(() => {
     // Check 1 is a 7, check 2 a natural 20, check 3 a natural 1.
-    rememberPool(ctx.sessionId, ctx.turnId, [7, 20, 1]);
+    rememberPool(ctx.sessionId, ctx.turnId, [7, 20, 1], { checkPlan });
+  });
+
+  it("requires zero modifier and no attribute when there are no listed abilities", () => {
+    rememberPool(ctx.sessionId, ctx.turnId, [7], {
+      checkPlan: { attributes: {}, modifiers: {} },
+    });
+    expect(
+      verifyCheckReceipt(ctx, emit([check({ attribute: undefined })])),
+    ).toMatchObject({
+      action: "abort",
+      reason: expect.stringContaining("must use 0"),
+    });
+    expect(
+      verifyCheckReceipt(
+        ctx,
+        emit([check({ attribute: "strength", modifier: 0 })]),
+      ),
+    ).toMatchObject({
+      action: "abort",
+      reason: expect.stringContaining("omit attribute"),
+    });
+    expect(
+      verifyCheckReceipt(
+        ctx,
+        emit([check({ attribute: undefined, modifier: 0 })]),
+      ),
+    ).toEqual({ action: "continue" });
   });
 
   it("lets a receipt through when every outcome is the one the dice give", () => {

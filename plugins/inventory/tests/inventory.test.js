@@ -730,10 +730,13 @@ describe("inventory plugin manifest", () => {
     });
   });
 
-  it("records changes in a post-turn function runtime reading optional typed WorldIR", () => {
+  it("reconciles after check settlement and reads optional typed WorldIR", () => {
     expect(manifest).not.toHaveProperty("pluginType");
-    expect(manifest.stage).toBe("post-turn");
-    expect(manifest.trigger).toBeUndefined(); // `auto`, the default
+    expect(manifest.stage).toBeUndefined();
+    expect(manifest.trigger).toMatchObject({
+      type: "event",
+      topic: "inventory.reconcile",
+    });
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
       // Optional: the plugin plays without a world-facts provider.
@@ -747,7 +750,7 @@ describe("inventory plugin manifest", () => {
       from: "operations@1",
     });
     expect(declaration.contributes.services).toEqual([
-      { contract: "inventory.bag@1", modelFacing: true },
+      { contract: "inventory.bag@2", modelFacing: true },
       { contract: "inventory.change@1", access: "write", modelFacing: true },
     ]);
     expect(manifest.runtimeType).toBe("function");

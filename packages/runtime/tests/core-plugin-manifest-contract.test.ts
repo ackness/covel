@@ -212,13 +212,25 @@ describe("core plugin manifest contract", () => {
       callTimeoutMs: 30000,
     });
 
+    const ledger = requireRuntime(manifests, "inventory/ledger");
     for (const downstream of [
       ...rawDownstreams,
       worldIr,
       ...structuredDownstreams,
     ]) {
+      if (downstream === ledger) continue;
       expect(getRuntimeSpec(downstream).stage).toBe("post-turn");
     }
+    // The ledger joins the event batch of check settlement through its own
+    // post-turn signal, so it sees the operations that already paid a check.
+    expect(
+      getRuntimeSpec(requireRuntime(manifests, "inventory/reconcile")).stage,
+    ).toBe("post-turn");
+    expect(ledger.trigger).toEqual({
+      type: "event",
+      topic: "inventory.reconcile",
+    });
+    expect(ledger.after).toEqual([{ capability: "check-settlement@1" }]);
 
     // Character tracking consumes attributed segments from any @2 provider.
     for (const downstream of rawDownstreams) {

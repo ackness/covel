@@ -7,6 +7,8 @@ schedule:
     type: event
     topic: check.resolved
 io:
+  output:
+    contract: check-settlement@1
   inputs:
     dicePool:
       from:
@@ -33,6 +35,8 @@ function: {}
 Dice check receipt recorder (function runtime).
 
 It subscribes to the `check.resolved` event, which the narrative engine emits through `emit-event` under the rules that `dice-check/roller` injects.
+
+`check-settlement@1` reports the number of recorded checks. Other receipts in this event batch can order after it, so they can see operations that already paid for a check.
 
 If the `tabletop-check@1` output of the same execution already holds a settlement receipt for this turn, the form check belongs to tabletop-rules alone: this runtime skips the whole event batch and neither reads nor writes dice pool receipts. Without such a receipt it records ordinary actions as follows.
 

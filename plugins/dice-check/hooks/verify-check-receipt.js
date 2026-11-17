@@ -56,6 +56,14 @@ export default function verifyCheckReceipt(ctx, payload) {
   const judged = checks.map((check, index) =>
     judgeCheck(dice[index], check, checkPlan),
   );
+  const invalidAttributes = judged.flatMap(({ problem }, index) =>
+    problem ? [`check ${index + 1}: ${problem}`] : [],
+  );
+  if (invalidAttributes.length > 0)
+    return {
+      action: "abort",
+      reason: `check.resolved was not sent: ${invalidAttributes.join("; ")}. Use the matching modifiers and outcomes and send the corrected batch before writing the prose.`,
+    };
   const wrong = judged.flatMap(({ result }, index) =>
     result.outcome === checks[index].outcome &&
     result.modifier === checks[index].modifier
@@ -70,7 +78,9 @@ export default function verifyCheckReceipt(ctx, payload) {
     const { result } = judged[index];
     const check = checks[index];
     return result.modifier !== check.modifier
-      ? `check ${index + 1} reports modifier ${check.modifier} and the modifier list gives ${result.modifier} for ${check.attribute}`
+      ? check.attribute === undefined
+        ? `check ${index + 1} reports modifier ${check.modifier} but must use 0 without an attribute`
+        : `check ${index + 1} reports modifier ${check.modifier} and the modifier list gives ${result.modifier} for ${check.attribute}`
       : `check ${index + 1} reports "${check.outcome}" and the dice give "${result.outcome}"`;
   };
   const line = (index) => {

@@ -69,7 +69,7 @@ export default function reviewCostProse(ctx, payload) {
     )
       return;
     const { result } = judgeCheck(roll, check, review.checkPlan);
-    if (result.modifier !== check.modifier || result.outcome !== check.outcome)
+    if (result?.modifier !== check.modifier || result.outcome !== check.outcome)
       return;
     const entry = resolveCost(review.plan, check, ledger);
     if (!entry || entry.cues.length === 0) return;

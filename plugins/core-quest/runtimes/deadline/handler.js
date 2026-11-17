@@ -231,6 +231,11 @@ function storyNote(ctx, due, failed, state) {
   const pick = (zh, en) => pickLocaleText(ctx.locale, zh, en);
   const unit = state.time?.units?.[0];
   const left = (deadline) => {
+    if (
+      !["elapsedSinceStart", "tick"].includes(deadline.when.time) ||
+      !Number.isInteger(deadline.when.gte ?? deadline.when.gt)
+    )
+      return "";
     const amount = timeLeft(deadline.when, state);
     if (amount === undefined || !unit) return "";
     const value = Math.max(amount, 0);

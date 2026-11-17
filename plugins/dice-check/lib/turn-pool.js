@@ -61,7 +61,7 @@ export function poolOf(sessionId, turnId) {
  */
 export function acceptReceipt(sessionId, turnId, receipt) {
   const turn = turns.get(keyOf(sessionId, turnId));
-  if (turn) turn.receipt = receipt;
+  if (turn && !turn.receipt) turn.receipt = receipt;
 }
 
 /**

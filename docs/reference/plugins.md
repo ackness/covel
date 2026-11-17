@@ -1422,11 +1422,11 @@ pnpm lint
 | [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 聊天式讲述 | `plugin` | `narrative-engine@2` | `plan` / `narrate` | 让故事更像角色对话；舞台在场输入同时供规划和叙事使用 |
 | [codex](../../plugins/codex/README.md) | 图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
 | [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary`、`deadline` | 从叙事中登记和推进任务；期限（维度、世界时间或 NPC 好感档位）过了的任务判为失败，并通过 `story-context@1` 告诉故事 |
-| [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定；失败的判定按世界数据付出代价（丢物品或推进时钟）；随身物品加修正，关系差的 NPC 和满了的时钟让检定更难 |
+| [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1`、`check-settlement@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定；失败的判定按世界数据付出代价（丢物品或推进时钟）；随身物品加修正，关系差的 NPC 和满了的时钟让检定更难 |
 | [dm-console](../../plugins/dm-console/README.md) | 主持人面板 | `plugin` | 无 | 无 | 在一个页面里展示在场角色、等你处理的事项、故事和输入框；只有界面，不调用模型 |
 | [guide](../../plugins/guide/README.md) | 行动建议 | `plugin` | `scene-prompts@1` | 内联 | 每轮故事后回顾前情，给出可直接采用的行动短句 |
 | [history-compaction](../../plugins/history-compaction/README.md) | 长篇故事记忆 | `core` | `history.compact@2`（默认提供者） | 无 | 把较早的对话整理成分段摘要 |
-| [inventory](../../plugins/inventory/README.md) | 背包 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary`、`item-op` | 记录物品得失和装备变化；物品可带 `effects.check`，通过 `inventory.bag@1` 报给判定插件 |
+| [inventory](../../plugins/inventory/README.md) | 背包 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`reconcile`、`vocabulary`、`item-op` | 记录物品得失和装备变化；物品可带 `effects.check`，通过 `inventory.bag@2` 报给判定插件 |
 | [living-world-rules](../../plugins/living-world-rules/README.md) | 世界规则 | `plugin` | `living-world-rules@1`、`world-info@1` | 无 | 展示世界包里长期生效的规则，并让叙事遵守 |
 | [memory](../../plugins/memory/README.md) | 故事记忆 | `core` | 无 | `extract` | 记住剧情、场景、人物关系和主角状态 |
 | [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@2`（默认提供者） | 内联 | 根据玩家的行动推进故事 |

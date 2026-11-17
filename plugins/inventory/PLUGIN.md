@@ -11,8 +11,13 @@ author:
   url: https://github.com/ackness/covel
 license: MIT
 contributes:
+  events:
+    - topic: inventory.reconcile
+      schema: ./schemas/reconcile.event.json
+      advertise: false
+      description: Reconciles the bag after the turn's staged runtimes.
   services:
-    - contract: inventory.bag@1
+    - contract: inventory.bag@2
       modelFacing: true
     - contract: inventory.change@1
       access: write
@@ -71,4 +76,4 @@ contributes:
 
 # Inventory
 
-Keeps the protagonist's bag. The `ledger` runtime applies each turn's item gains, losses, and equipment changes from the shared WorldIR extraction without a model call; the `vocabulary` runtime publishes the carried item names before extraction so the extractor reuses them. Players can equip, unequip, or drop items from the panel, and `/bag` opens it. A world can give an item `effects.check`, a modifier that checks of one attribute get while the item is carried; `inventory.bag@1` reports it, and a check plugin can add it. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.
+Keeps the protagonist's bag. The `ledger` runtime applies each turn's item gains, losses, and equipment changes from the shared WorldIR extraction without a model call; the `vocabulary` runtime publishes the carried item names before extraction so the extractor reuses them. Players can equip, unequip, or drop items from the panel, and `/bag` opens it. A world can give an item `effects.check`, a modifier that checks of one attribute get while the item is carried; `inventory.bag@2` reports it, and a check plugin can add it. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.

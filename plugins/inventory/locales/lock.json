@@ -8,6 +8,7 @@
       "PLUGIN.md#displayName": "b053c961f2acb0b9",
       "runtimes/item-op/RUNTIME.md#description": "b5bea2f4374b4d3e",
       "runtimes/ledger/RUNTIME.md#description": "d70481ff3983b8be",
+      "runtimes/reconcile/RUNTIME.md#description": "b0423bb7c711af02",
       "runtimes/vocabulary/RUNTIME.md#description": "45f26f4694da8bfb"
     },
     "zh": {
@@ -17,6 +18,7 @@
       "PLUGIN.md#displayName": "b053c961f2acb0b9",
       "runtimes/item-op/RUNTIME.md#description": "b5bea2f4374b4d3e",
       "runtimes/ledger/RUNTIME.md#description": "d70481ff3983b8be",
+      "runtimes/reconcile/RUNTIME.md#description": "b0423bb7c711af02",
       "runtimes/vocabulary/RUNTIME.md#description": "45f26f4694da8bfb"
     }
   }

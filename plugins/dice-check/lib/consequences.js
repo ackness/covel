@@ -308,8 +308,8 @@ export function costContext(plan, world, locale) {
       ? [
           pickLocaleText(
             locale,
-            "在这个世界里，失败的检定一定有代价。发出 `check.resolved` 后，系统按下表为每个失败的检定结算代价并展示给玩家。在这次检定的正文里写出这个代价，不要淡化，也不要跳过：",
-            "In this world a failed check always costs something. When you send `check.resolved`, the system applies the cost below for each failed check and shows it to the player. Write that cost into the prose of the check; do not soften or skip it:",
+            "在这个世界里，失败的检定一定有代价。发出 `check.resolved` 后，系统按下表为每个失败的检定结算代价并展示给玩家。把代价写进正文，不要用其他工具再扣一次：",
+            "In this world a failed check always costs something. When you send `check.resolved`, the system applies the cost below for each failed check and shows it to the player. Show the cost in the prose; do not pay it again with another tool:",
           ),
           ...lines,
           "",

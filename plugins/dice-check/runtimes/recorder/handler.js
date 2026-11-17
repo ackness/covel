@@ -163,6 +163,7 @@ export default async function handler(ctx) {
   });
   return {
     outcome: "success",
+    value: { recorded: entries.length },
     effects: {
       pluginData: [
         ...entries.map((entry) => ({
@@ -309,7 +310,7 @@ function parseCheck(data, roll, checkPlan) {
     payload,
     checkPlan,
   );
-  if (payload.modifier !== result.modifier) return null;
+  if (!result || payload.modifier !== result.modifier) return null;
   if (payload.outcome !== result.outcome) return null;
 
   const record = { action, ...result };

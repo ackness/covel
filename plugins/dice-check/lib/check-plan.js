@@ -12,16 +12,14 @@ import { DIFFICULTY_DCS, MODIFIER_LIMIT, resolveCheck } from "./check-rules.js";
  * receipt by the same plan through `judgeCheck`, so the narrative is held to
  * the modifier and the difficulty it was told.
  *
- * Items come from `inventory.bag@1` (`effects.check` of an item) and tiers
+ * Items come from `inventory.bag@2` (`effects.check` of an item) and tiers
  * from `affinity.tier@1`. Each is read only when exactly one plugin
  * provides it; without one, that part of the plan is empty.
  */
 
-const BAG_CONTRACT = "inventory.bag@1";
+const BAG_CONTRACT = "inventory.bag@2";
 const TIER_CONTRACT = "affinity.tier@1";
 const DIFFICULTIES = Object.keys(DIFFICULTY_DCS);
-/** Names in the "harder" list; the rest of the cast is left out of the prompt. */
-const UNHELPFUL_LIMIT = 8;
 
 function signed(value) {
   return value > 0 ? `+${value}` : `${value}`;
@@ -35,8 +33,7 @@ async function single(ctx, contract) {
 
 /**
  * What the player character carries, or null without one inventory.
- * `held(names)` gives the quantity of each lower-case name; it asks again by
- * name only when the first answer was cut short.
+ * `held(names)` looks up a missing name directly if a later page failed.
  *
  * @param {import("@covel/plugin-handlers-utils").PluginFunctionContext} ctx
  */
@@ -47,10 +44,20 @@ export async function readBag(ctx) {
     const call = (input) =>
       ctx.services.call({ ...provider, input }, { signal: ctx.signal });
     const first = await call({});
-    const items = Array.isArray(first?.items) ? first.items : [];
-    const complete = !(
-      typeof first?.total === "number" && first.total > items.length
-    );
+    const items = Array.isArray(first?.items) ? [...first.items] : [];
+    const total = Number.isSafeInteger(first?.total)
+      ? first.total
+      : items.length;
+    while (items.length > 0 && items.length < total) {
+      try {
+        const page = await call({ offset: items.length });
+        if (!Array.isArray(page?.items) || page.items.length === 0) break;
+        items.push(...page.items);
+      } catch {
+        ctx.signal?.throwIfAborted();
+        break;
+      }
+    }
     const quantityIn = (list, name) => {
       const item = list.find(
         (candidate) => candidate?.name?.toLowerCase() === name,
@@ -63,7 +70,7 @@ export async function readBag(ctx) {
         const held = {};
         for (const name of names) {
           held[name] = quantityIn(items, name);
-          if (held[name] > 0 || complete) continue;
+          if (held[name] > 0 || items.length >= total) continue;
           try {
             const found = await call({ query: name });
             held[name] = quantityIn(found?.items ?? [], name);
@@ -107,8 +114,7 @@ async function unhelpfulCast(ctx) {
           entry.steps > 0 &&
           entry.steps <= neutral,
       )
-      .sort((a, b) => b.steps - a.steps)
-      .slice(0, UNHELPFUL_LIMIT);
+      .sort((a, b) => b.steps - a.steps);
   } catch {
     ctx.signal?.throwIfAborted();
     return [];
@@ -188,20 +194,33 @@ export async function loadCheckPlan(ctx, { player, bag, clocks = {} }) {
 }
 
 /**
- * How a check is judged: the modifier it must report (the attribute's
- * modifier in the plan, or what it reported when the plan has none), the
- * difficulty after the reasons that make it harder, and the result.
+ * An attribute must be one of the turn's listed modifiers. Without available
+ * modifiers the receipt must leave out the attribute and use zero.
  *
  * @param {number} roll
  * @param {{ attribute?: unknown, modifier: number, difficulty: string, with?: unknown }} check
  * @param {any} plan The check plan, or null.
  */
 export function judgeCheck(roll, check, plan) {
+  if (!plan) return { problem: "this turn has no check plan" };
   const id =
     typeof check.attribute === "string"
-      ? plan?.attributes?.[check.attribute.trim().toLowerCase()]
+      ? plan.attributes[check.attribute.trim().toLowerCase()]
       : undefined;
-  const listed = id ? plan?.modifiers?.[id] : undefined;
+  const listed =
+    id && Object.hasOwn(plan.modifiers, id) ? plan.modifiers[id] : undefined;
+  if (!listed) {
+    const names = Object.values(plan.modifiers).map((entry) => entry.name);
+    if (names.length > 0)
+      return {
+        problem: `choose an attribute from the modifier list: ${names.join(", ")}`,
+      };
+    if (check.attribute !== undefined)
+      return {
+        problem:
+          "omit attribute and use modifier 0 because there are no listed attributes",
+      };
+  }
   const reasons = [];
   for (const clock of (id && plan?.raised?.[id]) || [])
     reasons.push({ text: clock, steps: 1 });
@@ -219,7 +238,7 @@ export function judgeCheck(roll, check, plan) {
   const chosen = DIFFICULTIES.indexOf(check.difficulty);
   const difficulty =
     DIFFICULTIES[Math.min(chosen + steps, DIFFICULTIES.length - 1)];
-  const modifier = listed ? listed.total : check.modifier;
+  const modifier = listed?.total ?? 0;
   return {
     result: resolveCheck(roll, modifier, difficulty),
     ...(listed?.item ? { item: listed.item } : {}),
