@@ -8,10 +8,7 @@ import {
   requestCredentialHandoff,
 } from "./plugin-rpc/settled-request.js";
 import { type QueuedRuntimeJob } from "./plugin-rpc/runtime-job-enqueue.js";
-import {
-  queueCommitFollowUps,
-  queueReleasedRuntimeJobs,
-} from "./commit-envelope.js";
+import { queueReleasedRuntimeJobs } from "./commit-envelope.js";
 /**
  * Resume route — resumes a suspended runtime.
  *
@@ -421,7 +418,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           ...(userSettings ? { userSettings } : {}),
         };
         const outcome = await commitExecution({
-          extraInTx: async (tx, { deferredFollowers }) => {
+          extraInTx: async (tx) => {
             if (releasedJobs.length > 0)
               queuedRuntimeJobs.push(
                 ...(await queueReleasedRuntimeJobs(
@@ -434,14 +431,6 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
                   releasedJobs,
                 )),
               );
-            if (deferredFollowers.length > 0) {
-              const queued = await queueCommitFollowUps(tx, {
-                ...enqueueContext,
-                turnId: suspension.turnId,
-                deferredFollowers,
-              });
-              queuedRuntimeJobs.push(...queued.followerJobs);
-            }
           },
           // A resume saves no suspension that ends another turn: under the
           // session lock the only new one is the resumed runtime's own (it

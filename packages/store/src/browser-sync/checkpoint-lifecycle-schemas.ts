@@ -1,5 +1,5 @@
 import { assertAgentOutputObjectSchema } from "@covel/shared/plugin-runtime";
-import { proposalReadScopesSchema, type TurnResult } from "@covel/shared";
+import { proposalReadScopesSchema } from "@covel/shared";
 import {
   orchestrationSettingsSchema,
   delegationSnapshotSchema,
@@ -191,30 +191,6 @@ const jobData = jsonValue.superRefine((value, context) => {
       message: "Invalid kernel job ownership",
     });
 });
-const deferredFollower = z.strictObject({
-  runtimeId: nonEmptyString,
-  pluginId: nonEmptyString,
-  triggerEvent: z.strictObject({
-    topic: nonEmptyString,
-    data: jsonObject,
-  }),
-}) satisfies z.ZodType<NonNullable<TurnResult["deferredFollowers"]>[number]>;
-const suspendedNestedResult = z.strictObject({
-  readScopes: proposalReadScopesSchema,
-  operationReadScopes: z
-    .record(z.string(), proposalReadScopesSchema)
-    .optional(),
-  result: z.looseObject({
-    pluginId: nonEmptyString,
-    runtimeId: nonEmptyString,
-    runId: nonEmptyString,
-    turnId: z.string(),
-    status: z.string(),
-  }),
-  journal: z.array(jsonValue).optional(),
-  deferredFollowers: z.array(deferredFollower).optional(),
-  trigger: nonEmptyString.optional(),
-});
 
 const suspensions = createdRow.extend({
   turnId: z.string(),
@@ -277,7 +253,6 @@ const suspensions = createdRow.extend({
       promptSegments: z
         .array(z.strictObject({ pluginId: z.string(), id: z.string() }))
         .optional(),
-      nestedResults: z.array(suspendedNestedResult).optional(),
     })
     .superRefine((continuation, ctx) => {
       if (continuation.suspendToolCallId && !continuation.loop)

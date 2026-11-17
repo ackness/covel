@@ -30,10 +30,10 @@ import {
   createHookPipeline,
   executeTurn,
   finalizeExecution,
-  resumeSuspendedRuntime,
-  suspensionOutdatedReason,
 } from "../src/index.js";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { suspendTool, ToolRegistry } from "@covel/tools";
 import { readRuntimeTriggerLedger } from "../src/trigger/trigger-ledger.js";
 
 const SESSION = "session";
@@ -83,6 +83,9 @@ async function run(
     readonly proposalGuard?: (proposal: Proposal) => string | undefined;
     readonly llm?: { readonly generate: (...args: never[]) => unknown };
     readonly setupRuntimes?: Record<string, SetupRuntimeState>;
+    readonly toolsFor?: (
+      store: ReturnType<typeof createMemoryStore>,
+    ) => ReturnType<typeof createToolExecutor>;
   } = {},
 ) {
   const store = createMemoryStore();
@@ -101,9 +104,11 @@ async function run(
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+  const toolExecutor = options.toolsFor?.(store);
   const execution = await executeTurn(input, runtimes, {
     store,
     llm: (options.llm ?? { generate: vi.fn() }) as never,
+    ...(toolExecutor ? { toolExecutor } : {}),
     ...(options.hookPipeline ? { hookPipeline: options.hookPipeline } : {}),
     loadRuntime: async (runtime) => ({
       manifest: runtime,
@@ -125,6 +130,7 @@ async function run(
     },
     ...(options.proposalGuard ? { proposalGuard: options.proposalGuard } : {}),
   });
+  await toolExecutor?.close();
   const notes = Object.fromEntries(
     (await store.listPluginData(SESSION, "probe", "notes")).map((row) => [
       row.key,
@@ -138,18 +144,26 @@ const ids = (results: readonly { readonly runtimeId: string }[]) =>
   results.map((result) => result.runtimeId);
 
 describe("recursiveCall results at commit", () => {
-  it.each(["throws", "returns failed"] as const)(
+  // A parent cannot suspend after a nested call: its continuation would have
+  // to keep the child's results, so the run fails and commits neither.
+  it.each(["throws", "returns failed", "suspends"] as const)(
     "drops the child's writes when the parent %s after the call returns",
     async (failure) => {
       const parent = manifest("parent", { trigger: { type: "auto" } });
       const child = manifest("child");
       let childStatus: string | undefined;
-      const { execution, outcome, notes } = await run([parent, child], {
+      const { store, execution, outcome, notes } = await run([parent, child], {
         [parent.name]: async (ctx) => {
           const nested = await call(ctx, "child");
           childStatus = nested.runtimeResults[0]?.status;
           await note(ctx, "parent");
           if (failure === "throws") throw new Error("parent broke");
+          if (failure === "suspends")
+            return {
+              outcome: "suspended",
+              reason: "Need an answer",
+              resumeSchema: { type: "object" },
+            };
           return { outcome: "failed", error: "parent gave up" };
         },
         [child.name]: async (ctx) => {
@@ -161,9 +175,86 @@ describe("recursiveCall results at commit", () => {
       expect(childStatus).toBe("success");
       expect(ids(execution.commit.results)).toEqual([parent.name]);
       expect(execution.commit.results[0]?.status).toBe("failed");
+      if (failure === "suspends")
+        expect(execution.result.runtimeResults[0]?.error).toBe(
+          `${parent.name} cannot suspend after a nested call (ctx.recursiveCall)`,
+        );
       expect(execution.result.nestedRuntimeResults).toBeUndefined();
+      expect(execution.commit.suspensions ?? []).toEqual([]);
       expect(outcome.status).toBe("committed");
+      expect(await store.listSuspensions(SESSION)).toEqual([]);
       expect(notes).toEqual({});
+    },
+  );
+
+  it.each(["function", "agent"] as const)(
+    "fails a nested %s run that suspends, and its parent sees the failure",
+    async (runtimeType) => {
+      const parent = manifest("parent", { trigger: { type: "auto" } });
+      const child = manifest("child", {
+        runtimeType,
+        ...(runtimeType === "agent" ? { tools: { builtin: ["suspend"] } } : {}),
+      });
+      const tools = new ToolRegistry();
+      tools.registerBuiltin(suspendTool);
+      let childStatus: string | undefined;
+      const { store, execution, outcome, notes } = await run(
+        [parent, child],
+        {
+          [parent.name]: async (ctx) => {
+            const nested = await call(ctx, "child");
+            childStatus = nested.runtimeResults[0]?.status;
+            await note(ctx, "parent", String(childStatus));
+            return ok();
+          },
+          [child.name]: async (ctx) => {
+            await note(ctx, "child");
+            return {
+              outcome: "suspended",
+              reason: "Need an answer",
+              resumeSchema: { type: "object" },
+            };
+          },
+        },
+        {
+          toolsFor: (store) =>
+            createToolExecutor({
+              store,
+              findTool: (name, context) => tools.find(name, context.pluginId),
+              getToolSource: (name) => tools.source(name),
+            }),
+          llm: {
+            generate: async () => ({
+              content: null,
+              toolCalls: [
+                {
+                  id: "ask",
+                  name: "suspend",
+                  arguments: JSON.stringify({
+                    reason: "Which gate?",
+                    fields: [{ type: "text", name: "gate", label: "Gate" }],
+                  }),
+                },
+              ],
+              finishReason: "tool_calls" as const,
+              usage: { inputTokens: 1, outputTokens: 1 },
+            }),
+          },
+        },
+      );
+
+      expect(childStatus).toBe("failed");
+      expect(execution.result.nestedRuntimeResults).toEqual([
+        expect.objectContaining({
+          runtimeId: child.name,
+          status: "failed",
+          error: `${child.name} cannot suspend inside a nested call (ctx.recursiveCall)`,
+        }),
+      ]);
+      expect(execution.commit.suspensions ?? []).toEqual([]);
+      expect(outcome.status).toBe("committed");
+      expect(await store.listSuspensions(SESSION)).toEqual([]);
+      expect(notes).toEqual({ parent: "failed" });
     },
   );
 
@@ -843,188 +934,6 @@ describe("recursiveCall results at commit", () => {
       });
     },
   );
-
-  describe("a nested continuation in a dropped unit", () => {
-    const story = manifest("story", {
-      outputKind: "story",
-      trigger: { type: "auto" },
-    });
-    const parent = manifest("parent", {
-      stage: "post-turn",
-      trigger: { type: "auto" },
-    });
-    const child = manifest("child");
-    const handlers: Record<string, FunctionHandler> = {
-      [story.name]: async () => ok({ narrativeOutput: "The story goes on." }),
-      [parent.name]: async (ctx) => {
-        await call(ctx, "child");
-        await note(ctx, `parent-${ctx.turnId}`);
-        return ok();
-      },
-      [child.name]: async (ctx) => {
-        await note(ctx, `child-${ctx.turnId}`);
-        if (ctx.resumedFromSuspensionId === undefined)
-          return {
-            outcome: "suspended",
-            reason: "Need an answer",
-            resumeSchema: { type: "object" },
-          };
-        return ok();
-      },
-    };
-    const deps = (store: ReturnType<typeof createMemoryStore>) => ({
-      store,
-      llm: { generate: vi.fn() } as never,
-      loadRuntime: async (runtime: RuntimeManifest) => ({
-        manifest: runtime,
-        promptTemplate: "",
-        handler: handlers[runtime.name],
-      }),
-    });
-    async function turn(
-      store: ReturnType<typeof createMemoryStore>,
-      n: number,
-      rejectParent: boolean,
-      // A turn without a player message (as the host's opening continuation
-      // runs) leaves the history a standing suspension was taken under alone.
-      playerMessage = true,
-    ) {
-      const turnInput = {
-        ...input,
-        turnId: `turn-${n}`,
-        logicalTurnId: `logical-turn-${n}`,
-        ...(playerMessage
-          ? {}
-          : { playerMessage: "", suppressPlayerMessage: true }),
-      };
-      const execution = await executeTurn(
-        turnInput,
-        [story, parent, child],
-        deps(store),
-      );
-      const outcome = await commitExecution({
-        enqueueReleasedJobsInTx: refuseReleasedJobs,
-        store,
-        execution,
-        completion: { kind: "turn", turnId: turnInput.turnId, durationMs: 0 },
-        proposalGuard: (proposal) =>
-          rejectParent &&
-          (proposal.payload as { key?: unknown }).key === `parent-turn-${n}`
-            ? "parent rejected"
-            : undefined,
-      });
-      return { execution, outcome };
-    }
-    async function freshStore() {
-      const store = createMemoryStore();
-      await store.createSession({
-        id: SESSION,
-        locale: "en-US",
-        status: "active",
-        phase: "playing",
-        setupRuntimes: {},
-        seats: [
-          {
-            id: "main",
-            controller: "human",
-            role: "player",
-            characters: "auto",
-          },
-        ],
-        activePlugins: ["probe"],
-        completedPlayerTurns: 0,
-        createdAt: "2026-10-29T00:00:00.000Z",
-        updatedAt: "2026-10-29T00:00:00.000Z",
-      });
-      return store;
-    }
-    const keys = async (store: ReturnType<typeof createMemoryStore>) =>
-      (await store.listPluginData(SESSION, "probe", "notes"))
-        .map((row) => row.key)
-        .sort();
-
-    it("is never saved, and its turn counts as if the continuation were abandoned", async () => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = await freshStore();
-      const { execution, outcome } = await turn(store, 1, true);
-
-      expect(execution.commit.suspensions).toHaveLength(1);
-      expect(outcome.status).toBe("committed");
-      expect(outcome.isolatedRuntimes?.map((item) => item.runtimeId)).toEqual([
-        child.name,
-        parent.name,
-      ]);
-      expect(await store.listSuspensions(SESSION)).toEqual([]);
-      expect(
-        await store.getSuspension(execution.commit.suspensions![0]!.id),
-      ).toBeNull();
-      expect((await store.getSession(SESSION))?.completedPlayerTurns).toBe(1);
-      expect(await keys(store)).toEqual([]);
-    });
-
-    it("does not replace a standing continuation, which still resumes and commits", async () => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = await freshStore();
-      await turn(store, 1, false);
-      const [standing] = await store.listSuspensions(SESSION);
-      expect(standing).toBeDefined();
-      expect(await keys(store)).toEqual(["parent-turn-1"]);
-
-      const second = await turn(store, 2, true, false);
-      expect(second.outcome.status).toBe("committed");
-      expect(second.execution.commit.suspensions).toHaveLength(1);
-      expect(
-        (await store.listSuspensions(SESSION)).map((record) => record.id),
-      ).toEqual([standing!.id]);
-      // The dropped continuation ended turn 2, which counts; turn 1 still
-      // waits for the standing one.
-      expect((await store.getSession(SESSION))?.completedPlayerTurns).toBe(1);
-      // The host's resume route checks this before resuming.
-      expect(
-        await suspensionOutdatedReason(store, standing!, child),
-      ).toBeUndefined();
-
-      const resumed = await resumeSuspendedRuntime(
-        standing!,
-        {},
-        child,
-        deps(store),
-      );
-      const outcome = await commitExecution({
-        enqueueReleasedJobsInTx: refuseReleasedJobs,
-        store,
-        execution: resumed,
-        completion: {
-          kind: "resume",
-          turnId: standing!.turnId,
-          suspensionId: standing!.id,
-          pluginId: standing!.pluginId,
-          runtimeId: standing!.runtimeId,
-        },
-      });
-      expect(outcome.status).toBe("committed");
-      expect(await keys(store)).toEqual(["child-turn-1", "parent-turn-1"]);
-      expect((await store.getSession(SESSION))?.completedPlayerTurns).toBe(2);
-    });
-
-    it("leaves a standing continuation in place but outdated after another player turn", async () => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = await freshStore();
-      await turn(store, 1, false);
-      const [standing] = await store.listSuspensions(SESSION);
-
-      const second = await turn(store, 2, true);
-      expect(second.outcome.status).toBe("committed");
-      expect(
-        (await store.listSuspensions(SESSION)).map((record) => record.id),
-      ).toEqual([standing!.id]);
-      // The dropped continuation ended its own turn, which counts.
-      expect((await store.getSession(SESSION))?.completedPlayerTurns).toBe(1);
-      expect(await suspensionOutdatedReason(store, standing!, child)).toBe(
-        "session-moved-on",
-      );
-    });
-  });
 
   it("keeps the success path: the parent reads the child's output and both commit", async () => {
     const parent = manifest("parent", { trigger: { type: "auto" } });

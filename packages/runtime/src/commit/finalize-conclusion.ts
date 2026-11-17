@@ -6,7 +6,7 @@
  * setup runtimes settle their attempts.
  */
 
-import type { DataStore } from "@covel/store";
+import type { DataStore, SuspensionRecord } from "@covel/store";
 import type { OperationSettlement } from "@covel/shared";
 import {
   presentationState,
@@ -20,7 +20,7 @@ import { jobOwnership } from "../job-status/job-ownership.js";
 import {
   correctSavedLifecycle,
   correctRuntimeLifecycle,
-  savedMembers,
+  savedMember,
 } from "../resume/suspended-lifecycle.js";
 import { settleSetupRuntimes } from "./setup-settle.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
@@ -80,10 +80,8 @@ function jobOutcomeForResult(status: string | undefined): ExecutionJobOutcome {
  * after the domain outcome is settled: a rolled-back execution fails all its
  * jobs; a committed one maps each job to its owning runtime's result status.
  * A suspended runtime's jobs wait for input, a claimed success too, since its
- * writes are held until the suspension is resumed; so do the jobs of the
- * `ctx.recursiveCall` children saved with it, which share this scope. A
- * reporting runtime with no result at all (a child whose parent failed) is
- * cancelled.
+ * writes are held until the suspension is resumed. A reporting runtime with
+ * no result at all (a child whose parent failed) is cancelled.
  * In a continued scope (a resume) only the jobs of the runtimes this
  * execution owns are settled. A rollback fails them, including claimed
  * successes, and a later retry can correct framework-owned failures.
@@ -115,25 +113,23 @@ async function terminalizeExecutionJobs(
         key(result.pluginId, result.runtimeId, result.runId),
         jobOutcomeForResult(result.status),
       );
+    const memberKey = (suspension: SuspensionRecord) => {
+      const member = savedMember(suspension);
+      return key(member.pluginId, member.runtimeId, member.progressRunId);
+    };
     const root = settled.at(-1);
-    if (args.resumedSuspension && root) {
-      for (const member of savedMembers(args.resumedSuspension))
-        outcomes.set(
-          key(member.pluginId, member.runtimeId, member.progressRunId),
-          jobOutcomeForResult(root.status),
-        );
-    }
+    if (args.resumedSuspension && root)
+      outcomes.set(
+        memberKey(args.resumedSuspension),
+        jobOutcomeForResult(root.status),
+      );
     for (const suspension of args.suspensions ?? []) {
       const holder = settled.find(
         (result) =>
           result.runId === suspension.pendingContinuation.lifecycle.runId,
       );
-      if (!holder) continue;
-      for (const member of savedMembers(suspension))
-        outcomes.set(
-          key(member.pluginId, member.runtimeId, member.progressRunId),
-          jobOutcomeForResult(holder.status),
-        );
+      if (holder)
+        outcomes.set(memberKey(suspension), jobOutcomeForResult(holder.status));
     }
     const latest = new Map<string, (typeof reported)[number]>();
     for (const row of reported)
@@ -267,16 +263,15 @@ export async function concludeExecution(
       (result) =>
         result.runId === suspension.pendingContinuation.lifecycle.runId,
     );
-    lifecycleCorrections.push(() =>
-      correctSavedLifecycle(
-        args,
-        suspension,
-        outcome.status === "failed"
-          ? "failed"
-          : jobOutcomeForResult(holder?.status),
-        outcome.status === "failed" || holder?.status !== "suspended",
-      ),
-    );
+    // A saved suspension already reported its own `suspended` status.
+    const status =
+      outcome.status === "failed"
+        ? "failed"
+        : jobOutcomeForResult(holder?.status);
+    if (status !== "suspended")
+      lifecycleCorrections.push(() =>
+        correctSavedLifecycle(args, suspension, status),
+      );
   }
   if (
     await flushPostCommit(lifecycleCorrections, {

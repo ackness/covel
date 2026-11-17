@@ -218,8 +218,7 @@ stateDiagram-v2
 - 每条已提交的故事消息在 `metadata.storySource` 保存内核回执：执行、run、插件和 runtime 的 ID，以及 `scope: top-level | nested`。延后呈现和选择器重试都读取这份持久身份，挂起释放后也一样；不会按 runtime ID 或缺失回执推断顶层身份。
 - 保存挂起记录时，同一个 runtime 还在等待的旧挂起项在同一个事务里作废。恢复的提交事务先核对挂起时记下的记录内容，有变化就什么都不写。
 - 恢复的 runtime 可以再次挂起。这次提交先把旧挂起项标为已处理，再保存新的；新挂起项接着同一次执行，不算放弃旧的。规则见[再次挂起](../reference/api.md#再次挂起)。
-- function 挂起时，成功的递归子调用及其所有后代随 continuation 保存。它们的计算结果保持成功，领域写入、日志、trigger 和输出导出暂不提交；最后一次恢复成功时按子先父后的顺序提交同一个原子单元，不重跑保存的 handler 或 Hook。再次挂起只转移保存的工作。
-- 子调用先前发出的成功是计算结果。保存挂起项之后，内核按原来的 `(turnId, runtimeId, runId)` 追加 `suspended` 生命周期修正，并让这些调用自己的任务等待。恢复失败或提交回滚时追加失败；之后重试提交成功可修正为成功，再次挂起则恢复等待，放弃、过期或作废则取消。原有 trace 保留为历史。独立调用即使 runtime 相同，也不跟着改变状态。
+- 挂起只保存 runtime 自己的工作。function 调用过 `ctx.recursiveCall` 并拿到子结果后返回 `suspended`，这次运行判为失败，子结果随之丢弃；嵌套执行里的 runtime 挂起时也判为失败，按普通失败子结果交给父调用。规则见[嵌套调用](../reference/plugins.md#嵌套调用ctxrecursivecall)。
 - continuation 保存当前挂起的 run 和整条链的任务所有者。进度记录的内核元数据保留调用身份及收尾来源，插件不能伪造；因此恢复可以修正内核上一次写下的失败，而不会复活插件明确报告的失败或取消。任务的公共去重身份和根进度范围不变。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
 - `execution.completed.committed` 是客户端的终态信号：前端据此结算进度；故事正文来自提交后的通知或保存的消息。
@@ -246,7 +245,7 @@ stateDiagram-v2
 - 作业 worker 认领后，把 handler 跑在会话锁**外**。只有 `processTurnResults`（finalize 事务加自动快照）进锁。作业的终态和它写入的数据在同一个事务里提交。
 - 它不能挂起等玩家：没有玩家在等它。runtime 真的挂起了，作业记为 `failed`，什么也不提交。
 
-递归调用产生的后台 follower 随其生产者所属的提交单元保存；父调用失败时不入队。不同嵌套执行可以各自触发同一个后台目标，分别保留 payload 和生产者。父调用挂起时，follower 随 continuation 保存，直到成功恢复才在同一提交事务里入队；再次挂起不会提前入队。
+递归调用产生的后台 follower 随其生产者所属的提交单元保存；父调用失败时不入队。不同嵌套执行可以各自触发同一个后台目标，分别保留 payload 和生产者。
 
 为什么这样是安全的：
 
@@ -1042,7 +1041,7 @@ turn_messages (canonical 追加式执行日志):
 - `block.emitted`
 - `hook.fired` / `hook.rewrote` / `hook.aborted`
 
-runtime 的生命周期事件由 `TraceRecorder` 写入，恢复入口也记录开始和终态。保存的递归工作在提交或退出挂起之后追加同一 run 的有效状态修正，先持久化，再送到订阅客户端和发起动作的流，每条流只转发一次。修正不重新提交提案、不执行 Hook，也不增加子调用的插件故障计数。
+runtime 的生命周期事件由 `TraceRecorder` 写入，恢复入口也记录开始和终态。挂起的 run 在恢复提交或退出挂起之后追加同一 run 的有效状态修正，先持久化，再送到订阅客户端和发起动作的流，每条流只转发一次。修正不重新提交提案、不执行 Hook，也不增加插件故障计数。
 
 不产生叙事增量，故事草稿也不是 trace 事件。接受后的 story runtime 在 trace 中记录一条 `message.completed`；只有提交后的 `narrative.completed` 进入玩家故事。
 

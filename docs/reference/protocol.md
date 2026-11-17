@@ -97,7 +97,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - function runtime 挂起时，continuation 保存还没提交的命令、输入和导出的绑定，以及 activation。
 - 恢复时使用这些冻结的快照。还没提交的命令仍然可以被这次运行读到，并在恢复成功时一起原子提交。
 - 恢复失败会丢弃这些域写入。
-- function handler 挂起前用 `ctx.recursiveCall` 调用的子 runtime，结果连同它们的写入一起保存在 continuation 里，恢复成功时先于 handler 提交。自己也挂起了的子 runtime 不保存，trace 里记一条 `recursive.failed`，`code` 是 `nested-suspension-dropped`。
+- continuation 不保存 `ctx.recursiveCall` 子调用的结果：调用过它的 handler 不能挂起，嵌套运行自己也不能挂起，见[嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。
 - agent runtime 挂起时，continuation 保存已用普通步数、当前步数上限、各类纠正的用量和上限、拒绝次数、激活的延迟工具、准入时的输出 schema 和必需工作规则，以及提示词片段。执行器持有的业务工具结果单独保存，用来恢复必需工作证据和 effects。恢复不会提高已保存的步数或纠正上限，也不重新组装上下文；普通回复、被拒绝的候选和公开工具记录都不能证明输出已接受。
 - continuation 还记下挂起时历史里的玩家回合数和插件版本。恢复时任一项变了，挂起项就被作废，不再运行，见[过时的挂起项](./api.md#过时的挂起项)。
 - 恢复的运行可以再次挂起。新挂起项接着同一次执行，原执行的身份、逻辑回合和扣下的后台作业都转给它，见[再次挂起](./api.md#再次挂起)。
@@ -205,11 +205,11 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `runtime.failed`        | S→C  | 单个 runtime 失败                                                                     | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget?, stopReason? }`            |
 | `execution.completed`   | S→C  | 请求执行终态                                                                          | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
-`runtime.started.resumed` 只在从挂起中恢复的运行上出现，值为 `true`，同时带上 `resumeSourceRunId`：内核从 continuation 的 `lifecycle.progressRunId` 读取的最初调用 ID。再次挂起和失败重试沿用这个来源，恢复本身仍有新的 `runId`。客户端只在同一 `(turnId, pluginId, runtimeId, resumeSourceRunId)` 链内替换旧运行；同 runtime 的其他调用及其保存的挂起子调用仍参与状态汇总。同一个逻辑 runtime 每次运行都有自己的 `runtime.started` 和终态事件，挂起的那次以 `status: "suspended"` 结束。trace、快照、浏览器 checkpoint 和本地执行历史都保留该来源身份。
+`runtime.started.resumed` 只在从挂起中恢复的运行上出现，值为 `true`，同时带上 `resumeSourceRunId`：内核从 continuation 的 `lifecycle.progressRunId` 读取的最初调用 ID。再次挂起和失败重试沿用这个来源，恢复本身仍有新的 `runId`。客户端只在同一 `(turnId, pluginId, runtimeId, resumeSourceRunId)` 链内替换旧运行；同 runtime 的其他调用仍参与状态汇总。同一个逻辑 runtime 每次运行都有自己的 `runtime.started` 和终态事件，挂起的那次以 `status: "suspended"` 结束。trace、快照、浏览器 checkpoint 和本地执行历史都保留该来源身份。
 
 已有恢复历史但缺少 `resumeSourceRunId` 的开发期会话、快照、浏览器 checkpoint 和本地执行历史需重建；不按 runtime ID 和时间猜测旧记录的归属。continuation 的字段形状不变。
 
-成功的递归调用可以先结束计算，再随父调用挂起。保存挂起项之后，服务端为每个保存的成功后代追加 `runtime.completed`（`status: "suspended"`）；最后恢复提交后追加 `success`，已准入的恢复失败或回滚则追加 `runtime.failed`，放弃、过期或作废则追加 `runtime.skipped`（`reason: "suspension-abandoned"`）。这些修正始终使用原来的 `(turnId, runtimeId, runId)`，更新原始行而不新增运行；原来的 trace 行仍是历史。重试可以把内核标记的失败修正为成功或再次挂起。同 runtime 的独立成功调用不能遮住被拒绝子调用的失败。修正同时持久化并送到动作流和订阅流，客户端按 run 合并重复投递。恢复本身仍有新的 run ID。浏览器 checkpoint 对最近执行和未解决挂起项保留每个 run 最新的开始与有效终态，避免压缩诊断历史后恢复到暂时的成功。
+挂起的那次运行以 `runtime.completed`（`status: "suspended"`）结束。之后服务端为它追加修正：最后恢复提交后追加 `success`，已准入的恢复失败或回滚则追加 `runtime.failed`，放弃、过期或作废则追加 `runtime.skipped`（`reason: "suspension-abandoned"`）。这些修正始终使用原来的 `(turnId, runtimeId, runId)`，更新原始行而不新增运行；原来的 trace 行仍是历史。重试可以把内核标记的失败修正为成功或再次挂起。修正同时持久化并送到动作流和订阅流，客户端按 run 合并重复投递。恢复本身仍有新的 run ID。浏览器 checkpoint 对最近执行和未解决挂起项保留每个 run 最新的开始与有效终态，避免压缩诊断历史后恢复到暂时的成功。
 
 `runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
 
@@ -429,8 +429,8 @@ ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })
 - 插件已经上报了 `succeeded`，但这次的领域写入没有提交（整次执行回滚、这个 runtime 失败，或者它的写入在提交时被单独丢弃）：框架追加一条 `failed`，不保留成功状态。
 - 嵌套子调用（`ctx.recursiveCall`）上报了 `succeeded`，但它的父 runtime 没有成功，子调用的写入随之丢弃：追加的是 `cancelled`，不是 `failed`，因为子调用不是一次独立失败的执行，它的成功只是被撤回。
 - 插件自己上报的 `failed` / `cancelled` 不会被改写。
-- 挂起的 runtime 及保存的成功递归后代的作业停在 `waiting-input`，已经上报的 `succeeded` 也退回等待。最后恢复成功提交后变成 `succeeded`；再次挂起继续等待；放弃、过期或作废变成 `cancelled`。
-- 已准入的恢复失败、抛错、超时、被 `PostRuntime` 拒绝或提交回滚时，父调用和保存的后代作业变成 `failed`，但挂起项和暂存的领域写入仍保留，释放占用后可重试。后续成功、再次挂起或放弃会修正内核写下的失败；插件自己报告的 `failed` / `cancelled` 保持不变。准入之前的校验、鉴权和占用冲突不改变任务。
+- 挂起的 runtime 的作业停在 `waiting-input`，已经上报的 `succeeded` 也退回等待。最后恢复成功提交后变成 `succeeded`；再次挂起继续等待；放弃、过期或作废变成 `cancelled`。
+- 已准入的恢复失败、抛错、超时、被 `PostRuntime` 拒绝或提交回滚时，挂起的 runtime 的作业变成 `failed`，但挂起项和暂存的领域写入仍保留，释放占用后可重试。后续成功、再次挂起或放弃会修正内核写下的失败；插件自己报告的 `failed` / `cancelled` 保持不变。准入之前的校验、鉴权和占用冲突不改变任务。
 - 每条挂起链沿用根执行的进度范围；收尾按插件、runtime 和内核记录的调用所有者选择任务，不能按 runtime 一并处理所有调用。公共去重身份仍是 `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)`：同一身份下相同的业务 job ID 仍是同一任务。
 - `data._covel` 保留给内核，包含任务所有者 `runId`、上报所在尝试的 `attemptId` 和是否由框架收尾的 `settled`。插件提交的同名字段会被覆盖或移除；非对象的业务 `data` 在需要这些字段时放到 `data.payload`。这些元数据随 checkpoint 校验和保存，用于区分可修正的框架失败与插件自己的终态。
 
