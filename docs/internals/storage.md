@@ -631,7 +631,7 @@ MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。�
 **执行读取。**
 
 - `queryTurnResults`（只返回根产物）和 `queryTraceEvents` 在解码载荷之前先过滤。
-- 回合产物持久化 `retryScope`，与 trace 的保留期无关；时间戳相同时保持插入顺序。
+- 回合产物持久化 `retryScope`，与 trace 的保留期无关；时间戳相同时保持插入顺序。宿主准入的恢复（`retry_runtime` / `retry_failed_runtimes`）在里面记 `recovery: true`，只有这类产物参与失败状态的合并。
 - `queryPluginData` 支持跨会话按索引读取命名空间，以及可选的顶层字符串过滤。维度屏障只请求待处理的回执；worker 的维护工作共用一份队列快照。
 - 读取或维护这份快照期间收到的唤醒信号，留在队列里等下一轮。对账只推进到快照的“开始读取”时间。
 - `deleteEventsBefore` 提供显式的事件日志保留。

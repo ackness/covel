@@ -211,7 +211,10 @@ describe("committed runtime recovery projection", () => {
         sessionId: f.sessionId,
         payload: { runtimeIds: ids, retryFromTurnId: "event-source" },
       },
-      [...ids.slice(0, 4).map((id) => subscriber(id)), subscriber("moved", "lost")],
+      [
+        ...ids.slice(0, 4).map((id) => subscriber(id)),
+        subscriber("moved", "lost"),
+      ],
     );
     expect(plan.targets).toEqual({
       // The producer the source chain selected, not the first with the topic.
@@ -248,7 +251,11 @@ describe("committed runtime recovery projection", () => {
       origin: "manual",
       commitStatus: "committed",
       runtimeResults: results,
-      retryScope: { sourceTurnId: "source", runtimeIds: ["a", "b"] },
+      retryScope: {
+        sourceTurnId: "source",
+        runtimeIds: ["a", "b"],
+        recovery: true,
+      },
       durationMs: 1,
       createdAt: "2026-01-02T00:00:00Z",
     });

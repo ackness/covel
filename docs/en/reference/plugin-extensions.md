@@ -454,7 +454,7 @@ A call from these places answers `unavailable` ("Write services cannot be called
 
 - detached runtimes and `background` executions;
 - resumed executions (`resume`): they would settle one trade twice;
-- in a retry with a source turn, every runtime except a target selected for this retry whose source result is `failed`: staging again for a committed result would settle it twice. Once the target succeeded in a committed execution, a later failure does not count it as failed again. A failed target's original writes and operations never committed, so it can stage; see [Turn flow · Recovering failed tasks](../internals/flow.md);
+- in a retry with a source turn, every runtime except a target selected for this retry whose source result is `failed`: staging again for a committed result would settle it twice. Once the target succeeded in the source turn or a committed recovery, a later failure does not count it as failed again. A failed target's original writes and operations never committed, so it can stage; see [Turn flow · Recovering failed tasks](../internals/flow.md);
 - agent guards, hooks, RPC handlers and extension providers;
 - an agent that can suspend (`suspend` in `tools.builtin`): its write-service imports are absent with the reason `not-allowed`.
 

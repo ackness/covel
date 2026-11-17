@@ -508,7 +508,11 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         turnId: "attempt",
         origin: "manual",
         createdAt: ts(0),
-        retryScope: { sourceTurnId: "source", runtimeIds: ["worker"] },
+        retryScope: {
+          sourceTurnId: "source",
+          runtimeIds: ["worker"],
+          recovery: true,
+        },
       });
       await store.saveTurnResult(source);
       await store.saveTurnResult(attempt);

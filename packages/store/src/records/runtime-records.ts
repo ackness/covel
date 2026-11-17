@@ -100,6 +100,13 @@ export interface TurnResultRecord {
   readonly retryScope?: {
     readonly sourceTurnId: string;
     readonly runtimeIds: readonly string[];
+    /**
+     * The host admitted this execution as the recovery of the source's
+     * failed runtimes (`retry_runtime` / `retry_failed_runtimes`). Only such
+     * an attempt can end or renew a source runtime's failure; a plugin RPC
+     * or job that names the source does not.
+     */
+    readonly recovery?: true;
   };
   /**
    * Whether this execution's proposals were committed.

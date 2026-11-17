@@ -111,6 +111,9 @@ async function persistTurnResult(
             runtimeIds: input.manualTrigger.runtimeIds ?? [
               input.manualTrigger.runtimeId,
             ],
+            ...(input.manualTrigger.retryTargets
+              ? { recovery: true as const }
+              : {}),
           },
         }
       : {}),

@@ -293,7 +293,9 @@ export interface TurnInput {
     readonly retrySeedResults?: readonly RuntimeResult[];
     /**
      * Scoped retries only: what the committed source recorded for each
-     * target, by runtime ID. Built by the host under the session lock.
+     * target, by runtime ID. Built by the host under the session lock when
+     * it admits the execution as a recovery of the source's failed runtimes;
+     * its presence records the attempt as that recovery (`retryScope.recovery`).
      */
     readonly retryTargets?: Readonly<Record<string, RuntimeRetryTarget>>;
     /** Host-validated original public sources for detached presentation retries. */

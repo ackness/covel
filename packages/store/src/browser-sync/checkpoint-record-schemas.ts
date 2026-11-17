@@ -105,7 +105,11 @@ export const checkpointRecordArrays = {
       origin: executionOrigin,
       parentTurnId: z.string().optional(),
       retryScope: z
-        .object({ sourceTurnId: z.string(), runtimeIds: z.array(z.string()) })
+        .object({
+          sourceTurnId: z.string(),
+          runtimeIds: z.array(z.string()),
+          recovery: z.literal(true).optional(),
+        })
         .optional(),
       commitStatus: z.enum(["pending", "committed", "failed"]),
       durationMs: z.number(),

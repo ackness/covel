@@ -112,16 +112,19 @@ export async function prepareRuntimeRetry(
       "retry_source_not_original",
     );
   }
-  // Attempts are oldest-first. Only a committed attempt can supersede
-  // source state: a successful runtime whose transaction rolled back is not healed.
-  // A committed success is final: its writes and operations landed, so no
-  // later failure of any attempt (an action retry, a plugin RPC) can make the
-  // target retriable again and pay twice.
+  // Attempts are oldest-first. Only a committed recovery the host admitted
+  // can supersede source state: a successful runtime whose transaction rolled
+  // back is not healed, and a plugin RPC or job that names the source ran
+  // without the source's event and write services, so it neither ends nor
+  // renews the failure. A committed success is final: its writes and
+  // operations landed, so no later failure can make the target retriable
+  // again and pay twice.
   for (const row of rows) {
     const scope = row.retryScope;
     if (
       row.commitStatus !== "committed" ||
-      scope?.sourceTurnId !== source.turnId
+      scope?.sourceTurnId !== source.turnId ||
+      scope.recovery !== true
     )
       continue;
     for (const result of (Array.isArray(row.runtimeResults)

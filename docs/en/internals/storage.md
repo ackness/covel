@@ -631,7 +631,7 @@ See [World Model](../reference/world-model.md#dynamic-dimension-snapshot) and [b
 **Execution reads.**
 
 - `queryTurnResults` (which returns only root artifacts) and `queryTraceEvents` filter before the payload is decoded.
-- Turn artifacts persist `retryScope`, independent of the trace retention period. When timestamps are equal, insertion order is kept.
+- Turn artifacts persist `retryScope`, independent of the trace retention period. When timestamps are equal, insertion order is kept. A host-admitted recovery (`retry_runtime` / `retry_failed_runtimes`) records `recovery: true` in it, and only such artifacts take part in merging failure state.
 - `queryPluginData` supports reading a namespace across sessions through an index, plus an optional filter on top-level strings. The dimension barrier requests only pending receipts. The worker's maintenance work shares one snapshot of the queue.
 - Wake-up signals received while this snapshot is being read or maintained stay in the queue until the next round. Reconciliation advances only to the snapshot's "started reading" time.
 - `deleteEventsBefore` provides explicit retention for the event log.
