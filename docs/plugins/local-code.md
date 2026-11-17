@@ -358,7 +358,7 @@ export default function register(covel) {
 注意：
 
 - 界面传来的 `payload` 是外部输入，使用之前要检查。
-- 动作的写入是立刻生效的。它不属于某个回合，后面的步骤失败了也不会撤销。要“全部成功才保存”，用手动触发的函数 runtime。
+- 动作只读：它的 `ctx.store` 只能查询，没有写入方法。要改数据，让界面用 `invokeRuntime` 调一个手动触发的函数 runtime，写入随 proposal 一起提交——要么全部成功，要么全部不保存。
 - 动作要很快做完。超过 30 秒这次动作就算失败：`ctx.signal` 中止，之后的 `ctx.store` 调用都会被拒绝。耗时的工作交给写了 `schedule.background: true` 的 runtime。
 - 离线运行不支持动作。运行时它会提示 `Unsupported rpc: notebook/inspect-note. Verify with the server.`，这不是错误。动作要在真实的服务端上验证。
 

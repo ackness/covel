@@ -21,7 +21,6 @@ function context(value, locale = "en") {
     ...(locale === "zh-CN" ? { messages: chinese } : {}),
     store: {
       getPluginData: vi.fn(async () => (value ? { value } : null)),
-      setPluginData: vi.fn(),
       getWorld: vi.fn(),
     },
   };
@@ -55,7 +54,6 @@ describe("world-time command", () => {
       data: { initialized: false },
     });
     expect(result.message).toContain("还没有时间记录");
-    expect(ctx.store.setPluginData).not.toHaveBeenCalled();
     expect(ctx.store.getWorld).not.toHaveBeenCalled();
   });
 
@@ -82,7 +80,6 @@ describe("world-time command", () => {
     });
     expect(value).toEqual(before);
     expect(ctx.store.getPluginData).toHaveBeenCalledWith("clock", "current");
-    expect(ctx.store.setPluginData).not.toHaveBeenCalled();
     expect(ctx.store.getWorld).not.toHaveBeenCalled();
   });
 
@@ -114,7 +111,6 @@ describe("world-time command", () => {
       expect(first.message).toBe("World time: Dream -1 · Night");
       expect(first.data).toMatchObject({ tick: -1, cycle: -1, phase: 3 });
       expect(second).toEqual(first);
-      expect(ctx.store.setPluginData).not.toHaveBeenCalled();
     },
   );
 

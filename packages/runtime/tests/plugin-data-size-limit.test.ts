@@ -11,10 +11,7 @@ import {
   createCommitPipeline,
   type KernelStore,
 } from "../src/session/session-kernel.js";
-import {
-  createPluginDataWriter,
-  createRpcHandlerStoreView,
-} from "../src/function-runtime/plugin-handler-helpers.js";
+import { createPluginDataWriter } from "../src/function-runtime/plugin-handler-helpers.js";
 
 const SESSION_ID = "sess-size-limit";
 const PLUGIN_ID = "bulky-plugin";
@@ -69,23 +66,14 @@ describe("plugin-data value size limit", () => {
     expect(rows[0]?.value).toEqual(small);
   });
 
-  it("throws the same error from ctx.pluginData and the RPC store view", async () => {
+  it("rejects an oversized value from ctx.pluginData without replacing stored data", async () => {
     const store = createMemoryStore();
 
     const writer = createPluginDataWriter(store, CTX);
+    await writer.set("notes", "log", small);
     await expect(writer.set("notes", "log", huge)).rejects.toThrow(
       /bulky-plugin.*notes\/log.*limit/,
     );
-    await writer.set("notes", "log", small);
-
-    const rpcStore = createRpcHandlerStoreView(store, CTX);
-    await expect(
-      rpcStore.setPluginData!({
-        namespace: "notes",
-        key: "log",
-        value: huge,
-      }),
-    ).rejects.toThrow(/bulky-plugin.*notes\/log.*limit/);
 
     const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes");
     expect(rows.map((r) => r.value)).toEqual([small]);

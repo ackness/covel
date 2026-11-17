@@ -11,7 +11,7 @@
 - **包级声明**（根 `PLUGIN.md`）集中声明 `notes` 数据集和共享面板；公共设置和命令也可放在这里。数据集的记录格式在 `schemas/note.schema.json`，提交时每条写入都按它校验。
 - **侧栏 Tab UI**（`runtimes/note/ui/panel.json`）—— 展示 `notes` namespace，提供手动记录和分析当前剧情两个动作。
 
-侧栏的“添加记录”按钮用 `invokeRuntime` 触发 manual function；`handler.js` 的 `ctx.pluginData.set` 在执行中暂存，成功后随 proposal 提交，不需要 LLM，也不会自动运行叙事 runtime。若一个操作要写入多条相互依赖的记录，在同一个 handler 中依次调用 `ctx.pluginData.set`，使它们一起提交；现成的双键写入范例见 [`plugins/tabletop-rules/runtimes/check/handler.js`](https://github.com/AcKnEsS/covel/blob/main/plugins/tabletop-rules/runtimes/check/handler.js)。`invokePluginAction` 的 RPC action 则即时写入，后续失败不回滚已成功的写入。
+侧栏的“添加记录”按钮用 `invokeRuntime` 触发 manual function；`handler.js` 的 `ctx.pluginData.set` 在执行中暂存，成功后随 proposal 提交，不需要 LLM，也不会自动运行叙事 runtime。若一个操作要写入多条相互依赖的记录，在同一个 handler 中依次调用 `ctx.pluginData.set`，使它们一起提交；现成的双键写入范例见 [`plugins/tabletop-rules/runtimes/check/handler.js`](https://github.com/AcKnEsS/covel/blob/main/plugins/tabletop-rules/runtimes/check/handler.js)。`invokePluginAction` 的 RPC action 只读：它查询、计算并返回结果，不写插件数据；界面上的写入都用 `invokeRuntime`。
 
 ## 启用
 

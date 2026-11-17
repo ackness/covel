@@ -1158,7 +1158,7 @@ Dimension tools report schema-invalid values as correctable input errors; see [u
 **Writing.**
 
 - Use the domain proposals `dimension.initialize` and `dimension.update`. Only a trusted owner can write. An update carries `expectedVersion`, and the whole batch is compared by version (CAS).
-- A plain `plugin.data` write, a batch, a delete, or a store write from an action RPC cannot touch `_dimensions` or `_dimension-settlements`.
+- A plain `plugin.data` write, a batch or a delete cannot touch `_dimensions` or `_dimension-settlements`; an action RPC's store is read-only and has no write method anyway.
 - The framework gets the source of the maintenance tool and the set of versions it reads. The model only submits the new values.
 - Even when nothing changed, call `update-dimensions({updates: []})`. Do not infer that settlement happened just because the runtime succeeded.
 
@@ -1498,7 +1498,7 @@ At commit, every proposal a plugin writes into a dataset namespace it declares i
 - **Record schema.** The written value (for `plugin.data.update`, the result after the operations) must satisfy `schema`.
 - A violation rejects the proposal with `code: "dataset-violation"`, under the commit-unit rules. When the host did not capture the schema document, every write is refused instead of let through.
 - `key` is not checked at commit. Dataset tools normalize keys with the [dataset key rule](./tools.md#the-key-rule-and-lookup) `datasetKey(...)` (exported by the SDK), and look up the key as written first, then the normalized key. Plugin code that writes the same dataset should build its keys with `datasetKey(...)` so they land on the rows the tools find.
-- Plugin action / command RPC `context.store.setPluginData`, world data import and sync use the same dataset rules. Whole-record seeding, replacement and projection output all count as `set`; a true sync removal of a managed record requires `delete`. An internal replacement delete does not require `delete` separately. `force` does not bypass these rules.
+- Plugin action / command RPC `context.store` is read-only and no longer provides `setPluginData`; world data import and sync use the same dataset rules. Whole-record seeding, replacement and projection output all count as `set`; a true sync removal of a managed record requires `delete`. An internal replacement delete does not require `delete` separately. `force` does not bypass these rules.
 - Policies come from registered package declarations and captured schemas, including packages with no runtimes. Trust and approval do not relax them. Missing, uncompilable or `$async` schemas refuse writes; record failures report at most 3 errors.
 - Policies use the physical stored namespace: `_hidden.notes` does not inherit the dataset rules of `notes`. RPC and import preserve exact keys without rewriting them or checking equality with a record field.
 - Management API `PUT` / `DELETE` remain operator overrides without dataset schema or `ops` checks. Existing authorization, activation, reserved-namespace and size limits still apply.

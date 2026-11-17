@@ -210,14 +210,15 @@ For search or category tabs, put each record’s subtree in `FilterContainer.ite
 
 Inside a component's `on.click`, write an action name and its parameters. The previous step used two of them. All available actions:
 
-| Action               | Effect                                                                                                                     | Story-text block | Side panel    | Stage decision area |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------- | ------------------- |
-| `draftMessage`       | Puts a sentence into the draft area. The player can add more and send everything together.                                 | Available        | Available     | Not available       |
-| `sendMessage`        | In story blocks, sends immediately; on stage, fills the input for the player to send.                                      | Available        | Not available | Available           |
-| `invokeRuntime`      | Runs a manually triggered runtime. Several pieces of data it writes either all take effect or none do.                     | Available        | Available     | Available           |
-| `invokePluginAction` | Calls an instant action the plugin registered: it runs and writes at once, without starting a new turn or calling a model. | Available        | Available     | Available           |
-| `invokeCommand`      | Runs a player command declared in the manifest (a command such as `/bag`).                                                 | Available        | Available     | Available           |
-| `emitEvent`          | Emits an event this plugin declared. Runtimes that subscribe to it run in the background.                                  | Available        | Available     | Available           |
+<!-- prettier-ignore -->
+| Action | Effect | Story-text block | Side panel | Stage decision area |
+| --- | --- | --- | --- | --- |
+| `draftMessage` | Puts a sentence into the draft area. The player can add more and send everything together. | Available | Available | Not available |
+| `sendMessage` | In story blocks, sends immediately; on stage, fills the input for the player to send. | Available | Not available | Available |
+| `invokeRuntime` | Runs a manually triggered runtime. Several pieces of data it writes either all take effect or none do. | Available | Available | Available |
+| `invokePluginAction` | Calls a query or computation the plugin registered and can return client actions. Its store is read-only; it starts no new turn and calls no model. | Available | Available | Available |
+| `invokeCommand` | Runs a player command declared in the manifest (a command such as `/bag`). | Available | Available | Available |
+| `emitEvent` | Emits an event this plugin declared. Runtimes that subscribe to it run in the background. | Available | Available | Available |
 
 A few rules:
 
@@ -227,7 +228,7 @@ A few rules:
 - A community emitter still needs approval for the event. A freshly verified declarative subscriber needs neither code nor runtime approval; other community subscribers need their own applicable grants.
 - A runtime that subscribes to an event is a background job. It does not run when there is no usable model key for the session.
 
-To make "go to the docks" a player action that the story then picks up, use `draftMessage` or `sendMessage`. To change data directly, use `invokeRuntime` or `invokePluginAction`.
+To make "go to the docks" a player action that the story then picks up, use `draftMessage` or `sendMessage`. To change data, use `invokeRuntime` to call a manually triggered function runtime; to only query and get a result right away, use `invokePluginAction`.
 
 Choices the player makes are remembered. When content that went into the draft area through `draftMessage` is sent, a line "You chose: ..." appears under the block it came from. You do not need to write anything for this.
 
@@ -573,7 +574,7 @@ The repository has a complete, working example: [`tests/third-party/clickable-ma
 4. A runtime that the plugin itself subscribes to checks whether the move is allowed, and then updates the position. Other plugins can also subscribe to the same event and do their own work.
 5. After the data is committed, it is sent back to the interface, and the map redraws.
 
-Puzzles follow the same idea. The clues and progress are stored in a data namespace. Each step is checked with `invokePluginAction` (for immediate feedback) or `invokeRuntime` (when it must take effect together with other data). Content the player must not see, such as the answer, is stored in a data namespace whose name starts with `_hidden.`, and it is compared only on the backend.
+Puzzles follow the same idea. The clues and progress are stored in a data namespace. Each step uses `invokeRuntime` to call a manually triggered function runtime that checks the step and updates progress, with several records succeeding or failing together. When a step only reads progress without changing data, use `invokePluginAction` for an immediate result. Content the player must not see, such as the answer, is stored in a data namespace whose name starts with `_hidden.`, and it is compared only on the backend.
 
 ## Let the interface follow the style
 
@@ -590,13 +591,14 @@ To check this yourself: in **Settings → General → Appearance → Style**, ch
 
 Before you build a more complex interface, know what the framework gives you now. The points below describe the current state. They are not things that can never be done. If you really need one, you can propose that the framework add it.
 
-| Area                        | How it works now                                                                                                                                     | So                                                                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Places it can go            | Story-text blocks, side-panel tabs, the stage decision area and plugin views in the full story column. The status bar accepts only status summaries. | You cannot place a panel over the scene picture at the moment.                                                          |
-| Panel size                  | The player drags the sidebar to set its width. Any panel can be expanded into a large dialog.                                                        | Use a [plugin view](#make-a-plugin-view) for the full story column; sidebar panels keep the sidebar layout.             |
-| Turn information            | The interface in the stage decision area can get the current turn and the current choices. A side panel cannot.                                      | A side panel that needs to know "which turn this result belongs to" must store the turn information in its data itself. |
-| Interface events            | `emitEvent` hands the event to subscribers, which run in the background, and does not return their results.                                          | To get a result right away, use `invokeRuntime` or `invokePluginAction`.                                                |
-| Content the framework draws | The list of places is fixed, and the data format of each place is fixed.                                                                             | New content that the framework draws requires a framework change. For content the plugin draws itself, use `webview`.   |
+<!-- prettier-ignore -->
+| Area | How it works now | So |
+| --- | --- | --- |
+| Places it can go | Story-text blocks, side-panel tabs, the stage decision area and plugin views in the full story column. The status bar accepts only status summaries. | You cannot place a panel over the scene picture at the moment. |
+| Panel size | The player drags the sidebar to set its width. Any panel can be expanded into a large dialog. | Use a [plugin view](#make-a-plugin-view) for the full story column; sidebar panels keep the sidebar layout. |
+| Turn information | The interface in the stage decision area can get the current turn and the current choices. A side panel cannot. | A side panel that needs to know "which turn this result belongs to" must store the turn information in its data itself. |
+| Interface events | `emitEvent` hands the event to subscribers, which run in the background, and does not return their results. | To get a result right away, use `invokeRuntime`; for a read-only query, use `invokePluginAction`. |
+| Content the framework draws | The list of places is fixed, and the data format of each place is fixed. | New content that the framework draws requires a framework change. For content the plugin draws itself, use `webview`. |
 
 ## When something does not work
 

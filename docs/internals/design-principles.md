@@ -137,7 +137,7 @@ runtime 不直接写数据库。它产出 [Proposal](../reference/glossary.md#pr
 - **并发修改有明确的规则。** 操作式写入在提交时作用于最新值；角色和维度更新检查版本，冲突会被拒绝。它们不会静默覆盖其他写入，作者仍需处理失败。
 - **插件私有数据隔离，公共领域对象共享。** 插件只能直接读写自己的 namespace；角色、座位、维度等通过公共 World Model 接口读取，领域写入仍须校验。
 
-没有故事的执行整体提交或整体回滚，例如手动触发、后台执行和开局准备。插件 action RPC 的 scoped store 写入是另一种已存在的边界：写入立即生效，handler 后续失败不会自动撤回；多条领域写入需要一起成败时，调用手动 function runtime。详见[通信方式](../reference/plugin-extensions.md#界面触发的写入三个动作的区别)和[事务](../reference/transactions.md#回合级单事务)。
+没有故事的执行整体提交或整体回滚，例如手动触发、后台执行和开局准备。插件 action RPC 的 scoped store 只读：查询、计算和返回结果不产生写入；作者的界面写入走手动 function runtime 的 proposal 提交，多条领域写入自然一起成败。详见[通信方式](../reference/plugin-extensions.md#界面触发的写入三个动作的区别)和[事务](../reference/transactions.md#回合级单事务)。
 
 数据库回滚不能撤销已经发出的外部请求等副作用。插件作者应让这类操作可重复、可取消，并明确区分外部操作和存档提交。
 

@@ -8,9 +8,8 @@
  * job whose progress reaches the UI as `plugin-data.changed` SSE events.
  *
  * A handler has a time limit. When it passes, the dispatch fails, the
- * handler's `signal` aborts and its store stops accepting calls, so the caller
- * can release the session lock without a late write landing after it. Writes
- * the handler made before the limit stay: they are immediate, not proposals.
+ * handler's `signal` aborts and its read-only store stops accepting calls.
+ * In-flight reads settle before the caller can release the session lock.
  *
  * Resolution for action-level dispatch: `FRAMEWORK_PLUGIN_ID` names the
  * framework defaults (`registry.getFrameworkDefault`), such as the actions
@@ -64,8 +63,8 @@ export class RpcDispatchError extends Error {
 
 /**
  * Wrap a handler's store so it can be closed: a call after `close()` is
- * refused, and `close()` waits for calls already in flight, so none of them
- * writes after the caller has moved on.
+ * refused, and `close()` waits for reads already in flight before the caller
+ * releases the session lock.
  */
 function closableStore(
   store: RpcHandlerStore,
@@ -101,16 +100,13 @@ function closableStore(
       );
       return pending;
     };
-  const { setPluginData, getPluginData, listPluginData } = store;
+  const { getPluginData, listPluginData } = store;
   return {
     store: {
       getSession: guard(() => store.getSession()),
       listTurnMessages: guard((limit?: number) =>
         store.listTurnMessages(limit),
       ),
-      ...(setPluginData
-        ? { setPluginData: guard(setPluginData.bind(store)) }
-        : {}),
       ...(getPluginData
         ? { getPluginData: guard(getPluginData.bind(store)) }
         : {}),
@@ -179,7 +175,7 @@ export function createRpcExecutor(deps: RpcDispatchDeps) {
           () =>
             reject(
               new RpcDispatchError(
-                `[plugin-rpc] handler for "${req.action}" (pluginId="${req.pluginId}") did not finish within ${handlerTimeoutMs}ms; writes it made before then are kept`,
+                `[plugin-rpc] handler for "${req.action}" (pluginId="${req.pluginId}") did not finish within ${handlerTimeoutMs}ms`,
                 "handler-timeout",
               ),
             ),

@@ -1,7 +1,3 @@
-import {
-  datasetFailure,
-  type DatasetPolicyResolver,
-} from "../plugin-data-validation.js";
 /**
  * Factories for the per-call helpers we hand to function-runtime
  * handlers. Keeps the turn-executor and plugin-rpc call sites symmetrical
@@ -876,7 +872,7 @@ export function createFunctionStoreView(
 const RPC_TURN_MESSAGE_LIMIT = 200;
 
 /**
- * Build a scoped immediate-write store for all plugin action-level RPC handlers.
+ * Build a scoped read-only store for all plugin action-level RPC handlers.
  * Method shapes match `RpcHandlerStore`, while session/plugin
  * arguments are bound to the current request so handler code cannot reach a
  * different session or plugin namespace by supplying alternate ids.
@@ -884,7 +880,6 @@ const RPC_TURN_MESSAGE_LIMIT = 200;
 export function createRpcHandlerStoreView(
   store: DataStore,
   ctx: Pick<HandlerHelperContext, "sessionId" | "pluginId">,
-  options: { readonly datasetPolicy?: DatasetPolicyResolver } = {},
 ): RpcHandlerStore {
   return {
     async getSession() {
@@ -898,43 +893,6 @@ export function createRpcHandlerStoreView(
           : RPC_TURN_MESSAGE_LIMIT;
       const count = Math.min(Math.max(wanted, 0), RPC_TURN_MESSAGE_LIMIT);
       return store.listRecentTurnMessages(ctx.sessionId, count);
-    },
-    async setPluginData(record) {
-      const input = structuredClone(record);
-      assertWritableNamespace(input.namespace);
-      assertPluginDataSize(
-        ctx.pluginId,
-        input.namespace,
-        input.key,
-        input.value,
-      );
-      const failure = datasetFailure(
-        "setPluginData",
-        options.datasetPolicy?.(ctx.pluginId, input.namespace),
-        ["set"],
-        { value: input.value },
-      );
-      if (failure) throw new Error(failure.error);
-      const existing = await store.getPluginData(
-        ctx.sessionId,
-        ctx.pluginId,
-        input.namespace,
-        input.key,
-      );
-      const now = new Date().toISOString();
-      await store.setPluginData({
-        // Preserve existing row identity without trusting a caller-supplied id.
-        id:
-          existing?.id ??
-          `${ctx.sessionId}:${ctx.pluginId}:${input.namespace}:${input.key}`,
-        sessionId: ctx.sessionId,
-        pluginId: ctx.pluginId,
-        namespace: input.namespace,
-        key: input.key,
-        value: input.value,
-        createdAt: existing?.createdAt ?? input.createdAt ?? now,
-        updatedAt: input.updatedAt ?? now,
-      });
     },
     async getPluginData(namespace, key) {
       return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);

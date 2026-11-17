@@ -33,7 +33,7 @@ for (const [name, create] of [
   describe.skipIf(name === "postgres" && !database)(
     `dataset destination rules on ${name}`,
     () => {
-      it("keeps import creation, sync changes and ledgers atomic while RPC persists per call", async () => {
+      it("keeps import creation, sync changes and ledgers atomic", async () => {
         const store = await create();
         try {
           await datasetBackendScenario(store);

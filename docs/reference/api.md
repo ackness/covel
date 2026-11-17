@@ -3193,7 +3193,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 ##### action 级
 
-action 与插件支持的 command 的 scoped store 按[数据集规则](./plugins.md#数据集contributesdatasets)检查每条 `setPluginData`：被拒记录不变，之前成功的调用保留。handler 可以捕获拒绝并返回自己的结果；未捕获时沿用生产安全的 `500`，不返回原始记录、schema 或文件路径。它不新增玩家回合或操作失败事件。
+action 与插件支持的 command 的 scoped store 只读：handler 只能查询、计算并返回结果，没有 `setPluginData` 等写入方法。要写入插件数据，让界面改用 `runtime` 级调用（`invokeRuntime`）触发一个 `trigger.type: manual` 的函数 runtime，写入经 proposal 事务提交。action 不新增玩家回合或操作失败事件。handler 抛错沿用生产安全的 `500`，不返回原始记录、schema 或文件路径。
 
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
@@ -3201,7 +3201,7 @@ action 与插件支持的 command 的 scoped store 按[数据集规则](./plugin
 
 - 插件必须在会话当前启用、并且现在能运行的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。玩家确认过、但现在不能运行的插件（见 `unavailable[]`）同样返回这个错误，错误信息写明原因。旧面板迟到的请求同样受这个检查约束。
 - `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。`framework` 是保留 ID，没有插件能用它，所以这样的请求只会执行框架默认 action；写插件 ID 的请求也只会执行该插件自己注册的 action。
-- handler 在会话锁内运行，时限 30 秒。超时后 handler 的 `ctx.signal` 中止，之后它对 `ctx.store` 的调用一律被拒绝。已在进行的存储调用先完成，再返回 `504 handler_timeout` 并放开锁。超时之前已经写入的数据保留，不会回滚。
+- handler 在会话锁内运行，时限 30 秒。超时后 handler 的 `ctx.signal` 中止，之后它对 `ctx.store` 的调用一律被拒绝。已在进行的读取先完成，再返回 `504 handler_timeout` 并放开锁。
 
 ##### runtime 级
 
@@ -3240,13 +3240,14 @@ action 与插件支持的 command 的 scoped store 按[数据集规则](./plugin
 
 ##### 写入什么时候生效
 
-| 调用方式                                | 写入时机                                                              | 失败时                               |
-| --------------------------------------- | --------------------------------------------------------------------- | ------------------------------------ |
-| 插件注册的 RPC action（内置插件也一样） | 在会话锁内立即写入                                                    | handler 后面失败，已成功的写入不回滚 |
-| 框架默认 action                         | 按各自的事务约定                                                      | 按各自的事务约定                     |
-| runtime 级                              | `ctx.pluginData` 写入和领域 effects 作为 proposal，执行成功后统一提交 | 提交失败会回滚本次全部领域写入       |
+<!-- prettier-ignore -->
+| 调用方式 | 写入时机 | 失败时 |
+| --- | --- | --- |
+| 插件注册的 RPC action（内置插件也一样） | 只读：scoped store 没有写入方法，界面写入走 runtime 级 | handler 失败不影响已提交数据 |
+| 框架默认 action | 按各自的事务约定 | 按各自的事务约定 |
+| runtime 级 | `ctx.pluginData` 写入和领域 effects 作为 proposal，执行成功后统一提交 | 提交失败会回滚本次全部领域写入 |
 
-需要多条记录一起成功或一起失败时，用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM。手动触发不会顺带运行叙事 runtime；只有显式声明的调度关系（如事件链）才会继续触发下游。见[函数 runtime 契约](./plugins.md#输入和输出)。
+需要写入时，用 `trigger.type: manual` 的 function runtime，尤其多条记录要一起成功或一起失败时。它直接运行 JS handler，不需要 LLM。手动触发不会顺带运行叙事 runtime；只有显式声明的调度关系（如事件链）才会继续触发下游。见[函数 runtime 契约](./plugins.md#输入和输出)。
 
 ##### action 的 `context.store`
 
@@ -3254,9 +3255,9 @@ action handler 拿到的 `context.store` 绑定在当前会话和当前插件上
 
 - `getSession()`：当前会话的只读视图（见[会话视图](./plugins.md#会话视图storegetsession)）
 - `listTurnMessages(limit?)`：只返回最近的已提交消息，最多 200 条；省略 `limit` 时也是 200。
-- 本插件的 `getPluginData` / `setPluginData` / `listPluginData`
+- 本插件的 `getPluginData` / `listPluginData`（只读）
 
-没有 `savePlayerInput`。玩家提交只能由表单提交通道写入，并经过表单校验；action 不能伪造玩家输入。
+没有 `setPluginData`，也没有 `savePlayerInput`：action 不能写插件数据，也不能伪造玩家输入。玩家提交只能由表单提交通道写入，并经过表单校验；插件数据写入走 `runtime` 级的 proposal 提交。
 
 ##### 请求
 
@@ -3944,7 +3945,6 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
         "function-output:pluginData[]",
         "function-ctx.pluginData.update",
         "local-tool:withPendingProposals(plugin.data.update)",
-        "plugin-rpc:context.store.setPluginData",
         "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key"
       ]
     },
@@ -3980,7 +3980,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 - 操作式写入有两条路径：function runtime 的 `function-ctx.pluginData.update`，以及插件本地工具通过 `withPendingProposals` 提交的 `plugin.data.update`。两者都产生 `plugin.data.update` proposal，在提交事务里对当前存的值应用操作。见[事务 · 操作式写入](./transactions.md#操作式写入plugindataupdate)。
 - 产生 proposal 的路径（内置工具、`function-output:pluginData[]`、`function-ctx.pluginData.*`、本地工具的 `withPendingProposals`）在提交时按插件声明的[数据集](./plugins.md#数据集contributesdatasets)检查操作种类和记录 schema，违反时以 `code: "dataset-violation"` 拒绝。
-- `plugin-rpc:context.store.setPluginData` 在立即写入前检查目的数据集的 `set` 和记录 schema；世界导入与同步也执行[目的数据集检查](./world-data.md#配套插件数据)，并在媒体转换后检查最终记录大小。
+- 插件 action / command RPC 的 `context.store` 只读，不再提供 `setPluginData`；世界导入与同步执行[目的数据集检查](./world-data.md#配套插件数据)，并在媒体转换后检查最终记录大小。
 - `management-api:PUT …` / DELETE 仍是运维覆盖，不受数据集 schema / `ops` 限制，保留授权、启用状态、命名空间和大小检查。
 
 #### `GET /api/plugins`
@@ -6850,4 +6850,4 @@ Stop 作用于整个请求，包含两轮之间的等待。未开始的自动轮
 
 ## 沙箱区域声明与宿主转发
 
-既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `composer`（只有 `false`）和 `capabilities`。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该页面，晚到结果丢弃；见[页面中的输入框](./ui-panels.md#页面中的输入框)。现有 action/command RPC 的即时写入契约不变。
+既有 `GET /api/ui-specs` 的 `view` 数组保留可选 `composer`（只有 `false`）和 `capabilities`。没有新增发现或写入端点。授权宿主转发行动、回答和所属手动 runtime；服务端鉴权、审批、提案校验与提交不变。停止与所属面板导航也受单独授权。失效只回退该页面，晚到结果丢弃；见[页面中的输入框](./ui-panels.md#页面中的输入框)。现有 action/command RPC 的只读契约不变。

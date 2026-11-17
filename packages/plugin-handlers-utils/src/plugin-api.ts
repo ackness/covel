@@ -656,13 +656,6 @@ export interface PluginRpcStore {
       readonly name?: string;
     }>
   >;
-  setPluginData?(record: {
-    readonly namespace: string;
-    readonly key: string;
-    readonly value: unknown;
-    readonly createdAt?: string;
-    readonly updatedAt?: string;
-  }): Promise<void>;
   getPluginData?(namespace: string, key: string): Promise<unknown>;
   listPluginData?(
     namespace: string,

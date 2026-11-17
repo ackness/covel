@@ -553,7 +553,7 @@ The second argument of `extraInTx` gives the dropped runtimes. Every commit path
 - Manual and background finalization do not pass `sessionClock`, so the clock does not move.
 - Resume does pass it. The count is advanced once, when the last suspension of the same logical turn is resumed, abandoned, expires or is voided. A commit in which the resumed runtime suspends again does not count; the count comes with the last resume of the chain. When the resumed runtime is a setup runtime and it reports completion, the `done` mirror and the phase flip (when all setup runtimes are complete) are written with this commit. The attempt ledger keeps the attempt that was in place at suspension.
 
-**Lock boundary of action-level plugin-rpc.** An action handler does its reads, validation, and writes inside the session lock. So it does not interleave with a turn of the same session. PG multi-process deployments are also serialized by the same distributed lock key.
+**Lock boundary of action-level plugin-rpc.** An action handler does its reads and computation inside the session lock. So it does not interleave with a turn of the same session. PG multi-process deployments are also serialized by the same distributed lock key.
 
 **Interaction answers and follow-up turns.**
 
@@ -641,14 +641,14 @@ A write-service operation's `plugin.data.update` that fails here reports `confli
 
 A missing namespace or key, and an empty or invalid operation list, are rejected by the payload check before the handler runs, with `code` `proposal-invalid`. Rejections for a reserved namespace and the size limit happen in the handler and carry `error` without a `code`.
 
-**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, every plugin-data proposal, action / command RPC scoped-store write, and world data import or sync uses the same [destination dataset rules](./plugins.md#datasets-contributesdatasets). Proposal checks are:
+**Dataset checks.** When a plugin declares a namespace in `contributes.datasets`, every plugin-data proposal and world data import or sync uses the same [destination dataset rules](./plugins.md#datasets-contributesdatasets). The action / command RPC scoped store is read-only and has no write method. Proposal checks are:
 
 - Each operation kind of a `plugin.data.update` must be in the dataset's `ops`. A whole-value write (`plugin.data` and each item of `plugin.data.batch`) counts as `set`, and `plugin.data.delete` counts as `delete`.
 - When the result is present, the written value is validated against the dataset's record schema, and the first 3 errors are reported.
 - When the host did not capture the dataset's schema document, every write is refused (`dataset schema of <ns> is unavailable`) instead of let through.
 - A namespace without a dataset gets none of these checks. The `key` field is not checked at commit.
 
-**Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data and the immediate writes of a plugin action RPC.
+**Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data.
 
 **Suspension write baseline.** `takenUnder.writes` still covers whole-value `set` / `delete` updates and nested pending writes. It records content at suspension save time. Earlier [read baselines](#read-baselines) separately protect read-derived `merge` / `upsertItem` replacements; the two fences have different observation times.
 

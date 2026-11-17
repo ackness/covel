@@ -36,8 +36,8 @@ export type RpcTrustLevel = "builtin" | "community";
  * Plugin authors compile against this surface — not the full `DataStore` —
  * so their handlers get autocomplete without importing `@covel/store` types.
  * Plugin actions, including builtins, receive a session/plugin-scoped capability.
- * Writes are immediate under the request's session lock, not runtime proposals;
- * a later handler failure does not roll earlier successful writes back.
+ * The store is read-only under the request's session lock; plugin data writes
+ * go through runtime proposals.
  * Framework default handlers separately own their host transactions.
  *
  * Adding new methods here is a breaking-change boundary: any new field
@@ -61,13 +61,6 @@ export interface RpcHandlerStore {
     }>
   >;
   // ── Plugin data KV ─────
-  setPluginData?(record: {
-    readonly namespace: string;
-    readonly key: string;
-    readonly value: unknown;
-    readonly createdAt?: string;
-    readonly updatedAt?: string;
-  }): Promise<void>;
   getPluginData?(namespace: string, key: string): Promise<unknown>;
   listPluginData?(
     namespace: string,
