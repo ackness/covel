@@ -4517,11 +4517,10 @@ Resume a suspended runtime with the data the player submitted.
 A story is returned only after the resume transaction commits, and state subscriptions publish its complete `narrative.completed`. Failure or resuspension exposes no candidate. Safe runtime/step/tool progress remains available during resume, without narrative deltas.
 
 - **agent runtime**: Continues from the saved tool-call record.
-- **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The writes of child runtimes the handler called with `ctx.recursiveCall` before it suspended are saved with the suspended item. They commit with a successful resume, ahead of the handler's own writes. A failed resume leaves those saved writes buffered in the unresolved suspension for retry; abandoning the item discards them together.
+- **function runtime**: Calls the handler again. This time's data is passed in through `ctx.resumeData` and `ctx.resumedFromSuspensionId`. It does not enter the model loop. The resumed handler cannot call `ctx.recursiveCall`, and the suspended item saves no child-call results, because a handler that called it cannot suspend (see [Nested calls](./plugins.md#nested-calls-ctxrecursivecall)).
 - The session's `runtimeModelOverrides` apply as usual: the resumed runtime and the sub-agents it calls each pick their model by their own runtimeId.
 - The time limit is the one of the original dispatch: the runtime manifest's `timeoutMs` when it sets one, otherwise the framework default.
 - A resumed runtime can suspend again; see [Suspending again](#suspending-again) below.
-- Background event jobs retained from recursive calls are queued only in the successful resume transaction. Suspending again keeps them buffered. Queued jobs use the existing `runtime.deferred` notification and job-status subscription.
 
 Agent resume retains spent steps, correction counts and admitted ceilings; reply text is not a submission. A changed output schema or required-work rule, or a continuation missing the current contract, fails before a model request and leaves the suspension available to abandon. Recreate active old agent continuations and snapshots/checkpoints containing them; committed stories need not be deleted.
 
@@ -4573,7 +4572,7 @@ Rules for failed responses:
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 
-After an admitted resume fails or rolls back, the parent and saved recursive descendants show failed effective lifecycle and framework-managed task status, while the suspension remains retriable. A committed retry corrects them to success, another suspension restores waiting, and abandonment cancels them; plugin-authored failures and cancellations are not revived. Refusals during validation, authorization or claim checks do not change untouched suspensions. After losing a response, recover from persisted traces, tasks and the suspension list; a transport error alone must not rerun a committed resume. See [Lifecycle events](./protocol.md#execution-lifecycle-events).
+After an admitted resume fails or rolls back, the suspended runtime shows failed effective lifecycle and framework-managed task status, while the suspension remains retriable. A committed retry corrects them to success, another suspension restores waiting, and abandonment cancels them; plugin-authored failures and cancellations are not revived. Refusals during validation, authorization or claim checks do not change untouched suspensions. After losing a response, recover from persisted traces, tasks and the suspension list; a transport error alone must not rerun a committed resume. See [Lifecycle events](./protocol.md#execution-lifecycle-events).
 
 ##### Out-of-date suspended items
 
@@ -4590,7 +4589,6 @@ The server voids it the way [abandoning](#delete-apisessionsidsuspensionssuspens
 Rules for `data-changed`:
 
 - The records compared are: one plugin data key, one character, the character schema, one lorebook entry. Only the content is compared, so a write to another key does not affect the resume. Dimension changes are not compared here; they check their version themselves when they commit.
-- The child-call writes saved with the suspended item are compared too.
 - A record can also change while the resumed runtime runs. The commit transaction compares again before it writes anything; on a change it writes nothing, voids the item the same way and answers the same `409`.
 
 A runtime has only one suspended item waiting to resume at a time. When it suspends again in another execution, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
@@ -4615,7 +4613,7 @@ A resumed runtime can suspend again: an agent calls `suspend` once more, or a fu
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
 - When a resumed runtime suspends again, the turn is still not complete. The whole chain counts once, when its last resume succeeds.
 - When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
-- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`, including those reported by the nested calls (`ctx.recursiveCall`) that the suspended runtime made. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. A failed resume marks them `failed` while retaining the suspension for retry; another suspension returns them to waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. A resumed run reports progress under the original execution too, so the jobs of the whole chain end together: when the last resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. A failed resume marks them `failed` while retaining the suspension for retry; another suspension returns them to waiting.
 
 ##### Resuming setup runtimes
 

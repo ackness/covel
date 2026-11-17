@@ -38,23 +38,28 @@ async function fixture(options: {
   readonly manual?: boolean;
   readonly suspended?: boolean;
   readonly relay?: boolean;
+  /** Run another turn on this store instead of a fresh session. */
+  readonly store?: ReturnType<typeof createMemoryStore>;
+  readonly turnId?: string;
 }) {
-  const store = createMemoryStore();
+  const turnId = options.turnId ?? "t";
+  const store = options.store ?? createMemoryStore();
   const now = new Date().toISOString();
-  await store.createSession({
-    id: "s",
-    locale: "en-US",
-    status: "active",
-    phase: "playing",
-    completedPlayerTurns: 0,
-    setupRuntimes: {},
-    seats: [
-      { id: "main", controller: "human", role: "player", characters: "auto" },
-    ],
-    activePlugins: ["story", "a", "b", "consumer", "next"],
-    createdAt: now,
-    updatedAt: now,
-  });
+  if (!options.store)
+    await store.createSession({
+      id: "s",
+      locale: "en-US",
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      activePlugins: ["story", "a", "b", "consumer", "next"],
+      createdAt: now,
+      updatedAt: now,
+    });
   const runtimes = [
     manifest("story", { stage: "narrative", outputKind: "story" }),
     manifest("a"),
@@ -66,7 +71,8 @@ async function fixture(options: {
   ];
   const input: TurnInput = {
     sessionId: "s",
-    turnId: "t",
+    turnId,
+    logicalTurnId: `logical-${turnId}`,
     playerMessage: "Continue",
     origin: options.manual ? "manual" : "player",
     ...(options.manual
@@ -136,7 +142,7 @@ async function fixture(options: {
     enqueueReleasedJobsInTx: refuseReleasedJobs,
     completion: {
       kind: "turn",
-      turnId: "t",
+      turnId,
       durationMs: execution.result.durationMs,
     },
   });
@@ -195,6 +201,27 @@ describe("event payload commit provenance", () => {
       ["a", "consumer"],
     );
     expect(await store.listSuspensions("s")).toEqual([]);
+    // Its turn ends as if the continuation were abandoned, so it counts.
+    expect((await store.getSession("s"))?.completedPlayerTurns).toBe(1);
+    await store.close();
+  });
+
+  it("keeps a standing continuation of the same runtime when the new one is dropped", async () => {
+    const first = await fixture({ reject: "b", suspended: true });
+    const [standing] = await first.store.listSuspensions("s");
+    expect(standing).toBeDefined();
+    const { store, outcome } = await fixture({
+      reject: "a",
+      suspended: true,
+      store: first.store,
+      turnId: "t2",
+    });
+    expect(outcome.status).toBe("committed");
+    expect((await store.listSuspensions("s")).map((row) => row.id)).toEqual([
+      standing!.id,
+    ]);
+    // The dropped continuation ended its own turn; the first one still waits.
+    expect((await store.getSession("s"))?.completedPlayerTurns).toBe(1);
     await store.close();
   });
 

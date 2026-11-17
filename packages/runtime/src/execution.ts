@@ -33,10 +33,7 @@ import {
   collectExecutionSuspensions,
 } from "./suspension-artifact.js";
 import { collectExecutionReadDependencies } from "./read-dependencies.js";
-import {
-  collectExecutionEventDependencies,
-  deferredFollowersOf,
-} from "./event-dependencies.js";
+import { collectExecutionEventDependencies } from "./event-dependencies.js";
 import { runWithHookScope } from "./hooks/hook-scope.js";
 import {
   buildHookSettings,
@@ -46,7 +43,6 @@ import { runTurnPipeline } from "./turn-executor/turn-executor.js";
 import {
   commitUnitSizes,
   inCommitOrder,
-  nestedResultsOf,
 } from "./turn-executor/nested-results.js";
 import {
   resumeRuntimePipeline,
@@ -529,8 +525,8 @@ export async function resumeSuspendedRuntime(
   if (result.status !== "success" && result.status !== "suspended")
     await settleFailedResumeJobs(deps, suspension, progressAttemptId);
   const inherited = suspension.pendingContinuation.executionContext;
-  // The scope its tasks report under, which a nested child's suspension
-  // keeps apart from its execution identity.
+  // The scope its tasks report under, kept apart from this resume's own
+  // execution identity.
   const progressScopeId = suspensionProgressScopeId(
     suspension.pendingContinuation,
   );
@@ -543,14 +539,7 @@ export async function resumeSuspendedRuntime(
       ? (suspension.pendingContinuation.withheldRuntimeJobs as
           readonly DeferredRuntimeJob[] | undefined)
       : undefined;
-  // Nested results restored from the suspension commit with the resumed
-  // parent, children first, as one unit.
-  const nestedRuntimeResults = nestedResultsOf([result]);
-  const carrier = {
-    runtimeResults: [result],
-    nestedRuntimeResults,
-    deferredFollowers: deferredFollowersOf(nestedRuntimeResults),
-  };
+  const carrier = { runtimeResults: [result] };
   if (
     result.status === "success" &&
     result.output &&
@@ -600,33 +589,8 @@ export async function resumeSuspendedRuntime(
       },
     };
   });
-  // The commit reads each result's manifest (its output kind, its setup
-  // role), nested results' included.
-  const results = inCommitOrder([result]);
-  const runtimes = [
-    manifest,
-    ...(options?.activeRuntimes ?? []).filter(
-      (runtime) =>
-        runtime.name !== manifest.name &&
-        results.some((nested) => nested.runtimeId === runtime.name),
-    ),
-  ];
-  // Restored nested results ran in an earlier leg, so this run never loaded
-  // their runtimes. Load each one that declares an export, without running
-  // its handler, so the commit can validate and publish the child's output.
-  for (const runtime of runtimes) {
-    if (
-      runtime === manifest ||
-      !runtime.output?.recordAs ||
-      captured.outputSchemas[runtime.name]
-    )
-      continue;
-    await captured.deps.loadRuntime(
-      runtime,
-      suspension.pendingContinuation.locale,
-      suspension.sessionId,
-    );
-  }
+  // A resume never runs `ctx.recursiveCall`, so its result commits alone.
+  const results = [result];
   const setup = await resumedSetupState({
     store: deps.store,
     suspension,
@@ -655,9 +619,9 @@ export async function resumeSuspendedRuntime(
             ? { countPolicy: "none" as const }
             : {}),
         },
-        runtimes,
+        runtimes: [manifest],
         results,
-        commitUnits: commitUnitSizes([result]),
+        commitUnits: [1],
         ...(subagentRuns.length ? { subagentRuns } : {}),
         serviceCalls,
         journalMessages: collectExecutionJournal(carrier),

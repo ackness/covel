@@ -10,7 +10,6 @@ import {
   commitExecution,
   executeTurn,
   refuseReleasedJobs,
-  resumeSuspendedRuntime,
 } from "../src/index.js";
 
 type Follower = NonNullable<TurnResult["deferredFollowers"]>[number];
@@ -49,8 +48,6 @@ async function fixture(
     failure?: "failed" | "throws";
     repeat?: boolean;
     siblings?: boolean;
-    suspended?: boolean;
-    resuspend?: boolean;
   } = {},
 ) {
   const store = createMemoryStore();
@@ -90,7 +87,6 @@ async function fixture(
     ...(options.siblings ? [sibling, top] : []),
   ];
   let sequence = 0;
-  let resuspend = options.resuspend ?? false;
   const handler =
     (runtime: RuntimeManifest): FunctionHandler =>
     async (ctx): Promise<HandlerResult> => {
@@ -103,17 +99,6 @@ async function fixture(
       if (runtime.name === child.name) return event(++sequence);
       if (runtime.name === follower.name)
         throw new Error("Follower must be deferred");
-      if (ctx.resumedFromSuspensionId !== undefined) {
-        if (resuspend) {
-          resuspend = false;
-          return {
-            outcome: "suspended",
-            reason: "One more answer",
-            resumeSchema: {},
-          };
-        }
-        return success();
-      }
       const nested = await ctx.recursiveCall({
         manualTrigger: { runtimeId: child.name },
       });
@@ -128,8 +113,6 @@ async function fixture(
       if (options.failure === "throws") throw new Error("Parent failed");
       if (options.failure === "failed")
         return { outcome: "failed", error: "Parent failed" };
-      if (options.suspended)
-        return { outcome: "suspended", reason: "An answer", resumeSchema: {} };
       return success();
     };
   const deps = {
@@ -225,68 +208,4 @@ describe("background followers from recursive calls", () => {
     );
     await f.store.close();
   });
-
-  it.each([false, true])(
-    "holds nested followers until successful resume (resuspend=%s)",
-    async (resuspend) => {
-      const f = await fixture({ suspended: true, resuspend });
-      const initial = await commit(f);
-      expect(initial.outcome.status).toBe("committed");
-      expect(initial.queued).toEqual([]);
-      let [saved] = (await f.store.listSuspensions("s")).filter(
-        (row) => !row.resolvedAt,
-      );
-      expect(
-        saved!.pendingContinuation.nestedResults?.[0]?.deferredFollowers,
-      ).toHaveLength(1);
-      const sourceRun = (
-        saved!.pendingContinuation.nestedResults![0]!.result as {
-          runId: string;
-        }
-      ).runId;
-      for (let attempt = 0; attempt < (resuspend ? 2 : 1); attempt++) {
-        expect(await f.store.claimSuspension(saved!.id)).not.toBeNull();
-        const resumed = await resumeSuspendedRuntime(
-          saved!,
-          {},
-          f.parent,
-          f.deps,
-          { activeRuntimes: f.runtimes },
-        );
-        let queued: readonly Follower[] = [];
-        const outcome = await commitExecution({
-          store: f.store,
-          execution: structuredClone(resumed),
-          enqueueReleasedJobsInTx: refuseReleasedJobs,
-          completion: {
-            kind: "resume",
-            turnId: "t",
-            suspensionId: saved!.id,
-            pluginId: "probe",
-            runtimeId: f.parent.name,
-          },
-          extraInTx: async (_tx, isolation) => {
-            queued = isolation.deferredFollowers;
-          },
-        });
-        expect(outcome.status).toBe("committed");
-        if (resumed.result.status === "suspended") {
-          expect(queued).toEqual([]);
-          [saved] = (await f.store.listSuspensions("s")).filter(
-            (row) => !row.resolvedAt,
-          );
-        } else {
-          expect(queued).toHaveLength(1);
-          expect(queued[0]?.triggerEvent.data).toEqual({ n: 1 });
-          expect(resumed.commit.eventDependencies?.followers).toMatchObject([
-            { producerRunId: sourceRun },
-          ]);
-        }
-      }
-      expect(
-        (await f.store.listSuspensions("s")).filter((row) => !row.resolvedAt),
-      ).toEqual([]);
-      await f.store.close();
-    },
-  );
 });

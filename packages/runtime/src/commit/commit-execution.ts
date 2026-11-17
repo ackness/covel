@@ -122,8 +122,8 @@ export async function commitExecution(
     hookSettings: deepFreeze(plan.hookSettings),
     loadOutputSchema: async (runtimeId) => plan.outputSchemas[runtimeId],
     extraInTx: async (tx, isolation) => {
-      // The resumed runtime is the last result; nested results restored
-      // with it come first. It either succeeded or suspended again.
+      // The resumed runtime is the last result. It either succeeded or
+      // suspended again.
       const resumed = plan.resolvedSuspensionId
         ? plan.results.at(-1)
         : undefined;

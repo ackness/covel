@@ -27,7 +27,6 @@ import {
 } from "../presentation/commit.js";
 import { presentationState } from "../presentation/state.js";
 import { turnStory } from "../presentation/turn-story.js";
-import { nestedResultProposals } from "../resume/suspension-baseline.js";
 import {
   commitPreparedProposals,
   prepareOperationProposals,
@@ -216,12 +215,6 @@ async function commitResult(
   for (const suspension of args.suspensions ?? []) {
     if (args.suspensionRuns?.[suspension.id] !== result.runId) continue;
     const continuation = suspension.pendingContinuation;
-    const nested = (continuation.nestedResults ?? []).flatMap((entry) =>
-      stampReadPreconditions(
-        nestedResultProposals([entry], sessionId),
-        entry.readScopes ?? [],
-      ),
-    );
     const pending = (continuation.pendingProposals as readonly Proposal[]).map(
       (proposal) =>
         ({
@@ -233,10 +226,10 @@ async function commitResult(
           },
         }) as Proposal,
     );
-    const failure = await checkPendingReadBaselines(sink, [
-      ...nested,
-      ...stampReadPreconditions(pending, continuation.readScopes ?? []),
-    ]);
+    const failure = await checkPendingReadBaselines(
+      sink,
+      stampReadPreconditions(pending, continuation.readScopes ?? []),
+    );
     if (failure) throw new ProposalCommitFailure([failure]);
   }
   const presentationSource = presentationState(result);

@@ -16,24 +16,14 @@
  * when its operations contain `set` or `delete`: relative operations (`inc`,
  * `merge`, array operations) are excluded from this save-time digest. The
  * separate read-time preconditions protect read-derived replacements.
- *
- * A suspended function also holds the results of its `ctx.recursiveCall`s,
- * which commit with its resume; their writes join the baseline the way the
- * commit derives them.
  */
 
 import { isRecord } from "../utils/is-record.js";
-import type { Proposal, RuntimeResult } from "@covel/shared";
+import type { Proposal } from "@covel/shared";
 import type {
-  SuspendedNestedResult,
   SuspensionWriteBaseline,
   SuspensionWriteTarget,
 } from "@covel/store";
-import { commitEligibility } from "../session/session-runtime-result.js";
-import {
-  malformedDomainEffect,
-  pluginDataProposalsFromEffects,
-} from "../commit/session-output-normalizer.js";
 import { readSuspensionWriteDigest } from "@covel/store/session";
 
 /** The reads a baseline needs; a `StoreTransaction` reads inside its transaction. */
@@ -124,44 +114,6 @@ export function suspensionWriteTargets(
     }
   }
   return [...targets.values()];
-}
-
-/**
- * The proposals saved nested results commit with their parent's resume:
- * effect-derived plugin data, then buffered writes, with the identity the
- * commit rebinds them to. A result the commit would write nothing for adds
- * nothing.
- */
-export function nestedResultProposals(
-  nested: readonly SuspendedNestedResult[],
-  sessionId: string,
-): Proposal[] {
-  return nested.flatMap(({ result: raw }) => {
-    const result = raw as RuntimeResult;
-    const eligibility = commitEligibility(result);
-    if (eligibility === "none" || malformedDomainEffect(result.effects))
-      return [];
-    const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
-    return [
-      ...(eligibility === "all"
-        ? pluginDataProposalsFromEffects(
-            result.effects,
-            source,
-            result.turnId,
-            sessionId,
-          )
-        : []),
-      ...(result.pendingProposals ?? []).map(
-        (proposal) =>
-          ({
-            ...proposal,
-            sessionId,
-            turnId: result.turnId,
-            source,
-          }) as Proposal,
-      ),
-    ];
-  });
 }
 
 /** Read the records `proposals` write, as they are now. */

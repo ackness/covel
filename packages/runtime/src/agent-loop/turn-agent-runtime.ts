@@ -106,8 +106,6 @@ export interface ExecuteAgentRuntimeOptions {
   readonly inputs?: Readonly<Record<string, InputSlot>>;
   /** Execution identity persisted if this agent suspends mid-turn. */
   readonly executionContext: ExecutionContext;
-  /** Progress scope of a nested call, persisted if this agent suspends. */
-  readonly progressScopeId?: string;
   /** Frozen cross-execution `recordAs` exports — rendered into the reserved exports block. */
   readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
@@ -141,7 +139,6 @@ export async function executeAgentRuntime({
   activation,
   inputs,
   executionContext,
-  progressScopeId,
   exports: exportSlots,
   startTime,
   runId,
@@ -439,7 +436,6 @@ export async function executeAgentRuntime({
       startTime,
       runId,
       executionContext,
-      ...(progressScopeId !== undefined ? { progressScopeId } : {}),
       ...(drafts ? { drafts } : {}),
     });
   } catch (error) {

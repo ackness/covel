@@ -349,10 +349,3 @@ export function createRootOperationStage(args: {
     },
   };
 }
-
-/** Whether a result, or a result nested under it, has staged operation writes. */
-export function hasOperationWrites(results: readonly RuntimeResult[]): boolean {
-  return results.some(
-    (result) => Object.keys(result.operationWrites ?? {}).length > 0,
-  );
-}
