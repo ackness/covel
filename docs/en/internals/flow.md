@@ -207,7 +207,7 @@ Details to remember:
 
 - Background work started while the lock is held, such as a job worker that was woken, does not inherit the lock. It queues for the lock itself and is never taken for its owner.
 - When several locks are needed at once (for example, deleting a session locks all its runtimes), the lock implementation sorts the keys and takes them in that order, so callers cannot deadlock each other whatever order they pass.
-- A plugin action's handler runs inside the session lock and has 30 seconds. Past that the action fails and the lock is released. Store calls the handler makes afterwards are refused; store calls already in progress finish before the lock is released. Data written before the limit is kept.
+- A plugin action's handler runs inside the session lock and has 30 seconds. At the limit, `ctx.signal` aborts and the store refuses new calls. Reads already in progress finish before the request returns failure and releases the lock. An action's store is read-only and produces no writes.
 - A few writes happen outside this transaction. None of them switches `phase`:
   - The attempt count of a setup runtime. It updates the count in `setupRuntimes` after the transaction. A rolled-back attempt still uses up a try.
   - Setup runtimes caught in a `needs(scope: session)` cycle. The executor marks them `blocked` before anything runs.

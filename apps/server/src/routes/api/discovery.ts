@@ -119,7 +119,6 @@ export function buildFrameworkCapabilities(
           "local-tool:withPendingProposals(plugin.data)",
           "local-tool:withPendingProposals(plugin.data.batch)",
           "local-tool:withPendingProposals(plugin.data.update)",
-          "plugin-rpc:context.store.setPluginData",
           "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key",
         ],
         readPaths: [

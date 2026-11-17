@@ -269,8 +269,8 @@ describe("createRpcExecutor", () => {
   });
 
   describe("handler time limit", () => {
-    function recordingStore(writeDelay?: Promise<void>) {
-      const writes: string[] = [];
+    function recordingStore(readDelay?: Promise<void>) {
+      const reads: string[] = [];
       const store = {
         getSession: async () => ({
           phase: "playing" as const,
@@ -279,36 +279,28 @@ describe("createRpcExecutor", () => {
           setupRuntimes: {},
         }),
         listTurnMessages: async () => [],
-        setPluginData: async (record: { key: string }) => {
-          await writeDelay;
-          writes.push(record.key);
+        getPluginData: async (_namespace: string, key: string) => {
+          await readDelay;
+          reads.push(key);
+          return { value: 1 };
         },
       };
-      return { store, writes };
+      return { store, reads };
     }
 
-    it("fails a handler that never finishes and refuses its later writes", async () => {
+    it("fails a handler that never finishes and refuses its later reads", async () => {
       const registry = createPluginRpcRegistry();
       const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
-      const { store, writes } = recordingStore();
+      const { store, reads } = recordingStore();
       let signal: AbortSignal | undefined;
-      let writeLate!: () => Promise<void>;
+      let readLate!: () => Promise<unknown>;
       registry.registerPluginHandler(
         "stuck",
         "hang",
         async (_payload, context) => {
           signal = context.signal;
-          writeLate = () =>
-            context.store.setPluginData!({
-              namespace: "state",
-              key: "late",
-              value: 1,
-            });
-          await context.store.setPluginData!({
-            namespace: "state",
-            key: "early",
-            value: 1,
-          });
+          readLate = () => context.store.getPluginData!("state", "late");
+          await context.store.getPluginData!("state", "early");
           return new Promise(() => {});
         },
         {},
@@ -325,25 +317,21 @@ describe("createRpcExecutor", () => {
         code: "handler-timeout",
       });
       expect(signal?.aborted).toBe(true);
-      await expect(writeLate()).rejects.toThrow(/accepts no more calls/);
-      expect(writes).toEqual(["early"]);
+      await expect(readLate()).rejects.toThrow(/accepts no more calls/);
+      expect(reads).toEqual(["early"]);
     });
 
-    it("refuses writes from synchronous abort listeners", async () => {
+    it("refuses reads from synchronous abort listeners", async () => {
       const registry = createPluginRpcRegistry();
       const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
-      const { store, writes } = recordingStore();
-      let lateWrite: Promise<void> | undefined;
+      const { store, reads } = recordingStore();
+      let lateRead: Promise<unknown> | undefined;
       registry.registerPluginHandler(
         "stuck",
-        "abort-write",
+        "abort-read",
         async (_payload, context) => {
           context.signal!.addEventListener("abort", () => {
-            lateWrite = context.store.setPluginData!({
-              namespace: "state",
-              key: "after-abort",
-              value: 1,
-            });
+            lateRead = context.store.getPluginData!("state", "after-abort");
           });
           return new Promise(() => {});
         },
@@ -352,32 +340,28 @@ describe("createRpcExecutor", () => {
       );
       await expect(
         executor.dispatch(
-          { pluginId: "stuck", action: "abort-write", payload: null },
+          { pluginId: "stuck", action: "abort-read", payload: null },
           { sessionId: "sess-1", store },
         ),
       ).rejects.toMatchObject({ code: "handler-timeout" });
-      await expect(lateWrite).rejects.toThrow(/accepts no more calls/);
-      expect(writes).toEqual([]);
+      await expect(lateRead).rejects.toThrow(/accepts no more calls/);
+      expect(reads).toEqual([]);
     });
 
-    it("settles a write already in flight before reporting the timeout", async () => {
+    it("settles a read already in flight before reporting the timeout", async () => {
       const registry = createPluginRpcRegistry();
       const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
-      let finishWrite!: () => void;
-      const { store, writes } = recordingStore(
+      let finishRead!: () => void;
+      const { store, reads } = recordingStore(
         new Promise<void>((resolve) => {
-          finishWrite = resolve;
+          finishRead = resolve;
         }),
       );
       registry.registerPluginHandler(
         "slow",
-        "write",
+        "read",
         async (_payload, context) => {
-          await context.store.setPluginData!({
-            namespace: "state",
-            key: "in-flight",
-            value: 1,
-          });
+          await context.store.getPluginData!("state", "in-flight");
           return "done";
         },
         {},
@@ -387,7 +371,7 @@ describe("createRpcExecutor", () => {
       let settled = false;
       const dispatched = executor
         .dispatch(
-          { pluginId: "slow", action: "write", payload: null },
+          { pluginId: "slow", action: "read", payload: null },
           { sessionId: "sess-1", store },
         )
         .finally(() => {
@@ -395,48 +379,51 @@ describe("createRpcExecutor", () => {
         });
       dispatched.catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 60));
-      // The limit has passed, but the caller still holds the lock while the
-      // store write it started is unsettled.
+      // The caller retains the lock until the in-flight read settles.
       expect(settled).toBe(false);
-      finishWrite();
+      finishRead();
       await expect(dispatched).rejects.toMatchObject({
         code: "handler-timeout",
       });
-      expect(writes).toEqual(["in-flight"]);
+      expect(reads).toEqual(["in-flight"]);
     });
 
-    it("refuses a write the handler left running after it returned", async () => {
-      const registry = createPluginRpcRegistry();
-      const executor = createRpcExecutor({ registry });
-      const { store, writes } = recordingStore();
-      let floating: Promise<void> | undefined;
-      registry.registerPluginHandler(
-        "leaky",
-        "fire-and-forget",
-        async (_payload, context) => {
-          setTimeout(() => {
-            floating = context.store.setPluginData!({
-              namespace: "state",
-              key: "after-return",
-              value: 1,
-            });
-          }, 0);
-          return "returned";
-        },
-        {},
-        "community",
-      );
+    it.each([false, true])(
+      "refuses reads after the handler ends (failed=%s)",
+      async (failed) => {
+        const registry = createPluginRpcRegistry();
+        const executor = createRpcExecutor({ registry });
+        const { store, reads } = recordingStore();
+        let readLate!: () => Promise<unknown>;
+        registry.registerPluginHandler(
+          "leaky",
+          "read-later",
+          async (_payload, context) => {
+            readLate = () => context.store.getPluginData!("state", "after-end");
+            if (failed) throw new Error("failed");
+            return "returned";
+          },
+          {},
+          "community",
+        );
 
-      await expect(
-        executor.dispatch(
-          { pluginId: "leaky", action: "fire-and-forget", payload: null },
+        const dispatched = executor.dispatch(
+          { pluginId: "leaky", action: "read-later", payload: null },
           { sessionId: "sess-1", store },
-        ),
-      ).resolves.toMatchObject({ result: "returned" });
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      await expect(floating).rejects.toThrow(/accepts no more calls/);
-      expect(writes).toEqual([]);
-    });
+        );
+        if (failed) {
+          await expect(dispatched).rejects.toMatchObject({
+            code: "handler-threw",
+          });
+        } else {
+          await expect(dispatched).resolves.toMatchObject({
+            result: "returned",
+          });
+        }
+        await expect(readLate()).rejects.toThrow(/accepts no more calls/);
+        expect(reads).toEqual([]);
+      },
+    );
   });
 
   it("lookupEntry exposes resolution without invoking the handler", () => {
@@ -461,7 +448,7 @@ describe("createRpcExecutor", () => {
 });
 
 describe("createRpcHandlerStoreView", () => {
-  it("binds action-level RPC reads and writes to the current session and plugin", async () => {
+  it("binds action-level RPC reads to the current session and plugin", async () => {
     const store = {
       getSession: vi.fn(async (id: string) => ({
         id,
@@ -523,18 +510,7 @@ describe("createRpcHandlerStoreView", () => {
     await scoped.listTurnMessages();
     await scoped.listTurnMessages(5);
     await scoped.listTurnMessages(1_000_000);
-    // Forged identity fields are not part of the view's types; held in variables
-    // they reach the view as a plugin could send them, and must be ignored.
-    const forgedData = {
-      sessionId: "sess-attacker",
-      pluginId: "plugin-attacker",
-      namespace: "ns",
-      key: "key",
-      value: 1,
-      createdAt: "2026-04-30T00:00:00.000Z",
-      updatedAt: "2026-04-30T00:00:00.000Z",
-    };
-    await scoped.setPluginData?.(forgedData);
+    expect(scoped).not.toHaveProperty("setPluginData");
     await scoped.getPluginData?.("ns", "key");
     await scoped.listPluginData?.("ns");
 
@@ -548,13 +524,7 @@ describe("createRpcHandlerStoreView", () => {
       ["sess-real", 200],
     ]);
     expect(scoped).not.toHaveProperty("savePlayerInput");
-    expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
-      sessionId: "sess-real",
-      pluginId: "plugin-real",
-      namespace: "ns",
-      key: "key",
-      value: 1,
-    });
+    expect(store.setPluginData).not.toHaveBeenCalled();
     expect(store.getPluginData).toHaveBeenCalledWith(
       "sess-real",
       "plugin-real",

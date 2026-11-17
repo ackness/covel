@@ -1244,9 +1244,8 @@ This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`pa
 - REST `PUT /api/sessions/:id/plugin-data/...`
 - Commit of `plugin.data` / `plugin.data.batch`, including proposals normalized from a function runtime's output
 - `ctx.pluginData` in a function runtime or an agent guard
-- The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
 
-RPC scoped-store `setPluginData` also uses the [dataset rules](./plugins.md#datasets-contributesdatasets), checking `set` and the record schema for the bound owning plugin and physical namespace. Refusal leaves that record unchanged; earlier successful calls remain persisted. Management REST writes remain operator overrides.
+The store view of an RPC handler (`createRpcHandlerStoreView()`) is read-only: every plugin's RPC action, including those of bundled plugins, gets a read capability bound to the session and the plugin, with no write method, and it is no longer a dataset-rule write entry point. Management REST writes remain operator overrides.
 
 Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
 
@@ -1263,14 +1262,15 @@ What happens when the limit is exceeded:
 
 The same limit applies at every write entry point:
 
-| Entry point                                                                      | When the limit is exceeded                                                                                        |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Dataset tools `<d>-upsert` / `<d>-update`                                        | Error at call time                                                                                                |
-| Commit of `plugin.data` / `plugin.data.batch`                                    | The commit fails                                                                                                  |
-| Commit of `plugin.data.update` (the result after the operations)                 | The commit fails                                                                                                  |
-| `ctx.pluginData.set` / `ctx.pluginData.update`, the store view of an RPC handler | The write fails                                                                                                   |
-| REST `PUT /api/sessions/:id/plugin-data/...`                                     | Returns `413`                                                                                                     |
-| World package import                                                             | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
+<!-- prettier-ignore -->
+| Entry point | When the limit is exceeded |
+| --- | --- |
+| Dataset tools `<d>-upsert` / `<d>-update` | Error at call time |
+| Commit of `plugin.data` / `plugin.data.batch` | The commit fails |
+| Commit of `plugin.data.update` (the result after the operations) | The commit fails |
+| `ctx.pluginData.set` / `ctx.pluginData.update` | The write fails |
+| REST `PUT /api/sessions/:id/plugin-data/...` | Returns `413` |
+| World package import | The record gets an error diagnostic. The import fails and is not truncated. `pnpm validate:world` reports it too. |
 
 Import and sync also check the same limit on the final stored JSON after selecting records and materializing media; read-only preflight does not materialize media.
 

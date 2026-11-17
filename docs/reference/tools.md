@@ -1244,9 +1244,8 @@ text.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
 - REST `PUT /api/sessions/:id/plugin-data/...`
 - `plugin.data` / `plugin.data.batch` 的提交，包括由函数 runtime 的输出规范化出来的 proposal
 - 函数 runtime 和 agent guard 的 `ctx.pluginData`
-- RPC handler 的 store view。所有插件的 RPC action（包括内置插件的）都通过 `createRpcHandlerStoreView()` 得到一个绑定了会话和插件的即时写入能力
 
-RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数据集contributesdatasets)，按绑定的所属插件和实际命名空间检查 `set` 与记录 schema。拒绝不改变该记录；先前成功的调用仍然保留。管理 REST 写入仍是运维覆盖。
+RPC handler 的 store view（`createRpcHandlerStoreView()`）只读：所有插件的 RPC action（包括内置插件的）拿到的是绑定了会话和插件的只读能力，没有写入方法，也不再是受数据集规则约束的写入口。管理 REST 写入仍是运维覆盖。
 
 两类插件句柄都不暴露宿主的事务、会话生命周期或关闭存储的方法。框架自己的特权写入者（后台任务运行器、runtime 日志）直接调用 store，不走这些入口。
 
@@ -1263,14 +1262,15 @@ RPC scoped store 的 `setPluginData` 也使用[数据集规则](./plugins.md#数
 
 同一个上限适用于所有写入口：
 
-| 入口                                                                      | 超限时                                                                        |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 数据集工具 `<d>-upsert` / `<d>-update`                                    | 调用时报错                                                                    |
-| `plugin.data` / `plugin.data.batch` 的提交                                | 提交失败                                                                      |
-| `plugin.data.update` 的提交（按操作之后的结果算）                         | 提交失败                                                                      |
-| `ctx.pluginData.set` / `ctx.pluginData.update`、RPC handler 的 store view | 写入失败                                                                      |
-| REST `PUT /api/sessions/:id/plugin-data/...`                              | 返回 `413`                                                                    |
-| 世界包导入                                                                | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
+<!-- prettier-ignore -->
+| 入口 | 超限时 |
+| --- | --- |
+| 数据集工具 `<d>-upsert` / `<d>-update` | 调用时报错 |
+| `plugin.data` / `plugin.data.batch` 的提交 | 提交失败 |
+| `plugin.data.update` 的提交（按操作之后的结果算） | 提交失败 |
+| `ctx.pluginData.set` / `ctx.pluginData.update` | 写入失败 |
+| REST `PUT /api/sessions/:id/plugin-data/...` | 返回 `413` |
+| 世界包导入 | 该记录得到一条 error 诊断，导入失败、不截断。`pnpm validate:world` 同样报告。 |
 
 世界导入和同步还在媒体物化、选择要写的记录之后，再按实际存储的最终 JSON 检查同一上限；只读预检不物化媒体。
 

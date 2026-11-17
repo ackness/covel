@@ -1,8 +1,4 @@
 import {
-  capturePluginDatasetPolicy,
-  emptyDatasetPolicy,
-} from "../../../lib/plugin-dataset-policy.js";
-import {
   approvalVerdictResponse,
   hasServerCodeGrant,
 } from "../approval-verdict.js";
@@ -222,9 +218,8 @@ export async function dispatchPluginAction(
 
   // Action-level dispatch.
   try {
-    // Action handlers can perform read-validate-write sequences. Serialize
-    // them with turns and sibling RPCs so each one is atomic at the session
-    // boundary, including across PG-backed server processes.
+    // Serialize action reads with turns and sibling RPCs so handlers observe
+    // a consistent session boundary, including across PG-backed processes.
     const dispatchAction = async () => {
       // Approval was evaluated before taking the session lock so a dialog can
       // return promptly. Re-read the incarnation under the lock before running
@@ -301,23 +296,13 @@ export async function dispatchPluginAction(
             resolveModel: c.get("resolveModel"),
           })
         : undefined;
-      const ownerEntry = c.get("pluginRegistry")?.get(pluginId);
-      const datasetPolicy =
-        pluginId === FRAMEWORK_PLUGIN_ID
-          ? emptyDatasetPolicy
-          : capturePluginDatasetPolicy(ownerEntry ? [ownerEntry] : []);
       const dispatch = () => {
-        // Every action handler, builtin or community, receives only the
-        // documented immediate-write RPC capability bound to this session and
-        // plugin.
-        const rpcStore = createRpcHandlerStoreView(
-          store,
-          {
-            sessionId,
-            pluginId,
-          },
-          { datasetPolicy },
-        );
+        // Every action handler receives only the documented read-only RPC
+        // capability bound to this session and plugin.
+        const rpcStore = createRpcHandlerStoreView(store, {
+          sessionId,
+          pluginId,
+        });
         // The plugin's own translations, in the session's language. A
         // framework action has no plugin entry and reads none.
         const messages = pluginMessagesFor(
