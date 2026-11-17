@@ -29,8 +29,11 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { ExecutionOrigin } from "@covel/shared";
 
 export interface HookScope {
+  /** Root activation, retained through nested calls and resumed manual runs. */
+  readonly executionOrigin?: ExecutionOrigin;
   /** One player input across its continuation rounds. */
   readonly logicalKey?: string;
   readonly logicalTurn?: number;

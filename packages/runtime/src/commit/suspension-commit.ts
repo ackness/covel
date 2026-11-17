@@ -13,10 +13,7 @@
 import type { StoreTransaction, SuspensionRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { DeferredRuntimeJob } from "@covel/shared";
-import {
-  nestedResultProposals,
-  takeSuspensionWriteBaseline,
-} from "../resume/suspension-baseline.js";
+import { takeSuspensionWriteBaseline } from "../resume/suspension-baseline.js";
 import {
   applySuspensionAbandonTx,
   isPendingSuspension,
@@ -112,13 +109,11 @@ export async function saveSuspensions(
           : {}),
         takenUnder: {
           ...continuation.takenUnder,
-          writes: await takeSuspensionWriteBaseline(tx, sessionId, [
-            ...continuation.pendingProposals,
-            ...nestedResultProposals(
-              continuation.nestedResults ?? [],
-              sessionId,
-            ),
-          ]),
+          writes: await takeSuspensionWriteBaseline(
+            tx,
+            sessionId,
+            continuation.pendingProposals,
+          ),
         },
       },
     };

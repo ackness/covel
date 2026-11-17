@@ -60,6 +60,7 @@ test("package webview receives runtime outcomes and sanitized transport errors",
   const mask = `**/api/sessions/${fixture.id}`;
   const requests: unknown[] = [];
   let outcome: "success" | "failed" | "transport-error" = "success";
+  let transportStatus = 500;
   try {
     const directory = await (
       await page.request.get(`/api/sessions/${fixture.id}/plugins`)
@@ -143,7 +144,7 @@ test("package webview receives runtime outcomes and sanitized transport errors",
       requests.push(route.request().postDataJSON());
       if (outcome === "transport-error") {
         return route.fulfill({
-          status: 500,
+          status: transportStatus,
           json: { error: "Synthetic server detail" },
         });
       }
@@ -215,12 +216,23 @@ test("package webview receives runtime outcomes and sanitized transport errors",
     await frame.getByRole("button", { name: "Run fixture" }).click();
     await expect(frame.locator("#result")).toContainText('"status":"failed"');
 
+    const toastHost = page.locator("[data-notice-toasts]");
+    while (await toastHost.getByRole("button", { name: "关闭" }).count())
+      await toastHost.getByRole("button", { name: "关闭" }).first().click();
     outcome = "transport-error";
-    await frame.getByRole("button", { name: "Run fixture" }).click();
-    await expect(frame.locator("#result")).toHaveText(
-      "Plugin UI action failed",
-    );
-    expect(requests).toHaveLength(3);
+    for (transportStatus of [500, 503]) {
+      await frame.getByRole("button", { name: "Run fixture" }).click();
+      await expect(frame.locator("#result")).toHaveText(
+        "Plugin UI action failed",
+      );
+      await expect(toastHost.getByRole("alert")).toHaveCount(1);
+      await expect(toastHost.getByRole("alert")).toContainText(
+        "Synthetic server detail",
+      );
+      await toastHost.getByRole("button", { name: "关闭" }).click();
+      await expect(toastHost.getByRole("alert")).toHaveCount(0);
+    }
+    expect(requests).toHaveLength(4);
     await frame.getByRole("button", { name: "Clear draft" }).click();
     await expect(frame.locator("#cache-result")).toHaveText("cached");
     await page.getByRole("tab", { name: "Other Fixture", exact: true }).click();
@@ -229,6 +241,50 @@ test("package webview receives runtime outcomes and sanitized transport errors",
       .click();
     await expect(frame.getByRole("textbox", { name: "Draft" })).toHaveValue("");
     expect(violations).toEqual([]);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+test("debugger turn count follows the session clock across manual trace groups and refresh", async ({
+  page,
+}) => {
+  const fixture = await createRecoveryFixture(page, "completed");
+  try {
+    const snapshot = await (
+      await page.request.get(`/api/sessions/${fixture.id}/view`)
+    ).json();
+    let completedPlayerTurns = 1;
+    await page.route(`**/api/sessions/${fixture.id}/view`, (route) =>
+      route.fulfill({
+        json: {
+          ...snapshot,
+          session: { ...snapshot.session, completedPlayerTurns },
+        },
+      }),
+    );
+    await page.route(`**/api/traces/${fixture.id}/turns/page**`, (route) =>
+      route.fulfill({
+        json: {
+          turns: ["player", "manual-one", "manual-two"].map((turnId) => ({
+            turnId,
+            traceId: turnId,
+            flowId: turnId,
+            startedAt: "2026-01-01T00:00:00Z",
+            completedAt: "2026-01-01T00:00:01Z",
+            events: [],
+            eventCount: 0,
+          })),
+          nextCursor: "older",
+        },
+      }),
+    );
+    await page.goto(`/debug?sid=${fixture.id}`);
+    await expect(page.getByText(/^回合 1 · 0 /)).toBeVisible();
+    completedPlayerTurns = 2;
+    await page.getByRole("button", { name: "刷新", exact: true }).click();
+    await expect(page.getByText(/^回合 2 · 0 /)).toBeVisible();
+    expect(fixture.actions).toEqual([]);
   } finally {
     await fixture.dispose();
   }

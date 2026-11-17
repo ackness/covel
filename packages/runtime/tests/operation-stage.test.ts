@@ -3,7 +3,6 @@ import type { Proposal, RuntimeResult } from "@covel/shared";
 import {
   createOperationExecutionScope,
   createRootOperationStage,
-  hasOperationWrites,
 } from "../src/operations/operation-stage.js";
 import {
   buildOperationRecord,
@@ -138,7 +137,6 @@ describe("operation stage", () => {
     ]);
     expect(result.operations?.[1]?.reason).toBe("caller-dropped");
     expect(Object.keys(result.operationWrites ?? {})).toEqual([op.id]);
-    expect(hasOperationWrites([result])).toBe(true);
     expect(() => stage.record(staged("c", 3))).toThrow();
   });
 
@@ -149,7 +147,6 @@ describe("operation stage", () => {
     stage.attachTo(result, false);
     expect(result.operations?.[0]?.status).toBe("discarded");
     expect(result.operationWrites).toBeUndefined();
-    expect(hasOperationWrites([result])).toBe(false);
   });
 
   it("loads a provider's datasets once and fails a call when they cannot be loaded", async () => {

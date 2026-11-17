@@ -445,11 +445,6 @@ async function createOrdinaryPluginRuntimeContext({
               deferredRuntimeJobs: nested.deferredRuntimeJobs.map(visibleJob),
             }
           : {}),
-        ...(nested.withheldRuntimeJobs
-          ? {
-              withheldRuntimeJobs: nested.withheldRuntimeJobs.map(visibleJob),
-            }
-          : {}),
       });
       nestedResults.push(...nested.runtimeResults);
       return copy;

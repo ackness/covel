@@ -409,6 +409,9 @@ export interface PluginFunctionContext {
    * Run one manual runtime of this plugin inside the current execution. Its
    * effects commit with the parent's, only when this handler succeeds; the
    * resolved value is a copy, so changing it changes nothing that commits.
+   * Suspension stays top-level: this handler fails if it returns `suspended`
+   * after a nested call produced results, a nested run that suspends fails,
+   * and a resumed handler cannot call this at all.
    */
   readonly recursiveCall: (
     delta: PluginRecursiveCallDelta,

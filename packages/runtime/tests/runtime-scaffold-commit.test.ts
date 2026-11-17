@@ -383,35 +383,30 @@ describe("un-awaited nested calls and the lease", () => {
 });
 
 describe("suspension and nested calls", () => {
-  it("saves a suspending parent's own buffer only; its child's writes are dropped", async () => {
+  // The lease drains the un-awaited child first, so the parent's suspension
+  // sees the nested result and fails rather than saving a continuation.
+  it("fails a parent that suspends after a nested call it did not await", async () => {
     const parent = manifest("parent", { trigger: { type: "auto" } });
     const child = manifest("child");
     const { store, execution, outcome, notes } = await run([parent, child], {
       [parent.name]: async (ctx) => {
-        await launch(ctx, "child");
+        void launch(ctx, "child");
         await note(ctx, "parent");
         return { outcome: "suspended", reason: "input" } as HandlerResult;
       },
-      [child.name]: async (ctx) => {
-        await note(ctx, "child");
-        return ok();
-      },
+      [child.name]: lateChild,
     });
     expect(outcome.status).toBe("committed");
     const parentResult = execution.result.runtimeResults.find(
       (result) => result.runtimeId === parent.name,
     );
-    expect(parentResult?.status).toBe("suspended");
-    expect(execution.result.nestedRuntimeResults).toBeUndefined();
-    const [record] = execution.commit.suspensions ?? [];
-    expect(execution.commit.suspensionRuns).toEqual({
-      [record!.id]: parentResult!.runId,
+    expect(parentResult).toMatchObject({
+      status: "failed",
+      error: `${parent.name} cannot suspend after a nested call (ctx.recursiveCall)`,
     });
-    const saved = await store.listSuspensions(SESSION);
-    expect(saved.map((item) => item.id)).toEqual([record!.id]);
-    expect(
-      noteKeys(saved[0]!.pendingContinuation.pendingProposals as Proposal[]),
-    ).toEqual(["parent"]);
+    expect(execution.result.nestedRuntimeResults).toBeUndefined();
+    expect(execution.commit.suspensions ?? []).toEqual([]);
+    expect(await store.listSuspensions(SESSION)).toEqual([]);
     expect(notes).toEqual({});
   });
 });

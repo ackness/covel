@@ -1159,7 +1159,6 @@ async function executeRuntime(
       sessionSummaries,
       prepareCompactedContext,
       sessionContext,
-      ...(progressScopeId !== undefined ? { progressScopeId } : {}),
       ...(operations ? { operations } : {}),
     });
   } catch (error: unknown) {

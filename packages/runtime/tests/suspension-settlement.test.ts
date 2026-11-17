@@ -395,7 +395,7 @@ describe("abandoning a suspension", () => {
   });
 });
 
-describe("abandoning a suspension that holds nested calls", () => {
+describe("abandoning a suspension's own tasks", () => {
   const scope = "suspended-execution";
   const report = (store: DataStore, runtimeId: string, jobId: string) =>
     store.appendJobStatus({
@@ -423,7 +423,7 @@ describe("abandoning a suspension that holds nested calls", () => {
       })
     ).map((record) => record.state);
 
-  function held(nestedResults: unknown[]): SuspensionRecord {
+  function held(): SuspensionRecord {
     return {
       id: "held",
       sessionId,
@@ -434,57 +434,23 @@ describe("abandoning a suspension that holds nested calls", () => {
         lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
         readScopes: [],
         executionContext: { executionId: scope },
-        nestedResults: nestedResults.map((result) => ({ result })),
       },
     } as unknown as SuspensionRecord;
   }
 
-  it("cancels the tasks of the runtimes it holds and leaves a sibling runtime's alone", async () => {
+  it("cancels the tasks of the runtime it holds and leaves a sibling runtime's alone", async () => {
     const store = createMemoryStore();
     await createSession(store);
     await report(store, asker.name, "own-job");
-    await report(store, "probe/nested", "nested-job");
     await report(store, "probe/sibling", "sibling-job");
 
-    await settleAbandonedSuspensionJobs(
-      { store },
-      held([
-        {
-          pluginId: "probe",
-          runtimeId: "probe/nested",
-          runId: "probe/nested",
-          turnId: "turn-1",
-          status: "success",
-          durationMs: 0,
-        },
-      ]),
-    );
+    await settleAbandonedSuspensionJobs({ store }, held());
 
     expect(await statesOf(store, "own-job")).toEqual([
-      "waiting-input",
-      "cancelled",
-    ]);
-    expect(await statesOf(store, "nested-job")).toEqual([
       "waiting-input",
       "cancelled",
     ]);
     expect(await statesOf(store, "sibling-job")).toEqual(["waiting-input"]);
-  });
-
-  it("ignores a saved result without runtime ids", async () => {
-    const store = createMemoryStore();
-    await createSession(store);
-    await report(store, asker.name, "own-job");
-
-    await settleAbandonedSuspensionJobs(
-      { store },
-      held([{ status: "success" }, null, { runtimeId: "probe/nested" }]),
-    );
-
-    expect(await statesOf(store, "own-job")).toEqual([
-      "waiting-input",
-      "cancelled",
-    ]);
   });
 });
 
@@ -521,6 +487,47 @@ describe("resuming a suspension", () => {
       "waiting-input",
       "succeeded",
     ]);
+  });
+
+  it("corrects the suspended invocation's lifecycle once and keeps the commit when a delivery fails", async () => {
+    const store = createMemoryStore();
+    await createSession(store);
+    const suspension = await suspendedTurn(store, "turn-1", [asker]);
+    expect(await store.claimSuspension(suspension.id)).not.toBeNull();
+    const resumed = await resumeSuspendedRuntime(
+      suspension,
+      { ok: true },
+      asker,
+      deps(store),
+    );
+    const delivery = vi.fn().mockRejectedValueOnce(new Error("disconnected"));
+    const outcome = await commitExecution({
+      enqueueReleasedJobsInTx: refuseReleasedJobs,
+      store,
+      execution: resumed,
+      onRuntimeCorrection: delivery,
+      completion: {
+        kind: "resume",
+        turnId: suspension.turnId,
+        suspensionId: suspension.id,
+        pluginId: asker.pluginId,
+        runtimeId: asker.name,
+      },
+    });
+
+    expect(outcome).toMatchObject({ status: "committed", fanOutFailed: true });
+    const { runId } = suspension.pendingContinuation.lifecycle;
+    expect(delivery).toHaveBeenCalledWith(
+      "runtime.completed",
+      expect.objectContaining({ runId, status: "success" }),
+    );
+    const corrections = (
+      await store.queryTraceEvents(sessionId, {
+        turnId: suspension.turnId,
+        types: ["runtime.completed"],
+      })
+    ).filter((row) => (row.payload as { runId?: string }).runId === runId);
+    expect(corrections).toHaveLength(1);
   });
 });
 

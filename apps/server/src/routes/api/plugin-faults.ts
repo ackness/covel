@@ -4,6 +4,7 @@ import {
   type TurnEmitter,
   type PreparedExecution,
   type FinalizeExecutionOutcome,
+  type HookHandlerOutcome,
 } from "@covel/runtime";
 import {
   DIMENSION_CONTRACT,
@@ -50,6 +51,11 @@ export async function recordExecutionFaults(args: {
   const faults = pluginFaultHost(args.store);
   if (!faults) return;
   const plan = args.execution.commit;
+  const origin =
+    plan.resumedSuspension?.pendingContinuation.executionContext.origin ??
+    plan.executionContext.origin;
+  // Explicit attempts neither trip nor reset automatic execution protection.
+  if (origin === "manual") return;
   const transitions = faults.latch.recordExecution({
     sessionId: plan.sessionId,
     logicalKey: plan.executionContext.logicalTurnId ?? args.turnId,
@@ -139,14 +145,8 @@ export function createHostPluginFaults(args: {
         ...runtimes,
       ]);
     },
-    async onHandlerOutcome(event: {
-      readonly sessionId: string;
-      readonly pluginId: string;
-      readonly turnId?: string;
-      readonly logicalKey?: string;
-      readonly outcome: "ok" | "error" | "timeout";
-      readonly emitter?: TurnEmitter;
-    }): Promise<void> {
+    async onHandlerOutcome(event: HookHandlerOutcome): Promise<void> {
+      if (event.executionOrigin === "manual") return;
       const session = await args.store.getSession(event.sessionId);
       if (!session || session.status === "ended") return;
       const runtimes = args.registry.getActiveRuntimes(event.sessionId);

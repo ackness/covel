@@ -39,32 +39,6 @@ const resumeParityFields = {
     activatedTools: ["lookup"],
   },
   promptSegments: [{ pluginId: "rules", id: "house-rules" }],
-  nestedResults: [
-    {
-      readScopes: [],
-      result: {
-        pluginId: "probe",
-        runtimeId: "probe/child",
-        runId: "run-child",
-        turnId: "turn-1",
-        status: "success",
-        output: { content: "child" },
-        pendingProposals: [{ type: "plugin.data", payload: { key: "B" } }],
-      },
-      deferredFollowers: [
-        {
-          runtimeId: "probe/follower",
-          pluginId: "probe",
-          triggerEvent: {
-            topic: "probe.ready",
-            data: { nested: { values: ["ready", 1, true, null] } },
-          },
-        },
-      ],
-      journal: [{ id: "message-1", content: "" }],
-      trigger: "probe/child",
-    },
-  ],
 } as const;
 
 export function registerPersistenceStoreSuites(

@@ -280,8 +280,7 @@ export async function settleAbandonedSetupAttempt(
 }
 
 /**
- * After the transaction commits: end the suspended execution's progress jobs,
- * and those of the nested calls saved with it.
+ * After the transaction commits: end the suspended execution's progress jobs.
  */
 export async function settleAbandonedSuspensionJobs(
   deps: SavedLifecycleDeps,

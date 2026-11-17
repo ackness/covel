@@ -22,10 +22,6 @@ function isManualTurn(turn: api.TurnTrace): boolean {
   );
 }
 
-export function getStoryTurnCount(turns: api.TurnTrace[]): number {
-  return turns.reduce((count, turn) => count + (isManualTurn(turn) ? 0 : 1), 0);
-}
-
 export function getVisibleTurns(turns: api.TurnTrace[]): VisibleTurn[] {
   let storyIndex = 0;
   return turns.map((turn) => {

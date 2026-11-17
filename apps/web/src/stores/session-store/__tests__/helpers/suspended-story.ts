@@ -13,7 +13,7 @@ import {
 } from "@covel/runtime";
 
 /** Real commit and subscription events, without HTTP or model requests. */
-export async function suspendedStory(manual: boolean) {
+export async function suspendedStory() {
   const store = createMemoryStore();
   const eventBus = createEventBus();
   const timestamp = "2026-10-31T00:00:00.000Z";
@@ -57,7 +57,7 @@ export async function suspendedStory(manual: boolean) {
     runtimeType: "function",
     stage: "narrative",
     outputKind: "story",
-    trigger: { type: manual ? "manual" : "auto" },
+    trigger: { type: "auto" },
   };
   const child: RuntimeManifest = {
     ...story,
@@ -70,8 +70,7 @@ export async function suspendedStory(manual: boolean) {
         sessionId: session.id,
         turnId: "turn",
         playerMessage: "Continue",
-        origin: manual ? "manual" : "player",
-        ...(manual ? { manualTrigger: { runtimeId: story.name } } : {}),
+        origin: "player",
       },
       [story, child],
       {
@@ -96,10 +95,6 @@ export async function suspendedStory(manual: boolean) {
               contract: "change@1",
               input: {},
             });
-            if (manual)
-              await ctx.recursiveCall({
-                manualTrigger: { runtimeId: child.name },
-              });
             return {
               outcome: "success",
               value: { narrativeOutput: "The guide waits for your answer." },

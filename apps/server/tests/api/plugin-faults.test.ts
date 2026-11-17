@@ -393,7 +393,7 @@ describe("host plugin fault boundary", () => {
   });
   // These prepared executions exercise the commit boundary. The real resume
   // route's pre-commit failure path is covered separately below.
-  it.each(["player", "manual", "resume", "background"] as const)(
+  it.each(["player", "resume", "background"] as const)(
     "counts faults at the shared boundary for origin=%s",
     async (origin) => {
       const f = await fixture();
@@ -407,97 +407,158 @@ describe("host plugin fault boundary", () => {
       expect(fourth.result.runtimeResults).toEqual([]);
     },
   );
-  it("latches after two prior faults and a self-caused failure through the real resume route without committing or resolving the suspension", async () => {
-    const handler = vi.fn<FunctionHandler>(async (ctx) => {
-      if (ctx.resumedFromSuspensionId) {
-        if (!ctx.pluginData) throw new Error("fixture requires plugin data");
-        await ctx.pluginData.set("notes", "resume-write", "uncommitted");
-        throw new Error("self-caused resume failure");
+  it.each(["runtime", "proposal", "hook", "success"] as const)(
+    "keeps manual %s outcomes neutral without clearing prior automatic faults",
+    async (mode) => {
+      const handler = vi.fn<FunctionHandler>(async (ctx) => {
+        if (mode === "runtime") throw new Error("manual failure");
+        if (mode !== "success")
+          await ctx.pluginData!.set("notes", "key", "value");
+        return { outcome: "success", value: {} };
+      });
+      const f = await fixture([runtime], handler);
+      f.host.latch.recordHookFault("s", "p", "auto-one", "hook");
+      f.host.latch.recordHookFault("s", "p", "auto-two", "hook");
+      if (mode === "proposal" || mode === "hook") {
+        f.hookPipeline.register({
+          id: "guard",
+          pluginId: "p",
+          event: "PreStateCommit",
+          handler: async () => {
+            if (mode === "hook") throw new Error("broken guard");
+            return { action: "abort", reason: "refused" };
+          },
+        });
       }
-      throw new Error("self-caused");
-    });
-    const f = await fixture([runtime], handler);
-    await f.run("one");
-    await f.run("two");
-    expect(f.host.latch.isLatched("s", "p")).toBe(false);
+      try {
+        for (const key of ["one", "two", "three"]) await f.run(key, "manual");
+        expect(handler).toHaveBeenCalledTimes(3);
+        expect(f.host.latch.isLatched("s", "p")).toBe(false);
+        expect(
+          (await f.store.listTraceEvents("s")).filter((event) =>
+            event.type.startsWith("plugin.fault."),
+          ),
+        ).toEqual([]);
+        if (mode === "proposal" || mode === "hook")
+          expect(await f.store.listPluginData("s", "p", "notes")).toEqual([]);
+        // A manual success cannot erase the two existing automatic faults.
+        f.host.latch.recordHookFault("s", "p", "auto-three", "hook");
+        expect(f.host.latch.latched("s")).toMatchObject([
+          { pluginId: "p", consecutiveFaults: 3 },
+        ]);
+      } finally {
+        await f.store.close();
+      }
+    },
+  );
+  it.each(["player", "manual"] as const)(
+    "settles a failed %s resume without committing or resolving the suspension",
+    async (origin) => {
+      const handler = vi.fn<FunctionHandler>(async (ctx) => {
+        if (ctx.resumedFromSuspensionId) {
+          if (!ctx.pluginData) throw new Error("fixture requires plugin data");
+          await ctx.pluginData.set("notes", "resume-write", "uncommitted");
+          throw new Error("self-caused resume failure");
+        }
+        throw new Error("self-caused");
+      });
+      const f = await fixture([runtime], handler);
+      await f.run("one");
+      await f.run("two");
+      expect(f.host.latch.isLatched("s", "p")).toBe(false);
 
-    const timestamp = new Date().toISOString();
-    const pending: Proposal = {
-      id: "buffered-before-resume",
-      sessionId: "s",
-      turnId: "suspended-turn",
-      timestamp,
-      type: "plugin.data",
-      source: { pluginId: runtime.pluginId, runtimeId: runtime.name },
-      payload: {
-        namespace: "notes",
-        key: "buffered-write",
-        value: "uncommitted",
-      },
-    };
-    const suspension: SuspensionRecord = {
-      id: "faulting-resume",
-      sessionId: "s",
-      turnId: "suspended-turn",
-      pluginId: runtime.pluginId,
-      runtimeId: runtime.name,
-      reason: "Need input",
-      resumeSchema: { type: "object" },
-      createdAt: timestamp,
-      pendingContinuation: {
-        lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
-        readScopes: [],
-        takenUnder: {
-          playerTurns: (await f.store.getTurnMessageStats("s"))
-            .playerMessageCount,
-          pluginVersion: "0.0.0",
-          writes: [],
+      const timestamp = new Date().toISOString();
+      const pending: Proposal = {
+        id: "buffered-before-resume",
+        sessionId: "s",
+        turnId: "suspended-turn",
+        timestamp,
+        type: "plugin.data",
+        source: { pluginId: runtime.pluginId, runtimeId: runtime.name },
+        payload: {
+          namespace: "notes",
+          key: "buffered-write",
+          value: "uncommitted",
         },
-        executionContext: {
-          executionId: "suspended-execution",
-          origin: "manual",
-          countPolicy: "none",
-          logicalTurnId: "resume-logical-input",
+      };
+      const suspension: SuspensionRecord = {
+        id: "faulting-resume",
+        sessionId: "s",
+        turnId: "suspended-turn",
+        pluginId: runtime.pluginId,
+        runtimeId: runtime.name,
+        reason: "Need input",
+        resumeSchema: { type: "object" },
+        createdAt: timestamp,
+        pendingContinuation: {
+          lifecycle: { runId: "suspended-run", progressRunId: "suspended-run" },
+          readScopes: [],
+          takenUnder: {
+            playerTurns: (await f.store.getTurnMessageStats("s"))
+              .playerMessageCount,
+            pluginVersion: "0.0.0",
+            writes: [],
+          },
+          executionContext: {
+            executionId: "suspended-execution",
+            origin,
+            countPolicy: "none",
+            logicalTurnId: "resume-logical-input",
+          },
+          messages: [],
+          toolCallsSoFar: [],
+          pendingProposals: [pending],
         },
-        messages: [],
-        toolCallsSoFar: [],
-        pendingProposals: [pending],
-      },
-    };
-    await f.store.saveSuspension(suspension);
-    const before = await f.store.getSession("s");
-    const events: string[] = [];
-    f.eventBus.onEmit((event) => events.push(event.type));
-    const commit = vi.spyOn(f.store, "withTransaction");
-    const response = await f.app.request(
-      "/api/sessions/s/suspensions/faulting-resume/resume",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: {} }),
-      },
-    );
+      };
+      await f.store.saveSuspension(suspension);
+      const before = await f.store.getSession("s");
+      const events: string[] = [];
+      f.eventBus.onEmit((event) => events.push(event.type));
+      const commit = vi.spyOn(f.store, "withTransaction");
+      const response = await f.app.request(
+        "/api/sessions/s/suspensions/faulting-resume/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: {} }),
+        },
+      );
 
-    expect(response.status).toBe(500);
-    expect(await response.json()).toMatchObject({
-      error: "Resume failed: self-caused resume failure",
-    });
-    expect(handler).toHaveBeenCalledTimes(3);
-    expect(f.host.latch.latched("s")).toEqual([
-      { pluginId: "p", consecutiveFaults: 3, latched: true, reason: "runtime" },
-    ]);
-    expect(events).toContain("plugin.fault.latched");
-    expect(commit).not.toHaveBeenCalled();
-    expect(await f.store.getSuspension(suspension.id)).toEqual(suspension);
-    expect(await f.store.listPluginData("s", "p", "notes")).toEqual([]);
-    expect(await f.store.getSession("s")).toEqual(before);
-    const view = await f.app.request("/s/plugins");
-    expect(await view.json()).toMatchObject({
-      items: [
-        expect.objectContaining({ id: "p", paused: { reason: "runtime" } }),
-      ],
-    });
-  });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({
+        error: "Resume failed: self-caused resume failure",
+      });
+      expect(handler).toHaveBeenCalledTimes(3);
+      expect(f.host.latch.latched("s")).toEqual(
+        origin === "player"
+          ? [
+              {
+                pluginId: "p",
+                consecutiveFaults: 3,
+                latched: true,
+                reason: "runtime",
+              },
+            ]
+          : [],
+      );
+      expect(events.includes("plugin.fault.latched")).toBe(origin === "player");
+      expect(commit).not.toHaveBeenCalled();
+      expect(await f.store.getSuspension(suspension.id)).toEqual(suspension);
+      expect(await f.store.listPluginData("s", "p", "notes")).toEqual([]);
+      expect(await f.store.getSession("s")).toEqual(before);
+      const view = await f.app.request("/s/plugins");
+      expect(await view.json()).toMatchObject({
+        items: [
+          origin === "player"
+            ? expect.objectContaining({
+                id: "p",
+                paused: { reason: "runtime" },
+              })
+            : expect.not.objectContaining({ paused: expect.anything() }),
+        ],
+      });
+    },
+  );
 
   it("publishes player notices for action forwarding; lists and resumes a paused plugin", async () => {
     const f = await fixture();

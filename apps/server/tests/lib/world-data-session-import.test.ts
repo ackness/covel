@@ -372,6 +372,39 @@ describe("world data session importer", () => {
     });
   });
 
+  it("imports Last Train Out's Chinese affinity seeds under the localized character names", async () => {
+    const registry = await builtinPluginRegistry();
+    const activePlugins = ["world-init", "affinity"];
+    const store = await makeStore(activePlugins);
+    const sessionId = "sess-1";
+    const result = await importWorldDataForSession({
+      store,
+      sessionId,
+      worldId: "last-train",
+      worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+      now: NOW,
+      locale: "zh-CN",
+      preflight: { registry, activePlugins },
+    });
+    expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
+      [],
+    );
+    const names = new Map(
+      (await store.listCharacters(sessionId)).map(({ id, name }) => [id, name]),
+    );
+    const affinity = await store.listPluginData(
+      sessionId,
+      "affinity",
+      "affinity",
+    );
+    expect(affinity).toHaveLength(5);
+    for (const { key, value } of affinity) {
+      const name = names.get(`npc-${key}`);
+      expect(name).toBeDefined();
+      expect(value).toMatchObject({ name });
+    }
+  });
+
   it.each(["last-train", "haruka-academy", "lantern-barrow", "mistport"])(
     "starts %s with the narrative-only pack and only the narrator active",
     async (worldId) => {

@@ -11,7 +11,6 @@ import {
 } from "./-use-session-snapshot.js";
 export type { SessionSnapshot } from "./-use-session-snapshot.js";
 import {
-  getStoryTurnCount,
   getVisibleTurns,
   mergeTurnPages,
   traceEventMatchesCategory,
@@ -304,7 +303,10 @@ export function useDebugPageData(
     [turns],
   );
 
-  const storyTurnCount = useMemo(() => getStoryTurnCount(turns), [turns]);
+  const storyTurnCount =
+    snapshot.snapshotData?.session.id === selectedSessionId
+      ? snapshot.snapshotData.session.completedPlayerTurns
+      : 0;
 
   const visibleTurns = useMemo(() => getVisibleTurns(turns), [turns]);
 
