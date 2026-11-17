@@ -39,8 +39,6 @@ export interface HandleSuspensionOptions {
   readonly pendingProposals: readonly Proposal[];
   readonly emittedEvents: readonly EmittedEvent[];
   readonly executionContext: ExecutionContext;
-  /** Scope the runtime's `ctx.progress` tasks report under, when not its own execution (a nested call). */
-  readonly progressScopeId?: string;
   /** Numeric clock of this execution, restored into the tool context on resume. */
   readonly logicalTurn?: number;
   readonly turnNumber?: number;
@@ -125,11 +123,6 @@ export async function handleSuspension(
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
     executionContext,
     ...(input.actions ? { actions: structuredClone(input.actions) } : {}),
-    // A nested call reports progress under the root execution's scope.
-    ...(opts.progressScopeId !== undefined &&
-    opts.progressScopeId !== executionContext.executionId
-      ? { progressScopeId: opts.progressScopeId }
-      : {}),
     // `executeTurn` sets the player turns once it knows the whole execution.
     takenUnder: suspensionBasis(manifest, 0),
     ...(input.locale !== undefined ? { locale: input.locale } : {}),

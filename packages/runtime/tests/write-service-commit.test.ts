@@ -511,7 +511,7 @@ for (const [backend, create] of BACKENDS) {
         expect(resultOf(parent.name).status).toBe("failed");
         if (ending === "suspend")
           expect(resultOf(parent.name).error).toBe(
-            `${parent.name} cannot suspend after changing another plugin's data through a write service`,
+            `${parent.name} cannot suspend after a nested call (ctx.recursiveCall)`,
           );
         expect(
           execution.commit.results.some(

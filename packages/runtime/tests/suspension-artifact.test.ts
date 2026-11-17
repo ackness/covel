@@ -61,14 +61,14 @@ describe("execution suspension artifacts", () => {
     );
   });
 
-  it("collects top-level and nested artifacts once", () => {
+  it("collects each runtime's artifacts once", () => {
     const top = attachSuspensionArtifact(runtimeResult("top"), {
       record: suspension("suspension-1", "top"),
     });
-    const nested = attachSuspensionArtifact(runtimeResult("nested"), {
-      record: suspension("suspension-2", "nested"),
+    const other = attachSuspensionArtifact(runtimeResult("other"), {
+      record: suspension("suspension-2", "other"),
     });
-    attachSuspensionArtifact(nested, {
+    attachSuspensionArtifact(other, {
       record: suspension("suspension-1", "top"),
     });
     const turn: TurnResult = {
@@ -79,8 +79,7 @@ describe("execution suspension artifacts", () => {
         origin: "player",
         countPolicy: "none",
       },
-      runtimeResults: [top],
-      nestedRuntimeResults: [nested],
+      runtimeResults: [top, other],
       durationMs: 1,
       timestamp: "2026-08-26T00:00:00.000Z",
     };

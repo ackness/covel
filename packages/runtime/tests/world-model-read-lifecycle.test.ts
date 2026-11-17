@@ -301,13 +301,12 @@ describe("world read lifecycle", () => {
       const f = await fixture();
       const reader = fn("read", { tools: { builtin: ["stage-character"] } });
       const dataProducer = fn("data", { stage: "pre-turn" });
-      const child = fn("child", { trigger: { type: "manual" } });
       const later = fn("later", {
         turnCompletion: { mode: "detached" },
         effects: { writes: ["plugin-data:self:notes"] },
       });
       const r = await f.execute(
-        [producer, dataProducer, story, reader, child, later],
+        [producer, dataProducer, story, reader, later],
         {
           [producer.name]: async () => writes(character()),
           [dataProducer.name]: async (ctx) => {
@@ -331,15 +330,8 @@ describe("world read lifecycle", () => {
                 id: "derived",
                 description: "derived",
               });
-              await ctx.recursiveCall({
-                manualTrigger: { runtimeId: child.name },
-              });
             }
             return suspend();
-          },
-          [child.name]: async (ctx) => {
-            await ctx.pluginData!.set("notes", "nested", true);
-            return ok();
           },
         },
       );

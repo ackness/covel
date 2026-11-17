@@ -23,7 +23,7 @@ const input = {
   origin: "player" as const,
 };
 
-async function suspendedFixture(nested = false) {
+async function suspendedFixture() {
   const store = createMemoryStore();
   await store.createSession({
     id: input.sessionId,
@@ -46,12 +46,6 @@ async function suspendedFixture(nested = false) {
     runtimeType: "function",
     stage: "narrative",
     outputKind: "system",
-    trigger: { type: nested ? "manual" : "auto" },
-  };
-  const parent: RuntimeManifest = {
-    ...child,
-    name: "probe/parent",
-    outputKind: "story",
     trigger: { type: "auto" },
   };
   const deps = {
@@ -61,15 +55,6 @@ async function suspendedFixture(nested = false) {
       manifest,
       promptTemplate: "",
       handler: async (context): Promise<HandlerResult> => {
-        if (manifest.name === parent.name) {
-          await context.recursiveCall({
-            manualTrigger: { runtimeId: child.name },
-          });
-          return {
-            outcome: "success",
-            value: { narrativeOutput: "Waiting for an answer." },
-          };
-        }
         if (context.resumeData === undefined) {
           return {
             outcome: "suspended",
@@ -84,11 +69,7 @@ async function suspendedFixture(nested = false) {
       },
     }),
   };
-  const execution = await executeTurn(
-    input,
-    nested ? [parent, child] : [child],
-    deps,
-  );
+  const execution = await executeTurn(input, [child], deps);
   const outcome = await commitExecution({
     enqueueReleasedJobsInTx: refuseReleasedJobs,
     store,
@@ -160,47 +141,6 @@ describe("prepared resume host API", () => {
       (await store.getSession(input.sessionId))?.completedPlayerTurns,
     ).toBe(0);
   });
-  it("counts a player turn only when its suspended recursive child finally commits", async () => {
-    const { store, child, deps, execution, suspension } =
-      await suspendedFixture(true);
-    // The nested child commits right before the parent that called it.
-    expect(execution.commit.results.map((result) => result.status)).toEqual([
-      "suspended",
-      "success",
-    ]);
-    expect(suspension.pendingContinuation.executionContext).toMatchObject({
-      logicalTurnId: input.logicalTurnId,
-      countPolicy: "complete-player-turn",
-    });
-    const resumed = await resumeSuspendedRuntime(suspension, {}, child, deps);
-    expect(resumed.result.status).toBe("success");
-    expect(resumed.commit.executionContext.countPolicy).toBe(
-      "complete-player-turn",
-    );
-    expect(
-      (await store.getSuspension(suspension.id))?.resolvedAt,
-    ).toBeUndefined();
-    expect(
-      (await store.getSession(input.sessionId))?.completedPlayerTurns,
-    ).toBe(0);
-    expect(
-      (
-        await commitExecution({
-          enqueueReleasedJobsInTx: refuseReleasedJobs,
-          store,
-          execution: structuredClone(resumed),
-          completion: completion(suspension),
-        })
-      ).status,
-    ).toBe("committed");
-    expect(
-      (await store.getSession(input.sessionId))?.completedPlayerTurns,
-    ).toBe(1);
-    expect((await store.getSuspension(suspension.id))?.resolvedAt).toEqual(
-      expect.any(String),
-    );
-  });
-
   it("does not resolve or count a failed non-story resume even if its caller commits it", async () => {
     const { store, child, deps, suspension } = await suspendedFixture();
     const resumed = await resumeSuspendedRuntime(suspension, {}, child, {

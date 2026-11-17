@@ -183,6 +183,9 @@ export function finalizeThrownRuntime(
  * this run. PostRuntime does not run: the logical runtime has not ended, and
  * its hook runs once when it does. A timeout or cancellation still turns the
  * result into a failure, which drops the continuation.
+ *
+ * A run inside a nested execution (`ctx.recursiveCall`) fails instead: a
+ * nested result commits with its parent, so nothing could resume it.
  */
 export async function finalizeSuspension(
   deps: FinalizationDeps,
@@ -196,6 +199,13 @@ export async function finalizeSuspension(
   finalizeOptions?: FinalizationOptions,
 ): Promise<RuntimeResult> {
   const { manifest, input, runId, startTime } = run;
+  if (input.origin === "recursive")
+    return finalizeRuntimeFailure(
+      deps,
+      run,
+      `${manifest.name} cannot suspend inside a nested call (ctx.recursiveCall)`,
+      finalizeOptions,
+    );
   const { record } = suspension;
   const suspendedResult: RuntimeResult = {
     pluginId: manifest.pluginId,
