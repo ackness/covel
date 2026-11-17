@@ -1,6 +1,5 @@
 import {
   CHARACTER_ACTOR_CONTRACT,
-  characterActorOutputSchema,
   concealTracePayload,
   type RuntimeManifest,
   type ToolCallRecord,
@@ -28,15 +27,6 @@ export class PrivateDelegationProjection {
   mark(id: string, kind: "actor" | "concealed"): void {
     this.calls.add(id);
     if (kind === "concealed") this.concealedCalls.add(id);
-  }
-  completion(
-    id: string,
-    value: Record<string, unknown>,
-  ): Record<string, unknown> {
-    if (!this.calls.has(id)) return value;
-    if (this.concealedCalls.has(id)) return {};
-    const actor = characterActorOutputSchema.safeParse(value);
-    return actor.success ? { segments: actor.data.segments } : {};
   }
   record(call: ToolCallRecord): ToolCallRecord {
     return this.calls.has(call.toolCallId)

@@ -43,7 +43,6 @@ import {
   finalizeThrownRuntime,
   resolveRuntimeTimeoutMs,
 } from "../turn-executor/runtime-scaffold.js";
-import { restoreNestedResults } from "./suspended-nested-results.js";
 import { suspensionProgressScopeId } from "./suspension-progress-scope.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
@@ -274,13 +273,6 @@ async function executeResumedRuntime(
         resumeData,
         resumedFromSuspensionId: suspension.id,
         progressRunId: pendingContinuation.lifecycle.progressRunId,
-        ...(pendingContinuation.nestedResults?.length
-          ? {
-              restoredNested: restoreNestedResults(
-                pendingContinuation.nestedResults,
-              ),
-            }
-          : {}),
       }),
     );
   }

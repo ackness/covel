@@ -458,7 +458,7 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 
 共享的契约测试会检查这些。
 
-**挂起。** 待处理的挂起保存继续执行所需的请求和控制状态：消息、工具调用与缓冲提案、冻结输入，以及 agent 的 `loop` 状态（已用纠正次数、发现的工具、引导前正文和完成工具输出）。恢复沿用这些状态，不从后来变化的会话重新组装；步数和时限按 runtime 清单为本次恢复重新取得，纠正次数则继续累计。function 的 `ctx.recursiveCall` 子结果随父挂起保存，恢复成功后才一起提交；这与只返回数据的子 agent 不同。完整规则见[挂起与恢复](../reference/api.md#post-apisessionsidsuspensionssuspensionidresume)。
+**挂起。** 待处理的挂起保存继续执行所需的请求和控制状态：消息、工具调用与缓冲提案、冻结输入，以及 agent 的 `loop` 状态（已用纠正次数、发现的工具、引导前正文和完成工具输出）。恢复沿用这些状态，不从后来变化的会话重新组装；步数和时限按 runtime 清单为本次恢复重新取得，纠正次数则继续累计。挂起项不保存 `ctx.recursiveCall` 子结果，因为调用过它的 function 不能挂起。完整规则见[挂起与恢复](../reference/api.md#post-apisessionsidsuspensionssuspensionidresume)。
 
 - 恢复提交后，`markSuspensionResolved` 保留这一行（重复的恢复请求和会话的挂起列表还要找到它），并丢掉恢复已经用掉的内容。已解决的行只保留执行身份、语言和回合号（`settledSuspensionContinuation`）。
 - 快照只复制待处理的挂起。所以已解决的挂起永远不会把提示词带进快照、分支、导出或浏览器检查点。

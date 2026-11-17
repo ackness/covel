@@ -121,7 +121,6 @@ export type {
   SuspensionWriteBaseline,
   SuspensionWriteTarget,
   SuspendedLoopState,
-  SuspendedNestedResult,
   SnapshotRecord,
   SnapshotPayload,
   SnapshotSessionState,

@@ -161,11 +161,6 @@ it("learns private batch provenance before tracing malformed mixed entries and s
       providerRequests: ["PRIVATE-WIRE"],
     });
     expect(
-      privacy.completion(id, {
-        results: [{ ok: true, output: { intent: "PRIVATE-INTENT" } }],
-      }),
-    ).toEqual({});
-    expect(
       privacy.record({
         toolCallId: id,
         toolName: "delegate-batch",
