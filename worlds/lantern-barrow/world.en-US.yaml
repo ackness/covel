@@ -1,27 +1,26 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: "Lantern Barrow: The First Delve"
-summary:
-  For a century, the lantern kept watch over the barrow. Now it has gone out, its
-  lampkeeper is missing, and the bronze tomb doors stand open. Form a party in Greyreed's
-  tavern, assign your points, and roll your way down — a classic tabletop adventure,
-  starting with your first expedition.
+summary: >-
+  The lantern that guarded the barrow for a century has gone dark. Its keeper is
+  missing, and the bronze tomb doors stand open. Gather a party at Greyreed's tavern,
+  assign your points, and roll the dice on your first expedition.
 pluginPitch:
   label: Classic Tabletop
   description:
     Point-buy character creation, form-based checks and dice-pool rolls, quests,
     inventory, companion affinity, and panels for dungeon exploration, the barrow's
     alarm, and your renown.
-  reason:
-    "Tabletop play is fun when the rules are visible: you assign the attribute points,
-    the dice really roll, and the panels record every room and every noise that stirs
-    the barrow."
+  reason: >-
+    Assign your own attributes and act on the dice results. The map records where
+    you have been; the alarm panel tracks time spent in the tomb and disturbances
+    that wake the barrow.
 characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description:
-        What your adventurer is like and how they speak, such as "a gruff veteran
-        with a soft heart and few words." This shapes how the narrator portrays you.
+      description: >-
+        Your adventurer's temperament and way of speaking, for example "a gruff,
+        softhearted veteran who keeps it brief." The narrator uses this to portray you.
     - id: calling
       name: Calling
       description:

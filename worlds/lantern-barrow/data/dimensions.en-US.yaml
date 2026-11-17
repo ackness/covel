@@ -17,30 +17,47 @@ delveMap:
             collapsed: Collapsed
         note:
           title: Notes
+        exits:
+          title: Adjacent locations
   initialValue:
     bronze-doors:
       room: The Bronze Doors
-      note:
-        The doors have stood open since the night the lantern went out. The seal was pushed
-        open from the inside.
+      note: Open since the night the lantern went out. The seal bears signs of being forced from inside.
     hall-of-lamps:
       room: Hall of Lamps
-      note:
-        The lampkeeper once said wall lamps line both sides of the first passage inside the
-        tomb.
-  updateRule:
-    "Add an entry when a named room is first entered, seen, or reported by a
-    reliable source in the narrative. Use a short English kebab-case ID. Set status to
-    rumored if the party has only heard about it; explored once the player enters and
-    looks around; cleared once the danger is dealt with; sealed if the door is sealed;
-    collapsed if the room caves in. Write one sentence in note about the most important
-    discovery: an exit, trap, relic, or danger. Never delete entries or explore unvisited
-    rooms on the player's behalf."
+      note: The lampkeeper said wall lamps line the first passage inside the tomb.
+    keepers-cottage:
+      room: The Lampkeeper's Cottage
+      note: Ysolde has lived in this stone cottage at the foot of the hill for forty years.
+    summit-lantern:
+      room: The Summit Lantern
+      note: The lantern that kept watch for a century has gone dark.
+    bone-hall:
+      room: Bone Hall
+      note: The party has only heard that this hall exists; no one has explored it yet.
+    flooded-chamber:
+      room: Flooded Burial Chamber
+      note: The party has heard of a flooded chamber but has yet to see it.
+    choir-gallery:
+      room: Choir Gallery
+      note: The dead sing in a passage inside the tomb. What awaits there is still unknown.
+    throne-room:
+      room: Throne Room
+      note: The throne lies deep within the hill. No one has brought back word of the room.
+  updateRule: >-
+    Maintain only the locations already on the map. Do not add, delete, or rename them, or change their connections.
+    Set status to explored after the party enters and looks around, cleared after its dangers are dealt with,
+    sealed if its door is sealed, or collapsed if it caves in. Leave places known only by rumor as rumored.
+    In Notes, record only discoveries confirmed this turn, such as traps, relics, dangers, or whether a passage is usable.
+    Never explore on the player's behalf. Connections are fixed passages. For sealed doors or cave-ins,
+    change the status and note which passage is blocked; keep the exits and never invent a new route.
 barrowAlarm:
   name: Barrow Alarm
-  description: How close the barrow is to waking. At 6, the Barrow King opens his eyes.
+  description: The barrow is waking. The longer you stay inside, the more it stirs. At 6, the Barrow King opens his eyes.
   schema:
     properties:
+      phasesInside:
+        title: Phases spent in the tomb
       level:
         title: Alarm
       stage:
@@ -52,14 +69,21 @@ barrowAlarm:
           singing: The choir sings
           stirring: The throne trembles
           awake: The Barrow King wakes
-  updateRule:
-    "Apply updates only after the party enters the barrow. Raise level by 1 when
-    this turn's narrative contains fighting, breaking down doors, loud shouting, lighting
-    a flame in the Choir Gallery, a critical failure, or a prolonged rest inside the tomb
-    (at most +2 per turn). Lower it by 1 for relighting a wall lamp, slipping quietly past
-    danger, or soothing the dead. Set stage from level: 0 sleeping, 1 murmuring, 2
-    restless, 3–4 singing, 5 stirring, 6 awake. Reset level to 0 once the Lantern Heart is
-    back in the ancient lantern and the lantern has been relit."
+  updateRule: >-
+    Follow the settled world clock for this turn and list this dimension as following the clock.
+    If the party enters the tomb or acts inside it at any point this turn, add all elapsed phases reported by
+    that clock to Phases spent in the tomb. Count a turn spent leaving the tomb the same way;
+    add nothing for a turn spent entirely outside. Never count messages or estimate elapsed time yourself.
+    Each time the accumulated count crosses a multiple of three, raise Alarm by 1. Count every threshold
+    crossed, but this natural increase can only raise Alarm to 5; an existing 6 stays at 6.
+    Keep the accumulated count after retreating and resume it on re-entry. Never count the same threshold twice.
+    Then apply this turn's events inside the tomb: add 1 each for fighting, breaking down doors, loud shouting,
+    lighting a flame in the Choir Gallery, a critical failure, or a prolonged rest. These increases are capped
+    at 2 per turn and can raise Alarm to 6. Subtract 1 each for relighting a wall lamp, slipping quietly past
+    danger, or soothing the dead. Clamp the final Alarm to 0 through 6. Set stage to match:
+    0 sleeping, 1 murmuring, 2 restless, 3 or 4 singing, 5 stirring, 6 awake.
+    Once the Lantern Heart is back in the lantern and the lantern is lit, reset both Alarm and Phases spent
+    in the tomb to 0, with stage set to sleeping. Keep them there while the lantern burns.
 lantern:
   name: The Barrow Lantern
   description: Where the Lantern Heart is, and whether the lantern burns again.
@@ -87,14 +111,12 @@ lantern:
           found: Found
           rescued: Rescued
           lost: Did not survive
-  updateRule:
-    Update only when the narrative explicitly establishes a change. Set heart to
-    traced when its whereabouts are learned, recovered when it is retrieved, returned when
-    it is placed back in the lantern, shattered if it is destroyed, or bargained-away if
-    it is handed to the Barrow King or anyone else. Set lamp to burning once the Heart has
-    been returned and the lantern lit, or flickering if a temporary flame is barely
-    keeping it alight. Set keeper to found when Ysolde is seen, rescued when she is
-    brought out of the barrow, or lost if she dies.
+  updateRule: >-
+    Record only changes the narrative has confirmed. Set heart to traced when its whereabouts
+    are learned, recovered once it is in hand, returned when replaced, shattered if destroyed,
+    or bargained-away if handed to the Barrow King or anyone else. Set lamp to burning once the Heart is
+    back and the lantern lit, or flickering if a temporary flame barely keeps it alight. Set keeper to
+    found when Ysolde is seen, rescued when brought out of the barrow, or lost if she dies.
 renown:
   name: Renown
   description: What people in Greyreed and the surrounding area say about you.
@@ -112,13 +134,12 @@ renown:
           legend: Legend
       deeds:
         title: Deeds
-  updateRule:
-    "Adjust when villagers witness or have actually heard about the player's
-    actions: +1 for solving a specific problem for a villager, +2 for rescuing the lampkeeper
-    or relighting the lantern, and -1 for deceiving, extorting, or bringing trouble on
-    villagers. Add a sentence to deeds for each change. Set title from score: 0–1
-    stranger, 2–3 sellsword, 4–6 trusted, 7–8 hero-of-greyreed, 9–10 legend. Actions no
-    one knows about do not affect renown."
+  updateRule: >-
+    Change Renown only after villagers witness or hear about an action: add 1 for solving a specific problem
+    for a villager, add 2 for rescuing the lampkeeper or relighting the lantern, and subtract 1 for deceiving,
+    extorting, or bringing trouble on villagers. Record a sentence explaining each change in Deeds.
+    Set title from Renown: 0 or 1 stranger, 2 or 3 sellsword, 4 through 6 trusted, 7 or 8 hero-of-greyreed,
+    9 or 10 legend. Actions that never reach the villagers do not affect Renown.
 geography:
   name: Geography
   schema:
@@ -230,11 +251,7 @@ mechanics:
       customRules:
         title: House rules
   initialValue:
-    skillSystem:
-      Might, Agility, Endurance, Wits, Insight, and Presence each start at 1.
-      Distribute 6 additional points as you choose, to a maximum of 4 in any one
-      attribute. Checks roll d20 + the attribute modifier (+2 per point, +10 at 5) against difficulty 8/12/16/20. A natural 20 is
-      a critical success; a natural 1 is a critical failure.
+    skillSystem: Use the opening form to assign points. Follow the Attribute Check panel and dice-pool receipts for modifiers, difficulties, and results.
     customRules:
       - At 0 hit points, you collapse rather than die immediately. Companions can drag you
         back.

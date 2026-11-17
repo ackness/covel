@@ -26,16 +26,16 @@ definition:
       - Sunday
     periods:
       - name: Late night
-      - name: Morning
-      - name: Afternoon
-      - name: Evening
+      - name: Arrival and morning reading prep
+      - name: Morning classes and breaks
+      - name: Midday
+      - name: Afternoon classes
+      - name: Last classes and dismissal
+      - name: Club activities
+      - name: Clubs winding down and dusk
+      - name: After closing
   evolution:
-    prompt: Morning reading preparation is before 08:20; lunch starts at 12:20;
-      school ends at 15:40; club activities run from 16:00 to 17:30; the school
-      closes at 18:00. When the story skips to lunch, after school or club
-      activities, include the skipped classes and waiting from the current
-      clock, not only the conversation after arrival.
-      A conversation usually takes a few minutes; classes and club
-      activities take as long as the story says they do. Sleep or a clear cut to
-      the next day moves the clock to the next day. Flashbacks do not change the
-      current date.
+    prompt: >-
+      Students arrive before 08:20 to get ready for morning reading. Lunch begins at 12:20, school ends at 15:40, club activities run from 16:00 to 17:30, and the school closes at 18:00.
+      Period labels use whole hours. For a move to lunch, dismissal, club activities, or closing time, use the exact times above and include classes and waiting skipped since the current time.
+      A conversation usually takes a few minutes; settle classes and club activities by the time the narrative says they take. Sleep or an explicit cut to the next day advances the date. Flashbacks do not change it.

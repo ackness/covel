@@ -1,5 +1,5 @@
-# Hidden route events (visibility: hidden in world.data.yaml). Payloads are
-# briefs for the narrator: play the moment, never decide the player's answer.
+# Hidden route events are discovered by convention at this path.
+# Give the narrator a moment to play; leave the player's answer open.
 - id: mio-the-club-room
   title: 澪没说出口的事
   when:
@@ -12,7 +12,9 @@
         gte: 3
       - time: hour
         gte: 16
-  payload: 放学后只剩两个人的文艺部活动室里，澪终于说出她一直瞒着部员的事：学生会有人提议把社团楼三层的旧活动室改成学园祭执行仓库，合并审查不只是人数问题。她把一份翻修草案压在《春日薄荷》的目录下面，问你如果是你，会不会告诉大家。演出她的疲惫和犹豫，让玩家决定怎么回应；不要替她做决定，也不要让事情当场解决。
+  payload: >-
+    放学后的文艺部活动室只剩你和澪。她说出一直瞒着部员的事：学生会有人想把社团楼三层的旧活动室改成学园祭执行仓库，合并审查还牵涉人数以外的问题。
+    她把翻修草案压在《春日薄荷》的目录下面，问你换作是你，会不会告诉大家。写出她的疲惫和犹豫，留给玩家回应的空隙；由澪自己作决定，事情也别在这一场就解决。
   priority: 10
 - id: kaho-last-verse
   title: 没有名字的歌
@@ -24,7 +26,9 @@
       - dimension: festival
         path: projects.closingSong.progress
         gte: 60
-  payload: 夏帆在樱坂海堤的自动贩卖机旁等你，吉他背在身后。她说新歌差最后一段写不出来，然后第一次认真地弹给你听已经写好的部分，在空着的那一段停下。她承认写不出来的原因：如果学园祭演砸了，轻音部可能失去主舞台资格，她不敢写一个"之后"。演出这段旋律和她的不安，让玩家回应；不要替她写出歌词。
+  payload: >-
+    夏帆背着吉他，在樱坂海堤的自动贩卖机旁等你。她说新歌还缺最后一段，接着第一次认真弹起已经写好的部分，在空白处停下来。
+    她承认，若学园祭演砸了，轻音部可能失去主舞台资格，她不敢写那以后的事。让旋律和她的不安留在场景里，等玩家回应；歌词留给她自己写。
   priority: 8
 - id: akane-sisters-note
   title: 旧刊扉页上的字
@@ -36,7 +40,9 @@
       - dimension: clubReview
         path: status
         equals: building-case
-  payload: 图书馆打烊前，东条茜把那架最旧的学园祭特刊取下来，翻到扉页给你看一行褪色的字："希望明年还能在这里。"她安静地说，这是七年前带头"旧社团楼保留运动"的姐姐写的，她一直想把这件事守下去。她问你愿不愿意把这本旧刊的故事交给文艺部。演出她少见的主动，留出沉默；不要替她说完全部心事。
+  payload: >-
+    图书馆闭馆前，东条茜取下最旧的学园祭特刊，翻开扉页，指给你看一行褪色的字：“希望明年还能在这里。”
+    她轻声说，这是七年前带头发起“旧社团楼保留运动”的姐姐写的，自己一直想接着守下去。她问你，愿不愿意把这本旧刊的故事交给文艺部。让她难得的主动和停顿都留下来，有些心事暂且不说完。
   priority: 6
 - id: kaho-names-the-song
   title: 给歌起个名字
@@ -47,5 +53,78 @@
       - dimension: festival
         path: milestones.stagePreview
         in: [passed, rough]
-  payload: 主舞台预演之后，夏帆在轻音部练习室门口拦住你，把一张写满涂改的歌词纸塞给你——最后一段终于写完了，句子里有春天、海风和"你"。她说想让你第一个听完整版，然后别开视线问：这首歌该叫什么名字？演出她难得的紧张和期待，让玩家回应或起名；不要替玩家决定歌名，也不要把这当成告白场面一次说穿。
+  payload: >-
+    主舞台预演后，夏帆在轻音部练习室门口拦住你，递来一张改得密密麻麻的歌词纸。最后一段写完了，句子里有春天、海风和“你”。
+    她想让你第一个听完整版，问到歌名时却别开了视线。写出她的紧张和期待，等玩家回应或起名；歌名由玩家决定，心意也别在这一场全说穿。
+  priority: 9
+- id: rin-closed-notebook
+  title: 合上的采访本
+  when:
+    all:
+      - dimension: routes
+        path: rin.stage
+        in: [familiar, heartbeat, confession-eve]
+      - dimension: routes
+        path: rin.trust
+        gte: 2
+      - dimension: festival
+        path: projects.rumorWall.progress
+        gte: 30
+  payload: >-
+    凛整理“传闻真伪墙”的匿名投稿时，把采访本合上了。她问你，若一条消息是真的，写出来却会伤到朋友，还该不该刊登。
+    这次她没有先开玩笑，也不肯拿投稿人的名字换一个容易的答案。她承认自己怕漏掉重要的事，也怕朋友以后只把她当记者。
+    让她听完玩家的看法；玩家可以追问、劝她压稿或提出核实办法，不替玩家表态，也不凭这次谈话判定投稿真假。
+  priority: 8
+- id: rin-unsigned-margin
+  title: 空着的署名栏
+  when:
+    all:
+      - revealed: rin-closed-notebook
+        turnsSinceGte: 3
+      - dimension: routes
+        path: rin.trust
+        gte: 3
+      - dimension: festival
+        path: projects.rumorWall.progress
+        gte: 60
+  payload: >-
+    放学后的新闻部编辑室里，凛把“传闻真伪墙”的版样推给你，署名栏还空着。她想请你一起核对措辞，却先把采访本收进包里，说这回有些话不用记。
+    她问，上次合上本子以后，你有没有觉得和她说话轻松一点。她说得很快，问完却没接玩笑。
+    留出玩家回答和决定是否署名的余地。版样应接住此前谈话与已发生的核实结果；不擅自断定她曾刊登或压下那条投稿，也不把一次认真交谈写成告白。
+  priority: 9
+- id: yuma-rooftop-round
+  title: 巡查表的背面
+  when:
+    all:
+      - dimension: routes
+        path: yuma.stage
+        in: [familiar, heartbeat, confession-eve]
+      - dimension: routes
+        path: yuma.trust
+        gte: 2
+      - time: hour
+        equals: 17
+      - time: minute
+        gte: 40
+  payload: >-
+    十七点四十分的巡查后，悠真在社团楼屋顶停下来，望着还亮灯的活动室。他把巡查表翻到背面，指给你看社团补件和申诉的流程。
+    他问，若文艺部拿得出保留的理由，你愿不愿意陪他们把材料补齐。说完又看了一眼表，提醒离闭校只剩一会儿。
+    演出他对规则的坚持和没有明说的关心，让玩家选择帮忙、追问或离开；不替玩家承诺，不让他私改审查结果。
+  priority: 8
+- id: yuma-after-review
+  title: 审查后的那段路
+  when:
+    all:
+      - revealed: yuma-rooftop-round
+        turnsSinceGte: 3
+      - dimension: routes
+        path: yuma.trust
+        gte: 3
+      - dimension: festival
+        path: milestones.budgetReview
+        in: [passed, rough]
+  payload: >-
+    预算初审之后，悠真收好材料，在离校时问你要不要一起绕过樱坂海堤。他说今天不再谈表格，走了几步却还是问，你觉得审查有没有公平对待那些努力的人。
+    根据已经发生的初审结果，让他谈自己仍放不下的那一处。他愿意听批评，也想知道玩家是否理解他的顾虑。
+    玩家可以回答、反问或安静同行；不替玩家宽慰他，不凭这次谈话宣布文艺部已被保住，也不替双方确认心意。
   priority: 9

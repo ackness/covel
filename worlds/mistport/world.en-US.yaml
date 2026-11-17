@@ -6,21 +6,20 @@ summary:
 pluginPitch:
   label: Mistport Investigation
   description:
-    Follow the case of the missing Guildmaster Qi as a classic story, with
-    clue memory, a relationship map, world rules, a ready-made cast and
-    portraits.
-  reason: The Case Board, Faction Standing, the Deep Ebb and the Key
-    Fragments update from the story every turn. Add tide time, fog-rot and a
-    core cast of seven, and every choice in a long investigation leaves a
-    mark.
+    Investigate Qi's disappearance, check testimony against physical evidence,
+    and preserve traces before the flood takes them. Includes a quest log,
+    clue memory, a relationship map, world rules and portraits of seven characters.
+  reason: Four investigations follow the half-letter, the missing report page,
+    the Echo Gallery and the ward testimony. The Case Board records sources,
+    contradictions and preservation; faction standing, the deep ebb and Key
+    fragments change with the story.
 characterSchema:
   attributes:
     - id: persona
       name: Personality
       description:
-        'Your character''s personality and way of speaking (the voice comes
-        from the personality), e.g. "quiet, wary, decisive when it counts."
-        It shapes how the story portrays your character and their dialogue.'
+        'How you speak and treat people, for example "quiet, wary, decisive when
+        it counts." The narrative uses this to shape your actions and dialogue.'
     - id: origin
       name: Origin
       description:

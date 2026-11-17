@@ -8,9 +8,9 @@ definition:
     - 满潮
     - 退潮
     - 低潮
-  initial: { cycle: 1, phase: 0 }
+  initial: { cycle: 1, phase: 2 }
   evolution:
     mode: forward
     defaultStep: 1
     maxStep: 16
-    prompt: 以潮汐阶段计时，不换算现实钟点。连续的短对话可保持当前阶段，等待潮水或跨区域探索应推进；深退潮属于剧情事件，不是常规阶段。
+    prompt: 以潮汐阶段计时，不换算现实钟点。开局海水已经后退，从退潮开始。连续短谈可留在当前阶段，等潮水或跨区域探索则推进。深退潮是罕见的剧情事件，不是循环中的常规阶段。

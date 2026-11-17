@@ -1,12 +1,44 @@
 - id: mio-the-club-room
-  title: What Mio Didn't Say
-  payload: "After school, alone with the player in the Literature Club Room, Mio finally tells them what she has been keeping from the other members: someone on the Student Council has proposed turning the old third-floor clubroom in the Club Building into a storeroom for running the festival, so the merger review isn't only about member numbers. She slides a draft renovation plan under the contents page of Spring Mint and asks the player whether, in her place, they would tell everyone. Play out her exhaustion and hesitation and let the player decide how to respond; don't decide for her, and don't let the problem be solved on the spot."
+  title: What Mio kept to herself
+  payload: >-
+    After school, alone with the player in the Literature Club Room, Mio explains what she has kept from the other members. Someone on the Student Council wants to turn their old third-floor room into a festival storeroom; the merger review is about more than membership numbers.
+    She slips a draft renovation plan under the contents page of Spring Mint and asks whether the player would tell everyone in her place. Show her exhaustion and hesitation. Leave the answer to the player, let Mio make her own decision, and keep the problem open beyond this scene.
 - id: kaho-last-verse
-  title: A Song with No Name
-  payload: 'Kaho is waiting for the player by the vending machine on Sakurazaka Seawall, her guitar on her back. She says she can''t finish the last verse of her new song. Then, for the first time, she properly plays the part she has written for the player, and stops where the empty verse should begin. She admits why she can''t write it: if the festival performance goes badly, the Light Music Club could lose its place on the main stage, and she doesn''t dare write an "after." Play out the melody and her unease and let the player respond; don''t write the lyrics for her.'
+  title: A song with no name
+  payload: >-
+    Kaho waits by the vending machine on Sakurazaka Seawall with her guitar on her back. She says she can't finish the last verse, then plays the part she has written properly for the player for the first time. She stops where the missing verse should begin.
+    If the festival performance goes wrong, the Light Music Club could lose its main-stage place. She admits she can't bring herself to write about what comes after it. Let the melody and her unease carry the scene. Leave room for the player's response and the lyrics for Kaho to write.
 - id: akane-sisters-note
-  title: The Note on the Title Page
-  payload: 'Just before the library closes, Akane Toujou takes the oldest festival special issue down from that shelf and opens it to the title page to show the player a faded line: "Hope we can still be here next year." She says quietly that her sister wrote it — the sister who led the Save the Old Clubhouse campaign seven years ago — and that she has always wanted to keep that going. She asks whether the player would be willing to hand this old issue''s story over to the Literature Club. Play out this rare moment of her reaching out and leave room for silence; don''t say everything on her mind for her.'
+  title: The faded line on the title page
+  payload: >-
+    Just before the library closes, Akane takes down the oldest festival special issue and shows the player a faded line on its title page: "Hope we can still be here next year."
+    Her sister wrote it when she led the Save the Old Clubhouse campaign seven years ago. Akane quietly says she wants to carry that work on, and asks whether the player would share the old issue's story with the Literature Club. Give her unusual willingness to speak some room, including its silences. Leave some of her thoughts unsaid.
 - id: kaho-names-the-song
-  title: Naming the Song
-  payload: 'After the main-stage preview, Kaho stops the player at the door of the Light Music Club Practice Room and presses a sheet of heavily scribbled-over lyrics into their hands — the last verse is finally done, and its lines hold spring, the sea breeze, and "you." She says she wants the player to be the first to hear the whole song, then looks away and asks: what should this song be called? Play out her rare nerves and hope and let the player respond or name it; don''t choose the title for the player, and don''t turn this into a confession scene where everything gets said at once.'
+  title: A name for the song
+  payload: >-
+    After the main-stage preview, Kaho stops the player outside the Light Music Club Practice Room and hands them a page covered in crossed-out lyrics. The last verse is finished; it has spring, the sea breeze, and "you" in it.
+    She wants the player to hear the whole song first. Looking away, she asks what they should call it. Show her nerves and anticipation, and let the player respond or suggest a name. Leave the title to them and let the scene stop short of a full confession.
+- id: rin-closed-notebook
+  title: The closed notebook
+  payload: >-
+    While sorting anonymous submissions for the Fact-or-Rumor Wall, Rin closes her notebook. If a story is true but publishing it would hurt a friend, she asks, should it still go to print?
+    She skips her usual opening joke and refuses to give up the sender's name for an easy answer. She admits she's afraid of missing something that matters, and of friends who come to see her only as a reporter.
+    Let her hear the player out. They can ask questions, suggest holding the story, or propose a way to check it. Leave their position to them and the submission's truth unresolved by this conversation alone.
+- id: rin-unsigned-margin
+  title: The empty byline
+  payload: >-
+    After school in the Newspaper Club Editorial Office, Rin slides over a proof of the Fact-or-Rumor Wall. The byline is blank. She wants the player's help checking the wording, but puts her notebook in her bag first: some things don't need writing down this time.
+    Since she closed it the other day, has talking to her felt any easier? The question comes out fast. This time she doesn't follow it with a joke.
+    Let the player answer and decide whether to add their name. The proof should reflect their earlier conversation and any checking that has actually happened. Leave open whether she ran or held that submission unless the story has already established it, and keep the conversation short of a confession.
+- id: yuma-rooftop-round
+  title: The back of the patrol sheet
+  payload: >-
+    After his 17:40 patrol, Yuma pauses on the Club Building Rooftop to look at the clubrooms still lit below. He turns his patrol sheet over and shows the player how clubs can submit missing documents or appeal.
+    If the Literature Club has a case for keeping its room, would the player help them finish the paperwork? He checks his watch again and reminds them that closing time is near.
+    Show his respect for procedure and the concern he leaves unspoken. Let the player offer help, ask questions, or leave. They must make their own promises; Yuma must not alter the review result on his own authority.
+- id: yuma-after-review
+  title: The walk after the review
+  payload: >-
+    After the first budget review, Yuma puts his papers away. As they leave school, he asks whether the player wants to take the longer way past Sakurazaka Seawall. No more forms today, he says, but a few steps later he asks whether the review was fair to the people who worked so hard.
+    Draw on the established review result to let him discuss the part he still worries about. He is willing to hear criticism and wants to know whether the player understands his concerns.
+    The player can answer, ask him a question, or walk beside him in silence. Leave any reassurance to them. This conversation neither settles the Literature Club's future nor confirms their feelings for each other.

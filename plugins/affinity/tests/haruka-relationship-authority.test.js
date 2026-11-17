@@ -339,7 +339,7 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
     );
     expect(row.value.definition.updateRule).toContain(
       locale === "zh-CN"
-        ? "初识→熟悉 1、熟悉→心动 2、心动→告白前夜 4"
+        ? "acquaintance → familiar 需 trust 至少 1，familiar → heartbeat 至少 2，heartbeat → confession-eve 至少 4"
         : "1 for acquaintance → familiar, 2 for familiar → heartbeat, and 4 for heartbeat → confession-eve",
     );
   });
@@ -502,7 +502,7 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
       "story-events",
       "_hidden.events",
     );
-    expect(events).toHaveLength(4);
+    expect(events).toHaveLength(8);
     const byId = Object.fromEntries(events.map((r) => [r.key, r.value]));
     const dims = await dimensions();
     dims.routes.value.mio = { stage: "heartbeat", trust: 2, pressure: 3 };

@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: lantern-barrow
 name: 提灯古冢・初次远征
-version: 0.1.2
-summary: 守了百年的古冢之灯熄灭，守灯人失踪，青铜墓门洞开。在灰苇村的酒馆里组队、分配点数、掷骰下墓——经典跑团，从第一次远征开始。
+version: 0.1.3
+summary: 守了百年的古冢之灯熄灭，守灯人失踪，青铜墓门洞开。到灰苇村的酒馆组队、分配点数，掷骰踏上第一次远征。
 defaultLocale: zh-CN
 tags:
   - fantasy
@@ -23,7 +23,7 @@ plugins:
 pluginPitch:
   label: 经典跑团
   description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
-  reason: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
+  reason: 自己分配属性，按骰子结果行动。地图记录走过的地方，警戒面板记录墓内流逝的时间与惊动古冢的响动。
 pluginSettings:
   story-events:
     planner: true
@@ -33,7 +33,7 @@ characterSchema:
       name: 性格
       type: string
       category: bio
-      description: 你的冒险者是什么样的人、怎么说话——如「嘴硬心软的老兵，说话简短」。影响叙事如何刻画你。
+      description: 冒险者的性格和说话方式，例如“嘴硬心软、说话简短的老兵”。叙事会据此刻画你。
     - id: calling
       name: 职业
       type: string

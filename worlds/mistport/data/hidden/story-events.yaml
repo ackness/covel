@@ -1,6 +1,4 @@
-# Hidden story events (visibility: hidden in world.data.yaml). Payloads are
-# briefs for the narrator, not finished prose, and must not resolve the deep
-# truth early.
+# Imported as hidden data by the story.events@1 convention.
 - id: frost-hears-it
   title: 雾在说话
   when:
@@ -11,7 +9,7 @@
       - dimension: factionStanding
         path: congregation.attitude
         gte: 2
-  payload: 小霜在遗迹完全暴露时找到主角，避开教会其他人，带主角走下回声廊旁一段只有深退潮才露出的石阶。她说雾正在用齐老说话的停顿方式低语，并让主角看她自己手腕上的潮纹，问主角是否也听得见。她不知道这意味着什么，也害怕被教会当成证据。只演出这次相遇与她的恐惧，不解释雾之主的真相，不确认齐老的下落。
+  payload: 小霜避开教会的人，在遗迹暴露的窗口找到你，领你走下回声廊旁只在深退潮露出的石阶。她说，雾低语时的停顿和齐老说话一模一样。她露出腕上潮纹，问你是否也听得见。她自己也不明白，害怕教会拿她当证据。写出这次私下相遇，别解释雾之主，也别确认齐老在哪。
   priority: 10
 - id: meg-shows-the-fragment
   title: 铁姑的碎片
@@ -23,7 +21,7 @@
       - dimension: factionStanding
         path: saltFangs.attitude
         gte: 2
-  payload: 铁姑私下约主角到盐牙会的暗仓，取出一块铰齿状的灰色碎片——正是第七十四号鉴定报告缺页上记载的那一块。她承认碎片是她派人从公会封档库带出来的，因为陈远山的人比她先一步在找它。她不肯说钥匙能打开什么，只要求主角在她和议会之间做出选择。演出这场摊牌与她的条件，不替主角做决定。
+  payload: 铁姑约你到盐牙会暗仓，拿出第七十四号报告缺页里记载的铰齿状灰色碎片。她承认是自己派人从公会封档库取的，因为陈远山的人更早就在找它。钥匙能开什么，她不肯说，只问你站她这边还是议会那边。把她的条件说清楚，留给玩家决定。
   priority: 5
 - id: meg-calls-the-debt
   title: 盐牙会讨账
@@ -34,5 +32,49 @@
       - dimension: factionStanding
         path: saltFangs.attitude
         lte: 0
-  payload: 铁姑给过主角选择，而主角没有站到盐牙会这边。现在她的人来讨这笔账：两个盐牙会的打手在潮湿的巷口拦住主角，客气地要回她摊牌时透露的情报的"价钱"——要么交出一条议会的消息，要么把案情板上的一条线索让给盐牙会。铁姑本人不露面。演出这场带威胁的交涉，让玩家决定付、拖还是翻脸；不要当场让局面失控成死斗。
+  payload: 铁姑给过你选择，你没站到盐牙会这边。两个打手在湿巷口拦住你，客客气气地讨情报的“价钱”：交一条议会的消息，或者让出案情板上的一条线索。铁姑不露面。让玩家选择付账、拖延或翻脸，别一开场就打成死斗。
   priority: 6
+- id: gallery-washed-clean
+  title: 被洗净的石壁
+  when:
+    dimension: caseBoard
+    path: echo-gallery.status
+    equals: contaminated
+  payload: 你发现回声廊的痕迹已经不能照原样核验。若是潮水冲刷，写出被磨平的盐线；若是人为污染，沿用案情板记下的原因。一名曾走过廊道的潮民愿意凭记忆描述痕迹的位置，却说不准时间。给玩家一个追问的新来源，明确这是回忆，不能直接恢复原有佐证，也不能抵消污染。
+  priority: 8
+- id: survivor-retracts
+  title: 病房门边的改口
+  when:
+    dimension: caseBoard
+    path: stilltide-survivor.status
+    equals: corroborated
+  payload: 幸存者的说法刚有了独立佐证，病房门边便出现议会看守。他在压力下否认自己刚才的话，避开你的目光。只让他撤回本人已经说过的证词，不编造玩家未曾听过的口供。写明哪一句被撤回、谁在场，供后续结算重新核对来源。让玩家选择保住记录、继续问，或先离开；别当场揭开深处的真相。
+  priority: 7
+- id: fragment-changes-hands
+  title: 碎片换了手
+  when:
+    dimension: keyFragments
+    path: archive-fragment.status
+    equals: taken
+  payload: 铰齿状碎片被夺走后，有人看见携带它的人经过中港。沿用碎片记录中已经确定的新持有者，不另换一个幕后主使。目击者只认得包裹和去向，没看清交接。给玩家一条可以追的路，也说明追赶会耽搁撤离或其他调查；别替玩家追回碎片。
+  priority: 7
+- id: secured-record-survives
+  title: 水退后留下的记录
+  when:
+    all:
+      - dimension: caseBoard
+        path: echo-gallery.secured
+        equals: true
+      - dimension: deepWithdrawal
+        path: stage
+        equals: flood
+  payload: 急涨吞没回声廊时，让你此前固定的记录仍能被找到。记录保存在何处、由谁看管，都沿用已经发生的保管行动；它若另遭伪造或泄密，不要写成完好无损。用一个具体细节对照水下消失的原迹。留下下一步可比对的材料，不把保存成功写成案情已经解决。
+  priority: 9
+- id: letter-ready-to-compare
+  title: 信纸上的盐
+  when:
+    dimension: caseBoard
+    path: torn-letter.secured
+    equals: true
+  payload: 苏窈与你重看已经固定的半封信，指出纸边黑潮盐与齐老离开时的潮时对不上。她提出把信上的盐痕与回声廊潮线比对。信件若已受损或走漏，按案情板现状写，不恢复遗失的字句。给出这条可行动的核验路径，不替玩家断定盐何时沾上，也不指认信里那个“他”。
+  priority: 4

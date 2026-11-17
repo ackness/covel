@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: mistport
 name: 雾港・裂潮纪
-version: 0.3.2
+version: 0.4.0
 summary: 潮钟三鸣，失踪的公会长与一把破碎的钥匙，把你卷入永雾港城的四方暗战。
 defaultLocale: zh-CN
 tags:
@@ -18,8 +18,8 @@ plugins:
   - pack:traditional-story
 pluginPitch:
   label: 雾港调查剧
-  description: 以传统叙事推进齐老失踪案，带有线索记忆、关系图谱、世界规则、预设角色与立绘。
-  reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
+  description: 追查齐老失踪案，核对证词和物证，固定会被返潮带走的痕迹。带有任务日志、线索记忆、关系图谱、世界规则和七名角色的立绘。
+  reason: 四条调查任务串起半封信、报告缺页、回声廊和病院证词。案情板记录每条线索的来源、矛盾与保存情况；四方立场、深退潮和钥匙碎片随叙事变化。
 pluginSettings:
   story-events:
     planner: true
@@ -29,7 +29,7 @@ characterSchema:
       name: 性格
       type: string
       category: bio
-      description: 主角的性格与说话方式（口吻由性格而来）——如「沉默寡言、谨慎多疑、必要时果断」。影响叙事如何刻画你的角色与对白。
+      description: 你怎样说话、怎样待人，例如“沉默寡言、谨慎多疑，必要时果断”。叙事会据此描写你的举止和对白。
     - id: origin
       name: 来历
       type: string

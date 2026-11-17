@@ -1,0 +1,122 @@
+- id: geography
+  keys:
+    [
+      Upper City,
+      Mid-Harbor,
+      Undertow,
+      Main Pier,
+      Sealed Archive,
+      Stilltide Asylum,
+      Salt Market,
+      Soundless Inn,
+      Tide-Seal Gate,
+      Drawdown Steps,
+      Echo Gallery,
+      Bone Arch,
+      Sunken Bell Hall,
+      Hidden Grotto,
+    ]
+  content: >-
+    Mistport stands between cliff and sea under permanent pale grey fog. Visibility never exceeds fifty paces. The city has three tiers: the Upper City, Mid-Harbor and the Undertow.
+    Fog thins at the cliff top, where daylight sometimes shows. The Council and merchant houses occupy stone buildings and control the legal relic trade. An ancient, flameless tide-stone lamp sits in the dome of Council Hall.
+    The Tide-Reader Guild Tower houses the city's only library and archive as well as its relic appraisers. The Sealed Archive beneath it is restricted. On the day Qi vanished, a page disappeared from Appraisal Report 74 and another from the visitor ledger, with no damage to the lock.
+    Stilltide Asylum supposedly treats severe fog-rot, but the Council guards it closely. The sole survivor of the deep-dive team lost three years ago is held on its lowest floor.
+    Mid-Harbor is damp and muggy, its docks, workshops and inns crowded into thick fog. The factions trade here and work against each other in secret. The Main Pier is the city's only large berth, where ferries, cargo ships and newcomers arrive. The tide-driven clocktower sounds every six hours; three quick strikes warn of a deep ebb.
+    The Salt Market operates semi-openly in the back alleys. The Salt Fangs sell goods and recruit there, quoting their real prices only to people with Salt Chips. The low walls of the Soundless Inn are packed with sound-absorbing fog fungus. Its keeper never asks where guests came from, but hangs the lamps of those who do not return over the door.
+    Tide-Seal Gate guards the route to the Drawdown Steps. Grey Falcon checks permits and confiscates open flames and unregistered relics. Bypassing him through the hidden pier hatch leaves a favor owed to the Salt Fangs.
+    The Undertow is cold, full of salt mist and the smell of corrosion. The ruins emerge at ebb, their layout changing each time. Old maps are useless; no one has reached the deepest part.
+    The half-submerged Bone Arch has no known origin. The deep ebb six years ago exposed it and cost seventeen lives. The Sunken Bell Hall appears only at ebb. The Congregation worships there, believing it closest to the Mist Lord.
+    Even flood tide cannot reach the Hidden Grotto, the Salt Fangs' base, where Meg stores her collected fragments. Every Drawdown Step bears an evacuation mark. A deep ebb begins only below the ninetieth step; after the flood bell there is usually about half an hour left.
+    The Echo Gallery is the first ring-shaped corridor exposed by this deep ebb. Its walls repeat footsteps and whispers after a delay. Qi's tide-sigil, fresh rope marks from Grey Falcon's unit and an unfamiliar nursery-rhyme copper plate have turned up there.
+- id: factions
+  keys:
+    [
+      Council,
+      Chair Chen,
+      Tide-Reader,
+      Guild,
+      Salt Fangs,
+      Iron Meg,
+      Congregation,
+      Frost,
+      Tide-Seal Decree,
+    ]
+  content: >-
+    The Mistport Council rules the Upper City from Council Hall under Chair Chen Yuanshan. It seeks to restrict civilian access to the Undertow and monopolize the legal relic trade through the Tide-Seal Decree, though its members are split between doves and hawks.
+    It treats the Salt Fangs as outlaws in a long cold war, uses its funding to pressure the Guild, and condemns the Congregation as a cult while watching its following grow in the lower city.
+    Guildmaster Qi heads the Tide-Reader Guild in its Upper City tower. The Guild alone is qualified to appraise ancient relics and study the Riftide. Dependent on Council money, it trades appraisal services for independence in name and publicly opposes smuggling. Its leaders suppress certain reports, to the growing unease of younger Tide-Readers.
+    The Salt Fangs control the Undertow's relic black market and have deep roots in the lower city. Their second-in-command, Iron Meg, keeps her word and secretly collects fragments. Based in the Hidden Grotto, they resist the Council's lockdown. They do not believe the Congregation's doctrine but let its followers pass and occasionally trade information with them.
+    The Congregation of the Mist is still a small sect, though its following is growing fast. Mist-Speaker Frost leads worship in the Undertow's Sunken Bell Hall. It worships the Mist Lord, believes the fog is conscious and the ruins are its body, and preaches that fog-rot is ascension. Branded a cult by the Council, it resists through its lower-city followers. Its explanations of Tide-Force and fog-rot through faith put it at odds with the Guild's claim to science.
+- id: powerSystem
+  keys:
+    [
+      Tide-Force,
+      tide-sigil,
+      relic,
+      fog-rot,
+      apprentice,
+      Tide-Reader,
+      Tidewielder,
+    ]
+  content: >-
+    Tide-Force is an unpredictable energy in relics, resonating with the tides and strongest at ebb. Tide-Readers guide and steady it with tide-sigils, a technique that takes long training, though the Guild publicly denies Tide-Force exists.
+    Relic effects also vary with the tide: strongest at high tide, most stable at ebb. Using an unappraised relic may backfire, disabling or killing the user. Large-scale relic use draws packs of fog beasts through fluctuations in Tide-Force.
+    Apprentices can sense whether a relic is active. Tide-Readers can appraise and steady ordinary relics. Tidewielders can guide Tide-Force directly; they are very rare, and most show fog-rot. A few people sense Tide-Force without a relic, a gift the Guild considers dangerous and the Congregation calls miraculous.
+    Overuse causes irreversible fog-rot. The body becomes translucent and eventually dissolves into the fog. It is recorded from 0 to 100: visible changes begin at 25, lasting impairment at 50, and at 75 or above the body may dissolve at any time.
+- id: history
+  keys:
+    [
+      Builders,
+      founding,
+      history,
+      Bone Arch,
+      deep-dive team,
+      expedition,
+      cycle,
+      Qi's notes,
+    ]
+  content: >-
+    The ancient Builders left the ruins of the Undertow but no surviving written records. Their inscriptions are ten thousand years older than Mistport. About three hundred years ago, drifters settled on cliffside walkways and discovered they could sell relics exposed at ebb. The settlement became Mistport.
+    Six years ago a deep ebb exposed the Bone Arch. Expeditions rushed in, and seventeen people died in the returning flood. People still avoid the subject. Three years ago a Council expedition vanished deep in the Undertow. Its only survivor went mad and kept saying, "It woke up down there."
+    As fog-rot cases rose in recent years, the Congregation recruited the lower-city poor with its doctrine of ascension, and Frost's prophecies repeatedly came true. Last year Chair Chen proposed the Tide-Seal Decree to bar people without permits from the Undertow, provoking fierce opposition below.
+    Sensitive Tide-Readers now notice the fog thickening month by month and the ebbs growing further apart. Qi's notes call it "the tipping point of the cycle."
+- id: economy
+  keys:
+    [
+      Tide Coin,
+      Salt Chip,
+      trade,
+      buy,
+      sell,
+      black market,
+      tide salt,
+      fog fungus,
+      cliff iron,
+    ]
+  content: >-
+    Tide Coins (₮) are the Council's standard currency. Salt Chips are untraceable tokens circulated by the Salt Fangs on the black market. Common goods include ancient relics, relic fragments, tide salt, edible fog fungus and cliff iron.
+    The relic trade supports Mistport. Legal goods are appraised by the Guild and auctioned; the Salt Fangs run the black market. Someone is paying heavily for fragments, pushing their black-market price to absurd levels.
+- id: socialStructure
+  keys:
+    [
+      class,
+      merchant house,
+      citizen,
+      Undertow local,
+      fog-rot patient,
+      Guild member,
+    ]
+  content: >-
+    Councilors and merchant houses form the first social tier in the Upper City, holding political power and the right to trade legally. Mid-Harbor's dockworkers, craftspeople and innkeepers form the second and keep the city running.
+    Undertow locals are the third tier. They live at its edges, scavenging and smuggling, and make up most of the Congregation's following. Guild members can cross class boundaries through their skills. People with fog-rot are shunned by every class and gradually turn to the Congregation.
+- id: tone
+  content: >-
+    This is a dark fantasy investigation and exploration story suitable for teenagers. Use a Gothic mystery voice, with an unhurried pace and danger in the details. The investigation uncovers the truth gradually; actions carry mounting costs.
+    Explore class conflict, the unknown, the struggle between order and freedom, faith and alienation, the cost of pursuing truth, and the blurred boundaries of a body changed by fog-rot.
+- id: mechanics
+  content: >-
+    Combat is handled through the narrative at normal difficulty. Vocational skills cover Tide-Reading (appraising and guiding relics), Fogcraft (stealth in fog), Diplomacy and Combat.
+    Assess the noise and light risks of moving through fog; failure draws fog beasts. Using an unappraised relic has unpredictable effects. Describe the action and its consequences without inventing a dice roll or table result.
+    The tides decide which parts of the Undertow are accessible. A flood warning means retreat. Guiding Tide-Force or using active relics increases fog-rot; crossing a threshold leaves irreversible changes.
+    The four factions react to relic dealings and Undertow activity. Pleasing one can offend another. Leads can be unverified, corroborated, contaminated or resolved; washed-away evidence proves no one's account.
+    A costly action must visibly change at least one state: tide time, location, injury or fog-rot, a character's attitude, faction pressure or confidence in a lead.

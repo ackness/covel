@@ -36,6 +36,6 @@
     - food
 - id: adventurers-blade
   name: Shortsword
-  description: Plain but handy. Whatever your calling, nobody goes down into a barrow without a blade.
+  description: A plain, handy shortsword for adventurers of any calling to carry into the barrow.
   tags:
     - weapon

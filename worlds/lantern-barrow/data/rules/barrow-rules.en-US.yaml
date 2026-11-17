@@ -1,27 +1,27 @@
 - id: lantern-fair-table
-  title: A Fair Table
-  content:
-    Honest dice and a fair GM. Call for a check only when the outcome is uncertain
-    and failure has a cost. For actions such as picking a lock, climbing a wall, or
-    persuading a guard, state the attribute and difficulty first (easy 8, normal 12, hard
-    16, very hard 20). Then roll and honor the result. Failure should move the story
-    forward at a cost in time, torches, hit points, position, or trust, rather than leave
-    the party stuck. A natural 20 exceeds expectations; a natural 1 creates a new problem.
+  title: A fair table
+  content: >-
+    Call for a check only when the outcome is uncertain and failure has a cost.
+    Before picking a lock, climbing a wall, or persuading a guard, state the attribute
+    and difficulty. Follow the Attribute Check panel and dice-pool receipts for numbers
+    and results. On failure, cost the party time, torches, hit points, position, or trust
+    while letting events move on. Never leave them stuck repeating the same action.
 - id: lantern-party
-  title: A Living Party
-  content:
-    Brannoc and Wren are companions who think for themselves, not tools for the
-    player. They offer advice, disagree, act independently in danger, and remember how the
-    player treats them. Never speak or make decisions for the player's character. End
-    every turn with the next choice in the player's hands.
+  title: Companions with a say
+  content: >-
+    Brannoc and Wren make their own judgments. They offer advice, disagree, act for
+    themselves in danger, and remember how the player treats them. Never speak or
+    decide for the player's character. Leave the next move to the player each turn.
 - id: lantern-alarm
-  title: Stirring the Barrow
-  content:
-    "The barrow sleeps lightly. Fighting, breaking down doors, speaking loudly,
-    lighting a flame in the Choir Gallery, or resting too long in the tomb brings it
-    closer to waking. Relighting wall lamps or slipping past quietly lets it settle back
-    to sleep. The Barrow Alarm panel holds the current level. Convey each change in the
-    scene: singing draws nearer, torches go out, skulls begin to turn."
+  title: Stirring the barrow
+  content: >-
+    The barrow sleeps lightly. Fighting, breaking down doors, shouting, lighting a flame
+    in the Choir Gallery, and lingering inside disturb it. Relighting wall lamps,
+    slipping past quietly, or soothing the dead lowers the alarm. Every three phases
+    spent in the tomb raises the alarm by one, up to five; noise can still push it to six.
+    Follow the Barrow Alarm panel for the reckoning. Let players hear and see the change:
+    closer singing, torches going out, skulls beginning to turn. Give them grounds to
+    decide whether to search another room or retreat.
   keys:
     - barrow
     - tomb
@@ -32,16 +32,16 @@
     - noise
     - firelight
 - id: lantern-truth
-  title: The Truth About the Barrow
-  content:
-    "Lantern Barrow is a prison, not a tomb. A hundred years ago, the Marsh King
-    traded the peace of all his village's dead for immortality. The first lampkeeper sealed
-    him beneath the hill with the flame of the Lantern Heart. While the lantern burns, he
-    sleeps and the dead are silent. Corvin took the Heart to study the power sealed inside
-    it; Ysolde followed him into the tomb. The reeve took Corvin's money for information
-    about the lantern. Reveal the truth gradually through clues, never outright early in
-    the story. There is no fixed ending: return the Heart, bargain with the Barrow King,
-    destroy him for good, or find another way. Every outcome must have a cost."
+  title: The truth about the barrow
+  content: >-
+    Lantern Barrow imprisons the Marsh King. A hundred years ago, he traded the peace
+    of all his village's dead for immortality. The first lampkeeper sealed him beneath
+    the hill with the Lantern Heart's flame. While the lantern burns, he sleeps and
+    the dead fall silent. Corvin took the Heart to study the power sealed inside it;
+    Ysolde followed him. The reeve took Corvin's money and told him about the lantern.
+    Let the player piece these facts together from clues. Never reveal them outright
+    early on. Returning the Heart, bargaining with the Barrow King, destroying him for
+    good, or finding another way must each carry a cost. Do not decide the ending in advance.
   keys:
     - Lantern Heart
     - Barrow King
@@ -50,13 +50,13 @@
     - Ysolde
     - Corvin
 - id: lantern-supplies
-  title: Torches and Rations
-  content:
-    In the barrow, light is time. Each torch burns for about one phase of the day;
-    once it goes out, the party cannot see the path clearly or find traps. A short rest
-    restores a few hit points but takes time. Camping inside disturbs the barrow. State
-    clearly in the narrative when torches, rations, or healing draughts are consumed, so
-    inventory and hit points can be tracked accurately.
+  title: Torches and rations
+  content: >-
+    Each torch burns for about one phase. Once it goes out, the party cannot see the
+    path clearly or spot traps. A short rest restores a few hit points but takes time;
+    camping inside disturbs the barrow. When torches, rations, or healing draughts are
+    used, name the consumption in the narrative so inventory and hit points can be
+    recorded accurately.
   keys:
     - torch
     - ration

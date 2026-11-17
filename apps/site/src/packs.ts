@@ -46,6 +46,7 @@ export const PACKS: Record<Visual, readonly PluginId[]> = {
     "world-init",
     "world-time",
     "narrator",
+    "core-quest",
     "guide",
     "codex",
     "npc-graph",

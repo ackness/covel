@@ -3,12 +3,12 @@
     {
       "label": "relationships",
       "displayName": "Relationships",
-      "extractionHint": "Record the interactions, promises and memorable details that actually happened between each character and the player. Numeric affinity belongs to the Affinity panel; stage, trust and pressure for the five route characters belong to Heart Routes; supporting characters’ trust, pressure and non-romantic relationship state, and all eight characters’ Public Closeness, belong to their character profiles. Do not keep a second current copy of these numbers or stages here."
+      "extractionHint": "Keep the interactions between the characters and the player, promises made, and details they can bring up later. Use the Affinity panel for affinity; Heart Routes for the five route characters' stage, Trust and Pressure; and character profiles for supporting characters' Trust, Pressure and non-romantic relationship state, and all eight characters' Public Closeness. Keep the events here, without storing another current copy of those values or stages."
     },
     {
       "label": "campus_schedule",
       "displayName": "Campus Schedule",
-      "extractionHint": "The current location and weather, the next bell or plan for closing time, which characters could naturally turn up, and where anyone has arranged to go. The world-time plugin owns the current date and time of day; do not keep a second clock in memory."
+      "extractionHint": "Keep the current place and weather, the next bell or plans before closing, who might be here, and where people have agreed to go next. Use world time for the date and period; memory must not keep a separate clock."
     }
   ]
 }

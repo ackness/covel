@@ -1,0 +1,52 @@
+- id: find-guildmaster-qi
+  name: 齐老去了哪里
+  description: 齐老在涨潮时走进了下潮区，苏窈只拿到半封信。先查清他从哪里下去，再追问信里提到的钥匙。每一条结论都得有能回头核对的依据。
+  status: active
+  giver: 苏窈
+  reward: 齐老走过的路线，以及一个有证据支撑的去向
+  objectives:
+    - id: examine-half-letter
+      text: 和苏窈查看半封信，记下原话与纸边黑潮盐的来源
+      done: false
+    - id: compare-independent-sources
+      text: 用独立证词或潮纹记录核对齐老离开的路线与潮时
+      done: false
+    - id: secure-route-evidence
+      text: 固定追查齐老去向所需的证据，再决定往深处走还是先撤离
+      done: false
+- id: missing-archive-page
+  name: 第七十四号报告的缺页
+  description: 第七十四号鉴定报告和同日访客簿各少一页，锁却没有被撬过。目录中的“铰齿状灰色碎片”是谁取走的？先查记录和经手人，不急着指认窃贼。
+  status: active
+  reward: 碎片的下落和缺页背后的经手人
+  objectives:
+    - id: inspect-archive-records
+      text: 核对第七十四号鉴定报告的目录与访客簿缺页处
+      done: false
+    - id: trace-fragment-custody
+      text: 找到能独立核验碎片去向的证词或记录，并固定证据
+      done: false
+- id: echo-gallery-traces
+  name: 回声廊的三个时间
+  description: 潮纹、绳痕和童谣铜片出现在同一条廊道里，时间却对不上。返潮之前，得先弄清哪些痕迹值得带走，哪些只是自己的猜测。
+  status: active
+  reward: 能互相比对的痕迹记录和一条可用的退路
+  objectives:
+    - id: compare-tide-lines
+      text: 比对回声廊的潮线、齐老的潮纹、私队绳痕与童谣铜片
+      done: false
+    - id: preserve-gallery-record
+      text: 在返潮前固定回声廊的痕迹记录，并记下尚未解释的矛盾
+      done: false
+- id: survivor-first-words
+  name: 幸存者最初说了什么
+  description: 静潮病院关着三年前深潜队唯一回来的那个人。他反复说“它在下面醒了”，可最初的病房记录不是这句话。听到本人说话之前，先把转述和原始记录分开。
+  status: active
+  reward: 一份可以核对的证词，以及仍待解释的差异
+  objectives:
+    - id: read-first-record
+      text: 查阅幸存者最初的病房记录，核对被改动的说法
+      done: false
+    - id: hear-survivor
+      text: 亲自听取幸存者的证词，与记录比对并留下可复核的副本
+      done: false

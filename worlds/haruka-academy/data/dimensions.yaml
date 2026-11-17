@@ -1,6 +1,6 @@
 routes:
   name: 心之路线
-  description: 五位可攻略角色的唯一关系阶段、信任与压力记录；信任和压力范围为 0–5。好感见好感面板，公开亲密度见角色资料。好感档位不等于路线阶段。
+  description: 五位恋爱路线角色的阶段、信任与压力只记在这里，信任和压力为 0–5。好感见好感面板，公开亲密度见角色资料；好感档位不代表路线阶段。
   schema:
     type: object
     properties:
@@ -142,25 +142,36 @@ routes:
     kaho: { stage: acquaintance, trust: 0, pressure: 2 }
     yuma: { stage: acquaintance, trust: 0, pressure: 2 }
     akane: { stage: acquaintance, trust: 0, pressure: 1 }
-  updateRule:
-    只结算本轮叙事中玩家与该角色明确发生的互动。兑现承诺、记住细节、尊重沉默、托付秘密时 trust
-    +1；公开偏袒、玩笑越界、逼问心意或让角色独自扛事时 pressure +1，替其分担、化解误会时 pressure -1。stage
-    只能在共同完成任务、托付秘密、化解误会或明确约定等可回忆事件之后前进一级，且 trust 至少达到 初识→熟悉 1、熟悉→心动 2、心动→告白前夜
-    4；共同未来只在学园祭当天或之后、双方明确确认心意时到达。不跳级、不因数值自动升级；明显伤害可退回一级。心动值不在这里记录。
+  updateRule: >-
+    只结算本轮叙事写出的玩家与该角色的互动。兑现承诺、记住细节、尊重沉默或托付秘密，trust +1；公开偏袒、玩笑越界、逼问心意或让角色独自扛事，pressure +1；分担负担或化解误会，pressure -1。
+    共同完成任务、托付秘密、化解误会或明确约定之后，stage 才能前进一级：acquaintance → familiar 需 trust 至少 1，familiar → heartbeat 至少 2，heartbeat → confession-eve 至少 4。
+    学园祭当天或之后，双方明确确认心意，stage 才能变为 together。不跳级，不凭数值自动升级；明显伤害可退回一级。好感另行记录。
 
 festival:
   name: 学园祭筹备
-  description: 四条筹备线的进度与倒计时节点。剩余天数由世界时间负责。
+  description: 四条筹备线的进度、节点结果和离学园祭还有几天。剩余天数随世界时钟变化。
   schema:
     type: object
     properties:
+      daysRemaining:
+        type: integer
+        title: 距学园祭天数
+        minimum: 0
+        maximum: 21
+        # Start just below 20.5 + 940/1440 so rounding drops the count at midnight, not a minute later.
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 21.1527
+          perUnit: -0.0006944444444444445
+          min: 0
+          max: 21
       projects:
         type: object
         title: 筹备线
         properties:
           seaBreezePost:
             type: object
-            title: 二年B组「海风邮局」
+            title: 二年B组“海风邮局”
             properties:
               progress:
                 type: integer
@@ -210,7 +221,7 @@ festival:
             additionalProperties: false
           rumorWall:
             type: object
-            title: 新闻部「传闻真伪墙」
+            title: 新闻部“传闻真伪墙”
             properties:
               progress:
                 type: integer
@@ -328,9 +339,10 @@ festival:
             festivalDay,
           ]
         additionalProperties: false
-    required: [projects, milestones]
+    required: [daysRemaining, projects, milestones]
     additionalProperties: false
   initialValue:
+    daysRemaining: 21
     projects:
       seaBreezePost:
         progress: 10
@@ -355,11 +367,10 @@ festival:
       finalDeadline: upcoming
       festivalEve: upcoming
       festivalDay: upcoming
-  updateRule:
-    进度只在本轮叙事中玩家或角色确实完成筹备工作时增加：一次具体工作 +5~+10，一整段合作 +15，单回合最多
-    +20；事故、争执、被拒稿可减少。卡住时设为 blocked，明显吃力为 struggling，完成时 progress 100 且
-    done。节点在叙事中真正发生后再标记：顺利为 passed，勉强过关为 rough，错过为 missed。天数由世界时间负责，这里不记录。note
-    写一句近况。
+  updateRule: >-
+    只在本轮叙事写出玩家或角色完成了筹备工作时增加进度：一次具体工作 +5~+10，一整段合作 +15，单回合最多 +20；事故、争执或被拒稿可使进度减少。
+    工作卡住时 status 为 blocked，明显吃力时为 struggling，完成时为 done 且 progress 为 100。节点在叙事中发生后，顺利通过标为 passed，勉强过关为 rough，错过为 missed。
+    剩余天数由时钟推导，不手动修改，也不把它列为按时钟结算的模型字段。近况只写一句话。
 
 clubReview:
   name: 文艺部存续审查
@@ -395,11 +406,9 @@ clubReview:
     status: under-review
     support: 1
     evidence: []
-  updateRule:
-    玩家或角色在叙事中拿到具体、可公开的支持（新部员加入、旧刊故事被找到、特刊试读得到反响、学生会有人松口、签名或来信）时 support
-    +1~+2，并在 evidence 加一句话；丑闻、截稿失败或冲突公开化可 -1。第一次有人主动为存续做准备时改为
-    building-case。预算初审在叙事中发生后：support ≥ 4 为 hearing-passed，否则仍为
-    under-review；学园祭之后按最终结果设为 saved 或 merged。澪隐瞒的翻修真相被公开时要在 evidence 中记录。
+  updateRule: >-
+    本轮叙事中拿到可公开的具体支持时，支持度 +1~+2，并添一句有力理由：例如新部员加入、找到旧刊故事、特刊试读获得反响、学生会有人松口，或收到签名和来信。丑闻、截稿失败或冲突公开化可使支持度 -1。
+    第一次有人主动为存续做准备时，status 改为 building-case。预算初审发生后，support 至少 4 则 status 为 hearing-passed，否则仍为 under-review。学园祭之后，根据结果记为 saved 或 merged。澪隐瞒的翻修真相若被公开，也记入 evidence。
 
 promises:
   name: 约定
@@ -428,9 +437,9 @@ promises:
       required: [to, promise, status]
       additionalProperties: false
   initialValue: {}
-  updateRule:
-    玩家在本轮叙事中明确答应某个角色的具体事情（一起回家、帮忙、保密、赴约）时新增一条，ID 用简短英文 kebab-case，状态
-    pending；客套和模糊的“下次吧”不算。叙事中兑现为 kept，错过或违背为 broken，对方明确说不用了为 released。不删除条目。
+  updateRule: >-
+    玩家在本轮叙事中明确答应某个角色一起回家、帮忙、保密或赴约等具体事情时，新增一条约定，键用简短的英文 kebab-case，status 为 pending。客套话和含糊的“下次吧”不算。
+    叙事中兑现后，status 为 kept；错过或违背为 broken，对方明确说不用了为 released。保留所有条目。
 
 rumors:
   name: 校园传闻
@@ -476,10 +485,9 @@ rumors:
       rumor: 东条学姐只给特别的人留窗边座位。
       stage: spreading
       heat: 1
-  updateRule:
-    传闻按 seed → spreading → heating → cleared / confirmed / redirected
-    演化，只在叙事明确出现传播、澄清或证实时推进。新传闻（例如关于转学生的）在叙事中第一次被人说出时新增，ID 用简短英文 kebab-case，阶段
-    seed、热度 1。公开独处、明显偏袒或被新闻部记录 heat +1；凛压稿、当事人用行动澄清或话题被新事件盖过 heat -1。不凭空让传闻全校皆知。
+  updateRule: >-
+    stage 从 seed 到 spreading、heating，之后可能为 cleared、confirmed 或 redirected。只在本轮叙事写出传播、澄清或证实时推进。
+    新传闻第一次被人说出时，新增条目，stage 为 seed、heat 为 1。公开独处、明显偏袒或被新闻部记下，heat +1；凛压稿、当事人用行动澄清或新事件盖过话题，heat -1。不能让传闻突然变成全校常识。
 
 geography:
   name: 地理
@@ -526,7 +534,7 @@ geography:
         title: 地区
     additionalProperties: false
   initialValue:
-    overview: 位于青砾町海边坡地的私立高中，教学楼、社团楼、图书馆、车站商店街和通往海堤的樱坂构成主要活动范围。地点距离很近，从午休铃到十八点闭校广播之间的路线选择会决定玩家遇见谁，也让偶遇和传闻自然发生。
+    overview: 遥风学园是青砾町海边坡地上的私立高中。教学楼、社团楼、图书馆、车站商店街和通往海堤的樱坂都离得很近。从午休铃响到十八点闭校，你走哪条路，就会遇到不同的人；偶遇之后，也可能多出一条传闻。
     regions:
       - name: 二年 B 组
         description: 玩家转入的班级，靠窗最后一排能看见操场和远处海面。早读前、十分钟课间、十二点二十分的午休、十五点四十分后的值日和小测前空白都是对话起点。
@@ -535,7 +543,7 @@ geography:
           - name: 靠窗座位
             description: 玩家最初的座位，神代澪会把资料放在桌角，朝仓凛常从后排探身搭话。
           - name: 黑板旁公告栏
-            description: 贴着学园祭倒计时、值班表、社团招募、补考名单和二年 B 组「海风邮局」摊位分工；被改动的排班最容易引出误会。
+            description: 贴着学园祭倒计时、值班表、社团招募、补考名单和二年 B 组“海风邮局”摊位分工；被改动的排班最容易引出误会。
           - name: 后排储物柜
             description: 同学们会把社团传单、借来的漫画和写错名字的便签塞在这里。
       - name: 社团楼
@@ -567,9 +575,9 @@ geography:
           - name: 自动贩卖机
             description: 常年只剩柠檬汽水、薄荷苏打和罐装热咖啡。学生传言在日落那一刻投币，最先掉下来的饮料会暴露心里正在想谁。
           - name: 海堤长椅
-            description: 椎名夏帆偶尔会在这里写歌词，白石悠真也会绕路经过；雨后长椅一端总是先干，成了「给约会的人留的座位」这条传闻的来源。
+            description: 椎名夏帆偶尔会在这里写歌词，白石悠真也会绕路经过；雨后长椅一端总是先干，成了“给约会的人留的座位”这条传闻的来源。
       - name: 青砾町商店街
-        description: 车站前两条短短的商店街，十七点后迎来放学人潮。书店、花店、家庭餐厅、乐器行和便利店构成校园外的日常据点，也共同赞助学园祭闭幕的「夕风点灯」。
+        description: 车站前两条短短的商店街，十七点后迎来放学人潮。书店、花店、家庭餐厅、乐器行和便利店构成校园外的日常据点，也共同赞助学园祭闭幕的“夕风点灯”。
         climate: 傍晚灯牌很亮，雨天会有伞和校服挤在窄檐下。
         landmarks:
           - name: 海猫书房
@@ -585,7 +593,7 @@ geography:
           - name: 学生会室
             description: 三枝遥主持预算审查、白石悠真核对社团登记的地方。墙上的总进度表会在倒计时十四天、七天和三天时更换颜色。
           - name: 中庭告示台
-            description: 新闻部发布学园祭号外与辟谣、轻音部进行公开试听、二年 B 组招募「海风邮局」志愿者的共同地点。
+            description: 新闻部发布学园祭号外与辟谣、轻音部进行公开试听、二年 B 组招募“海风邮局”志愿者的共同地点。
 factions:
   name: 势力
   schema:
@@ -653,10 +661,10 @@ factions:
           description: 轻音部需要学生会批准主舞台排练时段和音量申请。
         - targetId: class-2b
           type: coordination
-          description: 二年 B 组的「海风邮局」需要通过中庭摊位与匿名留言内容审查。
+          description: 二年 B 组的“海风邮局”需要通过中庭摊位与匿名留言内容审查。
     - id: literature-club
       name: 文艺部
-      description: 老牌小社团，成员少但坚持制作题为《春日薄荷》的学园祭特刊。旧活动室、历年特刊和海猫书房提供的再生纸是它的精神核心。
+      description: 成员很少的老社团，仍坚持做学园祭特刊，今年的题目是《春日薄荷》。他们舍不得旧活动室和历年刊物，也珍惜海猫书房为他们留下的再生纸。
       type: guild
       influence: minor
       leader: 神代澪
@@ -667,7 +675,7 @@ factions:
           description: 常因刊物选题与新闻部争抢采访对象；今年可以选择互换一页，让短篇、采访与辟谣共同帮助社团通过审查。
     - id: news-club
       name: 新闻部
-      description: 掌握校内传闻和学园祭报道权，正在策划「传闻真伪墙」。行动力强，界限感时好时坏；一次采访可能带来机会，也可能放大误会。
+      description: 掌握校内传闻和学园祭报道权，正在策划“传闻真伪墙”。行动力强，界限感时好时坏；一次采访可能带来机会，也可能放大误会。
       type: guild
       influence: minor
       leader: 朝仓凛
@@ -689,7 +697,7 @@ factions:
           description: 新闻部的报道能帮轻音部拉票，也会把排练失误写成热门话题。
     - id: class-2b
       name: 二年 B 组
-      description: 玩家转入的班级，是日常关系、值日、午休、传闻和班级学园祭企划的核心舞台。班级摊位「海风邮局」会替来客把写给未来自己的明信片封存到下一年。
+      description: 玩家转入的班级，是日常关系、值日、午休、传闻和班级学园祭企划的核心舞台。班级摊位“海风邮局”会替来客把写给未来自己的明信片封存到下一年。
       type: other
       influence: major
       leader: 班主任・小野寺千寻
@@ -752,9 +760,9 @@ powerSystem:
   initialValue:
     name: 好感与距离感
     type: other
-    description: 本世界的核心变化来自角色对玩家的信任、好奇、依赖、嫉妒、压力和边界感。下列五级只解释五条恋爱路线的阶段，不是好感面板的档位，也不适用于支持角色的非恋爱关系。
+    description: 角色会信任、好奇、依赖，也会嫉妒、承受压力、在意边界，这些感受影响他们与玩家的关系。下面五个阶段只用于五条恋爱路线；好感面板有自己的档位，支持角色的非恋爱关系也另行记录。
     rules:
-      - 关系推进依赖具体事件和对话选择；五位路线角色遭遇越界时按「心之路线」规则提高压力，明显伤害可使路线阶段退回一级。
+      - 关系推进依赖具体事件和对话选择；五位路线角色遭遇越界时按“心之路线”规则提高压力，明显伤害可使路线阶段退回一级。
       - 同一角色的好感、压力和公开亲密度可以不同步变化。
       - 学园祭筹备、考试、社团危机和传闻会推动角色关系发生阶段性变化。
       - 好感代表友好与亲近，在恋爱路线中可以包含心动；信任代表愿意托付秘密，压力代表现实负担，公开亲密度代表周围同学怎样解读这段关系。
@@ -815,7 +823,7 @@ history:
       significance: major
     - era: 两年前
       name: 夕风点灯成为闭幕传统
-      description: 商店街把剩余彩灯借给学园，闭幕时从中庭到樱坂逐盏点亮。学生开始把「和谁一起看最后一盏灯」当作不肯承认的约会暗号。
+      description: 商店街把剩余彩灯借给学园，闭幕时从中庭到樱坂逐盏点亮。学生开始把“和谁一起看最后一盏灯”当作不肯承认的约会暗号。
       significance: minor
     - era: 去年
       name: 轻音部主舞台失误
@@ -870,7 +878,7 @@ economy:
         symbol: 円
         description: 用于购买饮料、便当、社团材料和放学后的约会小物。
       - name: 人情
-        description: 通过帮忙值日、搬器材、保守秘密和陪伴练习积累的软性资源。
+        description: 帮忙值日、搬器材、保守秘密、陪人练习积下的人情。
     resources:
       - 社团预算
       - 学园祭摊位名额
@@ -958,7 +966,7 @@ socialStructure:
           - 对他人的评价敏感
           - 在集体生活中隐藏真实想法
           - 用社团、成绩和玩笑包装自己的不安
-    notes: 角色关系以班级、社团、学生会和放学后路线交织。谁在午休留座、谁交换值日、谁在闭校广播前一起离开，都会成为软性的公开信号；私下承诺、共同任务和称呼变化则推动信任与亲密感。
+    notes: 同班、同社团、学生会和放学后的去处，把角色联系起来。午休为谁留座、替谁值日、闭校广播前和谁一起走，都可能被旁人看在眼里。私下的承诺、一起做过的事和称呼的变化，则让彼此更信任、更亲近。
 tone:
   name: 基调
   schema:
@@ -1048,7 +1056,7 @@ mechanics:
         数组，没有对应视觉变体时省略视觉字段并使用默认立绘。
       - 新角色登场要符合常见行程或由临时任务解释；一轮聚焦一到两名发声角色，其他人物通过路过、便签、传闻或下一次约定进入，不把八人同时塞进一个场景。
       - 学园祭关键节点为倒计时十四天预算初审、十天考试与稿件中检、七天主舞台预演、三天特刊截稿和总彩排、一天前夜祭布置、零天正式祭典与夕风点灯。
-      - 传闻按「种子—扩散—升温—澄清/坐实/转向」演化；同一条传闻必须有来源、传播地点和受影响角色，不能凭空全校皆知。
+      - 传闻按“种子—扩散—升温—澄清/坐实/转向”演化；同一条传闻必须有来源、传播地点和受影响角色，不能凭空全校皆知。
 startingConditions:
   name: 开局
   schema:
