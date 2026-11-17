@@ -90,7 +90,6 @@ describe("dice-check roll command", () => {
   });
 
   it("reads notation from command args and returns a host-safe result", async () => {
-    const setPluginData = vi.fn();
     const result = await roll(
       {
         command: "roll",
@@ -98,7 +97,7 @@ describe("dice-check roll command", () => {
         argv: ["4d8"],
         args: { notation: "4d8" },
       },
-      { locale: "en-US", store: { setPluginData }, random: makeRandom() },
+      { locale: "en-US", store: {}, random: makeRandom() },
     );
 
     expect(result.ok).toBe(true);
@@ -113,7 +112,6 @@ describe("dice-check roll command", () => {
       expect(value).toBeLessThanOrEqual(8);
     }
     expect(() => JSON.stringify(result)).not.toThrow();
-    expect(setPluginData).not.toHaveBeenCalled();
   });
 
   it("localizes validation errors from the session locale", async () => {

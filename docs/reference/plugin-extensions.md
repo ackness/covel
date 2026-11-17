@@ -75,15 +75,16 @@ runtime 发出的事件在同一回合的事件链里逐层匹配订阅者。
 
 ### 界面触发的写入：三个动作的区别
 
-| 动作                 | 做什么                                         | 写入                                                                               |
-| -------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `invokePluginAction` | 调用插件的 RPC action                          | 合法记录立即生效。被拒记录保持原样；handler 后面失败，之前成功的写入保留。         |
-| `invokeRuntime`      | 触发一个 `trigger.type: manual` 的函数 runtime | `ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交，一起成功或一起失败。 |
-| `invokeCommand`      | 执行清单里声明的玩家命令                       | 走命令的校验与审计。不要用 `invokePluginAction` 绕开它。                           |
+<!-- prettier-ignore -->
+| 动作 | 做什么 | 写入 |
+| --- | --- | --- |
+| `invokePluginAction` | 调用插件的 RPC action | 不写入。handler 只查询、计算、返回结果或客户端动作。 |
+| `invokeRuntime` | 触发一个 `trigger.type: manual` 的函数 runtime | `ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交，一起成功或一起失败。 |
+| `invokeCommand` | 执行清单里声明的玩家命令 | 走命令的校验与审计，插件 handler 的 store 同样只读。不要用 `invokePluginAction` 绕开它。 |
 
-RPC 的 scoped store 按[数据集规则](./plugins.md#数据集contributesdatasets)检查 `set` 和记录 schema；没有新增回合或操作记录。多条记录必须一起成功或一起失败时，用 `invokeRuntime`。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
+RPC 的 scoped store 只读：handler 能查会话、最近消息和自己插件的数据，但没有写入方法，也不新增回合或操作记录。要改自己插件的游戏数据，用 `invokeRuntime` 触发一个 manual function runtime，把写入放进同一次 proposal 事务。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
 
-RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调用的关闭与已开始写入的结算见下方 RPC 通道。
+RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调用的关闭与在途读取的结算见下方 RPC 通道。
 
 参见 [RPC 通道](./api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](./plugins.md#输入和输出)。
 

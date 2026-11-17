@@ -553,7 +553,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - manual / background 的 finalize 不传 `sessionClock`，时钟不动。
 - resume 会传入。同一个逻辑回合的最后一个 suspension 恢复、被放弃、过期或作废时计数一次。恢复后又挂起的那次提交不计数，挂起链最后一次恢复时才计。被恢复的是 setup runtime 并且它报告完成时，`done` 镜像和（全部 setup 都完成时的）phase 翻转随这次提交写入；attempt 账本沿用挂起时的那次尝试。
 
-**Action 级 plugin-rpc 的锁边界。** action handler 在 session lock 里完成读、校验和写入。所以它不会和同一个 session 的回合穿插。PG 多进程部署也由同一个分布式锁键串行化。
+**Action 级 plugin-rpc 的锁边界。** action handler 在 session lock 里完成读和计算。所以它不会和同一个 session 的回合穿插。PG 多进程部署也由同一个分布式锁键串行化。
 
 **交互回答和后续回合。**
 
@@ -641,14 +641,14 @@ await store.withTransaction(async (tx) => {
 
 缺少 namespace / key、空的或不合法的操作列表在处理器之前就被载荷检查拒绝，`code` 是 `proposal-invalid`。保留命名空间和超过大小上限的拒绝发生在处理器里，没有 `code`，只有 `error`。
 
-**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，每一种插件数据 proposal、action / command RPC 的 scoped store 写入，以及世界数据导入和同步，都使用同一套[目的数据集规则](./plugins.md#数据集contributesdatasets)。proposal 的检查如下：
+**数据集检查。** 插件在 `contributes.datasets` 里声明了某个命名空间时，每一种插件数据 proposal，以及世界数据导入和同步，都使用同一套[目的数据集规则](./plugins.md#数据集contributesdatasets)。action / command RPC 的 scoped store 只读，没有写入方法。proposal 的检查如下：
 
 - `plugin.data.update` 里每个操作的种类都必须在数据集的 `ops` 里。整值写入（`plugin.data` 和 `plugin.data.batch` 的每一项）算作 `set`，`plugin.data.delete` 算作 `delete`。
 - 结果存在时，按数据集的记录 schema 校验写入后的值，最多报告前 3 条错误。
 - 宿主没有拿到数据集的 schema 文档时，写入一律被拒（`dataset schema of <ns> is unavailable`），不会放过。
 - 没有声明数据集的命名空间不做这些检查。`key` 字段在提交时不检查。
 
-**依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据，以及 plugin action RPC 的立即写入。
+**依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据。
 
 **挂起的写入基线。** `takenUnder.writes` 仍覆盖含 `set` / `delete` 的整值更新，记录的是挂起保存时的内容。更早的[读取基线](#read-baselines)另外保护读后计算的 `merge` / `upsertItem` 替换；两道围栏的观察时点不同。
 

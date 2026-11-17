@@ -3195,7 +3195,7 @@ Sends a structured command to a plugin in a session. It does not go through chat
 
 ##### Action level
 
-Action and plugin-backed command scoped stores check each `setPluginData` against the [dataset rules](./plugins.md#datasets-contributesdatasets): a refused record stays unchanged, and earlier successful calls remain persisted. A handler can catch the refusal and return its own result; an uncaught refusal retains the production-safe `500`, without raw records, schemas or filesystem paths. It creates no player turn or operation-failure event.
+Action and plugin-backed command scoped stores are read-only: a handler can only query, compute and return a result, with no `setPluginData` or other write method. To write plugin data, the interface uses a `runtime`-level call (`invokeRuntime`) that triggers a function runtime with `trigger.type: manual`, whose writes commit through the proposal transaction. An action creates no player turn or operation-failure event. A handler that throws retains the production-safe `500`, without raw records, schemas or filesystem paths.
 
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
@@ -3203,7 +3203,7 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 
 - The plugin must be one of the session's currently enabled plugins that can run now. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A plugin the player confirmed that cannot run now (see `unavailable[]`) gets the same error, and the message gives the reason. A late request from an old panel is also subject to this check.
 - `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions. `framework` is a reserved ID that no plugin can take, so such a request runs only a framework default action; a request that names a plugin ID runs only an action that plugin registered itself.
-- The handler runs inside the session lock and has 30 seconds. Past that the handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Store calls already in progress finish before the request returns `504 handler_timeout` and releases the lock. Data it wrote before the limit is kept, not rolled back.
+- The handler runs inside the session lock and has 30 seconds. Past that the handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Reads already in progress finish before the request returns `504 handler_timeout` and releases the lock.
 
 ##### Runtime level
 
@@ -3242,13 +3242,14 @@ The plugin's own interface (JSON-RENDER, or `emitEvent` from a `webview`) sends 
 
 ##### When writes take effect
 
-| How it is called                                           | When the write happens                                                                                                   | On failure                                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| An RPC action the plugin registered (built-in plugins too) | Written right away inside the session lock                                                                               | If the handler fails afterward, writes that already succeeded are not rolled back |
-| A framework default action                                 | Follows its own transaction rules                                                                                        | Follows its own transaction rules                                                 |
-| Runtime level                                              | The `ctx.pluginData` writes and domain effects are submitted as proposals, and committed together after the run succeeds | If the commit fails, all domain writes from this run are rolled back              |
+<!-- prettier-ignore -->
+| How it is called | When the write happens | On failure |
+| --- | --- | --- |
+| An RPC action the plugin registered (built-in plugins too) | Read-only: the scoped store has no write method, and interface writes go through the runtime level | A handler failure does not affect committed data |
+| A framework default action | Follows its own transaction rules | Follows its own transaction rules |
+| Runtime level | The `ctx.pluginData` writes and domain effects are submitted as proposals, and committed together after the run succeeds | If the commit fails, all domain writes from this run are rolled back |
 
-When several records must succeed or fail together, use a function runtime with `trigger.type: manual`. It runs a JS handler directly and does not need an LLM. A manual trigger does not run the narrative runtime along with it. Downstream runtimes continue only through explicitly declared scheduling relationships (such as an event chain). See [Function runtime contract](./plugins.md#inputs-and-outputs).
+To write at all — and especially when several records must succeed or fail together — use a function runtime with `trigger.type: manual`. It runs a JS handler directly and does not need an LLM. A manual trigger does not run the narrative runtime along with it. Downstream runtimes continue only through explicitly declared scheduling relationships (such as an event chain). See [Function runtime contract](./plugins.md#inputs-and-outputs).
 
 ##### `context.store` in actions
 
@@ -3256,9 +3257,9 @@ The `context.store` that an action handler receives is bound to the current sess
 
 - `getSession()`: a read-only view of the current session (see [the session view](./plugins.md#the-session-view-storegetsession))
 - `listTurnMessages(limit?)`: returns only the most recent committed messages, up to 200. If `limit` is omitted, it is also 200.
-- This plugin's `getPluginData` / `setPluginData` / `listPluginData`
+- This plugin's `getPluginData` / `listPluginData` (read-only)
 
-There is no `savePlayerInput`. A player submission can be written only through the form submission channel, and it goes through form validation. An action cannot fake player input.
+There is no `setPluginData`, and no `savePlayerInput`: an action can neither write plugin data nor fake player input. A player submission can be written only through the form submission channel, and it goes through form validation; plugin data writes go through the `runtime`-level proposal commit.
 
 ##### Request
 
@@ -3946,7 +3947,6 @@ Returns an index of the framework's capabilities. Third-party developers, extern
         "function-output:pluginData[]",
         "function-ctx.pluginData.update",
         "local-tool:withPendingProposals(plugin.data.update)",
-        "plugin-rpc:context.store.setPluginData",
         "management-api:PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key"
       ]
     },
@@ -3982,7 +3982,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
 
 - Operation-based writes have two paths: `function-ctx.pluginData.update` in a function runtime, and `plugin.data.update` submitted by a plugin's local tool through `withPendingProposals`. Both produce a `plugin.data.update` proposal, which applies its operations to the stored value inside the commit transaction. See [Transactions · Operation-based writes](./transactions.md#operation-based-writes-plugindataupdate).
 - Paths that produce proposals (builtin tools, `function-output:pluginData[]`, `function-ctx.pluginData.*`, a local tool's `withPendingProposals`) are checked at commit against the plugin's declared [datasets](./plugins.md#datasets-contributesdatasets): operation kinds and the record schema. A violation is refused with `code: "dataset-violation"`.
-- `plugin-rpc:context.store.setPluginData` checks the destination dataset's `set` and record schema before immediate persistence. World import and sync also apply [destination dataset checks](./world-data.md#companion-plugin-data), and check final record size after media transformation.
+- Plugin action / command RPC `context.store` is read-only and no longer provides `setPluginData`. World import and sync apply [destination dataset checks](./world-data.md#companion-plugin-data), and check final record size after media transformation.
 - `management-api:PUT …` / DELETE remain operator overrides without dataset schema / `ops` checks, retaining authorization, activation, namespace and size checks.
 
 #### `GET /api/plugins`
@@ -6852,4 +6852,4 @@ Session-page `capabilities` survive in `/api/ui-specs` under `view`, with the ex
 
 ## Sandbox region declarations and host forwarding
 
-The existing `GET /api/ui-specs` `view` array preserves optional `composer` (only `false`) and `capabilities`. No discovery or write endpoint is added. The authenticated host forwards actions, answers and own manual runtimes, preserving server authorization, approvals, proposal validation and commit. Stop and own-panel navigation require their own grants. Failure returns to the read view and drops late results; see [the input box on a page](./ui-panels.md#the-input-box-on-a-page). Existing action/command RPC immediate-write semantics remain unchanged.
+The existing `GET /api/ui-specs` `view` array preserves optional `composer` (only `false`) and `capabilities`. No discovery or write endpoint is added. The authenticated host forwards actions, answers and own manual runtimes, preserving server authorization, approvals, proposal validation and commit. Stop and own-panel navigation require their own grants. Failure returns to the read view and drops late results; see [the input box on a page](./ui-panels.md#the-input-box-on-a-page). The existing read-only contract of action/command RPC remains unchanged.

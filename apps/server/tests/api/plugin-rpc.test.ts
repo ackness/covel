@@ -597,80 +597,96 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(await res.json()).toMatchObject({ code: "session_not_active" });
   });
 
-  it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
-    installPackage(pluginRegistry, "codex");
-    await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
-    let exposed: string[] = [];
-    const createdAt = "2026-01-01T00:00:00.000Z";
-    await store.setPluginData({
-      id: "existing-entry",
-      sessionId: "sess-rpc-1",
-      pluginId: "codex",
-      namespace: "entries",
-      key: "entry",
-      value: { ready: false },
-      createdAt,
-      updatedAt: createdAt,
-    });
-    registry.registerPluginHandler(
-      "codex",
-      "edit",
-      async (_payload, context) => {
-        exposed = ["withTransaction", "close", "updateSession"].filter(
-          (name) => typeof Reflect.get(context.store, name) === "function",
-        );
-        // A hostile handler names a foreign session; the bound view must
-        // ignore the argument.
-        const getSession = context.store.getSession as (
-          sessionId: string,
-        ) => Promise<unknown>;
-        const snapshot = (await getSession("other")) as {
-          status: string;
-        };
-        snapshot.status = "ended";
-        const value = { ready: true };
-        const now = new Date().toISOString();
-        // Foreign identity fields are not part of the view's record type.
-        const foreignRecord = {
-          sessionId: "other",
-          pluginId: "other",
-          namespace: "entries",
-          key: "entry",
-          value,
-          createdAt: now,
-          updatedAt: now,
-        };
-        await context.store.setPluginData!(foreignRecord);
-        value.ready = false;
-        throw new Error("after the immediate write");
-      },
-      {},
-      "builtin",
-    );
-    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        kind: "action",
+  it.each(["builtin", "community"] as const)(
+    "gives %s plugin actions scoped reads and rejects attempted writes",
+    async (trust) => {
+      const { app, store, registry, pluginRegistry, gate } = setup();
+      await seedSession(store);
+      installPackage(pluginRegistry, "codex", { source: trust });
+      await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const existing = {
+        id: "existing-entry",
+        sessionId: "sess-rpc-1",
         pluginId: "codex",
-        action: "edit",
-      }),
-    });
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Internal server error" });
-    expect(exposed).toEqual([]);
-    expect((await store.getSession("sess-rpc-1"))?.status).toBe("active");
-    expect(
-      await store.getPluginData("sess-rpc-1", "codex", "entries", "entry"),
-    ).toMatchObject({
-      id: "existing-entry",
-      createdAt,
-      value: { ready: true },
-    });
-    expect(
-      await store.getPluginData("other", "other", "entries", "entry"),
-    ).toBeNull();
-  });
+        namespace: "entries",
+        key: "entry",
+        value: { ready: false },
+        createdAt,
+        updatedAt: createdAt,
+      };
+      await store.setPluginData(existing);
+      const read = vi.fn();
+      registry.registerPluginHandler(
+        "codex",
+        "edit",
+        async (_payload, context) => {
+          for (const name of [
+            "withTransaction",
+            "close",
+            "updateSession",
+            "setPluginData",
+          ]) {
+            expect(Reflect.get(context.store, name)).toBeUndefined();
+          }
+          // Extra identity arguments cannot redirect the bound read methods.
+          const getSession = context.store.getSession as (
+            sessionId: string,
+          ) => Promise<unknown>;
+          const snapshot = (await getSession("other")) as { status: string };
+          snapshot.status = "ended";
+          const row = await context.store.getPluginData!("entries", "entry");
+          expect(row).toEqual(existing);
+          expect(await context.store.listPluginData!("entries")).toEqual([
+            existing,
+          ]);
+          read(row);
+          // Simulate untyped plugin code using the removed API.
+          const write = Reflect.get(context.store, "setPluginData");
+          await write({
+            namespace: "entries",
+            key: "entry",
+            value: { ready: true },
+          });
+        },
+        {},
+        trust,
+      );
+      const request = () =>
+        app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "action",
+            pluginId: "codex",
+            action: "edit",
+          }),
+        });
+      let res = await request();
+      // Community actions retain both server-code and per-action approval.
+      for (let attempt = 0; attempt < 2 && res.status === 202; attempt++) {
+        const { approvalId } = (await res.json()) as { approvalId: string };
+        await decideSessionApproval(
+          gate,
+          store,
+          "sess-rpc-1",
+          "codex",
+          approvalId,
+        );
+        res = await request();
+      }
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: "Internal server error" });
+      expect(read).toHaveBeenCalledOnce();
+      expect((await store.getSession("sess-rpc-1"))?.status).toBe("active");
+      expect(
+        await store.getPluginData("sess-rpc-1", "codex", "entries", "entry"),
+      ).toEqual(existing);
+      expect(
+        await store.getPluginData("other", "other", "entries", "entry"),
+      ).toBeNull();
+    },
+  );
 
   it.each(["builtin", "community"] as const)(
     "rejects actions from a disabled %s plugin before approval or handler execution",

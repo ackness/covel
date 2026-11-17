@@ -358,7 +358,7 @@ export default function register(covel) {
 Notes:
 
 - The `payload` that the UI sends is external input. Check it before you use it.
-- An action's writes take effect at once. They do not belong to a turn, so if a later step fails, they are not undone. To "save only if everything succeeds", use a function runtime that is triggered manually.
+- An action is read-only: its `ctx.store` can only query, with no write method. To change data, the interface calls a manually triggered function runtime through `invokeRuntime`, whose writes commit with the proposal — either everything succeeds or nothing is saved.
 - Keep actions quick. An action that runs longer than 30 seconds fails: `ctx.signal` aborts and every later `ctx.store` call is refused. Put slow work in a runtime with `schedule.background: true`.
 - Offline runs do not support actions. When one runs, it prints `Unsupported rpc: notebook/inspect-note. Verify with the server.`, and this is not an error. Verify actions on a real server.
 

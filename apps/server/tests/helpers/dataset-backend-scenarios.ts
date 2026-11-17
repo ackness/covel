@@ -2,8 +2,6 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, vi } from "vitest";
 import type { DataStore } from "@covel/store";
-import { createRpcHandlerStoreView } from "@covel/runtime";
-import { capturePluginDatasetPolicy } from "../../src/lib/plugin-dataset-policy.js";
 import { applyPreparedWorldDataImportForSession } from "../../src/world-data/session-import.js";
 import { datasetWriteFixture } from "./dataset-write-fixture.js";
 
@@ -149,42 +147,6 @@ export async function datasetBackendScenario(store: DataStore) {
       diagnostics: [],
     });
     expect((await fixture.rows(store)).map((row) => row.key)).toEqual(["a"]);
-
-    const rpc = createRpcHandlerStoreView(
-      store,
-      { sessionId: fixture.options.sessionId, pluginId: "probe" },
-      {
-        datasetPolicy: capturePluginDatasetPolicy(
-          fixture.registry.getAll().values(),
-        ),
-      },
-    );
-    await rpc.setPluginData!({
-      namespace: "notes",
-      key: "rpc-first",
-      value: { id: "rpc-first", text: "valid" },
-    });
-    await expect(
-      rpc.setPluginData!({
-        namespace: "notes",
-        key: "rpc-second",
-        value: { id: "rpc-second", text: 2 },
-      }),
-    ).rejects.toThrow("record does not match");
-    expect(
-      (await fixture.rows(store)).some((row) => row.key === "rpc-first"),
-    ).toBe(true);
-    expect(
-      (await fixture.rows(store)).some((row) => row.key === "rpc-second"),
-    ).toBe(false);
-    await rpc.setPluginData!({
-      namespace: "notes",
-      key: "rpc-second",
-      value: { id: "rpc-second", text: "valid" },
-    });
-    expect(
-      (await fixture.rows(store)).filter((row) => row.key === "rpc-second"),
-    ).toHaveLength(1);
   } finally {
     await fixture.cleanup();
   }

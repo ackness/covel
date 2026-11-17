@@ -1,7 +1,7 @@
 /**
  * Framework-owned (`_`-prefixed) plugin-data namespaces must be unreachable
  * from every plugin-controlled write path — the proposal commit boundary, the
- * function-runtime `ctx.pluginData` writer, and the RPC handler store view.
+ * function-runtime `ctx.pluginData` writer.
  * Only privileged framework writers (job runner, runtime logger) touch them,
  * and they reach the store directly.
  */
@@ -13,10 +13,7 @@ import {
   createCommitPipeline,
   type KernelStore,
 } from "../src/session/session-kernel.js";
-import {
-  createPluginDataWriter,
-  createRpcHandlerStoreView,
-} from "../src/function-runtime/plugin-handler-helpers.js";
+import { createPluginDataWriter } from "../src/function-runtime/plugin-handler-helpers.js";
 
 const SESSION_ID = "sess-reserved-ns";
 const PLUGIN_ID = "some-plugin";
@@ -71,20 +68,6 @@ describe("reserved plugin-data namespaces", () => {
       writer.set("_jobs", "job-1", { status: "ok" }),
     ).rejects.toThrow(/reserved/);
     await expect(writer.delete("_logs", "entry-1")).rejects.toThrow(/reserved/);
-
-    const rpcStore = createRpcHandlerStoreView(store, CTX);
-    // Identity fields are not part of the view's types; held in a variable they
-    // reach it as a plugin could send them.
-    const forgedRecord = {
-      sessionId: SESSION_ID,
-      pluginId: PLUGIN_ID,
-      namespace: "_jobs",
-      key: "job-1",
-      value: { status: "ok" },
-    };
-    await expect(rpcStore.setPluginData!(forgedRecord)).rejects.toThrow(
-      /reserved/,
-    );
 
     // Nothing leaked into the store on any path.
     expect(
