@@ -19,6 +19,10 @@
       "types": "./dist/plugin-api.d.ts",
       "import": "./dist/plugin-api.js"
     },
+    "./conditions": {
+      "types": "./dist/conditions.d.ts",
+      "import": "./dist/conditions.js"
+    },
     "./dimensions": {
       "types": "./dist/dimensions.d.ts",
       "import": "./dist/dimensions.js"

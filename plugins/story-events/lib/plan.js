@@ -3,7 +3,12 @@
 // replace them, never rewrite an event that already fired, and always fire
 // at most once.
 
-import { OPERATORS, TURN_BOUNDS } from "./conditions.js";
+import {
+  CONDITION_OPERATORS as OPERATORS,
+  NUMERIC_CONDITION_OPERATORS,
+  conditionOperatorOf,
+} from "@covel/plugin-handlers-utils/conditions";
+import { TURN_BOUNDS } from "./conditions.js";
 
 const EVENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const EVENT_FIELDS = new Set(["id", "title", "when", "payload", "priority"]);
@@ -17,7 +22,7 @@ const LEAF_FIELDS = new Set([
   ...TURN_BOUNDS,
   ...OPERATORS,
 ]);
-const NUMERIC_OPERATORS = new Set(["gte", "gt", "lte", "lt"]);
+const NUMERIC_OPERATORS = new Set(NUMERIC_CONDITION_OPERATORS);
 const MAX_DEPTH = 6;
 
 /** Planned events waiting to fire, across every planner. */
@@ -68,12 +73,11 @@ function leafIssues(node, refs, issues) {
         issues.push(`${key} must be a non-negative integer`);
     return;
   }
-  const operators = OPERATORS.filter((key) => Object.hasOwn(node, key));
-  if (operators.length !== 1) {
+  const operator = conditionOperatorOf(node);
+  if (!operator) {
     issues.push("a condition leaf needs exactly one operator");
     return;
   }
-  const [operator] = operators;
   if (NUMERIC_OPERATORS.has(operator) && typeof node[operator] !== "number")
     issues.push(`${operator} needs a number`);
   if (operator === "in" && !Array.isArray(node.in))

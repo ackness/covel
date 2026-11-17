@@ -6,6 +6,8 @@
 
 分工是这样的：框架负责发现、授权、调度、校验、取消和挂载。业务数据的结构、算法、服务商协议和界面组件都留在插件包里。
 
+业务中的条件比较可复用 SDK 的[条件辅助函数](./extension-points.md#condition-helpers)，读取什么值和如何组合条件仍由插件决定。
+
 可以装上直接看的示例：
 
 - [Lifecycle Probe](../../tests/third-party/lifecycle-probe/README.md) 和 [Service Provider Probe](../../tests/third-party/service-provider-probe/README.md)：两个可以独立安装的插件，一起覆盖命令、面板、手动函数、数据提交和服务协作。

@@ -48,6 +48,8 @@ try {
 import assert from "node:assert/strict";
 import { makeProposal, optionalNumber, pickLocaleText, createNarrativeReview, withPendingProposals, withEmittedEvents, getToolContent, getPendingProposals, getEmittedEvents } from "@covel/plugin-handlers-utils";
 import { runImageGeneration } from "@covel/plugin-handlers-utils/image-generation";
+import { compareCondition, readConditionPath, conditionOperatorOf } from "@covel/plugin-handlers-utils/conditions";
+assert.equal(compareCondition(conditionOperatorOf({ gte: 3 }), readConditionPath({ scores: [4] }, ["scores", 0]), 3), true);
 assert.equal(optionalNumber("42"), 42);
 assert.equal(pickLocaleText("ZH_cn", "zh", "en"), "zh");
 assert.equal(makeProposal({ pluginId: "sample", turnId: "t", sessionId: "s" }, "now", "plugin.data", { namespace: "notes", key: "current", value: 1 }).type, "plugin.data");
@@ -71,6 +73,10 @@ for (const copy of [{ ...result }, structuredClone(result), JSON.parse(JSON.stri
     `
 import { makeProposal, optionalNumber, shortId, withPendingProposals } from "@covel/plugin-handlers-utils";
 import type { ImageGenerationHandlerContext } from "@covel/plugin-handlers-utils/image-generation";
+import { compareCondition, readConditionPath, conditionOperatorOf, CONDITION_OPERATORS, NUMERIC_CONDITION_OPERATORS, type ConditionOperator } from "@covel/plugin-handlers-utils/conditions";
+const operator: ConditionOperator | null = conditionOperatorOf({ gte: 3 });
+if (operator) compareCondition(operator, readConditionPath({ scores: [4] }, ["scores", 0] as const), 3);
+void [CONDITION_OPERATORS, NUMERIC_CONDITION_OPERATORS];
 import type { PluginAPI, PluginEntryFactory, PluginFunctionHandler, PluginAgentGuard } from "@covel/plugin-handlers-utils";
 const p = makeProposal({pluginId:"sample",turnId:"t",sessionId:"s"},"now","plugin.data",{namespace:"notes",key:"current",value:1});
 const kind: "plugin.data" = p.type;
