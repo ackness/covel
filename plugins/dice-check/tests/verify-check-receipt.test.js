@@ -4,8 +4,7 @@ import verifyCheckReceipt, {
 } from "../hooks/verify-check-receipt.js";
 import { forgetPool, rememberPool } from "../lib/turn-pool.js";
 
-const ctx = { sessionId: "sess-1", turnId: "turn-7" };
-const recorded = { success: true, result: { _text: "emitted" } };
+const ctx = { sessionId: "sess-1", turnId: "turn-7", runtimeId: "narrator" };
 const checkPlan = {
   attributes: { strength: "strength" },
   modifiers: { strength: { name: "Strength", total: 2 } },
@@ -87,7 +86,15 @@ describe("dice-check receipt guard", () => {
     expect(verifyCheckReceipt(ctx, emit([check()]))).toEqual({
       action: "continue",
     });
-    acceptRecordedReceipt(ctx, { ...emit([check()]), result: recorded });
+    acceptRecordedReceipt(ctx, {
+      ...emit([check()]),
+      result: {
+        success: true,
+        emittedEvents: [
+          { topic: "check.resolved", data: { checks: [check()] } },
+        ],
+      },
+    });
     // emit-event records one event of a topic in a turn and answers a repeat
     // itself. Sending the repeat back would only cost another round.
     expect(

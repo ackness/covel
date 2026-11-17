@@ -29,7 +29,7 @@ export default function verifyCheckReceipt(ctx, payload) {
   }
   if (args?.topic !== TOPIC) return { action: "continue" };
   const checks = args.data?.checks;
-  const pool = poolOf(ctx.sessionId, ctx.turnId);
+  const pool = poolOf(ctx.sessionId, ctx.turnId, ctx.runtimeId);
   // No dice in this process, or a payload the event schema will reject with
   // its own message: let it through.
   if (!pool || !Array.isArray(checks) || checks.length === 0)
@@ -100,26 +100,36 @@ export default function verifyCheckReceipt(ctx, payload) {
   };
 }
 
+/** The checks of the first receipt in a list of events, or undefined. */
+function firstReceipt(events) {
+  if (!Array.isArray(events)) return undefined;
+  const event = events.find(
+    (candidate) => candidate && candidate.topic === TOPIC,
+  );
+  return Array.isArray(event?.data?.checks) ? event.data.checks : undefined;
+}
+
 /**
- * Mark the turn's receipt as accepted when `emit-event` recorded it. A receipt
- * that agreed with the dice but was refused by the event catalogue (a missing
- * field, for example) is not recorded, so the one sent after it is checked
- * against the dice again.
+ * Remember the receipts a tool of the runtime recorded, by the channel the
+ * kernel delivers them through: an event in the tool's result, or an event
+ * the tool emitted (`emit-event`, or a plugin tool's emitted events). A
+ * receipt that the event catalogue refused, or a repeat that `emit-event`
+ * answered without recording it, emits nothing, so the receipt sent after it
+ * is checked against the dice again.
  */
 export function acceptRecordedReceipt(ctx, payload) {
-  if (payload.toolCall.name !== "emit-event") return { action: "continue" };
-  if (payload.result?.success !== true) return { action: "continue" };
-  let args;
-  try {
-    args = JSON.parse(payload.toolCall.arguments);
-  } catch {
-    return { action: "continue" };
+  const result = payload.result;
+  if (result?.success !== true) return { action: "continue" };
+  for (const [channel, events] of [
+    ["result", result.parsedResult?.events],
+    ["emitted", result.emittedEvents],
+  ]) {
+    const checks = firstReceipt(events);
+    if (checks)
+      acceptReceipt(ctx.sessionId, ctx.turnId, channel, {
+        runtimeId: ctx.runtimeId,
+        checks,
+      });
   }
-  // The review hook reads the receipt to find the costs of failed checks.
-  if (args?.topic === TOPIC && Array.isArray(args.data?.checks))
-    acceptReceipt(ctx.sessionId, ctx.turnId, {
-      runtimeId: ctx.runtimeId,
-      checks: args.data.checks,
-    });
   return { action: "continue" };
 }

@@ -391,17 +391,28 @@ describe("dice-check review of the cost in the prose", () => {
     toolResults: [],
   });
 
-  function accept(checks) {
+  const receipt = (checks) => ({ topic: "check.resolved", data: { checks } });
+
+  /** `emit-event` recorded the receipt; a repeat it refused emits nothing. */
+  function accept(checks, recorded = true) {
     acceptRecordedReceipt(ctx, {
       toolCall: {
         id: "emit",
         name: "emit-event",
-        arguments: JSON.stringify({
-          topic: "check.resolved",
-          data: { checks },
-        }),
+        arguments: JSON.stringify(receipt(checks)),
       },
-      result: { success: true },
+      result: {
+        success: true,
+        ...(recorded ? { emittedEvents: [receipt(checks)] } : {}),
+      },
+    });
+  }
+
+  /** A tool of the narrative returned the receipt in its result. */
+  function returnFromTool(checks) {
+    acceptRecordedReceipt(ctx, {
+      toolCall: { id: "resolve", name: "resolve-checks", arguments: "{}" },
+      result: { success: true, parsedResult: { events: [receipt(checks)] } },
     });
   }
 
@@ -456,10 +467,43 @@ describe("dice-check review of the cost in the prose", () => {
 
   it("reviews the accepted receipt, not the payload of a successful duplicate no-op", async () => {
     await recordedTurn([failed("stamina")]);
-    accept([{ ...failed("stamina"), outcome: "success" }]);
+    accept([{ ...failed("stamina"), outcome: "success" }], false);
     expect(reviewCostProse(ctx, story("Nothing."))).toHaveProperty(
       "replace.correction",
       expect.stringContaining("Cold water soaks you to the waist"),
     );
+  });
+
+  // The recorder gets the event the kernel delivers: a tool result's event
+  // comes before an emitted one, whichever was sent first.
+  it.each([
+    {
+      order: "a tool result after an emitted receipt",
+      send: (emitted, returned) => {
+        accept(emitted);
+        returnFromTool(returned);
+      },
+    },
+    {
+      order: "a tool result before an emitted receipt",
+      send: (emitted, returned) => {
+        returnFromTool(returned);
+        accept(emitted);
+      },
+    },
+  ])("reviews the receipt the recorder settles: $order", async ({ send }) => {
+    await rollTurn({ services: inventory({}) });
+    send([{ ...failed("stamina"), outcome: "success" }], [failed("stamina")]);
+    expect(reviewCostProse(ctx, story("Nothing."))).toHaveProperty(
+      "replace.correction",
+      expect.stringContaining("Cold water soaks you to the waist"),
+    );
+    forgetPool(base.sessionId, base.turnId);
+
+    await rollTurn({ services: inventory({}) });
+    send([failed("stamina")], [{ ...failed("stamina"), outcome: "success" }]);
+    expect(reviewCostProse(ctx, story("Nothing."))).toEqual({
+      action: "continue",
+    });
   });
 });

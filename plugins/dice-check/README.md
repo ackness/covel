@@ -23,6 +23,7 @@
 - 本回合判定数组写入 `plugin_data[dice-check][message]`（key = turnId，值带 `__turnId`，消息层 block 数据源）。
 - 回执只含叙事自己决定的内容：`action`、`modifier`、`difficulty`，以及它写出的 `outcome`；使用属性时另填 `attribute`。骰子不在回执里：第一项用本回合第一颗骰，第二项用第二颗，叙事无法挑骰。DC、合计与真实结果由 `lib/check-rules.js` 计算；`outcome` 与骰子给出的结果不一致的项不落库（它的骰子仍算已用），有效项照常落库，缺少预掷审计轨时整体 fail-closed。
 - 叙事在写正文之前发出回执。本插件的 `PreToolUse` 守卫（`hooks/verify-check-receipt.js`）在发出当场对照骰子：结果不符就退回，并在退回消息里给出每次判定的正确结果，叙事据此重发，再按真实结果写正文。守卫用的是 roller 留在进程内的骰子副本（`lib/turn-pool.js`）；副本不在时守卫放行，仍由 recorder 在回合末校验。
+- `ReviewAgentOutput` 审阅钩子检查的回执和 recorder 结算的是同一条。一个叙事 runtime 既在工具结果里返回 `check.resolved`、又发出同主题事件时，内核把工具结果里的事件排在前面，每个渠道只取第一条；`PostToolUse` 钩子按同样的顺序记下这个 runtime 的回执，审阅钩子据此判断正文缺了哪项代价。
 - 若同一执行的可选 `tabletop-check@1` 输入已有本回合表单回执，表单检定由 tabletop-rules 独占，recorder 整批跳过模型发出的 `check.resolved`，不再把独立掷出的表单骰当作本插件的骰池。下一无表单回执的普通回合仍照常校验和记账。
 
 ## 集成

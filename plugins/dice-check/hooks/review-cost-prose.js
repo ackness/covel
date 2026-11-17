@@ -47,9 +47,8 @@ function proseOf(output) {
  * checked, and the second submission is accepted as it is.
  */
 export default function reviewCostProse(ctx, payload) {
-  const review = reviewOf(ctx.sessionId, ctx.turnId);
-  if (!review || review.receipt.runtimeId !== ctx.runtimeId)
-    return { action: "continue" };
+  const review = reviewOf(ctx.sessionId, ctx.turnId, ctx.runtimeId);
+  if (!review) return { action: "continue" };
   // Another reviewer already sends this story back; the first correction is
   // the one the model gets, so this one waits for the next submission.
   if (payload.correction) return { action: "continue" };
@@ -77,7 +76,7 @@ export default function reviewCostProse(ctx, payload) {
       missing.push({ index, check, entry });
   });
   if (missing.length === 0) return { action: "continue" };
-  markReviewed(ctx.sessionId, ctx.turnId);
+  markReviewed(ctx.sessionId, ctx.turnId, ctx.runtimeId);
   const lines = missing.map(({ index, check, entry }) =>
     pickLocaleText(
       ctx.locale,

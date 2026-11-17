@@ -351,7 +351,13 @@ describe("dice-check review with the check plan", () => {
   });
   async function recordedTurn(checks) {
     await rollTurn();
-    acceptRecordedReceipt(ctx, { ...emit(checks), result: { success: true } });
+    acceptRecordedReceipt(ctx, {
+      ...emit(checks),
+      result: {
+        success: true,
+        emittedEvents: [{ topic: "check.resolved", data: { checks } }],
+      },
+    });
   }
 
   it("reviews only the failed checks the recorder records", async () => {

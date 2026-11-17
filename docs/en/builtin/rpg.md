@@ -94,7 +94,7 @@ A world can make every failed check pay a cost the player can see: an item is lo
 
 1. At the start of a turn, the plugin writes the costs this turn can still pay into the check rules for the narrator, one line per attribute. An item must still be on the player character, and a clock must not be full yet. Whether the item is still there is asked through the bag's public service.
 2. After the narrator sends the check receipt, the recorder settles a cost for each failed check. Clocks advance in `clock-progress`; items are taken through `inventory.change@1`. If the item cannot be taken (for example, it was given away this turn), the check pays its next cost. The bag reconciles changes from the prose afterward and does not charge the same cost again.
-3. When the prose uses none of a cost's words (`cues`), the story is sent back once to be rewritten, with a note naming the cost to add. The second submission is accepted as usual.
+3. When the prose uses none of a cost's words (`cues`), the story is sent back once to be rewritten, with a note naming the cost to add. The second submission is accepted as usual. The review and the settlement read the same receipt: when a narrative plugin returns a receipt in a tool result and also sends one with `emit-event`, both use the one in the tool result.
 
 A failed check pays one cost only, the most specific one: a cost with an attribute comes before one without, and a cost with an `outcome` comes before one for both kinds of failure; between equally specific costs, the one earlier in the file wins. Once a clock is full, its consequence is written into the check rules every turn, and the narrator must keep to it.
 
