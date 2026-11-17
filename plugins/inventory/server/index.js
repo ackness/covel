@@ -31,11 +31,14 @@ export default function (covel) {
   ]);
   covel.registerService({
     name: "bag",
-    contract: "inventory.bag@1",
+    contract: "inventory.bag@2",
     modelFacing: true,
     description:
-      "Look up what the player character carries now. Optionally filter by a name or tag; equipped items come first. Returns at most 50 items and the full matching count.",
-    input: z.object({ query: z.string().max(80).optional() }),
+      "Look up what the player character carries now. Optionally filter by a name or tag; equipped items come first. Returns at most 50 items from the requested offset and the full matching count. An item with `effects.check` gives checks of that attribute its modifier while it is carried.",
+    input: z.object({
+      query: z.string().max(80).optional(),
+      offset: z.number().int().nonnegative().optional(),
+    }),
     output: z.object({
       items: z.array(
         z.object({
@@ -44,6 +47,14 @@ export default function (covel) {
           equipped: z.boolean(),
           tags: z.array(z.string()),
           description: z.string().optional(),
+          effects: z
+            .object({
+              check: z.object({
+                attribute: z.string(),
+                modifier: z.number().int(),
+              }),
+            })
+            .optional(),
         }),
       ),
       total: z.number().int(),

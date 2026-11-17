@@ -1,0 +1,41 @@
+# What a failed check costs in this world (dice-check, check.consequences@1).
+# A failed check pays the most specific cost it can still pay: one for its
+# attribute before one for any attribute, one for its outcome before one for
+# both. A lost item must still be in the pocket; a full clock is passed over.
+- id: soaked
+  attribute: stamina
+  text: The water gets inside your clothes, and the cold bites deeper.
+  cues: [cold, wet, soaked, shiver, numb]
+  cost: { kind: clock, clock: exposure }
+- id: torch-goes-under
+  attribute: wayfinding
+  outcome: critical-failure
+  text: Your torch slips from your fingers and goes under. You are down to whatever light the others carry.
+  cues: [torch, dark]
+  cost: { kind: item, item: Pocket torch }
+- id: chalk-worn-down
+  attribute: wayfinding
+  outcome: failure
+  text: You mark a wrong turn and have to scrub it out; a stick of chalk is worn to nothing.
+  cues: [chalk, mark, wrong]
+  cost: { kind: item, item: Track chalk }
+- id: phone-drowned
+  outcome: critical-failure
+  text: Your phone slides out of your hand into the black water and does not light up again.
+  cues: [phone]
+  cost: { kind: item, item: Phone }
+- id: breaker-sparks
+  attribute: mechanics
+  text: The panel spits sparks, the car lights stutter, and people flinch away from you.
+  cues: [spark, flicker, stutter, flinch]
+  cost: { kind: clock, clock: panic }
+- id: words-land-wrong
+  attribute: rapport
+  outcome: critical-failure
+  text: Your words land badly. Someone starts shouting, and the car takes sides.
+  cues: [shout, yell, sides, argue]
+  cost: { kind: clock, clock: panic, ticks: 2 }
+- id: car-hears-it
+  text: Word of the setback goes round the car, and people get more frightened.
+  cues: [frightened, scared, panic, murmur, nervous, worried]
+  cost: { kind: clock, clock: panic }

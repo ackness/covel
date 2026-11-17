@@ -9,7 +9,27 @@ import {
   planInventoryChanges,
 } from "./update-inventory.js";
 
-export async function bag({ query }, ctx) {
+/**
+ * The `effects` of an item as the bag reports them: only a well-formed check
+ * modifier (`effects.check` in the items schema).
+ */
+function effectsOf(item) {
+  const effect = item.effects?.check;
+  if (
+    typeof effect?.attribute !== "string" ||
+    !effect.attribute.trim() ||
+    !Number.isInteger(effect.modifier) ||
+    effect.modifier === 0
+  )
+    return {};
+  return {
+    effects: {
+      check: { attribute: effect.attribute.trim(), modifier: effect.modifier },
+    },
+  };
+}
+
+export async function bag({ query, offset = 0 }, ctx) {
   const needle = query?.toLowerCase();
   const items = (await ctx.pluginData.list("items"))
     .map(({ value }) => value)
@@ -28,6 +48,7 @@ export async function bag({ query }, ctx) {
       ...(typeof item.description === "string"
         ? { description: item.description }
         : {}),
+      ...effectsOf(item),
     }))
     .filter(
       (item) =>
@@ -40,7 +61,7 @@ export async function bag({ query }, ctx) {
       (a, b) =>
         Number(b.equipped) - Number(a.equipped) || compareText(a.name, b.name),
     );
-  return { items: items.slice(0, 50), total: items.length };
+  return { items: items.slice(offset, offset + 50), total: items.length };
 }
 
 /** Validate the whole exchange before the writer receives its first change. */

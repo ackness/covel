@@ -19,6 +19,8 @@
     "status": {
       "enum": ["active", "completed", "failed"]
     },
+    "deadline": { "$ref": "#/$defs/deadline" },
+    "missed": { "$ref": "#/$defs/missed" },
     "objectives": {
       "type": "array",
       "items": {
@@ -27,7 +29,9 @@
         "properties": {
           "id": { "type": "string", "minLength": 1, "maxLength": 128 },
           "text": { "type": "string", "minLength": 1 },
-          "done": { "type": "boolean" }
+          "done": { "type": "boolean" },
+          "deadline": { "$ref": "#/$defs/deadline" },
+          "missed": { "$ref": "#/$defs/missed" }
         },
         "additionalProperties": true
       }
@@ -35,5 +39,60 @@
     "giver": { "type": "string" },
     "reward": { "type": "string" }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "$defs": {
+    "deadline": {
+      "type": "object",
+      "description": "When the quest or objective is too late. `when` holds once the deadline has passed.",
+      "required": ["when", "label"],
+      "properties": {
+        "when": {
+          "type": "object",
+          "description": "One condition: { dimension, path?, <operator> }, { time, <operator> }, { affinity, path?, <operator> } or { turnGte }. Operators: equals, notEquals, in, gte, gt, lte, lt, exists. `affinity` is an NPC's name; its value is { score, tier } (tier: hostile, cold, neutral, friendly, close, devoted).",
+          "properties": {
+            "dimension": { "type": "string", "minLength": 1 },
+            "path": { "type": "string" },
+            "time": { "type": "string", "minLength": 1 },
+            "affinity": { "type": "string", "minLength": 1 },
+            "turnGte": { "type": "integer", "minimum": 1 },
+            "equals": {},
+            "notEquals": {},
+            "in": { "type": "array" },
+            "gte": { "type": "number" },
+            "gt": { "type": "number" },
+            "lte": { "type": "number" },
+            "lt": { "type": "number" },
+            "exists": { "type": "boolean" }
+          },
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "The deadline as the player reads it, such as \"Before the water reaches your knees\"."
+        },
+        "missed": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "What happens when the deadline passes. The story tells it on that turn."
+        }
+      },
+      "additionalProperties": false
+    },
+    "missed": {
+      "type": "object",
+      "description": "Written by the quest log when the deadline passed.",
+      "required": ["label", "text"],
+      "properties": {
+        "label": { "type": "string" },
+        "text": { "type": "string" },
+        "turnId": { "type": "string" },
+        "turn": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  }
 }

@@ -4,6 +4,10 @@
   status: active
   giver: The car
   reward: A plan the car can actually follow
+  deadline:
+    when: { dimension: floodline, path: stage, equals: battery }
+    label: Before the water reaches the battery boxes
+    missed: The water reached the battery boxes and the car went dark before anyone knew which message to trust. From here on, the car argues in the dark.
   objectives:
     - id: reach-control
       text: Get a clear answer from Control over the cab radio
@@ -24,6 +28,10 @@
     - id: reach-theo
       text: Get word to Theo's group
       done: false
+      deadline:
+        when: { time: elapsedSinceStart, gte: 45 }
+        label: Before they reach the crossover, about 00:51
+        missed: Theo's group reached the crossover with no word from you and chose their own way on. Their lamp is gone from the walkway; you will have to find them.
     - id: meet-or-recall
       text: Meet them at the crossover, or bring them back
       done: false
@@ -37,6 +45,17 @@
     - id: read-the-gauge
       text: Read the battery gauge with Dara in the cab
       done: false
+    - id: keep-graham
+      text: Keep Graham with the car instead of the pump room
+      done: false
+      deadline:
+        when: { affinity: Graham Pike, path: tier, in: [cold, hostile] }
+        label: While Graham still listens to you
+        missed: Graham stopped listening to you and set off alone toward the Wharf Street pump room with the spare lamp. Someone will have to go after him, or let him go.
     - id: choose-priorities
       text: Decide what the battery runs
       done: false
+      deadline:
+        when: { dimension: floodline, path: stage, in: [knee, battery] }
+        label: Before the water is knee-deep
+        missed: Nobody chose in time. Dara cut the doors and the phone chargers herself to keep the radio alive, and half the car blames you for it.

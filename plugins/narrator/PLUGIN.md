@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.45
+version: 0.0.46
 displayName: Storyteller
 description: >-
   Continues the story after each of your actions, with scenes, reactions and
@@ -107,11 +107,14 @@ runtime:
           contract: action-check@1
         select: /checkContext
         required: false
+      context:
+        from:
+          kernel: story-context@1
     visibility: story
   agent:
     tools:
       services:
-        - contract: inventory.bag@1
+        - contract: inventory.bag@2
           as: check-bag
         - contract: inventory.change@1
           as: change-inventory

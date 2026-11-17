@@ -47,8 +47,8 @@ export function checkAttributes(world) {
   );
 }
 
-/** @param {Attribute} attribute */
-function namesOf(attribute) {
+/** Every name an attribute has, in any language. @param {Attribute} attribute */
+export function namesOf(attribute) {
   const name = attribute.name;
   if (typeof name === "string") return [name];
   return name && typeof name === "object"

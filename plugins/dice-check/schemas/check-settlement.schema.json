@@ -1,0 +1,9 @@
+{
+  "$id": "contract:check-settlement@1",
+  "type": "object",
+  "properties": {
+    "recorded": { "type": "integer", "minimum": 1 }
+  },
+  "required": ["recorded"],
+  "additionalProperties": false
+}

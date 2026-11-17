@@ -1,8 +1,8 @@
+import { judgeCheck } from "../lib/check-plan.js";
 import {
   isDifficulty,
   isModifier,
   OUTCOMES,
-  resolveCheck,
   rollText,
 } from "../lib/check-rules.js";
 import { acceptReceipt, poolOf } from "../lib/turn-pool.js";
@@ -29,11 +29,12 @@ export default function verifyCheckReceipt(ctx, payload) {
   }
   if (args?.topic !== TOPIC) return { action: "continue" };
   const checks = args.data?.checks;
-  const dice = poolOf(ctx.sessionId, ctx.turnId);
+  const pool = poolOf(ctx.sessionId, ctx.turnId, ctx.runtimeId);
   // No dice in this process, or a payload the event schema will reject with
   // its own message: let it through.
-  if (!dice || !Array.isArray(checks) || checks.length === 0)
+  if (!pool || !Array.isArray(checks) || checks.length === 0)
     return { action: "continue" };
+  const { dice, checkPlan } = pool;
   if (
     checks.some(
       (check) =>
@@ -52,50 +53,83 @@ export default function verifyCheckReceipt(ctx, payload) {
       reason: `check.resolved was not sent: this turn has ${dice.length} checks and the event reports ${checks.length}. Report at most ${dice.length} checks, in order, and send the event again.`,
     };
 
-  const results = checks.map((check, index) =>
-    resolveCheck(dice[index], check.modifier, check.difficulty),
+  const judged = checks.map((check, index) =>
+    judgeCheck(dice[index], check, checkPlan),
   );
-  const wrong = results.flatMap((result, index) =>
-    result.outcome === checks[index].outcome ? [] : [index],
+  const invalidAttributes = judged.flatMap(({ problem }, index) =>
+    problem ? [`check ${index + 1}: ${problem}`] : [],
+  );
+  if (invalidAttributes.length > 0)
+    return {
+      action: "abort",
+      reason: `check.resolved was not sent: ${invalidAttributes.join("; ")}. Use the matching modifiers and outcomes and send the corrected batch before writing the prose.`,
+    };
+  const wrong = judged.flatMap(({ result }, index) =>
+    result.outcome === checks[index].outcome &&
+    result.modifier === checks[index].modifier
+      ? []
+      : [index],
   );
   // Not marked as accepted here: the event catalogue can still refuse the
   // payload, and the receipt sent after that must be checked as well.
   if (wrong.length === 0) return { action: "continue" };
 
+  const problem = (index) => {
+    const { result } = judged[index];
+    const check = checks[index];
+    return result.modifier !== check.modifier
+      ? check.attribute === undefined
+        ? `check ${index + 1} reports modifier ${check.modifier} but must use 0 without an attribute`
+        : `check ${index + 1} reports modifier ${check.modifier} and the modifier list gives ${result.modifier} for ${check.attribute}`
+      : `check ${index + 1} reports "${check.outcome}" and the dice give "${result.outcome}"`;
+  };
   const line = (index) => {
-    const result = results[index];
-    return `check ${index + 1} (${result.difficulty}): d20 ${rollText(result)} -> ${result.outcome}`;
+    const { result, chosen, reasons } = judged[index];
+    const harder = chosen
+      ? ` (${chosen} made ${result.difficulty} by ${reasons.map((reason) => reason.text).join(", ")})`
+      : "";
+    return `check ${index + 1} (${result.difficulty}${harder}): d20 ${rollText(result)} -> ${result.outcome}`;
   };
   return {
     action: "abort",
     reason: [
-      `check.resolved was not sent: ${wrong
-        .map(
-          (index) =>
-            `check ${index + 1} reports "${checks[index].outcome}" and the dice give "${results[index].outcome}"`,
-        )
-        .join("; ")}.`,
-      `The outcomes of this turn are: ${results.map((_, index) => line(index)).join("; ")}.`,
-      "Send check.resolved again with these outcomes and the same actions, modifiers and difficulties. Then write the prose to match these outcomes.",
+      `check.resolved was not sent: ${wrong.map(problem).join("; ")}.`,
+      `The results of this turn are: ${judged.map((_, index) => line(index)).join("; ")}.`,
+      "Send check.resolved again with these modifiers and outcomes and the same actions, difficulties and people. Then write the prose to match these outcomes.",
     ].join(" "),
   };
 }
 
+/** The checks of the first receipt in a list of events, or undefined. */
+function firstReceipt(events) {
+  if (!Array.isArray(events)) return undefined;
+  const event = events.find(
+    (candidate) => candidate && candidate.topic === TOPIC,
+  );
+  return Array.isArray(event?.data?.checks) ? event.data.checks : undefined;
+}
+
 /**
- * Mark the turn's receipt as accepted when `emit-event` recorded it. A receipt
- * that agreed with the dice but was refused by the event catalogue (a missing
- * field, for example) is not recorded, so the one sent after it is checked
- * against the dice again.
+ * Remember the receipts a tool of the runtime recorded, by the channel the
+ * kernel delivers them through: an event in the tool's result, or an event
+ * the tool emitted (`emit-event`, or a plugin tool's emitted events). A
+ * receipt that the event catalogue refused, or a repeat that `emit-event`
+ * answered without recording it, emits nothing, so the receipt sent after it
+ * is checked against the dice again.
  */
 export function acceptRecordedReceipt(ctx, payload) {
-  if (payload.toolCall.name !== "emit-event") return { action: "continue" };
-  if (payload.result?.success !== true) return { action: "continue" };
-  let args;
-  try {
-    args = JSON.parse(payload.toolCall.arguments);
-  } catch {
-    return { action: "continue" };
+  const result = payload.result;
+  if (result?.success !== true) return { action: "continue" };
+  for (const [channel, events] of [
+    ["result", result.parsedResult?.events],
+    ["emitted", result.emittedEvents],
+  ]) {
+    const checks = firstReceipt(events);
+    if (checks)
+      acceptReceipt(ctx.sessionId, ctx.turnId, channel, {
+        runtimeId: ctx.runtimeId,
+        checks,
+      });
   }
-  if (args?.topic === TOPIC) acceptReceipt(ctx.sessionId, ctx.turnId);
   return { action: "continue" };
 }

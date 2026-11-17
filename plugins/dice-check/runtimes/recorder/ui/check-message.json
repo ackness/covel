@@ -70,6 +70,74 @@
                 }
               }
             ]
+          },
+          {
+            "component": "Row",
+            "visible": { "$item": "bonusText" },
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Icon",
+                "props": { "name": "backpack", "size": "xs" }
+              },
+              {
+                "component": "Badge",
+                "props": { "label": { "$item": "bonusText" }, "color": "green" }
+              }
+            ]
+          },
+          {
+            "component": "Row",
+            "visible": { "$item": "harderText" },
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Icon",
+                "props": { "name": "shield", "size": "xs" }
+              },
+              {
+                "component": "Text",
+                "props": { "content": { "$item": "harderText" }, "size": "xs" }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "harderDetail" },
+                  "color": "red"
+                }
+              }
+            ]
+          },
+          {
+            "component": "Row",
+            "visible": { "$item": "costText" },
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Icon",
+                "props": { "name": "x-circle", "size": "xs" }
+              },
+              {
+                "component": "Text",
+                "props": { "content": { "$item": "costText" }, "size": "xs" }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "costDetail" },
+                  "color": "amber"
+                }
+              }
+            ]
+          },
+          {
+            "component": "Text",
+            "visible": { "$item": "clockFull" },
+            "props": {
+              "content": { "$item": "clockFull" },
+              "weight": "bold",
+              "size": "xs"
+            }
           }
         ]
       }

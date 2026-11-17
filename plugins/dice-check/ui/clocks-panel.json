@@ -1,0 +1,71 @@
+{
+  "id": "dice-check-clocks",
+  "label": "Clocks",
+  "icon": "skull",
+  "dataSource": { "namespace": "clock-progress" },
+  "emptyState": {
+    "message": "No clocks in this world."
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": "Failed checks fill these clocks. When a clock is full, its consequence stays for the rest of the story.",
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "CardList",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Card",
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/name" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/progressText" },
+                      "color": "amber"
+                    }
+                  }
+                ]
+              },
+              {
+                "component": "Progress",
+                "props": {
+                  "value": { "$item": "value/filled" },
+                  "max": { "$item": "value/segments" }
+                }
+              },
+              {
+                "component": "Text",
+                "visible": { "$item": "value/isFull" },
+                "props": {
+                  "content": { "$item": "value/whenFull" },
+                  "size": "xs",
+                  "weight": "bold"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

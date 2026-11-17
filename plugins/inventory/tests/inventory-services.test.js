@@ -52,7 +52,7 @@ async function fixture(items = []) {
   const request = (name, input) => ({
     pluginId: "inventory",
     name,
-    contract: `inventory.${name}@1`,
+    contract: name === "bag" ? "inventory.bag@2" : "inventory.change@1",
     input,
   });
   const call = (name, input) =>
@@ -107,8 +107,44 @@ describe("inventory bag service", () => {
     const { output } = await call("bag", { query: "TRAV" });
     expect(output.items).toHaveLength(50);
     expect(output.total).toBe(55);
+    const next = (await call("bag", { query: "TRAV", offset: 50 })).output;
+    expect(next.total).toBe(55);
+    expect(next.items.map(({ name }) => name)).toEqual(
+      Array.from({ length: 5 }, (_, index) => `Supplies ${50 + index}`),
+    );
     expect((await call("bag", {})).output.total).toBe(56);
     noIds(output);
+  });
+  it("reports a well-formed check effect and drops a malformed one", async () => {
+    const { call } = await fixture([
+      {
+        id: "item-torch",
+        name: "Torch",
+        quantity: 1,
+        effects: { check: { attribute: " wayfinding ", modifier: 2 } },
+      },
+      {
+        id: "item-zero",
+        name: "Charm",
+        quantity: 1,
+        effects: { check: { attribute: "luck", modifier: 0 } },
+      },
+      {
+        id: "item-text",
+        name: "Map",
+        quantity: 1,
+        effects: { check: { attribute: "wayfinding", modifier: "2" } },
+      },
+    ]);
+    const { output } = await call("bag", {});
+    expect(output.items).toEqual([
+      expect.not.objectContaining({ effects: expect.anything() }),
+      expect.not.objectContaining({ effects: expect.anything() }),
+      expect.objectContaining({
+        name: "Torch",
+        effects: { check: { attribute: "wayfinding", modifier: 2 } },
+      }),
+    ]);
   });
 });
 

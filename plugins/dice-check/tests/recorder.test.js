@@ -9,6 +9,10 @@ const messages = await loadPluginMessages(
 );
 
 const TOPIC = "check.resolved";
+const PLAN = {
+  attributes: { agility: "agility", 敏捷: "agility", trust: "trust" },
+  modifiers: { agility: { name: "敏捷", total: 3 } },
+};
 
 // What the narrative reports: its decisions and the outcome it wrote. The
 // die, the DC and the total are the recorder's.
@@ -29,6 +33,7 @@ function makeCtx({
   tabletopReceipt = undefined,
   logicalTurn = undefined,
   world = undefined,
+  checkPlan = PLAN,
 } = {}) {
   return {
     pluginId: "dice-check",
@@ -41,6 +46,7 @@ function makeCtx({
     ...(world === undefined ? {} : { world }),
     triggerEvent: noTriggerEvent ? undefined : { topic: TOPIC, data },
     inputs: {
+      ...(checkPlan ? { checkPlan: { value: checkPlan } } : {}),
       ...(dice === null
         ? {}
         : {
@@ -218,9 +224,6 @@ describe("dice-check recorder handler", () => {
     expect(await labelOf("agility")).toBe("敏捷");
     expect(await labelOf("Agility")).toBe("敏捷");
     expect(await labelOf("敏捷")).toBe("敏捷");
-    expect(await labelOf("trust")).toBe("信任");
-    // Text that names no attribute of the world is shown as written.
-    expect(await labelOf("运气")).toBe("运气");
   });
 
   it("resolves an attribute name written in several languages for the session", async () => {
@@ -252,6 +255,7 @@ describe("dice-check recorder handler", () => {
 
   it("records a zero-modifier receipt without an attribute label", async () => {
     const ctx = makeCtx({
+      checkPlan: { attributes: {}, modifiers: {} },
       data: {
         checks: [
           {
@@ -290,9 +294,8 @@ describe("dice-check recorder handler", () => {
     // Arrange
     // The second check of the turn uses the second die, a 6.
     const second = {
+      ...VALID_CHECK,
       action: "缒链下降",
-      modifier: 1,
-      difficulty: "normal",
       outcome: "failure",
     };
     const ctx = makeCtx({ data: { checks: [VALID_CHECK, second] } });
@@ -341,7 +344,7 @@ describe("dice-check recorder handler", () => {
       data: {
         checks: [
           // One check is on record, so this one uses the second die, a 14.
-          { ...VALID_CHECK, modifier: -3, outcome: "failure" },
+          { ...VALID_CHECK, difficulty: "extreme", outcome: "failure" },
         ],
       },
       existingCheckRows: [
@@ -522,6 +525,12 @@ describe("dice-check recorder handler", () => {
       { outcome: "critical-success" },
     ],
     ["a modifier that is not an attribute modifier", { modifier: 11 }],
+    [
+      "an omitted attribute when abilities are listed",
+      { attribute: undefined },
+    ],
+    ["an invented attribute", { attribute: "运气" }],
+    ["an attribute outside the modifier list", { attribute: "trust" }],
     ["an unknown difficulty", { difficulty: "legendary" }],
   ])("rejects %s", async (_label, patch) => {
     const ctx = makeCtx({
@@ -537,6 +546,14 @@ describe("dice-check recorder handler", () => {
     const ctx = makeCtx({ data: { checks: [VALID_CHECK] }, dice: null });
     const result = await handler(ctx);
     expect(result.outcome).toBe("failed");
+  });
+
+  it("fails closed without the roller's check plan", async () => {
+    const result = await handler(
+      makeCtx({ data: { checks: [VALID_CHECK] }, checkPlan: null }),
+    );
+    expect(result.outcome).toBe("failed");
+    expect(result.effects).toBeUndefined();
   });
 
   it("fails closed without shifting positions when the dice pool is malformed", async () => {

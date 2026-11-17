@@ -1,5 +1,5 @@
 ---
-version: 0.0.46
+version: 0.0.47
 displayName: Affinity
 description: >-
   Tracks how much each character likes you, with scores, levels and recent
@@ -11,6 +11,8 @@ author:
   url: https://github.com/ackness/covel
 license: MIT
 contributes:
+  services:
+    - affinity.tier@1
   extensions:
     - prompt.segment@1/current-affinity
   datasets:

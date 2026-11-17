@@ -171,7 +171,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | character-blueprint | character-presence | image | character-art | presence | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像，`alwaysRender`） |
 | codex | codex | book-open | codex | entries | 知识图鉴 |
 | core-quest | core-quest | scroll-text | core-quest | quests | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组） |
-| dice-check | dice-check-panel | dices | （无） | checks | 判定记录（倒序回执列表：骰式 / 成败配色 / critical 强调，`alwaysRender`） |
+| dice-check | dice-check-panel | dices | （无） | checks | 判定记录（倒序回执列表：骰式 / 成败配色 / critical 强调 / 失败付出的代价，`alwaysRender`） |
+| dice-check | dice-check-clocks | skull | （无） | clock-progress | 时钟（世界定义的失败时钟：进度条 + `已填/总格` 徽标，填满后显示后果） |
 | inventory | inventory | backpack | inventory | items | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`） |
 | dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | 剧情插图画廊（`MediaGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
 | dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | 生成任务视图（`JobList`，`alwaysRender`） |

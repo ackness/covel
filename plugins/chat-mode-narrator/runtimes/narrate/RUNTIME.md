@@ -43,7 +43,7 @@ io:
 agent:
   tools:
     services:
-      - contract: inventory.bag@1
+      - contract: inventory.bag@2
         as: check-bag
       - contract: inventory.change@1
         as: change-inventory

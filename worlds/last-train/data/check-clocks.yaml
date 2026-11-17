@@ -1,0 +1,11 @@
+# Clocks that the costs of failed checks fill (dice-check, check.clocks@1).
+- id: panic
+  name: Panic in the car
+  segments: 4
+  full: The car has stopped listening to you. Someone has forced the end door, and a group of passengers is wading down the walkway on their own.
+  raises: [rapport]
+- id: exposure
+  name: Cold and wet
+  segments: 4
+  full: You are shaking with cold and your hands are clumsy. Anything that takes strength or steady fingers is harder from now on.
+  raises: [stamina, mechanics]

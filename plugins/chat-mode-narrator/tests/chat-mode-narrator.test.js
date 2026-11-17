@@ -114,7 +114,7 @@ describe(`${PLUGIN_ID} package`, () => {
 
   it("imports optional bag tools and explains payment and refusal in both languages", () => {
     expect(manifest.tools.services).toEqual([
-      { contract: "inventory.bag@1", name: "check-bag" },
+      { contract: "inventory.bag@2", name: "check-bag" },
       { contract: "inventory.change@1", name: "change-inventory" },
     ]);
     expect(definition.packageManifest.plugin.requires ?? []).toEqual([]);

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "climb-slips",
+    "attribute": "agility",
+    "text": "Your grip gives and you slide back down; the climb costs you time and skin.",
+    "cues": ["slip", "slide", "graze"],
+    "cost": { "kind": "clock", "clock": "alarm" }
+  },
+  {
+    "id": "lantern-breaks",
+    "outcome": "critical-failure",
+    "text": "The lantern hits the stone and goes dark for good.",
+    "cues": ["lantern", "dark"],
+    "cost": { "kind": "item", "item": "Oil lantern" }
+  },
+  {
+    "id": "noise",
+    "text": "Someone nearby heard you.",
+    "cues": ["heard", "noise", "footsteps"],
+    "cost": { "kind": "clock", "clock": "alarm" }
+  }
+]

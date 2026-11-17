@@ -5,6 +5,8 @@ PLUGIN.md:
   displayName: 背包
   description: 记录你随身携带的东西。故事里获得、失去或装备的物品会自动记进背包。
   contributes:
+    events:
+      - description: 在回合各阶段运行结束后核对背包。
     commands:
       - name: bag
         description: 查看你带着什么，并打开背包页。
@@ -16,6 +18,8 @@ runtimes/item-op/RUNTIME.md:
   description: 装备、卸下或丢弃背包里的物品。
 runtimes/ledger/RUNTIME.md:
   description: 每回合根据故事内容记录你获得、失去或装备的物品。
+runtimes/reconcile/RUNTIME.md:
+  description: 安排背包和其他回执在同一批事件中结算。
 runtimes/vocabulary/RUNTIME.md:
   description: 记录背包里已有的物品名，让后续记录沿用同一个叫法。
 messages:

@@ -41,6 +41,23 @@ describe("inventory changes already applied through services", () => {
     });
     expect(gains).toHaveLength(2);
   });
+  it("retains the unpaid quantity of an aggregated loss", () => {
+    const loss = { op: "remove", name: "Chalk", quantity: 3 };
+    const paid = operation([{ op: "remove", item: "Chalk" }]);
+    expect(unappliedInventoryChanges([loss], [paid, paid])).toEqual({
+      changes: [{ ...loss, quantity: 1 }],
+      alreadyApplied: 2,
+    });
+  });
+  it("offsets split losses with a single payment", () => {
+    const loss = { op: "remove", name: "Chalk", quantity: 1 };
+    expect(
+      unappliedInventoryChanges(
+        [loss, loss, { ...loss, quantity: 2 }],
+        [operation([{ op: "remove", item: "Chalk", quantity: 3 }])],
+      ),
+    ).toEqual({ changes: [loss], alreadyApplied: 1 });
+  });
   it("uses a retained request even when only the result was truncated", () => {
     expect(
       unappliedInventoryChanges(

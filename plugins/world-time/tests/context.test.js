@@ -1,4 +1,7 @@
-import { getPendingProposals } from "@covel/plugin-handlers-utils";
+import {
+  getPendingProposals,
+  getToolContent,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
 
 import handler from "../runtimes/context/handler.js";
@@ -43,5 +46,18 @@ describe("world-time context runtime", () => {
     );
     const other = await handler(ctx({ "clock/current": stored }, "zh-CN"));
     expect(getPendingProposals(other)).toHaveLength(1);
+  });
+
+  it("publishes the time since the story began without storing it", async () => {
+    const first = await handler(ctx({}));
+    expect(getToolContent(first).value.elapsedSinceStart).toBe(0);
+    const stored = JSON.parse(
+      JSON.stringify(getPendingProposals(first)[0].payload.value),
+    );
+    expect(stored).not.toHaveProperty("elapsedSinceStart");
+    const later = await handler(
+      ctx({ "clock/current": { ...stored, tick: stored.tick + 75 } }),
+    );
+    expect(getToolContent(later).value.elapsedSinceStart).toBe(75);
   });
 });

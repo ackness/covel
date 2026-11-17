@@ -5,6 +5,15 @@ PLUGIN.md:
   displayName: Проверка кубиками
   description: Бросает кубики, когда действие рискованно, и показывает результат в чате.
   contributes:
+    data:
+      consequences:
+        authoring:
+          title: Цена неудачи
+          summary: Каждая проваленная проверка стоит чего-то, что видит игрок.
+      clocks:
+        authoring:
+          title: Часы неудач
+          summary: Превращает повторные неудачи в растущее давление.
     commands:
       - name: roll
         description: "Бросить кубики, например /roll 2d6. По умолчанию бросает один 20-гранный кубик."
@@ -31,3 +40,6 @@ messages:
   Critical success: Критический успех
   Critical failure: Критическая неудача
   "Turn {turn}": "Ход {turn}"
+  Clocks: Часы
+  No clocks in this world.: В этом мире нет часов.
+  Failed checks fill these clocks. When a clock is full, its consequence stays for the rest of the story.: Проваленные проверки заполняют эти часы. Когда часы заполнены, их последствие остаётся до конца истории.

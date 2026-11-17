@@ -1,0 +1,9 @@
+[
+  {
+    "id": "alarm",
+    "name": "Alarm",
+    "segments": 4,
+    "full": "The guards know someone is inside and search every room.",
+    "raises": ["stealth"]
+  }
+]

@@ -777,7 +777,9 @@ export default async function (ctx) {
       const pool = slots["check-results"]?.value?.match(/\| 1 \| (\d+) \|/);
       const roll = receipt?.die ?? Number(pool?.[1]);
       expect(Number.isInteger(roll)).toBe(true);
-      const modifier = receipt?.modifier ?? 0;
+      // The attribute's modifier as the turn's modifier list gives it.
+      const listed = slots["check-results"]?.value?.match(/→ ([+-]?\d+)/);
+      const modifier = receipt?.modifier ?? Number(listed?.[1] ?? 0);
       const dc = receipt?.difficulty ?? 12;
       const outcome =
         receipt?.outcome ??

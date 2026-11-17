@@ -12,6 +12,7 @@ function handler() {
   register({
     toolkit: { tool, z, shortIdBatch },
     registerTool() {},
+    registerService() {},
     provideExtension: (...args) => extensions.push(args),
   });
   expect(extensions.map(([point, id]) => [point, id])).toEqual([

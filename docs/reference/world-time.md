@@ -155,6 +155,7 @@ evolution:
 内置的 `world-time` 是核心插件，有两个 runtime：
 
 1. **`world-time/context`**（回合开始时运行，不调用模型）：读取这局游戏的时钟；还没有时钟时读世界定义的初值。它把结果发布为契约 `world-time-context@1`。初值和按语言显示的文本通过 proposal 保存。
+   - 发布的值另带 `elapsedSinceStart`：开局以来经过的基础单位数，含义和下文 `summary` 的同名字段一样。它由刻度算出，不保存。隐藏剧情的 `time` 条件和任务期限都可以读它，例如 `{ time: elapsedSinceStart, gte: 45 }`。
    - 导入了定义的世界，第一次叙事之前面板就显示规则。
    - 没有导入定义时，面板显示默认历法的说明。
 2. **`world-time/advance`**（叙事之后运行，调用模型）：读取本回合成功的叙事和时间起点，然后调用工具 `advance-world-time`。

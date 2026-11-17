@@ -3,18 +3,25 @@ import {
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
-import { loadTime } from "../../clock.js";
+import { initialTick, loadTime } from "../../clock.js";
 
 export default async function handler(ctx) {
   const current = await loadTime(ctx.store, ctx.locale, ctx);
-  if (ctx.recursionDepth > 0) return { outcome: "success", value: current };
+  // Time passed since the story began, in the clock's base unit, for
+  // conditions such as a quest deadline. Published only: the stored clock
+  // keeps the tick, from which this is derived.
+  const value = {
+    ...current,
+    elapsedSinceStart: current.tick - initialTick(current.definition),
+  };
+  if (ctx.recursionDepth > 0) return { outcome: "success", value };
   // Most turns change nothing here: time moves through `advance-world-time`.
   // Writing the same record again would only tell every panel to draw again.
   const stored = await ctx.store.getPluginData("clock", "current");
   if (stored && JSON.stringify(stored.value) === JSON.stringify(current))
-    return { outcome: "success", value: current };
+    return { outcome: "success", value };
   // Initialization and locale refresh share the story transaction, never a live write.
-  return withPendingProposals({ outcome: "success", value: current }, [
+  return withPendingProposals({ outcome: "success", value }, [
     makeProposal(ctx, new Date().toISOString(), "plugin.data", {
       namespace: "clock",
       key: "current",

@@ -5,8 +5,17 @@ PLUGIN.md:
   displayName: 骰子判定
   description: 遇到有风险的行动时掷骰子，并把结果显示在对话里。
   contributes:
+    data:
+      consequences:
+        authoring:
+          title: 失败的代价
+          summary: 让每次失败的检定都付出玩家看得见的代价。
+      clocks:
+        authoring:
+          title: 失败时钟
+          summary: 把一次次失败变成不断加重的压力。
     events:
-      - description: 发射条件：本回合完成过至少一次骰子判定时必须发射，且整回合只发一次——把所有判定按使用顺序装进 checks 数组（先判定完、再一次性发射）。每项：action 填行动简述；attribute 填所用属性，未使用属性时省略；modifier 填属性修正，没有可用的有量程能力属性时填 0；difficulty 填 easy、normal、hard 或 extreme；outcome 填本回合判定表给出的结果。不要填 d20、DC 和合计，它们由系统补上。无风险行动不判定也不发射。
+      - description: 发射条件：本回合完成过至少一次骰子判定时必须发射，且整回合只发一次——把所有判定按使用顺序装进 checks 数组（先判定完、再一次性发射）。每项：action 填行动简述；attribute 填所用属性，未使用属性时省略；modifier 填本回合修正表里的属性修正（表中同行列出的物品已算在内），没有可用的有量程能力属性时填 0；difficulty 按情境填 easy、normal、hard 或 extreme；with 填这个行动要靠谁帮忙或同意，只在本回合“更难的检定”列出这个人时填写；outcome 填本回合判定表按“更难的检定”调整后给出的结果。不要填 d20、DC 和合计，它们由系统补上。无风险行动不判定也不发射。
     commands:
       - name: roll
         description: 掷骰子，例如 /roll 2d6；默认掷一个 20 面骰。
@@ -33,3 +42,6 @@ messages:
   Critical success: 大成功
   Critical failure: 大失败
   "Turn {turn}": "第 {turn} 回合"
+  Clocks: 时钟
+  No clocks in this world.: 这个世界没有时钟。
+  Failed checks fill these clocks. When a clock is full, its consequence stays for the rest of the story.: 失败的检定会推进这些时钟。时钟填满后，它的后果在之后的故事里一直有效。

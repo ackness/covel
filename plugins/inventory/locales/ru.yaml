@@ -5,6 +5,8 @@ PLUGIN.md:
   displayName: Сумка
   description: Следит за тем, что вы носите с собой. Предметы, которые вы получаете, теряете или надеваете в истории, сами попадают в сумку.
   contributes:
+    events:
+      - description: Сверяет содержимое сумки после завершения этапов хода.
     commands:
       - name: bag
         description: Показать, что у вас с собой, и открыть вкладку «Сумка».
@@ -16,6 +18,8 @@ runtimes/item-op/RUNTIME.md:
   description: Надеть, снять или выбросить предмет из сумки.
 runtimes/ledger/RUNTIME.md:
   description: После каждого хода записывает предметы, которые вы получили, потеряли или надели.
+runtimes/reconcile/RUNTIME.md:
+  description: Запускает сверку сумки вместе с обработкой остальных событий хода.
 runtimes/vocabulary/RUNTIME.md:
   description: Запоминает названия предметов из сумки, чтобы дальше они назывались одинаково.
 messages:
