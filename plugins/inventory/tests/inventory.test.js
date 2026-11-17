@@ -979,7 +979,7 @@ describe("inventory from WorldIR", () => {
     });
   });
 
-  it("records the losses it took from the prose under the story turn", async () => {
+  it("credits the losses it took from the prose to the story turn", async () => {
     const torch = { id: "torch", name: "Torch", quantity: 3 };
     const result = await ledger({
       sessionId: "sess-1",
@@ -990,14 +990,7 @@ describe("inventory from WorldIR", () => {
       random: makeRandom(),
       store: {
         listPluginData: async () => [{ key: torch.id, value: torch }],
-        getPluginData: async (namespace) =>
-          namespace === "prose-losses"
-            ? {
-                value: {
-                  losses: [{ item: "rope", quantity: 1, attempt: "source" }],
-                },
-              }
-            : null,
+        getPluginData: async () => null,
       },
       world: {
         seats: [
@@ -1023,19 +1016,20 @@ describe("inventory from WorldIR", () => {
         },
       },
     });
-    const record = getPendingProposals(result).find(
-      (proposal) => proposal.payload.items?.[0]?.namespace === "prose-losses",
+    const credits = getPendingProposals(result).filter(
+      (proposal) => proposal.payload.namespace === "prose-losses",
     );
-    expect(record?.payload.items[0]).toEqual({
-      namespace: "prose-losses",
-      key: "source",
-      value: {
-        losses: [
-          { item: "rope", quantity: 1, attempt: "source" },
-          { item: "torch", quantity: 2, attempt: "attempt" },
-        ],
+    // A blind increment: it adds to whatever another run committed.
+    expect(credits.map(({ type, payload }) => ({ type, payload }))).toEqual([
+      {
+        type: "plugin.data.update",
+        payload: {
+          namespace: "prose-losses",
+          key: "source/torch",
+          ops: [{ op: "inc", by: 2 }],
+        },
       },
-    });
+    ]);
   });
 
   it("avoids any store read when operations already cover every extracted change", async () => {
@@ -1420,19 +1414,12 @@ it("preserves the ledger proposals for a representative item exchange", async ()
           {
             "id": "[proposal-id]",
             "payload": {
-              "items": [
+              "key": "turn/gold",
+              "namespace": "prose-losses",
+              "ops": [
                 {
-                  "key": "turn",
-                  "namespace": "prose-losses",
-                  "value": {
-                    "losses": [
-                      {
-                        "attempt": "turn",
-                        "item": "gold",
-                        "quantity": 10,
-                      },
-                    ],
-                  },
+                  "by": 10,
+                  "op": "inc",
                 },
               ],
             },
@@ -1443,7 +1430,7 @@ it("preserves the ledger proposals for a representative item exchange", async ()
             },
             "timestamp": "2026-01-02T03:04:05.000Z",
             "turnId": "turn",
-            "type": "plugin.data.batch",
+            "type": "plugin.data.update",
           },
         ],
       }

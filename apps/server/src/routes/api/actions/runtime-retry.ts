@@ -114,6 +114,9 @@ export async function prepareRuntimeRetry(
   }
   // Attempts are oldest-first. Only a committed attempt can supersede
   // source state: a successful runtime whose transaction rolled back is not healed.
+  // A committed success is final: its writes and operations landed, so no
+  // later failure of any attempt (an action retry, a plugin RPC) can make the
+  // target retriable again and pay twice.
   for (const row of rows) {
     const scope = row.retryScope;
     if (
@@ -124,10 +127,12 @@ export async function prepareRuntimeRetry(
     for (const result of (Array.isArray(row.runtimeResults)
       ? row.runtimeResults
       : []) as RuntimeResult[]) {
+      const current = results.get(result.runtimeId);
       if (
         scope.runtimeIds.includes(result.runtimeId) &&
-        results.has(result.runtimeId) &&
-        (result.status === "success" || result.status === "failed")
+        current !== undefined &&
+        (result.status === "success" ||
+          (result.status === "failed" && current.status !== "success"))
       ) {
         results.set(result.runtimeId, result);
       }
@@ -228,10 +233,12 @@ export async function prepareRuntimeRetry(
 }
 
 /**
- * What each target's latest committed result for the source recorded: whether
- * it failed, and the event the source delivered to it. The event comes from
- * the producer the source chain selected, read from the original source row,
- * and only when that producer succeeded; otherwise the target gets none.
+ * What each target may do in this retry: stage write-service operations only
+ * while its recovered state is still failed, and receive the event the source
+ * turn delivered to it. The event is read from the target's own result in the
+ * original source row, never from a later attempt that ran without it, and
+ * comes from the producer that result names, only when that producer
+ * succeeded; otherwise the target gets none.
  */
 function retryTargets(
   runtimeIds: readonly string[],
@@ -241,8 +248,9 @@ function retryTargets(
 ): RetryTargets {
   return Object.fromEntries(
     runtimeIds.map((runtimeId) => {
-      const result = results.get(runtimeId);
-      const trigger = result?.trigger;
+      const trigger = sourceResults.find(
+        (result) => result.runtimeId === runtimeId,
+      )?.trigger;
       const subscribed = activeRuntimes.find(
         (runtime) => runtime.name === runtimeId,
       )?.trigger;
@@ -259,7 +267,7 @@ function retryTargets(
       return [
         runtimeId,
         {
-          sourceFailed: result?.status === "failed",
+          sourceFailed: results.get(runtimeId)?.status === "failed",
           ...(trigger && data ? { triggerEvent: { ...trigger, data } } : {}),
         },
       ];

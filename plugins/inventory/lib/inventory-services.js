@@ -8,10 +8,7 @@ import {
   newInventoryNames,
   planInventoryChanges,
 } from "./update-inventory.js";
-import {
-  PROSE_LOSSES_NAMESPACE,
-  settleWithProseLosses,
-} from "./prose-losses.js";
+import { claimProseLosses, PROSE_LOSSES_NAMESPACE } from "./prose-losses.js";
 
 /**
  * The `effects` of an item as the bag reports them: only a well-formed check
@@ -161,21 +158,18 @@ export async function change({ changes: requested }, ctx) {
 
 /**
  * In a retry of an earlier turn, a removal the ledger of that turn already
- * took from the prose is not taken again: claim it from the turn's record.
- * The claim commits with this operation, so it is made at most once.
+ * took from the prose is not taken again: claim it from the turn's credit.
+ * The claim commits with this operation and must still fit the credit at
+ * commit, so each unit is claimed at most once.
  */
 async function settleRetriedLosses(changes, ctx) {
   if (!ctx.sourceTurnId) return { changes, settled: [] };
-  const settlement = settleWithProseLosses(
-    await ctx.pluginData.get(PROSE_LOSSES_NAMESPACE, ctx.sourceTurnId),
-    changes,
-    ctx.turnId,
+  const settlement = await claimProseLosses(ctx.sourceTurnId, changes, (key) =>
+    ctx.pluginData.get(PROSE_LOSSES_NAMESPACE, key),
   );
-  if (settlement.record)
-    await ctx.pluginData.set(
-      PROSE_LOSSES_NAMESPACE,
-      ctx.sourceTurnId,
-      settlement.record,
-    );
+  for (const { key, by } of settlement.claims)
+    await ctx.pluginData.update(PROSE_LOSSES_NAMESPACE, key, [
+      { op: "inc", by, min: 0 },
+    ]);
   return settlement;
 }

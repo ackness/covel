@@ -509,11 +509,12 @@ describe("gameplay chains in a turn", () => {
 
   /**
    * A turn whose one failed check costs a chalk, played while the recorder
-   * fails as `mode` says. With `prose`, the story also says a chalk is lost
-   * and a rope found, which the inventory ledger reads from WorldIR.
+   * fails as `mode` says, or pays when there is no `mode`. With `prose`, the
+   * story also says a chalk is lost and a rope found, which the inventory
+   * ledger reads from WorldIR.
    */
-  async function failedReceiptTurn(
-    mode: "commit" | "run",
+  async function receiptTurn(
+    mode: "commit" | "run" | undefined,
     { prose = false } = {},
   ) {
     const sessionId = await playingSession([
@@ -571,7 +572,7 @@ describe("gameplay chains in a turn", () => {
       (source.runtimeResults as RuntimeResult[]).find(
         (result) => result.runtimeId === runtimeId,
       )?.status;
-    expect(status("dice-check/recorder")).toBe("failed");
+    expect(status("dice-check/recorder")).toBe(mode ? "failed" : "success");
     return { sessionId, sourceTurnId: source.turnId, status };
   }
 
@@ -600,6 +601,48 @@ describe("gameplay chains in a turn", () => {
     return { status: response.status, stream: await response.text() };
   }
 
+  /**
+   * Run the recorder again through a plugin RPC against the source turn and
+   * let that run fail. The RPC hands it no event, and the failure commits.
+   */
+  async function rpcRecorder(sessionId: string, sourceTurnId: string) {
+    failRecorder = "run";
+    let response: Response;
+    try {
+      response = await boot.app.request(
+        `/api/sessions/${sessionId}/plugin-rpc`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "runtime",
+            pluginId: "dice-check",
+            runtimeId: "dice-check/recorder",
+            payload: {},
+            retryFromTurnId: sourceTurnId,
+          }),
+        },
+      );
+    } finally {
+      failRecorder = undefined;
+    }
+    expect(response.status, await response.clone().text()).toBe(200);
+    const attempt = (await store.listTurnResults(sessionId)).at(-1)!;
+    expect(attempt.retryScope?.sourceTurnId).toBe(sourceTurnId);
+    expect(attempt.commitStatus).toBe("committed");
+    expect(
+      (attempt.runtimeResults as RuntimeResult[]).map(
+        ({ runtimeId, status, trigger }) => ({ runtimeId, status, trigger }),
+      ),
+    ).toEqual([
+      {
+        runtimeId: "dice-check/recorder",
+        status: "failed",
+        trigger: undefined,
+      },
+    ]);
+  }
+
   async function holdings(sessionId: string) {
     const items = await store.listPluginData(sessionId, "inventory", "items");
     return Object.fromEntries(
@@ -613,7 +656,7 @@ describe("gameplay chains in a turn", () => {
   it.each(["retry_runtime", "retry_failed_runtimes"])(
     "recovers a rejected dice receipt through %s, once",
     async (type) => {
-      const { sessionId, sourceTurnId } = await failedReceiptTurn("commit");
+      const { sessionId, sourceTurnId } = await receiptTurn("commit");
       // The cost the rejected receipt staged was taken back with it.
       expect(await holdings(sessionId)).toEqual({ Chalk: 2 });
 
@@ -648,11 +691,54 @@ describe("gameplay chains in a turn", () => {
     },
   );
 
+  it("hands a retry the source turn's event after a plugin RPC of the target failed without it", async () => {
+    const { sessionId, sourceTurnId } = await receiptTurn("run");
+    await rpcRecorder(sessionId, sourceTurnId);
+
+    const recovered = await retry(sessionId, sourceTurnId, [
+      "dice-check/recorder",
+    ]);
+    expect(recovered.status, recovered.stream).toBe(200);
+    expect(recovered.stream).not.toContain("No check event to record");
+    expect(
+      await store.listPluginData(sessionId, "dice-check", "checks"),
+    ).toHaveLength(1);
+    expect(await holdings(sessionId)).toEqual({ Chalk: 1 });
+  });
+
+  it.each([
+    { paid: "in the source turn", mode: undefined },
+    { paid: "in a recovery", mode: "commit" as const },
+  ])(
+    "does not let a failed plugin RPC reopen a receipt that paid $paid",
+    async ({ mode }) => {
+      const { sessionId, sourceTurnId } = await receiptTurn(mode);
+      if (mode) {
+        const first = await retry(sessionId, sourceTurnId, [
+          "dice-check/recorder",
+        ]);
+        expect(first.status, first.stream).toBe(200);
+      }
+      expect(await holdings(sessionId)).toEqual({ Chalk: 1 });
+
+      await rpcRecorder(sessionId, sourceTurnId);
+      const again = await retry(sessionId, sourceTurnId, [
+        "dice-check/recorder",
+      ]);
+      expect(`${again.status} ${again.stream}`).toContain(
+        "retry_target_not_failed",
+      );
+      expect(
+        await store.listPluginData(sessionId, "dice-check", "checks"),
+      ).toHaveLength(1);
+      expect(await holdings(sessionId)).toEqual({ Chalk: 1 });
+    },
+  );
+
   it("does not take a cost again that the ledger already took from the prose", async () => {
-    const { sessionId, sourceTurnId, status } = await failedReceiptTurn(
-      "run",
-      { prose: true },
-    );
+    const { sessionId, sourceTurnId, status } = await receiptTurn("run", {
+      prose: true,
+    });
     // The recorder failed before paying; the ledger took the chalk the
     // story lost.
     expect(status("inventory/ledger")).toBe("success");
@@ -681,10 +767,9 @@ describe("gameplay chains in a turn", () => {
   ])(
     "pays a rejected receipt's cost once when the ledger that read it is retried too: $order",
     async ({ order }) => {
-      const { sessionId, sourceTurnId, status } = await failedReceiptTurn(
-        "commit",
-        { prose: true },
-      );
+      const { sessionId, sourceTurnId, status } = await receiptTurn("commit", {
+        prose: true,
+      });
       // The ledger built on the receipt's dropped payment, so it was
       // dropped too.
       expect(status("inventory/ledger")).toBe("failed");

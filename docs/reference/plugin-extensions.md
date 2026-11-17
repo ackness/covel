@@ -454,7 +454,7 @@ covel.registerService({
 
 - 脱离回合的后台 runtime（`detached`）和 `background` 执行；
 - 恢复执行（`resume`）：它会把一笔交易结算两次；
-- 带源回合的重试里，除“本次选中、来源结果为 `failed` 的目标”以外的 runtime：已提交的结果再暂存就会结算两次。失败的目标原来的写入和操作都没有提交，所以可以暂存，见[回合管线 · 失败任务恢复](../internals/flow.md)；
+- 带源回合的重试里，除“本次选中、来源结果为 `failed` 的目标”以外的 runtime：已提交的结果再暂存就会结算两次。目标只要在某次已提交的执行里成功过，之后的失败不会让它重新算作失败。失败的目标原来的写入和操作都没有提交，所以可以暂存，见[回合管线 · 失败任务恢复](../internals/flow.md)；
 - agent 的 guard、Hook、RPC handler 和扩展点提供者；
 - 能挂起（`tools.builtin` 含 `suspend`）的 agent：它的写服务导入不出现，原因是 `not-allowed`。
 

@@ -3340,7 +3340,7 @@ Extra rules for fields:
   - These results are used only as context. This run does not save them again.
   - If the turn is not found: `404 retry_turn_not_found`.
   - If the turn was not committed successfully (its `commitStatus` is not `committed`, meaning it was rolled back or not yet settled): `409 retry_source_not_committed`. A successful result from an uncommitted turn cannot satisfy a downstream `needs` condition.
-  - This path does not check that the target failed, so it does not hand back the original turn's trigger event, and write services answer `unavailable`. To recover an event-triggered task or the write-service operations it missed, use the [`retry_runtime` / `retry_failed_runtimes`](#limits-of-a-batch-recovery) actions.
+  - This path does not check that the target failed, so it does not hand back the original turn's trigger event, and write services answer `unavailable`. Its result counts as an attempt for that source: a success ends the target's failure, and a failure does not make a target that already succeeded retriable again. To recover an event-triggered task or the write-service operations it missed, use the [`retry_runtime` / `retry_failed_runtimes`](#limits-of-a-batch-recovery) actions.
 
 **Resolution order (action level):**
 
@@ -5229,8 +5229,8 @@ Extra notes for each type:
 - Keeps normal input validation, dependency order, and parallel running of independent tasks across the targets.
 - Does not mark tasks that were skipped because a dependency failed as "fixed".
 - Ordinary targets run in the foreground; existing presentation jobs recover from the restricted source described below. Neither a batch recovery nor a single-task recovery with a clear source turn expands its scope through event subscriptions, recursive calls, or background dispatch.
-- Each event-triggered target gets back the event its source turn actually delivered to it (`ctx.triggerEvent`, activation source `event`), from the `trigger` saved on its result. When the producer did not commit successfully, cannot be found, or the result has no `trigger`, it gets no event. See [turn flow](../internals/flow.md) for the rule.
-- Only a target whose source result is `failed` can call write services; elsewhere they still answer `unavailable`. See [where write services cannot be called](./plugin-extensions.md#where-write-services-cannot-be-called).
+- Each event-triggered target gets back the event its source turn actually delivered to it (`ctx.triggerEvent`, activation source `event`), from the `trigger` saved on its own result in the original source turn; later attempts do not change it. When the producer did not commit successfully, cannot be found, or the result has no `trigger`, it gets no event. See [turn flow](../internals/flow.md) for the rule.
+- Only a target whose source result is `failed` can call write services; a target that succeeded in any committed execution is no longer failed; elsewhere they still answer `unavailable`. See [where write services cannot be called](./plugin-extensions.md#where-write-services-cannot-be-called).
 
 A single-task retry with a source turn also checks the source and the latest failure status. An ordinary manual call without a source turn, and a plugin RPC call, keep their existing event chain, recursion, and dispatch behavior.
 

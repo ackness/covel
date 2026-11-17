@@ -9,7 +9,7 @@ import {
 import { unappliedInventoryChanges } from "../../lib/applied-operations.js";
 import {
   PROSE_LOSSES_NAMESPACE,
-  recordProseLosses,
+  proseLossCredits,
 } from "../../lib/prose-losses.js";
 import updateInventory from "../../lib/update-inventory.js";
 import {
@@ -64,32 +64,28 @@ export default async function handler(ctx) {
     },
     [
       ...getPendingProposals(result),
-      ...(await proseLossProposals(ctx, summary.results)),
+      ...proseLossProposals(ctx, summary.results),
     ],
   );
 }
 
 /**
- * Record the losses this run took from the prose under the story turn, so a
+ * Credit the losses this run took from the prose to the story turn, so a
  * retry of that turn does not take them again through `inventory.change@1`.
- * A retry's ledger records under its source turn.
+ * A retry's ledger credits its source turn. Blind `inc` writes add to
+ * whatever another run committed meanwhile.
  */
-async function proseLossProposals(ctx, results) {
+function proseLossProposals(ctx, results) {
   const taken = (results ?? [])
     .filter((result) => result.op === "remove" && result.lost > 0)
     .map(({ name, lost }) => ({ name, quantity: lost }));
-  if (taken.length === 0) return [];
-  const turn = ctx.execution?.sourceTurnId ?? ctx.turnId;
-  const previous = await ctx.store.getPluginData(PROSE_LOSSES_NAMESPACE, turn);
-  return [
-    makeProposal(ctx, new Date().toISOString(), "plugin.data.batch", {
-      items: [
-        {
-          namespace: PROSE_LOSSES_NAMESPACE,
-          key: turn,
-          value: recordProseLosses(previous?.value, taken, ctx.turnId),
-        },
-      ],
-    }),
-  ];
+  const now = new Date().toISOString();
+  return proseLossCredits(ctx.execution?.sourceTurnId ?? ctx.turnId, taken).map(
+    ({ key, by }) =>
+      makeProposal(ctx, now, "plugin.data.update", {
+        namespace: PROSE_LOSSES_NAMESPACE,
+        key,
+        ops: [{ op: "inc", by }],
+      }),
+  );
 }

@@ -415,8 +415,6 @@ describe("inventory change service", () => {
 
 describe("inventory change service in a retry", () => {
   const chalk = { id: "chalk", name: "Chalk", quantity: 1 };
-  // The source turn's ledger already took one chalk from the prose.
-  const sourceLoss = { item: "chalk", quantity: 1, attempt: "source" };
   it.each([
     {
       name: "settles a removal the source turn's ledger already took",
@@ -424,7 +422,7 @@ describe("inventory change service in a retry", () => {
       quantity: 1,
       results: [{ op: "remove", item: "Chalk", status: "skipped" }],
       untouched: true,
-      left: [],
+      claim: [{ op: "inc", by: -1, min: 0 }],
     },
     {
       name: "takes only the part the ledger did not",
@@ -432,33 +430,33 @@ describe("inventory change service in a retry", () => {
       quantity: 2,
       results: [{ op: "remove", item: "Chalk", status: "removed" }],
       untouched: false,
-      left: [],
+      claim: [{ op: "inc", by: -1, min: 0 }],
     },
     {
-      name: "leaves the record alone outside a retry",
+      name: "leaves the credit alone outside a retry",
       quantity: 1,
       results: [{ op: "remove", item: "Chalk", status: "removed" }],
       untouched: false,
-      left: undefined,
+      claim: undefined,
     },
     {
-      name: "does not settle against a loss of the same execution",
-      sourceTurnId: "source",
-      turnId: "source",
+      name: "claims nothing from another turn's credit",
+      sourceTurnId: "other",
       quantity: 1,
       results: [{ op: "remove", item: "Chalk", status: "removed" }],
       untouched: false,
-      left: undefined,
+      claim: undefined,
     },
-  ])("$name", async ({ sourceTurnId, turnId, quantity, results, untouched, left }) => {
+  ])("$name", async ({ sourceTurnId, quantity, results, untouched, claim }) => {
     const { registry, request, store } = await fixture([chalk]);
+    // The source turn's ledger already took one chalk from the prose.
     await store.setPluginData({
       id: "prose-losses",
       sessionId: caller.sessionId,
       pluginId: "inventory",
       namespace: "prose-losses",
-      key: "source",
-      value: { losses: [sourceLoss] },
+      key: "source/chalk",
+      value: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
     });
@@ -466,7 +464,7 @@ describe("inventory change service in a retry", () => {
       registry,
       caller: {
         ...caller,
-        turnId: turnId ?? "attempt",
+        turnId: "attempt",
         ...(sourceTurnId ? { sourceTurnId } : {}),
       },
       request: request("change", {
@@ -479,7 +477,7 @@ describe("inventory change service in a retry", () => {
     const claimed = writes.find(
       (write) => write.payload.namespace === "prose-losses",
     );
-    expect(claimed?.payload.value.losses).toEqual(left);
+    expect(claimed?.payload.ops).toEqual(claim);
     const taken = writes.find((write) => write.payload.namespace === "items");
     expect(taken === undefined).toBe(untouched);
   });
