@@ -217,8 +217,7 @@ Details to remember:
 - Each committed story message carries a kernel receipt in `metadata.storySource`: execution, run, plugin and runtime IDs, plus `scope: top-level | nested`. Deferred presentation and selector recovery read this persisted identity, including after suspension release; they never infer top-level status from the runtime ID or a missing receipt.
 - When a suspension record is saved, an older item of the same runtime that still waits is voided in the same transaction. A resume's commit transaction first checks the record contents noted at the suspension, and writes nothing when one changed.
 - A resumed runtime can suspend again. That commit first marks the old suspended item handled, then saves the new one; the new item continues the same execution and does not abandon the old one. The rules are in [Suspending again](../reference/api.md#suspending-again).
-- When a function suspends, its successful recursive children and all their descendants are saved with the continuation. Their computation results remain successful while domain writes, journal rows, triggers and output exports wait. The final successful resume commits one atomic unit, children before parent, without rerunning saved handlers or Hooks. Another suspension only transfers the saved work.
-- A child's earlier success describes computation. After saving the suspension, the kernel appends a `suspended` lifecycle correction using the original `(turnId, runtimeId, runId)` and makes that invocation's tasks wait. A failed resume or rollback appends failure; a later committed retry corrects it to success, another suspension returns it to waiting, and abandonment, expiry or invalidation cancels it. Earlier traces remain history. Independent invocations of the same runtime keep their own outcomes.
+- A suspension saves only the runtime's own work. A function that returns `suspended` after `ctx.recursiveCall` produced nested results fails, and the nested results are dropped with it; a runtime inside a nested execution that suspends also fails and reaches its parent as an ordinary failed nested result. The rules are in [Nested calls](../reference/plugins.md#nested-calls-ctxrecursivecall).
 - The continuation retains the suspended run and the task owner of the chain. Kernel metadata in progress records preserves invocation identity and settlement provenance, which plugins cannot forge. This lets a retry correct a framework failure without reviving a failure or cancellation explicitly reported by a plugin. Public task deduplication and the root progress scope remain unchanged.
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
@@ -245,7 +244,7 @@ How it runs:
 - After a job worker claims the job, it runs the handler **outside** the session lock. Only `processTurnResults` (the finalize transaction plus the automatic snapshot) takes the lock. The final state of the job and the data it writes are committed in the same transaction.
 - It cannot suspend to wait for the player, because no player is waiting on it. If the runtime suspends anyway, the job is recorded as `failed` and nothing is committed.
 
-A background follower from a recursive call belongs to its producer's commit unit and is not queued if the parent call fails. Separate nested executions can each trigger the same background target, preserving their own payload and producer. If the parent suspends, the follower is saved with its continuation and queued in the successful resume's commit transaction. Suspending again does not queue it early.
+A background follower from a recursive call belongs to its producer's commit unit and is not queued if the parent call fails. Separate nested executions can each trigger the same background target, preserving their own payload and producer.
 
 Why this is safe:
 
@@ -1043,7 +1042,7 @@ The events it emits include:
 - `block.emitted`
 - `hook.fired` / `hook.rewrote` / `hook.aborted`
 
-Runtime lifecycle events use `TraceRecorder`, including starts and terminals at the resume entry. After commit or a suspension exit, saved recursive work appends an effective-status correction for the same run, persisting it before delivery to subscribers and the initiating action stream, once per stream. Corrections do not recommit proposals, rerun Hooks or count innocent child runs as plugin faults.
+Runtime lifecycle events use `TraceRecorder`, including starts and terminals at the resume entry. After a resume commits or a suspension exits, a suspended run appends an effective-status correction for the same run, persisting it before delivery to subscribers and the initiating action stream, once per stream. Corrections do not recommit proposals, rerun Hooks or count as plugin faults.
 
 Story deltas do not exist, and story drafts are not trace events. Each accepted story runtime records one `message.completed` in traces; only a committed `narrative.completed` enters the player story feed.
 

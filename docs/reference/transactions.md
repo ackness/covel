@@ -460,7 +460,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 写服务的操作也是生产者：提供者的 runtime 读到某个操作暂存的写入时，或任何 runtime 通过内核输入 `operations@1` 读到某个操作时，依赖记的是操作的 ID。操作排在它的调用方单元的位置；它失败、被撤回或调用方单元被丢弃时算作没有提交。辅助读者一起丢弃，错误是 `read data of <契约> that did not commit`；story 或 setup 读者照常提交，`read-dependency.kept` 的载荷用 `producerOperationId` 和 `producerContract` 代替 run 的两个字段。
 - [`story-context@1`](./plugins.md#story-context) 的提供方也是生产者：读者纳入某条本次执行的说明时，依赖记提供方的 run，丢弃和保留的规则与上面相同。重试种子已经提交，不记依赖。
 
-挂起也在源执行的提交时检查读取依赖，即使没有领域写入。生产者被丢弃时，辅助读者的 continuation 不保存、不发出可恢复的 `turn.suspended`；缓冲和嵌套写入不能留待恢复。它的进度作业、扣住的 detached 作业和回合计数走已有的丢弃结算。story/setup 的保护与 trace 规则照常适用。保存下来的 continuation 不带依赖图，恢复时源生产者已经结算。
+挂起也在源执行的提交时检查读取依赖，即使没有领域写入。生产者被丢弃时，辅助读者的 continuation 不保存、不发出可恢复的 `turn.suspended`；缓冲写入不能留待恢复。它的进度作业、扣住的 detached 作业和回合计数走已有的丢弃结算。story/setup 的保护与 trace 规则照常适用。保存下来的 continuation 不带依赖图，恢复时源生产者已经结算。
 
 #### 写服务的操作
 
@@ -496,7 +496,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 `commit_status` 结算时，`setTurnResultCommitStatus` 的第五个参数把每个操作的最终状态按 ID 写进这一回合的每一行，在提交事务里完成。整次执行回滚时，事务外的 `failed` 结算把全部操作记为 `discarded` / `execution-failed`。`FinalizeExecutionOutcome.operations` 列出同样的结果（`id`、`status`、`reason`、`contract`、`invokedBy`）。
 
-父函数抛错、返回失败或因暂存操作后挂起而被拒绝时，递归子调用的写入不会保留。内核仍保留它们的操作记录，提交时把已经持久化的记录结算为 `discarded` / `caller-dropped`，不会留下永久的 `staged`。整次执行失败时使用上面的 `execution-failed` 原因。
+父函数抛错、返回失败或在嵌套调用后挂起而判为失败时，递归子调用的写入不会保留。内核仍保留它们的操作记录，提交时把已经持久化的记录结算为 `discarded` / `caller-dropped`，不会留下永久的 `staged`。整次执行失败时使用上面的 `execution-failed` 原因。
 
 `extraInTx` 的第二个参数给出被丢弃的 runtime。每条提交路径（主回合、同步 manual RPC、后台作业）都通过服务端的 `queueCommitFollowUps`（`apps/server/src/routes/api/commit-envelope.ts`）排入后续工作，据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
 
@@ -540,7 +540,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、挂起时的玩家回合数和插件版本、语言和回合号。回滚时这些内容随事务恢复。
 - 放弃、过期和作废走同一个出口：删除 suspension、给回合计数（它是这个逻辑回合最后一个还在等待的 suspension 时）、把回合扣下的 detached 作业入队，都在一个事务里。
 - 恢复的 runtime 再次挂起时，这次提交照常进行：同一个事务先给旧 suspension 写 resolved 标记，再保存新的 suspension。旧的那条已经解决，所以保存新挂起项时不会被当成同一个 runtime 的旧挂起项放弃。新的 suspension 沿用旧的执行标识、逻辑回合、挂起时的玩家回合数和扣下的 detached 作业；作业不入队，回合不计数。
-- function runtime 挂起时保存下来的子调用结果，在恢复成功时和它一起作为一个提交单元提交，子调用在前。
+- 挂起项不保存 `ctx.recursiveCall` 的子结果：调用过它的 function 不能挂起，嵌套执行里的 runtime 也不能挂起（见[嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)）。恢复执行也不能发起嵌套调用，所以恢复的结果单独成为一个提交单元。
 
 **会话时钟写入进同一事务。**
 
@@ -650,7 +650,7 @@ await store.withTransaction(async (tx) => {
 
 **依赖会话内串行提交。** 读改写之所以正确，是因为同一个会话的提交按会话锁串行；PostgreSQL 多进程部署里这把锁是分布式的（见上面的 Action 级 plugin-rpc 锁边界）。两次执行各自准备 `inc +1`，先后提交，最终是两次都加上。会话锁之外的写入者不读当前值，可能覆盖：管理 API 的 `PUT` 插件数据。
 
-**挂起的写入基线。** `takenUnder.writes` 仍覆盖含 `set` / `delete` 的整值更新和嵌套待提交写入，记录的是挂起保存时的内容。更早的[读取基线](#read-baselines)另外保护读后计算的 `merge` / `upsertItem` 替换；两道围栏的观察时点不同。
+**挂起的写入基线。** `takenUnder.writes` 仍覆盖含 `set` / `delete` 的整值更新，记录的是挂起保存时的内容。更早的[读取基线](#read-baselines)另外保护读后计算的 `merge` / `upsertItem` 替换；两道围栏的观察时点不同。
 
 `isolatedRuntimes[].cause` 是结构化的丢弃原因：`rejected`（本单元提案被拒）、`upstream`（硬依赖未提交）、`read`（读过的生产方未提交）、`nested`（随父单元丢弃）。保留原有 `error` 文本；熔断不靠匹配文本归因。被拒提案按 `proposal.source.pluginId` 归属，不把整个单元都算成有错。
 

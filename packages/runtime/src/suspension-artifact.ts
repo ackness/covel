@@ -52,34 +52,28 @@ function artifactsOf(carrier: object): readonly SuspensionArtifact[] {
  * A continuation attached to the turn itself has no entry.
  */
 export function collectExecutionSuspensionRuns(
-  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+  turnResult: Pick<TurnResult, "runtimeResults">,
 ): Record<string, string> {
   const runs: Record<string, string> = {};
-  for (const result of [
-    ...turnResult.runtimeResults,
-    ...(turnResult.nestedRuntimeResults ?? []),
-  ])
+  for (const result of turnResult.runtimeResults)
     for (const { record } of artifactsOf(result))
       runs[record.id] ??= result.runId;
   return runs;
 }
 
-/** Collect and de-duplicate every continuation created by one execution. */
+/**
+ * Collect and de-duplicate every continuation created by one execution. A
+ * nested result never carries one: a nested run cannot suspend.
+ */
 export function collectExecutionSuspensions(
-  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+  turnResult: Pick<TurnResult, "runtimeResults">,
 ): readonly SuspensionRecord[] {
   const all = [
     ...artifactsOf(turnResult),
     ...turnResult.runtimeResults.flatMap((result) => artifactsOf(result)),
-    ...(turnResult.nestedRuntimeResults ?? []).flatMap((result) =>
-      artifactsOf(result),
-    ),
   ];
   const sources = new Map(
-    [
-      ...turnResult.runtimeResults,
-      ...(turnResult.nestedRuntimeResults ?? []),
-    ].flatMap((result) =>
+    turnResult.runtimeResults.flatMap((result) =>
       artifactsOf(result).map(({ record }) => [record.id, result] as const),
     ),
   );

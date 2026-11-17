@@ -460,7 +460,7 @@ For [`delegate-batch`](./tools.md#delegate-batch), child acceptance first joins 
 - Write-service operations are producers too: when a provider's runtime reads writes an operation staged, or any runtime reads an operation through the kernel input `operations@1`, the dependency names the operation's ID. An operation takes its caller unit's position, and counts as not committed when it failed, was taken back or its caller's unit was dropped. An auxiliary reader is dropped with it, with the error `read data of <contract> that did not commit`; a story or setup reader commits, and its `read-dependency.kept` payload carries `producerOperationId` and `producerContract` instead of the two run fields.
 - Providers of [`story-context@1`](./plugins.md#story-context) are producers too: when a reader includes a note from this execution, the dependency names the provider's run, with the same drop and keep rules as above. Retry seeds are already committed and add no dependency.
 
-Suspensions are checked for read dependencies at their source execution's commit, even without domain writes. When a producer drops, an auxiliary reader's continuation is neither saved nor emitted as a resumable `turn.suspended`; its buffered and nested writes cannot survive for resume. Progress jobs, held detached jobs and turn counting use the existing discard settlement. Story/setup protection and kept traces still apply. A saved continuation carries no dependency graph: its source producers have already settled by resume.
+Suspensions are checked for read dependencies at their source execution's commit, even without domain writes. When a producer drops, an auxiliary reader's continuation is neither saved nor emitted as a resumable `turn.suspended`; its buffered writes cannot survive for resume. Progress jobs, held detached jobs and turn counting use the existing discard settlement. Story/setup protection and kept traces still apply. A saved continuation carries no dependency graph: its source producers have already settled by resume.
 
 #### Write-service operations
 
@@ -496,7 +496,7 @@ Each operation leaves one `OperationRecord` on the calling run's result (`runtim
 
 When `commit_status` is settled, the fifth argument of `setTurnResultCommitStatus` writes each operation's final status by ID into every row of the turn, inside the commit transaction. When the whole execution rolls back, the `failed` settlement outside the transaction records every operation as `discarded` / `execution-failed`. `FinalizeExecutionOutcome.operations` lists the same result (`id`, `status`, `reason`, `contract`, `invokedBy`).
 
-When a parent function throws, returns failure or is rejected for suspending after staging operations, its recursive children's writes are dropped. The kernel retains their operation records and settles the persisted records as `discarded` / `caller-dropped` at commit, leaving none permanently `staged`. If the whole execution fails, the reason is `execution-failed` as above.
+When a parent function throws, returns failure or fails for suspending after a nested call, its recursive children's writes are dropped. The kernel retains their operation records and settles the persisted records as `discarded` / `caller-dropped` at commit, leaving none permanently `staged`. If the whole execution fails, the reason is `execution-failed` as above.
 
 The second argument of `extraInTx` gives the dropped runtimes. Every commit path (the main turn, a sync manual RPC, a background job) queues its follow-up work through the server's `queueCommitFollowUps` (`apps/server/src/routes/api/commit-envelope.ts`), so it does not queue detached jobs and background event followers that depend on them. A detached job that is still queued records the dropped runtimes as `failed` in the frozen turn digest and in the upstream results.
 
@@ -540,7 +540,7 @@ The second argument of `extraInTx` gives the dropped runtimes. Every commit path
 - The resolved mark also clears what this resume has already used from the suspension (messages, buffered tool calls and proposals, input), and keeps only the execution identifier, the player turns and plugin version recorded at suspension, the language, and the turn number. On rollback, this content is restored with the transaction.
 - Abandoning, expiring and voiding go through one exit: deleting the suspension, counting the turn (when it was the last suspension of its logical turn still waiting) and queuing the detached jobs the turn held back happen in one transaction.
 - When a resumed runtime suspends again, the commit goes ahead as usual: in one transaction it first writes the old suspension's resolved mark, then saves the new suspension. The old one is already resolved, so saving the new item does not abandon it as an older item of the same runtime. The new suspension keeps the old execution identifier, logical turn, player turns recorded at suspension, and held-back detached jobs; the jobs are not queued and the turn is not counted.
-- The nested results saved when a function runtime suspended commit with its successful resume as one commit unit, children first.
+- A suspended item saves no `ctx.recursiveCall` results: a function that called it cannot suspend, and neither can a runtime inside a nested execution (see [Nested calls](./plugins.md#nested-calls-ctxrecursivecall)). A resume cannot start nested calls either, so its result is a commit unit of its own.
 
 **The session clock is written in the same transaction.**
 
@@ -650,7 +650,7 @@ A missing namespace or key, and an empty or invalid operation list, are rejected
 
 **Relies on per-session commit serialization.** The read-modify-write is correct because the commits of one session are serialized by the session lock, which is distributed across PostgreSQL processes (see the action-level plugin-rpc lock boundary above). Two executions that each prepare `inc +1` and commit one after the other add both. Writers outside the session lock do not read the current value and can overwrite it: the management API `PUT` of plugin data.
 
-**Suspension write baseline.** `takenUnder.writes` still covers whole-value `set` / `delete` updates and nested pending writes. It records content at suspension save time. Earlier [read baselines](#read-baselines) separately protect read-derived `merge` / `upsertItem` replacements; the two fences have different observation times.
+**Suspension write baseline.** `takenUnder.writes` still covers whole-value `set` / `delete` updates. It records content at suspension save time. Earlier [read baselines](#read-baselines) separately protect read-derived `merge` / `upsertItem` replacements; the two fences have different observation times.
 
 `isolatedRuntimes[].cause` is the structured drop reason: `rejected` (a proposal in this unit was rejected), `upstream` (a hard dependency did not commit), `read` (a producer it read did not commit), or `nested` (dropped with the parent unit). Existing `error` text stays; fault attribution never matches that text. Rejected proposals belong to `proposal.source.pluginId`, not every plugin in the dropped unit.
 

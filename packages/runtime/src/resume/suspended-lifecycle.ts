@@ -24,64 +24,30 @@ export interface SavedLifecycleDeps {
   ) => void | Promise<void>;
 }
 
-export function savedMembers(suspension: SuspensionRecord) {
-  const children = (suspension.pendingContinuation.nestedResults ?? []).flatMap(
-    (entry) => {
-      const value = entry?.result;
-      if (!value || typeof value !== "object") return [];
-      const result = value as Partial<RuntimeResult>;
-      if (
-        result.status !== "success" ||
-        typeof result.pluginId !== "string" ||
-        typeof result.runtimeId !== "string" ||
-        typeof result.runId !== "string" ||
-        typeof result.turnId !== "string"
-      )
-        return [];
-      return [
-        {
-          pluginId: result.pluginId,
-          runtimeId: result.runtimeId,
-          turnId: result.turnId,
-          runId: result.runId,
-          progressRunId: result.runId,
-          durationMs: result.durationMs ?? 0,
-        },
-      ];
-    },
-  );
-  return [
-    ...children,
-    {
-      pluginId: suspension.pluginId,
-      runtimeId: suspension.runtimeId,
-      turnId: suspension.turnId,
-      runId: suspension.pendingContinuation.lifecycle.runId,
-      progressRunId: suspension.pendingContinuation.lifecycle.progressRunId,
-      durationMs: 0,
-    },
-  ];
+/** The original invocation a suspension continues. */
+export function savedMember(suspension: SuspensionRecord) {
+  return {
+    pluginId: suspension.pluginId,
+    runtimeId: suspension.runtimeId,
+    turnId: suspension.turnId,
+    runId: suspension.pendingContinuation.lifecycle.runId,
+    progressRunId: suspension.pendingContinuation.lifecycle.progressRunId,
+    durationMs: 0,
+  };
 }
 
 /** Persist the new effective status, then deliver it once to each transport. */
-export async function correctSavedLifecycle(
+export function correctSavedLifecycle(
   deps: SavedLifecycleDeps,
   suspension: SuspensionRecord,
   status: ExecutionJobOutcome,
-  includeParent = true,
 ): Promise<void> {
-  const members = savedMembers(suspension);
-  if (!includeParent) members.pop();
-  const failures: unknown[] = [];
-  for (const member of members) {
-    try {
-      await correctRuntimeLifecycle(deps, suspension.sessionId, member, status);
-    } catch (error) {
-      failures.push(error);
-    }
-  }
-  if (failures.length)
-    throw new AggregateError(failures, "Saved lifecycle delivery failed");
+  return correctRuntimeLifecycle(
+    deps,
+    suspension.sessionId,
+    savedMember(suspension),
+    status,
+  );
 }
 
 /** Correct one original invocation without replaying its computation or hooks. */
@@ -161,7 +127,7 @@ export async function settleSavedJobs(
   const progressScopeId = suspensionProgressScopeId(
     suspension.pendingContinuation,
   );
-  const members = savedMembers(suspension);
+  const member = savedMember(suspension);
   const reported = await deps.store.listJobStatus(suspension.sessionId, {
     progressScopeId,
   });
@@ -172,12 +138,9 @@ export async function settleSavedJobs(
     const owner = jobOwnership(row);
     if (
       !owner ||
-      (!members.some(
-        (member) =>
-          member.pluginId === row.pluginId &&
-          member.runtimeId === row.runtimeId &&
-          member.progressRunId === owner.runId,
-      ) &&
+      ((member.pluginId !== row.pluginId ||
+        member.runtimeId !== row.runtimeId ||
+        member.progressRunId !== owner.runId) &&
         owner.attemptId !== attemptId)
     )
       continue;

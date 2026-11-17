@@ -2106,7 +2106,7 @@ payload 是 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabl
 
 `delegate` 还有两个可选参数：`character`（最多 80 字符的角色名字/别名）与 `instruction`（最多 2,000 字符）。找到 `character-actor@1` 提供方后 character 必需，宿主私下解析 ID；原始 UUID 或语义 ID 不能当名字使用。这个契约拒绝 `data`，其他契约拒绝角色专用参数。同包 runtimeId 也不能绕过这些规则。
 
-角色提供方的输出为不带 speaker 的 dialogue/action segments 和可选 intent；父方组合故事时填写 speaker。模型仍可读取 intent，但持久工具记录、trace 与玩家投影不会保留私密委托内容。若 delegate 直接完成 runtime，普通角色只传递 segments，concealed 结果不传递内容。每次委托的暂存通知、写服务权限与串行屏障不变。累计名额见[角色委托](./plugins.md#character-orchestration)。
+角色提供方的输出为不带 speaker 的 dialogue/action segments 和可选 intent；父方组合故事时填写 speaker。模型仍可读取 intent，但持久工具记录、trace 与玩家投影不会保留私密委托内容。每次委托的暂存通知、写服务权限与串行屏障不变。累计名额见[角色委托](./plugins.md#character-orchestration)。
 
 `turn-policy@1` 导入覆盖普通服务的参数、结果及重复/并发注解：模型输入 `{present: string[], recentSegments}`，输出 `actors[].character` 名字，宿主添加当前行动与限制。它是只读工具，但 `idempotent: false`、`concurrencySafe: false`。选择、不可用与名字解析见[编排契约](./plugin-extensions.md#orchestration-contracts)。插件工具也可用会话绑定的 `context.historyFor(characterId, {limit?})` 读取[亲历故事](./world-model.md#witnessed-history)。
 

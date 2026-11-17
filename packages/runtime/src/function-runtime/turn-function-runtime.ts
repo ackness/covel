@@ -39,15 +39,8 @@ import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
-import {
-  attachNestedResults,
-  inCommitOrder,
-} from "../turn-executor/nested-results.js";
-import {
-  hasOperationWrites,
-  type RootOperationStage,
-} from "../operations/operation-stage.js";
-import { suspendNestedResults } from "../resume/suspended-nested-results.js";
+import { attachNestedResults } from "../turn-executor/nested-results.js";
+import type { RootOperationStage } from "../operations/operation-stage.js";
 import { attachReadDependencies } from "../read-dependencies.js";
 import {
   createPluginDataVisibility,
@@ -115,12 +108,6 @@ export interface ExecuteFunctionRuntimeOptions {
   /** Uncommitted writes captured by the suspended invocation. */
   readonly pendingProposals?: readonly import("@covel/shared").Proposal[];
   /**
-   * `ctx.recursiveCall` results of the suspended invocation, in commit order.
-   * Like its buffered writes, they commit only with the handler's own success,
-   * and a further suspension carries them on.
-   */
-  readonly restoredNested?: readonly RuntimeResult[];
-  /**
    * The run's operation stage. Without it (a resume) the handler cannot call
    * write services.
    */
@@ -155,7 +142,6 @@ export async function executeFunctionRuntime({
   resumeData,
   resumedFromSuspensionId,
   pendingProposals = [],
-  restoredNested = [],
   operations,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   const inputs = originalInputs ? freezeInputSlots(originalInputs) : undefined;
@@ -324,36 +310,24 @@ export async function executeFunctionRuntime({
     return failed;
   }
   if (handlerOutcome.outcome === "suspended") {
+    // A continuation keeps only the handler's own work. Results of its
+    // `ctx.recursiveCall`s commit with its success and cannot wait for a
+    // resume, so they fail the run and are dropped with it.
+    if (runtimeContext.nestedResults.length > 0)
+      return finalizeRuntimeFailure(
+        { ...deps, hookPipeline },
+        run,
+        `${manifest.name} cannot suspend after a nested call (ctx.recursiveCall)`,
+      );
     // A suspension keeps writes for a resume, which never stages operations;
     // a write-service operation cannot wait in it.
-    if (
-      operations?.hasOperations() ||
-      hasOperationWrites(
-        inCommitOrder([...restoredNested, ...runtimeContext.nestedResults]),
-      )
-    )
+    if (operations?.hasOperations())
       return finalizeRuntimeFailure(
         { ...deps, hookPipeline },
         run,
         `${manifest.name} cannot suspend after changing another plugin's data through a write service`,
       );
     const suspensionId = crypto.randomUUID();
-    // Nested results wait with the suspension and commit with the resume
-    // that succeeds. A nested run that itself suspended cannot be resumed
-    // from here, so it is dropped and traced.
-    const nested = suspendNestedResults([
-      ...restoredNested,
-      ...runtimeContext.nestedResults,
-    ]);
-    for (const child of nested.dropped)
-      await deps.emitter?.emit("recursive.failed", {
-        ...helperCtx,
-        depth: recursionDepth,
-        code: "nested-suspension-dropped",
-        nestedRuntimeId: child.runtimeId,
-        error:
-          "A nested run suspended inside a suspended parent; its suspension was dropped",
-      });
     // Keep domain writes uncommitted until resume succeeds. The continuation
     // also owns the original binding snapshots rather than resolving them again.
     const suspension: SuspensionRecord = {
@@ -379,7 +353,7 @@ export async function executeFunctionRuntime({
         emittedEvents: [],
         executionContext,
         ...(input.actions ? { actions: structuredClone(input.actions) } : {}),
-        // A nested call reports progress under the root execution's scope.
+        // A resumed leg reports progress under the suspended execution's scope.
         ...(executionId !== undefined &&
         executionId !== executionContext.executionId
           ? { progressScopeId: executionId }
@@ -388,7 +362,6 @@ export async function executeFunctionRuntime({
         takenUnder: suspensionBasis(manifest, 0),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),
         ...(logicalTurn !== undefined ? { logicalTurn } : {}),
-        ...(nested.saved.length > 0 ? { nestedResults: nested.saved } : {}),
       },
       createdAt: new Date().toISOString(),
     };
@@ -514,12 +487,8 @@ export async function executeFunctionRuntime({
           ],
         }
       : result;
-  if (ownSuccess)
-    attachNestedResults(completedResult, [
-      ...restoredNested,
-      ...runtimeContext.nestedResults,
-    ]);
   if (ownSuccess) {
+    attachNestedResults(completedResult, runtimeContext.nestedResults);
     attachReadDependencies(completedResult, runtimeContext.readDependencies());
     operations?.attachTo(completedResult, true);
   }

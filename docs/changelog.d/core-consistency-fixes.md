@@ -6,7 +6,7 @@
 
 ### Fixed
 
-- **Event consumers follow the payload producer that actually committed.** Another emitter on the same topic cannot keep a consumer or background follower alive after its selected source is dropped. Manual invocations keep their independent behavior. Nested followers survive suspension and queue only on successful resume, and a skipped guard cannot commit nested write-service operations from a dropped source. See [transaction dependencies](../en/reference/transactions.md).
+- **Event consumers follow the payload producer that actually committed.** Another emitter on the same topic cannot keep a consumer or background follower alive after its selected source is dropped. Manual invocations keep their independent behavior. A skipped guard cannot commit nested write-service operations from a dropped source. See [transaction dependencies](../en/reference/transactions.md).
 - **Memory queries stay bound to the model that embedded them.** A concurrent model reset falls back to keyword search instead of mixing vector spaces, including models with equal dimensions. See [storage](../en/internals/storage.md).
 - **Relationship updates retain earlier edits in the same batch.** Canonical names and aliases resolve to the latest node, and a newly added alias can immediately name an edge endpoint. See [relationships](../en/builtin/world.md#relationships-npc-graph).
 - **World editing pauses while a save is pending.** A failed save keeps the draft available for editing and retry. See [world editing](../en/builtin/features.md).

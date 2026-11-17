@@ -251,25 +251,6 @@ export interface SuspendedLoopState {
   readonly activatedTools?: readonly string[];
 }
 
-/**
- * A `ctx.recursiveCall` result of a suspended function, kept so that it
- * commits with the parent's successful resume.
- */
-export interface SuspendedNestedResult {
-  readonly readScopes: readonly import("@covel/shared").ProposalReadScope[];
-  readonly operationReadScopes?: Readonly<
-    Record<string, readonly import("@covel/shared").ProposalReadScope[]>
-  >;
-  /** The `RuntimeResult`, including its buffered proposals. */
-  readonly result: unknown;
-  /** Conversation rows (`TurnMessageRecord`) it adds when it commits. */
-  readonly journal?: readonly unknown[];
-  /** Background event followers owned by this saved producer invocation. */
-  readonly deferredFollowers?: import("@covel/shared").TurnResult["deferredFollowers"];
-  /** The runtime it counts one run of in the trigger ledger. */
-  readonly trigger?: string;
-}
-
 /** The session and plugin state a suspension was taken under. */
 export interface SuspensionBasis {
   /**
@@ -342,8 +323,7 @@ export interface SuspensionRecord {
     readonly executionContext: ExecutionContext;
     /**
      * The `ctx.progress` scope the suspended runtime reported under, when it
-     * is not its own execution: a `ctx.recursiveCall` child reports under the
-     * root execution's scope. Resume, re-suspension and abandon settle the
+     * is not its own execution. Resume, re-suspension and abandon settle the
      * runtime's tasks there. Absent means `executionContext.executionId`.
      */
     readonly progressScopeId?: string;
@@ -386,11 +366,6 @@ export interface SuspensionRecord {
       readonly pluginId: string;
       readonly id: string;
     }[];
-    /**
-     * Results of a suspended function's `ctx.recursiveCall`s, in commit order.
-     * They commit with its successful resume, children before the parent.
-     */
-    readonly nestedResults?: readonly SuspendedNestedResult[];
   };
   readonly createdAt: string;
   /** Set to ISO timestamp when resume completes successfully. */
