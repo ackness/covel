@@ -244,9 +244,44 @@ Plugin code depends only on the SDK (`@covel/plugin-handlers-utils`). It does no
 | Resolve multilingual text                     | `resolveI18nText` / `resolveI18nDeep`, and the locale registry                                                                                                                                                                       |
 | Form tools, character field validation        | The SDK root entry point                                                                                                                                                                                                             |
 | Types used by a `world.dimensions@1` provider | The schema and materializer from `@covel/plugin-handlers-utils/dimensions`                                                                                                                                                           |
+| Read condition paths and compare leaves       | `@covel/plugin-handlers-utils/conditions`, described below                                                                                                                                                                           |
 | Load the plugin's own prompt templates (Node) | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`, which reads only the English `<name>.md` and the Simplified Chinese `<name>.zh.md`. This sub-entry point is not part of the root module used in the browser. |
 
 For the return rules of hooks, see [Hooks](./hooks.md#how-an-event-runs). No return value means continue. On an event that can be intercepted, a handler that fails counts as a rejection. On other events, a handler that fails is skipped, and rewrites that succeeded before it are kept.
+
+<a id="condition-helpers"></a>
+
+### Condition helpers
+
+Import these pure functions and constants from `@covel/plugin-handlers-utils/conditions`. The host provides the same subpath to bundled and installed community plugins; plugins do not bundle the SDK.
+
+| Export                                         | Purpose                                                                                                                                                                                                                                  |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONDITION_OPERATORS` / `ConditionOperator`    | Operator tuple and its union type: `equals`, `notEquals`, `in`, `gte`, `gt`, `lte`, `lt`, `exists`                                                                                                                                       |
+| `NUMERIC_CONDITION_OPERATORS`                  | Numeric comparison operators: `gte`, `gt`, `lte`, `lt`                                                                                                                                                                                   |
+| `readConditionPath(value, path?)`              | Read a dot path or a readonly `(string \| number)[]` path; omitted or empty paths return the original value, missing segments or traversal through non-objects return `undefined`, and array segments use numeric indices                |
+| `compareCondition(operator, actual, expected)` | `equals`, `notEquals` and `in` reuse JSON equality from `/dimensions`; numeric comparisons require a numeric actual, while callers validate expected bounds and JavaScript bound coercion is preserved; unknown operators return `false` |
+| `conditionOperatorOf(leaf)`                    | Return the single own operator field, or `null` for zero or several; a field whose value is `undefined` still counts                                                                                                                     |
+
+`exists` treats `null` and `undefined` as absent. Only `expected === false` checks absence; every other expectation checks presence. The SDK does not read game state or prescribe leaf types or composition trees such as `all` / `any` / `not`; plugins implement those themselves.
+
+```js
+import {
+  compareCondition,
+  conditionOperatorOf,
+  readConditionPath,
+} from "@covel/plugin-handlers-utils/conditions";
+
+const leaf = { path: ["items", 0, "count"], gte: 2 };
+const operator = conditionOperatorOf(leaf);
+const met =
+  operator !== null &&
+  compareCondition(
+    operator,
+    readConditionPath({ items: [{ count: 3 }] }, leaf.path),
+    leaf[operator],
+  ); // true
+```
 
 ## Character composition example
 

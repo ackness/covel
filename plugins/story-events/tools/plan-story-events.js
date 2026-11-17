@@ -4,20 +4,13 @@
 // or an event that can never fire.
 
 import { ToolError } from "@covel/plugin-handlers-utils";
+import {
+  CONDITION_OPERATORS as OPERATORS,
+  NUMERIC_CONDITION_OPERATORS as NUMERIC_OPERATORS,
+} from "@covel/plugin-handlers-utils/conditions";
 import { MAX_EVENTS_PER_PLAN } from "../lib/plan.js";
 
 const EVENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
-const OPERATORS = [
-  "equals",
-  "notEquals",
-  "in",
-  "gte",
-  "gt",
-  "lte",
-  "lt",
-  "exists",
-];
-const NUMERIC_OPERATORS = ["gte", "gt", "lte", "lt"];
 const SINCE_BOUNDS = ["turnsSinceGte", "turnsSinceLte"];
 // What a condition is about. A condition has exactly one of them.
 const KINDS = ["dimension", "time", "revealed", "afterTurns"];

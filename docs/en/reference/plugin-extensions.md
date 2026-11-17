@@ -6,6 +6,8 @@ See [world data receivers](./world-data.md#data-receivers) for static discovery,
 
 The split of work is this: the framework handles discovery, authorization, scheduling, validation, cancellation, and mounting. The structure of business data, the algorithms, the provider protocols, and the UI components stay inside the plugin package.
 
+Business rules can reuse the SDK’s [condition helpers](./extension-points.md#condition-helpers) for comparisons; plugins still decide which values to read and how to combine conditions.
+
 Examples you can install and look at:
 
 - [Lifecycle Probe](../../../tests/third-party/lifecycle-probe/README.md) and [Service Provider Probe](../../../tests/third-party/service-provider-probe/README.md): two plugins you can install on their own. Together they cover commands, panels, manual functions, data submission, and service collaboration.

@@ -1,70 +1,14 @@
-import { dimensionsJsonEqual } from "@covel/plugin-handlers-utils/dimensions";
+import {
+  compareCondition,
+  conditionOperatorOf,
+  readConditionPath,
+} from "@covel/plugin-handlers-utils/conditions";
 
 // Deterministic condition evaluation for hidden story events. No model calls:
 // every leaf reads a frozen dimension value or the current world-time value.
 
-export const OPERATORS = [
-  "equals",
-  "notEquals",
-  "in",
-  "gte",
-  "gt",
-  "lte",
-  "lt",
-  "exists",
-];
-
 /** Bounds of a turn condition: the first and the last session turn it holds on. */
 export const TURN_BOUNDS = ["turnGte", "turnLte"];
-
-function readPath(value, path) {
-  const segments = Array.isArray(path)
-    ? path
-    : typeof path === "string" && path.length
-      ? path.split(".")
-      : [];
-  let current = value;
-  for (const segment of segments) {
-    if (current === null || typeof current !== "object") return undefined;
-    current = Array.isArray(current)
-      ? current[Number(segment)]
-      : current[segment];
-  }
-  return current;
-}
-
-function compare(operator, actual, expected) {
-  switch (operator) {
-    case "exists":
-      return (actual !== undefined && actual !== null) === (expected !== false);
-    case "equals":
-      return dimensionsJsonEqual(actual, expected);
-    case "notEquals":
-      return !dimensionsJsonEqual(actual, expected);
-    case "in":
-      return (
-        Array.isArray(expected) &&
-        expected.some((item) => dimensionsJsonEqual(actual, item))
-      );
-    case "gte":
-      return typeof actual === "number" && actual >= expected;
-    case "gt":
-      return typeof actual === "number" && actual > expected;
-    case "lte":
-      return typeof actual === "number" && actual <= expected;
-    case "lt":
-      return typeof actual === "number" && actual < expected;
-    default:
-      return false;
-  }
-}
-
-function leafOperator(condition) {
-  const found = OPERATORS.filter((operator) =>
-    Object.hasOwn(condition, operator),
-  );
-  return found.length === 1 ? found[0] : null;
-}
 
 /**
  * A node evaluates to `true`, `false`, or `null` when it cannot be judged:
@@ -143,21 +87,21 @@ export function evaluateCondition(condition, state) {
       return revealedLeaf(node, state, issues);
     if (TURN_BOUNDS.some((key) => Object.hasOwn(node, key)))
       return turnLeaf(node, state, issues);
-    const operator = leafOperator(node);
+    const operator = conditionOperatorOf(node);
     if (!operator)
       return undecided("a condition leaf needs exactly one operator");
     if (typeof node.dimension === "string") {
       const entry = state.dimensions?.[node.dimension];
       if (!entry) return undecided(`unknown dimension: ${node.dimension}`);
-      return compare(
+      return compareCondition(
         operator,
-        readPath(entry.value, node.path),
+        readConditionPath(entry.value, node.path),
         node[operator],
       );
     }
     if (typeof node.time === "string") {
       if (!state.time) return undecided("world time is unavailable");
-      return compare(operator, state.time[node.time], node[operator]);
+      return compareCondition(operator, state.time[node.time], node[operator]);
     }
     return undecided(
       "a condition leaf must reference a dimension, time, an event, or the turn",

@@ -185,6 +185,7 @@ The standalone plugin SDK owns these implementations. The host packages only re-
 
 - Locale resolution, token estimation, and the validation and instantiation of dimensions. `@covel/shared` re-exports these definitions.
 - Dimension providers import from `@covel/plugin-handlers-utils/dimensions`. Plugins do not go into the shared package to get these operations.
+- Condition rules import path reading, comparisons and operator detection from `@covel/plugin-handlers-utils/conditions`; plugins supply data sources and composition rules. Bundled and installed community plugins use the host-provided subpath; see [condition helpers](../reference/extension-points.md#condition-helpers).
 - The UI tool factories and the character field validation are also in the SDK.
 - Reading files by locale is placed in the `/prompts` entry, which can be used only in Node. The root entry stays usable in the browser.
 - What the host packages re-export includes the error class of tool validation. `shared` also re-exports the SDK’s `ToolError`, fixed error codes, `ToolModelView` and `ReviewAgentOutputPayload`; runtime imports errors, model view and output review types from `shared` and tool helper types from `tools`, without importing the SDK directly.

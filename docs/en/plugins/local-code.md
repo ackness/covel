@@ -4,6 +4,8 @@ This page shows you how to add your own code to a plugin: a tool a model can cal
 
 The rule behind the split is: **the model reads the text, and your code checks and writes the data.** If something can be worked out fully from rules, do not use a model. Write a function.
 
+For rules that compare values against conditions, reuse the SDK’s [condition helpers](../reference/extension-points.md#condition-helpers).
+
 Add code when [declarative tools and service imports](./prompt-only.md) cannot meet the need. This guide’s entry, tools and functions use the code approval path; earlier approval-free enablement does not authorize new code. Run extraction only on entries you trust.
 
 For file references, follow [declaration files and resource paths](../reference/plugins.md#declaration-paths): root declarations and runtime-private files have explicit base directories.

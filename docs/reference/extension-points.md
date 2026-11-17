@@ -244,9 +244,44 @@ export default function (covel) {
 | 解析多语言文本                      | `resolveI18nText` / `resolveI18nDeep`，以及 locale registry                                                                                                       |
 | 表单工具、角色字段校验              | SDK 根入口                                                                                                                                                        |
 | `world.dimensions@1` 提供者用的类型 | `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer                                                                                               |
+| 条件路径读取与叶子比较              | `@covel/plugin-handlers-utils/conditions`，见下文                                                                                                                 |
 | 加载插件自己的提示词模板（Node）    | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`，只读 English 的 `<name>.md` 和简体中文的 `<name>.zh.md`。这个子入口不进入浏览器用的根模块。 |
 
 Hook 的返回规则见 [Hooks](./hooks.md#how-an-event-runs)：不返回值表示继续；可以拦截的事件上 handler 出故障算作拒绝；其他事件上出故障的 handler 被跳过，之前成功的改写保留。
+
+<a id="condition-helpers"></a>
+
+### 条件辅助函数
+
+从 `@covel/plugin-handlers-utils/conditions` 导入下列纯函数和常量。宿主为内置与安装的社区插件提供同一子入口；无需把 SDK 打包进插件。
+
+| 导出                                           | 用途                                                                                                                                                                 |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONDITION_OPERATORS` / `ConditionOperator`    | 运算符元组及其联合类型：`equals`、`notEquals`、`in`、`gte`、`gt`、`lte`、`lt`、`exists`                                                                              |
+| `NUMERIC_CONDITION_OPERATORS`                  | 数字比较运算符列表：`gte`、`gt`、`lte`、`lt`                                                                                                                         |
+| `readConditionPath(value, path?)`              | 读取字符串点路径或只读的 `(string \| number)[]` 路径；省略或空路径返回原值，缺失或途经非对象时返回 `undefined`，数组段按数字索引读取                                 |
+| `compareCondition(operator, actual, expected)` | `equals`、`notEquals`、`in` 复用 `/dimensions` 的 JSON 相等规则；数字比较要求 actual 是数字，expected 由调用方校验并保留 JavaScript 边界转换；未知运算符返回 `false` |
+| `conditionOperatorOf(leaf)`                    | 仅有一个自有运算符字段时返回它；零个或多个返回 `null`，即使字段值为 `undefined` 也计数                                                                               |
+
+`exists` 把 `null` 与 `undefined` 视为不存在；只有 `expected === false` 时检查不存在，其余期望均检查存在。SDK 不读取游戏状态，也不规定叶子类型或 `all` / `any` / `not` 等组合树结构，这些由插件自己实现。
+
+```js
+import {
+  compareCondition,
+  conditionOperatorOf,
+  readConditionPath,
+} from "@covel/plugin-handlers-utils/conditions";
+
+const leaf = { path: ["items", 0, "count"], gte: 2 };
+const operator = conditionOperatorOf(leaf);
+const met =
+  operator !== null &&
+  compareCondition(
+    operator,
+    readConditionPath({ items: [{ count: 3 }] }, leaf.path),
+    leaf[operator],
+  ); // true
+```
 
 ## 角色编排示例
 

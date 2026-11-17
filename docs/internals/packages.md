@@ -185,6 +185,7 @@ prompt loader 也按实例划分：
 
 - locale 解析、token 估算、维度的校验与实例化。`@covel/shared` 重新导出这些定义。
 - 维度提供者从 `@covel/plugin-handlers-utils/dimensions` 导入。插件不到 shared 包里去取这些操作。
+- 条件规则从 `@covel/plugin-handlers-utils/conditions` 导入路径读取、比较和运算符识别，数据来源与组合规则由插件提供。内置与安装的社区插件都使用宿主提供的子入口，见[条件辅助函数](../reference/extension-points.md#condition-helpers)。
 - UI 工具工厂和角色字段校验也在 SDK 里。
 - 按 locale 读取文件的功能单独放在只能在 Node 里用的 `/prompts` 入口，根入口保持可以在浏览器里使用。
 - 宿主包重新导出的内容包括工具校验的错误类。`shared` 还重新导出 SDK 的 `ToolError`、固定错误码、`ToolModelView` 和 `ReviewAgentOutputPayload`；runtime 从 `shared` 导入错误、模型视图和输出审核类型，从 `tools` 读取工具辅助函数的类型，不直接导入 SDK。

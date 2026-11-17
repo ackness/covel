@@ -154,13 +154,18 @@ runtime:
 describe("a plugin without package.json", () => {
   // A plain `node` process, not the test runner: Node itself picks the
   // module format here.
-  it("loads its .js files as ES modules under a CommonJS package.json", async () => {
+  it("loads ES modules and host SDK subpaths outside the workspace under a CommonJS parent", async () => {
     const root = await temp();
     await files(root, {
       "plugins/package.json": JSON.stringify({ type: "commonjs" }),
       "plugins/tally/PLUGIN.md": "---\ndescription: Tally\n---\n",
-      "plugins/tally/runtimes/count/handler.js":
-        "export default function count() { return 42; }\n",
+      "plugins/tally/runtimes/count/handler.js": `
+import { compareCondition, conditionOperatorOf, readConditionPath } from "@covel/plugin-handlers-utils/conditions";
+export default function count() {
+  const value = readConditionPath({ counts: [42] }, ["counts", 0]);
+  return compareCondition(conditionOperatorOf({ gte: 42 }), value, 42) ? value : 0;
+}
+`,
       "plugins/other/handler.js":
         "export default function other() { return 0; }\n",
       "probe.mjs": `
@@ -189,12 +194,17 @@ console.log(JSON.stringify({ before, after }));
           path.resolve(import.meta.dirname, "../src/host-modules.ts"),
           "utf8",
         )
-      ).replace(
-        '"./path-containment.js"',
-        JSON.stringify(
-          new URL("../src/path-containment.ts", import.meta.url).href,
+      )
+        .replace(
+          '"./path-containment.js"',
+          JSON.stringify(
+            new URL("../src/path-containment.ts", import.meta.url).href,
+          ),
+        )
+        .replace(
+          "export const HOST_MODULE_PARENT_URL = import.meta.url;",
+          `export const HOST_MODULE_PARENT_URL = ${JSON.stringify(new URL("../src/host-modules.ts", import.meta.url).href)};`,
         ),
-      ),
     });
     const output = await new Promise<string>((resolve, reject) =>
       execFile(

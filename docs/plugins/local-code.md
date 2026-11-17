@@ -4,6 +4,8 @@
 
 分工的原则是：**模型负责读懂文字，代码负责检查和写入。**如果一件事完全可以用规则算出来，就不要用模型，直接写函数。
 
+如果规则需要按条件比较值，可复用 SDK 的[条件辅助函数](../reference/extension-points.md#condition-helpers)。
+
 先确认[声明式工具与服务导入](./prompt-only.md)不能满足需求，再添加代码。本页的 entry、工具和函数使包进入代码审批路径；以前免审批的启用不授权新代码。只对自己信任的入口运行提取。
 
 文件路径先看[声明文件与资源路径](../reference/plugins.md#declaration-paths)：根声明与 runtime 私有文件各有明确的基准目录。
