@@ -26,6 +26,7 @@ vi.mock("../session-summary.js", () => ({
 }));
 
 const { SceneHud } = await import("../scene-hud.js");
+const hudWidths = { storyWidth: 608, hostWidth: 1200 };
 
 const cast = {
   slot: "stage.cast@1",
@@ -68,14 +69,14 @@ describe("scene HUD speaking marker", () => {
   it("marks the last attributed segment's speaker of the latest story", () => {
     hud.slots = [cast];
     hud.messages = [story("story-1")];
-    render(<SceneHud sessionId="s" />);
+    render(<SceneHud sessionId="s" {...hudWidths} />);
     expect(speakingCard()).toContain("阿雅");
   });
 
   it("updates the speaker only when a complete story arrives", () => {
     hud.slots = [cast];
     hud.messages = [story("saved")];
-    const view = render(<SceneHud sessionId="s" />);
+    const view = render(<SceneHud sessionId="s" {...hudWidths} />);
     expect(speakingCard()).toContain("阿雅");
     hud.messages = [
       ...hud.messages,
@@ -84,7 +85,7 @@ describe("scene HUD speaking marker", () => {
         segments: [{ kind: "narration", text: "The rain stopped." }],
       },
     ];
-    view.rerender(<SceneHud sessionId="s" />);
+    view.rerender(<SceneHud sessionId="s" {...hudWidths} />);
     expect(speakingCard()).toBeNull();
   });
 });

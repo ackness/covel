@@ -154,6 +154,7 @@ test("same-named local and server models remain distinct in role selection and p
     .getByRole("button", { name: "Providers & keys", exact: true })
     .click();
   await dialog.getByRole("button", { name: /fixture.*2 models/ }).click();
+  await dialog.getByRole("tab", { name: "Models", exact: true }).click();
   const local = dialog.getByRole("group", {
     name: "Local configuration",
     exact: true,
@@ -331,6 +332,7 @@ test("role choices respect model capabilities and show each configuration's actu
       exact: false,
     }),
   ).toBeVisible();
+  await dialog.getByRole("tab", { name: "Models", exact: true }).click();
   await expect(
     dialog
       .getByRole("group", { name: "Configured chat", exact: true })

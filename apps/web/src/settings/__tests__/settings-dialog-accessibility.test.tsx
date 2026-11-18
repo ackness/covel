@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -106,21 +107,19 @@ describe("SettingsDialog navigation", () => {
         name: i18n.t("settings.title"),
       }),
     ).toBeTruthy();
-    const sidebar = screen.getByRole("complementary");
     const sectionPicker = screen.getByRole("combobox", { name: "Settings" });
     const desktopNav = screen.getByRole("navigation", { name: "Settings" });
-    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
-    const content = (await screen.findByText("Appearance pane")).closest(
-      "section",
-    );
-
-    expect(sidebar.className).toContain("w-full");
-    expect(sidebar.className).toContain("sm:w-56");
-    expect(sectionPicker.parentElement?.className).toContain("sm:hidden");
-    expect(desktopNav.className).toContain("hidden");
-    expect(desktopNav.className).toContain("sm:block");
-    expect(content?.className).toContain("p-4");
-    expect(content?.className).toContain("sm:p-6");
+    expect(
+      within(sectionPicker).getByRole("group", { name: "General" }),
+    ).toBeTruthy();
+    fireEvent.change(sectionPicker, { target: { value: "appearance" } });
+    expect(await screen.findByText("Appearance pane")).toBeTruthy();
+    expect(
+      within(desktopNav).getByRole("button", {
+        name: "Appearance",
+        current: "page",
+      }),
+    ).toBeTruthy();
   });
 
   it("renders group labels as headings and marks the selected page", async () => {

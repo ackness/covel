@@ -36,7 +36,7 @@ export const AI_ENV_VARS = [
     group: "ai",
     type: "string",
     status: "active",
-    defaultValue: "deepseek-v4-flash",
+    defaultValue: "deepseek-flash",
     description: "Model of the built-in story slot used without an llm.toml.",
   },
   {

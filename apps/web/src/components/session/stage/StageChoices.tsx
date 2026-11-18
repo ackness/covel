@@ -144,190 +144,185 @@ export function StageChoices({
       : t("stage.decisionFallback"));
 
   return (
-    <div
-      className="pointer-events-none absolute inset-x-0 top-[40%] bottom-0 z-40 flex items-end justify-center px-3 pb-3 md:top-[35%] md:px-8 md:pb-8"
-      data-testid="stage-choices"
-    >
-      <section className="ui-stage-panel pointer-events-auto flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-(--radius-card)">
-        <div
-          className="min-h-0 overflow-y-auto overscroll-contain"
-          data-testid="stage-decision-scroll"
-        >
-          {storyReview}
-          <div className="border-b border-border/50 px-4 py-3.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                {context.scene && (
-                  <p className="mb-1 text-[10px] font-semibold tracking-[0.16em] text-(--accent-primary) uppercase">
-                    {context.scene}
-                  </p>
-                )}
-                {recap && (
-                  <details className="group">
-                    <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
-                      {t("stage.recapLabel")}
-                      <ChevronDown
-                        className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <p className="pt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                      {recap}
-                    </p>
-                  </details>
-                )}
-                <div className={recap ? "mt-2" : undefined}>
-                  <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                    {t("stage.decisionLabel")}
-                  </p>
-                  <p className="text-sm font-medium leading-relaxed">
-                    {decision}
-                  </p>
-                </div>
-              </div>
-              {executing && (
-                <span
-                  className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground"
-                  aria-live="polite"
-                >
-                  <Loader2
-                    className="h-3.5 w-3.5 animate-spin"
-                    aria-hidden="true"
-                  />
-                  {t("stage.thinkingLabel")}
-                </span>
+    <div className="flex min-h-0 flex-col" data-testid="stage-choices">
+      <div
+        className="min-h-0 overflow-y-auto overscroll-contain"
+        data-testid="stage-decision-scroll"
+      >
+        {storyReview}
+        <div className="border-b border-border/50 px-4 py-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {context.scene && (
+                <p className="mb-1 text-[10px] font-semibold tracking-[0.16em] text-(--accent-primary) uppercase">
+                  {context.scene}
+                </p>
               )}
-            </div>
-          </div>
-
-          {groups.length > 0 && (
-            // One numbering for the whole panel, matching the number keys.
-            <div
-              ref={setOptionsEl}
-              className="px-3 py-3"
-              data-choice-scope=""
-              data-turn-current="true"
-            >
-              <div className="space-y-3">
-                {groups.map((group) => (
-                  <div key={group.id}>
-                    {group.prompt && group.prompt !== decision && (
-                      <p className="mb-1.5 px-1 text-xs font-medium text-muted-foreground">
-                        {group.prompt}
-                      </p>
-                    )}
-                    <div
-                      role="group"
-                      className={clsx(
-                        "ui-choice-list",
-                        group.items.length >= TWO_COLUMN_GROUP_SIZE &&
-                          "sm:grid sm:grid-cols-2",
-                      )}
-                    >
-                      {group.items.map((item) => {
-                        const index = itemOrder.get(item.id) ?? 0;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            disabled={
-                              executing ||
-                              (item.kind === "interaction" &&
-                                !onSubmitInteraction)
-                            }
-                            onClick={() => handleSelect(item)}
-                            // The same option hooks as the text view, so the
-                            // active style scheme draws both alike.
-                            className="ui-choice ui-stage-choice-item"
-                            data-tone={
-                              CATEGORY_TONES[index % CATEGORY_TONES.length]
-                            }
-                            style={{
-                              animationDelay: `${index * STAGGER_STEP_MS}ms`,
-                            }}
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="ui-choice-index"
-                            />
-                            <span className="ui-choice-content">
-                              <span className="ui-choice-title">
-                                {item.label}
-                              </span>
-                            </span>
-                            {item.description && (
-                              <span className="ui-choice-eyebrow">
-                                {item.description}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+              {recap && (
+                <details className="group">
+                  <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+                    {t("stage.recapLabel")}
+                    <ChevronDown
+                      className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  <p className="pt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                    {recap}
+                  </p>
+                </details>
+              )}
+              <div className={recap ? "mt-2" : undefined}>
+                <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                  {t("stage.decisionLabel")}
+                </p>
+                <p className="text-sm font-medium leading-relaxed">
+                  {decision}
+                </p>
               </div>
             </div>
-          )}
-          {extensions?.(items, setDraft)}
+            {executing && (
+              <span
+                className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground"
+                aria-live="polite"
+              >
+                <Loader2
+                  className="h-3.5 w-3.5 animate-spin"
+                  aria-hidden="true"
+                />
+                {t("stage.thinkingLabel")}
+              </span>
+            )}
+          </div>
         </div>
 
-        {composerModes && (
-          <div className="shrink-0 border-t border-border/50 px-3 pt-2.5">
-            <ComposerModeBar
-              t={t}
-              composerModes={composerModes}
-              executing={executing}
-            />
-            <ComposerFields composerModes={composerModes} />
+        {groups.length > 0 && (
+          // One numbering for the whole panel, matching the number keys.
+          <div
+            ref={setOptionsEl}
+            className="px-3 py-3"
+            data-choice-scope=""
+            data-turn-current="true"
+          >
+            <div className="space-y-3">
+              {groups.map((group) => (
+                <div key={group.id}>
+                  {group.prompt && group.prompt !== decision && (
+                    <p className="mb-1.5 px-1 text-xs font-medium text-muted-foreground">
+                      {group.prompt}
+                    </p>
+                  )}
+                  <div
+                    role="group"
+                    className={clsx(
+                      "ui-choice-list",
+                      group.items.length >= TWO_COLUMN_GROUP_SIZE &&
+                        "@xl:grid @xl:grid-cols-2",
+                    )}
+                  >
+                    {group.items.map((item) => {
+                      const index = itemOrder.get(item.id) ?? 0;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          disabled={
+                            executing ||
+                            (item.kind === "interaction" &&
+                              !onSubmitInteraction)
+                          }
+                          onClick={() => handleSelect(item)}
+                          // The same option hooks as the text view, so the
+                          // active style scheme draws both alike.
+                          className="ui-choice ui-stage-choice-item"
+                          data-tone={
+                            CATEGORY_TONES[index % CATEGORY_TONES.length]
+                          }
+                          style={{
+                            animationDelay: `${index * STAGGER_STEP_MS}ms`,
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="ui-choice-index"
+                          />
+                          <span className="ui-choice-content">
+                            <span className="ui-choice-title">
+                              {item.label}
+                            </span>
+                          </span>
+                          {item.description && (
+                            <span className="ui-choice-eyebrow">
+                              {item.description}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
-        {
-          <div
-            className={clsx(
-              "flex shrink-0 items-end gap-2 px-3 py-2.5",
-              !composerModes && "border-t border-border/50",
-            )}
-          >
-            {textless && composerModes ? (
-              <span className="min-w-0 flex-1 truncate px-1 text-sm text-muted-foreground">
-                {composerModes.mode.placeholder ?? composerModes.mode.label}
-              </span>
-            ) : (
-              <textarea
-                rows={1}
-                value={draft}
-                disabled={inputBusy}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleTextareaKeyDown}
-                placeholder={
-                  composerModes?.mode.placeholder ?? t("stage.inputPlaceholder")
-                }
-                aria-label={t("stage.inputPlaceholder")}
-                data-testid="stage-decision-input"
-                className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
-              />
-            )}
-            <button
-              type="button"
-              onClick={submitDraft}
-              disabled={!canSend}
-              aria-label={
-                textless && composerModes
-                  ? composerModes.mode.label
-                  : t("stage.sendLabel")
+        {extensions?.(items, setDraft)}
+      </div>
+
+      {composerModes && (
+        <div className="shrink-0 border-t border-border/50 px-3 pt-2.5">
+          <ComposerModeBar
+            t={t}
+            composerModes={composerModes}
+            executing={executing}
+          />
+          <ComposerFields composerModes={composerModes} />
+        </div>
+      )}
+      {
+        <div
+          className={clsx(
+            "flex shrink-0 items-end gap-2 px-3 py-2.5",
+            !composerModes && "border-t border-border/50",
+          )}
+        >
+          {textless && composerModes ? (
+            <span className="min-w-0 flex-1 truncate px-1 text-sm text-muted-foreground">
+              {composerModes.mode.placeholder ?? composerModes.mode.label}
+            </span>
+          ) : (
+            <textarea
+              rows={1}
+              value={draft}
+              disabled={inputBusy}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleTextareaKeyDown}
+              placeholder={
+                composerModes?.mode.placeholder ?? t("stage.inputPlaceholder")
               }
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {inputBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Send className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        }
-      </section>
+              aria-label={t("stage.inputPlaceholder")}
+              data-testid="stage-decision-input"
+              className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
+            />
+          )}
+          <button
+            type="button"
+            onClick={submitDraft}
+            disabled={!canSend}
+            aria-label={
+              textless && composerModes
+                ? composerModes.mode.label
+                : t("stage.sendLabel")
+            }
+            className="flex size-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-primary text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {inputBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      }
     </div>
   );
 }

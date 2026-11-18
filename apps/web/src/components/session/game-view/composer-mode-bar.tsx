@@ -30,7 +30,7 @@ export function ComposerModeBar({
         <div
           role="radiogroup"
           aria-label={t("session.composerMode", "Input mode")}
-          className="flex min-w-0 flex-wrap items-center gap-1"
+          className="flex min-w-0 flex-wrap items-center gap-0.5 rounded-(--radius-control) bg-(--surface-inset) p-0.5"
         >
           {modes.map((candidate) => {
             const Icon = resolveIcon(candidate.icon);
@@ -43,9 +43,9 @@ export function ComposerModeBar({
                 aria-checked={selected}
                 data-testid={`composer-mode-${candidate.kind}`}
                 onClick={() => selectKind(candidate.kind)}
-                className={`ui-tag inline-flex items-center gap-1 px-2 py-1 text-xs transition-colors ${
+                className={`inline-flex min-h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors ${
                   selected
-                    ? "bg-[color-mix(in_oklab,var(--accent-primary)_14%,transparent)] text-foreground"
+                    ? "bg-[color-mix(in_oklab,var(--accent-primary)_14%,transparent)] text-(--accent-primary)"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >

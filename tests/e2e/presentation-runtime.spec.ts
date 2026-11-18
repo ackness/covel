@@ -3,7 +3,8 @@ import { startPresentationBrowserHost } from "../../apps/server/tests/helpers/pr
 import {
   composer,
   composerInput,
-  seedAppSettings,
+  ONBOARDING_VERSION,
+  seedBrowserSettings,
   waitForTurnIdle,
 } from "./helpers/player.js";
 
@@ -11,8 +12,16 @@ type PresentationHost = Awaited<
   ReturnType<typeof startPresentationBrowserHost>
 >;
 
-async function openPresentationSession(page: Page, host: PresentationHost) {
-  await seedAppSettings(page);
+async function openPresentationSession(
+  page: Page,
+  host: PresentationHost,
+  appearance = "panel",
+) {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "zh-CN",
+    "ui.appearance": appearance,
+  });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/config/info")
@@ -82,6 +91,155 @@ async function expectDisplay(page: Page, title: string, source: string) {
   await expect(panel.getByText(title, { exact: true })).toBeVisible();
   await expect(panel.getByText(source, { exact: true })).toBeVisible();
 }
+
+test("reading and stage widths resize independently and fit a narrow viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1720, height: 900 });
+  const host = await startPresentationBrowserHost("updated");
+  try {
+    await openPresentationSession(page, host, "stage");
+    const reading = page.getByRole("separator", { name: "调整剧情栏宽度" });
+    const stage = page.getByRole("separator", { name: "调整舞台对白宽度" });
+    const readPanel = page.locator("#session-reading-panel");
+    const stagePanel = page.locator("#stage-width-panel");
+    const stageView = page.getByTestId("stage-view");
+    host.release();
+    await composerInput(page).fill("Enter the library");
+    await composerInput(page).press("Enter");
+    await waitForTurnIdle(page);
+    const story = readPanel.getByText("Public library story 1.", {
+      exact: true,
+    });
+    await expect(story).toBeVisible();
+    await expect(reading).toHaveAttribute("aria-valuenow", "608");
+    const storyWidth = (await story.boundingBox())!.width;
+    const inputWidth = (await composerInput(page).boundingBox())!.width;
+    const handle = (await reading.boundingBox())!;
+    await page.mouse.move(
+      handle.x + handle.width / 2,
+      handle.y + handle.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      handle.x + handle.width / 2 - 120,
+      handle.y + handle.height / 2,
+      { steps: 5 },
+    );
+    await page.mouse.up();
+    await expect(reading).toHaveAttribute("aria-valuenow", "728");
+    await expect
+      .poll(async () => (await readPanel.boundingBox())?.width)
+      .toBe(728);
+    await expect
+      .poll(async () => (await story.boundingBox())!.width)
+      .toBeGreaterThan(storyWidth + 105);
+    await expect
+      .poll(async () => (await composerInput(page).boundingBox())!.width)
+      .toBeGreaterThan(inputWidth + 105);
+
+    await showStage(page);
+    await expect(stage).toHaveAttribute("aria-valuenow", "768");
+    await expect
+      .poll(async () => (await stagePanel.boundingBox())?.width)
+      .toBe(768);
+    const stageHandle = (await stage.boundingBox())!;
+    await page.mouse.move(
+      stageHandle.x + stageHandle.width / 2,
+      stageHandle.y + stageHandle.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      stageHandle.x + stageHandle.width / 2 + 40,
+      stageHandle.y + stageHandle.height / 2,
+      { steps: 5 },
+    );
+    await page.mouse.up();
+    await expect(stage).toHaveAttribute("aria-valuenow", "848");
+    await expect
+      .poll(async () => (await stagePanel.boundingBox())?.width)
+      .toBe(848);
+    const panelBounds = (await stagePanel.boundingBox())!;
+    const viewBounds = (await stageView.boundingBox())!;
+    expect(panelBounds.x + panelBounds.width / 2).toBeCloseTo(
+      viewBounds.x + viewBounds.width / 2,
+      0,
+    );
+    await stage.press("ArrowRight");
+    await expect(stage).toHaveAttribute("aria-valuenow", "880");
+    await expect
+      .poll(async () => (await stagePanel.boundingBox())?.width)
+      .toBe(880);
+    await stage.press("End");
+    await expect
+      .poll(async () => +(await stage.getAttribute("aria-valuenow"))!)
+      .toBe(+(await stage.getAttribute("aria-valuemax"))!);
+    await stage.press("Enter");
+    await expect(stage).toHaveAttribute("aria-valuenow", "768");
+    await stage.press("ArrowRight");
+    await page.getByRole("button", { name: "履历", exact: true }).click();
+    const history = page.getByRole("dialog", { name: "对话履历" });
+    await expect(history).toBeVisible();
+    expect((await history.boundingBox())?.width).toBeGreaterThan(800);
+    await page.keyboard.press("Escape");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(stage).toBeHidden();
+    await expect(page.getByTestId("stage-decision-input")).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (await page.getByTestId("stage-choices").boundingBox())?.width,
+      )
+      .toBeGreaterThan(340);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBe(390);
+    await page.setViewportSize({ width: 1720, height: 900 });
+    await expect(stage).toHaveAttribute("aria-valuenow", "800");
+    await page.reload();
+    await expect(reading).toHaveAttribute("aria-valuenow", "728");
+    await showStage(page);
+    await expect(stage).toHaveAttribute("aria-valuenow", "800");
+
+    await page.setViewportSize({ width: 750, height: 900 });
+    await expect(stage).toBeVisible();
+    await expect
+      .poll(async () => Number(await stage.getAttribute("aria-valuemax")))
+      .toBeLessThan(768);
+    await stage.press("Enter");
+    await page.setViewportSize({ width: 1720, height: 900 });
+    await expect(stage).toHaveAttribute("aria-valuenow", "768");
+
+    await page.setViewportSize({ width: 1024, height: 320 });
+    await page.getByRole("button", { name: "菜单", exact: true }).click();
+    const menu = page.getByRole("group", { name: "菜单", exact: true });
+    await expect(menu).toBeVisible();
+    await expect
+      .poll(() =>
+        menu.evaluate((element) => {
+          const { bottom, left, top, width, height } =
+            element.getBoundingClientRect();
+          return (
+            bottom <= window.innerHeight &&
+            element.contains(
+              document.elementFromPoint(left + width / 2, top + height / 2),
+            )
+          );
+        }),
+      )
+      .toBe(true);
+    await menu.getByRole("button", { name: "设置…", exact: true }).click();
+    await expect(
+      page.getByRole("dialog", { name: "设置", exact: true }),
+    ).toBeVisible();
+  } finally {
+    host.release();
+    await page.goto("about:blank");
+    await page.unrouteAll({ behavior: "wait" });
+    await host.close();
+  }
+});
 
 test("story and both selectors remain usable while generated display waits and becomes superseded", async ({
   page,

@@ -58,6 +58,15 @@ These are the grounds for every trade-off. Where the code disagrees with them, t
 
 This is not a stable release yet. Contracts and definitions can change directly, with no compatibility branches for old data or old fields; see "Current contract only" in [AGENTS.md](../../../AGENTS.md). When a contract changes, the release notes say which data has to be recreated.
 
+### Web interface sizing
+
+Open `/design-system.html` in the Web app to view the design showcase in Simplified Chinese, English, or Russian and switch between the built-in themes. The original game and settings examples share the app’s themes, fonts, dividers, spacing, selection markers, and story input styling. Review both the showcase and the actual pages after changing these rules. Story excerpts keep the sample world’s content language.
+
+- Use the 4 px grid for new interfaces. Leave 4 px between a label and its help, 8 px between grouped controls, 12 px between fields, 16 px for card padding and gaps, and 24 px between sections. Page gutters range from 16 to 32 px with the available width.
+- Use 32 px for compact desktop controls, 36 px for standard buttons and inputs, and at least 44 px for primary composer actions and touch targets. Align inputs and buttons on the same row.
+- Choose the column count using the space the container actually has. Align story text and its composer to the same content width. Give tables their own scroll region when needed.
+- Use 14 px for interface text, 12 px for secondary information and 16 px semibold for card titles and speaker names. Keep field errors and essential instructions visible. Put optional detail behind a disclosure that works with a pointer and keyboard.
+
 ## Basic goal
 
 Any creator should be able to write a game idea as a declaration that follows the spec, and the framework can then orchestrate it into a playable scene. The creator may or may not know how to write code, and may even be an AI agent.

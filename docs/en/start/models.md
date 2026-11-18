@@ -36,9 +36,11 @@ Open **Settings → Models → Providers & keys**.
 
 You set up the address and key once for each provider. Then you can add several models under that provider.
 
+To use Magpie, Ollama or LM Studio from the public trial, open the provider's **Connection & key** tab and follow the instructions below the API endpoint. See [local model setup](./hosted-trial.md#local-model-setup).
+
 ## 2. Test the connection
 
-In the provider's details, click the test button ("Test connectivity and latency") for the model you just added. A successful test shows the latency.
+Open the provider's **Models** tab and click the test button next to the model. A successful test shows the latency. Expand **Model settings** to set a protocol override, a configuration name or the default reasoning effort.
 
 When a test fails, first look at what kind of problem it reports:
 

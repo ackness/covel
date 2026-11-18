@@ -22,8 +22,10 @@ import {
   type ReactNode,
 } from "react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
+import { UserRound } from "lucide-react";
 import type { CharacterVisualModel, SnapshotCharacter } from "@covel/shared";
 import { Markdown } from "@/components/ui/markdown.js";
+import { AvatarDisplay } from "@/lib/catalog/avatar-display.js";
 import { SegmentTemplateContext } from "@/lib/catalog/segment-template-context.js";
 import { segmentTemplateRegistry } from "@/lib/catalog.js";
 import { covelDirectives } from "@/lib/json-render-directives.js";
@@ -129,8 +131,14 @@ const TemplatedStory = memo(function TemplatedStory({
       >
         {segments.map((segment, index) => {
           const template = plan[index];
+          const state = segmentTemplateState(
+            segment,
+            index,
+            characters,
+            visuals,
+          );
           const fallback = (
-            <DefaultSegment segment={segment} sessionId={sessionId} />
+            <DefaultSegment state={state} sessionId={sessionId} />
           );
           if (!template) return <div key={index}>{fallback}</div>;
           return (
@@ -140,12 +148,7 @@ const TemplatedStory = memo(function TemplatedStory({
                   <SegmentTemplateView
                     sessionId={sessionId}
                     view={template.spec.view}
-                    state={segmentTemplateState(
-                      segment,
-                      index,
-                      characters,
-                      visuals,
-                    )}
+                    state={state}
                   />
                 </div>
               </SegmentTemplateBoundary>
@@ -167,22 +170,36 @@ function speakerOf(segment: Segment): string | undefined {
 
 /** A segment without a template: its text, headed by its speaker's name. */
 function DefaultSegment({
-  segment,
+  state,
   sessionId,
 }: {
-  readonly segment: Segment;
+  readonly state: SegmentTemplateState;
   readonly sessionId: string;
 }) {
+  const { segment, character, visual } = state;
   const speaker = speakerOf(segment);
+  const avatar =
+    character && character.id === visual?.characterId
+      ? visual.avatar
+      : undefined;
   return (
     <>
       {speaker && (
-        <span
-          data-testid="segment-speaker"
-          className="not-prose mb-0.5 block text-xs font-semibold text-(--accent-primary)"
-        >
-          {speaker}
-        </span>
+        <div className="ui-story-speaker not-prose">
+          {avatar && sessionId ? (
+            <AvatarDisplay
+              key={JSON.stringify([sessionId, segment.speakerId, avatar])}
+              avatar={avatar}
+              sessionId={sessionId}
+              size={32}
+            />
+          ) : (
+            <span className="ui-story-speaker-placeholder" aria-hidden="true">
+              <UserRound size={16} />
+            </span>
+          )}
+          <span data-testid="segment-speaker">{speaker}</span>
+        </div>
       )}
       <Markdown themeSessionId={sessionId}>{segment.text}</Markdown>
     </>

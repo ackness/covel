@@ -64,11 +64,15 @@
 
 体验站的服务器访问不到你的电脑和局域网。所以模型地址在你的电脑或局域网上时（Ollama、LM Studio、Magpie 这类本地模型服务），这些请求由你的浏览器转发，叫作本地模型中继：服务器把请求交给你的浏览器，浏览器请求你的模型服务，再把回答传回服务器。这里的 `127.0.0.1` 指打开网页的玩家电脑，不是 Render 服务器。公网上的模型地址不经过浏览器，仍由服务器直接请求。
 
+<a id="local-model-setup"></a>
+
 ### 怎样设置
 
 1. 在 **设置 → 模型 → 服务商与密钥** 里添加服务商，地址填你电脑上的地址，例如 `http://127.0.0.1:3425/v1` 或 `http://localhost:11434/v1`；局域网里的服务要用 HTTPS 地址，例如 `https://192.168.1.20/v1`。地址下方会提示这个地址由浏览器转发。
 2. 让模型服务允许体验站跨域访问。浏览器直接请求你的模型服务，模型服务必须在回答里允许体验站的地址这个来源（CORS），否则浏览器会拦下回答；在 demo.covel.cc 上就是 `https://demo.covel.cc`，地址下方的提示也会写出当前体验站的地址。例如 Ollama：把环境变量 `OLLAMA_ORIGINS` 设为这个地址，再重启 Ollama。其他服务在各自的设置里找 CORS 或“允许的来源”。
 3. 正常开始游戏，游玩时保持页面打开。浏览器第一次访问本机或局域网时，可能会询问是否允许这个网站访问，选允许。
+
+用 LM Studio 时，在本地服务器设置中启用 CORS，再启动服务。Covel 在「连接与密钥」中显示当前站点的来源，方便复制到支持来源列表的网关。
 
 ### Magpie
 
@@ -79,7 +83,7 @@ Magpie 的本机命令行请求能成功，不代表体验站的网页也能连�
 3. Covel 中的 API 地址填 `http://127.0.0.1:3425/v1`（端口以你的 Magpie 为准），协议和模型 ID 按 Magpie 的接入页填写。例如使用 Responses 接口时，选择 **OpenAI Responses**，保留 `codex/gpt-6-luna` 这样的完整模型 ID。
 4. 在 Covel 中测试连接。浏览器询问本地网络访问权限时，允许当前体验站访问。成功后再开始游戏，并保持页面打开。
 
-有些版本在关闭“局域网共享”时隐藏“网关密钥”区域，此时“接入”区仍只显示 `magpie` 占位值。可以使用 Magpie 的[官方命令行管理网关密钥](https://github.com/yetone/magpie/blob/main/internal/cli/gateway_keys_cli.go)。网页中继连接本机 `127.0.0.1` 本身不要求打开“局域网共享”或“在浏览器中打开 magpie”。
+连接另一台设备上的 Magpie 时，先开启 Magpie 的局域网网关共享。有些版本也通过这个开关显示“网关密钥”区域。同机使用 `127.0.0.1` 时，可以通过 Magpie 的[命令行管理网关密钥](https://github.com/yetone/magpie/blob/main/internal/cli/gateway_keys_cli.go)。
 
 来源没有获准时，Magpie 会拒绝跨域预检，返回 403 和 `magpie doesn't answer the web page …`；Covel 可能只显示 `your browser could not reach …`。先检查 Magpie 的网页来源设置和浏览器权限。预检已经成功、模型请求却返回 401，并提示 `a web page or browser extension calls magpie with a gateway key` 时，请检查真实网关密钥；仅允许网页来源不会让 `magpie` 占位值成为有效密钥。
 

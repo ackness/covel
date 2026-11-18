@@ -13,7 +13,13 @@ import {
 import { useSettingsWritable } from "../use-settings-save.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, Download, RotateCcw, Save, Upload } from "lucide-react";
+import {
+  ChevronRight,
+  FileInput,
+  FileOutput,
+  RotateCcw,
+  Save,
+} from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Markdown } from "@/components/ui/markdown.js";
@@ -48,6 +54,7 @@ import {
   type AppearanceOverrides,
 } from "@/theme-system/overrides.js";
 import type { ThemeScheme } from "@/theme-system/types.js";
+import { SettingsHelp } from "../pane-layout.js";
 
 export function AppearancePane() {
   const { t, i18n } = useTranslation();
@@ -221,10 +228,10 @@ export function AppearancePane() {
         <StylePicker />
       </fieldset>
 
-      <details className="ui-frame group/library [&_summary::-webkit-details-marker]:hidden">
+      <details className="settings-group group/library p-0 [&_summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 hover:bg-(--surface-inset)">
           <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open/library:rotate-90" />
-          <span className="ui-section-title">
+          <span className="settings-section-title">
             {t("settings.themeLibraryTitle")}
           </span>
         </summary>
@@ -233,24 +240,24 @@ export function AppearancePane() {
         </div>
       </details>
 
-      <div className="ui-section pb-3">
-        <div className="ui-section-head">
-          <span className="ui-section-title">
+      <div className="settings-group space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="settings-section-title">
             {t("appearance.customizeTitle")}
-          </span>
-          <span className="ui-tag ml-2">
+          </h3>
+          <span className="text-xs text-muted-foreground">
             {customCount > 0
               ? t("appearance.customizedCount", { count: customCount })
               : t("appearance.usingThemeDefaults")}
           </span>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <div className="flex w-full flex-wrap items-center gap-1.5 @2xl:w-auto">
             <Button
               size="sm"
               variant="ghost"
               disabled={!writable}
               onClick={() => fileRef.current?.click()}
             >
-              <Upload className="mr-1.5 h-3.5 w-3.5" />
+              <FileInput data-icon="inline-start" />
               {t("appearance.import")}
             </Button>
             <Button
@@ -259,7 +266,7 @@ export function AppearancePane() {
               disabled={customCount === 0}
               onClick={handleExport}
             >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
+              <FileOutput data-icon="inline-start" />
               {t("appearance.export")}
             </Button>
             <Button
@@ -273,20 +280,18 @@ export function AppearancePane() {
             </Button>
           </div>
         </div>
-        <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+        <SettingsHelp>
           {t("appearance.customizeDesc", {
             scheme: t(`settings.themeScheme.${activeScheme}`),
           })}
-        </p>
+        </SettingsHelp>
 
         <div className="ui-frame flex flex-wrap items-center gap-2 p-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">
+          <div className="min-w-0 basis-full @2xl:flex-1">
+            <p className="text-sm font-medium">
               {t("appearance.saveAsThemeTitle")}
             </p>
-            <p className="ui-meta normal-case tracking-normal text-[10px] leading-relaxed">
-              {t("appearance.saveAsThemeHint")}
-            </p>
+            <SettingsHelp>{t("appearance.saveAsThemeHint")}</SettingsHelp>
           </div>
           <input
             type="text"

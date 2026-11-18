@@ -30,6 +30,8 @@ At the top of the game screen there are two buttons side by side: "Read" and "St
 
 Choosing Stage offers the current story for rereading in the response panel, using the selected session theme. Choices and input remain available throughout; rereading never delays the next action. Reopening a session still takes already-read stories straight to the response panel.
 
+When space allows, drag the right edge of the stage response panel to resize it. With the Stage appearance, drag the left edge of the story panel in Read to resize the story text, action suggestions and input together. The two views remember their widths separately. Tab to a handle, use the arrow keys to resize and press Enter to restore the default width. On narrow screens the panels fit the available space automatically.
+
 ### What the world needs to provide
 
 Stage mode needs no extra setup on its own, but how complete the picture is depends on what the world includes:

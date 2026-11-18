@@ -21,8 +21,8 @@ contributes:
       default: character-second
       label: Perspective
       description: >-
-        How the story refers to your character. Other characters still speak
-        in their own words.
+        How the narration refers to your character. Applies when the game
+        uses Chat Storyteller.
       options:
         - value: character-first
           label: I ("I open the door.")

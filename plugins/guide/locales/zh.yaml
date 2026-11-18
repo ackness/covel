@@ -6,10 +6,10 @@ PLUGIN.md:
   description: 每次故事回复后，提醒你刚发生了什么、需要决定什么，并给出几个点一下就能用的行动建议。
 messages:
   Suggested actions: 行动建议
-  Pick a suggestion to put it in the message box, then send it.: 点选一条建议放进输入框，再发送。
+  Pick a suggestion to put it in the message box, then send it.: 点选后填入输入框，可编辑再发送。
   Your own action: 自己写行动
   e.g. I lower my voice and ask what she just saw.: 例如：我放低声音，问她刚才看见了什么
-  Use: 使用
+  Use: 填入输入框
   Suggestions will appear here after the next story reply.: 下一次故事回复后，建议会显示在这里。
   Observe: 观察
   Ask: 追问

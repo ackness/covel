@@ -74,19 +74,27 @@
   }
 
   html[data-backdrop="scene"] .ui-story-surface .ui-composer {
-    background: transparent;
+    border-top: 1px solid var(--rule-color);
+    background: color-mix(in oklab, var(--surface-page) 88%, transparent);
   }
 
   /* The story becomes a column on the right; the scene stays visible beside
      it. Narrow screens keep the full-width column over the scrim. */
   @media (min-width: 64rem) {
     html[data-backdrop="scene"] .ui-story-surface {
+      --session-column-max-width: var(--session-reading-width, 38rem);
+      --composer-max-width: var(--session-reading-width, 38rem);
+      --story-max-width: var(--session-reading-width, 38rem);
       align-self: flex-end;
-      width: min(38rem, calc(100% - 3rem));
+      width: min(var(--session-reading-width, 38rem), calc(100% - 3rem));
       margin: 0.25rem 1.5rem 1.5rem 0;
       border: 1px solid var(--rule-color);
       border-radius: var(--radius-card);
       overflow: hidden;
+    }
+
+    html[data-backdrop="scene"] .ui-story-surface {
+      --ui-gutter: max(1.5rem, var(--session-resize-hit-width, 1.125rem));
     }
   }
 
@@ -99,7 +107,40 @@
 
   .ui-scene-hud[data-shown="true"] {
     display: flex;
-    max-width: calc(100% - 38rem - 4.5rem);
+    max-width: calc(100% - var(--session-reading-width, 38rem) - 4.5rem);
+  }
+
+  .ui-session-width-handle {
+    position: absolute;
+    inset-block: 0;
+    z-index: 5;
+    width: var(--session-resize-hit-width, 1.125rem);
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-control);
+    color: var(--color-muted-foreground);
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+  }
+
+  @media (pointer: coarse) {
+    :root {
+      --session-resize-hit-width: var(--ui-control-touch);
+    }
+  }
+
+  .ui-session-width-handle:hover,
+  .ui-session-width-handle:focus-visible,
+  .ui-session-width-handle[data-dragging] {
+    background: color-mix(
+      in oklab,
+      var(--surface-page) 86%,
+      var(--accent-primary)
+    );
+    color: var(--accent-primary);
+    outline: 1px solid currentColor;
+    outline-offset: -1px;
   }
 
   .ui-scene-card {

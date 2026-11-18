@@ -87,6 +87,7 @@ import {
   sessionModelUses,
 } from "./provider-failure-notice.js";
 import { SceneHud } from "./scene-hud.js";
+import { SessionWidthHandle, useSessionWidth } from "./session-width-handle.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
@@ -429,6 +430,7 @@ export function GameView({
   const direction = "horizontal";
   const visual = worldVisual(world);
   const layout = useThemeLayout();
+  const readingWidth = useSessionWidth("reading", layout.backdrop === "scene");
   const stageActive = viewMode === "stage" && stageReady;
   const rightCollapsed = isMobile ? !mobileRightOpen : isRightCollapsed;
   const handleToggleRight = isMobile
@@ -619,12 +621,14 @@ export function GameView({
         {/* Center Panel */}
         <ResizablePanel
           id="center-panel"
+          elementRef={readingWidth.host}
           defaultSize={isMobile ? "100%" : "74%"}
           minSize={isMobile ? "100%" : "30%"}
           className="ui-session-center relative flex flex-col min-w-0 min-h-0 overflow-hidden"
           style={
             {
               "--world-accent": visual.accent,
+              "--session-reading-width": `${readingWidth.width}px`,
               background: "var(--surface-session, var(--surface-page))",
               overflowY: activePluginView?.spec.webview ? "auto" : undefined,
             } as React.CSSProperties
@@ -641,7 +645,11 @@ export function GameView({
             />
           )}
           {!stageActive && layout.backdrop === "scene" && (
-            <SceneHud sessionId={session.id} />
+            <SceneHud
+              sessionId={session.id}
+              storyWidth={readingWidth.width}
+              hostWidth={readingWidth.hostWidth}
+            />
           )}
           {/* Header — hidden while the stage is immersive so it fills the
               viewport. Fades back in on exit (rails snap; chrome fades). */}
@@ -929,7 +937,17 @@ export function GameView({
               messagesEndRef={messagesEndRef}
             />
           ) : (
-            <div className="ui-story-surface relative z-1 flex min-h-0 flex-1 flex-col">
+            <div
+              id="session-reading-panel"
+              className="ui-story-surface relative z-1 flex min-h-0 flex-1 flex-col"
+            >
+              {layout.backdrop === "scene" && readingWidth.enabled && (
+                <SessionWidthHandle
+                  {...readingWidth.handle}
+                  label={t("session.resizeReading")}
+                  controls="session-reading-panel"
+                />
+              )}
               <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                   aria-hidden="true"

@@ -14,7 +14,6 @@
   "apps/web/src/lib/catalog/interactive-form-renderers.tsx": 3,
   "apps/web/src/lib/catalog/media-renderers.tsx": 8,
   "apps/web/src/routes/__root.tsx": 2,
-  "apps/web/src/settings/panes/LlmKeysPane.tsx": 1,
   "apps/web/src/settings/panes/llm-provider-dialogs.tsx": 1,
   "apps/web/src/settings/widgets/index.tsx": 1
 }

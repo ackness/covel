@@ -298,6 +298,10 @@ describe("story segment templates in the chat view", () => {
     ["no templates", []],
     ["templates that match nothing", nothingMatches],
   ])("names dialogue speakers with %s", (_label, specs) => {
+    const avatar = { id: "a".repeat(64), mime: "image/png", size: 1 };
+    visuals.items = [
+      { key: "char-aya", value: { characterId: "char-aya", avatar } },
+    ];
     renderMessage(story, { specs });
     const body = screen.getByTestId("story-segments");
     const parts = [
@@ -313,6 +317,13 @@ describe("story segment templates in the chat view", () => {
         .getAllByTestId("segment-speaker")
         .map((plate) => plate.textContent),
     ).toEqual(["阿雅", "陌生人"]);
+    expect(
+      within(parts[1]!).getByAltText("projected portrait").getAttribute("src"),
+    ).toBe(avatar.id);
+    expect(
+      parts[2]!.querySelector(".ui-story-speaker-placeholder"),
+    ).not.toBeNull();
+    expect(parts[0]!.querySelector(".ui-story-speaker")).toBeNull();
   });
 
   it("draws full committed story through templates regardless of its durable ID", () => {

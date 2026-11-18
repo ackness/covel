@@ -62,7 +62,7 @@
 | `world.write` | 写共享的世界目录 | 开放 | operator | operator |
 | `world.generate` | 用服务端的模型生成、修改、翻译世界 | 开放 | 开放 | operator |
 | `plugin.community` | 批准、启用、运行社区插件的服务端代码 | 开放 | operator | operator |
-| `server.diagnostics` | 模型端点、配置路径、加载错误、哪些密钥已配置 | 开放 | operator，否则省略这些字段 | operator，否则省略这些字段 |
+| `server.diagnostics` | 自定义模型端点、配置路径、加载错误、哪些密钥已配置 | 开放 | operator，否则省略这些字段 | operator，否则省略这些字段 |
 | `model.probe` | 列出供应商的模型、测试一个模型 | 开放 | 开放 | operator |
 | `model-db.refresh` | 下载新的模型数据库 | 开放 | operator | operator |
 | `server.settings` | 写服务端设置 | 桌面令牌 | 拒绝 | 拒绝 |
@@ -74,7 +74,7 @@
 browser-private 一列只对访客开放他们用自己的密钥和存档做的事：创建会话、生成世界、列出和测试模型（设置页靠它添加服务商、测试密钥）。其余全局操作和托管档位一样归运营者，原因各不相同：
 
 - `plugin.community`：社区包的服务端代码没有沙箱，跑在每个访客的密钥都会经过的进程里（见 [Community plugin code](#community-plugin-code)）。
-- `server.diagnostics`：模型端点和配置路径属于运营者。
+- `server.diagnostics`：配置路径和自定义模型端点属于运营者。公开模型列表只在内置配置实际使用服务商的官方公开地址时显示该地址。
 - `server.settings`、`host.config`：服务端设置和宿主配置由运营者用环境变量决定。
 - `media.cleanup`：服务端只看得到此刻有镜像的会话，清理会删掉其他浏览器里的存档仍在引用的媒体。
 
@@ -368,7 +368,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
 
-设置了启动令牌时，桌面敏感配置接口的读取和写入都受其保护，包括只返回供应商名称的 `GET /api/config/keys`。browser-private 形态和托管档位的公开模型目录（`/api/presets`、`/api/llm-config`）省略 `baseUrl`，避免泄露私有网关地址和 URL 内的凭据；运维令牌持有者仍可读取地址。
+设置了启动令牌时，桌面敏感配置接口的读取和写入都受其保护，包括只返回供应商名称的 `GET /api/config/keys`。browser-private 形态和托管档位的公开模型目录仅在生效的内置配置使用服务商官方远程端点时显示地址。详情见[个人配置 API](../reference/api.md#personal-configuration-api)。
 
 ### Server settings
 

@@ -43,8 +43,8 @@ fallback = "story"
 
 **没有 `llm.toml` 时**，服务器使用一个内置的 `story` 用途：
 
-- 默认是 DeepSeek 的 `deepseek-v4-flash`。
-- 设置了 `DEFAULT_BASE_URL` 时，改用这个兼容 OpenAI 的地址。服务商名为 `default`，密钥读 `DEFAULT_API_KEY`，模型读 `DEFAULT_MODEL`（没设置时仍是 `deepseek-v4-flash`）。
+- 默认使用 DeepSeek 的 `deepseek-flash`，地址为 `https://api.deepseek.com`。
+- 设置了 `DEFAULT_BASE_URL` 时，改用这个兼容 OpenAI 的地址。服务商名为 `default`，密钥读 `DEFAULT_API_KEY`，模型读 `DEFAULT_MODEL`（没设置时用 `deepseek-flash`）。
 
 没有 DeepSeek 密钥的环境（例如云端测试）设置这三个变量，就能换成任意一家服务商，不必写 `llm.toml`。
 

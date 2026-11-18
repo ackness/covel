@@ -108,7 +108,7 @@ test("personal model configuration survives reload and reaches the request witho
     .getByRole("textbox", { name: "API endpoint", exact: true })
     .press("Enter");
   await dialog
-    .getByLabel("Fixture", { exact: true })
+    .getByLabel("API key", { exact: true })
     .fill("synthetic-player-key");
   await dialog
     .getByRole("spinbutton", { name: "fixture Price multiplier" })
@@ -175,12 +175,13 @@ test("personal model configuration survives reload and reaches the request witho
     dialog.getByRole("textbox", { name: "API endpoint", exact: true }),
   ).toHaveValue("https://updated-fixture.invalid/v1");
   // A saved key is not shown again; the request below still carries it.
-  const savedKey = dialog.getByLabel("Fixture", { exact: true });
+  const savedKey = dialog.getByLabel("API key", { exact: true });
   await expect(savedKey).toHaveValue("");
   await expect(savedKey).toHaveAttribute(
     "placeholder",
     "Configured on this device; enter a value to replace",
   );
+  await dialog.getByRole("tab", { name: /^Models\b/ }).click();
   await dialog
     .getByRole("group", { name: "detailed-model", exact: true })
     .getByRole("button", { name: "Test", exact: true })
@@ -212,11 +213,14 @@ test("personal model configuration survives reload and reaches the request witho
 
   // A saved key is removed with Clear; an empty field leaves it as it is.
   await dialog
-    .getByLabel("Fixture", { exact: true })
+    .getByRole("tab", { name: "Connection & key", exact: true })
+    .click();
+  await dialog
+    .getByLabel("API key", { exact: true })
     .locator("..")
     .getByRole("button", { name: "Clear", exact: true })
     .click();
-  await expect(dialog.getByLabel("Fixture", { exact: true })).toHaveAttribute(
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveAttribute(
     "placeholder",
     "sk-...",
   );
@@ -229,14 +233,15 @@ test("personal model configuration survives reload and reaches the request witho
   await expect.poll(() => configReloads).toBe(1);
   await expect(reloadConfig).toBeEnabled();
   await openProvider();
-  await expect(dialog.getByLabel("Fixture", { exact: true })).toHaveValue("");
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
   await page.keyboard.press("Escape");
   await page.reload();
   await openSettings();
   await openProvider();
-  await expect(dialog.getByLabel("Fixture", { exact: true })).toHaveValue("");
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
   request = undefined;
   const clearedRequest = () => request;
+  await dialog.getByRole("tab", { name: /^Models\b/ }).click();
   await dialog
     .getByRole("group", { name: "detailed-model", exact: true })
     .getByRole("button", { name: "Test", exact: true })

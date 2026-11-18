@@ -4,6 +4,7 @@ import type {
   ReasoningEffortProfile,
 } from "@/services/api.js";
 import { isReasoningEffortOverrideValid } from "./llm-reasoning-effort.js";
+import { SettingsHelp } from "../pane-layout.js";
 
 export function ReasoningEffortCard({
   profile,
@@ -29,6 +30,11 @@ export function ReasoningEffortCard({
     override !== undefined &&
     override !== "provider-default" &&
     !profile?.options.some((option) => option.value === override);
+  const effortHint = profile
+    ? t("settings.reasoningEffortHint", {
+        family: t(`settings.reasoningFamily.${profile.family}`),
+      })
+    : t("settings.reasoningUnavailable");
   const displayValue = (value: ReasoningEffort | undefined) =>
     value
       ? `${t(`settings.reasoningLevel.${value}`)}${budgetLabel(value)}`
@@ -43,7 +49,13 @@ export function ReasoningEffortCard({
   };
 
   return (
-    <div className="space-y-3 border border-border p-3 md:col-span-2">
+    <div
+      className={
+        scope === "model"
+          ? "space-y-2"
+          : "space-y-3 border border-border p-3 md:col-span-2"
+      }
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-medium">
@@ -53,13 +65,16 @@ export function ReasoningEffortCard({
                 : "settings.reasoningEffort",
             )}
           </div>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {profile
-              ? t("settings.reasoningEffortHint", {
-                  family: t(`settings.reasoningFamily.${profile.family}`),
-                })
-              : t("settings.reasoningUnavailable")}
-          </p>
+          <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            {scope === "model" ? (
+              <SettingsHelp>
+                <p>{effortHint}</p>
+                <p className="mt-1">{t("settings.modelReasoningReuseHint")}</p>
+              </SettingsHelp>
+            ) : (
+              <p>{effortHint}</p>
+            )}
+          </div>
         </div>
         {override !== undefined && (
           <button
@@ -96,7 +111,7 @@ export function ReasoningEffortCard({
             (event.target.value || undefined) as ReasoningEffort | undefined,
           )
         }
-        className="w-full border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
         <option value="">
           {t(
@@ -136,13 +151,11 @@ export function ReasoningEffortCard({
           {t("settings.reasoningUnsupported")}
         </p>
       )}
-      <p className="text-[10px] leading-relaxed text-muted-foreground">
-        {t(
-          scope === "model"
-            ? "settings.modelReasoningReuseHint"
-            : "settings.reasoningPrecedenceHint",
-        )}
-      </p>
+      {scope === "slot" && (
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          {t("settings.reasoningPrecedenceHint")}
+        </p>
+      )}
       {profile?.requestDefault &&
         profile.defaultValue &&
         effective === undefined && (

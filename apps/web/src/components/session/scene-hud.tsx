@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { CharacterVisualModel, StageCastModel } from "@covel/shared";
 import { Media } from "@/components/Media.js";
@@ -22,31 +21,6 @@ type CastActor = StageCastModel["actors"][number];
 /** The scene has room for a few faces; the character panel lists everyone. */
 const MAX_CAST = 3;
 
-/** Narrower than this, the story column leaves no scene to sit on. */
-const MIN_HOST_WIDTH_REM = 66;
-
-/**
- * Whether the session area is wide enough for the HUD. Measured rather than
- * left to a container query because the context panel reads the answer too:
- * it shows the gauges itself whenever the HUD cannot.
- */
-function useHasRoom(): [RefObject<HTMLDivElement | null>, boolean] {
-  const ref = useRef<HTMLDivElement>(null);
-  const [roomy, setRoomy] = useState(false);
-  useEffect(() => {
-    const host = ref.current?.parentElement;
-    if (!host || typeof ResizeObserver === "undefined") return;
-    const rem =
-      parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setRoomy(entry.contentRect.width >= MIN_HOST_WIDTH_REM * rem);
-    });
-    observer.observe(host);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, roomy];
-}
-
 /**
  * Who is in the scene and how the player is doing, laid over the scene art in
  * the `backdrop: "scene"` layout. Everything comes from kernel data — the
@@ -54,13 +28,21 @@ function useHasRoom(): [RefObject<HTMLDivElement | null>, boolean] {
  * World Model record — so it shows for any world that provides them and stays
  * empty otherwise.
  */
-export function SceneHud({ sessionId }: { readonly sessionId: string }) {
+export function SceneHud({
+  sessionId,
+  storyWidth,
+  hostWidth,
+}: {
+  readonly sessionId: string;
+  readonly storyWidth: number;
+  readonly hostWidth: number;
+}) {
   const { t } = useTranslation();
   const { state } = useSession();
   const status = usePlayerStatus();
   const summary = useSessionSummary(sessionId);
   const hasStatus = status !== null || summary.length > 0;
-  const [hostRef, roomy] = useHasRoom();
+  const roomy = hostWidth >= Math.max(1056, storyWidth + 448);
   const slots = useUiSlots(sessionId);
   const cast = slots.find((entry) => entry.slot === "stage.cast@1")?.value as
     StageCastModel | undefined;
@@ -84,7 +66,6 @@ export function SceneHud({ sessionId }: { readonly sessionId: string }) {
 
   return (
     <div
-      ref={hostRef}
       data-shown={roomy && (hasStatus || actors.length > 0)}
       className="ui-scene-hud pointer-events-none absolute bottom-6 left-6 z-1 flex-col gap-3"
     >

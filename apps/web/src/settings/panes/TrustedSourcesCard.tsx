@@ -116,6 +116,7 @@ export function TrustedSourcesCard() {
       <Button
         size="sm"
         variant="outline"
+        className="h-auto max-w-full py-1.5 text-start whitespace-normal"
         disabled={locked}
         onClick={() => {
           setInput(SUGGESTED_PLUGIN_REPOSITORY);

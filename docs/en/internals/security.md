@@ -62,7 +62,7 @@ Each route states which "actions" it performs, and the host profile decides how 
 | `world.write` | Writing the shared world catalog | Open | Operator | Operator |
 | `world.generate` | Generating, revising or translating a world with the server's models | Open | Open | Operator |
 | `plugin.community` | Approving, enabling or running a community plugin's server code | Open | Operator | Operator |
-| `server.diagnostics` | Model endpoints, config paths, load errors, which keys are configured | Open | Operator, otherwise these fields are left out | Operator, otherwise these fields are left out |
+| `server.diagnostics` | Custom model endpoints, config paths, load errors, which keys are configured | Open | Operator, otherwise these fields are left out | Operator, otherwise these fields are left out |
 | `model.probe` | Listing a provider's models, testing a model | Open | Open | Operator |
 | `model-db.refresh` | Downloading a new model database | Open | Operator | Operator |
 | `server.settings` | Writing server settings | Desktop token | Refused | Refused |
@@ -74,7 +74,7 @@ Each route states which "actions" it performs, and the host profile decides how 
 The browser-private column opens to visitors only what they do with their own keys and saves: creating sessions, generating worlds, and listing and testing models (the settings page needs this to add a provider and test a key). Every other global operation belongs to the operator, as on the hosted tiers, each for its own reason:
 
 - `plugin.community`: a community package's server code has no sandbox and runs in the process that every visitor's keys pass through (see [Community plugin code](#community-plugin-code)).
-- `server.diagnostics`: model endpoints and config paths belong to the operator.
+- `server.diagnostics`: config paths and custom model endpoints belong to the operator. The public model catalog shows an endpoint only when the active built-in configuration uses the provider's official public address.
 - `server.settings`, `host.config`: the operator sets the server settings and host configuration through environment variables.
 - `media.cleanup`: the server sees only the sessions it holds a mirror of right now, so a cleanup would delete media that saves in other browsers still reference.
 
@@ -368,7 +368,7 @@ The personal form trusts other processes on the same machine. Loopback listening
 
 The import of community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is guarded by two-step approval: first `covel:plugin-server-code` is granted, then the specific operations.
 
-Sensitive desktop configuration reads and writes require the launch token when one is configured, including `GET /api/config/keys`, which returns only provider names. The public model catalogs (`/api/presets`, `/api/llm-config`) of the browser-private form and the hosted tiers omit `baseUrl` to avoid exposing private gateway addresses and credentials in URLs; operator-token holders can still read the addresses.
+Sensitive desktop configuration reads and writes require the launch token when one is configured, including `GET /api/config/keys`, which returns only provider names. The public model catalogs of the browser-private form and the hosted tiers show an address only when the active built-in configuration uses the provider's official remote endpoint. See the [personal configuration API](../reference/api.md#personal-configuration-api).
 
 ### Server settings
 

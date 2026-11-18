@@ -61,6 +61,10 @@ import { StageChoices } from "./StageChoices.js";
 import type { ComposerModes } from "../game-view/use-composer-modes.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import {
+  SessionWidthHandle,
+  useSessionWidth,
+} from "../session-width-handle.js";
+import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
@@ -294,6 +298,14 @@ export function StageView(props: StageViewProps): ReactElement {
   // Done reading line by line, the player sees the whole story: the draft
   // while it is written, otherwise the latest committed one.
   const shownStory = draft?.message ?? storyMsg;
+  const panelWidth = useSessionWidth("stage");
+  const resizeHandle = panelWidth.enabled && (
+    <SessionWidthHandle
+      {...panelWidth.handle}
+      label={t("stage.resizeDialogue")}
+      controls="stage-width-panel"
+    />
+  );
   const reader =
     reading && target ? (
       <StageReader
@@ -310,13 +322,27 @@ export function StageView(props: StageViewProps): ReactElement {
         revising={revising}
       />
     ) : undefined;
+  const storyReview =
+    reader ??
+    (shownStory && (
+      <StageDialog
+        key={shownStory.id}
+        sessionId={session.id}
+        message={shownStory}
+        autoPlay={autoPlay}
+        reducedMotion={reducedMotion}
+      />
+    ));
 
   return (
     <div
-      className="relative flex flex-col flex-1 min-h-0 overflow-hidden"
+      className="relative isolate flex flex-col flex-1 min-h-0 overflow-hidden"
       data-testid="stage-view"
     >
-      <div className="relative flex-1 min-h-0 overflow-hidden">
+      <div
+        ref={panelWidth.host}
+        className="relative flex-1 min-h-0 overflow-hidden"
+      >
         <StageBackdrop
           sceneCurrent={effectiveSceneCurrent}
           world={world}
@@ -344,67 +370,58 @@ export function StageView(props: StageViewProps): ReactElement {
           onToggleImmersive={onToggleImmersive}
           onExit={() => onViewModeChange("parsed")}
         />
-        {/* While the turn runs, a story being read gets the panel alone. */}
-        {reader && !choicesVisible && (
+        {(choicesVisible ||
+          reader ||
+          (executing && shownStory && !reading)) && (
           <div
             className="pointer-events-none absolute inset-x-0 top-[40%] bottom-0 z-40 flex items-end justify-center px-3 pb-3 md:top-[35%] md:px-8 md:pb-8"
-            data-testid="stage-draft-panel"
+            data-testid={
+              reader && !choicesVisible ? "stage-draft-panel" : undefined
+            }
           >
-            <section className="ui-stage-panel pointer-events-auto flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-(--radius-card)">
-              <div className="min-h-0 overflow-y-auto overscroll-contain">
-                {reader}
-              </div>
+            <section
+              id={resizeHandle ? "stage-width-panel" : undefined}
+              className="ui-stage-panel ui-stage-width @container relative pointer-events-auto flex max-h-full w-full flex-col overflow-hidden rounded-(--radius-card)"
+              style={{ maxWidth: panelWidth.width }}
+            >
+              {resizeHandle}
+              {!choicesVisible && (
+                <div className="min-h-0 overflow-y-auto overscroll-contain">
+                  {storyReview}
+                </div>
+              )}
+              <StageChoices
+                storyReview={storyReview}
+                composerDraft={props.composerDraft}
+                composerModes={props.composerModes}
+                extensions={(choices, onDraftMessage) => (
+                  <StagePluginPanels
+                    panelState={props.panelState}
+                    activePluginIds={sessionPlugins
+                      .filter((plugin) => plugin.active)
+                      .map((plugin) => plugin.id)}
+                    choices={choices.map(({ id, label }) => ({
+                      id,
+                      text: label,
+                    }))}
+                    turnIds={stageTurnIds}
+                    turnId={storyTurnId}
+                    executing={executing}
+                    onDraftMessage={onDraftMessage}
+                  />
+                )}
+                visible={choicesVisible}
+                advancing={advancing}
+                executing={executing}
+                interactionChoices={interactionChoices}
+                suggestions={freshPrompts}
+                locale={locale}
+                onSubmitInteraction={onSubmitInteraction}
+                onSendMessage={onSendMessage}
+              />
             </section>
           </div>
         )}
-        {executing && shownStory && !reading && (
-          <StageDialog
-            key={shownStory.id}
-            sessionId={session.id}
-            message={shownStory}
-            autoPlay={autoPlay}
-            reducedMotion={reducedMotion}
-          />
-        )}
-        <StageChoices
-          storyReview={
-            reader ? (
-              reader
-            ) : shownStory ? (
-              <StageDialog
-                key={shownStory.id}
-                inline
-                sessionId={session.id}
-                message={shownStory}
-                autoPlay={autoPlay}
-                reducedMotion={reducedMotion}
-              />
-            ) : undefined
-          }
-          composerDraft={props.composerDraft}
-          composerModes={props.composerModes}
-          extensions={(choices, onDraftMessage) => (
-            <StagePluginPanels
-              panelState={props.panelState}
-              activePluginIds={sessionPlugins
-                .filter((plugin) => plugin.active)
-                .map((plugin) => plugin.id)}
-              choices={choices.map(({ id, label }) => ({ id, text: label }))}
-              turnIds={stageTurnIds}
-              turnId={storyTurnId}
-              executing={executing}
-              onDraftMessage={onDraftMessage}
-            />
-          )}
-          visible={choicesVisible}
-          advancing={advancing}
-          executing={executing}
-          interactionChoices={interactionChoices}
-          suggestions={freshPrompts}
-          locale={locale}
-          onSubmitInteraction={onSubmitInteraction}
-          onSendMessage={onSendMessage}
-        />
 
         <StageExecutionStatus {...props} />
       </div>
@@ -422,13 +439,13 @@ export function StageView(props: StageViewProps): ReactElement {
           failed-turn banner on the stage itself. */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent
-          className="max-w-3xl p-0 gap-0"
+          className="flex h-[min(86dvh,64rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0"
           aria-describedby={undefined}
         >
-          <DialogHeader className="px-4 pt-4 pb-2">
+          <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
             <DialogTitle>{t("stage.historyTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="flex h-[80vh] flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             <ChatMessages
               {...props}
               viewMode="parsed"
@@ -449,21 +466,26 @@ export function StageView(props: StageViewProps): ReactElement {
           }
         }}
       >
-        <DialogContent className="max-w-lg" aria-describedby={undefined}>
-          <DialogHeader className="sr-only">
+        <DialogContent
+          className="flex max-h-[90dvh] max-w-3xl flex-col gap-0 overflow-hidden p-0"
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
             <DialogTitle>{t("stage.formTitle")}</DialogTitle>
           </DialogHeader>
           {activeForm && (
-            <MessageBlockRenderer
-              msg={activeForm}
-              block={activeForm.block as Record<string, unknown>}
-              submitted={submittedBlockIds.has(activeForm.id)}
-              submittedValues={submittedBlockValues[activeForm.id]}
-              executing={executing}
-              onSubmitInteraction={onSubmitInteraction}
-              onSendMessage={onSendMessage}
-              onSubmitBlock={onSubmitBlock}
-            />
+            <div className="ui-scroll min-h-0 overflow-y-auto p-4 sm:p-5">
+              <MessageBlockRenderer
+                msg={activeForm}
+                block={activeForm.block as Record<string, unknown>}
+                submitted={submittedBlockIds.has(activeForm.id)}
+                submittedValues={submittedBlockValues[activeForm.id]}
+                executing={executing}
+                onSubmitInteraction={onSubmitInteraction}
+                onSendMessage={onSendMessage}
+                onSubmitBlock={onSubmitBlock}
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>

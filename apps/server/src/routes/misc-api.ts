@@ -6,7 +6,10 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { providerApiKeysFromEnv } from "@covel/shared";
+import {
+  getBuiltinProviderConnection,
+  providerApiKeysFromEnv,
+} from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
@@ -49,12 +52,24 @@ export function createMiscApiRoutes(
   apiKeys: Readonly<Record<string, string>> = providerApiKeysFromEnv(),
 ): Hono {
   const app = new Hono();
+  const visibleBaseUrl = (
+    canReadDiagnostics: boolean,
+    provider: string,
+    baseUrl: string | undefined,
+  ) => {
+    if (canReadDiagnostics) return baseUrl;
+    if (ai.configSource?.kind !== "builtin" || !baseUrl) return undefined;
+    const connection = getBuiltinProviderConnection(provider);
+    return connection && !connection.local && connection.baseUrl === baseUrl
+      ? baseUrl
+      : undefined;
+  };
 
   // GET /api/presets — list configured model presets
   //
   // Each entry carries enough info for the settings UI to identify exactly
   // what a Ping would hit:
-  //   - `baseUrl`: operator-only on hosted deployments
+  //   - `baseUrl`: public built-in endpoint or operator diagnostics
   //   - `protocol`: preset-level protocol, else the provider default
   //   - `slotBindings`: every slot id whose `presetId` resolves here — lets
   //     the UI show e.g. `default, fast` next to the preset so operators can
@@ -93,9 +108,11 @@ export function createMiscApiRoutes(
         enabled: p.enabled,
         isDefault: p.isDefault ?? false,
         scope: "global",
-        ...(canReadDiagnostics
-          ? { baseUrl: p.baseUrl ?? providerBaseUrl }
-          : {}),
+        baseUrl: visibleBaseUrl(
+          canReadDiagnostics,
+          p.provider,
+          p.baseUrl ?? providerBaseUrl,
+        ),
         protocol: p.protocol ?? providerProtocol,
         slotBindings: slotBindingsByPreset.get(p.id) ?? [],
         ...(p.capability ? { capability: p.capability } : {}),
@@ -173,7 +190,11 @@ export function createMiscApiRoutes(
             : fallbackPresetId
           : undefined;
       slotsInfo[slotId] = {
-        ...(canReadDiagnostics ? { baseUrl: resolved.config.baseUrl } : {}),
+        baseUrl: visibleBaseUrl(
+          canReadDiagnostics,
+          preset.provider,
+          resolved.config.baseUrl,
+        ),
         provider: preset.provider,
         model: preset.model,
         protocol: resolved.protocol,

@@ -176,37 +176,34 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(90dvh,56rem)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 p-0">
-        <DialogHeader className="px-4 sm:px-6 pt-5 pb-4 border-b border-(--rule-color)">
-          <DialogTitle className="flex items-baseline gap-3">
-            <span className="ui-title text-base font-semibold tracking-tight">
-              {t("settings.title")}
-            </span>
-            <Settings2 className="w-3.5 h-3.5 ml-auto opacity-50" />
+      <DialogContent className="settings-workspace flex h-[calc(100dvh-1rem)] max-w-7xl flex-col gap-0 overflow-hidden p-0 md:h-[min(92dvh,64rem)]">
+        <DialogHeader className="ui-workspace-rule ui-workspace-content flex min-h-16 justify-center text-left">
+          <DialogTitle className="ui-title text-lg">
+            {t("settings.title")}
           </DialogTitle>
           <DialogDescription className="sr-only">
             {t("settings.description")}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">
-          <aside
-            className="w-full sm:w-56 shrink-0 border-b sm:border-b-0 sm:border-r border-(--rule-color) flex flex-col"
-            style={{ background: "var(--surface-rail)" }}
-          >
-            <div className="p-3 border-b border-(--rule-color) flex items-center gap-2 focus-within:ring-1 focus-within:ring-(--accent-primary)">
-              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <aside className="flex min-w-0 shrink-0 flex-col border-b border-border bg-(--surface-rail) md:w-52 md:border-r md:border-b-0 lg:w-56">
+            <div className="grid gap-(--ui-gap-inline) p-3 sm:grid-cols-2 md:block md:px-3.5 md:pt-4">
               <label htmlFor="settings-search" className="sr-only">
                 {t("settings.searchPlaceholder")}
               </label>
-              <input
-                id="settings-search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("settings.searchPlaceholder")}
-                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground min-w-0"
-              />
-            </div>
-            <div className="p-3 sm:hidden">
+              <div className="flex min-w-0 items-center gap-(--ui-gap-inline) rounded-md border border-border bg-background px-2.5 focus-within:ring-1 focus-within:ring-primary">
+                <Search
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+                <input
+                  id="settings-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t("settings.searchPlaceholder")}
+                  className="min-h-(--ui-control-touch) w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground sm:min-h-(--ui-control-standard) sm:text-sm md:text-xs"
+                />
+              </div>
               <label htmlFor="settings-section" className="sr-only">
                 {t("settings.title")}
               </label>
@@ -215,21 +212,36 @@ export function SettingsDialog({
                 value={selectedNode?.id ?? ""}
                 disabled={selectableNodes.length === 0}
                 onChange={(event) => setSelected(event.target.value)}
-                className="w-full rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-(--accent-primary)"
+                className="min-h-(--ui-control-touch) w-full min-w-0 rounded-md border border-border bg-background px-2.5 text-base outline-none focus:ring-1 focus:ring-primary sm:min-h-(--ui-control-standard) sm:text-sm md:hidden"
               >
                 {selectableNodes.length === 0 && (
                   <option value="">{t("settings.noResults", { query })}</option>
                 )}
-                {selectableNodes.map((node) => (
-                  <option key={node.id} value={node.id}>
-                    {node.label}
-                  </option>
-                ))}
+                {filtered
+                  .filter((node) => node.kind === "header")
+                  .map((group) => (
+                    <optgroup key={group.id} label={group.label}>
+                      {selectableNodes
+                        .filter((node) => node.parentId === group.id)
+                        .map((node) => (
+                          <option key={node.id} value={node.id}>
+                            {node.label}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                {selectableNodes
+                  .filter((node) => !node.parentId)
+                  .map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.label}
+                    </option>
+                  ))}
               </select>
             </div>
             <nav
               aria-label={t("settings.title")}
-              className="hidden sm:block flex-1 overflow-y-auto py-2 ui-scroll"
+              className="ui-scroll hidden min-h-0 flex-1 flex-col overflow-y-auto pb-4 md:flex"
             >
               {filtered.map((node) => {
                 const isHeader = node.kind === "header";
@@ -238,7 +250,7 @@ export function SettingsDialog({
                   return (
                     <h3
                       key={node.id}
-                      className="ui-meta px-5 pt-4 pb-1 text-[10px] text-muted-foreground"
+                      className="px-4 pt-4 pb-1 text-xs font-medium text-muted-foreground"
                     >
                       {node.label}
                     </h3>
@@ -251,12 +263,7 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => setSelected(node.id)}
                     aria-current={isSelected ? "page" : undefined}
-                    className={
-                      "mx-2 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-(--radius-control) px-3 py-1.5 text-left text-[13px] transition-colors " +
-                      (isSelected
-                        ? "bg-[color-mix(in_oklab,var(--accent-primary)_14%,transparent)] font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)] hover:text-foreground")
-                    }
+                    className="ui-rail-item flex w-full items-center gap-2 px-4 py-1.5 text-left text-sm transition-colors aria-[current=page]:font-medium"
                   >
                     <Icon
                       aria-hidden
@@ -265,7 +272,9 @@ export function SettingsDialog({
                         (isSelected ? "text-(--accent-primary)" : "opacity-70")
                       }
                     />
-                    <span className="min-w-0 truncate">{node.label}</span>
+                    <span className="min-w-0 wrap-break-word leading-snug">
+                      {node.label}
+                    </span>
                   </button>
                 );
               })}
@@ -278,14 +287,16 @@ export function SettingsDialog({
           </aside>
           <section
             ref={contentRef}
-            className="ui-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
+            className="ui-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
           >
-            {!writable && (
-              <p role="alert" className="mb-4 text-sm text-destructive">
-                {t("settings.loadFailedReadOnly")}
-              </p>
-            )}
-            {renderPane(selectedNode, t)}
+            <div className="ui-workspace-content @container mx-auto max-w-6xl py-(--ui-gap-section)">
+              {!writable && (
+                <p role="alert" className="mb-4 text-sm text-destructive">
+                  {t("settings.loadFailedReadOnly")}
+                </p>
+              )}
+              {renderPane(selectedNode, t)}
+            </div>
           </section>
         </div>
       </DialogContent>
@@ -330,7 +341,16 @@ function renderPane(
   }
   if (node.id === "llm.slots") return <LlmSlotsPane />;
   if (node.id === "llm.providers") return <LlmPresetsPane />;
-  if (node.id === "llm.advanced") return <LlmAdvancedPane />;
+  if (node.id === "llm.advanced")
+    return (
+      <>
+        <SettingsPaneHeader
+          title={node.label}
+          description={t("settings.advancedDesc")}
+        />
+        <LlmAdvancedPane />
+      </>
+    );
   if (node.id === DATA_NODE_ID)
     return (
       <>
@@ -361,9 +381,23 @@ function renderPane(
         <MediaLibraryPane />
       </>
     );
-  if (node.id === "desktop") return <DesktopPane />;
-  if (node.id === APPEARANCE_NODE_ID) return <AppearancePane />;
-  if (node.id === OPERATOR_ACCESS_NODE_ID) return <OperatorAccessPane />;
+  if (
+    node.id === "desktop" ||
+    node.id === APPEARANCE_NODE_ID ||
+    node.id === OPERATOR_ACCESS_NODE_ID
+  )
+    return (
+      <>
+        <SettingsPaneHeader title={node.label} />
+        {node.id === "desktop" ? (
+          <DesktopPane />
+        ) : node.id === APPEARANCE_NODE_ID ? (
+          <AppearancePane />
+        ) : (
+          <OperatorAccessPane />
+        )}
+      </>
+    );
   if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
   if (node.kind === "plugin")
     return (
@@ -427,8 +461,8 @@ function EntryPane({
         ))}
       </SettingFieldList>
       {reading.length > 0 && (
-        <section className="mt-8 max-w-2xl space-y-3">
-          <h3 className="ui-meta border-t border-(--rule-color) pt-4 text-[10px] text-muted-foreground">
+        <section className="mt-6 max-w-2xl space-y-3">
+          <h3 className="settings-section-title">
             {t("settings.readingHeading")}
           </h3>
           <SettingFieldList>

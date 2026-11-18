@@ -388,10 +388,8 @@ function fmt(n: number): string {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 border border-(--rule-color) px-3 py-2 min-w-28">
-      <span className="ui-meta text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </span>
+    <div className="debug-card flex min-w-0 grow basis-36 flex-col gap-1 px-3 py-2.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
       <span className="font-mono text-base tabular-nums text-foreground">
         {value}
       </span>
@@ -473,23 +471,23 @@ export function CostPanel({
 
   if (model.totalCalls === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+      <div className="debug-pane py-16 text-center text-sm text-muted-foreground">
         {t("debugger.cost.noData", "No token usage recorded for this game.")}
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-auto p-4 space-y-6">
+    <div className="debug-pane space-y-6">
       {/* 聚合合计：窗口化后标题明确「当前窗口」而非「会话合计」，避免静默失真 */}
       <section className="space-y-2">
-        <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
+        <h2 className="text-sm font-semibold">
           {isPartial
             ? t("debugger.cost.windowTitle", "Loaded window")
             : t("debugger.cost.session", "Save total")}
         </h2>
         {isPartial && (
-          <div className="flex flex-wrap items-center gap-2 border border-amber-500/40 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <div className="flex flex-wrap items-center gap-2 rounded-(--radius-card) border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
             <span>
               {t(
                 "debugger.cost.partialNote",
@@ -559,10 +557,10 @@ export function CostPanel({
       {/* By model */}
       {model.byModel.length > 0 && (
         <section className="space-y-2">
-          <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
+          <h2 className="text-sm font-semibold">
             {t("debugger.cost.byModel", "By model")}
           </h2>
-          <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
+          <div className="debug-card divide-y divide-(--rule-color)">
             {model.byModel.map((m) => {
               const priceKey = `${m.provider ?? ""}\u0000${m.model}`;
               const price =
@@ -572,14 +570,14 @@ export function CostPanel({
               return (
                 <div
                   key={priceKey}
-                  className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
+                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2 text-xs"
                 >
-                  <span className="font-mono truncate text-foreground">
+                  <span className="min-w-0 font-mono wrap-anywhere text-foreground">
                     {m.model === UNKNOWN_MODEL
                       ? t("debugger.cost.unknownModel", "(unknown model)")
                       : `${m.provider ? `${m.provider} · ` : ""}${m.model}`}
                   </span>
-                  <span className="font-mono tabular-nums text-muted-foreground shrink-0">
+                  <span className="min-w-0 font-mono wrap-anywhere text-muted-foreground tabular-nums">
                     {fmt(m.inputTokens)} → {fmt(m.outputTokens)} · {m.calls}× ·{" "}
                     {m.cachedInputTokens > 0 || m.cacheWriteInputTokens > 0
                       ? `${t("debugger.cost.cache", "Cache read / write")} ${fmt(m.cachedInputTokens)}/${fmt(m.cacheWriteInputTokens)} · `
@@ -597,24 +595,24 @@ export function CostPanel({
 
       {/* By runtime */}
       <section className="space-y-2">
-        <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
+        <h2 className="text-sm font-semibold">
           {t("debugger.cost.byRuntime", "By step")}
         </h2>
-        <div className="space-y-1.5">
+        <div className="debug-card space-y-3 p-3">
           {model.byRuntime.map((r) => {
             const tokens = r.inputTokens + r.outputTokens;
             const pct = Math.round((tokens / maxRuntimeTokens) * 100);
             return (
-              <div key={r.runtimeId} className="space-y-0.5">
+              <div key={r.runtimeId} className="space-y-1">
                 <div className="flex items-baseline justify-between gap-3 text-xs">
-                  <span className="font-mono truncate text-foreground">
+                  <span className="min-w-0 wrap-anywhere font-mono text-foreground">
                     {r.runtimeId}
                   </span>
                   <span className="font-mono tabular-nums text-muted-foreground shrink-0">
                     {fmt(tokens)} · {r.calls}×
                   </span>
                 </div>
-                <div className="h-1.5 w-full bg-(--surface-inset) overflow-hidden">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full bg-primary/60"
                     style={{ width: `${pct}%` }}
@@ -628,14 +626,14 @@ export function CostPanel({
 
       {/* By turn */}
       <section className="space-y-2">
-        <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
+        <h2 className="text-sm font-semibold">
           {t("debugger.cost.byTurn", "By turn")}
         </h2>
-        <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
+        <div className="debug-card divide-y divide-(--rule-color)">
           {model.byTurn.map((tn) => (
             <div
               key={tn.turnId}
-              className="debug-compact-row flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
+              className="debug-compact-row flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2 text-xs"
             >
               <span className="font-mono text-foreground">
                 {t("debugger.turn", { count: tn.turnIndex })}

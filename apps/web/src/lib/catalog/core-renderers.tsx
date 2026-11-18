@@ -218,6 +218,7 @@ export const Section: ComponentRenderer = ({ element, children }) => {
     <div>
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="ui-eyebrow flex w-full items-center gap-1.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
       >

@@ -36,14 +36,14 @@ export function MissingCredentialsDialog({
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="flex max-h-[90dvh] max-w-xl flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{t("session.missingCredentials.title")}</DialogTitle>
           <DialogDescription>
             {t("session.missingCredentials.detail")}
           </DialogDescription>
         </DialogHeader>
-        <ul className="space-y-2 text-sm">
+        <ul className="ui-scroll min-h-0 space-y-2 overflow-y-auto overscroll-contain text-sm">
           {[...providers].map(([provider, slots]) => (
             <li key={provider}>
               {t("session.missingCredentials.provider", {
@@ -54,7 +54,7 @@ export function MissingCredentialsDialog({
             </li>
           ))}
         </ul>
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:justify-end">
           <Button onClick={onConfigure}>
             {t("session.missingCredentials.configure")}
           </Button>

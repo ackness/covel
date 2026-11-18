@@ -15,6 +15,8 @@ This page explains how the story is written, how you get suggestions after it, a
 
 `narrator` and `chat-mode-narrator` do the same job: they write the next part of the story based on your action. A session has one storytelling plugin, so they cannot be on at the same time. Pick one.
 
+Each plugin saves its own Perspective setting. Future narration uses the setting for the storyteller selected in that save.
+
 |                 | Storyteller (`narrator`)                                      | Chat Storyteller (`chat-mode-narrator`)                                  |
 | --------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Reads like      | A 200 to 400 character novel passage                          | A conversation, with characters taking turns to speak                    |
@@ -107,7 +109,7 @@ After each part of the story, recaps the relevant earlier events, explains the c
 
 ### What you will see
 
-- Classic Story: below the story in the chat area, a suggestion block appears with a recap, the current choice, and a few action buttons.
+- Classic Story shows a recap, the current choice and action buttons below the story. Expand “Your own action” to draft a different action.
 - Dialogue: the actions also appear in the choice bar on the stage.
 
 When you tap an action, it is only filled into the input box at the bottom. It is not sent. You can edit it, or write your own action and send it yourself.

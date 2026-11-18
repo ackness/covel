@@ -39,8 +39,8 @@ export function SessionDataView({
   const { t } = useTranslation();
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-      <div className="p-4 max-w-5xl space-y-4">
+    <div className="debug-pane">
+      <div className="min-w-0 space-y-4">
         {!selectedSessionId && (
           <p className="text-sm text-muted-foreground py-20 text-center">
             {t("debugger.selectSession")}

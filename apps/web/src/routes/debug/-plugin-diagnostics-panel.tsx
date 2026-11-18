@@ -107,7 +107,7 @@ export function PluginDiagnosticsPanel({
 
   return (
     <section
-      className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5"
+      className="debug-pane"
       aria-label={t("debugger.plugins.tab", "Plugins")}
       aria-busy={currentStatus === "loading"}
     >
@@ -178,7 +178,7 @@ export function PluginDiagnosticsPanel({
                 : t("debugger.plugins.empty", "No plugins are installed.")}
             </p>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid items-start gap-3 @3xl:grid-cols-2">
               {snapshot.plugins.map((plugin) => (
                 <PluginCard
                   key={plugin.pluginId}
@@ -318,10 +318,10 @@ function PluginCard({
   const { t } = useTranslation();
   const { registrations } = plugin;
   return (
-    <article className="min-w-0 rounded border border-(--rule-color) p-3 text-xs">
+    <article className="debug-card @container min-w-0 space-y-3 p-4 text-xs">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="font-mono text-sm font-semibold break-all">
+          <h3 className="font-mono text-sm font-semibold wrap-anywhere">
             {plugin.pluginId}
           </h3>
           <p className="text-muted-foreground">{plugin.source}</p>
@@ -332,7 +332,7 @@ function PluginCard({
           </Button>
         )}
       </div>
-      <dl className="grid gap-2 sm:grid-cols-2">
+      <dl className="grid gap-x-4 gap-y-3 border-t border-(--rule-color) pt-3 @sm:grid-cols-2">
         <Capability
           label={t("debugger.plugins.hostState", "Host state")}
           values={[plugin.hostState]}
@@ -427,11 +427,12 @@ function Capability({
   label: string;
   values: readonly string[];
 }) {
+  if (values.length === 0) return null;
   return (
     <div className="min-w-0">
       <dt className="mb-1 text-muted-foreground">{label}</dt>
-      <dd className="font-mono break-all">
-        {values.length ? values.join(", ") : "—"}
+      <dd className="font-mono leading-relaxed wrap-anywhere">
+        {values.join(", ")}
       </dd>
     </div>
   );

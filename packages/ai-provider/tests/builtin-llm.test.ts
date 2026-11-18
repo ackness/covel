@@ -7,7 +7,7 @@ describe("builtinLlmToml", () => {
   it("is a DeepSeek story slot without settings", () => {
     expect(storySlot(builtinLlmToml())).toMatchObject({
       provider: "deepseek",
-      model: "deepseek-v4-flash",
+      model: "deepseek-flash",
       baseUrl: "https://api.deepseek.com",
     });
   });

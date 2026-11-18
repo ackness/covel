@@ -14,6 +14,7 @@ import {
   type ProviderProtocolOutput,
 } from "@covel/shared";
 import { ImportedModelReasoning } from "./model-reasoning-settings.js";
+import { LocalModelEndpointNote } from "./local-model-endpoint-note.js";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -54,7 +55,7 @@ export function ProviderDialog({
     : "";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-xl overflow-y-auto">
+      <DialogContent className="ui-scroll max-h-[90dvh] max-w-3xl overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{t("settings.addProvider", "Add provider")}</DialogTitle>
           <DialogDescription>
@@ -134,6 +135,14 @@ export function ProviderDialog({
             value={draft.protocol}
             onChange={(protocol) => onDraftChange({ ...draft, protocol })}
           />
+          <LocalModelEndpointNote
+            baseUrl={
+              draft.baseUrl.trim() ||
+              getBuiltinProviderConnection(typedProviderId)?.baseUrl ||
+              ""
+            }
+            provider={typedProviderId}
+          />
           <ModelIdsTextarea
             value={draft.modelIds}
             onChange={(modelIds) => onDraftChange({ ...draft, modelIds })}
@@ -212,7 +221,7 @@ export function ModelDialog({
   const count = parseModelIds(value).length;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-lg overflow-y-auto">
+      <DialogContent className="ui-scroll max-h-[90dvh] max-w-2xl overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{t("settings.addModel", "Add model")}</DialogTitle>
           <DialogDescription>
@@ -496,10 +505,10 @@ export function ProtocolSelect({
       : (getBuiltinProviderConnection(provider ?? "")?.evaluationProtocol ??
         "typesafe-systemone-v1");
   const selectClassName =
-    "w-full border border-border bg-background px-2 py-1.5 text-xs outline-none disabled:bg-muted/30 disabled:text-muted-foreground focus:ring-1 focus:ring-primary";
+    "h-9 w-full min-w-0 rounded-md border border-border bg-background px-2.5 text-sm font-normal outline-none disabled:bg-muted/30 disabled:text-muted-foreground focus:ring-1 focus:ring-primary";
   return (
-    <div className="space-y-2">
-      <label className="block space-y-1 text-xs">
+    <div className="flex min-w-0 flex-col gap-2">
+      <label className="flex min-w-0 flex-col gap-1.5 text-[13px] font-medium">
         <span>{t("settings.protocol")}</span>
         <select
           value={evaluation ? "evaluation" : value}

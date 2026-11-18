@@ -99,10 +99,10 @@ export function SessionSettingsDrawer({
       <DialogContent
         data-covel-host-controls=""
         data-testid="session-settings-drawer"
-        className="inset-y-0 left-auto right-0 top-0 flex h-dvh max-w-md translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0"
+        className="inset-y-0 left-auto right-0 top-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 sm:w-[clamp(28rem,40vw,42rem)]"
       >
-        <DialogHeader className="ui-panel-header border-b border-border px-4 py-3">
-          <DialogTitle className="text-sm font-medium">
+        <DialogHeader className="ui-panel-header shrink-0 border-b border-border px-4 py-4 sm:px-6">
+          <DialogTitle className="text-lg font-semibold">
             {t("session.drawerTitle")}
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -110,7 +110,7 @@ export function SessionSettingsDrawer({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="ui-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <section
             aria-label={t("session.drawerSaves")}
             className="ui-panel-section space-y-2 border-b border-border"

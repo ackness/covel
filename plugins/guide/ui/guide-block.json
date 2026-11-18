@@ -10,10 +10,9 @@
     },
     "children": [
       {
-        "component": "Row",
+        "component": "Stack",
         "props": {
-          "gap": "sm",
-          "align": "baseline"
+          "gap": "xs"
         },
         "children": [
           {
@@ -21,8 +20,7 @@
             "props": {
               "content": "Suggested actions",
               "variant": "muted",
-              "size": "xs",
-              "className": "ui-meta"
+              "size": "sm"
             }
           },
           {
@@ -32,7 +30,10 @@
                 "$state": "/scene"
               },
               "weight": "bold",
-              "size": "sm"
+              "size": "lg"
+            },
+            "visible": {
+              "$state": "/scene"
             }
           }
         ]
@@ -43,8 +44,7 @@
           "content": {
             "$state": "/recap"
           },
-          "variant": "muted",
-          "size": "sm"
+          "variant": "muted"
         },
         "visible": {
           "$state": "/recap"
@@ -56,8 +56,7 @@
           "content": {
             "$state": "/decision"
           },
-          "weight": "bold",
-          "size": "sm"
+          "weight": "bold"
         },
         "visible": {
           "$state": "/decision"
@@ -68,7 +67,7 @@
         "props": {
           "content": "Pick a suggestion to put it in the message box, then send it.",
           "variant": "muted",
-          "size": "xs"
+          "size": "sm"
         }
       },
       {
@@ -245,35 +244,12 @@
         ]
       },
       {
-        "component": "Card",
+        "component": "Section",
         "props": {
-          "variant": "subtle"
+          "title": "Your own action",
+          "icon": "pen-line"
         },
         "children": [
-          {
-            "component": "Row",
-            "props": {
-              "gap": "sm",
-              "align": "center"
-            },
-            "children": [
-              {
-                "component": "Icon",
-                "props": {
-                  "name": "pen-line",
-                  "size": "xs"
-                }
-              },
-              {
-                "component": "Text",
-                "props": {
-                  "content": "Your own action",
-                  "weight": "bold",
-                  "size": "sm"
-                }
-              }
-            ]
-          },
           {
             "component": "Input",
             "props": {
@@ -287,7 +263,7 @@
             "component": "Button",
             "props": {
               "label": "Use",
-              "variant": "ghost",
+              "variant": "outline",
               "size": "compact"
             },
             "on": {

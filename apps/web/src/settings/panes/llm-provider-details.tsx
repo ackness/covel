@@ -1,7 +1,8 @@
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import { useState } from "react";
 import { useSettingsWritable } from "../use-settings-save.js";
 import { useTranslation } from "react-i18next";
-import { Copy, FileCode, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Copy, FileCode, Plus, Trash2 } from "lucide-react";
 import {
   type LlmConfigResponse,
   type ModelCapabilityInfo,
@@ -11,15 +12,18 @@ import {
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs.js";
 import { PingButton } from "@/components/shared/ping-button.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
 import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
-import { sharedServerEndpointNote } from "@/lib/local-network-url.js";
-import {
-  getSharedServerInfo,
-  isModelRelaySupported,
-} from "@/services/api/health.js";
+import { getSharedServerInfo } from "@/services/api/health.js";
 import { LlmKeysPane } from "./LlmKeysPane.js";
+import { LocalModelEndpointNote } from "./local-model-endpoint-note.js";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import { ProtocolSelect } from "./llm-provider-dialogs.js";
 import { useModelCapability } from "./use-model-capability.js";
@@ -30,12 +34,14 @@ import {
   useSettingDraft,
 } from "../use-setting-draft.js";
 import { useOpenLlmToml } from "../use-open-llm-toml.js";
+import { SettingsHelp } from "../pane-layout.js";
 
 type ServerConfigSource = LlmConfigResponse["source"];
 
 export function ProviderDetails({
   provider,
   serverConfig,
+  builtinDefault = serverConfig?.kind === "builtin",
   busy = false,
   onAddModel,
   onPatchLocalProfile,
@@ -47,6 +53,7 @@ export function ProviderDetails({
   busy?: boolean;
   /** Where the server models come from: an llm.toml file or the built-in default. */
   serverConfig?: ServerConfigSource;
+  builtinDefault?: boolean;
   onAddModel: () => void;
   onPatchLocalProfile: (
     patch:
@@ -60,17 +67,17 @@ export function ProviderDetails({
   const { t, i18n } = useTranslation();
   const writable = useSettingsWritable();
   const sharedServer = getSharedServerInfo() !== null;
+  const [tab, setTab] = useState("connection");
+  const [modelsOpened, setModelsOpened] = useState(false);
   const isServerProvider = provider.serverModels.length > 0;
-  const isBuiltinDefault = serverConfig?.kind === "builtin";
-  const serverLabel = isBuiltinDefault
+  const serverLabel = builtinDefault
     ? t("settings.builtinDefault")
     : t("settings.fromLlmToml", "From llm.toml");
   const localProfile = provider.localProfile;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
-  const endpointNote = sharedServer
-    ? sharedServerEndpointNote(baseUrl.draft, isModelRelaySupported())
-    : undefined;
+  const modelCount =
+    provider.serverModels.length + (localProfile?.models.length ?? 0);
 
   const commitBaseUrl = () => {
     if (localProfile && !baseUrl.conflict) {
@@ -80,27 +87,18 @@ export function ProviderDetails({
     }
   };
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="truncate font-mono text-base font-semibold">
-              {provider.id}
-            </h4>
-            {isServerProvider && (
-              <Badge variant="outline" className="text-[9px]">
-                {serverLabel}
-              </Badge>
-            )}
-            {localProfile && (
-              <Badge variant="outline" className="text-[9px]">
-                {t("settings.localProvider", "Local")}
-              </Badge>
-            )}
-          </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {t("settings.modelIdOpaqueHint")}
-          </p>
+    <div className="@container">
+      <header className="flex min-w-0 items-center justify-between gap-3 pb-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <h3 className="min-w-0 wrap-break-word text-xl font-semibold tracking-tight">
+            {provider.id}
+          </h3>
+          {isServerProvider && <Badge variant="secondary">{serverLabel}</Badge>}
+          {localProfile && (
+            <Badge variant="secondary">
+              {t("settings.localProvider", "Local")}
+            </Badge>
+          )}
         </div>
         {localProfile && !isServerProvider && (
           <Button
@@ -121,195 +119,230 @@ export function ProviderDetails({
                 onDeleteLocalProvider();
             }}
             aria-label={t("common.delete", "Delete")}
+            title={t("settings.deleteProviderTitle")}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 />
           </Button>
         )}
-      </div>
+      </header>
 
-      {isServerProvider && <ServerProviderNotice serverConfig={serverConfig} />}
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          setTab(value);
+          if (value === "models") setModelsOpened(true);
+        }}
+        activationMode="manual"
+      >
+        <div className="ui-workspace-rule">
+          <TabsList
+            aria-label={provider.id}
+            className="h-auto max-w-full justify-start gap-4 bg-transparent p-0"
+          >
+            <TabsTrigger
+              value="connection"
+              className="ui-tab-item px-3 whitespace-normal data-[state=active]:shadow-none"
+            >
+              {t("settings.providerConnectionTab")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="models"
+              className="ui-tab-item gap-1.5 px-3 whitespace-normal data-[state=active]:shadow-none"
+            >
+              {t("settings.providerModelsTab")}
+              <span
+                aria-hidden="true"
+                className="text-muted-foreground tabular-nums"
+              >
+                {modelCount}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      <LlmKeysPane
-        key={provider.id}
-        providerId={provider.id}
-        showIntro={false}
-        showPresetTests={false}
-      />
-
-      {sharedServer && (
-        <p
-          role="note"
-          className="rounded-(--radius-control) border border-primary/20 bg-primary/5 px-2.5 py-2 text-[11px] leading-relaxed text-foreground"
+        <TabsContent
+          forceMount
+          value="connection"
+          hidden={tab !== "connection"}
+          className="m-0 flex flex-col gap-5 pt-5 data-[state=inactive]:hidden"
         >
-          {t("sharedServer.keyAdvice")} {t("settings.keysLocalDesc")}{" "}
-          <a
-            href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2 hover:text-primary/80"
-          >
-            {t("sharedServer.learnMore")}
-          </a>
-        </p>
-      )}
-
-      <p className="text-[11px] text-muted-foreground">
-        {t(
-          isBuiltinDefault
-            ? "settings.providerConnectionScopeBuiltin"
-            : "settings.providerConnectionScope",
-        )}
-      </p>
-      <div className="grid grid-cols-1 gap-2">
-        <label className="space-y-1">
-          <span className="text-[10px] text-muted-foreground">
-            {t("settings.baseUrl", "API endpoint")}
-          </span>
-          <input
-            value={baseUrl.draft}
-            aria-invalid={baseUrl.conflict}
-            readOnly={!localProfile}
-            disabled={!writable}
-            onChange={(event) => baseUrl.setDraft(event.target.value)}
-            onBlur={commitBaseUrl}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-            className="w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none read-only:bg-muted/30 read-only:text-muted-foreground focus:ring-1 focus:ring-primary"
-          />
-        </label>
-        {endpointNote && (
-          <p
-            role="note"
-            className={`rounded-(--radius-control) border px-2.5 py-2 text-[11px] leading-relaxed text-foreground ${endpointNote === "relay" ? "border-primary/20 bg-primary/5" : "border-amber-500/30 bg-amber-500/10"}`}
-          >
-            {endpointNote === "relay"
-              ? t("sharedServer.localRelay", {
-                  origin: window.location.origin,
-                })
-              : endpointNote === "lan-http"
-                ? t("sharedServer.localHttp")
-                : t("sharedServer.localEndpoint")}
-          </p>
-        )}
-        {baseUrl.conflict && <SettingsDraftConflict onReload={baseUrl.reset} />}
-        <ProtocolSelect
-          provider={provider.provider}
-          value={localProfile?.protocol ?? provider.protocol}
-          disabled={!localProfile || !writable}
-          onChange={(protocol) => onPatchLocalProfile({ protocol })}
-        />
-      </div>
-
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h5 className="text-xs font-semibold">
-              {t("settings.modelConfigurations")}
-            </h5>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
+          {isServerProvider && localProfile && (
+            <p className="text-xs text-muted-foreground">
               {t(
-                "settings.providerModelsHint",
-                "Models share the provider key and price multiplier. Each model shows its effective protocol and endpoint.",
+                builtinDefault
+                  ? "settings.providerConnectionScopeBuiltin"
+                  : "settings.providerConnectionScope",
               )}
             </p>
+          )}
+          <div className="grid min-w-0 items-start gap-3 @2xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <label className="flex min-w-0 flex-col gap-1.5 text-[13px] font-medium">
+              <span>{t("settings.baseUrl", "API endpoint")}</span>
+              <input
+                value={baseUrl.draft}
+                placeholder={
+                  isServerProvider && !localProfile
+                    ? t("settings.providerEndpointPrivate")
+                    : undefined
+                }
+                aria-invalid={baseUrl.conflict}
+                readOnly={!localProfile}
+                disabled={!writable}
+                onChange={(event) => baseUrl.setDraft(event.target.value)}
+                onBlur={commitBaseUrl}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                className="h-9 w-full min-w-0 rounded-md border border-border bg-background px-2.5 font-mono text-sm outline-none read-only:text-muted-foreground focus:ring-1 focus:ring-primary"
+              />
+            </label>
+            <ProtocolSelect
+              provider={provider.provider}
+              value={localProfile?.protocol ?? provider.protocol}
+              disabled={!localProfile || !writable}
+              onChange={(protocol) => onPatchLocalProfile({ protocol })}
+            />
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || !writable}
-            onClick={onAddModel}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("settings.addModel", "Add model")}
-          </Button>
-        </div>
+          {baseUrl.conflict && (
+            <SettingsDraftConflict onReload={baseUrl.reset} />
+          )}
+          <LlmKeysPane
+            providerId={provider.id}
+            showIntro={false}
+            showPresetTests={false}
+          />
+          <LocalModelEndpointNote
+            baseUrl={baseUrl.draft}
+            provider={provider.provider}
+          />
+          {isServerProvider && (
+            <ServerProviderNotice
+              builtinDefault={builtinDefault}
+              path={serverConfig?.path}
+            />
+          )}
+          {sharedServer && (
+            <SettingsHelp label={t("sharedServer.learnMore")}>
+              <p>{t("sharedServer.keyAdvice")}</p>
+              <a
+                href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-primary underline underline-offset-2"
+              >
+                {t("sharedServer.keyPolicyLink")}
+              </a>
+            </SettingsHelp>
+          )}
+        </TabsContent>
 
-        <div className="divide-y divide-border border border-border">
-          {provider.serverModels.map((model) => (
-            <ProviderModelRow
-              key={`server:${model.id}`}
-              provider={provider.provider}
-              protocol={model.protocol ?? provider.protocol}
-              modelId={model.model}
-              name={model.name}
-              presetId={model.id}
-              baseUrl={model.baseUrl}
-              capability={model.capability}
-              source="server"
-              sourceLabel={serverLabel}
-            />
-          ))}
-          {localProfile?.models.map((model) => (
-            <ProviderModelRow
-              key={model.ref}
-              provider={provider.provider}
-              protocol={
-                model.protocol ?? localProfile.protocol ?? provider.protocol
-              }
-              modelProtocol={model.protocol}
-              providerProtocol={localProfile.protocol ?? provider.protocol}
-              busy={busy}
-              onProtocolChange={(protocol) =>
-                onPatchLocalProfile((current) => ({
-                  models: current.models.map((entry) =>
-                    entry.ref === model.ref ? { ...entry, protocol } : entry,
-                  ),
-                }))
-              }
-              modelId={model.modelId}
-              name={model.name}
-              presetId={model.ref}
-              baseUrl={localProfile.baseUrl}
-              source="local"
-              sourceLabel={t("settings.localModel", "Local model")}
-              reasoningEffort={model.reasoningEffort}
-              onNameChange={(name) =>
-                onPatchLocalProfile((current) => ({
-                  models: current.models.map((entry) =>
-                    entry.ref === model.ref ? { ...entry, name } : entry,
-                  ),
-                }))
-              }
-              onDuplicate={() => onDuplicateLocalModel(model)}
-              onReasoningChange={(reasoningEffort) =>
-                onPatchLocalProfile((current) => ({
-                  models: current.models.map((entry) =>
-                    entry.ref === model.ref
-                      ? { ...entry, reasoningEffort }
-                      : entry,
-                  ),
-                }))
-              }
-              onDelete={() => onDeleteLocalModel(model.ref)}
-            />
-          ))}
-          {provider.serverModels.length === 0 &&
-            (localProfile?.models.length ?? 0) === 0 && (
-              <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-                {t("settings.noModels", "No models yet")}
-              </div>
-            )}
-        </div>
-      </section>
+        <TabsContent
+          forceMount
+          value="models"
+          hidden={tab !== "models"}
+          className="m-0 flex flex-col gap-3 pt-5 data-[state=inactive]:hidden"
+        >
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || !writable}
+              onClick={onAddModel}
+            >
+              <Plus data-icon="inline-start" />
+              {t("settings.addModel", "Add model")}
+            </Button>
+          </div>
+
+          {modelsOpened && (
+            <div className="divide-y divide-border rounded-lg border border-border">
+              {provider.serverModels.map((model) => (
+                <ProviderModelRow
+                  key={`server:${model.id}`}
+                  provider={provider.provider}
+                  protocol={model.protocol ?? provider.protocol}
+                  modelId={model.model}
+                  name={model.name}
+                  presetId={model.id}
+                  baseUrl={model.baseUrl}
+                  capability={model.capability}
+                  source="server"
+                  sourceLabel={serverLabel}
+                />
+              ))}
+              {localProfile?.models.map((model) => (
+                <ProviderModelRow
+                  key={model.ref}
+                  provider={provider.provider}
+                  protocol={
+                    model.protocol ?? localProfile.protocol ?? provider.protocol
+                  }
+                  modelProtocol={model.protocol}
+                  providerProtocol={localProfile.protocol ?? provider.protocol}
+                  busy={busy}
+                  onProtocolChange={(protocol) =>
+                    onPatchLocalProfile((current) => ({
+                      models: current.models.map((entry) =>
+                        entry.ref === model.ref
+                          ? { ...entry, protocol }
+                          : entry,
+                      ),
+                    }))
+                  }
+                  modelId={model.modelId}
+                  name={model.name}
+                  presetId={model.ref}
+                  baseUrl={localProfile.baseUrl}
+                  source="local"
+                  sourceLabel={t("settings.localModel", "Local model")}
+                  reasoningEffort={model.reasoningEffort}
+                  onNameChange={(name) =>
+                    onPatchLocalProfile((current) => ({
+                      models: current.models.map((entry) =>
+                        entry.ref === model.ref ? { ...entry, name } : entry,
+                      ),
+                    }))
+                  }
+                  onDuplicate={() => onDuplicateLocalModel(model)}
+                  onReasoningChange={(reasoningEffort) =>
+                    onPatchLocalProfile((current) => ({
+                      models: current.models.map((entry) =>
+                        entry.ref === model.ref
+                          ? { ...entry, reasoningEffort }
+                          : entry,
+                      ),
+                    }))
+                  }
+                  onDelete={() => onDeleteLocalModel(model.ref)}
+                />
+              ))}
+              {modelCount === 0 && (
+                <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-xs text-muted-foreground">
+                  {t("settings.noModels", "No models yet")}
+                </p>
+              )}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
 /** Explains why a provider defined outside Settings has no delete action. */
 function ServerProviderNotice({
-  serverConfig,
+  builtinDefault,
+  path = "llm.toml",
 }: {
-  serverConfig?: ServerConfigSource;
+  builtinDefault: boolean;
+  path?: string;
 }) {
   const { t } = useTranslation();
   const openLlmTomlFile = useOpenLlmToml();
-  const isBuiltinDefault = serverConfig?.kind === "builtin";
-  const path = serverConfig?.path ?? "llm.toml";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border border-border/60 bg-muted/20 px-3 py-2">
-      <p className="min-w-0 flex-1 wrap-break-word text-[11px] leading-relaxed text-muted-foreground">
-        {isBuiltinDefault
+    <SettingsHelp label={t("settings.providerSourceHelp")}>
+      <p className="wrap-break-word">
+        {builtinDefault
           ? t("settings.providerBuiltinNotice", { path })
           : t("settings.providerFileNotice", { path })}
       </p>
@@ -317,16 +350,16 @@ function ServerProviderNotice({
         <Button
           variant="outline"
           size="sm"
-          className="shrink-0 text-[11px]"
+          className="mt-2"
           onClick={() => void openLlmTomlFile()}
         >
-          <FileCode className="h-3 w-3" />
-          {isBuiltinDefault
+          <FileCode data-icon="inline-start" />
+          {builtinDefault
             ? t("settings.createLlmToml")
             : t("settings.openLlmToml", "Open llm.toml")}
         </Button>
       )}
-    </div>
+    </SettingsHelp>
   );
 }
 
@@ -376,22 +409,30 @@ function ProviderModelRow({
     <div
       role="group"
       aria-label={name || modelId}
-      className="space-y-2 px-2.5 py-2"
+      className="flex min-w-0 flex-col gap-3 px-3 py-3.5 @lg:px-4"
     >
-      <div className="flex min-w-0 items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-mono text-xs" title={modelId}>
-            {name || modelId}
+      <div className="grid min-w-0 gap-2 @lg:grid-cols-[minmax(0,1fr)_auto] @lg:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div
+              className="min-w-0 wrap-break-word font-medium"
+              title={modelId}
+            >
+              {name || modelId}
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {sourceLabel}
+            </Badge>
           </div>
           {name && name !== modelId && (
             <div
-              className="truncate font-mono text-[10px] text-muted-foreground"
+              className="truncate font-mono text-xs text-muted-foreground"
               title={modelId}
             >
               {modelId}
             </div>
           )}
-          <p className="font-mono text-[10px] text-muted-foreground break-all">
+          <p className="mt-1 wrap-anywhere font-mono text-xs text-muted-foreground">
             {protocol}
             {baseUrl ? ` · ${baseUrl}` : ""}
           </p>
@@ -402,68 +443,63 @@ function ProviderModelRow({
             baseCapability={capability}
           />
         </div>
-        <Badge variant="outline" className="shrink-0 text-[9px]">
-          {sourceLabel}
-        </Badge>
-        {onDuplicate && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            disabled={busy || !writable}
-            onClick={onDuplicate}
-            aria-label={t("settings.duplicateModelConfiguration")}
-            title={t("settings.duplicateModelConfiguration")}
-          >
-            <Copy className="h-3 w-3" />
-          </Button>
-        )}
-        {onDelete && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            disabled={busy || !writable}
-            onClick={async () => {
-              if (
-                await requestConfirm({
-                  title: t("settings.deleteModelTitle"),
-                  message: t("settings.deleteModelConfirm"),
-                  subject: name || modelId,
-                  confirmLabel: t("common.delete"),
-                  cancelLabel: t("common.cancel"),
-                  destructive: true,
-                })
-              )
-                onDelete();
-            }}
-            aria-label={t("common.delete", "Delete")}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <PingButton
+            target={
+              source === "local"
+                ? { kind: "model", modelRef: presetId }
+                : { kind: "preset", presetId }
+            }
+          />
+          {onDuplicate && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={busy || !writable}
+              onClick={onDuplicate}
+              aria-label={t("settings.duplicateModelConfiguration")}
+              title={t("settings.duplicateModelConfiguration")}
+            >
+              <Copy />
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={busy || !writable}
+              onClick={async () => {
+                if (
+                  await requestConfirm({
+                    title: t("settings.deleteModelTitle"),
+                    message: t("settings.deleteModelConfirm"),
+                    subject: name || modelId,
+                    confirmLabel: t("common.delete"),
+                    cancelLabel: t("common.cancel"),
+                    destructive: true,
+                  })
+                )
+                  onDelete();
+              }}
+              aria-label={t("common.delete", "Delete")}
+            >
+              <Trash2 />
+            </Button>
+          )}
+        </div>
       </div>
-      {onProtocolChange && (
-        <ProtocolSelect
-          provider={provider}
-          inheritedProtocol={providerProtocol}
-          disabled={!writable}
-          value={modelProtocol ?? ""}
-          onChange={(value) => onProtocolChange(value || undefined)}
-          inheritLabel={t("settings.inheritProviderProtocol")}
-        />
-      )}
       {onReasoningChange && (
-        <details className="rounded border border-border p-2">
-          <summary className="cursor-pointer text-xs text-muted-foreground">
-            {t("settings.modelReasoningDefault")} ·{" "}
-            {t(
-              reasoningEffort
-                ? `settings.reasoningLevel.${reasoningEffort}`
-                : "settings.reasoningTaskDefault",
-            )}
+        <details className="group">
+          <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-sm py-1 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+            <ChevronRight
+              aria-hidden="true"
+              className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
+            />
+            {t("settings.providerModelOptions")}
           </summary>
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 grid gap-4 border-t border-border pt-3 @lg:grid-cols-2">
             {onNameChange && (
-              <label className="block space-y-1 text-xs">
+              <label className="flex min-w-0 flex-col gap-1.5 text-[13px] font-medium">
                 <span>{t("settings.modelConfigurationName")}</span>
                 <input
                   disabled={!writable}
@@ -482,14 +518,24 @@ function ProviderModelRow({
                   onKeyDown={(event) => {
                     if (event.key === "Enter") event.currentTarget.blur();
                   }}
-                  className="w-full border border-border bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+                  className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm font-normal outline-none focus:ring-1 focus:ring-primary"
                 />
               </label>
             )}
             {nameDraft.conflict && (
               <SettingsDraftConflict onReload={nameDraft.reset} />
             )}
-            <fieldset disabled={!writable}>
+            {onProtocolChange && (
+              <ProtocolSelect
+                provider={provider}
+                inheritedProtocol={providerProtocol}
+                disabled={!writable}
+                value={modelProtocol ?? ""}
+                onChange={(value) => onProtocolChange(value || undefined)}
+                inheritLabel={t("settings.inheritProviderProtocol")}
+              />
+            )}
+            <fieldset disabled={!writable} className="col-span-full min-w-0">
               <ModelReasoningSettings
                 model={modelId}
                 provider={provider}
@@ -501,13 +547,6 @@ function ProviderModelRow({
           </div>
         </details>
       )}
-      <PingButton
-        target={
-          source === "local"
-            ? { kind: "model", modelRef: presetId }
-            : { kind: "preset", presetId }
-        }
-      />
     </div>
   );
 }
@@ -528,15 +567,17 @@ function ModelCapabilitySummary({
   const capability = resolveDisplayCapability(result, baseCapability);
 
   if (result === undefined && !capability) {
-    return <div className="mt-0.5 text-[9px] text-muted-foreground">…</div>;
+    return null;
   }
   const supportsImage = capability?.input.includes("image");
   return (
-    <div className="mt-0.5 flex flex-wrap gap-x-2 text-[9px] text-muted-foreground">
+    <div className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
       <span>
-        {result?.found
+        {result?.found && result.matchedModelId !== modelId
           ? result.matchedModelId
-          : capability?.contextWindow || capability?.maxOutputTokens
+          : result?.found ||
+              capability?.contextWindow ||
+              capability?.maxOutputTokens
             ? null
             : t("settings.modelLimitsUnknown", {
                 defaultValue: "Model limits unknown",

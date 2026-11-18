@@ -15,63 +15,36 @@ export function DebugToolbar({
   onFilterCategoryChange: (category: EventCategory | null) => void;
 }) {
   const { t } = useTranslation();
+  const views = [
+    { id: "traces", label: t("debugger.traces") },
+    { id: "data", label: t("debugger.sessionData") },
+    { id: "cost", label: t("debugger.cost.tab", "Cost") },
+    { id: "plugins", label: t("debugger.plugins.tab", "Plugins") },
+  ] as const;
 
   return (
-    <div className="ui-rail flex shrink-0 flex-col gap-2 border-b border-(--rule-color) p-2 sm:min-h-12 sm:flex-row sm:items-center sm:px-4">
-      <div className="grid shrink-0 grid-cols-4 gap-1 sm:flex sm:border-r sm:border-(--rule-color) sm:pr-3">
-        <button
-          onClick={() => onDebugViewChange("traces")}
-          aria-pressed={debugView === "traces"}
-          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
-            debugView === "traces"
-              ? "border-primary/40 bg-primary/10 text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("debugger.traces")}
-        </button>
-        <button
-          onClick={() => onDebugViewChange("data")}
-          aria-pressed={debugView === "data"}
-          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
-            debugView === "data"
-              ? "border-primary/40 bg-primary/10 text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("debugger.sessionData")}
-        </button>
-        <button
-          onClick={() => onDebugViewChange("cost")}
-          aria-pressed={debugView === "cost"}
-          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
-            debugView === "cost"
-              ? "border-primary/40 bg-primary/10 text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("debugger.cost.tab", "Cost")}
-        </button>
-        <button
-          onClick={() => onDebugViewChange("plugins")}
-          aria-pressed={debugView === "plugins"}
-          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
-            debugView === "plugins"
-              ? "border-primary/40 bg-primary/10 text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("debugger.plugins.tab", "Plugins")}
-        </button>
+    <div className="ui-workspace-rule ui-workspace-content ui-rail flex shrink-0 flex-col gap-2 lg:flex-row lg:items-center">
+      <div className="flex shrink-0 flex-wrap gap-x-1">
+        {views.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onDebugViewChange(id)}
+            aria-pressed={debugView === id}
+            className="ui-tab-item wrap-anywhere px-3 py-1.5 text-sm font-medium transition-colors"
+          >
+            {label}
+          </button>
+        ))}
       </div>
       {debugView === "traces" && (
-        <div className="relative flex min-w-0 items-center gap-2">
+        <div className="relative flex min-w-0 items-center gap-2 py-1">
           <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain pr-8">
             <button
               onClick={() => onFilterCategoryChange(null)}
               aria-pressed={filterCategory === null}
-              className={`min-h-8 shrink-0 border px-3 text-xs uppercase tracking-wider transition-colors ${
+              className={`min-h-8 shrink-0 rounded-(--radius-control) border px-2.5 text-xs transition-colors ${
                 filterCategory === null
                   ? "border-primary/40 bg-primary/10 text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -91,7 +64,7 @@ export function DebugToolbar({
                       )
                     }
                     aria-pressed={filterCategory === category}
-                    className={`flex min-h-8 shrink-0 items-center gap-1 border px-3 text-xs uppercase tracking-wider transition-colors ${
+                    className={`flex min-h-8 shrink-0 items-center gap-1 rounded-(--radius-control) border px-2.5 text-xs transition-colors ${
                       filterCategory === category
                         ? `${style.border} ${style.bg} ${style.color}`
                         : "border-transparent text-muted-foreground hover:text-foreground"

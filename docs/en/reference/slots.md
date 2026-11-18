@@ -43,8 +43,8 @@ Common text role names are `story` (story text), `plugin` (plugin tasks), `utili
 
 **If there is no `llm.toml`**, the server uses a built-in `story` role:
 
-- The default is `deepseek-v4-flash` from DeepSeek.
-- If `DEFAULT_BASE_URL` is set, the server uses that OpenAI-compatible address instead. The provider name is `default`, the key is read from `DEFAULT_API_KEY`, and the model is read from `DEFAULT_MODEL`. If `DEFAULT_MODEL` is not set, it is still `deepseek-v4-flash`.
+- The default is `deepseek-flash` at `https://api.deepseek.com`.
+- If `DEFAULT_BASE_URL` is set, the server uses that OpenAI-compatible address instead. The provider name is `default`, the key is read from `DEFAULT_API_KEY`, and the model is read from `DEFAULT_MODEL`. If `DEFAULT_MODEL` is unset, it uses `deepseek-flash`.
 
 In an environment without a DeepSeek key (for example, cloud tests), set these three variables. You can then use any provider without writing `llm.toml`.
 

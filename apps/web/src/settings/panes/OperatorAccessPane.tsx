@@ -56,12 +56,12 @@ export function OperatorAccessPane({
 
   return (
     <div className="space-y-5">
-      <div className="border border-border p-4 space-y-2">
+      <div className="settings-group max-w-2xl">
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-medium">
+              <h3 className="settings-section-title">
                 {t("settings.operatorAccessTitle")}
               </h3>
               <Badge variant={configured ? "default" : "outline"}>
@@ -70,18 +70,15 @@ export function OperatorAccessPane({
                   : t("settings.operatorAccessUnconfigured")}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               {t("settings.operatorAccessDescription")}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label
-          htmlFor="operator-token"
-          className="text-xs uppercase tracking-widest text-muted-foreground"
-        >
+      <div className="max-w-2xl space-y-2">
+        <Label htmlFor="operator-token" className="text-sm font-medium">
           {t("settings.operatorTokenLabel")}
         </Label>
         <div className="flex gap-1">
@@ -93,7 +90,7 @@ export function OperatorAccessPane({
             value={token}
             onChange={(event) => setToken(event.target.value)}
             placeholder={t("settings.operatorTokenPlaceholder")}
-            className="flex-1 min-w-0 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
           />
           <Button
             type="button"

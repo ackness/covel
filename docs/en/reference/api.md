@@ -354,7 +354,7 @@ Settings in the interface are only override values sent along with the request. 
 
 **Differences on hosted tiers (`demo` / `commercial`)**
 
-- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source`, `envKeyOverrides`, the load `error`, or slot `baseUrl` values. `GET /api/presets` also omits `baseUrl`. Only a request with the operator token can see these fields.
+- The public `GET /api/llm-config` returns the model catalog the client needs at startup and omits `source`, `envKeyOverrides`, and the load `error`. `GET /api/llm-config` and `GET /api/presets` expose `baseUrl` only when the active built-in configuration uses the provider's official remote endpoint. Operator requests can read diagnostics and custom endpoints.
 - The public `GET /api/config/info` returns `isDesktop: false` and `requiresAuth: true`, and all path fields are `null`. A request with the operator token gets the full deployment paths.
 - Responses on your own `self` machine and in the desktop app are not affected.
 

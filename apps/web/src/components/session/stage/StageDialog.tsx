@@ -22,7 +22,6 @@ import {
 } from "@/lib/segment-templates.js";
 
 export interface StageDialogProps {
-  readonly inline?: boolean;
   readonly sessionId?: string;
   readonly message: Pick<StreamMessage, "id" | "content" | "segments">;
   readonly autoPlay: boolean;
@@ -30,7 +29,6 @@ export interface StageDialogProps {
 }
 
 export function StageDialog({
-  inline = false,
   sessionId,
   message,
   autoPlay,
@@ -121,85 +119,79 @@ export function StageDialog({
   }, [autoPlay, index, message.id, navigationCount]);
   return (
     <section
-      className={
-        inline
-          ? "relative"
-          : "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-4"
-      }
+      className="ui-stage-panel relative w-full rounded-(--radius-card) p-4"
       data-testid="stage-dialog"
     >
-      <div className="ui-stage-panel pointer-events-auto w-full max-w-3xl rounded-(--radius-card) p-4">
-        <div
-          className="max-h-52 overflow-y-auto overscroll-contain"
-          data-stage-reader=""
+      <div
+        className="max-h-52 overflow-y-auto overscroll-contain"
+        data-stage-reader=""
+      >
+        <Reveal
+          revealKey={message.id}
+          {...admission}
+          {...policy}
+          active={
+            admission.active &&
+            !reducedMotion &&
+            !(reader.id === message.id && reader.manual)
+          }
         >
-          <Reveal
-            revealKey={message.id}
-            {...admission}
-            {...policy}
-            active={
-              admission.active &&
-              !reducedMotion &&
-              !(reader.id === message.id && reader.manual)
-            }
-          >
-            {paragraphs.map((paragraph, position) => {
-              const speaker = structured
-                ? (speakers?.[position] ?? undefined)
-                : undefined;
-              return (
-                <article
-                  key={position}
-                  ref={(node) => {
-                    if (node) refs.current.set(position, node);
-                    else refs.current.delete(position);
-                  }}
-                  data-stage-paragraph={position}
-                  data-reader-current={index === position}
-                  className="py-1.5 text-sm leading-relaxed"
-                >
-                  {speaker && (
-                    <span
-                      data-testid="stage-dialog-speaker"
-                      className="font-semibold text-(--accent-primary)"
-                    >
-                      {speaker}
-                    </span>
-                  )}
-                  <Markdown themeSessionId={sessionId} themePart="dialogue">
-                    {paragraph}
-                  </Markdown>
-                </article>
-              );
-            })}
-          </Reveal>
-        </div>
-        {navigationCount > 1 && (
-          <nav
-            data-covel-host-controls=""
-            className="mt-2 flex flex-wrap gap-3 text-xs"
-            aria-label={t("stage.readAgain")}
-          >
-            <button
-              type="button"
-              disabled={index === 0}
-              onClick={() => move(index - 1)}
-            >
-              {t("stage.previousParagraph")}
-            </button>
-            <button
-              type="button"
-              disabled={index === navigationCount - 1}
-              onClick={() => move(index + 1)}
-            >
-              {t("stage.nextParagraph")}
-            </button>
-            <button type="button" onClick={() => move(0)}>
-              {t("stage.readAgain")}
-            </button>
-          </nav>
-        )}
+          {paragraphs.map((paragraph, position) => {
+            const speaker = structured
+              ? (speakers?.[position] ?? undefined)
+              : undefined;
+            return (
+              <article
+                key={position}
+                ref={(node) => {
+                  if (node) refs.current.set(position, node);
+                  else refs.current.delete(position);
+                }}
+                data-stage-paragraph={position}
+                data-reader-current={index === position}
+                className="py-1.5 text-sm leading-relaxed"
+              >
+                {speaker && (
+                  <span
+                    data-testid="stage-dialog-speaker"
+                    className="font-semibold text-(--accent-primary)"
+                  >
+                    {speaker}
+                  </span>
+                )}
+                <Markdown themeSessionId={sessionId} themePart="dialogue">
+                  {paragraph}
+                </Markdown>
+              </article>
+            );
+          })}
+        </Reveal>
       </div>
+      {navigationCount > 1 && (
+        <nav
+          data-covel-host-controls=""
+          className="mt-2 flex flex-wrap gap-3 text-xs"
+          aria-label={t("stage.readAgain")}
+        >
+          <button
+            type="button"
+            disabled={index === 0}
+            onClick={() => move(index - 1)}
+          >
+            {t("stage.previousParagraph")}
+          </button>
+          <button
+            type="button"
+            disabled={index === navigationCount - 1}
+            onClick={() => move(index + 1)}
+          >
+            {t("stage.nextParagraph")}
+          </button>
+          <button type="button" onClick={() => move(0)}>
+            {t("stage.readAgain")}
+          </button>
+        </nav>
+      )}
     </section>
   );
 }

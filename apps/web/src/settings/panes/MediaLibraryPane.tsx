@@ -285,7 +285,7 @@ export function MediaLibraryPane() {
         <div
           role="group"
           aria-label={t("mediaLibrary.kindFilter")}
-          className="inline-flex bg-muted p-1"
+          className="flex max-w-full flex-wrap rounded-md bg-muted p-1"
         >
           {KIND_FILTERS.map((value) => (
             <button
@@ -338,6 +338,7 @@ export function MediaLibraryPane() {
         <Button
           size="sm"
           variant="outline"
+          className="h-auto max-w-full py-1.5 text-start whitespace-normal"
           disabled={busy || selectableOnPage.length === 0}
           onClick={() =>
             setSelection((current) => togglePageSelection(current, items))
@@ -350,7 +351,7 @@ export function MediaLibraryPane() {
         <Button
           size="sm"
           variant="outline"
-          className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="h-auto max-w-full border-destructive/50 py-1.5 text-start whitespace-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
           disabled={busy || selection.size === 0}
           onClick={() => void deleteSelected()}
         >
@@ -363,7 +364,7 @@ export function MediaLibraryPane() {
         <Button
           size="sm"
           variant="outline"
-          className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="h-auto max-w-full border-destructive/50 py-1.5 text-start whitespace-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
           disabled={busy || !page || page.totals.unusedCount === 0}
           onClick={() => void deleteAllUnused()}
         >
@@ -438,7 +439,7 @@ export function MediaLibraryPane() {
           if (!open) setPreview(null);
         }}
       >
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="ui-scroll max-h-[90dvh] max-w-6xl overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="truncate text-sm">
               {preview ? itemName(t, preview) : ""}
@@ -451,7 +452,7 @@ export function MediaLibraryPane() {
             <img
               src={preview.url}
               alt={itemName(t, preview)}
-              className="mx-auto block max-h-[75vh] max-w-full object-contain"
+              className="mx-auto block max-h-[75dvh] max-w-full object-contain"
             />
           )}
         </DialogContent>
@@ -567,10 +568,10 @@ function MediaTileUsage({
         {shown.map((id) => {
           const session = sessions.get(id);
           return (
-            <li key={id} className="truncate">
+            <li key={id}>
               <a
                 href={`/session?sid=${encodeURIComponent(id)}`}
-                className="text-foreground underline-offset-2 hover:underline"
+                className="block wrap-break-word text-foreground underline-offset-2 hover:underline"
               >
                 {session ? labelOf(session) : id}
               </a>

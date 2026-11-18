@@ -21,6 +21,26 @@
     color: var(--color-muted-foreground);
   }
 
+  .settings-workspace {
+    font-family: var(--font-sans);
+  }
+
+  .settings-group {
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: max(0.5rem, var(--radius-control));
+    background: var(--color-card);
+    padding: 1rem;
+  }
+
+  .settings-section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--color-foreground);
+    overflow-wrap: anywhere;
+  }
+
   .ui-title {
     font-family: var(--title-font-family);
     font-style: var(--title-font-style);
@@ -336,6 +356,22 @@
     contain-intrinsic-size: auto 90px;
   }
 
+  .debug-pane {
+    container-type: inline-size;
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: var(--ui-gap-section) var(--ui-gutter);
+  }
+
+  .debug-card {
+    border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+    border-radius: var(--radius-control);
+    background: var(--surface-rail);
+  }
+
   /* Long debugger and media lists use the same browser-native render skipping. */
   .debug-turn-card {
     content-visibility: auto;
@@ -408,16 +444,6 @@
   /* Composer */
   .ui-composer-frame {
     max-width: var(--composer-max-width);
-  }
-
-  .ui-composer-input {
-    border-radius: var(--radius-control);
-    background: var(--surface-inset);
-    border: var(--rule-thickness) var(--rule-style) var(--rule-color);
-  }
-
-  .ui-composer-submit {
-    border-radius: var(--radius-control);
   }
 
   /* Choice — options the player picks between (catalog `ChoiceList` /

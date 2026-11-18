@@ -270,8 +270,8 @@ export function DesktopPane() {
         </div>
       )}
 
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title">
           {t("settings.desktopDataLocations")}
         </h3>
         <div className="space-y-2 text-xs">
@@ -321,8 +321,8 @@ export function DesktopPane() {
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title flex items-center gap-1.5">
           <Network className="w-3.5 h-3.5" />
           {t("settings.desktopProxy")}
         </h3>
@@ -408,8 +408,8 @@ export function DesktopPane() {
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title">
           {t("settings.desktopServer")}
         </h3>
         <div className="text-xs text-muted-foreground">
@@ -450,8 +450,8 @@ export function DesktopPane() {
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title">
           {t("settings.desktopTutorial")}
         </h3>
         <div className="text-xs text-muted-foreground">
@@ -467,10 +467,8 @@ export function DesktopPane() {
         </Button>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {t("settings.desktopAbout")}
-        </h3>
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title">{t("settings.desktopAbout")}</h3>
         <div className="space-y-1 text-xs">
           <InfoRow
             label={t("settings.desktopVersion")}

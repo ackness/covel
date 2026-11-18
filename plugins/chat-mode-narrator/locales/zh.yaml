@@ -8,7 +8,7 @@ PLUGIN.md:
     settings:
       - key: perspective
         label: 叙述视角
-        description: 选择故事怎样称呼你的角色。其他角色仍按自己的口吻说话。
+        description: 决定旁白如何称呼你的角色。仅在本局使用「聊天式讲述」时生效。
         options:
           - label: 我（“我推开了门。”）
           - label: 你（“你推开了门。”）

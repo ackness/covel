@@ -253,9 +253,7 @@ describe("LLM settings regressions", () => {
       ).value,
     ).toBe("1");
     expect(apiMocks.setSlotConfig).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Reset model choice" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset model choice" }));
     expect(apiMocks.setSlotConfig).toHaveBeenCalledWith({
       fast: { presetId: "kept" },
     });
@@ -405,6 +403,9 @@ describe("LLM settings regressions", () => {
         onDeleteLocalProvider={() => undefined}
       />,
     );
+    fireEvent.keyDown(screen.getByRole("tab", { name: /^Models\b/ }), {
+      key: "Enter",
+    });
     expect(
       within(
         screen.getByRole("group", { name: "Local configuration" }),
@@ -449,6 +450,9 @@ describe("LLM settings regressions", () => {
         {...handlers}
       />,
     );
+    fireEvent.keyDown(screen.getByRole("tab", { name: /^Models\b/ }), {
+      key: "Enter",
+    });
     expect(screen.getAllByText("Built-in default")).toHaveLength(2);
     expect(screen.queryByText("From llm.toml")).toBeNull();
     expect(

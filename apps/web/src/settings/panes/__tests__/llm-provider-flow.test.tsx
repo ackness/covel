@@ -24,6 +24,17 @@ import i18n from "@/i18n";
 import { registerLlmSettings } from "../../registry/llm.js";
 import { LlmPresetsPane } from "../LlmPresetsPane.js";
 
+function openModels() {
+  fireEvent.keyDown(screen.getByRole("tab", { name: /^Models\b/ }), {
+    key: "Enter",
+  });
+}
+
+function openModelSettings() {
+  openModels();
+  fireEvent.click(screen.getByText("Model settings", { selector: "summary" }));
+}
+
 const mocks = vi.hoisted(() => ({
   store: null as unknown as SettingsStoreApi,
   lookup: vi.fn(),
@@ -248,6 +259,7 @@ describe("provider configuration flow", () => {
   });
   it("has one model test and queries capabilities with the configured protocol", async () => {
     render(<LlmPresetsPane />);
+    openModels();
     expect(screen.getAllByRole("button", { name: "Test model" })).toHaveLength(
       1,
     );
@@ -271,6 +283,7 @@ describe("provider configuration flow", () => {
       maxOutputTokens: 8192,
     };
     render(<LlmPresetsPane />);
+    openModels();
     expect(await screen.findByText("65,536 ctx")).toBeTruthy();
     expect(screen.queryByText("Model limits unknown")).toBeNull();
   });
@@ -282,13 +295,13 @@ describe("provider configuration flow", () => {
       name: i18n.t("settings.providerConnections"),
     });
     expect(aside.parentElement?.className).toContain("grid-cols-1");
-    expect(main.className).toContain("hidden lg:block");
+    expect(main.className).toContain("hidden @2xl:block");
     fireEvent.click(screen.getByRole("button", { name: /example.*1 model/ }));
-    expect(aside.className).toContain("hidden lg:flex");
+    expect(aside.className).toContain("hidden @2xl:flex");
     expect(main.className).not.toContain("hidden");
     fireEvent.click(screen.getByRole("button", { name: "All providers" }));
     expect(aside.className).not.toContain("hidden");
-    expect(main.className).toContain("hidden lg:block");
+    expect(main.className).toContain("hidden @2xl:block");
   });
 });
 
@@ -381,11 +394,7 @@ it.each([
     await mocks.store.set("llm.providers", [profile]);
     render(<LlmPresetsPane />);
     fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
-    if (field === "model name") {
-      fireEvent.click(
-        screen.getByText(/Model reasoning default/, { selector: "summary" }),
-      );
-    }
+    if (field === "model name") openModelSettings();
     const input = screen.getByRole("textbox", {
       name:
         field === "endpoint"
@@ -440,11 +449,7 @@ it.each([
     await mocks.store.set("llm.providers", [profile]);
     render(<LlmPresetsPane />);
     fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
-    if (field === "model name") {
-      fireEvent.click(
-        screen.getByText(/Model reasoning default/, { selector: "summary" }),
-      );
-    }
+    if (field === "model name") openModelSettings();
     const input = screen.getByRole("textbox", {
       name:
         field === "endpoint"
@@ -560,6 +565,7 @@ it.each(["provider", "model"])(
     await mocks.store.set("keys.fixture", "saved-secret");
     render(<LlmPresetsPane />);
     fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
+    if (kind === "model") openModels();
     const profileBefore = mocks.store.get("llm.providers");
     const slotsBefore = mocks.store.get("llm.slotConfig");
     vi.mocked(adapter.save).mockClear();

@@ -10,7 +10,7 @@ import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
-import { Check, Download, Palette, Trash2, Upload } from "lucide-react";
+import { Check, FileInput, FileOutput, Palette, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useSetting, useSettingsStore } from "@/settings/use-settings.js";
 import {
@@ -183,7 +183,7 @@ export function ThemeManagerWidget() {
       )}
 
       <div className="ui-section pb-4">
-        <div className="ui-section-head">
+        <div className="ui-section-head flex-wrap">
           <Palette className="w-4 h-4 opacity-60" />
           <span className="ui-section-title">
             {t("settings.themeLibraryTitle")}
@@ -191,11 +191,11 @@ export function ThemeManagerWidget() {
           <Button
             size="sm"
             variant="outline"
-            className="ml-auto shrink-0"
+            className="ml-auto h-auto max-w-full py-1.5 whitespace-normal"
             disabled={busy || !writable}
             onClick={() => fileRef.current?.click()}
           >
-            <Upload className="w-3.5 h-3.5 mr-1.5" />
+            <FileInput data-icon="inline-start" />
             {t("settings.themeImportButton")}
           </Button>
         </div>
@@ -290,7 +290,7 @@ html[data-theme="my-theme"].dark {
                       onClick={() => handleExport(theme.id)}
                       aria-label={t("settings.export")}
                     >
-                      <Download className="w-4 h-4" />
+                      <FileOutput />
                     </Button>
                     <Button
                       size="icon-sm"

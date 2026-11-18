@@ -74,14 +74,18 @@ for (const width of [1512, 390]) {
       await expect(page.getByTestId("game-composer")).toBeVisible();
       await navigateTopbar(page, "调试", width);
       await expect(page).toHaveURL(new RegExp(`/debug\\?sid=${fixture.id}`));
-      await expect(page.getByText("§ TRACE", { exact: true })).toBeVisible();
+      const debuggerHeading = page.getByRole("heading", {
+        name: "追踪检查器",
+        exact: true,
+      });
+      await expect(debuggerHeading).toBeVisible();
       await navigateTopbar(page, "设置", width);
       await expect(
         page.getByRole("dialog", { name: "设置", exact: true }),
       ).toBeVisible();
       await page.keyboard.press("Escape");
       await navigateTopbar(page, "调试", width);
-      await expect(page.getByText("§ TRACE", { exact: true })).toBeVisible();
+      await expect(debuggerHeading).toBeVisible();
       // There is no Images entry; the panel opens through its deep link.
       await page.goto(`/session?sid=${fixture.id}&panel=images`);
       await expect(

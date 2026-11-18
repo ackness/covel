@@ -128,6 +128,8 @@ The settings dialog has five groups. Each setting has one editor; everywhere els
 
 The desktop app adds a "Desktop" page. It no longer has editors for `llm.toml` and `keys.env`, only "Open the config folder".
 
+Settings shows a sidebar on wide screens and a section picker at the top on narrow screens. Use search to find a setting and expand **Details** where offered.
+
 Setting keys and stored values do not change with the grouping. A setting belongs to one page and has an editor only there. A plugin's page is titled with its display name, never its ID.
 
 Where other screens point:
@@ -278,6 +280,8 @@ The debug page reads session data at three moments: the first selection of a ses
 ## Current provider configuration
 
 `llm.providers` is the only store of model configuration.
+
+**Connection & key** holds the provider's API endpoint, protocol and key. Use **Models** to add, remove and test models. Expand **Model settings** for per-model overrides.
 
 - Startup and reads neither migrate from `llm.customPresets` nor fall back to it. The old navigation aliases, and the preset-write APIs that had no production caller, no longer exist.
 - Affected development model configurations and credentials must be created again through the current provider UI. Old entries are not deleted automatically.
