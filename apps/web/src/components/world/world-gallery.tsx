@@ -11,7 +11,7 @@ import {
 import type { I18nText } from "@covel/shared";
 import { text } from "@/components/world/editor-helpers.js";
 import { useInView } from "@/hooks/use-in-view.js";
-import { worldCoverRef } from "@/lib/world-visuals.js";
+import { applyFallbackWorldImage, worldCoverRef } from "@/lib/world-visuals.js";
 
 /**
  * The art a world package ships — scenes and character portraits — shown on
@@ -189,6 +189,7 @@ export function ShowcaseBackdrop({
         <img
           key={settled}
           src={settled}
+          onError={applyFallbackWorldImage}
           alt=""
           aria-hidden="true"
           className="absolute inset-0 h-full w-full object-cover"
@@ -198,6 +199,7 @@ export function ShowcaseBackdrop({
       <img
         key={current}
         src={current}
+        onError={applyFallbackWorldImage}
         alt=""
         aria-hidden="true"
         width={1536}

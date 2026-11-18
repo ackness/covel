@@ -266,7 +266,7 @@
   }
 
   .ui-world-thumb {
-    border: 1px solid rgb(255 255 255 / 0.2);
+    border: 2px solid rgb(255 255 255 / 0.2);
   }
 
   .ui-world-thumb:hover {
@@ -274,7 +274,12 @@
   }
 
   .ui-world-thumb[aria-pressed="true"] {
-    border: 2px solid var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .ui-world-thumb:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -4px;
   }
 
   /* A strip of covers longer than its row snaps to a cover when it scrolls. */

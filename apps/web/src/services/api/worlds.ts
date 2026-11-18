@@ -14,7 +14,7 @@ import {
   type WorldPluginPlan,
   type WorldWireRecord,
 } from "@covel/shared";
-import { request, requestResponse } from "./request.js";
+import { request, requestResponse, type RequestOptions } from "./request.js";
 import { getSettings } from "@/settings/store";
 import { WORLD_AUTHORING_IDLE_TIMEOUT_SETTING } from "@/settings/registry/core.js";
 import { pruneMissingSessionCredentials } from "./session-credential-cleanup.js";
@@ -41,8 +41,15 @@ function mapWorldRecord(value: unknown): WorldRecord {
 }
 
 /** Every world as a summary; the full record is `getWorld`. */
-export async function listWorlds(): Promise<WorldSummary[]> {
-  const res = await request<{ items: unknown[] }>("/api/worlds");
+type WorldReadOptions = Pick<
+  RequestOptions,
+  "silentErrors" | "retry" | "signal"
+>;
+
+export async function listWorlds(
+  options?: WorldReadOptions,
+): Promise<WorldSummary[]> {
+  const res = await request<{ items: unknown[] }>("/api/worlds", options);
   return res.items.map((item) => {
     const w = worldSummarySchema.parse(item);
     return {
@@ -55,7 +62,7 @@ export async function listWorlds(): Promise<WorldSummary[]> {
 
 export async function getWorld(
   id: string,
-  options?: { silentErrors?: boolean },
+  options?: WorldReadOptions,
 ): Promise<WorldRecord> {
   const raw = await request<unknown>(
     `/api/worlds/${encodeURIComponent(id)}`,

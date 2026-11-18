@@ -90,13 +90,18 @@ interface PendingCommitRecord {
   stagedAt: string;
 }
 
+interface WorldInitialization {
+  key: "worlds";
+  catalogIds?: string[];
+}
+
 class BrowserVaultDatabase extends Dexie {
   checkpoints!: Table<CheckpointRecord, string>;
   heads!: Table<BrowserVaultSession, string>;
   commits!: Table<CommitRecord, string>;
   pendingCommits!: Table<PendingCommitRecord, string>;
   worlds!: Table<WorldRecord, string>;
-  initialization!: Table<{ key: string }, string>;
+  initialization!: Table<WorldInitialization, string>;
 
   constructor(name: string) {
     super(name);
@@ -115,6 +120,12 @@ class BrowserVaultDatabase extends Dexie {
           "Unsupported browser vault version; recreate development data",
         );
       });
+    this.on("versionchange", (event) => {
+      if (event.newVersion === null) {
+        this.close();
+        return false;
+      }
+    });
   }
 }
 
@@ -441,26 +452,46 @@ export class BrowserVault {
     return worlds.map((world) => structuredClone(world));
   }
 
-  async initializeWorlds(worlds: readonly WorldRecord[]): Promise<void> {
-    const seeds = structuredClone(worlds);
+  async importCatalogWorlds(
+    worlds: readonly WorldRecord[],
+    knownIds: readonly string[],
+  ): Promise<void> {
     await this.db.transaction(
       "rw",
       this.db.worlds,
       this.db.initialization,
       async () => {
-        if (await this.db.initialization.get("worlds")) return;
-        if ((await this.db.worlds.count()) === 0) {
-          for (const world of seeds) await this.db.worlds.put(world);
+        const initialization = await this.getWorldInitialization();
+        const imported = new Set(initialization?.catalogIds);
+        for (const world of worlds) {
+          if (
+            !imported.has(world.id) &&
+            !(await this.db.worlds.get(world.id))
+          ) {
+            await this.db.worlds.put(world);
+          }
+          imported.add(world.id);
         }
-        // The marker commits with the complete seed set, including when two
-        // documents initialize concurrently. Failed writes leave both absent.
-        await this.db.initialization.put({ key: "worlds" });
+        for (const id of knownIds) imported.add(id);
+        if (
+          !initialization?.catalogIds ||
+          imported.size !== initialization.catalogIds.length
+        ) {
+          await this.db.initialization.put({
+            key: "worlds",
+            catalogIds: [...imported],
+          });
+        }
       },
     );
   }
 
-  async hasInitializedWorlds(): Promise<boolean> {
-    return (await this.db.initialization.get("worlds")) !== undefined;
+  getWorldInitialization(): Promise<WorldInitialization | undefined> {
+    return this.db.initialization.get("worlds");
+  }
+
+  listWorldIds(): Promise<string[]> {
+    return this.db.worlds.toCollection().primaryKeys();
   }
 
   async getWorld(id: string): Promise<WorldRecord | null> {
@@ -540,9 +571,14 @@ export class BrowserVault {
     this.db.close();
   }
 
-  async deleteDatabase(): Promise<void> {
+  async deleteDatabase(onBlocked?: () => void): Promise<void> {
+    if (onBlocked) this.db.on("blocked", onBlocked);
     this.db.close();
-    await this.db.delete();
+    try {
+      await this.db.delete();
+    } finally {
+      if (onBlocked) this.db.on("blocked").unsubscribe(onBlocked);
+    }
   }
 }
 

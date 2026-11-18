@@ -1,5 +1,6 @@
 import { worldAccentColorSchema } from "@covel/shared";
 import type { WorldRecord } from "@/services/api.js";
+import type { SyntheticEvent } from "react";
 
 export interface WorldVisual {
   image: string;
@@ -7,6 +8,14 @@ export interface WorldVisual {
 }
 
 const DEFAULT_IMAGE = "/visuals/backgrounds/studio-shell.webp";
+
+export function applyFallbackWorldImage({
+  currentTarget,
+}: SyntheticEvent<HTMLImageElement>): void {
+  if (currentTarget.getAttribute("src") !== DEFAULT_IMAGE) {
+    currentTarget.src = DEFAULT_IMAGE;
+  }
+}
 
 /** `media/<dir>/<file>` of a declared cover, or null when it is not that shape. */
 function coverParts(

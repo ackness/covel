@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { ArrowRight, Eye, Play, Trash2 } from "lucide-react";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { sessionContinueLabel } from "@/lib/session-display.js";
-import { worldVisual } from "@/lib/world-visuals.js";
+import { applyFallbackWorldImage, worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import {
   worldDisplayText,
@@ -129,7 +129,7 @@ export function WorldTileCard({
   return (
     <article
       aria-busy={isEntering}
-      className={`ui-world-tile group flex flex-col overflow-hidden rounded-(--radius-card) border border-border bg-card transition-colors hover:border-(--rule-strong-color) ${
+      className={`ui-world-tile group flex min-w-0 flex-col overflow-hidden rounded-(--radius-card) border border-border bg-card transition-colors hover:border-(--rule-strong-color) ${
         dimmed ? "opacity-30 pointer-events-none" : ""
       }`}
       style={accentStyle(visual.accent)}
@@ -155,7 +155,9 @@ export function WorldTileCard({
         )}
       </WorldCardCover>
       <div className="flex flex-1 flex-col gap-2.5 p-4">
-        <h2 className="ui-title text-lg leading-snug">{shown.name}</h2>
+        <h2 className="ui-title text-lg leading-snug wrap-anywhere">
+          {shown.name}
+        </h2>
         <WorldUpdateBadge world={world} t={t} />
         <p className="flex-1 text-[13px] leading-relaxed text-muted-foreground line-clamp-3 wrap-break-word">
           {shown.description}
@@ -175,7 +177,7 @@ export function WorldTileCard({
             )}
           </div>
         )}
-        <div className="mt-1 flex items-center justify-between gap-2">
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -310,7 +312,7 @@ export function WorldRowItem({
   return (
     <article
       aria-busy={isEntering}
-      className={`ui-world-row grid grid-cols-1 items-center gap-x-7 gap-y-4 border-t border-(--rule-color) py-5 md:grid-cols-[3rem_minmax(0,1fr)_19rem] ${
+      className={`ui-world-row grid min-w-0 grid-cols-1 items-center gap-x-7 gap-y-4 border-t border-(--rule-color) py-5 md:grid-cols-[3rem_minmax(0,1fr)_minmax(9rem,32%)] ${
         dimmed ? "opacity-30 pointer-events-none" : ""
       }`}
       style={accentStyle(visual.accent)}
@@ -322,13 +324,15 @@ export function WorldRowItem({
         {String(index + 1).padStart(2, "0")}
       </span>
       <div className="min-w-0 space-y-2">
-        <h2 className="ui-title text-2xl leading-snug">{shown.name}</h2>
+        <h2 className="ui-title text-2xl leading-snug wrap-anywhere">
+          {shown.name}
+        </h2>
         <WorldUpdateBadge world={world} t={t} />
         <p className="max-w-xl text-[14.5px] leading-[1.75] text-muted-foreground line-clamp-3 wrap-break-word">
           {shown.description}
         </p>
         {meta.length > 0 && (
-          <p className="text-[13px] text-muted-foreground">
+          <p className="text-[13px] wrap-anywhere text-muted-foreground">
             {meta.join(" · ")}
           </p>
         )}
@@ -365,6 +369,7 @@ export function WorldRowItem({
       </div>
       <img
         src={visual.image}
+        onError={applyFallbackWorldImage}
         alt=""
         aria-hidden="true"
         width={1536}

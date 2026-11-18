@@ -8,6 +8,25 @@ import i18n from "i18next";
 import * as api from "../api.js";
 import { ApiError, isNotFound } from "../api/request.js";
 
+export const BROWSER_WORLD_STORAGE = {
+  scope: "browser",
+  backend: "indexeddb",
+  durable: true,
+} as const;
+
+export function isBrowserWorldMirror(world: {
+  metadata?: Readonly<Record<string, unknown>>;
+}): boolean {
+  const { source, storage } = world.metadata ?? {};
+  return (
+    source === "browser-indexeddb" ||
+    (typeof storage === "object" &&
+      storage !== null &&
+      "scope" in storage &&
+      storage.scope === BROWSER_WORLD_STORAGE.scope)
+  );
+}
+
 function serverWorldRequest(world: WorldRecord): WorldCreateRequest {
   return {
     id: world.id,
@@ -50,13 +69,21 @@ export function serverCheckpointWorld(world: WorldRecord): WorldRecord {
   };
 }
 
+async function createServerWorldMirror(world: WorldRecord): Promise<void> {
+  const input = serverWorldRequest(world);
+  await api.createWorld({
+    ...input,
+    metadata: { ...input.metadata, storage: BROWSER_WORLD_STORAGE },
+  });
+}
+
 /** Prepare the world for planning or restoring a browser session. */
 export async function syncWorldToServer(world: WorldRecord): Promise<void> {
   try {
     await api.getWorld(world.id, { silentErrors: true });
   } catch (error) {
     if (!isNotFound(error)) throw error;
-    await api.createWorld(serverWorldRequest(world));
+    await createServerWorldMirror(world);
     return;
   }
 
@@ -75,7 +102,7 @@ export async function syncWorldToServer(world: WorldRecord): Promise<void> {
       return;
     }
     if (isNotFound(error)) {
-      await api.createWorld(serverWorldRequest(world));
+      await createServerWorldMirror(world);
       return;
     }
     throw error;

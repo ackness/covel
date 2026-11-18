@@ -822,12 +822,12 @@ The following describes the behavior of the web client itself. It is written for
 - When a world is deleted, it first waits for all admitted session operations to finish, and only then lists and cleans up the sessions. A new session created after the deletion checks again whether the world exists, and fails if it does not.
 - A patch to world fields merges into the latest record inside the lock. `saveGeneratedWorld` is an explicit full replacement.
 
-**Sample world.** The browser's sample world is inserted only when a new vault is first initialized and the world list is empty.
+**Sample world.** On the first visit, the browser imports worlds from the server catalog. On later visits, it checks the catalog and adds new worlds it has never imported. The import skips temporary world copies used to run browser saves on the server.
 
-- The sample and the initialization marker are committed in the same transaction. Initialization happens only once across tabs. A failure can be retried, and no part of the sample is left behind.
-- After all worlds are deleted and the page is refreshed, the list stays empty.
-- The Dexie schema v5 upgrade keeps the existing list (including an empty list), and does not add the sample again.
-- Only an explicit clearing of the whole vault resets the initialization marker.
+- Worlds and their imported IDs are committed in the same transaction. When multiple tabs import worlds at once, existing records take precedence.
+- The browser keeps its worlds and saves, including worlds removed from the server. If the catalog is unavailable, the local list stays available.
+- After a local deletion, the browser remembers the imported ID. Reloading adds only newly seen IDs. Older libraries have no import history, so the first reload after upgrading may add previously deleted sample worlds again.
+- Resetting browser game data clears world drafts and session UI caches, then deletes the vault. The page reloads and imports the current catalog.
 
 **Forms and timeline cache.** These live in a separate cache database. They do not replace the checkpoint, and they do not replace game state.
 

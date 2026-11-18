@@ -537,7 +537,6 @@ describe("LocalDataService browser-authoritative sync", () => {
   it("prepares the complete local world before server-side planning", async () => {
     const service = await serviceWithWorld("world-local", {
       pluginPolicy: { requiredPluginIds: ["world-notes"] },
-      source: "browser-indexeddb",
     });
     await service.updateWorld("world-local", {
       lore: "Local lore",
@@ -573,7 +572,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       },
       metadata: {
         pluginPolicy: { requiredPluginIds: ["world-notes"] },
-        source: "browser-indexeddb",
+        storage: { scope: "browser", backend: "indexeddb", durable: true },
         dimensions: {
           history: {
             name: "History",

@@ -1026,6 +1026,10 @@
     "resetDescription": "Clears every setting and every saved API key on this device, including the providers and models you added and the themes you imported. Worlds, saves and installed plugins are not affected.",
     "resetAll": "Reset all settings",
     "resetAllConfirm": "This clears every setting and every saved API key and restores the defaults. It cannot be undone.",
+    "resetBrowserData": "Reset browser game data",
+    "resetBrowserDataDescription": "Clear the worlds and saved games in this browser and import the trial's current built-in worlds. Your settings and API keys stay.",
+    "resetBrowserDataConfirm": "Close this site's other tabs first. This permanently deletes all worlds and saved games in this browser. The page will then reload.",
+    "resetBrowserDataBlocked": "The browser game database is still open. Close this site's other tabs to continue the reset.",
     "reset": "Reset",
     "packages": {
       "navLabel": "Install & manage",

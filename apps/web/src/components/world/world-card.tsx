@@ -4,7 +4,7 @@ import type { TFunction } from "i18next";
 import { Eye, Trash2, ArrowRight } from "lucide-react";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { worldVisual } from "@/lib/world-visuals.js";
+import { applyFallbackWorldImage, worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import {
   worldLanguageBadge,
@@ -69,7 +69,7 @@ export function WorldCard({
   return (
     <article
       aria-busy={isEntering}
-      className={`group relative min-h-80 md:min-h-83 overflow-hidden rounded-(--radius-card) border border-border bg-card transition-all hover:border-primary/40 ${
+      className={`group relative min-h-80 min-w-0 overflow-hidden rounded-(--radius-card) border border-border bg-card transition-colors hover:border-primary/40 md:min-h-83 ${
         isEntering ? "opacity-100" : ""
       } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
       style={
@@ -83,13 +83,14 @@ export function WorldCard({
     >
       <img
         src={visual.image}
+        onError={applyFallbackWorldImage}
         alt=""
         aria-hidden="true"
         width={1536}
         height={1024}
         loading={index < 2 ? "eager" : "lazy"}
         fetchPriority={index < 2 ? "high" : "auto"}
-        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]"
+        className="absolute inset-0 h-full w-full object-cover motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.025]"
         draggable={false}
       />
       <div
@@ -110,13 +111,13 @@ export function WorldCard({
       />
       <div
         aria-hidden
-        className="absolute left-0 top-0 h-1 w-24 transition-all group-hover:w-40"
+        className="absolute left-0 top-0 h-1 w-24"
         style={{ background: "var(--world-accent)" }}
       />
 
       <div className="relative z-10 flex min-h-80 md:min-h-83 flex-col justify-between p-5 md:p-6 text-white">
-        <div className="flex items-start justify-between gap-4">
-          <span className="ui-meta text-[11px] text-white/78 tabular-nums">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <span className="ui-meta text-[11px] wrap-anywhere text-white/78 tabular-nums">
             № {String(index + 1).padStart(2, "0")} · {world.id}
           </span>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -144,7 +145,7 @@ export function WorldCard({
         <div className="space-y-3.5">
           <div className="max-w-124 space-y-2.5">
             <h2
-              className="ui-title text-3xl md:text-[2.35rem] leading-[1.02] tracking-tight text-white transition-colors"
+              className="ui-title text-3xl leading-[1.02] tracking-tight wrap-anywhere text-white transition-colors md:text-[2.35rem]"
               style={isEntering ? { color: "var(--world-accent)" } : undefined}
             >
               {shown.name}
@@ -175,7 +176,7 @@ export function WorldCard({
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-white/14 pt-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/14 pt-3.5">
             <div className="flex items-center gap-1">
               <button
                 type="button"
