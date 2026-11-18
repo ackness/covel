@@ -822,7 +822,7 @@ The following describes the behavior of the web client itself. It is written for
 - When a world is deleted, it first waits for all admitted session operations to finish, and only then lists and cleans up the sessions. A new session created after the deletion checks again whether the world exists, and fails if it does not.
 - A patch to world fields merges into the latest record inside the lock. `saveGeneratedWorld` is an explicit full replacement.
 
-**Sample world.** On the first visit, the browser imports worlds from the server. On later visits, it checks the catalog and adds new worlds it has never imported.
+**Sample world.** On the first visit, the browser imports worlds from the server catalog. On later visits, it checks the catalog and adds new worlds it has never imported. The import skips temporary world copies used to run browser saves on the server.
 
 - Worlds and their imported IDs are committed in the same transaction. When multiple tabs import worlds at once, existing records take precedence.
 - The browser keeps its worlds and saves, including worlds removed from the server. If the catalog is unavailable, the local list stays available.

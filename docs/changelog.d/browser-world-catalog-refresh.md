@@ -5,5 +5,5 @@
 
 ### Fixed
 
-- **Newly published worlds appear in existing browser libraries.** Reloading adds new world IDs while keeping existing local worlds and saves.
+- **Newly published worlds appear in existing browser libraries.** Reloading adds new world IDs while keeping existing local worlds and saves. Temporary copies used to run browser saves are skipped.
 - **World thumbnails stay the same size when selected.** The showcase adapts to narrow screens and respects reduced-motion settings. Every layout displays a default image when a cover fails to load.

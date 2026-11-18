@@ -115,6 +115,36 @@ it("leaves out a world deleted between the catalog list and its read", async () 
   expect(worlds).toHaveLength(catalog.length - 1);
 });
 
+it("skips browser execution mirrors in both catalog summaries and full records", async () => {
+  const summaryMirror = {
+    ...catalog[0]!,
+    id: "mirror-in-list",
+    metadata: {
+      ...catalog[0]!.metadata,
+      storage: { scope: "browser", backend: "indexeddb", durable: true },
+    },
+  };
+  const replacedWorld = { ...catalog[1]!, id: "mirror-after-list" };
+  api.listWorlds.mockResolvedValue(
+    [...catalog, summaryMirror, replacedWorld].map(summarizeWorld),
+  );
+  const readCatalogWorld = api.getWorld.getMockImplementation()!;
+  api.getWorld.mockImplementation((id: string) =>
+    id === replacedWorld.id
+      ? Promise.resolve({
+          ...replacedWorld,
+          metadata: { source: "browser-indexeddb" },
+        })
+      : readCatalogWorld(id),
+  );
+
+  const service = new LocalDataService(vault);
+  expect((await service.listWorlds()).map(({ id }) => id).sort()).toEqual(
+    catalog.map(({ id }) => id).sort(),
+  );
+  expect(api.getWorld).not.toHaveBeenCalledWith(summaryMirror.id, undefined);
+});
+
 it("still fails the first visit when a world read fails for another reason", async () => {
   api.getWorld.mockRejectedValue(new ApiError(500, "/api/worlds/x", "boom"));
   await expect(new LocalDataService(vault).listWorlds()).rejects.toThrow();

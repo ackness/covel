@@ -39,6 +39,8 @@ import {
   toFrontendWorld,
 } from "./mappers.js";
 import {
+  BROWSER_WORLD_STORAGE,
+  isBrowserWorldMirror,
   serverCheckpointWorld,
   syncWorldToServer,
 } from "./local-world-sync.js";
@@ -181,7 +183,9 @@ export class LocalDataService implements DataService {
         ...(initialization?.catalogIds ?? []),
         ...worldIds,
       ]);
-      const missing = summaries.filter(({ id }) => !knownIds.has(id));
+      const missing = summaries.filter(
+        (world) => !knownIds.has(world.id) && !isBrowserWorldMirror(world),
+      );
       const options = backgroundOptions();
       const read = await Promise.all(
         missing.map(({ id }) =>
@@ -193,18 +197,14 @@ export class LocalDataService implements DataService {
       );
       await this.vault.importCatalogWorlds(
         read.flatMap((world) =>
-          world === null
+          world === null || isBrowserWorldMirror(world)
             ? []
             : [
                 {
                   ...world,
                   metadata: {
                     ...world.metadata,
-                    storage: {
-                      scope: "browser",
-                      backend: "indexeddb",
-                      durable: true,
-                    },
+                    storage: BROWSER_WORLD_STORAGE,
                   },
                 } as StoreWorldRecord,
               ],
@@ -342,11 +342,7 @@ export class LocalDataService implements DataService {
     const metadata: Record<string, unknown> = {
       ...world.metadata,
       source: "browser-indexeddb",
-      storage: {
-        scope: "browser",
-        backend: "indexeddb",
-        durable: true,
-      },
+      storage: BROWSER_WORLD_STORAGE,
     };
     delete metadata.worldDataPath;
     delete metadata.worldData;
