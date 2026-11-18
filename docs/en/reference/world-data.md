@@ -493,8 +493,8 @@ A user worlds directory that does not exist counts as an empty directory; bundle
 
 - The first time an empty database is initialized, the full catalog is imported from `GET /api/worlds`. It keeps the manifest ID, the lore, the dimensions, the characters and the package information.
 - If the catalog request fails, initialization is not counted as done, and it can be retried. Getting an empty catalog successfully is a valid result.
-- After initialization, the worlds in the browser are managed only by local edits and deletes. Later starts do not request the catalog again and do not overwrite anything automatically, and the worlds can be read offline. Existing local worlds are never overwritten by initialization.
-- Later changes in the server catalog do not update these copies automatically.
+- On later page loads, the browser imports catalog IDs it has never seen. Players can still edit and delete their existing local worlds, and read them offline.
+- Old world copies stay in the browser. If the server removes a world package, its images may become unavailable. Its saves may also become unplayable on the public trial. See [browser sample worlds](./api.md#browser-private-workspace).
 
 ### Updating files and installing
 

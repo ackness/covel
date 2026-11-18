@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import Dexie from "dexie";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { LocalDataService } from "../data-service/local.js";
@@ -94,7 +95,7 @@ it("imports the actual catalog with stable IDs and full package content into bro
     updatedAt: undefined,
   });
   expect(worldStorageLabel(academy!)).toBe("Browser IndexedDB");
-  expect(await vault.hasInitializedWorlds()).toBe(true);
+  expect(await vault.getWorldInitialization()).toBeDefined();
 });
 
 it("leaves out a world deleted between the catalog list and its read", async () => {
@@ -124,29 +125,80 @@ it("retries a failed first catalog load without initializing an empty library", 
   const service = new LocalDataService(vault);
   api.listWorlds.mockRejectedValueOnce(new Error("catalog unavailable"));
   await expect(service.listWorlds()).rejects.toThrow("catalog unavailable");
-  expect(await vault.hasInitializedWorlds()).toBe(false);
+  expect(await vault.getWorldInitialization()).toBeUndefined();
   expect(await vault.listWorlds()).toEqual([]);
   expect(await service.listWorlds()).toHaveLength(catalog.length);
   expect(api.listWorlds).toHaveBeenCalledTimes(2);
 });
 
-it("keeps an initialized, edited library available offline and ignores later catalog updates", async () => {
+it("keeps an initialized, edited library available offline", async () => {
   const service = new LocalDataService(vault);
   await service.listWorlds();
   await service.updateWorld("haruka-academy", { name: "Personal edit" });
-  api.listWorlds.mockRejectedValue(new Error("offline"));
+  api.listWorlds.mockRejectedValueOnce(new Error("offline"));
   const reloaded = new LocalDataService(secondVault);
   expect((await reloaded.getWorld("haruka-academy"))?.name).toBe(
     "Personal edit",
   );
   expect(await reloaded.listWorlds()).toHaveLength(catalog.length);
-  expect(api.listWorlds).toHaveBeenCalledTimes(1);
+  expect(api.listWorlds).toHaveBeenCalledTimes(2);
 });
+
+it("adds a new catalog world to an existing library without replacing edits or restoring deletions", async () => {
+  const service = new LocalDataService(vault);
+  await service.listWorlds();
+  await service.updateWorld("haruka-academy", { name: "Personal edit" });
+  await service.deleteWorld("last-train");
+  const newWorld = { ...catalog[1]!, id: "new-world" };
+  api.listWorlds.mockResolvedValue([...catalog, newWorld].map(summarizeWorld));
+  api.getWorld.mockResolvedValueOnce(newWorld);
+  api.getWorld.mockClear();
+
+  const worlds = await new LocalDataService(secondVault).listWorlds();
+  expect(worlds.map(({ id }) => id).sort()).toEqual([
+    "haruka-academy",
+    "new-world",
+  ]);
+  expect(worlds.find(({ id }) => id === "haruka-academy")?.name).toBe(
+    "Personal edit",
+  );
+  expect(api.getWorld).toHaveBeenCalledExactlyOnceWith(
+    "new-world",
+    expect.anything(),
+  );
+});
+
+it.each([false, true])(
+  "adds worlds to a library initialized before catalog IDs were recorded (empty: %s)",
+  async (empty) => {
+    const service = new LocalDataService(vault);
+    const initial = await service.listWorlds();
+    if (empty) {
+      for (const { id } of initial) await service.deleteWorld(id);
+    }
+    const legacy = await new Dexie(dbName).open();
+    try {
+      await legacy.table("initialization").put({ key: "worlds" });
+    } finally {
+      legacy.close();
+    }
+    const replacement = { ...catalog[1]!, id: "replacement-world" };
+    api.listWorlds.mockResolvedValue([summarizeWorld(replacement)]);
+    api.getWorld.mockResolvedValueOnce(replacement);
+
+    const worlds = await new LocalDataService(secondVault).listWorlds();
+    expect(worlds.map(({ id }) => id).sort()).toEqual(
+      empty
+        ? ["replacement-world"]
+        : ["haruka-academy", "last-train", "replacement-world"],
+    );
+  },
+);
 
 it("accepts a successfully loaded empty catalog without inventing starter worlds", async () => {
   api.listWorlds.mockResolvedValue([]);
   expect(await new LocalDataService(vault).listWorlds()).toEqual([]);
-  expect(await vault.hasInitializedWorlds()).toBe(true);
+  expect(await vault.getWorldInitialization()).toBeDefined();
 });
 
 it("initializes only one complete catalog snapshot across concurrent services", async () => {
@@ -165,9 +217,8 @@ it("keeps an intentionally empty world library empty after reload", async () => 
   const service = new LocalDataService(vault);
   const worlds = await service.listWorlds();
   for (const world of worlds) await service.deleteWorld(world.id);
-  api.listWorlds.mockRejectedValue(new Error("offline"));
   expect(await new LocalDataService(secondVault).listWorlds()).toEqual([]);
-  expect(api.listWorlds).toHaveBeenCalledTimes(1);
+  expect(api.getWorld).toHaveBeenCalledTimes(catalog.length);
 });
 
 it("rolls back partial seeding and permits retry on the same service", async () => {
@@ -212,4 +263,19 @@ it("allows fresh initialization after an explicit full vault reset", async () =>
   expect(await new LocalDataService(secondVault).listWorlds()).toHaveLength(
     catalog.length,
   );
+});
+
+it("reimports the current catalog after deleting the vault and closes old tab connections", async () => {
+  await new LocalDataService(secondVault).listWorlds();
+  const replacement = { ...catalog[1]!, id: "replacement-world" };
+  api.listWorlds.mockResolvedValue([summarizeWorld(replacement)]);
+  api.getWorld.mockResolvedValueOnce(replacement);
+  await new BrowserVault({ dbName }).deleteDatabase();
+
+  await expect(secondVault.listWorlds()).rejects.toMatchObject({
+    name: "DatabaseClosedError",
+  });
+  expect(
+    (await new LocalDataService(vault).listWorlds()).map(({ id }) => id),
+  ).toEqual(["replacement-world"]);
 });

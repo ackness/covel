@@ -246,7 +246,7 @@ export function WorldListView(props: WorldListViewProps) {
           />
         )}
 
-        {worldList === "cards" && worlds.length > 0 && (
+        {worlds.length > 0 && (
           <label className="ui-world-search mb-4 flex h-10 w-full max-w-xs items-center gap-2 rounded-(--radius-control) border border-border bg-card px-3 text-muted-foreground">
             <Search className="h-4 w-4 shrink-0" aria-hidden />
             <span className="sr-only">{t("session.searchWorlds")}</span>

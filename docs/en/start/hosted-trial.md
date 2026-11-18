@@ -30,6 +30,10 @@ A session's save is at most 64 MiB. The page warns you when it gets close to tha
 
 A trial cannot export or import a full save yet. "Export save" in the session menu saves the chat log as a text file only, and it cannot be loaded back to continue playing. Do not keep important progress here; to play for the long term, use the [desktop app](./install.md).
 
+When you reopen the page, the trial adds newly published worlds. Your existing worlds and saves stay in this browser.
+
+To start over, close this site's other tabs, open **Settings → Import, backup & reset → Reset browser game data**, and confirm. The page reloads and imports the current worlds. This permanently deletes this site's worlds and saves in this browser. Settings and API keys stay.
+
 ## How your API keys are used
 
 1. The keys you enter in settings are stored in plain text in this browser's local storage.

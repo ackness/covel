@@ -28,6 +28,10 @@ import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
 import { BrowserVault } from "../storage/index.js";
+import {
+  clearSessionToken,
+  listSessionCredentials,
+} from "../session-credentials.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   toFrontendMessage,
@@ -48,6 +52,28 @@ import type {
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
+const CATALOG_REQUEST_TIMEOUT_MS = 5000;
+
+export async function resetBrowserGameData(
+  onBlocked: () => void,
+): Promise<void> {
+  const vault = new BrowserVault();
+  const sessions = await vault.listSessions().catch(() => []);
+  const sessionIds = new Set(sessions.map(({ sessionId }) => sessionId));
+  const credentials =
+    sessionIds.size === 0 ? [] : await listSessionCredentials();
+  await appKv.clearBrowserGameCache();
+  await vault.deleteDatabase(onBlocked);
+  await Promise.all(
+    credentials
+      .filter(({ sessionId }) => sessionIds.has(sessionId))
+      .map(({ sessionId, token }) =>
+        clearSessionToken(sessionId, token).catch(
+          ignoreError("clear reset session credential"),
+        ),
+      ),
+  );
+}
 
 /** World records are JSON; object insertion order is not part of identity. */
 function worldSnapshotJson(world: WorldRecord): string {
@@ -133,36 +159,62 @@ export class LocalDataService implements DataService {
   }
 
   private async initializeWorlds(): Promise<void> {
-    if (await this.vault.hasInitializedWorlds()) return;
-    // Pre-existing local documents remain authoritative, even before their
-    // first service initialization. Never add catalog copies beside them.
-    if ((await this.vault.listWorlds()).length > 0) {
-      await this.vault.initializeWorlds([]);
+    const [initialization, worldIds] = await Promise.all([
+      this.vault.getWorldInitialization(),
+      this.vault.listWorldIds(),
+    ]);
+    if (!initialization && worldIds.length > 0) {
+      await this.vault.importCatalogWorlds([], worldIds);
       return;
     }
-    // The vault keeps full records (a browser session plays from them), and the
-    // catalog list carries summaries.
-    const summaries = await api.listWorlds();
-    // A world deleted between the list and its read is no longer in the
-    // catalog: leave it out instead of failing the first visit.
-    const read = await Promise.all(
-      summaries.map((summary) =>
-        api.getWorld(summary.id).catch((error: unknown) => {
-          if (isNotFound(error)) return null;
-          throw error;
-        }),
-      ),
-    );
-    const catalog = read.filter((world) => world !== null);
-    await this.vault.initializeWorlds(
-      catalog.map((world) => ({
-        ...world,
-        metadata: {
-          ...world.metadata,
-          storage: { scope: "browser", backend: "indexeddb", durable: true },
-        },
-      })) as StoreWorldRecord[],
-    );
+    const backgroundOptions = () =>
+      initialization
+        ? {
+            silentErrors: true,
+            retry: false,
+            signal: AbortSignal.timeout(CATALOG_REQUEST_TIMEOUT_MS),
+          }
+        : undefined;
+    try {
+      const summaries = await api.listWorlds(backgroundOptions());
+      const knownIds = new Set([
+        ...(initialization?.catalogIds ?? []),
+        ...worldIds,
+      ]);
+      const missing = summaries.filter(({ id }) => !knownIds.has(id));
+      const options = backgroundOptions();
+      const read = await Promise.all(
+        missing.map(({ id }) =>
+          api.getWorld(id, options).catch((error: unknown) => {
+            if (isNotFound(error)) return null;
+            throw error;
+          }),
+        ),
+      );
+      await this.vault.importCatalogWorlds(
+        read.flatMap((world) =>
+          world === null
+            ? []
+            : [
+                {
+                  ...world,
+                  metadata: {
+                    ...world.metadata,
+                    storage: {
+                      scope: "browser",
+                      backend: "indexeddb",
+                      durable: true,
+                    },
+                  },
+                } as StoreWorldRecord,
+              ],
+        ),
+        worldIds,
+      );
+    } catch (error) {
+      if (!initialization) throw error;
+      ignoreError("refresh browser world catalog")(error);
+    }
   }
 
   private async mutateCheckpointNow(

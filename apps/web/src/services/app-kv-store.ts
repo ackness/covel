@@ -23,6 +23,24 @@ type StoreNames =
   | typeof STORE_SUBMITTED_BLOCKS
   | typeof STORE_EXECUTION_STEPS;
 
+export async function clearBrowserGameCache(): Promise<void> {
+  const db = await openBrowserCacheDb();
+  const stores = [
+    STORE_WORLD_OVERLAYS,
+    STORE_SUBMITTED_BLOCKS,
+    STORE_EXECUTION_STEPS,
+  ];
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(stores, "readwrite");
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () =>
+      reject(
+        transaction.error ?? new Error("Browser game cache reset aborted"),
+      );
+    for (const name of stores) transaction.objectStore(name).clear();
+  });
+}
+
 async function idbGet<T>(
   storeName: StoreNames,
   key: string,

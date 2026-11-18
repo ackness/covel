@@ -6,6 +6,7 @@ import { Download, RotateCw, Upload } from "lucide-react";
 import { z } from "zod";
 import type { SettingsExportBundle } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
+import { getStorageMode } from "@/services/storage/mode.js";
 import { useSettingsStore } from "./use-settings.js";
 import { SettingsBackups } from "./SettingsBackups.js";
 
@@ -24,6 +25,7 @@ export function DataPane() {
   const { t } = useTranslation();
   const store = useSettingsStore();
   const writable = useSettingsWritable();
+  const browserPrivate = getStorageMode() === "local";
   const fileRef = useRef<HTMLInputElement>(null);
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [pending, setPending] = useState<{
@@ -132,6 +134,33 @@ export function DataPane() {
     } catch {
       setError(t("settings.dataOperationFailed"));
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResetBrowserData() {
+    if (
+      busy ||
+      !(await requestConfirm({
+        title: t("settings.resetBrowserData"),
+        message: t("settings.resetBrowserDataConfirm"),
+        confirmLabel: t("settings.resetBrowserData"),
+        cancelLabel: t("common.cancel"),
+        destructive: true,
+      }))
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { resetBrowserGameData } =
+        await import("@/services/data-service/local.js");
+      await resetBrowserGameData(() =>
+        setError(t("settings.resetBrowserDataBlocked")),
+      );
+      window.location.reload();
+    } catch {
+      setError(t("settings.dataOperationFailed"));
       setBusy(false);
     }
   }
@@ -310,6 +339,21 @@ export function DataPane() {
           <RotateCw className="w-3 h-3 mr-1" />
           {t("settings.resetAll")}
         </Button>
+        {browserPrivate && (
+          <div className="flex flex-col items-start gap-2 pt-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("settings.resetBrowserDataDescription")}
+            </p>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleResetBrowserData}
+              disabled={busy}
+            >
+              {t("settings.resetBrowserData")}
+            </Button>
+          </div>
+        )}
       </section>
     </div>
   );

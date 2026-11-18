@@ -358,6 +358,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 浏览器私有的持久化有意放在 `DataStore` 之外。IndexedDB 的事务和 schema 生命周期由 Dexie 管理，代码在 `apps/web/src/services/storage/browser-vault.ts`。
 
+浏览器获取目录后，在同一事务中加入新世界并记录已导入的 ID。重置游戏数据时，先在独立缓存事务中清理草稿和会话界面数据，再删除 vault。两个数据库的清理各自提交。
+
 新存档的第 1 版就是服务端的第一份导出（见[浏览器私有工作区](./api.md#浏览器私有工作区)）：服务端先创建并初始化会话，浏览器再把导出的完整 checkpoint 原子保存为插件集合、开局状态和世界数据，不分开保存各个领域。第一份导出失败时不保存任何本地存档，并尽力删除服务端会话。
 
 **写入。**

@@ -20,7 +20,7 @@ import {
 import type { WorldRecord } from "@/services/api.js";
 import { matchesWorldQuery, text } from "@/components/world/editor-helpers.js";
 import { useOverflowEdges } from "@/hooks/use-overflow-edges.js";
-import { worldVisual } from "@/lib/world-visuals.js";
+import { applyFallbackWorldImage, worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import { worldLanguageName, worldTextForPlayer } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
@@ -92,6 +92,7 @@ function AllWorldsDialog({
             >
               <img
                 src={worldVisual(world).image}
+                onError={applyFallbackWorldImage}
                 alt=""
                 aria-hidden="true"
                 loading="lazy"
@@ -155,12 +156,10 @@ function WorldRail({
     if (!rail || !active) return;
     const start = active.offsetLeft;
     const end = start + active.offsetWidth;
-    if (start < rail.scrollLeft)
-      rail.scrollTo?.({ left: start - 40, behavior: "smooth" });
+    if (start < rail.scrollLeft) rail.scrollTo?.({ left: start - 24 });
     else if (end > rail.scrollLeft + rail.clientWidth)
       rail.scrollTo?.({
-        left: end - rail.clientWidth + 40,
-        behavior: "smooth",
+        left: end - rail.clientWidth + 24,
       });
   }, [selectedId]);
 
@@ -168,7 +167,6 @@ function WorldRail({
     const rail = railRef.current;
     rail?.scrollBy?.({
       left: direction * rail.clientWidth * 0.8,
-      behavior: "smooth",
     });
   };
 
@@ -198,15 +196,18 @@ function WorldRail({
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => setBrowsing(true)}
-              className="ui-btn ui-world-glass h-9 px-3"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              {t("session.allWorlds", { total: worlds.length })}
-            </button>
           </>
+        )}
+        {worlds.length > 1 && (
+          <button
+            type="button"
+            onClick={() => setBrowsing(true)}
+            disabled={busy}
+            className="ui-btn ui-world-glass h-9 px-3"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            {t("session.allWorlds", { total: worlds.length })}
+          </button>
         )}
       </div>
       {worlds.length > 1 && (
@@ -214,7 +215,7 @@ function WorldRail({
           ref={railRef}
           data-fade-start={edges.start}
           data-fade-end={edges.end}
-          className="ui-scroll-fade ui-world-rail relative flex max-w-full items-end gap-3.5 overflow-x-auto pb-1"
+          className="ui-scroll-fade ui-world-rail relative flex max-w-full gap-2.5 overflow-x-auto overscroll-x-contain pb-1 motion-safe:scroll-smooth sm:gap-3.5"
           onKeyDown={(event) => {
             const delta =
               event.key === "ArrowRight"
@@ -233,7 +234,7 @@ function WorldRail({
               .querySelector<HTMLElement>(
                 `[data-world-id="${CSS.escape(next.id)}"]`,
               )
-              ?.focus();
+              ?.focus({ preventScroll: true });
           }}
         >
           {worlds.map((world) => {
@@ -246,25 +247,24 @@ function WorldRail({
                 onClick={() => onSelect(world.id)}
                 aria-pressed={active}
                 disabled={busy}
-                className={`ui-world-thumb relative w-40 shrink-0 overflow-hidden rounded-(--radius-card) text-left transition-all ${
-                  active ? "h-60" : "h-52"
-                }`}
+                className="ui-world-thumb group relative h-32 w-24 shrink-0 overflow-hidden rounded-(--radius-card) text-left motion-safe:transition-colors sm:h-44 sm:w-32 xl:h-52 xl:w-36"
               >
                 <img
                   src={worldVisual(world).image}
+                  onError={applyFallbackWorldImage}
                   alt=""
                   aria-hidden="true"
                   width={1536}
                   height={1024}
                   loading="lazy"
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="absolute inset-0 h-full w-full object-cover motion-safe:transition-transform motion-safe:group-aria-pressed:scale-105"
                   draggable={false}
                 />
                 <span
                   aria-hidden="true"
                   className="absolute inset-x-0 bottom-0 h-28 bg-linear-to-t from-black/90 to-transparent"
                 />
-                <span className="ui-title absolute inset-x-3 bottom-3 text-base leading-snug text-white">
+                <span className="ui-title absolute inset-x-2 bottom-2 line-clamp-2 text-sm leading-snug wrap-break-word text-white sm:inset-x-3 sm:bottom-3 sm:text-base">
                   {worldTextForPlayer(world, interfaceLocale).name}
                 </span>
                 <WorldUpdateBadge
@@ -323,12 +323,11 @@ export function WorldShowcase({
     worldVisual(selected).image,
   );
   const slideshow = useSlideshow(selected?.id ?? "", slides.length);
+  useWorldThemeMusic(selected);
   if (!selected) return null;
   const resumable = Boolean(
     recentSessions?.get(selected.id) && onResumeSession,
   );
-  // The world list plays the world's theme music while it is shown.
-  useWorldThemeMusic(selected);
   const visual = worldVisual(selected);
   // The edition a new game would be played in, as on the cover cards.
   const shown = worldTextForPlayer(selected, interfaceLocale);
@@ -383,8 +382,8 @@ export function WorldShowcase({
 
         <div className="min-h-10 flex-1" />
 
-        <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-8 px-5 pb-8 md:px-12 md:pb-11">
-          <div className="max-w-xl flex-[1_1_24rem] space-y-3.5">
+        <div className="grid items-end gap-x-10 gap-y-6 px-4 pb-6 sm:px-6 md:px-10 md:pb-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div className="min-w-0 max-w-xl space-y-3.5">
             <p className="ui-eyebrow text-(--accent-primary)">
               {resumable
                 ? t("session.continueLatest")
@@ -394,7 +393,7 @@ export function WorldShowcase({
                     { count: worlds.length },
                   )}
             </p>
-            <h1 className="ui-title text-5xl leading-[1.1] md:text-6xl">
+            <h1 className="ui-title text-3xl leading-[1.1] wrap-anywhere sm:text-5xl xl:text-6xl">
               {shown.name}
             </h1>
             <WorldUpdateBadge world={selected} t={t} />

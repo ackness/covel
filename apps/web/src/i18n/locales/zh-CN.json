@@ -984,6 +984,10 @@
     "resetDescription": "清除这台设备上的全部设置和已保存的 API 密钥，包括你添加的服务商与模型、导入的主题。世界、存档和已安装的插件不受影响。",
     "resetAll": "重置所有设置",
     "resetAllConfirm": "将清除全部设置和已保存的 API 密钥，并恢复默认。此操作无法撤销。",
+    "resetBrowserData": "重置浏览器游戏数据",
+    "resetBrowserDataDescription": "清除这个浏览器里的世界和游戏存档，重新导入体验站当前的内置世界。设置和 API 密钥会保留。",
+    "resetBrowserDataConfirm": "请先关闭这个站点的其他标签页。此操作会永久删除这个浏览器里的全部世界和游戏存档，完成后页面会自动刷新。",
+    "resetBrowserDataBlocked": "正在等待浏览器释放游戏数据库。请关闭此站点的其他标签页，重置会自动继续。",
     "reset": "已重置",
     "packages": {
       "navLabel": "安装与管理",
