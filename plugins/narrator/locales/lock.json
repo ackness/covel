@@ -2,13 +2,13 @@
   "version": 1,
   "labels": {
     "ru": {
-      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
+      "PLUGIN.md#contributes.settings[key=perspective].description": "cec377b4e0c34e2d",
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
       "PLUGIN.md#description": "3f70ce0a05b35cd2",
       "PLUGIN.md#displayName": "5447064655a33e83"
     },
     "zh": {
-      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
+      "PLUGIN.md#contributes.settings[key=perspective].description": "cec377b4e0c34e2d",
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
       "PLUGIN.md#description": "3f70ce0a05b35cd2",
       "PLUGIN.md#displayName": "5447064655a33e83"

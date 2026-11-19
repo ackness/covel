@@ -97,7 +97,7 @@ export function MessageComposer({
       data-testid="game-composer"
       data-executing={executing}
       data-blocked={composerBlocked}
-      className="ui-composer border-t border-(--rule-color) shrink-0 px-3 md:px-4 py-4 md:py-5 bg-(--surface-page)"
+      className="ui-composer ui-workspace-content shrink-0 border-t border-(--rule-color) bg-(--surface-page) py-(--ui-gap-group)"
     >
       {isEnded ? (
         <p className="ui-empty-copy mx-auto text-center text-sm">
@@ -184,11 +184,11 @@ export function MessageComposer({
               <ComposerFields composerModes={composerModes} />
             </>
           )}
-          <div className="ui-composer-input flex items-stretch rounded-(--radius-control) border border-(--rule-color) bg-(--surface-inset) focus-within:border-(--accent-primary) transition-colors">
+          <div className="ui-composer-input">
             {textless && mode ? (
               <span
                 data-testid="game-composer-input"
-                className="flex-1 min-w-0 truncate px-3.5 py-2.5 text-base text-muted-foreground md:text-sm"
+                className="ui-composer-field truncate text-muted-foreground"
               >
                 {mode.placeholder ?? mode.label}
               </span>
@@ -234,7 +234,7 @@ export function MessageComposer({
                               )
                 }
                 disabled={composerDisabled || commandExecuting}
-                className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-base outline-none disabled:opacity-50 placeholder:text-muted-foreground md:text-sm"
+                className="ui-composer-field disabled:opacity-50"
               />
             )}
             {executing && onAbort && (
@@ -264,12 +264,12 @@ export function MessageComposer({
                       ? mode.label
                       : t("session.inputKbdHint", "to send")
               }
-              className="ui-composer-submit shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              className="ui-composer-submit disabled:cursor-not-allowed disabled:opacity-30"
             >
               {commandExecuting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Send className="w-3.5 h-3.5" />
+                <Send className="size-4" />
               )}
             </button>
           </div>
@@ -315,7 +315,7 @@ export function MessageComposer({
               {t("session.composerBlockedHint")}
             </p>
           ) : (
-            <div className="hidden md:flex justify-end items-center gap-1.5 ui-meta text-[10px] text-muted-foreground/60 pr-1 mt-1.5 select-none">
+            <div className="ui-meta mt-1.5 hidden select-none items-center justify-end gap-1.5 pr-1 text-xs text-muted-foreground md:flex">
               <kbd className="ui-tag px-1.5 py-0">{"\u23CE"}</kbd>
               <span>{t("session.inputKbdHint", "to send")}</span>
             </div>

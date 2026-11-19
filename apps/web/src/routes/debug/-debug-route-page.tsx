@@ -2,9 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  Activity,
   ChevronsUp,
-  Database,
   Filter,
   Gamepad2,
   Layers,
@@ -104,18 +102,13 @@ export function DebugRoutePage({
   return (
     <div className="flex h-full w-full flex-col border-t border-(--rule-color) overflow-hidden">
       <div
-        className="shrink-0 min-h-11 px-4 py-2 border-b border-(--rule-color) flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+        className="ui-workspace-rule ui-workspace-content min-h-11 shrink-0 py-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
         style={{ background: "var(--surface-page)" }}
       >
         <div className="flex items-center gap-3">
-          <h1 className="flex items-baseline gap-3">
-            <span className="ui-meta text-xs text-muted-foreground">
-              § TRACE
-            </span>
-            <span className="ui-title text-sm font-semibold tracking-tight">
-              {t("debugger.title")}
-            </span>
-            <Terminal className="w-3.5 h-3.5 opacity-50" />
+          <h1 className="ui-title flex items-center gap-2 text-lg">
+            <Terminal className="size-4 text-primary" aria-hidden="true" />
+            {t("debugger.title")}
           </h1>
           {selectedSessionId && (
             <Badge
@@ -141,16 +134,6 @@ export function DebugRoutePage({
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="hidden md:flex items-center gap-1.5 border-r border-(--rule-color) pr-3 text-xs text-muted-foreground">
-            <span className="ui-meta text-xs">{t("debugger.sessions")}</span>
-            <span className="font-mono text-foreground">{sessions.length}</span>
-            <span className="ui-meta text-xs">
-              {t("debugger.view", "View")}
-            </span>
-            <span className="font-mono text-foreground uppercase">
-              {debugView}
-            </span>
-          </div>
           {selectedSessionId && (
             <Button
               variant="ghost"
@@ -231,16 +214,6 @@ export function DebugRoutePage({
                 {selectedSessionId}
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Activity className="h-3 w-3 text-primary" />
-              <span>{t("debugger.turn", { count: storyTurnCount })}</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Database className="h-3 w-3 text-muted-foreground" />
-              <span>
-                {totalEvents} {t("session.events")}
-              </span>
-            </span>
             {isPartial && (
               <span
                 className="inline-flex items-center gap-1.5 text-amber-500/80"
@@ -264,11 +237,13 @@ export function DebugRoutePage({
       )}
 
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden sm:flex-row">
-        <SessionSidebar
-          sessions={sessions}
-          selectedSessionId={selectedSessionId}
-          onSelectSession={selectSession}
-        />
+        {(sessions.length > 0 || !selectedSessionId) && (
+          <SessionSidebar
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            onSelectSession={selectSession}
+          />
+        )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <DebugToolbar

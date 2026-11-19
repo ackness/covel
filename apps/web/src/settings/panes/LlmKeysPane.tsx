@@ -25,6 +25,7 @@ import {
 } from "../use-setting-draft.js";
 import { useSettingsSave } from "../use-settings-save.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
+import { SettingsHelp } from "../pane-layout.js";
 
 /**
  * Shape we need per preset for rendering — a minimal projection of both
@@ -191,25 +192,23 @@ export function LlmKeysPane({
           (p) => p.provider === providerId,
         );
         return (
-          <div key={entry.key} className="border border-border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs">
-                <strong>{providerId}</strong>
-                {hasKey ? (
-                  <Badge variant="default" className="text-[10px]">
-                    {t("settings.keyConfigured")}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px]">
-                    {t("settings.keyUnconfigured")}
-                  </Badge>
-                )}
-              </div>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {providerId.toUpperCase().replace(/-/g, "_")}_API_KEY
-              </span>
-            </div>
-            <SettingWidget entry={entry} />
+          <div key={entry.key} className="flex min-w-0 flex-col gap-3">
+            <SettingWidget
+              entry={
+                onlyProviderId
+                  ? { ...entry, label: t("settings.providerCredentialTitle") }
+                  : entry
+              }
+              labelAccessory={
+                <Badge variant={hasKey ? "secondary" : "outline"}>
+                  {t(
+                    hasKey
+                      ? "settings.keyConfigured"
+                      : "settings.keyUnconfigured",
+                  )}
+                </Badge>
+              }
+            />
             {hasKey && envOverrides.includes(providerId) && (
               <p className="text-[10px] text-(--accent-warning)">
                 {t("settings.keyOverriddenByEnv")}
@@ -279,17 +278,17 @@ function ProviderPriceMultiplierField({
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-2">
+    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
       <div className="min-w-0">
-        <div className="text-[11px] font-medium">
+        <div className="text-[13px] font-medium">
           {t("settings.priceMultiplier", "Price multiplier")}
         </div>
-        <div className="text-[10px] leading-relaxed text-muted-foreground">
+        <SettingsHelp>
           {t(
             "settings.priceMultiplierHint",
             "Estimated settlement = official reference price × multiplier. The default multiplier is 1.",
           )}
-        </div>
+        </SettingsHelp>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <span className="text-xs text-muted-foreground">×</span>
@@ -305,7 +304,7 @@ function ProviderPriceMultiplierField({
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}
-          className="w-20 border border-border bg-background px-2 py-1 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-primary"
+          className="h-9 w-20 rounded-md border border-border bg-background px-2 text-right font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
       {conflict && (

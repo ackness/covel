@@ -31,15 +31,25 @@ describe("scene-stage dialogue template", () => {
     expect(spec).toMatchObject({
       match: { kind: "dialogue" },
       reveal: { mode: "segments" },
-      view: { component: "Row" },
+      view: { component: "Stack" },
     });
     expect(spec.view.children[0]).toMatchObject({
-      component: "CharacterAvatar",
-      props: { characterId: { $state: "/character/id" } },
+      component: "Row",
+      visible: { $state: "/segment/speaker" },
+      children: [
+        {
+          component: "CharacterAvatar",
+          props: { characterId: { $state: "/character/id" }, size: 32 },
+        },
+        {
+          component: "Text",
+          props: { content: { $state: "/segment/speaker" }, weight: "bold" },
+        },
+      ],
     });
-    expect(spec.view.children[1].children).toEqual([
-      { component: "Badge", props: { label: { $state: "/segment/speaker" } } },
-      { component: "Prose", props: { content: { $state: "/segment/text" } } },
-    ]);
+    expect(spec.view.children[1]).toEqual({
+      component: "Prose",
+      props: { content: { $state: "/segment/text" } },
+    });
   });
 });

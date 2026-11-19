@@ -215,9 +215,9 @@ export function TokenControl({
     // accent bar per row, which reads as noise across 45 stacked controls.
     <div
       onBlur={flush}
-      className="flex items-center justify-between gap-4 border-b border-(--rule-color) py-2 last:border-b-0"
+      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-(--rule-color) py-3 last:border-b-0"
     >
-      <div className="min-w-0 flex-1 space-y-0.5">
+      <div className="min-w-0 flex-[1_1_9rem] space-y-0.5">
         <div className="flex items-center gap-1.5">
           {override !== null && (
             <span
@@ -226,18 +226,18 @@ export function TokenControl({
               style={{ background: "var(--accent-primary)" }}
             />
           )}
-          <span id={labelId} className="text-xs font-medium truncate">
+          <span id={labelId} className="wrap-break-word text-sm font-medium">
             {label}
           </span>
         </div>
         {hint && (
-          <p className="ui-meta normal-case tracking-normal text-[10px] leading-relaxed">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {hint}
           </p>
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex max-w-full min-w-0 items-center gap-1.5">
         <TokenInput
           spec={spec}
           value={value}
@@ -349,7 +349,7 @@ function ColorInput({
   const swatch = toSwatchHex(value) ?? "#000000";
   const valid = !text.trim() || isValidCssColor(text);
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <input
         type="color"
         value={swatch}
@@ -521,7 +521,7 @@ function PresetInput({
   const matched = options.find((option) => option.value === value.trim());
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <select
         aria-labelledby={labelId}
         value={matched?.value ?? ""}
@@ -532,7 +532,7 @@ function PresetInput({
           }
           onPreview(event.target.value);
         }}
-        className={`${FIELD_CLASS} w-36`}
+        className={`${FIELD_CLASS} w-36 max-w-full min-w-0 flex-[1_1_7rem]`}
       >
         <option value="">{t("appearance.followTheme")}</option>
         {options.map((option) => (
@@ -552,7 +552,7 @@ function PresetInput({
           onPreview(event.target.value);
         }}
         style={previewFont ? { fontFamily: value } : undefined}
-        className={`${FIELD_CLASS} w-40`}
+        className={`${FIELD_CLASS} w-40 max-w-full min-w-0 flex-[1_1_8rem]`}
       />
     </div>
   );

@@ -2,9 +2,10 @@ import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Boxes, Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
+import { Boxes, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import type { GithubBatchInstallResult } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
+import { SettingsPaneHeader } from "../pane-layout.js";
 import {
   getDesktopInfo,
   hasElectronIpc,
@@ -224,15 +225,10 @@ export function PackagesPane() {
 
   return (
     <div className="space-y-5">
-      <header className="space-y-1">
-        <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Package className="w-4 h-4" />
-          {t("settings.packages.title")}
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          {t("settings.packages.description")}
-        </p>
-      </header>
+      <SettingsPaneHeader
+        title={t("settings.packages.title")}
+        description={t("settings.packages.description")}
+      />
 
       <PaneNotice notice={notice} />
 
@@ -359,7 +355,7 @@ export function PackagesPane() {
 
       {rows.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground">
+          <h3 className="settings-section-title">
             {t("settings.packages.installedTitle", "Installed plugins")}
           </h3>
           <ul className="divide-y divide-border border border-border rounded">
@@ -447,7 +443,7 @@ export function PackagesPane() {
 
       {worldInstallations.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground">
+          <h3 className="settings-section-title">
             {t("settings.worldGithub.installed")}
           </h3>
           <ul className="divide-y divide-border rounded border border-border">

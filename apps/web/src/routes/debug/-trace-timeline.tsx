@@ -34,8 +34,8 @@ export function TraceTimeline({
   const { t } = useTranslation();
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-      <div className="p-4 space-y-2 max-w-5xl">
+    <div className="debug-pane">
+      <div className="space-y-2">
         {!selectedSessionId && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Terminal className="w-8 h-8 text-muted-foreground/30 mb-3" />

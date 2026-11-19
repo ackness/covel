@@ -2,7 +2,7 @@ import { useSettingsWritable } from "./use-settings-save.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, RotateCw, Upload } from "lucide-react";
+import { FileInput, FileOutput, RotateCw } from "lucide-react";
 import { z } from "zod";
 import type { SettingsExportBundle } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
@@ -186,11 +186,9 @@ export function DataPane() {
         </div>
       )}
 
-      <section className="space-y-2">
-        <h3 className="text-[13px] font-medium leading-snug text-foreground">
-          {t("settings.exportHeader")}
-        </h3>
-        <p className="text-xs leading-relaxed text-muted-foreground">
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title">{t("settings.exportHeader")}</h3>
+        <p className="text-sm leading-relaxed text-muted-foreground">
           {t("settings.exportDescription")}
         </p>
         {!writable && (
@@ -212,16 +210,14 @@ export function DataPane() {
           onClick={handleExport}
           disabled={busy}
         >
-          <Download className="w-3 h-3 mr-1" />
+          <FileOutput data-icon="inline-start" />
           {t("settings.exportDownload")}
         </Button>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-[13px] font-medium leading-snug text-foreground">
-          {t("settings.importHeader")}
-        </h3>
-        <p className="text-xs leading-relaxed text-muted-foreground">
+      <section className="settings-group space-y-3">
+        <h3 className="settings-section-title">{t("settings.importHeader")}</h3>
+        <p className="text-sm leading-relaxed text-muted-foreground">
           {t("settings.importDescription")}
         </p>
         <Button
@@ -230,7 +226,7 @@ export function DataPane() {
           disabled={busy}
           onClick={() => fileRef.current?.click()}
         >
-          <Upload className="w-3 h-3 mr-1" />
+          <FileInput data-icon="inline-start" />
           {t("settings.importChoose")}
         </Button>
         <input
@@ -321,9 +317,9 @@ export function DataPane() {
 
       <section
         data-testid="settings-reset-section"
-        className="mt-10 space-y-2 border-t border-destructive/40 pt-6"
+        className="settings-group space-y-3 border-destructive/30"
       >
-        <h3 className="text-[13px] font-medium leading-snug text-destructive">
+        <h3 className="settings-section-title text-destructive">
           {t("settings.resetHeader")}
         </h3>
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -347,6 +343,7 @@ export function DataPane() {
             <Button
               size="sm"
               variant="destructive"
+              className="h-auto max-w-full py-1.5 text-start whitespace-normal"
               onClick={handleResetBrowserData}
               disabled={busy}
             >

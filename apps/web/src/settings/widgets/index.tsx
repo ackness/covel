@@ -113,7 +113,13 @@ function inferWidget(entry: SettingEntry): WidgetKind {
   return "custom";
 }
 
-export function SettingWidget({ entry }: { entry: SettingEntry }) {
+export function SettingWidget({
+  entry,
+  labelAccessory,
+}: {
+  entry: SettingEntry;
+  labelAccessory?: React.ReactNode;
+}) {
   const widget = inferWidget(entry);
   switch (widget) {
     case "toggle":
@@ -125,7 +131,7 @@ export function SettingWidget({ entry }: { entry: SettingEntry }) {
     case "number":
       return <NumberWidget entry={entry} />;
     case "secret":
-      return <SecretWidget entry={entry} />;
+      return <SecretWidget entry={entry} labelAccessory={labelAccessory} />;
     case "textarea":
       return <TextareaWidget entry={entry} />;
     case "text":
@@ -142,12 +148,14 @@ function FieldShell({
   entry,
   controlId,
   inline = false,
+  labelAccessory,
   children,
 }: {
   entry: SettingEntry;
   controlId?: string;
   /** Put the control beside the text instead of under it. */
   inline?: boolean;
+  labelAccessory?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { t, i18n } = useTranslation();
@@ -173,6 +181,7 @@ function FieldShell({
         >
           {resolveSettingEntryText(entry, "label", locale)}
         </Label>
+        {labelAccessory}
         {!lock.locked && <UseDefaultButton entry={entry} />}
       </div>
       {(description || range) && (
@@ -454,7 +463,13 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
   );
 }
 
-function SecretWidget({ entry }: { entry: SettingEntry }) {
+function SecretWidget({
+  entry,
+  labelAccessory,
+}: {
+  entry: SettingEntry;
+  labelAccessory?: React.ReactNode;
+}) {
   const { t } = useTranslation();
   const [value, setValue] = useSetting<string>(entry.key);
   const [visible, setVisible] = useState(false);
@@ -464,7 +479,11 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
     if (text) void setValue(text);
   });
   return (
-    <FieldShell entry={entry} controlId={controlId}>
+    <FieldShell
+      entry={entry}
+      controlId={controlId}
+      labelAccessory={labelAccessory}
+    >
       <div className="flex gap-1">
         <SecretInput
           id={controlId}

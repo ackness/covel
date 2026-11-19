@@ -4,7 +4,7 @@
     "ru": {
       "PLUGIN.md#contributes.settings[key=dialogueRatio].description": "50c9d43aaddebf34",
       "PLUGIN.md#contributes.settings[key=dialogueRatio].label": "334f84c1f0478b93",
-      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
+      "PLUGIN.md#contributes.settings[key=perspective].description": "8ff74039280e2b0c",
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
       "PLUGIN.md#contributes.settings[key=proseLength].description": "89c3b8d9ee671bfb",
       "PLUGIN.md#contributes.settings[key=proseLength].label": "195bbecaed5490c0",
@@ -16,7 +16,7 @@
     "zh": {
       "PLUGIN.md#contributes.settings[key=dialogueRatio].description": "50c9d43aaddebf34",
       "PLUGIN.md#contributes.settings[key=dialogueRatio].label": "334f84c1f0478b93",
-      "PLUGIN.md#contributes.settings[key=perspective].description": "4e2790c33633d0f9",
+      "PLUGIN.md#contributes.settings[key=perspective].description": "8ff74039280e2b0c",
       "PLUGIN.md#contributes.settings[key=perspective].label": "e3ad1bcc2cbd8537",
       "PLUGIN.md#contributes.settings[key=proseLength].description": "89c3b8d9ee671bfb",
       "PLUGIN.md#contributes.settings[key=proseLength].label": "195bbecaed5490c0",

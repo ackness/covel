@@ -269,7 +269,7 @@ function SessionRightPanel({
         orientation={barTabs ? "horizontal" : "vertical"}
       >
         {barTabs ? (
-          <div className="ui-panel-tabbar relative flex shrink-0 items-center gap-1 border-b border-(--rule-color) px-3">
+          <div className="ui-panel-tabbar ui-workspace-rule relative flex shrink-0 items-center gap-1 px-3">
             <div
               ref={tabRailRef}
               data-fade-start={tabEdges.start}
@@ -281,14 +281,14 @@ function SessionRightPanel({
                   event.currentTarget.scrollLeft += event.deltaY;
               }}
             >
-              <TabsList className="flex h-auto w-max items-center justify-start gap-1 rounded-none bg-transparent p-0 py-2 text-muted-foreground">
+              <TabsList className="flex h-auto w-max items-center justify-start gap-1 rounded-none bg-transparent p-0 text-muted-foreground">
                 {tabItems.map((item) => {
                   const ItemIcon = item.icon;
                   return (
                     <TabsTrigger
                       key={item.id}
                       value={item.value}
-                      className="ui-panel-tab h-8 shrink-0 gap-1.5 rounded-(--radius-control) border-0 px-2.5 text-[13px] font-normal text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-accent data-[state=active]:font-medium data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
+                      className="ui-panel-tab ui-tab-item shrink-0 gap-1.5 border-0 px-2.5 text-[13px] font-normal shadow-none touch-manipulation data-[state=active]:font-medium data-[state=active]:shadow-none"
                       title={item.title ?? item.label}
                       // The tab may show a short label; its name stays the full one.
                       aria-label={item.label}
@@ -532,11 +532,11 @@ function SessionRightPanel({
                         if (!open) setExpandedPanelKey(null);
                       }}
                     >
-                      <DialogContent className="ui-panel-dialog flex max-h-[90vh] w-[min(72rem,94vw)] max-w-none flex-col sm:max-w-none">
+                      <DialogContent className="ui-panel-dialog flex max-h-[90dvh] max-w-7xl flex-col overflow-hidden p-4 sm:p-6">
                         <DialogHeader>
                           <DialogTitle>{currentSub.label}</DialogTitle>
                         </DialogHeader>
-                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                        <div className="ui-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
                           <PluginPanel
                             key={pluginPanelKey(currentSub)}
                             panelId={currentSub.id}

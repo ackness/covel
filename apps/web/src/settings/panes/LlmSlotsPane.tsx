@@ -259,7 +259,7 @@ export function LlmSlotsPane() {
       />
       {/* Manual hot-reload: re-read llm.toml on the server and apply it to the
           live gateway without restarting. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius-control) border border-(--rule-color) px-3 py-2">
+      <div className="settings-group flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 space-y-0.5">
           {llm?.source && (
             <p className="break-all text-xs">
@@ -311,8 +311,8 @@ export function LlmSlotsPane() {
         </ul>
       </details>
       {discoveredSlotIds.length > 0 && (
-        <div className="border border-border/70 bg-muted/20 px-3 py-2 space-y-2">
-          <div className="flex items-center justify-between gap-2">
+        <div className="settings-group space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="space-y-1">
               <div className="text-xs font-medium">
                 {t(
@@ -330,7 +330,7 @@ export function LlmSlotsPane() {
             <Button
               variant="outline"
               size="sm"
-              className="text-[11px] shrink-0"
+              className="h-auto max-w-full py-1.5 text-xs whitespace-normal"
               disabled={savingSlot || savingCapabilities || !writable}
               onClick={autoBindDiscoveredSlots}
             >
@@ -399,16 +399,15 @@ export function LlmSlotsPane() {
         ))}
       </div>
 
-      <div className="border border-dashed border-border p-3 space-y-2 mt-2">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+      <div className="settings-group mt-2 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="settings-section-title flex items-center gap-1.5">
             <Database className="w-3 h-3" />
             {t("settings.modelDatabase")}
-          </h4>
+          </h3>
           <Button
             variant="outline"
             size="sm"
-            className="h-6 text-[10px] px-2"
             disabled={refreshing}
             onClick={handleRefreshModelDb}
           >

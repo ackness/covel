@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Info, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import {
   getParamOverrides,
   getProviderProfiles,
@@ -24,7 +24,7 @@ import {
   resolveEffectiveModelTarget,
 } from "./llm-effective-capability.js";
 import { useModelCapability } from "./use-model-capability.js";
-import { MaxOutputTokensCard, ValueCell } from "./llm-max-output-tokens.js";
+import { MaxOutputTokensCard } from "./llm-max-output-tokens.js";
 import { ModelTokenLimits } from "./llm-token-limits.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 import { useLlmSlotIds } from "./use-llm-slot-ids.js";
@@ -32,6 +32,7 @@ import { useSetting, useSettingsStore } from "../use-settings.js";
 import { useSettingsSave } from "../use-settings-save.js";
 
 import { useInputDraft } from "../use-input-draft.js";
+import { SettingsHelp } from "../pane-layout.js";
 
 type NumericParameter = Exclude<
   keyof ModelParameterOverrides,
@@ -227,27 +228,22 @@ export function LlmAdvancedPane({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2 border border-border/60 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span className="leading-relaxed">{t("settings.advancedDesc")}</span>
-      </div>
-
+    <div className="@container flex min-w-0 flex-col gap-4">
       {!slotId && (
-        <div className="border border-border bg-background p-3">
-          <div className="flex items-end justify-between gap-3">
-            <label className="min-w-0 flex-1 space-y-1.5">
-              <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+        <div className="settings-group flex flex-col gap-2">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <label className="flex min-w-0 flex-[1_1_14rem] flex-col gap-1.5">
+              <span className="text-xs font-medium">
                 {t("settings.selectSlot")}
               </span>
               <select
                 value={selectedSlot}
                 onChange={(event) => setSelectedSlot(event.target.value)}
-                className="w-full border border-border bg-background px-3 py-2 text-sm font-medium outline-none focus:ring-1 focus:ring-primary"
+                className="h-10 w-full min-w-0 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-primary"
               >
                 {slots.map((slot) => (
                   <option key={slot} value={slot}>
-                    {slot}
+                    {t(`session.modelUse.${slot}`, { defaultValue: slot })}
                   </option>
                 ))}
               </select>
@@ -262,9 +258,11 @@ export function LlmAdvancedPane({
             </Badge>
           </div>
           {(effectiveTarget.provider || effectiveTarget.model) && (
-            <div className="mt-2 flex flex-wrap gap-x-4 text-[10px] text-muted-foreground">
+            <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
               <span>{effectiveTarget.provider}</span>
-              <span className="font-mono">{effectiveTarget.model}</span>
+              <span className="min-w-0 wrap-break-word font-mono">
+                {effectiveTarget.model}
+              </span>
             </div>
           )}
         </div>
@@ -297,43 +295,55 @@ export function LlmAdvancedPane({
         <fieldset
           disabled={!selectedSlot || !writable}
           aria-busy={saving}
-          className="grid grid-cols-1 gap-3 md:grid-cols-2"
+          className="flex min-w-0 flex-col gap-5"
         >
-          <ModelTokenLimits
-            key={`limits:${selectedSlot}`}
-            capability={capability}
-            override={getCapabilityOverrides()[selectedSlot]}
-            onUpdate={(patch) => {
-              return save(() => {
-                const overrides = getCapabilityOverrides();
-                return setCapabilityOverrides({
-                  ...overrides,
-                  [selectedSlot]: { ...overrides[selectedSlot], ...patch },
-                });
-              });
-            }}
-          />
-          <MaxOutputTokensCard
-            override={current.maxOutputTokens}
-            defaultValue={effectiveTarget.parameterDefaults?.maxOutputTokens}
-            key={selectedSlot}
-            modelLimit={capability?.maxOutputTokens}
-            contextWindow={capability?.contextWindow}
-            onChange={(value) => setField("maxOutputTokens", value)}
-          />
-          {PARAMETER_DEFINITIONS.map((definition) => (
-            <ParameterCard
-              key={`${selectedSlot}:${definition.field}`}
-              definition={{
-                ...definition,
-                defaultValue:
-                  effectiveTarget.parameterDefaults?.[definition.field] ??
-                  definition.defaultValue,
-              }}
-              override={current[definition.field]}
-              onChange={(value) => setField(definition.field, value)}
+          <section className="flex min-w-0 flex-col gap-3">
+            <h3 className="settings-section-title">
+              {t("settings.tokenBudgetGroup")}
+            </h3>
+            <MaxOutputTokensCard
+              override={current.maxOutputTokens}
+              defaultValue={effectiveTarget.parameterDefaults?.maxOutputTokens}
+              key={selectedSlot}
+              modelLimit={capability?.maxOutputTokens}
+              contextWindow={capability?.contextWindow}
+              onChange={(value) => setField("maxOutputTokens", value)}
             />
-          ))}
+            <ModelTokenLimits
+              key={`limits:${selectedSlot}`}
+              capability={capability}
+              override={getCapabilityOverrides()[selectedSlot]}
+              onUpdate={(patch) =>
+                save(() => {
+                  const overrides = getCapabilityOverrides();
+                  return setCapabilityOverrides({
+                    ...overrides,
+                    [selectedSlot]: { ...overrides[selectedSlot], ...patch },
+                  });
+                })
+              }
+            />
+          </section>
+          <section className="flex min-w-0 flex-col gap-3">
+            <h3 className="settings-section-title">
+              {t("settings.samplingGroup")}
+            </h3>
+            <div className="grid min-w-0 gap-3 @lg:grid-cols-2">
+              {PARAMETER_DEFINITIONS.map((definition) => (
+                <ParameterCard
+                  key={`${selectedSlot}:${definition.field}`}
+                  definition={{
+                    ...definition,
+                    defaultValue:
+                      effectiveTarget.parameterDefaults?.[definition.field] ??
+                      definition.defaultValue,
+                  }}
+                  override={current[definition.field]}
+                  onChange={(value) => setField(definition.field, value)}
+                />
+              ))}
+            </div>
+          </section>
           <ReasoningEffortCard
             profile={reasoningProfile}
             defaultOverride={effectiveTarget.parameterDefaults?.reasoningEffort}
@@ -352,7 +362,7 @@ export function LlmAdvancedPane({
         size="sm"
         onClick={resetSlot}
         disabled={overrideCount === 0 || saving || !writable}
-        className="w-full text-xs"
+        className="w-fit max-w-full whitespace-normal"
       >
         <RotateCcw className="h-3.5 w-3.5" />
         {t("settings.resetToDefaults", "Reset to defaults")}
@@ -380,38 +390,18 @@ function ParameterCard({
   const decimals = definition.step < 0.1 ? 2 : definition.step < 1 ? 1 : 0;
 
   return (
-    <div className="border border-border p-3 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-sm font-medium">
-            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-            {t(definition.labelKey)}
-          </div>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {t(definition.descriptionKey)}
-          </p>
-        </div>
+    <div className="settings-group flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-sm font-medium">{t(definition.labelKey)}</div>
         {override !== undefined && (
           <button
             type="button"
             onClick={() => onChange(undefined)}
-            className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="text-xs text-primary underline-offset-2 hover:underline"
           >
             {t("settings.useDefault", "Use default")}
           </button>
         )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 text-[10px]">
-        <ValueCell
-          label={t("settings.defaultValue", "Default")}
-          value={definition.defaultValue.toFixed(decimals)}
-        />
-        <ValueCell
-          label={t("settings.currentValue", "Effective")}
-          value={effective.toFixed(decimals)}
-          active={override !== undefined}
-        />
       </div>
 
       <div className="flex items-center gap-3">
@@ -446,12 +436,16 @@ function ParameterCard({
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}
-          className="w-20 border border-border bg-background px-2 py-1.5 text-right font-mono text-xs tabular-nums outline-none focus:ring-1 focus:ring-primary"
+          className="h-9 w-20 rounded-md border border-border bg-background px-2 text-right font-mono text-xs tabular-nums outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
-      <div className="flex justify-between font-mono text-[9px] text-muted-foreground/70">
-        <span>{definition.min}</span>
-        <span>{definition.max}</span>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {t("settings.parameterDefault", {
+            value: definition.defaultValue.toFixed(decimals),
+          })}
+        </p>
+        <SettingsHelp>{t(definition.descriptionKey)}</SettingsHelp>
       </div>
     </div>
   );

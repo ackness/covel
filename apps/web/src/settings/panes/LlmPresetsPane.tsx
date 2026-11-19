@@ -1,7 +1,7 @@
 import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Download, Plus, Server, Upload } from "lucide-react";
+import { ArrowLeft, FileInput, FileOutput, Plus, Server } from "lucide-react";
 import {
   getSlotConfig,
   getProviderProfiles,
@@ -40,6 +40,7 @@ import { ProviderList } from "./llm-provider-list.js";
 import { ProviderDetails } from "./llm-provider-details.js";
 import { ModelDialog, ProviderDialog } from "./llm-provider-dialogs.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
+import { SettingsPaneHeader } from "../pane-layout.js";
 
 /** Provider catalogue with connection settings and one-to-many model editing. */
 export function LlmPresetsPane() {
@@ -356,34 +357,24 @@ export function LlmPresetsPane() {
   };
 
   return (
-    <div aria-busy={saving} className="min-w-0 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {t("settings.providerConnections", "Provider connections")}
-          </h3>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            {t(
-              "settings.providerCatalogHint",
-              "Choose a provider, configure its connection once, then maintain all of its models in one list.",
-            )}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={saving || !writable}
-          onClick={() => setProviderDialogOpen(true)}
-          className="shrink-0"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("settings.addProvider", "Add provider")}
-        </Button>
-      </div>
+    <div aria-busy={saving} className="@container min-w-0">
+      <SettingsPaneHeader
+        title={t("settings.providerConnections")}
+        actions={
+          <Button
+            size="sm"
+            disabled={saving || !writable}
+            onClick={() => setProviderDialogOpen(true)}
+            className="shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("settings.addProvider", "Add provider")}
+          </Button>
+        }
+      />
 
-      <div className="grid min-h-112 grid-cols-1 lg:grid-cols-[10.5rem_minmax(0,1fr)] border border-border">
+      <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-[11rem_minmax(0,1fr)] @2xl:gap-6">
         <ProviderList
-          busy={saving || !writable}
           providers={filteredCatalog}
           selectedProviderId={selectedProvider?.id}
           query={query}
@@ -393,17 +384,16 @@ export function LlmPresetsPane() {
             setSelectedProviderId(id);
             setMobileDetailsOpen(true);
           }}
-          onAddProvider={() => setProviderDialogOpen(true)}
         />
 
         <section
           aria-label={t("settings.providerConnections")}
-          className={`${mobileDetailsOpen ? "block" : "hidden lg:block"} min-w-0 p-3`}
+          className={`${mobileDetailsOpen ? "block" : "hidden @2xl:block"} min-w-0 @2xl:border-l @2xl:border-border @2xl:pl-6`}
         >
           <Button
             variant="ghost"
             size="sm"
-            className="mb-3 lg:hidden"
+            className="mb-3 @2xl:hidden"
             onClick={() => setMobileDetailsOpen(false)}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -411,8 +401,18 @@ export function LlmPresetsPane() {
           </Button>
           {selectedProvider ? (
             <ProviderDetails
+              key={selectedProvider.id}
               provider={selectedProvider}
               serverConfig={state.llmConfig?.source}
+              builtinDefault={
+                state.llmConfig?.source
+                  ? undefined
+                  : Object.values(state.llmConfig?.slots ?? {}).some(
+                      (slot) =>
+                        slot.provider === selectedProvider.id &&
+                        slot.builtinDefault,
+                    )
+              }
               busy={saving || !writable}
               onAddModel={() => setModelDialogOpen(true)}
               onPatchLocalProfile={patchLocalProfile}
@@ -436,7 +436,7 @@ export function LlmPresetsPane() {
               }}
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border p-8 text-center text-muted-foreground">
               <Server className="h-6 w-6" />
               <p className="text-xs">
                 {t("settings.noProvidersTitle", "No providers registered yet")}
@@ -446,42 +446,38 @@ export function LlmPresetsPane() {
         </section>
       </div>
 
-      <PaneNotice
-        notice={
-          importError || saveError
-            ? { tone: "error", message: importError || saveError || "" }
-            : notice
-        }
-      />
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          className="flex-1 text-xs"
-        >
-          <Download className="h-3.5 w-3.5" />
-          {t("settings.export")}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={saving || !writable}
-          onClick={() => fileRef.current?.click()}
-          className="flex-1 text-xs"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          {t("settings.import")}
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          disabled={saving || !writable}
-          accept=".json"
-          aria-label={t("settings.import")}
-          className="hidden"
-          onChange={handleImport}
+      <div className="mt-5 flex flex-col gap-3 border-t border-border pt-3">
+        <PaneNotice
+          notice={
+            importError || saveError
+              ? { tone: "error", message: importError || saveError || "" }
+              : notice
+          }
         />
+        <div className="flex flex-wrap gap-1">
+          <Button variant="ghost" size="sm" onClick={handleExport}>
+            <FileOutput data-icon="inline-start" />
+            {t("settings.export")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={saving || !writable}
+            onClick={() => fileRef.current?.click()}
+          >
+            <FileInput data-icon="inline-start" />
+            {t("settings.import")}
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            disabled={saving || !writable}
+            accept=".json"
+            aria-label={t("settings.import")}
+            className="hidden"
+            onChange={handleImport}
+          />
+        </div>
       </div>
 
       <ProviderDialog

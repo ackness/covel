@@ -119,6 +119,10 @@ export default defineConfig(({ mode }) => ({
     // floor to silence it would hide the regression it is there to catch.
     chunkSizeWarningLimit: 600,
     rolldownOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        design: fileURLToPath(new URL("./design-system.html", import.meta.url)),
+      },
       output: {
         // Stage 6 (audit): split heavy vendors and feature surfaces out of
         // the main chunk so the first-paint critical path doesn't ship

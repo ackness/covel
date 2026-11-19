@@ -236,11 +236,7 @@ function RootLayout() {
                     type="button"
                     onClick={item.onClick}
                     aria-current={isActive ? "page" : undefined}
-                    className={`ui-nav-item flex h-13 w-14 flex-col items-center justify-center gap-1 rounded-(--radius-control) text-[11px] leading-none transition-colors ${
-                      isActive
-                        ? "bg-accent text-accent-foreground font-medium"
-                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    }`}
+                    className="ui-nav-item ui-rail-item flex h-13 w-14 flex-col items-center justify-center gap-1 text-[11px] leading-none transition-colors aria-[current=page]:font-medium"
                   >
                     <Icon
                       className={`h-4.5 w-4.5 ${isActive ? "text-(--accent-primary)" : ""}`}
@@ -289,19 +285,9 @@ function RootLayout() {
                       type="button"
                       onClick={item.onClick}
                       aria-current={isActive ? "page" : undefined}
-                      className={`ui-nav-item relative h-8 px-3 transition-colors rounded-(--radius-control) ${
-                        isActive
-                          ? "bg-primary/10 text-foreground"
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                      }`}
+                      className="ui-nav-item ui-tab-item px-3 transition-colors"
                     >
                       <span>{item.label}</span>
-                      {isActive && (
-                        <span
-                          aria-hidden
-                          className="ui-nav-item-marker absolute left-2 right-2 -bottom-px h-0.5 bg-(--accent-primary)"
-                        />
-                      )}
                     </button>
                   );
                 })}

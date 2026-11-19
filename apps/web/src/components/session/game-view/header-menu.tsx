@@ -52,14 +52,14 @@ export function HeaderMenu({
   readonly children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [menuLeft, setMenuLeft] = useState(0);
+  const [position, setPosition] = useState({ left: 0, maxHeight: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const { containerRef, triggerRef } = useDismissibleMenu(open, setOpen, true);
   useLayoutEffect(() => {
     const wrapper = containerRef.current;
     const menu = menuRef.current;
     if (!open || !wrapper || !menu) return;
-    const position = () => {
+    const measure = () => {
       const anchor = wrapper.getBoundingClientRect();
       const width = menu.getBoundingClientRect().width;
       const left = Math.max(
@@ -69,21 +69,30 @@ export function HeaderMenu({
           window.innerWidth - width - MENU_VIEWPORT_GUTTER,
         ),
       );
-      setMenuLeft(left - anchor.left);
+      const offset = left - anchor.left;
+      const maxHeight = Math.max(
+        0,
+        window.innerHeight - anchor.bottom - MENU_VIEWPORT_GUTTER - 6,
+      );
+      setPosition((current) =>
+        current.left === offset && current.maxHeight === maxHeight
+          ? current
+          : { left: offset, maxHeight },
+      );
     };
-    position();
+    measure();
     const observer =
       typeof ResizeObserver === "undefined"
         ? null
-        : new ResizeObserver(position);
+        : new ResizeObserver(measure);
     observer?.observe(wrapper);
     observer?.observe(menu);
-    window.addEventListener("resize", position);
-    window.addEventListener("scroll", position, true);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
     return () => {
       observer?.disconnect();
-      window.removeEventListener("resize", position);
-      window.removeEventListener("scroll", position, true);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
     };
   }, [open, containerRef, children]);
 
@@ -114,10 +123,10 @@ export function HeaderMenu({
           role="group"
           aria-label={label}
           data-covel-host-controls=""
-          className="ui-dialog-shell absolute top-full z-30 mt-1.5 w-max p-1"
+          className="ui-dialog-shell ui-scroll absolute top-full z-30 mt-1.5 w-max overflow-y-auto overscroll-contain p-1"
           style={{
-            left: menuLeft,
-            minWidth: `min(12rem, ${MENU_MAX_WIDTH})`,
+            ...position,
+            minWidth: `min(16rem, ${MENU_MAX_WIDTH})`,
             maxWidth: MENU_MAX_WIDTH,
           }}
           // Any choice closes the menu; the items handle their own action.
@@ -154,12 +163,12 @@ export function MenuItem({
       aria-pressed={checked}
       disabled={disabled}
       onClick={onSelect}
-      className={`ui-menu-item flex h-9 w-full items-center gap-2.5 rounded-(--radius-control) px-2.5 text-left text-[13px] hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50 ${
+      className={`ui-menu-item flex min-h-9 w-full items-center gap-2.5 rounded-(--radius-control) px-2.5 py-1.5 text-left text-[13px] hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50 ${
         checked ? "text-(--accent-primary) font-medium" : ""
       }`}
     >
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span>{label}</span>
+      <span className="min-w-0 wrap-break-word">{label}</span>
       {secondary && (
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {secondary}

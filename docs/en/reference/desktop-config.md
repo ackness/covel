@@ -146,7 +146,7 @@ This guarantees the file is either the old content or the complete new content. 
 The desktop shell always passes this path to the backend, even before the file exists. The app never copies model configuration from its install directory: the first launch uses the built-in default, and creating this file and reloading applies it.
 
 - See [`llm.toml.example`](../../../llm.toml.example) at the repository root. Each model slot pairs one provider with one model.
-- The built-in default `story` slot uses `deepseek-v4-flash`. Filling `DEEPSEEK_API_KEY` in `keys.env` is enough to run.
+- The built-in default `story` slot uses `deepseek-flash`. Filling `DEEPSEEK_API_KEY` in `keys.env` is enough to run.
 
 **Settings UI.** The model settings have three pages: **AI roles**, **Providers & keys**, and **Generation**.
 

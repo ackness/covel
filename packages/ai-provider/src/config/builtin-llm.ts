@@ -11,7 +11,7 @@
 export const BUILTIN_LLM_PROVIDER = "default";
 
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-const DEEPSEEK_MODEL = "deepseek-v4-flash";
+const DEEPSEEK_MODEL = "deepseek-flash";
 
 export interface BuiltinLlmSettings {
   /** `DEFAULT_BASE_URL`: the endpoint, as an llm.toml `baseUrl` takes it. */

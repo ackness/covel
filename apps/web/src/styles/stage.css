@@ -204,6 +204,14 @@
     backdrop-filter: blur(8px);
   }
 
+  .ui-stage-width {
+    max-width: 48rem;
+  }
+
+  .ui-stage-width:has(> .ui-session-width-handle) {
+    padding-inline-end: max(1.25rem, var(--session-resize-hit-width, 1.125rem));
+  }
+
   @keyframes ui-stage-choice-in {
     from {
       opacity: 0;

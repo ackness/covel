@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/fonts.css";
+@import "./styles/editorial.css";
 @import "./styles/narrative.css";
 @import "./styles/ui-components.css";
 @import "./styles/stage.css";

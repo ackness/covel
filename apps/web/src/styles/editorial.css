@@ -1,0 +1,205 @@
+:root {
+  --ui-gap-label: 0.25rem;
+  --ui-gap-inline: 0.5rem;
+  --ui-gap-field: 0.75rem;
+  --ui-gap-group: 1rem;
+  --ui-gap-section: 1.5rem;
+  --ui-gutter: clamp(1rem, 2.5vw, 2rem);
+  --ui-control-compact: 2rem;
+  --ui-control-standard: 2.25rem;
+  --ui-control-touch: 2.75rem;
+}
+
+.ui-workspace-heading {
+  --heading-rule: var(--rule-color);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ui-gap-field);
+  min-width: 0;
+  padding-block-end: var(--ui-gap-field);
+  border-block-end: var(--rule-thickness, 1px) var(--rule-style)
+    var(--heading-rule);
+}
+
+.ui-workspace-heading :is(h1, h2, h3) {
+  font-family: var(--title-font-family, var(--type-display));
+  font-style: var(--title-font-style, normal);
+  font-weight: var(--title-font-weight, 600);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ui-workspace-rule {
+  border-block-end: var(--rule-thickness, 1px) var(--rule-style)
+    var(--rule-color);
+}
+
+.ui-workspace-content {
+  min-width: 0;
+  padding-inline: var(--ui-gutter);
+}
+
+.ui-field-rows {
+  min-width: 0;
+}
+
+.ui-field-rows > * {
+  padding-block: var(--ui-gap-group);
+}
+
+.ui-field-rows > * + * {
+  border-block-start: var(--rule-thickness, 1px) var(--rule-style)
+    var(--rule-color);
+}
+
+.ui-rail-item,
+.ui-tab-item {
+  position: relative;
+  min-width: 0;
+  min-height: var(--ui-control-compact);
+  color: var(--color-muted-foreground);
+}
+
+.ui-rail-item {
+  min-height: var(--ui-control-standard);
+}
+
+:is(.ui-rail-item, .ui-tab-item):hover {
+  background: color-mix(in oklab, var(--color-foreground) 5%, transparent);
+  color: var(--color-foreground);
+}
+
+.ui-rail-item:is(
+  [aria-current]:not([aria-current="false"]),
+  [aria-pressed="true"]
+),
+.ui-tab-item:is(
+  [aria-current="page"],
+  [aria-pressed="true"],
+  [data-state="active"],
+  [data-active="true"]
+) {
+  background: color-mix(in oklab, var(--accent-primary) 8%, transparent);
+  color: var(--color-foreground);
+}
+
+.ui-rail-item:is(
+    [aria-current]:not([aria-current="false"]),
+    [aria-pressed="true"]
+  )::before,
+.ui-tab-item:is(
+    [aria-current="page"],
+    [aria-pressed="true"],
+    [data-state="active"],
+    [data-active="true"]
+  )::before {
+  content: "";
+  position: absolute;
+  background: var(--accent-primary);
+}
+
+.ui-rail-item::before {
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 2px;
+}
+
+.ui-tab-item::before {
+  inset-inline: 0;
+  inset-block-end: 0;
+  block-size: 2px;
+}
+
+.ui-rail-item:focus-visible,
+.ui-tab-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+@layer components {
+  .ui-composer-input {
+    display: flex;
+    align-items: stretch;
+    min-block-size: var(--ui-control-touch);
+    border-radius: var(--radius-control);
+    border: var(--rule-thickness, 1px) var(--rule-style) var(--rule-color);
+    background: var(--surface-inset);
+    transition: border-color 120ms ease;
+  }
+
+  .ui-composer-input:focus-within {
+    border-color: var(--accent-primary);
+  }
+
+  .ui-composer-field {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 0.625rem 0.875rem;
+    color: var(--color-foreground);
+    font-family: var(--type-body);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  input.ui-composer-field {
+    border: 0;
+    outline: none;
+    background: transparent;
+  }
+
+  .ui-composer-field::placeholder {
+    color: var(--color-muted-foreground);
+    opacity: 1;
+  }
+
+  .ui-composer-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    inline-size: var(--ui-control-touch);
+    border: 0;
+    border-inline-start: 1px solid var(--rule-color);
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .ui-composer-submit:enabled:hover {
+    background-color: color-mix(
+      in oklab,
+      var(--color-foreground) 6%,
+      transparent
+    );
+    color: var(--color-foreground);
+  }
+
+  .ui-composer-submit:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: -2px;
+  }
+}
+
+@media (pointer: coarse), (max-width: 40rem) {
+  .ui-rail-item,
+  .ui-tab-item {
+    min-height: var(--ui-control-touch);
+  }
+
+  .ui-composer-field {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-composer-input,
+  .ui-composer-submit {
+    transition: none;
+  }
+}

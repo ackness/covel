@@ -150,6 +150,7 @@ test("canonical provider configuration returns to the guide, keeps assignments, 
   await add.getByRole("textbox", { name: "Model IDs" }).fill("fixture-text");
   await add.getByRole("button", { name: "Add provider", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("tab", { name: "Models", exact: true }).click();
   await expect(
     settings.getByText("fixture-text", { exact: true }),
   ).toBeVisible();

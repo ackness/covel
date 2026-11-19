@@ -145,7 +145,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 桌面程序总是把这个路径传给后端，即使文件还不存在。应用不会从安装目录复制模型配置：第一次启动用内置默认，之后新建这个文件并重载就能生效。
 
 - 示例见仓库根目录的 [`llm.toml.example`](../../llm.toml.example)。每个模型用途对应一个服务商和一个模型。
-- 内置默认的 `story` 用途指向 `deepseek-v4-flash`。在 `keys.env` 里填好 `DEEPSEEK_API_KEY` 就能运行。
+- 内置默认的 `story` 用途指向 `deepseek-flash`。在 `keys.env` 里填好 `DEEPSEEK_API_KEY` 就能运行。
 
 **设置界面。** 模型部分分成“AI 分工”“服务商与密钥”“生成参数”三页。
 

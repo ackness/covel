@@ -7,6 +7,37 @@ import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
+it.each([
+  [undefined, "deepseek", "https://api.deepseek.com"],
+  ["https://private-gateway.example/v1/account", "default", undefined],
+])(
+  "publishes the public built-in connection, keeping a custom URL private (%s)",
+  async (baseUrl, provider, publicUrl) => {
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    vi.stubEnv("COVEL_LLM_TOML", "/private/synthetic-host/llm.toml");
+    vi.stubEnv("DEFAULT_BASE_URL", baseUrl);
+    vi.stubEnv("DEFAULT_MODEL", undefined);
+    const store = createMemoryStore();
+    const misc = createMiscApiRoutes(
+      createAiStack(),
+      createPluginRegistry(),
+      store,
+      {},
+    );
+    try {
+      const presets = await (await misc.request("/api/presets")).json();
+      const config = await (await misc.request("/api/llm-config")).json();
+      expect(config.slots.story.builtinDefault).toBe(true);
+      for (const model of [presets.items[0], config.slots.story]) {
+        expect(model).toMatchObject({ provider, model: "deepseek-flash" });
+        expect(model.baseUrl).toBe(publicUrl);
+      }
+    } finally {
+      await store.close();
+    }
+  },
+);
+
 describe.each(["demo", "commercial"])(
   "%s configuration diagnostics",
   (tier) => {

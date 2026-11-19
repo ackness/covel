@@ -231,7 +231,7 @@ test("older orphaned execution stays before the latest story while an optional t
       .selectOption("preset:replacement");
     await role
       .getByRole("button", {
-        name: "生成参数（token、温度、思考强度）",
+        name: "生成参数",
         exact: true,
       })
       .click();

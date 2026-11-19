@@ -147,14 +147,16 @@ export function LlmSlotCard({
       key={slotId}
       role="group"
       aria-label={slotId}
-      className="border border-border p-3 space-y-2"
+      className="settings-group space-y-3"
     >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{slotId}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="min-w-0 wrap-break-word text-sm font-semibold">
+          {slotId}
+        </span>
         {(requiredTag || selectedPreset) && (
           <Badge variant="outline">{roleTag}</Badge>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           {isRequired && (
             <Badge variant="default" className="text-[10px]">
               {t("settings.required", "required")}
@@ -233,8 +235,8 @@ export function LlmSlotCard({
         </p>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <label className="space-y-1">
+      <div className="grid min-w-0 gap-2 @md:grid-cols-2">
+        <label className="min-w-0 space-y-1">
           <span className="text-[10px] text-muted-foreground">
             {t("settings.providerLabel", "Provider")}
           </span>
@@ -266,7 +268,7 @@ export function LlmSlotCard({
             ))}
           </select>
         </label>
-        <label className="space-y-1">
+        <label className="min-w-0 space-y-1">
           <span className="text-[10px] text-muted-foreground">
             {t("settings.modelConfiguration")}
           </span>
@@ -365,7 +367,7 @@ export function LlmSlotCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-2 text-[11px]"
+              className="h-auto max-w-full px-2 py-1.5 text-start text-xs whitespace-normal"
               aria-expanded={isEditing}
               onClick={onToggleEditing}
             >
@@ -379,15 +381,12 @@ export function LlmSlotCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-2 text-[11px]"
+              className="h-auto max-w-full px-2 py-1.5 text-start text-xs whitespace-normal"
               aria-expanded={editingParameters}
               onClick={() => setEditingParameters((value) => !value)}
             >
               <SlidersHorizontal className="mr-1 h-3 w-3" />
-              {t(
-                "settings.editGenerationParameters",
-                "Generation parameters (tokens, temperature, reasoning)",
-              )}
+              {t("settings.editGenerationParameters", "Generation parameters")}
             </Button>
           )}
           {developerMode && hasCapOverride && (

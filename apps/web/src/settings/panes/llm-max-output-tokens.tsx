@@ -52,47 +52,24 @@ export function MaxOutputTokensCard({
     budgetInvalid = true;
   }
   return (
-    <div className="border border-border p-3 space-y-3 md:col-span-2">
-      <div className="flex items-start justify-between gap-3">
+    <div className="settings-group flex flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-sm font-medium">
             {t("settings.maxOutputTokens", "Max Output Tokens")}
           </div>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {t(
-              "settings.maxOutputTokensHint",
-              "Limits output, not input context. Tasks default to 16,384 tokens; you can raise or lower this value for complex calls and reasoning. The selected model and context budget still constrain the request. Catalog limits are reference values; use Edit Capabilities to correct them for your provider.",
-            )}
-          </p>
         </div>
         {override !== undefined && (
           <button
             type="button"
             onClick={() => onChange(undefined)}
-            className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="text-xs text-primary underline-offset-2 hover:underline"
           >
             {t("settings.useDefault", "Use default")}
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[10px]">
-        <ValueCell
-          label={t("settings.defaultValue", "Default")}
-          value={
-            defaultValue?.toLocaleString(i18n.language) ??
-            t("settings.taskOutputDefault", "Task default (up to 16,384)")
-          }
-        />
-        <ValueCell
-          label={t("settings.requestedOutputLimit", "Requested limit")}
-          value={
-            (override ?? defaultValue)?.toLocaleString(i18n.language) ??
-            t("settings.taskOutputDefault", "Task default (up to 16,384)")
-          }
-          active={override !== undefined}
-        />
-      </div>
-      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <input
           aria-label={t("settings.maxOutputTokens", "Max Output Tokens")}
           type="number"
@@ -108,17 +85,24 @@ export function MaxOutputTokensCard({
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}
-          className="min-w-0 flex-1 border border-border bg-background px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
+          className="h-10 min-w-0 flex-[1_1_11rem] rounded-md border border-border bg-background px-3 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
         />
+        <span className="text-xs text-muted-foreground">
+          {defaultValue === undefined
+            ? t("settings.taskOutputDefault")
+            : t("settings.parameterDefault", {
+                value: defaultValue.toLocaleString(i18n.language),
+              })}
+        </span>
         {modelLimit === undefined && (
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {t("settings.modelLimitsUnknown", {
               defaultValue: "Model limits unknown",
             })}
           </span>
         )}
         {modelLimit !== undefined && (
-          <span className="shrink-0 text-[10px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {t("settings.modelOutputLimit", {
               value: modelLimit.toLocaleString(i18n.language),
               defaultValue: "Reference model limit: {{value}}",
@@ -126,7 +110,7 @@ export function MaxOutputTokensCard({
           </span>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[10px]">
+      <div className="grid grid-cols-2 gap-2 text-xs">
         <ValueCell
           label={t("settings.effectiveOutputBudget", "Effective output budget")}
           value={effectiveOutput?.toLocaleString(i18n.language) ?? "—"}
@@ -136,12 +120,10 @@ export function MaxOutputTokensCard({
           value={inputBudget?.toLocaleString(i18n.language) ?? "—"}
         />
       </div>
-      <p className="text-[10px] leading-relaxed text-muted-foreground">
-        {t(
-          "settings.tokenBudgetPreviewHint",
-          "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 262,144; server limits may reduce the budget.",
-        )}
-      </p>
+      <SettingsHelp label={t("settings.tokenBudgetHelp")}>
+        <p>{t("settings.maxOutputTokensHint")}</p>
+        <p className="mt-1">{t("settings.tokenBudgetPreviewHint")}</p>
+      </SettingsHelp>
       {budgetInvalid && (
         <p role="alert" className="text-xs text-destructive">
           {t(
@@ -175,8 +157,8 @@ export function ValueCell({
     <div
       className={
         active
-          ? "border border-primary/40 bg-primary/5 px-2 py-1.5"
-          : "border border-border/60 bg-muted/20 px-2 py-1.5"
+          ? "min-w-0 rounded-md bg-primary/10 px-2.5 py-2"
+          : "min-w-0 rounded-md bg-muted/45 px-2.5 py-2"
       }
     >
       <div className="text-muted-foreground">{label}</div>
@@ -186,3 +168,4 @@ export function ValueCell({
     </div>
   );
 }
+import { SettingsHelp } from "../pane-layout.js";

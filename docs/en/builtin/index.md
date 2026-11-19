@@ -139,6 +139,8 @@ Ensemble sessions without an eligible sub-agent target receive no delegation too
 
 ## Story-driven presentation
 
+The Stage appearance supports resizing the story panel in Read and the response panel in Stage. See [Stage mode](./stage.md#stage-mode).
+
 Stage Scene and Soundtrack story-cue selectors adopt zero-budget [presentation functions](../reference/plugins.md#presentation-runtimes). They add no generation charges; absent plugins or assets degrade only their display. See [stage and sound](./stage.md).
 
 Stage Scene dialogue templates use speaker-scoped portraits with local enlargement. The current cast updates immediately while cast and direction providers explicitly opt into host-owned departure fades; see [Stage and sound](./stage.md).

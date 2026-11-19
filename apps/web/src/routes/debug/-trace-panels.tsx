@@ -132,12 +132,12 @@ export function TurnCard({
 
   return (
     <div
-      className={`debug-turn-card border ${hasError ? "border-destructive/30" : "border-border"} bg-card`}
+      className={`debug-card debug-turn-card ${hasError ? "border-destructive/40" : ""}`}
     >
       <button
         onClick={onToggle}
         aria-expanded={expanded}
-        className="flex w-full flex-wrap items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/10 sm:flex-nowrap"
+        className="flex min-h-11 w-full flex-wrap items-center gap-3 rounded-(--radius-card) px-3 py-2 text-left transition-colors hover:bg-muted/50 @2xl:flex-nowrap"
       >
         {expanded ? (
           <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -152,10 +152,16 @@ export function TurnCard({
                 <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0 text-violet-500">
                   {t("debugger.pluginInvocation")}
                 </span>
-                <span className="font-mono text-xs text-violet-500/80 shrink-0 truncate">
+                <span
+                  className="min-w-0 truncate font-mono text-xs text-violet-500/80"
+                  title={manualTrigger.runtimeId}
+                >
                   {manualTrigger.runtimeId}
                 </span>
-                <span className="font-mono text-xs text-muted-foreground/60 truncate">
+                <span
+                  className="truncate font-mono text-xs text-muted-foreground"
+                  title={turn.turnId}
+                >
                   {turn.turnId}
                 </span>
               </>
@@ -164,7 +170,10 @@ export function TurnCard({
                 <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
                   {t("debugger.turn", { count: turnIndex })}
                 </span>
-                <span className="font-mono text-xs text-muted-foreground truncate">
+                <span
+                  className="truncate font-mono text-xs text-muted-foreground"
+                  title={turn.turnId}
+                >
                   {turn.turnId}
                 </span>
               </>
@@ -190,7 +199,7 @@ export function TurnCard({
           )}
         </div>
 
-        <div className="flex w-full items-center justify-end gap-2 pl-6 sm:w-auto sm:shrink-0 sm:pl-0">
+        <div className="flex w-full flex-wrap items-center gap-2 pl-6 @2xl:w-auto @2xl:shrink-0 @2xl:justify-end @2xl:pl-0">
           {filteredRuntimes.length > 0 && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs border border-border bg-muted/10 text-muted-foreground">
               <Activity className="w-2.5 h-2.5" />

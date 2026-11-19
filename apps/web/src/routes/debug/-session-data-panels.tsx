@@ -242,12 +242,12 @@ export function DataSection({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   return (
-    <div className="border border-border">
+    <div className="debug-card">
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground ui-rail"
+        className="flex min-h-10 w-full items-center gap-2 rounded-(--radius-card) px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-muted/50"
       >
         {expanded ? (
           <ChevronDown className="w-3 h-3" />

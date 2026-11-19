@@ -27,6 +27,55 @@ async function savedEntries(page: Page) {
   );
 }
 
+test("hosted local provider setup shows provider-specific instructions and the browser origin", async ({
+  page,
+}) => {
+  await page.route("**/api/health", async (route) => {
+    const response = await route.fetch();
+    const health = await response.json();
+    await route.fulfill({
+      json: {
+        ...health,
+        deployment: { form: "hosted", modelRelay: true },
+        storage: { data: { frontendMode: "local", backend: "memory" } },
+      },
+    });
+  });
+  const settings = await openProviderSettings(page);
+  await settings
+    .getByRole("button", { name: "Add provider", exact: true })
+    .click();
+  const create = page.getByRole("dialog", {
+    name: "Add provider",
+    exact: true,
+  });
+  const provider = create.getByRole("combobox", {
+    name: "Provider",
+    exact: true,
+  });
+  const summary = create.getByText("Local connection setup", { exact: true });
+  const guide = create.locator("details").filter({
+    has: page.getByText("Local connection setup", { exact: true }),
+  });
+  const origin = new URL(page.url()).origin;
+  for (const [id, hint] of [
+    ["magpie", "Settings → Network & sharing → Web"],
+    ["ollama", `OLLAMA_ORIGINS=${origin}`],
+    ["lmstudio", "Enable CORS in the LM Studio local server settings"],
+    ["llamacpp", "allow the website origin below"],
+  ] as const) {
+    await provider.selectOption(id);
+    if (!(await guide.locator("code").isVisible())) await summary.click();
+    await expect(guide).toContainText(hint);
+    await expect(guide.locator("code")).toHaveText(origin);
+    await expect(
+      guide.getByRole("button", { name: "Copy website origin" }),
+    ).toBeEnabled();
+  }
+  await provider.selectOption("google");
+  await expect(guide).toBeHidden();
+});
+
 test("Google Gemini native models retain their protocol and text bindings across reload", async ({
   page,
 }) => {
@@ -168,6 +217,7 @@ test("failed provider creation keeps its draft and deleting its last model retai
     .getByRole("button", { name: "Add provider", exact: true })
     .click();
   await expect(create).toHaveCount(0);
+  await settings.getByRole("tab", { name: /^Models\b/ }).click();
   await settings
     .getByRole("group", { name: "synthetic-model", exact: true })
     .getByRole("button", { name: "Delete", exact: true })
@@ -300,6 +350,7 @@ for (const { provider, model, protocol, baseUrl } of [
       .getByRole("button", { name: "Add provider", exact: true })
       .click();
     await expect(create).toHaveCount(0);
+    await settings.getByRole("tab", { name: /^Models\b/ }).click();
     await settings
       .getByRole("button", { name: "Add model", exact: true })
       .click();
@@ -328,6 +379,7 @@ for (const { provider, model, protocol, baseUrl } of [
       models: [{ modelId: "synthetic-chat" }, { modelId: model, protocol }],
     });
     const row = settings.getByRole("group", { name: model, exact: true });
+    await row.getByText("Model settings", { exact: true }).click();
     await expect(
       row.getByRole("combobox", { name: "API protocol", exact: true }),
     ).toHaveValue("evaluation");

@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Plus, Search } from "lucide-react";
-import { Button } from "@/components/ui/button.js";
+import { Search } from "lucide-react";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 
 export function ProviderList({
@@ -10,8 +9,6 @@ export function ProviderList({
   mobileDetailsOpen,
   onQueryChange,
   onSelect,
-  onAddProvider,
-  busy = false,
 }: {
   providers: ProviderCatalogEntry[];
   selectedProviderId?: string;
@@ -19,30 +16,32 @@ export function ProviderList({
   mobileDetailsOpen: boolean;
   onQueryChange: (value: string) => void;
   onSelect: (id: string) => void;
-  onAddProvider: () => void;
-  busy?: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <aside
-      className={`${mobileDetailsOpen ? "hidden lg:flex" : "flex"} min-w-0 flex-col lg:border-r border-border bg-muted/10`}
+      className={`${mobileDetailsOpen ? "hidden @2xl:flex" : "flex"} min-w-0 flex-col gap-3`}
     >
-      <div className="border-b border-border p-2">
+      <div>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             aria-label={t("settings.searchProviders")}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={t(
-              "settings.searchProviders",
-              "Search providers or models",
-            )}
-            className="w-full border border-border bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+            placeholder={t("settings.searchProvidersPlaceholder")}
+            className="h-9 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
       </div>
-      <div className="flex-1 space-y-0.5 overflow-y-auto p-1.5">
+      <div className="ui-scroll flex max-h-96 flex-col gap-0.5 overflow-y-auto">
+        {providers.length === 0 && (
+          <p className="px-2 py-4 text-xs text-muted-foreground">
+            {query.trim()
+              ? t("settings.providerSearchEmpty")
+              : t("settings.noProvidersTitle")}
+          </p>
+        )}
         {providers.map((provider) => {
           const modelCount =
             provider.serverModels.length +
@@ -54,20 +53,19 @@ export function ProviderList({
               type="button"
               onClick={() => onSelect(provider.id)}
               aria-pressed={active}
-              className={`flex w-full items-center gap-2 px-2 py-2 text-left transition-colors ${
-                active
-                  ? "bg-primary/10 text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
+              className="ui-rail-item flex items-center gap-2 px-2 py-2 text-left transition-colors"
             >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted font-mono text-[10px] uppercase">
+              <span
+                aria-hidden="true"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-xs uppercase"
+              >
                 {provider.id.slice(0, 2)}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium">
+                <span className="block truncate text-sm font-medium">
                   {provider.id}
                 </span>
-                <span className="block text-[9px] text-muted-foreground">
+                <span className="block text-[11px] text-muted-foreground">
                   {t("settings.modelCountShort", {
                     count: modelCount,
                     defaultValue: "{{count}} models",
@@ -77,18 +75,6 @@ export function ProviderList({
             </button>
           );
         })}
-      </div>
-      <div className="border-t border-border p-1.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-xs"
-          disabled={busy}
-          onClick={onAddProvider}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("settings.addProvider", "Add provider")}
-        </Button>
       </div>
     </aside>
   );

@@ -230,7 +230,7 @@ export function StylePicker() {
       <div
         role="group"
         aria-label={t("appearance.styleTitle")}
-        className="grid grid-cols-2 gap-3 md:grid-cols-3"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3"
       >
         {groups.map((group) => {
           const active = group.members.find(
@@ -266,7 +266,9 @@ export function StylePicker() {
                   )}
                 />
                 <span className="flex items-center gap-1.5">
-                  <span className="ui-section-title truncate">{label}</span>
+                  <span className="wrap-break-word text-sm font-semibold">
+                    {label}
+                  </span>
                   {selected && (
                     <Check
                       className="h-3.5 w-3.5 shrink-0 text-(--accent-primary)"

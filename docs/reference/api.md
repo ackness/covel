@@ -354,7 +354,7 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 **托管层级（`demo` / `commercial`）的差别**
 
-- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source`、`envKeyOverrides`、加载 `error` 和槽位的 `baseUrl`。`GET /api/presets` 也不返回 `baseUrl`。带运维 token 才能看到这些字段。
+- 公开的 `GET /api/llm-config` 返回客户端启动需要的模型目录，省略 `source`、`envKeyOverrides` 和加载 `error`。`GET /api/llm-config` 和 `GET /api/presets` 仅在生效的内置配置使用服务商官方远程端点时公开 `baseUrl`。运维请求可读取诊断字段和自定义端点。
 - 公开的 `GET /api/config/info` 返回 `isDesktop: false`、`requiresAuth: true`，路径字段都是 `null`。带运维 token 的请求能拿到完整的部署路径。
 - 本机 `self` 和桌面端的响应不受影响。
 

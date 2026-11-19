@@ -70,6 +70,7 @@ test("same API model configurations can be copied, named, shared, and imported i
     .getByRole("button", { name: "Providers & keys", exact: true })
     .click();
   await dialog.getByRole("button", { name: /fixture.*1 model\b/ }).click();
+  await dialog.getByRole("tab", { name: "Models", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Duplicate configuration", exact: true })
     .click();
@@ -77,7 +78,7 @@ test("same API model configurations can be copied, named, shared, and imported i
     name: "Quick tools copy",
     exact: true,
   });
-  await copy.locator("summary").click();
+  await copy.getByText("Model settings", { exact: true }).click();
   await copy
     .getByRole("textbox", { name: "Configuration name" })
     .fill("Detailed story");

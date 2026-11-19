@@ -323,7 +323,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 | 变量                                 | 默认值                  | 用途                                                                                                                        |
 | ------------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_BASE_URL` / `DEFAULT_MODEL` | — / `deepseek-v4-flash` | 没有 `llm.toml` 时，内置的 `story` 用途改用这个 OpenAI 兼容端点和模型（服务商 `default`）；`e2e:replay --record` 也向它录制 |
+| `DEFAULT_BASE_URL` / `DEFAULT_MODEL` | — / `deepseek-flash` | 没有 `llm.toml` 时，内置的 `story` 用途改用这个 OpenAI 兼容端点和模型（服务商 `default`）；`e2e:replay --record` 也向它录制 |
 | `DEFAULT_API_KEY`                    | —                       | `default` 服务商的密钥：上面的内置用途和 `tests/llm-replay/` 的会话都用它                                                   |
 | `COVEL_LLM_RETRY_DISABLED`           | `false`                 | 设为 `1` 时关闭服务商 HTTP 重试                                                                                             |
 | `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | 整个进程同时进行的文本模型调用上限                                                                                          |

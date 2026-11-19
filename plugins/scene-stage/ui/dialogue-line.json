@@ -3,26 +3,33 @@
   "match": { "kind": "dialogue" },
   "reveal": { "mode": "segments" },
   "view": {
-    "component": "Row",
-    "props": { "gap": "sm", "align": "start" },
+    "component": "Stack",
+    "props": { "gap": "xs" },
     "children": [
       {
-        "component": "CharacterAvatar",
-        "props": { "characterId": { "$state": "/character/id" } }
-      },
-      {
-        "component": "Stack",
-        "props": { "gap": "sm" },
+        "component": "Row",
+        "props": { "gap": "sm", "align": "center" },
+        "visible": { "$state": "/segment/speaker" },
         "children": [
           {
-            "component": "Badge",
-            "props": { "label": { "$state": "/segment/speaker" } }
+            "component": "CharacterAvatar",
+            "props": {
+              "characterId": { "$state": "/character/id" },
+              "size": 32
+            }
           },
           {
-            "component": "Prose",
-            "props": { "content": { "$state": "/segment/text" } }
+            "component": "Text",
+            "props": {
+              "content": { "$state": "/segment/speaker" },
+              "weight": "bold"
+            }
           }
         ]
+      },
+      {
+        "component": "Prose",
+        "props": { "content": { "$state": "/segment/text" } }
       }
     ]
   }
