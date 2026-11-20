@@ -603,7 +603,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 故事的形状由内核负责，对所有 `outputKind: story` 的 runtime（agent、function 和 guard 提前给出的故事）都一样。当前契约是 `narrative-engine@2`，它的 schema 由框架持有（见[框架持有的契约](#framework-contracts)）：
 
 - 自动调度的故事 runtime 提供 `narrative-engine@2`，不用写 `io.output.contract` 或 `io.output.schema`。写了 `narrative-engine@2` 时，`pnpm validate:plugin` 警告可以删掉；写了别的契约，这个 runtime 被禁用。
-- 手动、事件和子 agent 故事 runtime 被启动时照样写故事，但不提供契约，不和叙事器争这一局的故事，也不能写 `io.output.contract`（写了这个 runtime 被禁用）。
+- 手动、事件和子 agent 故事 runtime 被启动时照样写故事，但不提供契约，不和主讲述者争这一局的故事，也不能写 `io.output.contract`（写了这个 runtime 被禁用）。
 - 没有 schema 的故事 agent 也按这个形状提交，见[没有输出 schema 时](#default-output-schema)。
 
 | 字段       | 类型                                  | 含义                                                                     |
@@ -759,7 +759,7 @@ const result = await ctx.agents?.run({
 - **只读工具**：提供方 `agent.tools` 里没有 `readOnly` 注解的工具（插件工具、数据集的 `-upsert` / `-update` 这类写入工具）、`suspend` 和 `delegate` 都被拿掉。声明了却没注册的插件工具仍按原规则让这次运行失败。数据集工具只保留 `-get` / `-list`。导入的服务工具保留，写服务的导入也保留：子 agent 以自己的身份调用，暂存的操作挂在委托它的 run 上，子 agent 失败时撤回。
 - **提交工具**：只读筛选之后，宿主按提供方实际输出 schema 生成 `submit-output`，不授予领域写权限。子 agent 只能交回通过 schema、必需工作和 `ReviewAgentOutput` 的结果；委托结果不会代替父 agent 自己的提交。子 agent 不可挂起。
 - **循环 profile**：没写 `agent.loop.profile` 时用 `actor`，不流式显示，也不读玩家插话。
-- **模型**：用提供方自己声明的模型用途。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
+- **模型**：用提供方自己声明的模型分工（slot）。会话的 `runtimeModelOverrides` 按提供方的 runtimeId 生效，挂起后恢复的运行里也一样；调用方的覆盖和请求里的故事模型覆盖都不生效。
 - **上限**：一次执行最多同时运行 8 个子 agent，嵌套执行也算在内；子 agent 不能再调用子 agent（深度上限 1）。另有会话设置的累计角色与调用上限，见[执行名额](#character-orchestration)。超过上限的调用立刻得到 `unavailable`，不排队。
 - **取消**：调用方被取消、超时或运行结束，子 agent 跟着停下，结果是 `cancelled`。handler 没有等待的子 agent，runtime 收尾前会等它结束。
 - **只交回输出**：输出按提供方的 `io.output.schema` 和契约 schema 检查，没通过算 `internal`。Hook 中的 `PreRuntime`、`PostRuntime` 和 `PostContextAssembly` 不为子 agent 触发；循环里的 `PreLLMCall`、`PostLLMResponse`、`PreStep`、`PreToolUse`、`PostToolUse` 和 `ReviewAgentOutput` 照常触发，`ctx.runtimeId` 是子 agent 的。
@@ -971,7 +971,7 @@ io:
 | `contributes.prompt[].position: {depth: N}` | 按消息深度把静态段插进历史，见 [Prompt 结构](./prompt-structure.md) |
 | `contributes.commands[].context` | 命令调用 action 时带上的宿主信息：`session`、`active-runtimes`、`models` |
 | `contributes.commands[].arguments[].variadic`、`choices` | `variadic: true` 把剩下的词都收进最后一个参数；`choices` 列出参数可选的值 |
-| `contributes.settings[].type` 的 `text`、`textarea`、`integer`、`slider`、`slot` | 单行文字、多行文字、整数、滑块、模型用途选择 |
+| `contributes.settings[].type` 的 `text`、`textarea`、`integer`、`slider`、`slot` | 单行文字、多行文字、整数、滑块、模型分工选择 |
 | `agent.loop.maxSteps` | 工具调用最多几步。只调用一个工具就结束的 runtime 可以写 1 或 2 |
 | `agent.loop.firstTokenTimeoutMs`、`idleTimeoutMs` | 流式调用的等待时限，见[流式调用的等待时限](#流式调用的等待时限) |
 | `agent.loop.loopDetection` | 模型连续重复同一个调用多少次算打转。默认 3，`0` 关闭检测 |
@@ -1282,20 +1282,20 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 一个事件 topic 在一个会话里只有一个声明者。两个活动插件的 `contributes.events` 含同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被拒绝，原因里写出 topic 和两个插件的 ID（显式请求先于自动依赖，其余按请求顺序）。topic 是会话内全局的名字，发出者和订阅者往往属于别的插件，所以它只能对应一份 payload schema。两个插件可以同时安装，只是不能进同一个会话。给自己的 topic 加上和插件相关的前缀可以避免撞名。
 - 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。这类拒绝的 `code` 是 `missing-provider` 或 `ambiguous-provider`，`contract` 写出等的是哪个契约。
 - 被依赖的插件缺了，依赖它的插件自动停用，不挡开局。创建会话和启用、停用插件时，玩家要的（`requested`）和 `kind: core` 的插件里因此停用的那些，仍写进 `activePlugins`：它们暂时不运行，列在 `unavailable` 里，依赖回来后自动恢复。只有玩家要的插件因冲突等别的原因被拒，创建才返回 `400 plugin_rejected`，正文写出插件 ID 和原因。
-- 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
-- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 插件 → 安装与管理”安装。
+- 开局准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
+- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。开局准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 插件 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `contract:` 引用 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
+- 世界的 `contract:` 引用 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，开局准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 
 - 世界在 `plugins` 中列出 `pack:`、`plugin:` 和 `contract:` 引用，见[插件选择](./world-data.md#插件选择pluginpolicy)。只有初始包展开到默认请求，独立插件请求同时保留。
 - 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage`、`parsed` 或 `plugin:<pluginId>:<viewId>`；桥接视图先请求玩家授权）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
-- `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
-- 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `diagnostics` 的 `missing-plugin` 项里，保留 `pluginId`、字段 `path` 和可选 `packId`；未知玩法包使用 `unknown-pack` 项并保留引用位置。准备页显示提示，缺失的插件 ID 不进入创建请求。
+- `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。开局准备页和创建端再用同一个解析器计算活动集合。
+- 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `diagnostics` 的 `missing-plugin` 项里，保留 `pluginId`、字段 `path` 和可选 `packId`；未知玩法包使用 `unknown-pack` 项并保留引用位置。开局准备页显示提示，缺失的插件 ID 不进入创建请求。
 
-**在准备页切换玩法包。**
+**在开局准备页切换玩法包。**
 
 - 切换玩法包不会改变视图模式。玩法包的 `defaultViewMode` 只在 AI 生成世界时写进世界。
 - 切换会替换上一个包贡献的请求，包括世界初始选中的包。

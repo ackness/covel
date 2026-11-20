@@ -141,7 +141,7 @@ One scene has two tasks, one for the day picture and one for the night picture. 
 pnpm exec tsx scripts/generate-scenes.mjs tidelamp --slot image
 ```
 
-After `--slot`, write the name of the model role you gave the image model in `llm.toml`. If you leave it out, the script looks for a role named `gpt-image-2`. Where the script reads model settings and keys from, and how to run it when the config is in the repository root, are the same as for the portrait script. See [Where the script reads model settings and keys](./portraits.md#生成方式框架统一-image-wire).
+After `--slot`, write the name of the model role you gave the image model in `llm.toml`. If you leave it out, the script looks for a role named `gpt-image-2`. Where the script reads model settings and keys from, and how to run it when the config is in the repository root, are the same as for the portrait script. See [Where the script reads the model configuration and the key](./portraits.md#where-the-script-reads-the-model-configuration-and-the-key).
 
 The pictures are saved in `worlds/tidelamp/media/scenes/`. The script prints one line for each finished picture, and ends with `done: N ok, M failed`. Pictures that already exist are skipped. So if some failed, run the same command again as it is. It fills in only what is missing.
 
@@ -210,7 +210,7 @@ Rules when a picture is missing:
 > [!NOTE]
 > When the world's `data/world.data.yaml` names `media/scenes.registry.json`, the file must exist, or the world fails validation. If the pictures are not ready yet, run `node scripts/emit-scenes.mjs <world ID>` once first. It writes an empty placeholder manifest with no scenes. After you make the pictures, run it again.
 
-**This session needs the plugin that manages scenes turned on.** The built-in one is "Stage Scene" (`scene-stage`). It is included in the "Dialogue" (`dialogue-mode`) pack, and not in "Classic Story". Change `plugins` in `world.yaml` to `dialogue-mode`, or add `scene-stage` to `plugins`. Or, on the session-prep screen, open "Customize plugins and advanced settings" and select it there.
+**This session needs the plugin that manages scenes turned on.** The built-in one is "Stage Scene" (`scene-stage`). It is included in the "Dialogue" (`dialogue-mode`) pack, and not in "Classic Story". Change `plugins` in `world.yaml` to `dialogue-mode`, or add `scene-stage` to `plugins`. Or, on the getting-ready screen, open "Customize plugins and advanced settings" and select it there.
 
 To have players start in stage view as soon as they enter the game, add this line to `world.yaml`:
 

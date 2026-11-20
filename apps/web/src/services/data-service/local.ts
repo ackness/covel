@@ -634,7 +634,7 @@ export class LocalDataService implements DataService {
         )
       : all;
     const items = eligible.slice(-limit).map(toFrontendMessage);
-    // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
+    // When a full page is returned (older rows may exist), point nextCursor at the oldest item; otherwise null.
     const oldest = items[0];
     const nextCursor =
       items.length >= limit && oldest

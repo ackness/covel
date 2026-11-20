@@ -33,15 +33,15 @@ Local ZIP packages are imported on the same page.
 
 After restarting the backend, complete two more steps before the plugin can run:
 
-1. **Enable it**: select it in the plugin list on the world's session-prep screen, or have the world's gameplay pack include it.
+1. **Enable it**: select it in the plugin list on the world's getting-ready screen, or have the world's gameplay pack include it.
 2. **Authorize it**: if trusted-source authorization does not apply, the first time a community plugin needs to run code, the "Authorize plugin action" prompt appears. After you authorize it, it starts working. If you choose "Not now", the plugin stays paused, and the rest of the game keeps running as usual.
 
 Explicit authorization lasts only while the server is running. Trusted-source code and runtime grants can pass automatically; other community plugins ask again after a restart.
 
 > [!NOTE]
-> Official plugins installed separately remain community plugins and are not enabled automatically. No source is trusted by default. You may add sources under "Trusted sources" on this page; the suggestion button only fills the input and does not save it.
+> Official plugins installed separately remain community plugins and are not enabled automatically. No source is trusted by default; you may add trusted repositories under "Trusted sources" on this page.
 
-The preview lists requested capabilities. "From a trusted source" means the instance trusts that repository; unchanged files with no new capabilities show "auto-approved: trusted source" after enabling. New capabilities and per-action RPCs still ask for approval. A file-difference warning disables automatic approval and leaves normal approval available; see [trusted sources](../reference/plugin-installation.md#trusted-sources).
+The preview lists the capabilities a package requests. Packages from a trusted source whose files are unchanged and request no new capabilities receive automatic code and runtime approval when enabled (showing "auto-approved: trusted source"). New capabilities, per-action requests, and locally modified files still prompt for approval; see [trusted sources](../reference/plugin-installation.md#trusted-sources).
 
 ## Update and uninstall
 
@@ -57,8 +57,8 @@ You also uninstall from "Install & manage". After you uninstall a plugin, you ne
 | Symptom                                                      | What to do                                                                                                                              |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | You cannot select a package in the preview                   | Read the error next to it. Usually a capability it depends on is not provided by any plugin, or it needs a newer Covel version          |
-| The session-prep screen says the world is missing a plugin   | You can start without installing it, but the gameplay that plugin provides will not work                                                |
-| The session-prep screen says no plugin provides a capability | You can start with that feature (for example, dice checks) missing. To add it, install and enable a plugin that provides the capability |
+| The getting-ready screen says the world is missing a plugin  | You can start without installing it, but the gameplay that plugin provides will not work                                                |
+| The getting-ready screen says no plugin provides a capability | You can start with that feature (for example, dice checks) missing. To add it, install and enable a plugin that provides the capability |
 | A plugin is installed but does not run                       | Check in order: whether you restarted the backend, whether you enabled it in this game, and whether you authorized it                   |
 | The download fails                                           | Set up a proxy under **Settings → Desktop → Network Proxy**. Downloads follow the settings there                                        |
 

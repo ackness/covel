@@ -1,6 +1,5 @@
 /**
- * Runtime input bindings (`inputs`) — resolution, provenance, and gating
- * (docs 02 §3, 01 §4).
+ * Runtime input bindings (`inputs`) — resolution, provenance, and gating.
  *
  * A binding pulls a same-execution value from an upstream producer's success
  * result (or a guard's skip:true output) and injects it — wrapped in provenance
@@ -9,7 +8,7 @@
  * makes the binding a turn gate: unsatisfiable → the consumer is skipped with a
  * machine-readable reason; `required: false` is best-effort (omit the slot).
  *
- * Activation projection (01 §4): a `manual` activation ignores turn bindings
+ * Activation projection: a `manual` activation ignores turn bindings
  * entirely (the target runs on `ctx.activation.payload`); a `detached`
  * activation that still carries turn bindings is rejected for THIS activation
  * without making the spec illegal. The recurrently-detached loader check
@@ -118,7 +117,7 @@ export interface ResolveBindingsInput {
   ) => Promise<Schema | undefined>;
   /**
    * Canonicalize + ownership-check the MediaRefs in an about-to-be-injected
-   * value (docs 02 §2.1). Injected before `accepts` runs, so `accepts` sees the
+   * value. Injected before `accepts` runs, so `accepts` sees the
    * canonical value. Absent (test harnesses / no MediaStore) ⇒ values inject
    * unchanged — a media-free value is identical either way.
    */
@@ -169,7 +168,7 @@ async function canonicalizeBindingValue(
  * Derive this activation's `RuntimeActivation` from the run-time signals the
  * executor already threads. `event` wins over `manual` so a background follower
  * that replays an event (manual RPC carrying a `triggerEvent`) reads as an
- * event source, matching the canonical payload rule (02 §3.3).
+ * event source, matching the canonical payload rule.
  */
 export function deriveActivation(
   manifest: RuntimeManifest,
@@ -453,7 +452,7 @@ export async function resolveInputBindings(
       continue;
     }
 
-    // Build-time accepts compatibility, per provider (docs 02 §3.1). Proven
+    // Build-time accepts compatibility, per provider. Proven
     // incompatible → skip; indeterminate → diagnostic + always-on runtime check.
     if (acceptsSchema) {
       const itemsSchema =
@@ -574,7 +573,7 @@ function asSchema(value: unknown): Schema | undefined {
     : undefined;
 }
 
-// ── Persistent export consumption (docs 02 §3.4) ─────────────────
+// ── Persistent export consumption ────────────────────────────────
 
 /** Machine-readable skip reasons an export-binding gate can emit. */
 export type ExportBindingSkipReason =
@@ -618,7 +617,7 @@ export interface ResolveExportBindingsInput {
  * provenance-wrapped slots, or a single gate skip. Unlike `inputs` bindings
  * (same-execution, in-memory), exports are cross-execution: the provider must be
  * in the active set and must have a committed revision frozen at execution
- * start, else a required binding skips the consumer (docs 02 §3.4.4). Runs for
+ * start, else a required binding skips the consumer. Runs for
  * every activation source — exports are not turn bindings, so manual / detached
  * activations still see them.
  */

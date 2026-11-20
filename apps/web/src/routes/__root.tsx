@@ -117,7 +117,7 @@ function RootLayout() {
   const activeNav: NavId | null = (() => {
     if (isDebugRoute) return "debug";
     if (isSessionRoute) {
-      // World-select view (no session) implicitly maps to 世界
+      // World-select view (no session) implicitly maps to the World nav item
       if (!hasSession) return "world";
       return "session";
     }

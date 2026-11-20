@@ -35,8 +35,8 @@ export interface UseRuntimeBindingsResult {
  *   - Session mode: caller passes a real sessionId + the current
  *     `SessionRecord.runtimeModelOverrides`. Changes PATCH the server.
  *   - External mode: caller passes an `onPersist` callback and keeps
- *     `runtimeModelOverrides` in its own state. Used for the session
- *     prep screen, where no SessionRecord exists yet.
+ *     `runtimeModelOverrides` in its own state. Used for the getting-ready
+ *     screen, where no SessionRecord exists yet.
  */
 export function useRuntimeBindings(
   sessionId: string | undefined,

@@ -22,9 +22,11 @@ cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
 ```
 
-每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.12.1、pnpm 12.14.0 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。运行检查的 Node 与 `mise.toml` 指定的版本不一致时（例如 PATH 里 nvm 排在 mise 前面），检查直接拒绝并说明原因，不会在别的 Node 上运行测试。通过检查后，pre-push 先按原 PATH 找到 pnpm，再把这个 Node 的目录放在子进程 PATH 首位，pnpm、Turbo 和各个测试都在它上面运行。
+每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook（保留已有的 pre-commit hook；若已有其他 pre-push hook 会拒绝覆盖，需先自行处理冲突）：
 
-提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier 一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 和 pre-push 一样先核对 Node 版本，与 `mise.toml` 不一致时直接拒绝；再将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。提交 hook 不做类型检查；类型检查在 `pnpm check`、pre-push hook 和 CI 里运行。
+- **工具链选择**：pre-push hook 通过 `mise exec` 使用 `mise.toml` 指定的 Node 26.12.1、pnpm 12.14.0 和 actionlint，因此需先安装 `mise` 并运行 `mise install`。若检查时的 Node 与 `mise.toml` 不一致（例如 `PATH` 里 nvm 排在 mise 前面），会直接拒绝并说明原因；通过后，pre-push 先按原 `PATH` 找到 `pnpm`，再将目标 Node 目录置于子进程 `PATH` 首位供 pnpm、Turbo 与测试使用。
+- **提交前检查（pre-commit）**：由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 版本固定在根 `devDependencies` 与 `pnpm-lock.yaml`，与 Prettier 一样通过 `mise exec` 运行；`scripts/run-with-project-node.mjs` 会先校验 Node 版本并把它置于子进程 `PATH` 首位，更新配置后已有 hook 自动生效，无需清缓存。
+- **Oxlint 与检查范围**：规则在根目录 `.oxlintrc.jsonc`（关闭的规则各有一行说明）。pre-commit hook 检查改动的文件，`pnpm check` 检查整个仓库，两处均带 `--deny-warnings`，任何警告都会失败。类型检查在 `pnpm check`、pre-push hook 和 CI 中运行，不在提交 hook 内执行。
 
 新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量；每张原图旁要有同名 WebP 展示版，安装包和 Docker 镜像只带 WebP。世界立绘和场景只以 WebP 入库（见[世界美术方向](./worlds/art-direction.md)）。
 
@@ -192,7 +194,7 @@ macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界
 5. 用户、作者或运维能察觉的改动，新增一个 changelog 片段 `docs/changelog.d/<slug>.md`（[格式](./changelog.d/README.md)，条目用英文）；不要直接修改 `docs/CHANGELOG.md`，它由发布脚本写入
 6. 有破坏性变更时，在正文中标注 `BREAKING CHANGE:`，并在片段里写一条 `### Breaking`
 
-## Release Process
+## 发布流程
 
 发布检查的唯一操作清单是[桌面打包指南](./internals/desktop-packaging.md#release-checklist)。按以下顺序执行：
 
@@ -208,23 +210,30 @@ macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界
 
 ### 官网部署
 
-[`site.yml`](../.github/workflows/site.yml) 由每次非发布 CI 调用，不再独立响应 push 或 PR。它构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下。PR 只构建，不上传发布产物或部署；`main` 改动站点、文档或相关根构建/安装配置时才发布到 GitHub Pages，无关源码改动只构建。部署选择与测试范围共用一次 git diff；无法确定变更时保守选择部署，但仍限于 `main` push。具体输入列在 `scripts/ci-scope.mjs`。Actions 页面手动运行 Site 默认部署，也可关闭 `deploy` 只验证构建。
+[`site.yml`](../.github/workflows/site.yml) 由每次非发布 CI 调用，不再独立响应 push 或 PR。它构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下。
 
-仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其他构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。Site 用下面的命令并行构建两个独立目标，再把 `apps/docs/dist` 复制到 `apps/site/dist/docs`；复制前删除旧 docs 子树。Turbo 分别保存两份输出，官网缓存排除合并进去的 docs 子树。
+- **发布判定**：PR 只构建，不上传发布产物或部署；`main` 改动站点、文档或相关根构建/安装配置时才发布到 GitHub Pages，无关源码改动只构建。部署选择与测试范围共用一次 git diff（无法确定变更时在 `main` push 保守部署，输入见 `scripts/ci-scope.mjs`）。在 Actions 页面手动运行 Site 时默认部署，关闭 `deploy` 可仅验证构建。
+- **Pages 与路径前缀**：仓库 **Settings → Pages** 的 Source 需选 **GitHub Actions**。站点默认发布在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其余构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite（配置自定义域名后自动改为 `/`）。文档站读取同一变量，路径为 `<SITE_BASE>docs/`，存在失效链接会导致构建失败；`public/` 下的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用前缀。
+
+Site 用下面的命令并行构建两个独立目标，再把 `apps/docs/dist` 复制到 `apps/site/dist/docs`（复制前先清空旧 docs 子树）；Turbo 分别缓存两份输出，官网缓存排除合并进去的 docs 子树：
 
 ```bash
 pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2
 ```
 
-Site 的独立 Turbo 缓存按内容复用：输入覆盖各自源码与配置、`docs/**`、`SITE_BASE`、`VITE_*`、构建环境文件、根安装配置、lockfile 和工具链。`docs/**` 只影响文档目标，无关框架源码不影响这两个目标。GitHub 的 PR 缓存仍限于 PR ref，部署不能恢复它们。部署只消费同次 Site 任务按当前输入构建或恢复、重新合并并上传的产物，不下载其他工作流的发布产物。
+Site 的独立 Turbo 缓存按内容复用，输入覆盖各自源码与配置、`docs/**`、`SITE_BASE`、`VITE_*`、构建环境文件、根安装配置、lockfile 和工具链（`docs/**` 只影响文档目标，无关框架源码不影响这两个目标）。GitHub 的 PR 缓存仍限于 PR ref，部署不能恢复它们；部署只消费同次 Site 任务按当前输入构建或恢复、重新合并并上传的产物，不下载其他工作流的发布产物。
 
 ### 模型资料快照
 
-内置的 LiteLLM 模型表（`packages/ai-provider/data/model-db.json`，由 `model-db-source.json` 固定到具体提交）决定未在 `llm.toml` 或设置中填写上限的模型的上下文窗口、输出上限与价格。[`update-model-db.yml`](../.github/workflows/update-model-db.yml) 每周一把它固定到 LiteLLM 最新修改模型表的提交，重新生成快照和各模型名称得到哪些思考档位的记录（`tests/__snapshots__/reasoning-characterization.snap.txt`）并跑 `@covel/ai-provider` 测试，然后在 `chore/update-model-db` 分支开启或刷新 PR，不直接推送 `main`；也可在 Actions 页面手动触发。用默认 `GITHUB_TOKEN` 开的 PR 不会触发其他 workflow：配置可开 PR 的 `MODEL_DB_PR_TOKEN` secret 才会自动跑 CI，否则关闭再重开 PR 即可。默认 token 还需要在仓库设置中开启 “Allow GitHub Actions to create and approve pull requests”。手动更新运行 `pnpm --filter @covel/ai-provider update-model-db`。模型表只说明模型是否会思考，刷新不会改动档位数据。档位来自 models.dev 目录快照和 Covel 的厂商规则：目录用 `pnpm --filter @covel/ai-provider update-models-dev` 手动刷新，提交前逐组检查快照 diff，见[档位数据](./reference/slots.md#档位数据)。
+内置的 LiteLLM 模型表（`packages/ai-provider/data/model-db.json`，由 `model-db-source.json` 固定到具体提交）决定未在 `llm.toml` 或设置中填写上限的模型的上下文窗口、输出上限与价格。
+
+- **每周自动同步**：[`update-model-db.yml`](../.github/workflows/update-model-db.yml) 每周一把它固定到 LiteLLM 最新修改模型表的提交，重新生成快照和各模型名称对应的思考档位记录（`tests/__snapshots__/reasoning-characterization.snap.txt`）并运行 `@covel/ai-provider` 测试，随后在 `chore/update-model-db` 分支开启或刷新 PR（不直推 `main`，也可在 Actions 页面手动触发）。
+- **PR 权限与手动刷新**：用默认 `GITHUB_TOKEN` 开的 PR 不会自动触发其他 workflow，需配置可开 PR 的 `MODEL_DB_PR_TOKEN` secret（否则可手动关闭再重开 PR），并在仓库设置中开启 **Allow GitHub Actions to create and approve pull requests**。手动更新模型表运行 `pnpm --filter @covel/ai-provider update-model-db`（该表只说明模型是否会思考，不改档位数据）。
+- **思考档位数据**：档位来自 `models.dev` 目录快照和 Covel 的厂商规则。用 `pnpm --filter @covel/ai-provider update-models-dev` 手动刷新目录，提交前逐组检查快照 diff，见[档位数据](./reference/slots.md#档位数据)。
 
 ### 代码签名
 
-当前正式发布有意使用 unsigned 产物，不需要平台签名凭据。发布说明必须披露这一点，并说明首次启动可能触发 macOS Gatekeeper 或 Windows SmartScreen 提示。未来启用签名时，需要同时更新 electron-builder 配置与发布工作流；本地签名配置见 [`guide/desktop-packaging.md`](./internals/desktop-packaging.md)。
+当前正式发布有意使用 unsigned 产物，不需要平台签名凭据。发布说明必须披露这一点，并说明首次启动可能触发 macOS Gatekeeper 或 Windows SmartScreen 提示。未来启用签名时，需要同时更新 electron-builder 配置与发布工作流；本地签名配置见 [`internals/desktop-packaging.md`](./internals/desktop-packaging.md)。
 
 ## 报告问题
 

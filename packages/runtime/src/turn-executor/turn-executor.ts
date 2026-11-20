@@ -207,7 +207,7 @@ async function executeTurnImpl(
   const startTime = Date.now();
   // Frozen execution-start instant: pins `atOrBefore` on every recordAs export
   // read so this execution sees a stable snapshot of committed exports even if a
-  // producer publishes a new revision while the turn is still running (02 §3.4.2).
+  // producer publishes a new revision while the turn is still running.
   const executionStartedAt =
     input.detachedStage?.sourceExecutionStartedAt ?? new Date().toISOString();
   const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
@@ -593,7 +593,7 @@ async function executeTurnImpl(
     if (unconfined) return failClosed(unconfined);
   }
 
-  // Same-layer effects hazard policy (01 §7): derive read/write sets for each
+  // Same-layer effects hazard policy: derive read/write sets for each
   // parallel group and check pairs. Default `warn` keeps the groups parallel and
   // only emits diagnostics (no behaviour change); `strict` splits conflicting
   // pairs into serial sub-levels. Single-runtime groups (manual trigger) are a
@@ -901,7 +901,7 @@ async function executeTurnImpl(
   if (!isPreGamePending && !isTargeted && !executionAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
     const lateSetupPlan = scheduleByDag(lateSetup);
-    // Same-layer effects hazard policy as the main groups (01 §7): late-setup
+    // Same-layer effects hazard policy as the main groups: late-setup
     // runs parallel groups too, so it must not bypass conflict diagnostics or
     // the strict policy's serial sub-levels.
     const { groups: lateSetupGroups, diagnostics: lateSetupHazards } =

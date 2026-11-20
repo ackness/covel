@@ -6,7 +6,7 @@
 
 - `PLUGIN.md` 注册 `memory.block-definitions@1` 服务、`prompt.segment@1` 扩展和面板。
 - `runtimes/extract/RUNTIME.md` 在 `post-turn` 消费冻结的 `turn-digest@1`，以脱离回合的 function runtime 提取记忆。
-- `server/extract.js` 使用当前请求的 gateway 和 `memory` 模型用途，写入自己的 `blocks` 和 `facts` 命名空间。
+- `server/extract.js` 使用当前请求的 gateway 和 `memory` 模型分工（slot），写入自己的 `blocks` 和 `facts` 命名空间。
 - `server/facts.js` 决定事实记录的 key、文字，以及每回合召回哪几条。
 
 ## 数据与行为

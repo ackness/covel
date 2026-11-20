@@ -10,7 +10,7 @@ import { resolveProviderSlot } from "./model-slot-helpers.js";
 
 /**
  * Function runtimes can declare several provider roles, each with its own
- * setting. The prep screen shows the current choice as text; Settings → the
+ * setting. The getting-ready screen shows the current choice as text; Settings → the
  * plugin holds the editor.
  */
 export function ProviderSlotSetting({

@@ -95,7 +95,7 @@ export interface RuntimeBinding {
 }
 
 /**
- * Provenance wrapper for an injected binding value (02 §3.2). `accepts`
+ * Provenance wrapper for an injected binding value. `accepts`
  * validates the business value BEFORE this wrapper (`value` for `one`,
  * `items.map(i => i.value)` for `all`) — metadata never attaches to the bare
  * value, so a value object that itself carries a `source` field cannot clash.

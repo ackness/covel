@@ -25,7 +25,7 @@ import { ServerStatusOverlay } from "@/components/desktop/server-status-overlay.
 // Lazy-load the in-game surface (chat + stage + json-render panels + plugin
 // UI) — the single heaviest component tree in the app, but only reachable once
 // a session is active. Keeping it out of the main chunk trims first paint for
-// the marketing home / world-select / prep screens, which never touch it
+// the marketing home / world-select / getting-ready screens, which never touch it
 // (bundle budget). Split alongside the already-lazy /debug route.
 const GameView = lazyWithRetry(() =>
   import("@/components/session/game-view.js").then((m) => ({
@@ -313,7 +313,7 @@ function SessionScreen() {
     );
   }
 
-  // Prep screen — world selected but no session yet
+  // Getting-ready screen — world selected but no session yet
   if (state.world) {
     return (
       <SessionPrepScreen

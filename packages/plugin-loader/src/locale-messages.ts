@@ -17,8 +17,8 @@ export const PLUGIN_BASE_LOCALE = "en";
  * ```yaml
  * # locales/zh.yaml
  * messages:
- *   Codex: 知识图鉴
- *   shortLabel|Codex: 图鉴
+ *   Almanac: 图鉴
+ *   shortLabel|Almanac: 图鉴
  *   "{{count}} entries collected": 已收录 {{count}} 条
  * ```
  *

@@ -1,7 +1,7 @@
 /**
  * JSON wire-value boundary checks.
  *
- * The runtime I/O contract (docs 02 §2) allows only `JsonValue` across runtime
+ * The runtime I/O contract allows only `JsonValue` across runtime
  * boundaries: activation payloads, binding values, exports, job data, envelope
  * values and persisted tool-call input/output. Anything else — `undefined`,
  * `bigint`, functions, symbols, `NaN` / `Infinity`, or circular references — is

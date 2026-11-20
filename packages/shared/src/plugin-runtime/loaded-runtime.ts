@@ -14,12 +14,12 @@ export interface LoadedRuntime {
   /**
    * Activation-payload JSON Schema loaded from `input.schema` — enforced on
    * `RuntimeActivation.payload` before dispatch for both function and agent
-   * runtimes (docs 02 §3.3).
+   * runtimes.
    */
   readonly inputSchema?: Readonly<Record<string, unknown>>;
   /**
    * Per-binding `accepts` JSON Schemas, keyed by `inputs.<name>`. Validates the
-   * injected same-execution binding value (docs 02 §3.1).
+   * injected same-execution binding value.
    */
   readonly bindingAcceptsSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
@@ -34,7 +34,7 @@ export interface LoadedRuntime {
   /**
    * Per-export-binding `accepts` JSON Schemas, keyed by the `input.inject`
    * runtime-export `name`. Validates the frozen cross-execution export value at
-   * consume time (docs 02 §3.4.4).
+   * consume time.
    */
   readonly exportAcceptsSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>

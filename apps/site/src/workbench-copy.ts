@@ -12,7 +12,7 @@ export const workbenchEn = {
     dice: "Dice",
     quests: "Quests",
     relationships: "Relationships",
-    codex: "Codex",
+    codex: "Almanac",
   },
   intros: {
     dice: {
@@ -164,7 +164,7 @@ export const workbenchEn = {
   },
   codex: {
     label: "Field notes",
-    search: "Search the codex",
+    search: "Search the almanac",
     placeholder: "A place, a name, a discovery…",
     filter: "Category",
     all: "All entries",
@@ -213,7 +213,7 @@ export const workbenchZh: typeof workbenchEn = {
       foot: "骰点、修正与结果，都留在同一份记录里。",
     },
     quests: {
-      title: "答应过的事，记得。",
+      title: "许下的诺言，自会记得。",
       body: "灯熄灭的那晚，伊索德走进了古冢。三天过去，她的小屋仍空着。沿着线索，一步一步找到她。",
       foot: "目标和进度，始终伴着故事向前。",
     },

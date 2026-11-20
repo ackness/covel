@@ -1,14 +1,8 @@
 # Characters and World
 
-Preparation keeps independent world requests and manual exclusions when switching packs. Missing references reduce only their features. The first pack card uses public world text unless `pluginPitch` overrides it.
-
-See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices. Data acceptance does not satisfy service or runtime capability dependencies.
-
 This page covers the start of a game and the world itself: what happens when a game begins, how the player character is created, and how the people, rules, time and new discoveries in the world are recorded.
 
 This page introduces the plugins in the order you encounter them in a game. First come the four that run at the start, then the five that keep updating as the story goes on.
-
-Character tracking, fact extraction, and dimension updates read the attribution of each dialogue or action segment, distinguishing NPC actions from player actions. Unattributed or ambiguous text should not be guessed to be a player action. Story text and history stay unchanged; model-extracted facts can still be wrong.
 
 | Plugin                                     | In short                                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------------------------ |
@@ -23,11 +17,9 @@ Character tracking, fact extraction, and dimension updates read the attribution 
 | Story Notes (`world-ir`)                   | Sorts out the facts of each turn in the background, for other plugins to use         |
 
 > [!NOTE]
-> None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the session-prep screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
-
-If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives. A later explicit retry reads and recalculates it; see [read-baseline conflicts](../reference/transactions.md#read-baselines).
-
-A world package has one authored dimension file, `data/dimensions.yaml`. The world editor saves resolved records without directly changing installed packages; an empty table clears definitions. See [dimension sources](../reference/world-data.md#dimension-sources).
+> None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the getting-ready screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
+>
+> Switching gameplay packs on the getting-ready screen preserves independent world requests and manual player exclusions (missing references reduce only their features); the first pack card uses public world text unless `pluginPitch` overrides it. See [world data receivers](../reference/world-data.md#data-receivers) for static discovery, inferred selection and omission notices (data acceptance does not satisfy service or runtime capability dependencies).
 
 ## Get Ready (`pregame`)
 
@@ -35,7 +27,7 @@ Reads the world material before the game starts, prepares the first part of the 
 
 **What you will see**: a notice that says "Welcome to [world name]".
 
-**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen.
+**When it is on**: on by default (`kind: core`). You can turn it off on the getting-ready screen.
 
 ## Character Creator (`char-creator`)
 
@@ -50,7 +42,7 @@ At the start, it guides you through creating the player character. It gives you 
 - The character form at the start. The first field is the character's name. Up to three more fields follow, taken from the text or choice attributes the world defines for characters. Numeric attributes are not filled in on the form. They use the world's default values.
 - A list of characters in the "Characters" tab on the right. Each character is an expandable card with a portrait. The alias is shown under the name. The cards are read-only. The type badge shows "Player", "NPC" or "Companion" in the UI language; a type the world defines itself is shown as the world writes it.
 
-**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Classic Story, Dialogue and Budget all include it.
+**When it is on**: on by default (`kind: core`). You can turn it off on the getting-ready screen. Classic Story, Dialogue and Budget all include it.
 
 **Notes**
 
@@ -100,9 +92,9 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 - "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits shows the character attribute definitions for the current session. If a save already has these definitions, you can view them as soon as you open it. Type and category badges follow the UI language.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
-**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. All three built-in packs include it.
+**When it is on**: on by default (`kind: core`). You can turn it off on the getting-ready screen. All three built-in packs include it.
 
-**What world authors can preset**: declare the structure, starting values and update rules of each dimension in `data/dimensions.yaml`. For how to write them, see [World data](../reference/world-data.md). For how dimensions update, see [Dynamic world dimensions](../reference/dynamic-dimensions.md).
+**What world authors can preset**: declare the structure, starting values and update rules of each dimension in `data/dimensions.yaml` (a world package has only this one authored dimension file; the world editor saves resolved records without changing installed packages, and an empty table clears definitions — see [dimension sources](../reference/world-data.md#dimension-sources)). For how to write them, see [World data](../reference/world-data.md). For how dimensions update, see [Dynamic world dimensions](../reference/dynamic-dimensions.md).
 
 **Notes**
 
@@ -114,7 +106,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 Gives the world its own calendar. After each turn of the story ends, it judges from the story how much time has passed, and updates the date and time of day. Before the next turn's narrative begins, it tells the narrative the current time.
 
-For an explicit destination, the tool calculates the difference from the current clock; otherwise it estimates activity duration. The model reads only this turn's story and current clock, excluding previous explanations.
+For an explicit destination, the tool calculates the difference from the current clock; otherwise it estimates activity duration. The model reads only this turn's story and current clock, excluding previous explanations. If a concurrent change makes an affinity or clock calculation stale, that derived update is skipped while an independent successful story survives; a later explicit retry reads and recalculates it (see [read-baseline conflicts](../reference/transactions.md#read-baselines)).
 
 Harukaze Academy's time rules give exact times for lunch, dismissal, and club activities, so the model can resolve transitions to destination times and include skipped classes and waiting. Period labels use whole hours: classes may still be running between 12:00 and 12:20, so the "Midday" label does not mean lunch has started. Days until the festival decrease with world time in the Festival Prep dimension. Project progress and milestone results still record what actually happened.
 
@@ -126,7 +118,7 @@ Harukaze Academy's time rules give exact times for lunch, dismissal, and club ac
 - A line in the status summary: "World time: ...".
 - Type `/time` to see the current world time. It only reads the time. It does not call a model and does not advance the turn. If the story has not started yet, it says the time has not been recorded.
 
-**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Each successful narrative turn usually adds one model call.
+**When it is on**: on by default (`kind: core`). You can turn it off on the getting-ready screen. Each successful narrative turn usually adds one model call.
 
 **What world authors can preset**: `data/time.yaml`, with an `id: world` and a `definition`. The world can have a simple cycle of a few times of day, or a calendar with months and days. You can also set time to run forward, run backward, run both ways, or run at random, and describe in a paragraph how long various actions take. For the fields, see [World time](../reference/world-time.md).
 
@@ -135,7 +127,7 @@ Harukaze Academy's time rules give exact times for lunch, dismissal, and club ac
 - If the world does not define time, it uses a generic world calendar: 12 months a year, 30 days a month, 24 hours a day, starting at 08:00 on January 1 of year 1. This is not the Gregorian calendar.
 - Once a game has started recording time, the time definition is fixed. If you change the world file later, existing saves keep their time. The change only applies to a new game.
 - If the narrative fails, or the turn is rolled back, time does not move forward.
-- Time dataset (数据集) settlement records are checked when the turn is saved. An invalid record skips time settlement for this turn; the story is still saved.
+- Time dataset settlement records are checked when the turn is saved. An invalid record skips time settlement for this turn; the story is still saved.
 
 ## World Rules (`living-world-rules`)
 
@@ -151,16 +143,16 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 The right panel shows committed entries, and “Expand panel” opens it in the large view. Search covers titles, content and tags, retaining category counts, expandable full content, tags/rarity, empty and no-match states. Ordinary hydration updates the panel; opening or enlarging it makes no model calls.
 
-When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
+When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the almanac automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
-**What you will see**: the "Almanac" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
+**What you will see**: the "Almanac" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The Almanac panel defines the colors used to highlight rarity.
 
 **When it is on**: optional. The Classic Story pack includes it. With "Story Notes" on, it reads the sorted facts; without it, it reads this turn's story directly and records as usual.
 
 **Notes**
 
 - It is strict. It would rather miss an entry than record one wrongly. It records at most 3 entries per turn, and most turns record nothing.
-- Character status and relationships are not recorded here. Those belong to Character Creator and Relationships. People in the codex are recorded only for background: passersby, people from legends, or their origins and references.
+- Character status and relationships are not recorded here. Those belong to Character Creator and Relationships. People in the almanac are recorded only for background: passersby, people from legends, or their origins and references.
 - Each time it sorts entries, it makes one more model call.
 
 ## Relationships (`npc-graph`)
@@ -187,13 +179,15 @@ Records relationships between people, groups and factions. It checks existing no
 
 World initialization, time advancement and fact extraction use validated tool results directly, retaining completed work when final confirmation is retried.
 
-You cannot see this plugin, and it has no panel. After each turn ends, it sorts out the people, relationships, events and clues from that turn into a list. It passes the list to the codex, relationship graph, quest log, inventory and similar plugins. This way, each plugin does not have to read the story again on its own.
+You cannot see this plugin, and it has no panel. After each turn ends, it sorts out the people, relationships, events and clues from that turn into a list. It passes the list to the almanac, relationship graph, quest log, bag and similar plugins. This way, each plugin does not have to read the story again on its own.
 
-If you use these plugins, it is best to keep this one on. Turning it off removes only its own work, and the other plugins still work: the codex, relationship graph and affinity read this turn's story directly instead. The quest log no longer records or advances quests from the story, and the bag no longer adds item changes from the story; changes the storyteller makes with the bag tools, and actions in the panel, still apply. It adds one model call per turn. If you want to save money, you can turn it off.
+If you use these plugins, it is best to keep this one on. Turning it off removes only its own work, and the other plugins still work: the almanac, relationship graph and affinity read this turn's story directly instead. The quest log no longer records or advances quests from the story, and the bag no longer adds item changes from the story; changes the storyteller makes with the bag tools, and actions in the panel, still apply. It adds one model call per turn. If you want to save money, you can turn it off.
 
 **When it is on**: optional. The Classic Story pack includes it, Dialogue and Game Master recommend it, and Harukaze Academy requests it in its own plan. Turning on a plugin that reads it does not turn it on.
 
 Extraction also sees changes already made through tools this turn. When the story shows one, it records the event. The item name and quantity match the tool request exactly. It does not invent events for changes absent from the story. Bag skips changes its tool already handled, while other plugins can still read those events.
+
+Character tracking, fact extraction, and dimension updates read the attribution of each dialogue or action segment, distinguishing NPC actions from player actions. Unattributed or ambiguous text should not be guessed to be a player action; story text and history stay unchanged, and model-extracted facts can still be wrong.
 
 World fact extraction assesses each open objective of tracked quests and checks that achievement judgments agree with quest events. Plans, partial work, failures and unverified claims do not count as completion. Semantic judgments can still be wrong; see [per-objective assessment](../reference/tools.md#per-objective-assessment).
 

@@ -155,7 +155,7 @@ function buildAvailableEventsBlock(params: ContextBuildParams): string {
 }
 
 /**
- * Reserved `<runtime-activation>` block (docs 02 §3.3): the canonical
+ * Reserved `<runtime-activation>` block: the canonical
  * `{ source, detached, payload }` JSON, with bookkeeping removed from the
  * payload only for the model. Function handlers keep the full `ctx.activation`.
  * Framework-built, so a plugin template can neither override nor omit it.
@@ -215,7 +215,7 @@ function modelFacingSlots(
 }
 
 /**
- * Reserved `<runtime-inputs>` block (docs 02 §3.2): the provenance-wrapped
+ * Reserved `<runtime-inputs>` block: the provenance-wrapped
  * `inputs.<name>` slots as JSON, the shape a function handler reads from
  * `ctx.inputs` minus result ids. Absent when no bindings resolved. The
  * `story-context@1` input has a block of its own, so it is not sent twice.
@@ -276,7 +276,7 @@ function executionStoryInConversation(
 }
 
 /**
- * Reserved `<runtime-exports>` block (docs 02 §3.4.3): the provenance-wrapped
+ * Reserved `<runtime-exports>` block: the provenance-wrapped
  * cross-execution `recordAs` export slots as JSON, the shape a function
  * handler reads from `ctx.exports` minus result ids. Absent when no export
  * binding resolved.

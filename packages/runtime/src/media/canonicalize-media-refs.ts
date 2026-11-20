@@ -1,5 +1,5 @@
 /**
- * Unified MediaRef canonicalizer + ownership gate (docs 02 §2 / §2.1).
+ * Unified MediaRef canonicalizer + ownership gate (`docs/reference/media-store.md`).
  *
  * Every runtime I/O boundary that can carry a MediaRef wire shape — activation
  * payload, same-execution binding value, persistent `recordAs` export, and
@@ -7,9 +7,9 @@
  * before schema validation / injection / persistence. Sharing one scanner is
  * the whole point: an asset the current session cannot prove it references is
  * rejected the same way whether it arrives via a binding or an export, and no
- * boundary is allowed to "补检查" only at HTTP dereference time (§2.1.4).
+ * boundary may defer checking to HTTP dereference time.
  *
- * Canonicalization rules (§2.1):
+ * Canonicalization rules:
  *  - `id` is identity; the MediaStore lookup's `mime` / `size` are authoritative.
  *    A caller `size` that disagrees is overridden with a diagnostic; a caller
  *    `mime` that disagrees is REJECTED (mime is consumption-load-bearing — a ref

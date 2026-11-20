@@ -258,7 +258,7 @@ If the world has a second language, the translated names are written in `media/p
 **This session must enable the plugin that shows portraits.** The built-in one is "Character Profiles" (`character-blueprint`). It is included in the "Dialogue" gameplay pack (`dialogue-mode`). It is not in the "Classic Story" pack (`traditional-story`). Use either of these two ways:
 
 - Add `character-blueprint` to `plugins` in `world.yaml`, or change `plugins` to `dialogue-mode`.
-- Or, on the session-prep screen, expand "Customize plugins and advanced settings" and select "Character Profiles".
+- Or, on the getting-ready screen, expand "Customize plugins and advanced settings" and select "Character Profiles".
 
 If the plugin is not enabled, the images and their manifest are skipped, and a notice is shown when the session starts.
 

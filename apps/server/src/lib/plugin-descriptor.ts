@@ -205,7 +205,7 @@ export function buildPluginSummary(
     conflicts: facts.conflicts,
     extensions: facts.extensions,
     eventTopics: facts.eventTopics,
-    // Kept in the loader's order: the prep screen groups by the first tag,
+    // Kept in the loader's order: the getting-ready screen groups by the first tag,
     // and a tag the author wrote comes before the derived ones.
     tags: [...new Set(entry.summary.tags ?? [])],
     runtimes,

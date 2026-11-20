@@ -4,10 +4,6 @@
 
 全程约二十分钟。不需要写代码。
 
-预置数据按[接收规则](../reference/world-data.md#data-receivers)自动选择唯一合格接收者。只有没有种子内容的玩法或有意消除歧义时才需要额外的 `plugin:` 引用。
-
-结构化维度只写在 `data/dimensions.yaml`，不要复制到 `world.yaml`。编辑器改的是世界记录，重新导出时才写入规范文件；详见[维度来源](../reference/world-data.md#维度来源)。
-
 ## 开始之前
 
 - 已经完成[第一局游戏](../start/first-session.md)，知道一局游戏是怎样进行的。
@@ -115,7 +111,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 
 启动 Covel（源码运行用 `pnpm dev`；已经在运行的话重启一次），打开世界选择页。你会在列表里看到“潮灯镇”。点“进入”，然后“开始游戏”。
 
-这个世界还没有选玩法，这一局只有每局都有的核心插件：叙事者讲故事，开局时由你创建主角。第一段故事应该从大退潮之夜的码头客栈讲起。
+这个世界还没有选玩法，这一局只有每局都有的核心插件：讲述者讲故事，开局时由你创建主角。第一段故事应该从大退潮之夜的码头客栈讲起。
 
 ## 5. 选玩法和角色属性
 
@@ -143,12 +139,12 @@ characterSchema:
 
 | 字段              | 作用                                                             |
 | ----------------- | ---------------------------------------------------------------- |
-| `plugins`         | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
+| `plugins`         | 开局默认的玩法包。`traditional-story` 是内置的经典故事组合       |
 | `characterSchema` | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
 
 `category` 决定属性用在哪里：`abilities` 是检定和配点用的能力，`stats` 是状态栏里的量条（生命、压力），`social` 是关系（信任），`bio` 是身份，`equipment` 是随身物品。胆识要拿来掷骰，所以放在 `abilities`。
 
-内置的玩法包有四个：`traditional-story`（传统叙事）、`dialogue-mode`（角色对话）、`low-cost`（省 token）、`narrative-only`（纯故事）。
+内置的玩法包有四个：`traditional-story`（经典故事）、`dialogue-mode`（对话）、`low-cost`（省钱）、`narrative-only`（纯故事）。
 
 ## 6. 加一份资料库
 
@@ -163,7 +159,7 @@ characterSchema:
   content: 石路由整块的黑石铺成，平时沉在水下两丈。走完全程要一个时辰，潮水回来时没有地方可躲。
 ```
 
-文件放在 `data/lorebook.yaml` 这个约定的路径上，就会被自动导入，不需要在别处登记。
+文件放在 `data/lorebook.yaml` 这个约定的路径上，就会被自动导入，不需要在别处登记。预置数据按[接收规则](../reference/world-data.md#data-receivers)自动选择唯一合格接收者；只有没有种子内容的玩法或需要消除歧义时，才需要额外写 `plugin:` 引用。
 
 ## 7. 预置一个角色
 
@@ -204,7 +200,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 
 按提示改完再运行，直到通过。
 
-重启 Covel，再进入“潮灯镇”。这次准备页选中的玩法包是“经典故事”，点“开始游戏”。试着做这几件事，确认每个文件都在起作用：
+重启 Covel，再进入“潮灯镇”。这次开局准备页选中的玩法包是“经典故事”，点“开始游戏”。试着做这几件事，确认每个文件都在起作用：
 
 | 做什么               | 应该看到                         | 来自哪个文件                  |
 | -------------------- | -------------------------------- | ----------------------------- |
@@ -228,6 +224,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 你已经有了一个可以玩的世界。可以沿着这些方向继续：
 
 - **换一种玩法。** 把列表的第一个引用换成 `pack:dialogue-mode`，或者加上 `plugin:dice-check`、`plugin:core-quest`、`plugin:inventory`、`plugin:affinity`，让它变成一场带判定和任务的冒险。
+- **加上动态世界状态。** 结构化维度只写在 `data/dimensions.yaml`，不要复制到 `world.yaml`（编辑器改的是世界记录，重新导出时才写入规范文件，见[维度来源](../reference/world-data.md#维度来源)）。
 - **预置更多内容。** 在仓库里运行 `pnpm describe:authoring`，它列出当前版本能预置的每一种内容、文件该放的路径和一份合法的示例。
 - **看成品。** 仓库的 `worlds/` 目录里有四个完整的世界，`worlds/last-train` 是带判定、任务、背包和好感的参考。
 - **加上画面。** 见[世界立绘](./portraits.md)和[世界场景](./scenes.md)。

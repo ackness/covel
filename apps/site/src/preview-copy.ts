@@ -28,7 +28,7 @@ export const previewEn = {
     quest: "Find the Lampkeeper",
     objective: "Enter the bronze tomb doors",
     progress: "1 of 3 clues found",
-    inventoryLabel: "Inventory",
+    inventoryLabel: "Bag",
     items: ["Torch", "Rope · fifteen metres", "Healing draught"],
   },
   story: {
@@ -106,7 +106,7 @@ export const previewZh: typeof previewEn = {
     quest: "寻找守灯人",
     objective: "穿过青铜墓门",
     progress: "已找到 1 / 3 条线索",
-    inventoryLabel: "行囊",
+    inventoryLabel: "背包",
     items: ["火把", "麻绳（十五米）", "治疗药水"],
   },
   story: {

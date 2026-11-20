@@ -1,5 +1,5 @@
 /**
- * Effects read/write-set derivation and same-layer hazard policy (01 §7).
+ * Effects read/write-set derivation and same-layer hazard policy.
  *
  * A runtime's read/write sets are derived from its declared surfaces — builtin
  * tools, dataset tools, `outputKind` — and
@@ -105,7 +105,7 @@ export function deriveEffects(manifest: RuntimeManifest): RuntimeEffects {
 /**
  * Two resource keys intersect when they are identical, when either is the
  * conservative `unknown:*` global write, or when one is a namespace wildcard
- * (`<ns>:*`) and the other shares that namespace prefix (01 §7).
+ * (`<ns>:*`) and the other shares that namespace prefix.
  */
 export function resourcesIntersect(
   a: EffectResource,
@@ -132,7 +132,7 @@ function intersectsSets(
 }
 
 /**
- * Same-layer hazard between two runtimes (01 §7):
+ * Same-layer hazard between two runtimes:
  *   intersects(W_A, R_B ∪ W_B) || intersects(W_B, R_A ∪ W_A)
  * R/R is always safe. When both runtimes opt into `parallelSafe` and the ONLY
  * overlap is pure W/W with no `unknown:*`, the pair is exempted (the authors

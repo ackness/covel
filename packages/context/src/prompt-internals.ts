@@ -217,7 +217,7 @@ function isPluginDataInject(
  * read through the bounded prompt window and serialised via
  * {@link serializeEntries}. Store errors are not caught — they propagate to
  * the caller so the containing runtime fails cleanly and its error stays on
- * the observability channel (see Phase 0 audit notes in the ticket).
+ * the observability channel.
  */
 export async function buildInjectBlocksAsync(
   params: ContextBuildParams,
@@ -242,8 +242,8 @@ export async function buildInjectBlocksAsync(
  *
  * Calls `store.getPluginDataPromptWindow(sessionId, pluginId, namespace)` — pluginId
  * comes from the runtime's own manifest, so cross-plugin reads are
- * structurally impossible through this path. Errors bubble up to the
- * caller (runtime fail → Phase 0 audit guarantees no context pollution).
+ * structurally impossible through this path. Errors bubble up so runtime failure
+ * aborts prompt assembly without partial context pollution.
  */
 async function resolvePluginDataInject(
   inject: PluginDataInjectDecl,

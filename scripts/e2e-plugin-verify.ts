@@ -1760,7 +1760,7 @@ async function runMain(
   kv("Locale", args.locale);
 
   // ── Phase 4: Session creation ──────────────────────────────────
-  // Start the way the prep screen does: the world's preset pack plus the
+  // Start the way the getting-ready screen does: the world's preset pack plus the
   // plugins the world requires. A session created from worldId alone holds
   // only the core plugins and would not exercise what players play.
   section("Phase 4: Session Creation");

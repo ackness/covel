@@ -1,6 +1,6 @@
 # Covel
 
-**A modular, agentic AI RPG. Compose mechanics as plugins and ship settings as portable world packs.**
+**A modular, agent-driven AI RPG framework and playable studio. Compose mechanics with plugins; ship settings as portable world packs.**
 
 **English** · [简体中文](./README.zh-CN.md)
 
@@ -13,28 +13,32 @@
 
 **[▶ Watch the full demo at covel.cc](https://covel.cc/)** · **[🎮 Play in your browser at demo.covel.cc](https://demo.covel.cc/)** · **[📖 Documentation](https://covel.cc/docs/en/)**
 
-Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
+Covel is both a playable AI RPG studio and an open-source framework where NPC relationships, almanac lore, quests, bags, story memory, stage direction, and media evolve turn by turn.
 
-> **Source version: v0.0.54**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. The desktop backend runs on the bundled Electron runtime and requires macOS 13.5 or later; source and Docker deployments need Node 26.12.1. Read the [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0054) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0054) before upgrading: **v0.0.54 refuses to start on an SQLite or PostgreSQL database created by v0.0.53 or earlier, including the desktop app's database, and cannot open browser-private saves made before it; recreate them** (sessions are not migrated), and update community plugins and session pages to the new agent, story and session-bridge contracts. Upgrades from v0.0.52 or earlier also follow the v0.0.53 [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0053) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0053), and from v0.0.51 or earlier the v0.0.52 [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0052) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0052). Older upgrades also follow the [v0.0.51 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051), the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md). Back up affected storage before upgrading; development data is not automatically migrated. When following `main`, also check unreleased schema changes; see [data, backups, and upgrades](./docs/en/start/data-and-upgrade.md).
+> [!WARNING]
+> **Early access (v0.0.54)**: APIs, world data, and plugin manifests may change between releases.
+> - **Platforms & runtime**: Unsigned desktop builds target macOS Apple Silicon (13.5+) and Windows x64 (`SHA256SUMS.txt` included; macOS builds are not notarized). Source and Docker setups require Node 26.12.1.
+> - **Breaking storage change**: **v0.0.54 refuses SQLite or PostgreSQL databases and browser-private saves from v0.0.53 or earlier—back up and recreate your storage before upgrading** (sessions are not migrated), and update community plugins and session pages to the new contracts.
+> - See the [v0.0.54 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0054), [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0054), and [Data, backups, and upgrades](./docs/en/start/data-and-upgrade.md). When upgrading across multiple earlier versions, follow the matching sections in [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) (and the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md) for pre-v0.0.42 data).
 
 ## Highlights
 
 - 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops come from the world pack's scene art; a location without one shows the world image. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](./docs/en/reference/image-generation.md).
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
-- 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
+- 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed bag, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel resolves versioned contracts and declared output visibility; framework code does not branch on concrete plugin IDs.
-- 🎲 **Optional point-buy rules** — `tabletop-rules` uses the same typed forms, validators and deterministic tools available to third-party ZIP packages. Narration perspective is configurable in both narrative plugins; prose streams as it is written, and the reviewed text replaces it on completion.
+- 📐 **Optional point-buy rules** — `tabletop-rules` uses the same typed forms, validators, and deterministic tools available to third-party ZIP packages. Narration perspective is configurable in both narrative plugins; prose streams as it is written, and the reviewed text replaces it on completion.
 - 🌍 **Portable world packs** — bundle lore, character schemas, cast, rules, memory blocks, quests, items, portraits, scenes, and plugin defaults behind one `WorldData` import protocol.
-- 🔄 **One shared WorldIR** — a post-turn fact projection lets quests, inventory, affinity, the codex, and relationship plugins reuse the same evidence instead of independently re-reading the story.
+- 🔄 **One shared WorldIR** — a post-turn fact projection lets quests, bag, affinity, the almanac, and relationship plugins reuse the same evidence instead of independently re-reading the story.
 - 🕯️ **Hidden story events** — worlds ship events that stay out of prompts, tools, and public APIs until their dimension, world-time, or chained conditions hold; an optional planner plants follow-up events during play.
 - 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk; Web mode stores API keys in browser localStorage, while desktop mode saves them as plaintext in `~/.covel/keys.env`.
 
 ## Two ways to play
 
-|                                                Stage mode (visual novel)                                                |                                              Story mode (text)                                              |
-| :---------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------: |
-| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) |              ![Story mode: narration and quest log](./.assets/images/readme/text-mode.en.png)               |
-|           Backdrops, sprites, and typewriter dialog; exploration selects scene art already in the world pack            | Narrated turns with suggested actions and inline forms; enabled plugins update panels such as the quest log |
+| Stage mode (visual novel) | Read mode (text) |
+| :---: | :---: |
+| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.en.png) | ![Read mode: narration and quest log](./.assets/images/readme/text-mode.en.png) |
+| Backdrops, sprites, and typewriter dialog; exploration selects scene art already in the world pack | Text-first turns with action suggestions and inline forms; enabled plugins update panels such as the quest log |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
@@ -106,7 +110,7 @@ worlds/my-world/
     └── presence and scene indexes
 ```
 
-`plugins` lists prefixed `pack:`, `plugin:` and `contract:` references; versioned contracts resolve their dependencies, and the player can still change the selection before the game starts. A `contract:action-check@1` reference requests a versioned capability. Any eligible plugin that implements the contract can satisfy it. If no provider can be enabled, the prep screen explains which features are missing and the session can still start. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
+`plugins` lists prefixed `pack:`, `plugin:` and `contract:` references; versioned contracts resolve their dependencies, and the player can still change the selection before the game starts. A `contract:action-check@1` reference requests a versioned capability. Any eligible plugin that implements the contract can satisfy it. If no provider can be enabled, the getting-ready screen explains which features are missing and the session can still start. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
 
 `WorldData` is the shared import protocol, not a second world format. Its sources can be YAML, JSON, Markdown, text, or media and can target canonical characters/lorebook data or a plugin namespace that explicitly accepts world data. The in-app AI builder produces the same standard package: it can generate the manifest, lore, dimensions, main cast, lorebook, and rules from a structured creative brief. File-backed packs can include full media; browser/store-backed generated worlds retain a portable text fallback while media remains file- or asset-backed.
 
@@ -133,13 +137,13 @@ Every turn ends with an **Execution · N runtimes** row below the story: expand 
 
 ## Every roll leaves a receipt
 
-![Dice checks and scene actions alongside equipped items in the inventory](./.assets/images/readme/rpg-systems.en.png)
+![Dice checks and scene actions alongside equipped items in the bag](./.assets/images/readme/rpg-systems.en.png)
 
-A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
+A risky action resolves against dice rolled **before** the storyteller writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, bag, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 
 ## What persists between turns
 
-Open a side panel mid-play and you are reading the state carried forward from the world pack and this session: core memory (running plot, current scene, player state), the NPC relationship graph, the world codex, and the on-stage cast. World authors can seed characters, rules, quests, items, affinity, and media; plugins keep that state evolving as you play, then feed the relevant parts back into later turns.
+Open a side panel mid-play and you are reading the state carried forward from the world pack and this session: core memory (running plot, current scene, player state), the NPC relationship graph, the world almanac, and the on-stage cast. World authors can seed characters, rules, quests, items, affinity, and media; plugins keep that state evolving as you play, then feed the relevant parts back into later turns.
 
 ## Quick start
 
@@ -149,9 +153,9 @@ Open **[demo.covel.cc](https://demo.covel.cc/)**, the official public trial, and
 
 It is a trial on a free instance: it sleeps after 15 minutes without visitors (the next visit takes about a minute), generated images are lost when it restarts, and saves cannot be exported yet, so keep important progress in the desktop app. Create a temporary API key just for the trial, with a spending limit, and delete or rotate it at your provider when you finish: we do our best to protect your data, but the key still passes through the server. What lives where and who could see your key: [Play on a public trial](./docs/en/start/hosted-trial.md). Run your own: [Deploy a trial on Render](./docs/en/start/deploy-render.md).
 
-### Play
+### Desktop app
 
-Download the **macOS Apple Silicon (macOS 13.5+)** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases). The guide appears on your first visit to world selection: choose your interface language, then add a connection and model in **Configure Providers & Models**, test connectivity, check assignments in **Model Roles**, then choose a world, confirm its play pack, and start. Existing model settings can be reused.
+Download the **macOS Apple Silicon (macOS 13.5+)** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases). On first launch, the getting-started guide walks you through choosing your interface language, adding a connection and model in **Configure Providers & Models**, testing connectivity, checking assignments in **AI roles**, and choosing a world and mode to start. Existing model settings can be reused.
 
 You can skip the guide to browse worlds, but configure a model before generating a story. Reopen **Getting started guide** from world selection at any time. Complete any character creation or opening choices before entering actions to advance the story.
 
@@ -180,16 +184,16 @@ Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal u
 
 ## Worlds in the box
 
-- **Mistport: The Riftide Chronicle** (雾港・裂潮纪) — the traditional-story demo: a dark-fantasy investigation. Its custom plugin pack, bilingual lore, investigation memory, cast blueprints, rules, and portraits show how a world can specialize the framework without forking it.
-- **Harukaze Academy** (遥风学园) — the stage-mode demo: a school ensemble romance. Dialogue policy, character relationships, memory blocks, transparent sprites, and day/night scene registries turn the same kernel into a visual novel.
-- **Last Train Out** (末班地铁) — written in English (`en-US` is the default), with a Chinese edition, to show how one world can carry several languages. It is a modern urban survival story in traditional-story mode: a storm surge blacks out Calder, the last train is trapped under the river, and water is coming in. You are an off-duty platform attendant heading home. Seeded quests, inventory, affinity, rules, character blueprints, and five check attributes come with live panels for the water, battery, messages, and the group that walked ahead. It ships with a cover and five character cards set inside the stalled car.
-- **Lantern Barrow: The First Delve** (提灯古冢・初次远征) — the tabletop-mode demo: a bilingual classic dungeon crawl. Point-buy character creation, d20 attribute checks, quests, inventory, companion affinity, and live delve-map, alarm, lantern, and renown panels; it requires the `action-check@1` contract instead of naming a dice plugin.
+- **Mistport: The Riftide Chronicle** (雾港・裂潮纪) — the Read-mode demo: a dark-fantasy investigation. Its custom plugin pack, bilingual lore, investigation memory, cast blueprints, rules, and portraits show how a world can specialize the framework without forking it.
+- **Harukaze Academy · Spring Mint** (遥风学园・春日薄荷) — the Stage-mode demo: a school ensemble romance. Dialogue policy, character relationships, memory blocks, transparent sprites, and day/night scene registries turn the same kernel into a visual novel.
+- **Last Train Out** (末班地铁) — written in English (`en-US` is the default), with a Chinese edition, to show how one world can carry several languages. It is a modern urban survival story in Read mode: a storm surge blacks out Calder, the last train is trapped under the river, and water is coming in. You are an off-duty platform attendant heading home. Seeded quests, bag, affinity, rules, character blueprints, and five check attributes come with live panels for the water, battery, messages, and the group that walked ahead. It ships with a cover and five character cards set inside the stalled car.
+- **Lantern Barrow: The First Delve** (提灯古冢・初次远征) — the tabletop-mode demo: a bilingual classic dungeon crawl. Point-buy character creation, d20 attribute checks, quests, bag, companion affinity, and live delve-map, alarm, lantern, and renown panels; it requires the `action-check@1` contract instead of naming a dice plugin.
 
 ## Create your own
 
-Use **AI Create World** in the world picker to turn a creative brief into a validated, playable world pack. Choose traditional narration or character dialogue, then include the cast, lorebook, rules, genre memory, and opening configuration you need.
+Use **AI Create World** in the world picker to turn a creative brief into a validated, playable world pack. Choose story narration or character dialogue, then include the cast, almanac, rules, genre memory, and opening configuration you need.
 
-Repository authors can also use the bundled helpers:
+Repository authors can also use the bundled coding-assistant workspace commands:
 
 - **`/create-world`** — generate and validate `world.yaml`, `WORLD.md`, and WorldData files. Desktop packs go in `<data_root>/worlds/` (default `~/.covel/data/worlds/`); source runs use `COVEL_USER_WORLDS_DIR`, defaulting to `$COVEL_HOME/worlds/` (otherwise `~/.covel/worlds/`).
 - **`/create-plugin`** — scaffold the right combination of runtime manifests, handlers, schemas, tools, UI, and tests for a capability package.

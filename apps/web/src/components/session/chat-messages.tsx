@@ -148,8 +148,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
     [scrollRef],
   );
 
-  // 向上滚动加载更旧消息（游标分页）。顶部 sentinel 进入视口即预取一页，
-  // 合并后按 scrollHeight 差值补偿 scrollTop 保持视图不跳。
+  // Cursor-paginated upward scrollback: prefetch when the top sentinel enters
+  // view, then compensate scrollTop by scrollHeight delta so the view does not jump.
   const { topSentinelRef, loadingOlder, loadFailed, retry } =
     useLoadOlderMessages({
       viewportEl,
@@ -330,8 +330,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <div className="ui-session-column ui-workspace-content mx-auto flex w-full flex-col gap-(--ui-gap-section) py-(--ui-gap-section)">
-            {/* 顶部哨兵（零高度）：进入视口触发游标分页向上加载。放在滚动内容流内，
-                但不产生高度，避免影响加载后的 scrollHeight 差值补偿。 */}
+            {/* Zero-height top sentinel inside the scroll container to trigger cursor
+                pagination without distorting scrollHeight compensation. */}
             <div ref={topSentinelRef} aria-hidden="true" />
 
             {/* Only above the true first message, not above a loaded page. */}
@@ -400,8 +400,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
             <div ref={messagesEndRef} />
           </div>
         </div>
-        {/* 加载更旧消息指示：绝对定位悬浮，不进入滚动内容流，避免扰动 scrollHeight
-            补偿计算（否则会在加载前后产生额外跳动）。 */}
+        {/* Floating indicator positioned outside scroll flow so toggling it does
+            not alter scrollHeight compensation calculations. */}
         {loadingOlder && (
           <div className="pointer-events-none absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

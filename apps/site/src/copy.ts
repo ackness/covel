@@ -138,10 +138,10 @@ const en = {
     play: "Play preview",
     zip: "ZIP · extract once, no install",
     zipHelp:
-      "No installation needed. Extract All once, then run Covel.exe from that folder. Keep its companion files; future launches skip extraction.",
+      "No install needed. Extract the archive once, then launch Covel.exe from that folder (keep the companion files beside it).",
     portable: "Self-extracting EXE · no install",
     portableHelp:
-      "The single-file portable build extracts itself on every launch, which can mean a wait. Choose ZIP to avoid repeated extraction.",
+      "Extracts itself on every launch, which adds a short wait. Pick the ZIP archive for regular use.",
     openHelp: {
       mac: {
         summary: "macOS says the app is damaged?",
@@ -154,7 +154,7 @@ const en = {
     },
     trial: "Play in your browser",
     secondary: "View source",
-    note: "macOS (Apple silicon) and Windows x64, or play in the browser with your own API key · MIT licensed",
+    note: "macOS (Apple Silicon) and Windows x64, or play in the browser with your own API key · MIT licensed",
   },
   pillars: foundationsEn,
   rack: {
@@ -224,7 +224,7 @@ const en = {
   },
   downloads: {
     title: "Pack for your next story.",
-    body: "Choose a macOS or Windows build, wherever you are browsing. Download it here, or copy a link for later.",
+    body: "Pick a macOS or Windows build from any device—download it now, or copy the link for later.",
     loading: "Looking up the latest release…",
     unavailable:
       "Downloads could not be listed. Find available files on GitHub Releases.",
@@ -270,10 +270,10 @@ const zh: Copy = {
     docsPath: "",
     title: "Covel · 一切皆可插拔，每个世界都属于你",
     description:
-      "Covel 是插件驱动的开源交互框架，专为多智能体叙事与演练打造：舞台、跑团与故事玩法，全链路多语言，所有插件与世界皆可自定义。",
+      "Covel 是插件驱动的开源交互式叙事框架，支持舞台、跑团与阅读模式，原生多语言，所有插件与世界皆可自定义。",
   },
   nav: {
-    features: "核心系统",
+    features: "核心架构",
     plugins: "插件体验",
     create: "创作",
     worlds: "世界",
@@ -299,12 +299,12 @@ const zh: Copy = {
       {
         visual: "tabletop",
         word: "跑团冒险",
-        body: "提灯照亮墓门，骰子落定悬念。分配属性、携上行囊，在清晰的规则里冒险；每一次检定，都有迹可循。",
+        body: "提灯照亮墓门，骰子落定悬念。分配属性、备好背包，在清晰的规则里冒险；每一次检定，都有迹可循。",
         alt: "跑团游戏里的任务、背包与好感",
       },
       {
         visual: "story",
-        word: "长篇叙事",
+        word: "互动小说",
         body: "一封来信，一句承诺，都可能让故事转向。循着线索前行，或走向另一条路；你做过的选择，渐渐成为世界的往事。",
         alt: "Covel 的阅读画面",
       },
@@ -320,13 +320,13 @@ const zh: Copy = {
     primaryFor: { mac: "下载 macOS 版", windows: "Windows 安装版（推荐）" },
     otherPlatforms: "全部下载",
     pause: "暂停演示",
-    play: "自动演示",
+    play: "继续演示",
     zip: "ZIP 版 · 解压一次，免安装",
     zipHelp:
-      "免安装。首次“全部解压缩”后，直接运行文件夹中的 Covel.exe；保留同目录文件，无需每次重新解包。",
+      "免安装。右键“全部解压缩”一次即可，之后直接运行文件夹内的 Covel.exe（请勿删除同目录文件）。",
     portable: "自解压 EXE · 免安装",
     portableHelp:
-      "单文件便携版每次启动都要解包，可能需要等待；ZIP 版可避免重复解压。",
+      "单文件版每次启动都会重新解压，启动稍慢；经常使用建议选 ZIP 版。",
     openHelp: {
       mac: {
         summary: "macOS 提示“已损坏，无法打开”？",
@@ -409,7 +409,7 @@ const zh: Copy = {
   },
   downloads: {
     title: "下一段故事，就此启程。",
-    body: "无论正在用哪台设备，都可选择 macOS 或 Windows 版本。现在下载，或复制链接，留待启程时。",
+    body: "无论你此刻用哪台设备，都可以先下载 macOS 或 Windows 安装包，或复制链接稍后再装。",
     loading: "正在获取最新版本…",
     unavailable: "暂时无法列出下载文件，请前往 GitHub Releases 查看可用版本。",
     releases: "全部版本与校验文件",
@@ -420,7 +420,7 @@ const zh: Copy = {
     copyFailed: "无法自动复制，请右键下载链接并复制链接地址。",
     installer: "安装版",
     archive: "ZIP 压缩包",
-    portable: "Portable EXE",
+    portable: "便携版 EXE（自解压）",
     installerRecommended: "推荐",
     action: "下载",
     macInstallerHelp: "打开 DMG，将 Covel 拖入“应用程序”。",

@@ -414,7 +414,7 @@ export function SessionPrepScreen({
         );
       } catch {
         // startGameSession stores the actionable message in session state; keep
-        // this handler settled while the prep screen renders that message.
+        // this handler settled while the getting-ready screen renders that message.
       } finally {
         setIsStarting(false);
       }

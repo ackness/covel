@@ -6,7 +6,7 @@ titleTemplate: false
 hero:
   name: Covel
   text: From your first game to your own worlds and plugins
-  tagline: Combine plugins for gameplay, and deliver settings as world packages. Pick a path based on what you want to do now.
+  tagline: Compose mechanics with plugins, and deliver settings as world packages. Pick a path based on what you want to do.
   image:
     src: /icon.png
     alt: Covel
@@ -29,7 +29,7 @@ features:
     linkText: Install and first launch
   - icon: 🌍
     title: I want to make a world
-    details: Write a world package that can be imported and started with four files, then add characters, rules, and portraits step by step.
+    details: Create a playable, importable world package with just four files, then add characters, rules, and portraits step by step.
     link: /en/worlds/first-world
     linkText: First world
   - icon: 🧩
@@ -39,7 +39,7 @@ features:
     linkText: First plugin
   - icon: 📦
     title: I want to share it with others
-    details: "Package plugins and worlds so others can install them: validation, authorization, restart recovery, uninstall, and updates."
+    details: "Package plugins and worlds for others to install: validation, permissions, restart handling, updates, and removal."
     link: /en/ship/
     linkText: Verify and distribute
   - icon: 📖

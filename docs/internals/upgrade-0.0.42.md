@@ -108,7 +108,7 @@ v0.0.42 换掉了插件、世界数据和存储的格式。**它不会自动转�
 | 扩展 handler 读取快照式的跨插件 `pluginData`，或注册任意扩展点                                                     | 已知的扩展点用带类型的 `provideExtension(point, id, handler)`。宿主的执行环境用 `readPluginData(pluginId, namespace)` 按 namespace 延迟读取；提供方的 handler 用绑定在自己身上的 `ctx.pluginData.get/list`。跨插件共享走公开的服务或契约。检查 schema、顺序、超时和失败策略。见[扩展点](../reference/extension-points.md)和[插件通信](../reference/plugin-extensions.md)。                                                                                                                |
 | 插件私有的角色镜像、旧的 Lorebook 身份、文本型的 `lastPlayerInput`                                                 | 角色的 schema 和记录归内核的 World Model。Lorebook 条目按所有者区分：world、player 或某个 plugin。`ctx.playerMessage` 仍然是文本；`ctx.session.lastPlayerInput` 是结构化的提交，或 `null`。后台作业需要完整的 `turn-digest@1`，里面含各 runtime 的最终状态列表；旧作业和旧快照要重建。见 [World Model](../reference/world-model.md)和[插件契约](../reference/plugins.md#输入和输出)。                                                                                                     |
 | 世界的 `dimensions.time`、以插件 ID 为目标的数据、旧的规则 ID                                                      | 时间放进 `world.time-definition@1` 数据源。`pluginPolicy` 使用 `requested` / `recommended`，插件数据以 `contract:<id>` 为目标导入。WorldIR 投影出的规则 ID 是 `world-ir-<SHA256(statement.id)>`，原来的 ID 保存在 `sourceStatementId`；旧规则要重新导入。见[世界时间](../reference/world-time.md)和[世界数据](../reference/world-data.md)。                                                                                                                                               |
-| 保存密钥时发送完整的 provider 映射；生图靠 tag 猜角色，或只检查插件有没有装                                        | `saveSecrets`、`/api/config/keys` 和桌面版的 `covel:keys:save` 接收的是补丁：字符串表示设置，`null` 表示删除，没列出的 provider 保持不变。浏览器往 localStorage 写密钥需要 HTTPS 或 localhost 上的 Web Locks。生图要明确解析图像用途，`ImagesContext.isAvailable()` 是必需的，生成结果带实际的 `target`；叙事舞台依赖 `scene-stage@1`。见 [SettingsStore](../reference/settings-store.md#密钥通道边界)、[模型用途](../reference/slots.md)和[图像生成](../reference/image-generation.md)。 |
+| 保存密钥时发送完整的 provider 映射；生图靠 tag 猜角色，或只检查插件有没有装                                        | `saveSecrets`、`/api/config/keys` 和桌面版的 `covel:keys:save` 接收的是补丁：字符串表示设置，`null` 表示删除，没列出的 provider 保持不变。浏览器往 localStorage 写密钥需要 HTTPS 或 localhost 上的 Web Locks。生图要明确解析图像用途，`ImagesContext.isAvailable()` 是必需的，生成结果带实际的 `target`；叙事舞台依赖 `scene-stage@1`。见 [SettingsStore](../reference/settings-store.md#密钥通道边界)、[模型分工](../reference/slots.md)和[图像生成](../reference/image-generation.md)。 |
 
 几个例子：
 
@@ -144,7 +144,7 @@ Embedding 请求现在带着预期的模型身份。换了模型，即使向量�
 在隔离的新数据上检查：
 
 1. `/api/health` 报告的存储和媒体后端是你预期的。
-2. 世界和插件的发现诊断没有问题，模型用途和密钥已经配置好。
+2. 世界和插件的发现诊断没有问题，模型分工和密钥已经配置好。
 3. 创建一个新的世界会话，完成 setup 和一个回合。
 4. 重启后读档，相关的媒体能显示。
 

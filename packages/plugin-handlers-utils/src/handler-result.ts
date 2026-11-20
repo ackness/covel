@@ -20,7 +20,7 @@ export type JsonSchema = Readonly<Record<string, unknown>>;
 
 /**
  * The job business fields a handler reports through the observability channel.
- * A field subset of `JobStatusRecord` (docs 02 §4.1): the kernel injects the
+ * A field subset of `JobStatusRecord`: the kernel injects the
  * identity (session / scope / plugin / runtime) and timestamp, so a handler
  * cannot forge another plugin's or runtime's job. Structurally identical to the
  * plugin-loader `ProgressEffect` (the live `ctx.progress.report` argument).
@@ -44,7 +44,7 @@ export interface RuntimeDiagnostic {
 /**
  * Effects a non-success outcome may carry. `skipped` / `failed` accept ONLY
  * these observation channels — any domain write in a non-success envelope is
- * stripped by the finalizer (docs 02 §4.1).
+ * stripped by the finalizer.
  */
 export interface ObservabilityEffects {
   readonly jobStatus?: readonly JobStatusEffect[];

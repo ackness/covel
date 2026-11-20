@@ -736,7 +736,7 @@ export async function loadRuntime(
     ...snapshot.packageManifest?.contractSchemas,
     ...frameworkContractSchemas,
   };
-  // Deterministic loader rejection (01 §4): a recurrently-detached spec that
+  // Deterministic loader rejection: a recurrently-detached spec that
   // still declares turn bindings can never satisfy them.
   if (hasIllegalDetachedContract(parsed.manifest)) {
     throw new Error(

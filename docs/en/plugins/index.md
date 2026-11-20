@@ -56,7 +56,7 @@ Plugins do not name each other directly. One plugin says what capability it **pr
 requires: [narrative-engine@2]
 ```
 
-This line means "I need a plugin that can write the story", not "I need the plugin named narrator". So the narrator can be replaced, and the plugins that depend on it do not have to change.
+This line means "I need a plugin that can write the story", not "I need the plugin named `narrator`". So the storyteller plugin can be replaced, and the plugins that depend on it do not have to change.
 
 ## How plugins save data
 

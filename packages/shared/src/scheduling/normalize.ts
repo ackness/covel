@@ -189,7 +189,7 @@ export function effectiveTurnCompletion(
 }
 
 /**
- * Static detached-contract check (01 §4 rule 3): a spec whose declared entry is
+ * Static detached-contract check: a spec whose declared entry is
  * ALWAYS detached (`event` / `manual` trigger + `backgroundWhenDetached`) may
  * not carry turn bindings — no activation of it could ever satisfy them, so the
  * loader rejects it deterministically. The activation-scoped twin (a stage spec

@@ -28,7 +28,7 @@ import {
  * ```yaml
  * # locales/zh.yaml
  * PLUGIN.md:
- *   displayName: 行囊
+ *   displayName: 背包
  *   contributes:
  *     commands:
  *       - name: bag

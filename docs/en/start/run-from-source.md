@@ -1,4 +1,4 @@
-# Run from Source
+# Run from source
 
 Run from source to change the framework or develop worlds and plugins in the repository. You can also use it if your system has no installer package. When you are done, the browser opens the same interface as the desktop app.
 

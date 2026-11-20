@@ -1,5 +1,5 @@
 /**
- * Unified handler-result normalization (docs 02 §4).
+ * Unified handler-result normalization.
  *
  * One funnel every runtime entry can call to turn a raw handler return into a
  * discriminated `HandlerResult` plus diagnostics. It does NOT commit anything
@@ -12,7 +12,7 @@
  * against the JSON wire boundary, and its effects against the entry shapes
  * the commit normalizer reads.
  *
- * Non-success isolation (docs 02 §4.1): a `skipped` / `failed` envelope may only
+ * Non-success isolation: a `skipped` / `failed` envelope may only
  * carry observability effects (`jobStatus` / `diagnostics`); any domain write is
  * stripped with a `non-success-domain-effects-stripped` diagnostic.
  */

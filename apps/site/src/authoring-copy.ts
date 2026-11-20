@@ -59,7 +59,7 @@ export const foundationsZh: typeof foundationsEn = {
     modules: ["骰点", "任务", "记忆", "人物关系"],
     points: [
       {
-        title: "一段对话，也能成行",
+        title: "只靠一段对话，也能开局",
         body: "只启用一个讲述者插件就能游玩。随着故事需要，再添上工具、规则与界面。",
       },
       {
@@ -142,7 +142,7 @@ export const creationZh: typeof creationEn = {
   body: "玩家和开发者，都可以成为造世界的人。在应用里开始构筑，或与编程助手一起，把设定与玩法写进自己的文件。",
   app: {
     title: "在应用里，一键开始构筑",
-    body: "接入模型，打开“AI 创建世界”，写下核心创意，选择内容与玩法，再点“开始构筑”。Agent 会创作、校验并保存世界，之后你可以继续编辑。",
+    body: "接好模型后打开“AI 创建世界”，写下你的点子，选好内容要素与玩法风格，点击“开始构筑”。Agent 会自动完成创作、校验与保存，你随时可以接着改写。",
     label: "世界构筑 Agent · 流程示例",
     prompt: "一座建在沉睡巨人身上的城市。每当它做梦，街道便会改变方向。",
     promptLabel: "核心创意",
@@ -163,7 +163,7 @@ export const creationZh: typeof creationEn = {
     sourceLabel: "阅读 SKILL.md 原文",
     worldTitle: "写一个世界包",
     worldBody: "把构想展开成设定、人物、开局内容与合适的插件组合。",
-    pluginTitle: "添一种新玩法",
+    pluginTitle: "打造一项新能力",
     pluginBody: "把规则、工具或面板做成可复用的插件，再完成校验与测试。",
     note: "这两份 Skill 供工作区里的编程助手使用，与应用内的世界构筑 Agent 是两条创作入口。",
     link: "阅读 Agent Skills 指南",
@@ -198,7 +198,7 @@ export const extensionsEn = {
   },
   more: {
     title: "Keep making room",
-    body: "Inventory, memory, music, hidden events and new mechanics can all find their place. Combine existing plugins or write one of your own.",
+    body: "Bag, memory, music, hidden events and new mechanics can all find their place. Combine existing plugins or write one of your own.",
     link: "Explore the bundled plugins",
   },
   note: "Image and speech plugins are optional installations. Configure the corresponding model services before using them.",
@@ -208,15 +208,15 @@ export const extensionsZh: typeof extensionsEn = {
   body: "这里试玩的，只是插件系统的一角。让文字有画面，让故事有声音，或为自己的世界添一条从未有过的规则。",
   images: {
     title: "让文字，长出画面",
-    body: "为故事生成插图，收进一路积累的画廊。OpenAI Images 与 DashScope Images 提供不同的生图路径，可按需安装。",
+    body: "随剧情生成插画并收入画廊。可按需安装 OpenAI Images 或 DashScope Images 等生图插件。",
   },
   voice: {
-    title: "让叙事，有声可循",
+    title: "让文字，开口说话",
     body: "MiMo Narration 提供语音合成，可自动朗读或手动触发，在音频面板里听见故事。",
   },
   more: {
     title: "为新的玩法，留一扇门",
-    body: "行囊、记忆、配乐、隐藏事件，以及你尚未写出的机制，都可以成为插件。组合已有能力，也可以亲手添一种。",
+    body: "背包、记忆、配乐、隐藏事件，以及你尚未写出的机制，都可以成为插件。组合已有能力，也可以亲手添一种。",
     link: "浏览随附插件",
   },
   note: "生图与语音属于可选扩展，需另行安装，并配置对应的模型服务。",

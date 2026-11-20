@@ -33,8 +33,6 @@ Write one short observation grounded in the latest narrative.
 
 校验它：
 
-没有源码的玩家可以在设置的安装与管理里点“校验”。
-
 ```bash
 pnpm validate:plugin ~/.covel/plugins/observer
 ```
@@ -43,6 +41,9 @@ pnpm validate:plugin ~/.covel/plugins/observer
 ✓ Static package validation: /Users/you/.covel/plugins/observer
   languages: text en; instructions en
 ```
+
+> [!TIP]
+> 没有源码的玩家可以在**设置 → 插件 → 安装与管理**里点**校验**。
 
 这已经是一个完整的插件。没写的都由 Covel 推出来：ID 是文件夹名 `observer`；没有 `function` 块，所以它是一个由模型驱动的 agent，正文就是提示词；它每回合在故事之后运行。它不需要 `package.json`。
 
@@ -121,7 +122,7 @@ agent:
 | `schedule.stage: post-turn` | 在叙事之后运行                                                                                     |
 | `io.inputs.narrator-output` | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@2` 的插件”，而不是某个具体的插件           |
 | `io.selfData`               | 把自己已有的记录放进提示词，模型据此避免重复记录                                                   |
-| 没写的字段                  | 用默认值：它用 `plugin` 这个模型用途，输出不是故事正文。见[默认值](../reference/plugins.md#默认值) |
+| 没写的字段                  | 用默认值：它用 `plugin` 这个模型分工（slot），输出不是故事正文。见[默认值](../reference/plugins.md#默认值) |
 | `agent.tools.datasets`      | 模型只能调用 `notes-upsert` 这一个工具：往自己的 `notes` 数据集写一条记录                          |
 
 模型只能使用这里列出的工具。它不能读写别的插件的数据，也不能绕过内核直接改存档。
@@ -215,7 +216,7 @@ pnpm dev
 用户目录里的插件属于**社区插件**。它会被发现，但它的代码要等你在一局游戏里授权之后才会执行。
 
 1. 打开 <http://localhost:5173>，选一个世界，点“进入”。
-2. 在准备页展开“自定义插件与高级设置”，在插件列表里找到 `tavern-rumors` 并选中它。
+2. 在开局准备页展开“自定义插件与高级设置”，在插件列表里找到 `tavern-rumors` 并选中它。
 3. 点“开始游戏”。出现“授权插件操作”时，授权 `tavern-rumors`。
 4. 完成开场，然后写一个会让人开口说话的行动，例如“向掌柜打听最近镇上有什么怪事”。
 5. 等“本轮已完成”出现。
@@ -240,7 +241,7 @@ pnpm dev
 | 插件列表里没有它         | 它不在用户插件目录里，或者清单有错。运行第 4 步的校验，再重启一次后端                                                                    |
 | 选中了但没有运行         | 没有授权。在游戏里处理“授权插件操作”的提示                                                                                               |
 | 面板一直是空的           | 这一回合的故事里没有传闻，或者模型没有调用工具。在调试页面 <http://localhost:5173/debug> 查看 `tavern-rumors/analyst` 这一步的请求和回复 |
-| 提示 `plugin` 用途不可用 | 在 **设置 → 模型 → AI 分工** 给它选一个模型，或者在准备页把这个任务改用别的用途                                                         |
+| 提示 `plugin` 分工不可用 | 在 **设置 → 模型 → AI 分工** 给它选一个模型，或者在开局准备页把这个任务改用别的分工                                                      |
 | 离线运行报用例失败       | 你改了数据的形状，但没有同步修改 `tests/runtime-cases.json` 里的期望                                                                     |
 
 ## 你刚才用到了什么

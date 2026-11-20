@@ -98,12 +98,12 @@ interface RightPanelProps {
 
 /**
  * Right panel — split into two sections in the activity bar:
- *   1. Framework-owned tabs (世界 / 数据库) — always present while a session is loaded.
+ *   1. Framework-owned tabs (World / Database) — always present while a session is loaded.
  *   2. Plugin-driven tabs (from /api/ui-specs) — rendered below a thin divider.
  *
- * The hardcoded 角色 and 世界观 tabs were removed because they duplicated
- * plugin contributions (char-creator "角色" and world-init
- * "世界维度"); the pretty world-dimensions rendering moved into the
+ * The hardcoded Characters and Lore tabs were removed because they duplicated
+ * plugin contributions (`char-creator` "Characters" and `world-init`
+ * "World Details"); the structured world-dimensions rendering moved into the
  * plugin tab via the `WorldDimensions` covelRegistry component.
  *
  * Memoised: the session view re-renders on every slot projection and stream

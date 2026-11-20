@@ -11,12 +11,12 @@
 
 仓库根目录的 `render.yaml` 是一份 Render Blueprint。它用 `docker/Dockerfile` 构建一个免费套餐的 Web 服务 `covel-demo`。Render 在每次推送到所连分支时重新构建和部署。
 
-这份配置让服务端以浏览器私有形态运行：`DEPLOYMENT_TIER=self`、`NODE_ENV=production`、`STORE_BACKEND=memory`。规则见[安全边界](../internals/security.md#host-profile)，简单说：
+这份配置让服务端以浏览器私有形态（`browser-private`：存档只保存在玩家浏览器中，服务端仅使用内存）运行：`DEPLOYMENT_TIER=self`、`NODE_ENV=production`、`STORE_BACKEND=memory`。规则见[安全边界](../internals/security.md#host-profile)，简单说：
 
 - 任何访客都可以创建会话、生成世界、列出服务商的模型和测试自己的密钥。
 - 访问一个会话要用创建它时拿到的会话令牌。
 - 写共享的世界目录、启用社区插件的服务端代码、读诊断信息、写服务端设置和文件、清理媒体，都要运维令牌（`COVEL_DESKTOP_REST_TOKEN`）。
-- 服务端不检查请求的 `Host`，自己也不连接内网地址。玩家电脑或局域网上的模型由玩家的浏览器转发（[本地模型中继](./hosted-trial.md#用自己电脑或局域网里的模型)），不需要额外配置；它要求只有一个服务进程，Render 免费实例正是这样。
+- 服务端不检查请求的 `Host`，也不主动访问内网地址；玩家本机或局域网上的模型通过**本地模型中继**由浏览器转发（见[在公开体验站上玩](./hosted-trial.md#用自己电脑或局域网里的模型)）。该模式无需额外配置，但要求服务端保持单进程运行，Render 免费实例正好符合这一条件。
 
 `render.yaml` 里每个变量的作用写在它旁边的注释里。
 

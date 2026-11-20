@@ -32,7 +32,7 @@ Run the installer. If it says "Windows protected your PC", click "More info", an
 
 For the no-install ZIP, right-click and choose “Extract All”, then run `Covel.exe` from the extracted folder. Do not launch it inside the ZIP window or move only the EXE. On later launches, open the program in that folder directly; it does not extract again.
 
-The single-file `portable.exe` extracts again on every launch, shows a static preparation notice, and removes its extraction folder on exit. For frequent use without installation, prefer ZIP. System security scanning may happen before the notice appears. All three downloads use the same [data directories](./data-and-upgrade.md); saves do not move beside the EXE.
+The single-file `portable.exe` extracts again on every launch, shows a brief startup notice, and removes its extraction folder on exit. For frequent use without installation, prefer ZIP. System security scanning may happen before the notice appears. All three downloads use the same [data directories](./data-and-upgrade.md); saves do not move beside the EXE.
 
 ## 3. See the world selection page
 
@@ -42,8 +42,8 @@ After you close the guide, you see the list of worlds. It has four bundled world
 
 | World                                                | Style                                                                 |
 | ---------------------------------------------------- | --------------------------------------------------------------------- |
-| 雾港・裂潮纪 (Mistport: The Riftide Chronicle)       | A dark-fantasy investigation in the traditional narrative style       |
-| 遥风学园 (Harukaze Academy · Spring Mint)            | A campus ensemble story in stage mode                                 |
+| 雾港・裂潮纪 (Mistport: The Riftide Chronicle)       | A dark-fantasy investigation in Read mode                             |
+| 遥风学园・春日薄荷 (Harukaze Academy · Spring Mint)  | A campus ensemble story in Stage mode                                 |
 | Last Train Out                                       | Modern urban survival, written in English, with a Chinese edition     |
 | 提灯古冢・初次远征 (Lantern Barrow: The First Delve) | A classic tabletop dungeon crawl, with starting stats and dice checks |
 

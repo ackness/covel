@@ -34,8 +34,8 @@ const DROP_FILE_PATTERNS = [
 ];
 
 function isUnpackedDir(name) {
-  // electron-builder 解包阶段产物：mac, mac-arm64, mac-x64, win-unpacked,
-  // win-ia32-unpacked, linux-unpacked, linux-arm64-unpacked, ...
+  // Unpacked intermediate directories produced by electron-builder: mac,
+  // mac-arm64, mac-x64, win-unpacked, win-ia32-unpacked, linux-unpacked, ...
   if (name === "mac" || /^mac-(arm64|x64|universal)$/.test(name)) return true;
   if (name.endsWith("-unpacked")) return true;
   return false;

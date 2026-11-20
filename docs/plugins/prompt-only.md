@@ -47,7 +47,7 @@ Write one short observation grounded in the latest narrative.
 
 | 这一段                      | 意思                                                                                         |
 | --------------------------- | -------------------------------------------------------------------------------------------- |
-| `description`               | 一句话说明这个插件做什么，准备页的插件列表里显示它                                           |
+| `description`               | 一句话说明这个插件做什么，开局准备页的插件列表里显示它                                       |
 | `schedule.stage: post-turn` | 在每回合的故事之后运行                                                                       |
 | 正文                        | 给模型的提示词                                                                               |
 | 没写的字段                  | 由 Covel 推出：ID 是文件夹名；没有 `function` 块，所以它是由模型驱动的 agent，正文就是提示词 |
@@ -99,14 +99,14 @@ Use at most {{ userSettings.length }} sentences.
 You must not add an event, a character, an item or a decision that the narrative did not state.
 ```
 
-| 这一段                           | 意思                                                                                                                                                           |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `displayName`                    | 玩家看到的名称                                                                                                                                                 |
-| `requires: [narrative-engine@2]` | 需要一个能写故事的插件。启用这个插件时，Covel 会确保有一个                                                                                                     |
-| `contributes.settings`           | 给玩家一个设置项：最多写几句，默认 2                                                                                                                           |
-| `schedule.stage: post-turn`      | 在每回合的故事之后运行                                                                                                                                         |
-| `io.inputs.narrative`            | 读取这一回合的故事正文。提示词里用 `runtime-inputs.narrative.value` 引用它                                                                                     |
-| 没写的字段                       | 用默认值：这一回合没有故事（叙事失败了）时它不运行；它的输出是插件的结果，不是故事正文；它用 `plugin` 这个模型用途。见[默认值](../reference/plugins.md#默认值) |
+| 这一段                           | 意思                                                                                                                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `displayName`                    | 玩家看到的名称                                                                                                                                                       |
+| `requires: [narrative-engine@2]` | 需要一个能写故事的插件。启用这个插件时，Covel 会确保有一个                                                                                                           |
+| `contributes.settings`           | 给玩家一个设置项：最多写几句，默认 2                                                                                                                                 |
+| `schedule.stage: post-turn`      | 在每回合的故事之后运行                                                                                                                                               |
+| `io.inputs.narrative`            | 读取这一回合的故事正文。提示词里用 `runtime-inputs.narrative.value` 引用它                                                                                           |
+| 没写的字段                       | 用默认值：这一回合没有故事（叙事失败了）时它不运行；它的输出是插件的结果，不是故事正文；它用 `plugin` 这个模型分工（slot）。见[默认值](../reference/plugins.md#默认值) |
 
 再写一个 `README.md` 给维护者看：这个插件做什么、玩家能看到什么、有哪些设置项。先写一行标题也可以。要发布给别人时，在配置里加上 `version`，见[打包](../ship/package.md)。
 
@@ -189,7 +189,7 @@ pnpm test:runtime -- observation --pretty
 
 ## 8. 在游戏里运行
 
-启动 `pnpm dev`，然后和[第一个插件](./first-plugin.md)的最后一步一样：在准备页展开“自定义插件与高级设置”，选中 `observation`，点“开始游戏”，声明式包直接启用，不出现代码或 runtime 授权提示；先阅读模型使用说明。
+启动 `pnpm dev`，然后和[第一个插件](./first-plugin.md)的最后一步一样：在开局准备页展开“自定义插件与高级设置”，选中 `observation`，点“开始游戏”，声明式包直接启用，不出现代码或 runtime 授权提示；先阅读模型使用说明。
 
 玩一个回合。在调试页面 <http://localhost:5173/debug> 找到 `observation` 这一步，可以看到发给模型的提示词和它的回复。
 
@@ -408,7 +408,7 @@ window.covel.subscribe((snapshot) => {
 
 <!-- declarative-notebook-example-end -->
 
-先校验，再在准备页或会话插件列表启用：
+先校验，再在开局准备页或会话插件列表启用：
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/declarative-notebook

@@ -391,7 +391,7 @@ sessionRoutes.post("/", async (c) => {
     );
   // A contract the world requires without an active provider never stops the
   // game: the session starts without that part, and the response names it so
-  // the player is told. The prep screen shows the same list before the start.
+  // the player is told. The getting-ready screen shows the same list before the start.
   for (const unmet of selection.unmet.filter(isBlockingWorldRequirement))
     console.warn(
       `[sessions] world ${rawWorldId}: ${unmetRequirementMessage(unmet)}`,

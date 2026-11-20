@@ -42,22 +42,22 @@ export function traceEventMatchesCategory(
 }
 
 /**
- * 事件去重键：跨窗口翻页 / 自动刷新最新窗口时，同一事件可能重复出现，
- * 用尽量多的判别字段避免重复计入。seq 在同一会话内通常单调递增，
- * 仍叠加 requestId/traceId/type/timestamp 以求稳妥。
+ * Deduplication key for trace events: paging across windows or refreshing the
+ * latest window can surface the same event again, so include `seq` alongside
+ * requestId, traceId, type, and timestamp.
  */
 function traceEventKey(event: api.TraceEvent): string {
   return traceEventIdentity(event);
 }
 
-/** 取两个时间戳里较早的非空值（空串视为缺失，不参与比较）。 */
+/** Return the earlier non-empty timestamp (treating `""` as missing). */
 function earlierTimestamp(a: string, b: string): string {
   if (!a) return b;
   if (!b) return a;
   return a < b ? a : b;
 }
 
-/** 取两个时间戳里较晚的非空值（空串视为缺失，不参与比较）。 */
+/** Return the later non-empty timestamp (treating `""` as missing). */
 function laterTimestamp(a: string, b: string): string {
   if (!a) return b;
   if (!b) return a;
@@ -65,11 +65,12 @@ function laterTimestamp(a: string, b: string): string {
 }
 
 /**
- * 按 turnId 合并两批 turn。分页单位是「事件」，一个 turn 可能被窗口边界切开，
- * 因此加载更旧一页 / 自动刷新最新窗口后，需要把同 turnId 的 events 合并去重、
- * 重算 eventCount、重排 startedAt/completedAt，并整体按 startedAt 正序输出
- * （与后端 `/turns` 顺序一致）。纯函数，不修改入参；内容没有变化时返回
- * `existing` 原引用，避免 Live 轮询让整个调试页面无意义重渲染。
+ * Merge two batches of turns by `turnId`. Because pagination splits by event
+ * rather than turn boundaries, loading an older page or refreshing the latest
+ * window merges events with the same `turnId`, deduplicates, recomputes
+ * `eventCount` and `startedAt`/`completedAt`, and returns turns sorted in
+ * ascending `startedAt` order (matching `/turns`). Pure and preserves the
+ * `existing` reference when unchanged so live polling avoids redundant renders.
  */
 export function mergeTurnPages(
   existing: readonly api.TurnTrace[],
@@ -85,7 +86,7 @@ export function mergeTurnPages(
       order.push(turn.turnId);
       return;
     }
-    // 同 turnId：合并事件、去重、按 seq/timestamp 重排（还原追踪时间线）。
+    // Same turnId: merge, deduplicate, and re-sort events by seq/timestamp.
     const eventByKey = new Map<string, api.TraceEvent>();
     for (const event of [...prev.events, ...turn.events]) {
       const key = traceEventKey(event);

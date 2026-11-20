@@ -28,8 +28,8 @@ export function useDebugPageData(
     sid ?? null,
   );
   const [turns, setTurns] = useState<api.TurnTrace[]>([]);
-  // 游标分页：olderCursor 指向已加载最旧一段的更前一步；null 表示已到 trace
-  // 起点或已通过「加载全部」拉全量，此时展示数据即完整（无窗口失真）。
+  // Cursor pagination: olderCursor points just before the oldest loaded page;
+  // null means all trace events are loaded (via start or Load All).
   const [olderCursor, setOlderCursor] = useState<PageCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -112,7 +112,7 @@ export function useDebugPageData(
     }
   }, [sid, selectSession]);
 
-  // 展开最新（正序数组的最后一个）turn，便于用户直接看到最近一轮。
+  // Expand the latest (last in ascending order) turn for immediate inspection.
   const expandLatestTurn = useCallback((loaded: api.TurnTrace[]) => {
     const latest = loaded.at(-1);
     if (!latest) return;
@@ -124,7 +124,7 @@ export function useDebugPageData(
     });
   }, []);
 
-  // 默认加载：拉最近一段窗口（第一页），重置游标。切换会话 / 手动刷新走这里。
+  // Initial/manual load: fetch the latest window (first page) and reset cursor.
   const loadTraces = useCallback(async () => {
     if (!selectedSessionId) return;
     const epoch = ++traceEpoch.current;
@@ -159,8 +159,7 @@ export function useDebugPageData(
     }
   }, [selectedSessionId, expandLatestTurn]);
 
-  // 加载更早：用 olderCursor 拉更旧一页，按 turnId 合并进现有 turns（合并边界
-  // turn），并前移游标；已加载页不受影响。
+  // Load older: fetch prior page via olderCursor, merge boundary turns, advance cursor.
   const loadOlder = useCallback(async () => {
     if (!selectedSessionId || !olderCursor || loadingOlder) return;
     const epoch = traceEpoch.current;
@@ -177,7 +176,7 @@ export function useDebugPageData(
       setTurns((prev) => mergeTurnPages(prev, data.turns));
       setOlderCursor(data.nextCursor);
     } catch {
-      // 保留已加载数据；失败不清空。
+      // Keep already-loaded turns on transient error.
     } finally {
       if (
         currentSession.current === selectedSessionId &&
@@ -187,8 +186,8 @@ export function useDebugPageData(
     }
   }, [selectedSessionId, olderCursor, loadingOlder]);
 
-  // 自动刷新：只重拉最新窗口（第一页）并按 turnId 合并进现有 turns，
-  // 不 wipe 已加载的更早页，也不动 olderCursor（它可能指向更前的位置）。
+  // Live refresh: refetch only the newest window and merge without clearing
+  // previously loaded older pages or altering olderCursor.
   const refreshLatest = useCallback(async () => {
     if (!selectedSessionId) return;
     const epoch = traceEpoch.current;
@@ -211,7 +210,7 @@ export function useDebugPageData(
     }
   }, [selectedSessionId]);
 
-  // 兜底：一次拉服务端允许的最大窗口并整体替换；更早的事件仍由游标继续加载。
+  // Fallback: fetch the server's max single-request window and replace state.
   const loadAll = useCallback(async () => {
     if (!selectedSessionId) return;
     const epoch = ++traceEpoch.current;
@@ -229,7 +228,7 @@ export function useDebugPageData(
       setTraceDiscovery(data.discovery ?? null);
       expandLatestTurn(data.turns);
     } catch {
-      // 保留已加载数据；失败不清空。
+      // Keep already-loaded turns on failure.
     } finally {
       if (
         currentSession.current === selectedSessionId &&
@@ -310,7 +309,7 @@ export function useDebugPageData(
 
   const visibleTurns = useMemo(() => getVisibleTurns(turns), [turns]);
 
-  // 仍有更早未加载的事件：展示的计数/成本聚合只是「当前窗口」，非全会话。
+  // Earlier unloaded events remain: displayed counts/costs reflect the loaded window only.
   const isPartial = olderCursor !== null;
 
   const filterMatchesEvent = useCallback(

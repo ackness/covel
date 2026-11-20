@@ -18,7 +18,7 @@ This chapter is for people who want to change the framework itself, or who want 
 
 | Page                                         | Contents                                                         |
 | -------------------------------------------- | ---------------------------------------------------------------- |
-| [Contributing guide](../../CONTRIBUTING.md)  | Branches, commits, checks, and the release process               |
+| [Contributing guide](../../CONTRIBUTING.en.md)  | Branches, commits, checks, and the release process               |
 | [Commands](./commands.md)                    | Less common scripts, Git hooks, and the scope of CI              |
 | [Browser end-to-end tests](./e2e-testing.md) | Playwright tests and the player-flow acceptance before a release |
 | [Desktop packaging](./desktop-packaging.md)  | Local builds, signing, and the release checklist                 |

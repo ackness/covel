@@ -12,7 +12,7 @@
 - 有一个能通过校验的世界，见[第一个世界](./first-world.md)。
 - **世界文件夹要放在仓库的 `worlds/` 目录下**，例如 `worlds/tidelamp/`。这几个脚本只认这个位置。你的世界在 `~/.covel/worlds/` 里时，先把整个文件夹移过来，做完图再移回去。不要两边各留一份，同一个 ID 的世界不能有两个。
 - 用脚本生成图片的话，还需要：
-  - 一个图像模型。在 `llm.toml` 里它是一个用途，例如 `[covel.image]`，见[模型用途参考](../reference/slots.md)。
+  - 一个图像模型。在 `llm.toml` 里它是一个分工（slot），例如 `[covel.image]`，见[模型分工参考](../reference/slots.md)。
   - 命令行工具 `cwebp`，用来把图片压成 WebP。macOS 上运行 `brew install webp`，Debian 或 Ubuntu 上运行 `apt install webp`。
 
 下面的命令都在仓库的根目录运行，例子里的世界 ID 是 `tidelamp`。
@@ -258,7 +258,7 @@ wrote worlds/tidelamp/media/presence.json with 1 presence record(s)
 **这一局要启用显示立绘的插件。** 内置的是“角色资料”（`character-blueprint`）。它包含在“对话”（`dialogue-mode`）这个玩法包里；“经典故事”（`traditional-story`）里没有它。两种办法任选：
 
 - 在 `world.yaml` 的 `plugins` 里加上 `character-blueprint`，或者把 `plugins` 改成 `dialogue-mode`。
-- 或者在开局的准备页展开“自定义插件与高级设置”，选中“角色资料”。
+- 或者在开局准备页展开“自定义插件与高级设置”，选中“角色资料”。
 
 没有启用时，图片和对应清单会被跳过，开局时给出一条提醒。
 

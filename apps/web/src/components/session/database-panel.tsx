@@ -2,8 +2,8 @@
  * DatabasePanel — view of session, character and plugin-data virtual tables.
  *
  * Groups the database view into sections:
- *   - § 核心 — built-in tables (`session`, `characters`, …)
- *   - § 插件 — `plugin_data/*` tables grouped by pluginId, then namespace
+ *   - Core — built-in tables (`session`, `characters`, …)
+ *   - Plugins — `plugin_data/*` tables grouped by pluginId, then namespace
  *
  * Layout follows the editorial design system (ui-folio + ui-section-head +
  * flat hairline rows) so the panel reads as a printed index rather than a

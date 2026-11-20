@@ -2,11 +2,11 @@
 
 This page does not cover plugins. It covers the features the app itself gives players: what each one is, where to find it, and what is worth knowing about it.
 
-## Text and stage views
+## Read and stage views
 
 At the top of the game screen, there are two buttons: "Read" and "Stage". "Read" is a text view you read one page at a time. "Stage" is a full-screen picture with a background and portraits. Both views show the same game, and you can switch between them at any time.
 
-![Text mode](/text-mode.webp)
+![Read mode](/text-mode.webp)
 
 For details on the stage view, see [Stage and Sound](./stage.md).
 
@@ -20,7 +20,7 @@ The settings search shows keyboard focus. Configuration sources use segmented bu
 
 ## AI Create World
 
-On the world selection page, click "AI Create World". Write a "Core Direction", under "Player Experience" choose the gameplay pack the world is made for (the choices are the app's gameplay packs, such as "Classic Story", "Dialogue" and "Budget"), and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
+On the world selection page, click "AI Create World". Write a "Core Direction", under "Player Experience" choose the gameplay pack the world is made for (the choices are the app's gameplay packs, such as "Classic Story", "Dialogue" and "Budget"), and tick what to generate together: "Main Cast", "World Almanac", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
 
 ![World package builder](/world-package-builder.webp)
 
@@ -32,9 +32,9 @@ When the world dimension editor has unsaved changes, clicking "Cancel", navigati
 
 Editing is disabled while a save or discard confirmation is pending. A failed save keeps the drafts, so you can edit and retry.
 
-## Session-prep screen: choose plugins and gameplay packs
+## Getting-ready screen: choose plugins and gameplay packs
 
-After you choose a world and click "Enter", you reach the session-prep screen ("Session Setup"). Here you decide which plugins are on for this game.
+After you choose a world and click "Enter", you reach the getting-ready screen ("Session Setup"). Here you decide which plugins are on for this game.
 
 - At the top, you can choose a gameplay pack, such as "Classic Story", "Dialogue", "Budget" or "Story Only". Choosing one turns on all the plugins it includes; some packs also turn plugins off.
 - "Back to the minimal set" keeps only the narrative plugins and the plugins that they and the world require, and turns everything else off.
@@ -49,9 +49,9 @@ After you confirm, click "Start Game". If this is your first time playing, the g
 Different tasks can use different models. For example, you might use a better model for writing the story, and a cheaper, faster one for organizing world material.
 
 - Global settings: in "Settings", under "Models", set up your providers and keys in "Providers & keys", and choose a model for each role in "AI roles". For first-time setup, see [Connect a model](../start/models.md).
-- A single task: on the session-prep screen, each plugin task has a "Model" option. You can change it to another model role. The new choice is used from the next turn.
+- A single task: on the getting-ready screen, each plugin task has a "Model" option. You can change it to another AI role. The new choice is used from the next turn.
 
-For details on model roles, see [Model roles](../reference/slots.md).
+For details on AI roles, see [Model roles](../reference/slots.md).
 
 ## Retry
 
@@ -64,7 +64,7 @@ Models sometimes fail. The app only redoes the part that failed, so the parts th
 - Before retrying, you can click "Change model / parameters" to switch to another model, or lower the output limit. The retry uses the current settings.
 - If opening setup fails, the notice at the top explains why. For key, permission, endpoint or rate-limit errors, click "Model settings" to fix the problem, then "Retry setup". It only runs unfinished steps. Expand execution records for details; during setup, retry from the top notice.
 - If a turn fails, the recovery notice at the top shows the cause recorded by the task. Expand it to read the original error. For key, permission, endpoint or rate-limit errors, open "Model settings" before retrying. While the recovery notice is visible, retry from there. Execution records keep a summary and expandable details.
-- Key, permission, quota and rate-limit errors name the provider. If several model uses in this session share it, the notice lists them, such as Story and Plugin tasks. For key authentication failures, "Model settings" opens "Providers and models". Fixing the shared key applies to all those uses. The list follows current settings; failure details keep the provider and model used at the time.
+- Key, permission, quota and rate-limit errors name the provider. If several AI roles in this game share it, the notice lists them, such as Story and Plugin tasks. For key authentication failures, "Model settings" opens "Providers and models". Fixing the shared key applies to all those uses. The list follows current settings; failure details keep the provider and model used at the time.
 - If the app stops unexpectedly, unfinished tasks stop, and the progress that was saved is kept. A new attempt starts only when you click "Retry unfinished turn".
 
 If approval for a pending interaction is denied, its card stays available. You can send an answer again or choose "Abandon" to end the interaction.
@@ -93,11 +93,6 @@ Under "Saves & data" in "Settings". "Export settings" saves the settings on this
 
 When importing, choose the file first. In the preview, tick the items you want to apply, then click "Apply". The selected items overwrite the current values, and the other settings stay the same.
 
-## Next
-
-- [Stage and Sound](./stage.md)
-- [Built-in Plugins and Features](./index.md)
-
 ## Session orchestration settings
 
 Open “Menu” → “This game's settings…” in the game toolbar, then expand “Advanced”. A sole policy provider resolves automatically: its name and settings link appear without a provider selector or Save button. Multiple providers show the “Speaking rules” selector, offering “Automatic selection” or an exact authorized service. A saved paused or unavailable selection stays visible and never switches automatically; clear the selection to resolve automatically again. “Characters speaking at once (0–16)” and “Helper calls (0–64)” bound delegation per execution, defaulting to 4 and 16; zero disables the corresponding capability. Changes start next execution and survive reloads and forks.
@@ -106,10 +101,15 @@ These generic controls install no new policy, character plugin or play pack. Plu
 
 ### Creation roles and independent saves
 
-Next to "Start Game" on the getting-ready screen, you choose who you play as. It defaults to Player, with Game master and Spectator as choices, each with a one-line hint; it is hidden when only one is valid. It applies only to new sessions and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it during preparation when choosing Game master in the ensemble recipe.
+Next to "Start Game" on the getting-ready screen, you choose who you play as. It defaults to Player, with Game master and Spectator as choices, each with a one-line hint; it is hidden when only one is valid. It applies only to new games and grants no server administration rights. Plugin selection controls stay disabled while the plugin plan loads. Edit them after the default composition appears so loading cannot overwrite your choices. Host/spectator recipes omit player creation; disable it on the getting-ready screen when choosing Game master in the ensemble recipe.
 
 The Advanced block groups Speaking rules, Characters speaking at once, Helper calls and Auto-advance turns. Save each field independently. Policy/caps use the orchestration route; Automatic rounds uses ordinary session PATCH. A failed field retains its draft/error while successful fields remain saved, followed by authoritative reloads; there is no joint rollback. The provider-settings link opens its own strategy fields. Multiple providers require an exact choice. Paused/stale selections remain visible and clearable without activation or approval.
 
 Refreshing the plugin list preserves unsaved drafts, errors and saves in progress. Untouched fields update to the latest saved values; earlier reads cannot overwrite a later confirmed save.
 
 Actor/call caps apply per execution; Automatic rounds counts additional executions per input. Zero disables the respective capability. Changes apply to the next applicable execution/input, leaving a running chain’s frozen limit intact. Every game view keeps the progress chip in the header, and selecting it stops the advancement; new input also ends the old automatic chain.
+
+## Next
+
+- [Stage and Sound](./stage.md)
+- [Built-in Plugins and Features](./index.md)
