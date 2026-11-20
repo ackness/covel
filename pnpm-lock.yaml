@@ -314,8 +314,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/tools
       '@hono/node-server':
-        specifier: ^2.1.5
-        version: 2.1.5(hono@4.13.16)
+        specifier: ^2.1.8
+        version: 2.1.8(hono@4.13.16)
       '@types/yauzl':
         specifier: ^3.4.0
         version: 3.4.0
@@ -2051,8 +2051,8 @@ packages:
   '@fontsource-variable/newsreader@5.3.0':
     resolution: {integrity: sha512-rrzYi43qMpbzwuFtf9OkWH8sxAPVPcQQQEwXpPtwaKYeJ8yVg5aLs5kawmo1f2Q1t1M38TLmEKCkGVDsYwgdFw==}
 
-  '@hono/node-server@2.1.5':
-    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+  '@hono/node-server@2.1.8':
+    resolution: {integrity: sha512-jdf7FHh6A1lzjpHHQUgxsg2GeER2vMetnAOfeActzcoli6jamlK+NAwL6Dsr5Fl3BS3tYUQzCdtZjU8Qxv7bEA==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4 || ^5.0.0-0
@@ -7047,7 +7047,7 @@ snapshots:
 
   '@fontsource-variable/newsreader@5.3.0': {}
 
-  '@hono/node-server@2.1.5(hono@4.13.16)':
+  '@hono/node-server@2.1.8(hono@4.13.16)':
     dependencies:
       hono: 4.13.16
 
