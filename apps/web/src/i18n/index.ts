@@ -35,6 +35,9 @@ export const i18nReady = i18n
     load: "currentOnly",
     ns: ["translation"],
     defaultNS: "translation",
+    // Start loading the async locale catalog immediately instead of deferring
+    // behind setTimeout(load, 0), which stalls boot when timers are paused.
+    initAsync: false,
     interpolation: {
       escapeValue: false,
     },
