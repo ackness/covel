@@ -1,0 +1,78 @@
+- id: preserve-literature-club
+  name: 守住文艺部与《春日薄荷》
+  description: 文艺部因人数不足面临合并，特刊《春日薄荷》和公开试读反响是保住旧活动室的最后凭据。
+  status: active
+  giver: 神代澪
+  reward: 文艺部保住旧社团楼三层活动室，神代澪愿意托付更深的心事
+  deadline:
+    when: { dimension: festival, path: daysRemaining, lte: 2 }
+    label: 在三天前《春日薄荷》截稿前完成终稿
+    missed: 截稿日过了，《春日薄荷》没能按期送印；旧社团楼三层活动室在闭幕后改作执行仓库的方案再难拦下。
+  objectives:
+    - id: visit-literature-room
+      text: 放学后到旧社团楼三层文艺部活动室看一看，接手《春日薄荷》的目录缺页
+      done: false
+    - id: gather-budget-support
+      text: 在预算初审前攒够试读反响、帮手或旧刊依据，替文艺部争取支持度
+      done: false
+      deadline:
+        when: { dimension: festival, path: daysRemaining, lte: 13 }
+        label: 在十四天前预算初审前备齐存续材料
+        missed: 十四天前的预算初审没能拿出足够依据，文艺部的并社审查继续往合并方向推进。
+    - id: finalize-spring-mint
+      text: 陪神代澪敲定终稿并保住文艺部名额
+      done: false
+- id: finish-closing-song
+  name: 未完成的闭幕新歌
+  description: 轻音部去年在主舞台预演失手，夏帆的新歌还差最后一段歌词。今年想再次站上闭幕舞台，得先跨过预演这道坎。
+  status: active
+  giver: 椎名夏帆
+  reward: 轻音部留住主舞台资格，夏帆写完只属于这个春天的最后一首歌
+  deadline:
+    when: { dimension: festival, path: daysRemaining, lte: 6 }
+    label: 在七天前主舞台预演结束前完成试演与终段
+    missed: 主舞台预演落幕时，夏帆的新歌仍停在半截副歌里；闭幕压轴的时段被改排给别的节目。
+  objectives:
+    - id: hear-guitar-rehearsal
+      text: 在练习室或樱坂海堤听完夏帆弹唱的现成段落
+      done: false
+    - id: complete-final-verse
+      text: 和夏帆找到最后一段歌词的落点，排解她对重演失误的顾虑
+      done: false
+    - id: pass-stage-preview
+      text: 陪轻音部顺利通过主舞台预演
+      done: false
+- id: rumor-wall-choice
+  name: 传闻真伪墙的版面
+  description: 新闻部在准备学园祭的「传闻真伪墙」，可传闻里渐渐出现关于你的来历与各社团的试探。报道、压稿还是辟谣，会决定许多人往哪边站。
+  status: active
+  giver: 朝仓凛
+  reward: 厘清校园传闻的源头，赢得朝仓凛的信任，或换来新闻部的正式版面
+  deadline:
+    when: { dimension: festival, path: daysRemaining, lte: 2 }
+    label: 在三天前新闻部展板截稿前定下版面
+    missed: 展板赶在截稿前仓促上墙，几条没来得及核实的流言按传得最凶的版本留在了纸面上。
+  objectives:
+    - id: trace-rumor-source
+      text: 弄清当前传闻是从谁嘴里、在哪个地点先传出来的
+      done: false
+    - id: choose-editorial-stance
+      text: 和朝仓凛谈妥哪些真话可以见报、哪些边界必须守住
+      done: false
+- id: sea-breeze-post-and-archives
+  name: 海风邮局与旧刊之约
+  description: 二年 B 组的「海风邮局」摊位还缺人手与明信片着落，图书馆架上那本七年前的旧学园祭特刊也等着有人接着往下写。
+  status: active
+  giver: 白石悠真与东条茜
+  reward: 海风邮局顺利开张，摸清学生会规则背后的余地与旧社团楼的过去
+  deadline:
+    when: { dimension: festival, path: milestones.festivalEve, equals: missed }
+    label: 在前夜祭布置结束前完成摊位与旧刊整理
+    missed: 前夜祭收尾时海风邮局的木箱与明信片架没能及时立起来，开祭当天的摊位只好临时缩减规模。
+  objectives:
+    - id: organize-sea-breeze-post
+      text: 协助班长与学生会核定「海风邮局」摊位排班与明信片材料
+      done: false
+    - id: read-old-festival-issue
+      text: 在图书馆里和东条茜翻出七年前那本写着愿望的旧特刊
+      done: false

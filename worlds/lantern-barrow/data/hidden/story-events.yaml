@@ -42,3 +42,40 @@
         equals: missing
   payload: 合唱里传出一个熟悉的苍老声音，是守灯人伊索德。她反复哼着守灯人巡山的调子，压过亡者的旋律，像在拖住什么。队伍靠近古冢或身处墓中时，能辨认出她的声音来自更深处。让这条线索催着队伍去找她，但别解释她正在做什么，也别透露还能撑多久。
   priority: 7
+- id: penn-ledger
+  title: 村长的账本与封蜡
+  when:
+    all:
+      - turnGte: 2
+      - dimension: barrowAlarm
+        path: level
+        lte: 2
+      - dimension: lantern
+        path: heart
+        equals: missing
+  payload: 梅瑞尔或守灯人小屋的旧木箱露出了一条不合常理的旧账：村长潘恩修堤的帐目缺了一笔银币，同一周科尔文恰巧拿走了一把小屋备钥的蜡模。先只拿出物证和缺口，让玩家决定是先去质问村长、先找修女商量，还是立刻带着线索进墓；别当场把科尔文的全部动机说穿。
+  priority: 4
+- id: ossuary-echoes
+  title: 骸骨堂的回声
+  when:
+    all:
+      - dimension: delveMap
+        path: bone-hall.status
+        equals: explored
+      - dimension: barrowAlarm
+        path: level
+        gte: 2
+  payload: 骸骨堂墙龛里的几颗旧颅骨忽然同时微转，低声吐出队伍里某个人刚说过的话——却夹杂着二十年前布兰诺克逃出时丢下同伴的名字。老兵当场僵住，火把边缘好像多了几道人影在试探火光。写出声音错位与压迫感，留给玩家稳住布兰诺克、熄灯绕行或先查地面方砖机关的选择，必要时发起检定。
+  priority: 8
+- id: drowned-reliquary
+  title: 水下铁盾与灯油匣
+  when:
+    all:
+      - dimension: delveMap
+        path: flooded-chamber.status
+        equals: explored
+      - dimension: barrowAlarm
+        path: phasesInside
+        gte: 2
+  payload: 水淹墓室的黑水退开半寸，露出二十年前那支小队遗落的锈铁盾，旁边压着一只黎明灯修会封印完好的铜油匣。油匣够把千灯廊好几盏熄灭的壁灯重新点亮，却会顺着铁链牵动墓室深处的水闸声响。让玩家权衡要不要冒险捞取，并提示水温与响动带来的风险。
+  priority: 8

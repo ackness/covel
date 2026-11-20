@@ -1,0 +1,51 @@
+- id: old-club-preservation
+  keys:
+    [
+      Old Clubhouse,
+      Save the Old Clubhouse,
+      merger,
+      third-floor,
+      old issue,
+      title page,
+    ]
+  content: >-
+    Seven years ago when Harukaze Academy moved to the Seireki hillside, the first class of transfer students ran a petition that saved the wooden Old Club Building. The oldest festival issue in the library bears the handwritten line "Hope we can still be here next year" on its title page—written by Akane Toujou's older sister before she graduated.
+    With festival renovations approaching, someone on the Student Council has proposed turning the Literature Club's third-floor room into an operations storeroom. Yuma Shiraishi enforces the paperwork strictly, yet every afternoon his rooftop inspection log quietly records which clubrooms still keep their lights on.
+- id: seireki-merchants
+  keys:
+    [
+      Umineko Books,
+      Shopping Street,
+      music shop,
+      family restaurant,
+      vending machine,
+      mint soda,
+    ]
+  content: >-
+    Only two shopping streets run in front of Seireki Station. Near the harbor bend sits Umineko Books, whose owner knows every Literature Club regular and sets aside cheap recycled stock and back issues. Across the corner, an old music shop lets students tune guitars and borrow spare instrument cables.
+    Down by the seawall, the vending machine almost always holds only lemon soda, mint soda, and canned hot coffee; the rumor that "whatever drops at sunset names who you're thinking of" started because classmates kept teasing each other on the walk home.
+- id: campus-traditions
+  keys:
+    [
+      Evening Breeze Lanterns,
+      Sea Breeze Post,
+      Fact-or-Rumor Wall,
+      Spring Festival,
+      last lantern,
+    ]
+  content: >-
+    Three years ago the Spring Festival shifted into joint class-and-club projects, adopting the Evening Breeze Lanterns loaned by the Shopping Street two years back—lighting lanterns from the courtyard down along the Sakurazaka Seawall, with "who you watch the last lantern with" treated as an unspoken date cue.
+    This spring Class 2-B hosts the Sea Breeze Post to seal postcards addressed a year ahead, the Newspaper Club mounts the Fact-or-Rumor Wall, and the Light Music Club hopes Kaho's new song will take the closing stage slot right before the lanterns are lit.
+- id: seating-and-timetable
+  keys:
+    [
+      Class 2-B,
+      morning reading,
+      lunch break,
+      closing announcement,
+      cleaning duty,
+      homeroom,
+    ]
+  content: >-
+    Morning reading starts at 8:20, with ten-minute breaks between periods, lunch at 12:20, dismissal at 15:40, club hours from 16:00 to 17:30, and the closing announcement at 18:00. Each slot generally fits one real choice—spending lunch in the library means missing whatever Rin wanted to ask outside Class 2-B.
+    From the back window seat of Class 2-B you can watch harbor ferries and hear guitar strings below; Ms. Chihiro Onodera never forces a student's hand, though cleaning duty and after-school makeup notes often leave natural room for quiet talk.

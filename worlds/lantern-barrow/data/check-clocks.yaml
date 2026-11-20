@@ -1,0 +1,11 @@
+# Failed dice checks fill these clocks in Lantern Barrow (dice-check, check.clocks@1).
+- id: barrow-chill
+  name: 古冢寒气
+  segments: 4
+  full: 墓里的沼泽阴寒浸透了衣物与指节，挥剑、破门与硬撑体力从此更难。
+  raises: [might, endurance]
+- id: unquiet-dead
+  name: 亡灵围拢
+  segments: 4
+  full: 黑暗里的歌声与脚步贴近到火光边缘，闪避伏击和辨认机关从此更难。
+  raises: [agility, insight]

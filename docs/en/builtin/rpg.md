@@ -173,6 +173,8 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
 | `last-train`     | World default selection |
+| `mistport`       | World default selection |
+| `haruka-academy` | World default selection |
 
 It has no settings you can change.
 
@@ -360,7 +362,7 @@ A misspelled dimension ID, an invalid path inside a dimension, or a candidate in
 | ---------------- | ---------------- | ------------ | ---------- | ---------------- |
 | `dice-check`     | Yes              | Yes          |            |                  |
 | `tabletop-rules` | Yes              |              |            |                  |
-| `core-quest`     | Yes              | Yes          | Yes        |                  |
+| `core-quest`     | Yes              | Yes          | Yes        | Yes              |
 | `inventory`      | Yes              | Yes          |            |                  |
 | `affinity`       | Yes              | Yes          |            | Yes              |
 | `story-events`   | Yes              | Yes          | Yes        | Yes              |

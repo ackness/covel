@@ -3,7 +3,9 @@ import {
   completedBusinessOutput,
 } from "../helpers/output-submission.js";
 import { closeTestApi } from "../helpers/close-api.js";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
@@ -42,6 +44,33 @@ interface ActionEnvelope {
   readonly turnId: string;
   readonly payload: Record<string, unknown>;
 }
+
+const HARUKA_OPEN_OBJECTIVES = (
+  YAML.parse(
+    readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        "../../../../worlds/haruka-academy/data/quests.yaml",
+      ),
+      "utf8",
+    ),
+  ) as Array<{
+    name: string;
+    status?: string;
+    objectives?: Array<{ text: string; done?: boolean }>;
+  }>
+)
+  .filter((q) => (q.status ?? "active") === "active")
+  .flatMap((q) =>
+    (q.objectives ?? [])
+      .filter((o) => !o.done)
+      .map((o) => ({
+        quest: q.name,
+        objective: o.text,
+        outcome: "not_addressed" as const,
+        evidence: "",
+      })),
+  );
 
 class ChatModeMockLLM implements LLMAdapter {
   narratorCalls = 0;
@@ -106,6 +135,7 @@ class ChatModeMockLLM implements LLMAdapter {
               relations: [],
               events: [],
               statements: [],
+              objectiveAssessments: HARUKA_OPEN_OBJECTIVES,
             }),
           },
         ],

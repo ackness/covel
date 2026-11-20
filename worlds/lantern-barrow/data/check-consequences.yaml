@@ -1,0 +1,39 @@
+# Costs paid on failed dice checks in Lantern Barrow (dice-check, check.consequences@1).
+- id: drenched-in-chill
+  attribute: endurance
+  text: 阴冷潮气钻进披风，你的关节一阵发僵。
+  cues: [寒, 冷, 僵, 发抖, 湿]
+  cost: { kind: clock, clock: barrow-chill }
+- id: torch-snuffed
+  attribute: insight
+  outcome: critical-failure
+  text: 一阵从深处吹来的冷风扑灭火苗，一支火把彻底烧废。
+  cues: [火把, 灭, 黑, 暗]
+  cost: { kind: item, item: 火把 }
+- id: chalk-snapped
+  attribute: wits
+  outcome: failure
+  text: 你在石壁上划错记号又抹掉，手里的一截石膏粉笔折断磨尽。
+  cues: [粉笔, 记号, 铭文, 错]
+  cost: { kind: item, item: 石膏粉笔 }
+- id: noisy-misstep
+  attribute: agility
+  outcome: critical-failure
+  text: 石块滚落台阶，回声在墓室里炸开，黑暗深处传来急促的脚步声。
+  cues: [响, 回声, 脚步, 惊动, 滑]
+  cost: { kind: clock, clock: unquiet-dead, ticks: 2 }
+- id: steel-clangs
+  attribute: might
+  text: 铁器磕上石壁或锈甲，沉闷的震响引得黑暗里的动静朝这边聚拢。
+  cues: [响, 震, 声音, 亡灵, 动静]
+  cost: { kind: clock, clock: unquiet-dead }
+- id: sharp-words-in-dark
+  attribute: presence
+  outcome: critical-failure
+  text: 你的话惹恼了倾听者或惊动了沉睡的亡魂，寒意与敌意一同涌上来。
+  cues: [沉默, 敌意, 冷, 怒, 退]
+  cost: { kind: clock, clock: barrow-chill, ticks: 2 }
+- id: barrow-stirs-general
+  text: 墓室深处落下一阵灰土，阴冷贴着石阶漫了上来。
+  cues: [冷, 灰, 暗, 脚步, 歌声, 阴影]
+  cost: { kind: clock, clock: barrow-chill }

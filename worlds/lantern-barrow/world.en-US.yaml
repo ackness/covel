@@ -7,13 +7,13 @@ summary: >-
 pluginPitch:
   label: Classic Tabletop
   description:
-    Point-buy character creation, form-based checks and dice-pool rolls, quests,
-    inventory, companion affinity, and panels for dungeon exploration, the barrow's
-    alarm, and your renown.
+    Point-buy character creation, dice-pool checks with failure clocks and item costs,
+    gear with check bonuses, timed quests, Bag, companion affinity, and panels for
+    dungeon exploration, the barrow's alarm, and your renown.
   reason: >-
     Assign your own attributes and act on the dice results. The map records where
-    you have been; the alarm panel tracks time spent in the tomb and disturbances
-    that wake the barrow.
+    you have been; the alarm and clock panels track time spent in the tomb, creeping
+    chill, and disturbances that wake the barrow.
 characterSchema:
   attributes:
     - id: persona
@@ -23,12 +23,15 @@ characterSchema:
         softhearted veteran who keeps it brief." The narrator uses this to portray you.
     - id: calling
       name: Calling
-      description:
-        How your adventurer makes a living. Fighter, rogue, scholar, priest, hunter,
-        or something of your own.
+      description: >-
+        How your adventurer makes a living: retired soldier, locksmith, fallen scribe,
+        Order courier, marsh guide, or something of your own.
     - id: background
       name: Background
-      description: Why you came to Greyreed, and something from your past that only you know.
+      description: >-
+        Why you came to Greyreed—for thirty silver coins, carrying a sealed letter for the
+        Order, tracing a missing soldier from twenty years ago, or following Corvin Ashe
+        from the capital.
     - id: might
       name: Might
       description: Fighting, breaking down doors, climbing, and carrying heavy loads.

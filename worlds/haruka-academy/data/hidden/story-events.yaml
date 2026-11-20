@@ -128,3 +128,22 @@
     根据已经发生的初审结果，让他谈自己仍放不下的那一处。他愿意听批评，也想知道玩家是否理解他的顾虑。
     玩家可以回答、反问或安静同行；不替玩家宽慰他，不凭这次谈话宣布文艺部已被保住，也不替双方确认心意。
   priority: 9
+- id: akane-lantern-shelf
+  title: 夕风里的海猫书房
+  when:
+    all:
+      - revealed: akane-sisters-note
+        turnsSinceGte: 3
+      - dimension: routes
+        path: akane.stage
+        in: [heartbeat, confession-eve]
+      - dimension: routes
+        path: akane.trust
+        gte: 3
+      - dimension: festival
+        path: daysRemaining
+        lte: 7
+  payload: >-
+    学园祭前最后一周的傍晚，你在海猫书房外檐下碰见东条茜。她怀里抱着店主替她包好的一捆旧刊复本和手工灯笼纸，说以前每年「夕风点灯」她都是看一会儿就回图书馆，因为很少有人真会等到最后一盏灯。
+    她停了一拍，轻声问今年闭幕那天，你忙完手边的事之后能不能别走太快。让她的克制、话后的停顿和街角海风留在场景里；由玩家决定答不答应，也别在这一场写破告白。
+  priority: 9

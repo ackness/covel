@@ -5,16 +5,16 @@ pluginPitch:
   label: Campus Romance · Visual Novel
   description: A full-screen stage with character portraits and day and night
     backdrops, several replies to choose from, and affection, heart routes,
-    promises, rumors and festival prep that shift as you talk.
-  reason: Over the twenty-one-day festival countdown, every promise you keep or
-    break and every rumor stays on the panels, and the five heart routes move
-    forward only on things that actually happen.
+    quests, promises, rumors and festival prep that shift as you talk.
+  reason: Over the twenty-one-day festival countdown, every festival task,
+    promise you keep or break, and rumor stays on the panels, and the five heart
+    routes move forward only on things that actually happen.
 characterSchema:
   attributes:
     - id: persona
       name: Personality
       description: >-
-        Your character's personality and way of speaking, such as "cautious and introverted, quiet when nervous, polite but has opinions of their own." The narrative draws on this when writing your actions and dialogue.
+        Your character's personality, speech habits, and an optional reason for transferring (such as "moved to Seireki for a family job, cautious and quiet when nervous, polite but strong-willed"). The narrative draws on this when writing your actions and dialogue.
     - id: club
       name: Club
       description: The club they belong to

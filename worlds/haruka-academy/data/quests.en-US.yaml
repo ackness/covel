@@ -1,0 +1,59 @@
+- id: preserve-literature-club
+  name: Keeping the Literature Club and Spring Mint
+  description: The Literature Club is listed for merger due to low headcount. Finishing the special issue Spring Mint and earning real reader support are Mio's last proof for keeping the old clubroom.
+  giver: Mio Kamishiro
+  reward: The Literature Club keeps its third-floor room in the Old Club Building, and Mio lowers her guard
+  deadline:
+    label: Finish Spring Mint before the 3-day print deadline
+    missed: The 3-day deadline passes without a print-ready issue; turning the old third-floor room into a festival storeroom becomes nearly impossible to block.
+  objectives:
+    - id: visit-literature-room
+      text: Visit the Literature Clubroom on the third floor of the Club Building after school and help sort Spring Mint's table of contents
+    - id: gather-budget-support
+      text: Build readable support, recruits, or archival evidence before the budget review
+      deadline:
+        label: Prepare retention support before the 14-day budget review
+        missed: The 14-day budget review ends short of solid evidence, pushing the Literature Club closer to merger.
+    - id: finalize-spring-mint
+      text: Lock down the final manuscript with Mio and keep the Literature Club standing
+- id: finish-closing-song
+  name: The Unfinished Closing Song
+  description: After last year's main-stage mishap, Kaho's new song is still missing its final verse. Keeping the closing-stage slot means clearing the preview milestone together.
+  giver: Kaho Shiina
+  reward: The Light Music Club secures the main-stage slot, and Kaho finishes the song that belongs to this spring
+  deadline:
+    label: Clear the preview and last verse before the 7-day preview ends
+    missed: The main-stage preview wraps up with Kaho's chorus left hanging; the closing slot goes to another act.
+  objectives:
+    - id: hear-guitar-rehearsal
+      text: Listen to Kaho's unfinished arrangement in the practice room or along Sakurazaka Seawall
+    - id: complete-final-verse
+      text: Help Kaho find the words for the final verse and work through her fear of slipping again
+    - id: pass-stage-preview
+      text: Stand with the Light Music Club through the main-stage preview
+- id: rumor-wall-choice
+  name: Choosing What Goes on the Fact-or-Rumor Wall
+  description: The Newspaper Club is building a Fact-or-Rumor Wall for the festival, and whispers about your transfer and the clubs are starting to circulate. Printing, holding, or debunking them shifts where everyone stands.
+  giver: Rin Asakura
+  reward: Trace the rumors' origin, earn Rin's trust, or shape the Newspaper Club's exhibit
+  deadline:
+    label: Lock the exhibit layout before the 3-day press cutoff
+    missed: The board goes to print at cutoff with unverified gossip frozen in the loudest version going around.
+  objectives:
+    - id: trace-rumor-source
+      text: Find out who started the active rumor and where it first spread
+    - id: choose-editorial-stance
+      text: Agree with Rin on which truths go to print and which private lines stay off the wall
+- id: sea-breeze-post-and-archives
+  name: Sea Breeze Post and the Old Issue
+  description: Class 2-B's Sea Breeze Post booth still needs shift planning and postcards, while a seven-year-old festival issue waits on the library shelf for someone to continue it.
+  giver: Yuma Shiraishi & Akane Toujou
+  reward: Sea Breeze Post opens smoothly, revealing both room inside Student Council rules and the Old Clubhouse's past
+  deadline:
+    label: Finish booth setup and archive sorting before festival-eve ends
+    missed: Festival-eve setup closes with Sea Breeze Post's postbox and racks unfinished, forcing a scaled-back stall on festival day.
+  objectives:
+    - id: organize-sea-breeze-post
+      text: Work out Class 2-B's Sea Breeze Post shift schedule and postcard supplies with the Student Council
+    - id: read-old-festival-issue
+      text: Find and read the seven-year-old festival issue with Akane Toujou in the library

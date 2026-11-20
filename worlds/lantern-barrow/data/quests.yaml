@@ -4,6 +4,10 @@
   status: active
   giver: 村长阿尔多斯・潘恩
   reward: 三十枚银币，以及村子的感激
+  deadline:
+    when: { dimension: barrowAlarm, path: level, gte: 6 }
+    label: 在古冢之王彻底苏醒之前
+    missed: 古冢之王睁眼之时，地底合唱戛然而止。伊索德再不能平安归村，她的灯油与旧唱诗已陷入王座厅的冷光之中。
   objectives:
     - id: keepers-cottage
       text: 去守灯人的小屋看看她留下了什么
@@ -33,6 +37,10 @@
     - id: decide-its-fate
       text: 找回灯心，并决定它的去处
       done: false
+      deadline:
+        when: { affinity: Sister Wren, path: tier, in: [cold, hostile] }
+        label: 趁雷恩修女仍信任你
+        missed: 雷恩修女对你寒了心，不再等待队伍的决议，独自执起修会圣徽走进黑暗深处。
 - id: the-singing-below
   name: 地下的歌声
   description: 磨坊主的女儿说，夜里能听见地底有人在唱歌，唱的是她死去祖父的名字。梅瑞尔希望你顺路弄清楚。
