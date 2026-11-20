@@ -10,8 +10,7 @@ import {
 import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { confirmPluginApproval } from "@/lib/approval-message.js";
-
-type Translate = (key: string, options?: Record<string, unknown>) => string;
+import type { TranslateFn as Translate } from "@/i18n";
 
 export interface PluginRpcConfirmRequest {
   readonly title: string;

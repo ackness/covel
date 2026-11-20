@@ -48,7 +48,9 @@ export function checkThemeContrast(
   theme: Pick<ThemeDefinition, "id" | "schemes" | "cssText">,
 ): ThemeContrastResult[] {
   const frame = document.createElement("iframe");
-  frame.hidden = true;
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText =
+    "position:fixed;width:0;height:0;border:0;visibility:hidden;pointer-events:none;";
   frame.setAttribute("sandbox", "allow-same-origin");
   document.body.append(frame);
   try {

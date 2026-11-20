@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TranslateFn } from "@/i18n";
 import { Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { DimensionValueSchema, JsonValue } from "@covel/shared";
@@ -318,7 +319,7 @@ function renderSchemaHint(schema: unknown): string {
 /** Coarse "Xm ago" / "Xh ago" formatter; keeps zero external deps. */
 function formatRelativeTime(
   iso: string,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: TranslateFn,
 ): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return "";

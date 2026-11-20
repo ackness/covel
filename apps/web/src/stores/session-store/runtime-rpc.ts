@@ -115,7 +115,7 @@ export async function resumeSessionSuspension(
       const allowed =
         isCurrent() &&
         (await confirmPluginApproval(approval.pending, {
-          t: (key, options) => i18n.t(key, options) as string,
+          t: i18n.t,
           confirm: requestConfirm,
         }));
       const approved = await workspace.run(
@@ -363,7 +363,7 @@ export function runActionStream(
         const allowed =
           isCurrent() &&
           (await confirmPluginApproval(approval.pending, {
-            t: (key, options) => i18n.t(key, options) as string,
+            t: i18n.t,
             confirm: requestConfirm,
           }));
         const proceed =

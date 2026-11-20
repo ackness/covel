@@ -38,7 +38,7 @@
     "@hono/node-server": "^2.1.8",
     "@types/yauzl": "^3.4.0",
     "ajv": "^8.20.0",
-    "hono": "4.13.16",
+    "hono": "4.13.18",
     "postgres": "^3.4.9",
     "tsx": "4.23.15",
     "yaml": "^2.9.1",
@@ -49,7 +49,7 @@
     "@types/yazl": "^3.3.1",
     "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5",
+    "vitest": "^5.1.0",
     "yazl": "^3.3.1"
   }
 }

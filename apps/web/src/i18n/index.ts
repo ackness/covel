@@ -44,4 +44,9 @@ if (typeof document !== "undefined") {
   document.documentElement.lang = initialLocale;
 }
 
+export type TranslateFn = {
+  (key: string): string;
+  (key: string, options: Record<string, unknown>): string;
+};
+
 export default i18n;

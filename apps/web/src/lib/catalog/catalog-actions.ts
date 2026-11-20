@@ -5,6 +5,7 @@ import {
   emitPluginRpcRuntimeResponse,
 } from "@/components/session/plugin-rpc-ui.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import type { TranslateFn } from "@/i18n";
 
 /** Resolve only explicit selectors; ordinary payload strings remain literal. */
 export function resolveCatalogPayload(
@@ -28,7 +29,7 @@ export async function invokeCatalogAction(args: {
   sessionId: string;
   action: CatalogAction;
   scope: Record<string, unknown>;
-  t: (key: string, options?: Record<string, unknown>) => string;
+  t: TranslateFn;
   prepare?: () => Promise<Record<string, unknown>>;
 }): Promise<void> {
   let prepared: Record<string, unknown> | undefined;

@@ -14,7 +14,7 @@ import type { FormIssue } from "@/stores/session-store/types.js";
 type NestedSpec = Record<string, unknown>;
 
 const tr = (key: string, vars?: Record<string, unknown>): string =>
-  i18n.t(key, vars) as string;
+  vars ? i18n.t(key, vars) : i18n.t(key);
 
 /**
  * Convert a StreamMessage to a disabled spec (post-submission state).

@@ -1,5 +1,6 @@
 import { ReasoningDisclosure } from "@/components/reasoning-disclosure.js";
 import { useTranslation } from "react-i18next";
+import type { TranslateFn } from "@/i18n";
 import {
   AlertTriangle,
   Copy,
@@ -216,7 +217,7 @@ function renderStructuredData(
   data: Record<string, unknown>,
   diagnostic: api.TraceEventDiagnostic | undefined,
   toolInvocation: ToolInvocation | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: TranslateFn,
 ) {
   if (type === "llm.calling") {
     const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -468,7 +469,7 @@ function ToolInvocationDetail({
   t,
 }: {
   invocation: ToolInvocation;
-  t: (key: string, options?: Record<string, unknown>) => string;
+  t: TranslateFn;
 }) {
   const statusClass =
     invocation.status === "failed"
@@ -529,7 +530,7 @@ function ToolCallCard({
   t,
 }: {
   call: Record<string, unknown>;
-  t: (key: string, options?: Record<string, unknown>) => string;
+  t: TranslateFn;
 }) {
   const name = stringValue(call.name) ?? stringValue(call.toolName);
   const callId = stringValue(call.id) ?? stringValue(call.toolCallId);

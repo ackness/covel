@@ -1,8 +1,7 @@
 import type { ConfirmRequest } from "./confirm-channel.js";
 import type { I18nText } from "@covel/shared";
 import { resolveDisplayText } from "./i18n-text.js";
-
-type Translate = (key: string, options?: Record<string, unknown>) => string;
+import type { TranslateFn as Translate } from "@/i18n";
 
 /**
  * Display names of the installed plugins, kept by the session provider. An

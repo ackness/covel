@@ -758,7 +758,8 @@ describe("useGameViewComposer modes", () => {
         commands: [rollCommand],
       });
       return createElement(MessageComposer, {
-        t: ((_key: string, fallback?: string) => fallback ?? _key) as TFunction,
+        t: ((_key: string, fallback?: string) =>
+          fallback ?? _key) as unknown as TFunction,
         session,
         executing: true,
         inputValue: composer.inputValue,

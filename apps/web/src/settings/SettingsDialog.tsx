@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TranslateFn } from "@/i18n";
 import {
   Database,
   FileCode,
@@ -330,7 +331,7 @@ function isSelectable(node: NavNode): boolean {
 
 function renderPane(
   node: NavNode | null,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: TranslateFn,
 ) {
   if (!node) {
     return (
@@ -441,7 +442,7 @@ function EntryPane({
   t,
 }: {
   node: NavNode;
-  t: (key: string, opts?: Record<string, unknown>) => string;
+  t: TranslateFn;
 }) {
   const reading = node.children.filter((entry) => READING_KEYS.has(entry.key));
   const rest = node.children.filter((entry) => !READING_KEYS.has(entry.key));

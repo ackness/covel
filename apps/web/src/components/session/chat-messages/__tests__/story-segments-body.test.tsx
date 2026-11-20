@@ -54,7 +54,8 @@ afterEach(() => {
   visuals.mediaProps = [];
 });
 
-const t = ((key: string, fallback?: string) => fallback ?? key) as TFunction;
+const t = ((key: string, fallback?: string) =>
+  fallback ?? key) as unknown as TFunction;
 
 const segments = [
   { kind: "narration" as const, text: "雨停了。" },
