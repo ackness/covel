@@ -7,12 +7,12 @@ pluginPitch:
   label: Mistport Investigation
   description:
     Investigate Qi's disappearance, check testimony against physical evidence,
-    and preserve traces before the flood takes them. Includes a quest log,
-    clue memory, a relationship map, world rules and portraits of seven characters.
+    and preserve leads before the flood takes them. Includes a timed quest log,
+    clue memory, faction and trust tracking, world rules and portraits of seven characters.
   reason: Four investigations follow the half-letter, the missing report page,
-    the Echo Gallery and the ward testimony. The Case Board records sources,
-    contradictions and preservation; faction standing, the deep ebb and Key
-    fragments change with the story.
+    the Echo Gallery before the flood surges in, and the ward testimony. The Case Board
+    records sources, contradictions and preservation; faction standing, character trust,
+    the deep ebb and Key fragments change with the story.
 characterSchema:
   attributes:
     - id: persona
@@ -23,15 +23,14 @@ characterSchema:
     - id: origin
       name: Origin
       description:
-        You enter the story as a newly admitted Tide-Reader apprentice or as an
-        Undertow local who knows its ways. You can also add a homeland, a
-        former trade, and what brought you to the Main Pier.
+        Enter as a newly admitted Tide-Reader apprentice (exam tide-sigil on your wrist, lawful archive access)
+        or an Undertow local (knows the pier hatch and fog-lamp hand signals, carries Qi's note). You can also add
+        a homeland, a former trade, and what brought you to the Main Pier.
     - id: motive
       name: Motive
       description:
-        "Your own reason for risking the hunt for Guildmaster Qi: repaying a
-        kindness, seeking knowledge, atonement, money, or finding someone who
-        went missing."
+        "Your own reason for risking the hunt for Guildmaster Qi: repaying an unappraised debt of kindness,
+        learning what happened to someone lost on an earlier ebb, seeking truth, or surviving the Tide-Seal lockdown."
     - id: faction
       name: Faction
       description: The faction or guild they belong to

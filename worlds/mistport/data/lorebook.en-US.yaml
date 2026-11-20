@@ -109,14 +109,79 @@
   content: >-
     Councilors and merchant houses form the first social tier in the Upper City, holding political power and the right to trade legally. Mid-Harbor's dockworkers, craftspeople and innkeepers form the second and keep the city running.
     Undertow locals are the third tier. They live at its edges, scavenging and smuggling, and make up most of the Congregation's following. Guild members can cross class boundaries through their skills. People with fog-rot are shunned by every class and gradually turn to the Congregation.
+- id: silent-inn-and-salt-market
+  keys:
+    [
+      Soundless Inn,
+      Salt Market,
+      pier hatch,
+      hand signal,
+      fog-lamp,
+      fog fungus,
+    ]
+  content: >-
+    The walls of Mid-Harbor's Soundless Inn are packed with sound-absorbing fog fungus; once the door shuts, voices drop off within a pace. Its keeper never asks where guests came from or whether they carry papers, only hangs the cold-light fog-lamps of patrons who fail to return from the Undertow along the lintel—an unspoken casualty ledger for the lower city.
+    The Salt Market meets between the Main Pier alleys and old salt warehouses, judging visitors by tokens rather than papers. Show a Salt Chip to hear real prices on waterproof document tubes, forged permits, and the hidden pier hatch—though the hatch pulls up its ladder before flood tide and every passage leaves a favor owed to the Salt Fangs.
+- id: stilltide-roster
+  keys:
+    [
+      Stilltide Asylum,
+      ward record,
+      survivor,
+      deep-dive team,
+      three years ago,
+      lowest floor,
+    ]
+  content: >-
+    Stilltide Asylum sits on the cold-mist cliff east of the Upper City under a sanatorium sign, yet its night watch answers directly to Council guards. The upper two floors house the fog-rotted relatives of wealthy families; behind the iron door on the lowest floor lives the sole survivor of the deep-dive team lost three years ago.
+    To visitors he repeats only "It woke up down there," yet his original handwritten admission ledger recorded different words before lines were crossed out or removed. Reaching either the ledger or the cell requires Guild/Council papers or catching the watch between shifts.
+- id: council-factions
+  keys:
+    [
+      doves,
+      hawks,
+      Speaker Chen,
+      Grey Falcon,
+      auction tax,
+      private unit,
+    ]
+  content: >-
+    The Council is divided: doves worry an overtight Tide-Seal Decree will choke legal relic auctions and drive Mid-Harbor straight into the Salt Fangs' hands, while hawks demand an armed sweep of the Hidden Grotto and black market.
+    Speaker Chen holds the chamber together by keeping his private expedition off regular patrol books—Grey Falcon takes only handpicked retainers down, keeping losses and finds out of standard Guild logs. Lately, Grey Falcon has begun noticing dates in Council orders that contradict physical evidence below.
+- id: fog-rot-ward
+  keys:
+    [
+      gloves,
+      dissolve,
+      Mist-Speaker,
+      whispering,
+      translucent,
+      fog-rot threshold,
+    ]
+  content: >-
+    Early fog-rot looks like chill-ache, numb fingertips, and nocturnal ringing in the ears. Past 25, patches of skin turn as translucent as wet vellum—why senior Tide-Readers such as Guildmaster Qi keep gloved. Past 50, Tide-Force feels sharper while limbs misfire under strain.
+    The Guild quietly buries mild cases under "sea-damp rheumatism" so apprentice exams and legal auctions stay undisturbed. The Congregation does the opposite, welcoming those near dissolution who hear the tide into Sunken Bell Hall as chosen witnesses.
+- id: bone-arch-threshold
+  keys:
+    [
+      Bone Arch,
+      deepest part,
+      Key,
+      socket,
+      resonance,
+      threshold,
+    ]
+  content: >-
+    What sits half-submerged on the far face of the Bone Arch is no ordinary bolt, but a ring of blue-black tide-stone sockets whose toothed recesses match loose key fragments, glowing with cold light that seawater never washes dim.
+    Hold a cold-light fog-lamp close and the fog pulls back half a pace inside the arch; forcing fragments into place sets Tide-Force humming through the entire Undertow, whereas packing the outer groove with salt-wax or reversing a tide-sigil chokes the inward pull long enough for rivals to rethink their footing before the flood.
 - id: tone
   content: >-
     This is a dark fantasy investigation and exploration story suitable for teenagers. Use a Gothic mystery voice, with an unhurried pace and danger in the details. The investigation uncovers the truth gradually; actions carry mounting costs.
     Explore class conflict, the unknown, the struggle between order and freedom, faith and alienation, the cost of pursuing truth, and the blurred boundaries of a body changed by fog-rot.
 - id: mechanics
   content: >-
-    Combat is handled through the narrative at normal difficulty. Vocational skills cover Tide-Reading (appraising and guiding relics), Fogcraft (stealth in fog), Diplomacy and Combat.
-    Assess the noise and light risks of moving through fog; failure draws fog beasts. Using an unappraised relic has unpredictable effects. Describe the action and its consequences without inventing a dice roll or table result.
-    The tides decide which parts of the Undertow are accessible. A flood warning means retreat. Guiding Tide-Force or using active relics increases fog-rot; crossing a threshold leaves irreversible changes.
-    The four factions react to relic dealings and Undertow activity. Pleasing one can offend another. Leads can be unverified, corroborated, contaminated or resolved; washed-away evidence proves no one's account.
-    A costly action must visibly change at least one state: tide time, location, injury or fog-rot, a character's attitude, faction pressure or confidence in a lead.
+    Mistport uses pure narrative resolution without dice checks, a separate Bag plugin, or an affinity score plugin. Vocational skills cover Tide-Reading, Fogcraft, Diplomacy, and Combat; physical gear, relics, and permits live directly on character equipment, relics, and permit fields.
+    Weigh sound, light, and skill before acting in fog; failure draws fog beasts, and using an unappraised relic brings unpredictable backlash. Describe actions and consequences without inventing dice rolls or table results.
+    The tides decide which parts of the Undertow are reachable, and the flood bell means retreating in time. Guiding Tide-Force or activating relics raises fog-rot; crossing thresholds leaves irreversible changes.
+    The four factions react through Faction Standing while NPCs shift Trust and Disposition. Leads move between unverified, corroborated, contaminated, and resolved; washed-away evidence proves no one's story.
+    Every costly action visibly changes at least one state: tide time, location, injury or fog-rot, attitude, faction pressure, or confidence in a lead.

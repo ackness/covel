@@ -14,12 +14,13 @@ author:
 license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.1 185)"
+# 采用经典故事组合包与叙事判定；data/ 约定自动接入核心任务、记忆、世界规则、故事事件与世界时间，不启用掷骰、背包或好感插件。
 plugins:
   - pack:traditional-story
 pluginPitch:
   label: 雾港调查剧
-  description: 追查齐老失踪案，核对证词和物证，固定会被返潮带走的痕迹。带有任务日志、线索记忆、关系图谱、世界规则和七名角色的立绘。
-  reason: 四条调查任务串起半封信、报告缺页、回声廊和病院证词。案情板记录每条线索的来源、矛盾与保存情况；四方立场、深退潮和钥匙碎片随叙事变化。
+  description: 追查齐老失踪案，核对证词和物证，在返潮前固定线索。带有任务日志与期限、线索记忆、四方立场面板、世界规则和七名角色的立绘。
+  reason: 四条调查任务串起半封信、报告缺页、回声廊和病院证词，回声廊在深退潮急涨前设有限时窗口。案情板记录来源、矛盾与保存情况；四方立场、人物信任与钥匙碎片随叙事变化。
 pluginSettings:
   story-events:
     planner: true
@@ -34,12 +35,12 @@ characterSchema:
       name: 来历
       type: string
       category: bio
-      description: 你以新晋验潮师学徒或熟悉下潮区的潮民身份进入故事；也可补充家乡、旧业与来到主栈桥的缘由。
+      description: 你以新晋验潮师学徒（腕带考核潮纹、可凭公会名义查档）或熟悉下潮区的潮民（知道栈桥暗门与雾灯手势、手头有齐老当年留下的便笺）身份进入故事；也可补充家乡、旧业与来到主栈桥的缘由。
     - id: motive
       name: 此行所求
       type: string
       category: bio
-      description: 你愿意冒险追查齐老的私人理由，例如报恩、求知、赎罪、求财或寻找失踪者。
+      description: 你愿意冒险追查齐老的私人理由，例如报当年免费鉴物之恩、查清同伴为何在退潮时失踪、保住生计或求财自保。
     - id: faction
       name: 势力
       type: string

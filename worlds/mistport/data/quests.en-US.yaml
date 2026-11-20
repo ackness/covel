@@ -23,6 +23,9 @@
   name: Three Times in the Echo Gallery
   description: A tide-sigil, rope marks and a nursery-rhyme copper plate share a corridor, but their timings disagree. Before the flood returns, work out which traces are worth preserving and which conclusions are still guesses.
   reward: Records that can be compared, and a usable way back
+  deadline:
+    label: Before the deep-ebb flood overwhelms the gallery
+    missed: Surge water floods the Echo Gallery; any uncopied tide-sigils and fresh rope marks wash away before you can match their timings.
   objectives:
     - id: compare-tide-lines
       text: Compare the Gallery's tide lines, Qi's tide-sigil, the private unit's rope marks and the nursery-rhyme plate

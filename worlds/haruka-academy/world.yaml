@@ -20,13 +20,14 @@ author:
 license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.15 350)"
+# 使用对话模式组合包与 world-ir 演出管线；data/ 约定自动接入核心任务（quests@1）与世界规则（campus-life）。
 plugins:
   - pack:dialogue-mode
   - plugin:world-ir
 pluginPitch:
   label: 学园恋爱 · 视觉小说
-  description: 全屏舞台、立绘与日夜场景，多条回复可选，好感度与心之路线、约定、传闻和学园祭筹备随对话实时变化。
-  reason: 二十一天的学园祭倒计时里，每一次赴约、失约和传闻都会留在面板上，五条心之路线只靠真实发生的事件推进。
+  description: 全屏舞台、立绘与日夜场景，多条回复可选，好感度与心之路线、任务、约定、传闻和学园祭筹备随对话实时变化。
+  reason: 二十一天的学园祭倒计时里，每一条筹备任务、守住或失约的承诺、校园传闻都会留在面板上，五条心之路线只靠真实发生的事件推进。
 pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
@@ -39,7 +40,7 @@ characterSchema:
       name: 性格
       type: string
       category: bio
-      description: 主角的性格和说话方式，例如“谨慎内向，紧张时话少，礼貌但有主见”。叙事会据此写你的行动与对白。
+      description: 主角的性格、说话方式，也可顺带写一句转学缘由（例如“因家里调职搬到青砾町，谨慎内向，紧张时话少，礼貌但有主见”）。叙事会据此写你的行动与对白。
     - id: club
       name: 社团
       type: string

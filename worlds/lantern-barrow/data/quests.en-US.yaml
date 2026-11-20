@@ -6,6 +6,9 @@
     alive.
   giver: Reeve Aldous Penn
   reward: Thirty silver coins and the village's gratitude
+  deadline:
+    label: Before the Barrow King wakes completely
+    missed: When the Barrow King opens his eyes, the singing stops. Ysolde can no longer walk out untouched; her lantern and voice are drawn into the throne room's cold light.
   objectives:
     - id: keepers-cottage
       text: Visit the Lampkeeper's Cottage and see what she left behind
@@ -29,6 +32,10 @@
       text: Find out who took the Lantern Heart
     - id: decide-its-fate
       text: Recover the Lantern Heart and decide where it should go
+      deadline:
+        when: { affinity: Sister Wren }
+        label: While Sister Wren still trusts you
+        missed: Sister Wren stopped trusting you and stepped off into the dark alone with only her bronze pendant to answer for the Order.
 - id: the-singing-below
   name: The Singing Below
   description: >-

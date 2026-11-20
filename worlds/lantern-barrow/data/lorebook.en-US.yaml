@@ -1,0 +1,28 @@
+- id: sunken-old-greyreed
+  keys: [Greyreed Marsh, old village, Marsh King, bargain, century, singing, grandfather]
+  content: >-
+    A century ago, old Greyreed did not stand on today's dry ground; it sank beneath peat and black water half a mile east. Legend says the Marsh King traded the rest of his village's dead—forcing them to sing and keep vigil—for deathlessness. The first lampkeeper sealed him and those earliest dead behind the bronze tomb doors and bound the barrow under the hilltop beacon's flame.
+    The modern churchyard buries only recent generations, yet elders fear that if the lantern stays dark too long, the singing below will draw recent names from the hillside graves down into the choir. That is how the miller's daughter came to hear her dead grandfather's name.
+- id: dawn-lantern-order
+  keys: [Dawn Lantern, Order, inscription, pendant, Wren, lamp oil, seal]
+  content: >-
+    The Order of the Dawn Lantern worships no named god; it keeps a single vow that "light is the border of rest"—where a keeper's lamp shines, the dead should not hear the names of the living, nor should the living borrow power from the dead. Keepers live solitary lives at the hill's foot with annual deliveries of treated oil and bronze wicks.
+    Quietly, the Order's older folios preserve one line never taught to novices: "The fire that seals a king also feeds on the king's bone." That is Sister Wren's hidden doubt—if the lantern draws on the barrow's own strength, destroying the throne altogether might leave the hilltop lamp unable to burn again.
+- id: village-secrets
+  keys: [Penn, reeve, Corvin, lord, bounty, ledger, cottage, logbook]
+  content: >-
+    A letter from the border lord's bailiff is due this week. Reeve Aldous Penn quietly dipped into flood-dike funds over the past two years and dreads an audit. When Corvin Ashe arrived from the capital a month ago—well funded, polite, and claiming to catalog old inscriptions for the lord—Penn gladly accepted coin to let him read Ysolde's older cottage logbooks.
+    In Ysolde's final logbook, one cramped margin reads: "The scholar from the capital won't settle for rubbings; he asked about the inner bar on the bronze doors. Must check the wax seals tonight." Twenty years ago, Brannoc Hale entered the barrow under a seasoned mercenary whom Ysolde once sheltered; two companions were lost in the Choir Gallery, and Brannoc has never been sure whether the bronze bar was forced from within or opened to let someone out.
+- id: barrow-depths
+  keys: [Hall of Lamps, Bone Hall, Flooded Chamber, Choir Gallery, Throne Room, wall lamps, traps, bronze doors]
+  content: >-
+    The passages inside Lantern Barrow run deeper than the hill looks from outside, shifting from weathered limestone to cold slick basalt:
+    - Hall of Lamps: thirty-six pairs of bronze oil lamps in waist-high niches, their oil thickened like wax. Relighting lamps calms the dead, though pockets of marsh damp linger near ceiling vents.
+    - Bone Hall: an octagonal ossuary chamber off the right passage, walls stacked with century-old bones and counterweighted relief tiles beneath the flagstones. The dead here ambush noisy intruders or mimic a companion's voice.
+    - Flooded Chamber: steps descending into knee-deep black water holding offerings and a rusted shield left behind by Brannoc's expedition twenty years ago. Cold mist clings to the water; wading carelessly drains warmth fast.
+    - Choir Gallery: where both passages reunite under a high echoing vault. Open shouting or bright brawling draws the choir hard; humming the keeper's watch-tune or dimming excess light helps a party slip past.
+    - Throne Room: at the heart of the hill, ringed by bronze chains and dry oil channels. The Barrow King is no mindless beast—once awake, he prefers to bargain first using the living villagers and the names of the dead as chips.
+- id: barrow-world-protocol
+  content: >-
+    Lantern Barrow runs with classic tabletop stakes: risky actions go through dice checks, and failed rolls pay concrete costs from check-clocks (Barrow Chill and Unquiet Dead) or check-consequences (losing a torch, chalk, or advancing a clock). Carried gear such as torches, rope, shortswords, and chalk supply check bonuses while held; note consumption when torches burn out or draughts are drunk.
+    Move strictly along adjacent exits on `delveMap`, mark rooms explored only once the party steps inside, count tomb phases and noise toward `barrowAlarm`, and change `renown` only after word reaches Greyreed.

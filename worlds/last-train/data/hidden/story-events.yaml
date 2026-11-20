@@ -34,3 +34,55 @@
   payload: >-
     Theo's group reaches the top of the crossover stair and finds the emergency door won't open. Through the gap at the edge they can see a contractor's chain looped around the outside bar, and they can feel cold, dry air and hear a siren somewhere above. Make the physical facts concrete — the chain, the bar, the gap, the lamp — and let the group react; do not decide how the door gets opened or who opens it.
   priority: 12
+- id: asthma-air-crisis
+  title: Stale Air
+  when:
+    all:
+      - dimension: floodline
+        path: stage
+        in: [ankle, knee]
+      - dimension: battery
+        path: systems.ventilation
+        equals: off
+  payload: >-
+    With the ventilation shut off and damp coats steaming in the closed car, Arthur Bell starts wheezing hard on row four while his inhaler runs nearly empty. Nadia calls across the aisle that someone has to put the fans back on low—even if cabin lights or the charging rail have to drop for it. Show the tight breath, the foggy glass, and the glare from passengers clutching half-charged phones; let the player choose what gets cut.
+  priority: 9
+- id: students-split-walkway
+  title: One Student Turns Back
+  when:
+    all:
+      - dimension: walkers
+        path: position
+        equals: walking
+      - dimension: walkers
+        path: contact
+        equals: none
+      - time: elapsedSinceStart
+        gte: 30
+  payload: >-
+    Shouts echo softly from the black tunnel ahead: Ben Ortiz panicked when cold water washed over his ankles and started edging back toward the train in the dark without the lamp, while Theo and Priya stayed ahead by cross-passage three trying to keep track of him. Give the player concrete distance and sound cues, and let them choose whether to go out onto the narrow ledge with a light or call Dara to flash the headlights.
+  priority: 8
+- id: pump-room-seal
+  title: The Silt Behind Wharf Street
+  when:
+    all:
+      - dimension: floodline
+        path: stage
+        in: [ankle, knee]
+      - turnGte: 5
+  payload: >-
+    Graham Pike checks the rising water level by the rear end door and pulls out an old transit maintenance card from his wallet. He explains—almost to himself—why the automatic pump relay went silent when the grid dropped, and admits the manual bypass valve needs two hands and a dry foothold behind the tool locker. Keep his stubborn competence grounded in physical details and let the player support, stop, or redirect him without resolving the trip yet.
+  priority: 7
+- id: cello-in-the-dark
+  title: The Cello Case and the Last Bar
+  when:
+    all:
+      - dimension: floodline
+        path: stage
+        equals: knee
+      - dimension: battery
+        path: reserve
+        lte: 25
+  payload: >-
+    With knee-deep water sloshing under the seats and the cabin lights flickering down to amber, Tomas Lind unlatches his dry cello case and draws a slow bow across one low string to cut through the rising murmur. Near the door, Kit holds up his phone with three percent left and catches one shaky bar of signal—just enough for one short burst text or a final torch beam while Maya and Sam pass out their cold tea thermos. Let these ordinary passengers steady the car in their own way and leave the player to decide whether to use Kit's last charge to signal Mercer Park, document conditions, or rally the car toward an exit.
+  priority: 7

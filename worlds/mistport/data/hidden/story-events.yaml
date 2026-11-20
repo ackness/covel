@@ -78,3 +78,20 @@
     equals: true
   payload: 苏窈与你重看已经固定的半封信，指出纸边黑潮盐与齐老离开时的潮时对不上。她提出把信上的盐痕与回声廊潮线比对。信件若已受损或走漏，按案情板现状写，不恢复遗失的字句。给出这条可行动的核验路径，不替玩家断定盐何时沾上，也不指认信里那个“他”。
   priority: 4
+- id: bone-arch-standoff
+  title: 骨拱门前的三方对峙
+  when:
+    all:
+      - turnGte: 8
+      - dimension: deepWithdrawal
+        path: stage
+        in: [full-exposure, return-bell]
+      - any:
+          - dimension: keyFragments
+            path: archive-fragment.status
+            in: [located, held-by-you, taken]
+          - dimension: keyFragments
+            path: meg-collection.status
+            in: [located, held-by-you, taken]
+  payload: 退过第九十级后的骨拱门前，冷雾里同时亮起三股不同的灯影：灰隼的私队封住了阶口，铁姑带着盐牙会的人卡在侧翼石柱间，小霜则站在半淹的石门门槛前不肯退开，脚下水纹里透出戴手套的老人不久前留下的潮印。谁都想要眼前的“钥匙”或开门先机，而返潮已经在脚下回声廊作响。只按已经确立的碎片归属与四方态度写清这一刻的剑拔弩张，不替玩家选择站边、交出碎片或下水门，也不直接宣布齐老是生是死。
+  priority: 12

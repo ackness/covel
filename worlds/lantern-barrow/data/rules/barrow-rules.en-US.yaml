@@ -55,7 +55,7 @@
     Each torch burns for about one phase. Once it goes out, the party cannot see the
     path clearly or spot traps. A short rest restores a few hit points but takes time;
     camping inside disturbs the barrow. When torches, rations, or healing draughts are
-    used, name the consumption in the narrative so inventory and hit points can be
+    used, name the consumption in the narrative so Bag and hit points can be
     recorded accurately.
   keys:
     - torch

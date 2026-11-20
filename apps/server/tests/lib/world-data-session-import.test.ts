@@ -2919,7 +2919,7 @@ describe("world data session importer", () => {
     expect(
       await store.listPluginData(sessionId, "living-world-rules", "rules"),
     ).toHaveLength(9);
-    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(17);
+    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(22);
     expect(
       (await store.listWorldDataImportLedger(sessionId)).map(
         (row) => row.sourceId,

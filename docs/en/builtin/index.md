@@ -32,7 +32,7 @@ The first three packs also include Get Ready, World State, and Character Creator
 
 The "Back to the minimal set" button on the getting-ready screen selects this combination in one click: only narrative plugins and any plugins they or the world require.
 
-A world can add plugins to a built-in pack and give that combination a name. For example, Lantern Barrow calls its Classic Story setup with Ability Checks, Dice Check, Quest Log, Bag, and Affinity “Classic Tabletop”. This does not create another pack available globally. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the getting-ready screen.
+A world can declare extra capabilities in `plugins` (`pack:`, `plugin:`, `contract:`), pull in generic plugins automatically through conventional files under `data/` (such as Quest Log, Bag, Affinity, or Ability Checks), and give that combined setup a name. For example, Lantern Barrow explicitly requests `dice-check` and `action-check@1` on top of Classic Story and draws in Ability Checks, Quest Log, Bag, and Affinity from its data files under the name “Classic Tabletop”. This does not create another pack available globally. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the getting-ready screen.
 
 ## All built-in plugins
 
@@ -96,14 +96,14 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 ## The four built-in worlds
 
-Mistport, Harukaze Academy, and Lantern Barrow each show one play style: Mistport shows Read mode, Harukaze Academy shows Stage mode, and Lantern Barrow shows tabletop rules. Last Train Out is a survival sandbox: the floodline counts down with world time, the lights, doors, and radio share one battery, and Control's orders and the photos passengers pass around have to be checked one by one. It is written in English and also shows how a world can offer editions in several languages.
+Mistport, Harukaze Academy, and Lantern Barrow each show one play style: Mistport shows Read mode without dice checks, Harukaze Academy shows Stage mode, and Lantern Barrow shows full tabletop rules. Last Train Out is a survival sandbox: the floodline counts down with world time, the lights, doors, and radio share one battery, and Control's orders and the photos passengers pass around have to be checked one by one. It is written in English and also shows how a world can offer editions in several languages.
 
-| World                                                       | Gameplay                                          | What is worth a look                                                                                                     |
-| ----------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in Read mode         | Four investigations, a Case Board with sources and contradictions, evidence preservation, eight hidden events, portraits |
-| Harukaze Academy (遥风学园・春日薄荷) `haruka-academy`      | A campus ensemble in Stage mode                   | Campus timetable, dialogue narration, day/night scenes, transparent portraits                                            |
-| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English         | Floodline countdown, a shared battery, message checking, character-card portraits; English first, with a Chinese edition |
-| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration              | Point buy at the start, dice checks, dungeon panel                                                                       |
+| World                                                       | Gameplay                                          | What is worth a look                                                                                                            |
+| ----------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in Read mode         | Four investigations with tide deadlines, Case Board with sources & contradictions, evidence preservation, eight hidden events   |
+| Harukaze Academy (遥风学园・春日薄荷) `haruka-academy`      | A campus ensemble in Stage mode                   | Campus timetable, dialogue narration, day/night scenes, transparent portraits, and festival quests                              |
+| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English         | Floodline countdown, a shared battery, message checking, ensemble cast threads, character-card customization; Chinese edition   |
+| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration              | Point buy at the start, failure clocks & item costs, gear check modifiers, dungeon map & Barrow Alarm panel                     |
 
 To build your own world based on these, the files are in the repository's [`worlds/`](../../../worlds) directory.
 

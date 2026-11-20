@@ -15,6 +15,7 @@ export const PACKS: Record<Visual, readonly PluginId[]> = {
     "world-time",
     "memory",
     "chat-mode-narrator",
+    "core-quest",
     "scene-stage",
     "guide",
     "character-blueprint",

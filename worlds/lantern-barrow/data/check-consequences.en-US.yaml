@@ -1,0 +1,23 @@
+- id: drenched-in-chill
+  text: Damp barrow cold cuts under your cloak and stiffens your hands.
+  cues: [cold, chill, stiff, shiver, damp]
+- id: torch-snuffed
+  text: A cold draft from deeper in the tomb snuffs your flame and ruins one torch for good.
+  cues: [torch, out, dark, draft]
+  cost: { item: Torch }
+- id: chalk-snapped
+  text: You score the wrong rune or passage marker and rub it out, wearing a stick of chalk down to dust.
+  cues: [chalk, mark, rune, wrong]
+  cost: { item: Chalk }
+- id: noisy-misstep
+  text: Loose stone skitters down the steps, and hurried footsteps answer out of the dark.
+  cues: [noise, echo, footsteps, stir, slip]
+- id: steel-clangs
+  text: Steel rings against wet stone; the sound draws movement closer through the dark.
+  cues: [ring, sound, footsteps, closer, stir]
+- id: sharp-words-in-dark
+  text: Your words land badly in the hush, leaving the listener colder and the dark more hostile.
+  cues: [cold, silence, glare, hostile, chill]
+- id: barrow-stirs-general
+  text: Dust sifts from the vault above as marsh cold creeps across the flagstones.
+  cues: [cold, chill, dust, dark, singing, shadow]

@@ -6,6 +6,12 @@ pluginPitch:
   reason: 水漫到电池箱之前，每个选择都要花掉点什么——几分钟、一格电、一支手电，或者某个人的信任——面板上清清楚楚写着还剩多少。
 characterSchema:
   attributes:
+    - id: persona
+      name: 性格与习惯
+      description: 你在压力下的反应与说话方式——例如“越急越安静，说话直来直去，关过的门会再拉一把确认”。叙事会据此描写你的言行。
+    - id: shiftReason
+      name: 为什么坐上末班车
+      description: 你为什么会在 23:47 搭上 4 号线——在码头街站替完晚班、早些时候顺手帮过一名受伤通勤者，或者单纯想赶在暴雨前回家。
     - id: stamina
       name: 体力
       description: 蹚水、攀爬、背人，还有凌晨两点浑身湿冷时继续往前走。

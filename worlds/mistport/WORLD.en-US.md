@@ -42,12 +42,18 @@ Worse, the fog is getting thicker. The most sensitive Tide-Readers can tell: ove
 
 The player isn't the lone savior of some prophecy. The player is a new variable that knocks seven people off the paths they were already on. The opening fits either of two backgrounds:
 
-- **New Tide-Reader apprentice**: your exam left a faint tide-sigil on your wrist. Su Yao was your examiner, and Lin Yuanzhou sat the exam with you. You can enter the Guild Tower lawfully, but you are expected to obey the Guild's rules on sealed records and appraisals.
-- **Undertow local**: you know the Drawdown Steps, the hidden hatch in the pier, and the fog-lamp hand signals. Qi once appraised a relic for you or your family free of charge. Before he vanished he left Su Yao a note asking her to find "someone who remembers the way and doesn't put blind faith in maps." You have no permit, but you find it easier to get close to the Salt Fangs and the Congregation.
+- **New Tide-Reader apprentice**: your exam left a faint tide-sigil on your wrist, and you carry a Guild tide-stone fog-lamp and apprentice archive slip. Su Yao was your examiner, and Lin Yuanzhou sat the exam with you. You can enter the Guild Tower lawfully, but you are expected to obey the Guild's rules on sealed records and appraisals.
+- **Undertow local**: you know the Drawdown Steps, the hidden hatch in the pier, and the fog-lamp hand signals, and carry an old cold-light fog-lamp plus waterproof oilcloth. Qi once appraised a relic for you or your family free of charge; before he vanished he left Su Yao a note asking her to find "someone who remembers the way and doesn't put blind faith in maps." You have no permit, but you find it easier to get close to the Salt Fangs and the Congregation.
 
 <!-- narrator-only -->
 
 Whatever your background, Su Yao has only half a letter when she finds you on the Main Pier. The other half, the route Qi actually took, and the reason the deep ebb came early all have to be pieced together from the cracks between what different people want. Lin Yuanzhou needs someone to keep his tide sense quiet. Iron Meg has to beat Chen to the Key. Grey Falcon needs to know whether the orders he's carrying have been altered. Frost wants to find out whether the player really does "hear it too." These people will ask you for promises, and they will refuse anything that goes against their side. Keep your word, lie, get hurt, choose — and their trust, and where they are, will shift. They don't stand still waiting for you to bring them a quest.
+
+## Plugin and World Extension Coordination
+
+- **Narrative-only boundary (no dice, Bag, or Affinity plugin)**: Mistport uses `pack:traditional-story` with `data/` conventions for `core-quest`, `memory` (`clues`, `commitments`, `relics`, `tides`), `world-rules` (`tide-mystery`), `story-events`, and `world-time`. Do not invent dice rolls, table results, a separate Bag inventory, or affinity tier names. Keep lamps, sealed copies, relic fragments, and permits in character fields (`equipment`, `relics`, `permit`) and track interpersonal standing in character `trust` (0–100) and `dispositionToPlayer`.
+- **Dimensions and quest deadlines**: `caseBoard` tracks `unverified`, `corroborated`, `contaminated`, and `resolved` along with independent `sources`, `contradictions`, and `secured`. `deepWithdrawal` advances one way through `triple-warning` → `step-ninety` → `full-exposure` → `return-bell` → `flood` → `receded`; entering `flood` trips the deadline on `echo-gallery-traces` if traces were not secured in time. Update `factionStanding` and `keyFragments` only from events that occurred and became known in the scene.
+- **Selective lore triggers**: Details on the Soundless Inn, Salt Market, Stilltide admission ledger, Council hawks vs doves, and early fog-rot signs sit in selective lorebook entries and should surface only as investigation reaches them.
 
 ## The Case Board and Consequences
 
@@ -100,6 +106,6 @@ If you are a new apprentice, her eyes fall on the tide-sigil left by your exam. 
 
 She glances toward the clocktower. "But if the deep ebb really is coming—"
 
-The bell strikes a fourth time. The ground shivers. At the edge of the dock the sea is pulling back fast enough to see, and beneath it the outline of ruins no one has ever laid eyes on, glowing a dull grey.
+By old habit a deep-ebb warning stops at three; today an unscheduled fourth strike rings out heavy as iron, as if something beneath the seabed pushed the gears. The ground shivers. At the edge of the dock the sea is pulling back fast enough to see, and beneath it the outline of ruins no one has ever laid eyes on, glowing a dull grey.
 
 And somewhere in the fog, something seems to open its eyes.

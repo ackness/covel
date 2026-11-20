@@ -16,14 +16,16 @@ author:
 license: MIT
 cover: media/gallery/lantern-barrow-hero.webp
 accentColor: "oklch(72% 0.12 75)"
+# Uses classic story pack plus dice-check / action-check@1; data/ conventions
+# pull in tabletop-rules, core-quest, inventory, affinity, story-events, world-time.
 plugins:
   - pack:traditional-story
   - plugin:dice-check
   - contract:action-check@1
 pluginPitch:
   label: 经典跑团
-  description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
-  reason: 自己分配属性，按骰子结果行动。地图记录走过的地方，警戒面板记录墓内流逝的时间与惊动古冢的响动。
+  description: 开局配点、骰池检定与失败代价时钟、带加成的随身装备、带期限任务与背包、队友好感，以及地城探索与警戒面板。
+  reason: 自己分配属性，按骰子结果行动。地图记录走过的地方，警戒与失败时钟记录时间流逝、寒气与惊动古冢的响动。
 pluginSettings:
   story-events:
     planner: true
@@ -38,12 +40,12 @@ characterSchema:
       name: 职业
       type: string
       category: bio
-      description: 你的冒险者靠什么吃饭：战士、游荡者、学者、祭司、猎人，或你自己的说法。
+      description: 你的冒险者靠什么吃饭：退役兵、锁匠、落魄书吏、修会随从、沼泽向导，或你自己的说法。
     - id: background
       name: 来历
       type: string
       category: bio
-      description: 你为什么来到灰苇村，以及一件只有你知道的往事。
+      description: 你为何来到灰苇村：为三十枚银币而来、受修会托付带信、在找二十年前失踪小队的旧识，或是追着王都学者科尔文的踪迹。
     - id: might
       name: 力量
       type: number

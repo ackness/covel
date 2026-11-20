@@ -7,16 +7,21 @@
 - id: torch
   name: 火把
   quantity: 3
-  description: 浸过松脂的火把，每支大约烧一个时辰。古冢里的黑暗会吞掉光。
+  equipped: true
+  description: 浸过松脂的火把，每支大约烧一个时辰。古冢里的黑暗会吞掉光；有火光照路时，更容易察觉暗门与陷阱。
   tags:
     - 照明
     - 补给
+  effects:
+    check: { attribute: insight, modifier: 1 }
 - id: rope
   name: 麻绳（十五米）
   quantity: 1
-  description: 结实的麻绳，适合下竖井、过断桥，或绑住不该醒的东西。
+  description: 结实的麻绳，适合下竖井、过断桥，或绑住不该醒的东西。带着它攀降、涉险与脱身更稳当。
   tags:
     - 工具
+  effects:
+    check: { attribute: agility, modifier: 1 }
 - id: healing-draught
   name: 治疗药水
   quantity: 2
@@ -35,6 +40,17 @@
   name: 随身短剑
   quantity: 1
   equipped: true
-  description: 一把普通、趁手的短剑，供各行当的冒险者下墓防身。
+  description: 一把普通、趁手的短剑，供各行当的冒险者下墓防身、搏斗或撬开卡死的木栓。
   tags:
     - 武器
+  effects:
+    check: { attribute: might, modifier: 1 }
+- id: chalk
+  name: 石膏粉笔
+  quantity: 2
+  description: 两截白粉笔，用来在岔路石壁做回程记号或临摹古灯铭文，查验机关与符文时很顺手。
+  tags:
+    - 工具
+    - 标记
+  effects:
+    check: { attribute: wits, modifier: 1 }

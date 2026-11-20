@@ -18,3 +18,19 @@
   strategy: selective
   keys: [walkway, track, third rail]
   content: The walkway is a concrete ledge along the tunnel wall, wide enough for one person. The power rail is dead in a blackout, but staff are trained to treat it as live until Control confirms isolation. Water on the track bed hides the sleepers and the drainage channel.
+- id: calder-floodwall
+  strategy: selective
+  keys: [river, wall, floodwall, water, surge, Calder]
+  content: Calder's old stone embankment at the East Dockyards lies two feet lower than the Mercer Park bluff. When the storm surge cleared the coping at 23:47, water poured down the Wharf Street ventilation shaft into the river-bottom dip while upper districts stayed dry. At the current inflow rate, the track bed fills slowly at first and reaches the train's battery boxes around 02:36.
+- id: pump-refit
+  strategy: selective
+  keys: [Graham, bypass, valve, sump, silt, refit]
+  content: Six years ago the Wharf Street pump room was converted to remote grid-powered relays, eliminating the full-time night attendant. Graham Pike fought that budget cut at the time and remembers where the heavy cast-iron manual bypass wheel still sits behind the south tool locker—though river silt tends to jam the non-return gate once water backs above the floor.
+- id: second-train-and-control
+  strategy: selective
+  keys: [Control, rescue, second train, signal, radio, behind]
+  content: On battery backup, Line 4 Control sees only rough track-circuit occupancy lights, not carriage water levels. Another late train stopped two hundred meters closer to Wharf Street with an elderly conductor who could not keep radio contact; Control's 23:51 blanket instruction ("rescue coming from Wharf Street") assumed emergency crews could clear the flooded Wharf Street concourse stairs before reaching either train.
+- id: car-passengers
+  strategy: selective
+  keys: [passengers, Arthur, cello, Tomas, wedding, Maya, Sam, students, Priya, Ben]
+  content: Among the forty passengers on board are Arthur Bell (seventy-three, retired dock clerk with asthma whom Nadia is tending near row four), Tomas Lind (cellist hugging a waterproofed wooden case with dry resin and spare gut strings), Maya and Sam Patel (newlyweds in soaked dress clothes sharing a half-full thermos and spare scarf), and engineering students Priya Nair and Ben Ortiz, who climbed onto the walkway ten minutes earlier behind Theo Marsh.

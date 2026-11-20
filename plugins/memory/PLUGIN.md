@@ -49,29 +49,8 @@ Memory extraction runs as a detached post-turn function that settles before the 
 
 The same extraction adds up to three facts of the turn to the `facts` namespace. A block is rewritten every turn and holds the present state; facts are only added and keep what happened. The namespace is declared searchable, so the kernel's `memory-search` reads it, and the prompt segment brings back the facts that the player's message is about. Both use the kernel's lexical ranking and need no embedding model. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
 
-## Quality Characteristics
+## Behavior and Boundaries
 
-**Extraction Reliability**: Memory extraction is **not guaranteed to be lossless**. The LLM may:
-
-- Miss important facts mentioned briefly in narrative
-- Misinterpret ambiguous phrasing
-- Prioritize recent events over older but significant details
-- Produce inconsistent extractions across similar contexts
-
-**Configuration Sensitivity**: The current default timeout (30s) and retry settings have **not been empirically validated** across diverse model speeds, narrative complexity, or session lengths. Deployments may need to tune these values based on:
-
-- Model choice (faster models like DeepSeek vs slower models like GPT-4)
-- Average turn length and narrative density
-- Acceptable latency budget for post-turn processing
-
-**Recall Accuracy**: Retrieved blocks reflect the quality of extraction. If a fact was not extracted or was extracted incorrectly, recall will not surface it. Consider combining with:
-
-- Explicit player note-taking mechanisms
-- Full-text search over raw narrative history for critical fact verification
-- Periodic manual review of extracted blocks
-
-**Best Practices**:
-
-- Monitor extraction failures and timeout rates in production
-- Validate memory accuracy during long sessions (>50 turns)
-- Use structured character/world updates for critical game state that must persist reliably
+- **Best-effort narrative extraction**: The extractor summarizes what happened into topic blocks and appends up to three factual records per turn. Brief or ambiguous details in prose may be skipped rather than inferred.
+- **Role of structured state**: Because memory extraction is a bounded narrative summary, authoritative numbers, inventory items, quests, clocks, and world dimensions belong in dedicated datasets or dimension schemas rather than narrative memory blocks.
+- **Custom world topics**: Any world pack can contribute additional genre-specific blocks through `data/memory-blocks.json` (`memory.blocks@1`), using `extractionHint` to mark what narrative details belong there without duplicating structured state already owned by dimensions or other plugins.

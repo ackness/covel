@@ -31,6 +31,10 @@
   description: 潮纹、绳痕和童谣铜片出现在同一条廊道里，时间却对不上。返潮之前，得先弄清哪些痕迹值得带走，哪些只是自己的猜测。
   status: active
   reward: 能互相比对的痕迹记录和一条可用的退路
+  deadline:
+    when: { dimension: deepWithdrawal, path: stage, equals: flood }
+    label: 在深退潮急涨淹没廊道前
+    missed: 返潮急水灌满回声廊，石壁上未拓印的潮纹与新绳痕一同被海水洗散，再无法原样比对。
   objectives:
     - id: compare-tide-lines
       text: 比对回声廊的潮线、齐老的潮纹、私队绳痕与童谣铜片

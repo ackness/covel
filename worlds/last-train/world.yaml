@@ -17,13 +17,15 @@ author:
 license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(82% 0.16 92)"
+# Uses classic story pack plus dice-check; data/ conventions pull in core-quest,
+# inventory, affinity, story-events, world-time, plus check-clocks/consequences.
 plugins:
   - pack:traditional-story
   - plugin:dice-check
 pluginPitch:
   label: Last Train Out
   description: >-
-    Read mode with dice checks, quests, the things in your pockets,
+    Read mode with dice checks, failure clocks, quests, the things in your pockets,
     relationships with the other passengers, and live panels for the water,
     the train battery, the messages coming in, and the three people who
     walked ahead.
@@ -36,6 +38,20 @@ pluginSettings:
     planner: true
 characterSchema:
   attributes:
+    - id: persona
+      name: Personality
+      type: string
+      category: bio
+      description: >-
+        Your manner under pressure—for example, "calm until people shout, speaks plainly,
+        double-checks doors twice." The narrative uses this when writing your voice.
+    - id: shiftReason
+      name: Why You Were on the Last Train
+      type: string
+      category: bio
+      description: >-
+        Why you were riding Line 4 at 23:47—covering a late Wharf Street platform shift,
+        helping an injured commuter earlier, or trying to catch the last train before the storm.
     - id: stamina
       name: Stamina
       type: number

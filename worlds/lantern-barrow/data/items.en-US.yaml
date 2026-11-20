@@ -9,7 +9,7 @@
   name: Torch
   description:
     Pine-pitch torches, each good for about one phase of the day. The barrow's
-    dark swallows light.
+    dark swallows light; steady firelight helps you spot traps and hidden doors.
   tags:
     - light
     - supply
@@ -36,6 +36,12 @@
     - food
 - id: adventurers-blade
   name: Shortsword
-  description: A plain, handy shortsword for adventurers of any calling to carry into the barrow.
+  description: A plain, handy shortsword for fighting in tight passages or prying jammed bolts.
   tags:
     - weapon
+- id: chalk
+  name: Chalk
+  description: Two sticks of white chalk for marking return turns in the stone passages or rubbing faint lantern inscriptions.
+  tags:
+    - tool
+    - marking
