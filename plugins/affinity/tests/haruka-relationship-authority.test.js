@@ -502,7 +502,7 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
       "story-events",
       "_hidden.events",
     );
-    expect(events).toHaveLength(8);
+    expect(events).toHaveLength(9);
     const byId = Object.fromEntries(events.map((r) => [r.key, r.value]));
     const dims = await dimensions();
     dims.routes.value.mio = { stage: "heartbeat", trust: 2, pressure: 3 };
@@ -559,6 +559,22 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
       evaluateCondition(byId["kaho-names-the-song"].when, {
         ...chained,
         turn: 5,
+      }).met,
+    ).toBe(false);
+    dims.routes.value.akane = { stage: "heartbeat", trust: 3, pressure: 0 };
+    dims.festival.value.daysRemaining = 7;
+    const akaneLate = {
+      ...state,
+      turn: 10,
+      revealed: { "akane-sisters-note": { lastTurn: 7 } },
+    };
+    expect(
+      evaluateCondition(byId["akane-lantern-shelf"].when, akaneLate),
+    ).toEqual({ met: true, issues: [] });
+    expect(
+      evaluateCondition(byId["akane-lantern-shelf"].when, {
+        ...akaneLate,
+        turn: 9,
       }).met,
     ).toBe(false);
   });
