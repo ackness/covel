@@ -13,9 +13,9 @@
 ```text
 ~/.covel/                    ← 配置根目录（小文件）
   config.toml                ← 数据位置、网络代理、日志轮转参数（见下文）
-  llm.toml                   ← 模型用途配置（服务商 / 模型 / 地址）
+  llm.toml                   ← 模型分工（slot）配置（服务商 / 模型 / 地址）
   keys.env                   ← 服务商 API 密钥，KEY=VALUE 纯文本
-  settings.json              ← 界面里的设置：语言、外观、用途覆盖、每个插件的设置
+  settings.json              ← 界面里的设置：语言、外观、分工覆盖、每个插件的设置
   reasoning-models.json      ← 可选：内置数据还没收录的模型的思考档位（见 slots.md 的“档位数据”）
   app-update.json            ← 已忽略的桌面应用版本
   window-state.json          ← 窗口尺寸、位置、最大化和全屏状态
@@ -34,7 +34,7 @@
   server.port                ← 最近一次启动用的端口（下次优先复用）
 ```
 
-思考档位数据的说明在[模型用途](./slots.md)。
+思考档位数据的说明在[模型分工](./slots.md)。
 
 **日志写入约定**：
 
@@ -144,8 +144,8 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 桌面程序总是把这个路径传给后端，即使文件还不存在。应用不会从安装目录复制模型配置：第一次启动用内置默认，之后新建这个文件并重载就能生效。
 
-- 示例见仓库根目录的 [`llm.toml.example`](../../llm.toml.example)。每个模型用途对应一个服务商和一个模型。
-- 内置默认的 `story` 用途指向 `deepseek-flash`。在 `keys.env` 里填好 `DEEPSEEK_API_KEY` 就能运行。
+- 示例见仓库根目录的 [`llm.toml.example`](../../llm.toml.example)。每个模型分工对应一个服务商和一个模型。
+- 内置默认的 `story` 分工指向 `deepseek-flash`。在 `keys.env` 里填好 `DEEPSEEK_API_KEY` 就能运行。
 
 **设置界面。** 模型部分分成“AI 分工”“服务商与密钥”“生成参数”三页。
 
@@ -198,7 +198,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 **打开和编辑 `llm.toml`：**
 
 - “打开 llm.toml”使用当前生效的 `COVEL_LLM_TOML` 路径，没设置时才用配置根目录的 `llm.toml`。`keys.env` 始终在配置根目录。
-- `llm.toml` 不存在时，应用用内置默认运行：DeepSeek 的 `story` 用途；设置了 `DEFAULT_BASE_URL` 时改指那个端点，见[模型用途](./slots.md)。
+- `llm.toml` 不存在时，应用用内置默认运行：DeepSeek 的 `story` 分工；设置了 `DEFAULT_BASE_URL` 时改指那个端点，见[模型分工](./slots.md)。
 - 第一次点“编辑 llm.toml”时，应用按这份内置默认生成文件再打开。生效的模型不变。
 - 其他要打开的目标不存在时返回 `open_target_unavailable`。
 

@@ -384,8 +384,8 @@ export type SessionAction =
       messages: StreamMessage[];
     }
   | {
-      // 把更旧的一批消息合并到 messages 前部（按 id 去重、整体保持 createdAt 正序），
-      // 并把 olderMessagesCursor 更新为返回的 nextCursor。保留现有消息。
+      // Prepend older messages (deduplicated by id, sorted by createdAt) and
+      // update olderMessagesCursor to cursor while keeping existing messages.
       type: "PREPEND_MESSAGES";
       messages: StreamMessage[];
       cursor: PageCursor | null;

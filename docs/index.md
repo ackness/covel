@@ -6,7 +6,7 @@ titleTemplate: false
 hero:
   name: Covel
   text: 从第一局游戏，到你自己的世界和插件
-  tagline: 插件组合玩法，世界包交付设定。按你现在想做的事选一条路。
+  tagline: 用插件组合玩法，用世界包交付设定。按你想做的事，从下面选一条路开始。
   image:
     src: /icon.png
     alt: Covel
@@ -39,7 +39,7 @@ features:
     linkText: 第一个插件
   - icon: 📦
     title: 我想发给别人用
-    details: 把插件和世界打成别人能安装的包：校验、授权、重启恢复、卸载与更新。
+    details: 把插件和世界打包分享给他人：校验、权限确认、安装更新与卸载。
     link: /ship/
     linkText: 验证与分发
   - icon: 📖

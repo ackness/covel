@@ -106,7 +106,7 @@ The preview also shows the result of the integrity checks. The checks only read 
 **A language is not a condition for installing.** A plugin has at least English. When there is no text in the player's language, the plugin is still installed and enabled as usual, and its labels fall back to English (or to the translation in the [translation catalogue](./i18n.md)).
 
 - After a restart, the `languages` field of the plugin list shows which languages the plugin has text and instructions in.
-- The session-prep screen marks plugins that have no text in the current interface language as "Not translated".
+- The getting-ready screen marks plugins that have no text in the current interface language as "Not translated".
 - Before publishing, an author runs `pnpm validate:plugin <dir>` to see the same summary.
 
 ### Where it is installed, and who can install

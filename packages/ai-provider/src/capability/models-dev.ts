@@ -4,7 +4,7 @@
  * parameters a model fixes itself, and tool choices per protocol.
  *
  * `models-dev.data.json` is a trimmed snapshot written by
- * `scripts/update-models-dev.ts`. It is the default source for these facts;
+ * `packages/ai-provider/scripts/update-models-dev.ts`. It is the default source for these facts;
  * `reasoning-models.data.json` only corrects or extends it.
  */
 

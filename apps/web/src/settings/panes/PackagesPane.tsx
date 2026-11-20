@@ -108,7 +108,7 @@ export function PackagesPane() {
   }, [isDesktop, desktopInfoAttempt]);
 
   // Boot fetches the world list again and drops the cached full records, so
-  // the home screen and the prep screen show what was just installed.
+  // the home screen and the getting-ready screen show what was just installed.
   const refreshWorlds = useCallback(() => void boot(), [boot]);
 
   /** The status line shows one package; prefer one that needs the restart. */

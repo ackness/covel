@@ -82,7 +82,7 @@ The rules that are easiest to get wrong:
 
 Every `pnpm create-plugin` mode starts `PLUGIN.md` at version `0.1.0`. Change that one place when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
 
-After validation passes, select the plugin on the session-prep screen. Packages the host verifies as declarative from current files run directly; code packages ask for authorization. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
+After validation passes, select the plugin on the getting-ready screen. Packages the host verifies as declarative from current files run directly; code packages ask for authorization. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
 
 ## Where to declare what my code registers
 
@@ -341,7 +341,7 @@ Write a range such as `covel: ">=0.0.45"` in `PLUGIN.md`. Covel outside the rang
 
 ### How to let players know who made it
 
-Write `version`, `author`, `license` and `homepage` in `PLUGIN.md`. The author name, a short note for players, and a few `https` links are shown on the session-prep screen and in the installed list. Before a player opens a link, they see a warning about third-party links. For the fields and their limits, see [author information](../reference/plugins.md#author-information).
+Write `version`, `author`, `license` and `homepage` in `PLUGIN.md`. The author name, a short note for players, and a few `https` links are shown on the getting-ready screen and in the installed list. Before a player opens a link, they see a warning about third-party links. For the fields and their limits, see [author information](../reference/plugins.md#author-information).
 
 ## What you can use in code
 

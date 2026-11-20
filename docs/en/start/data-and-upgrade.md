@@ -1,22 +1,22 @@
-# Data, Backup and Upgrades
+# Data, backup, and upgrades
 
 This page explains where the desktop app keeps its data, how to back it up, and what to check before an upgrade.
 
-## Where Files Are
+## Where files are
 
 The first time the desktop app starts, it creates `~/.covel/`. The small configuration files are in this folder, and the data that takes up space is by default in the `data/` folder under it.
 
 ```text
 ~/.covel/                 configuration
   config.toml             data location, network proxy, log settings
-  llm.toml                model role configuration (optional)
+  llm.toml                AI role configuration (optional)
   keys.env                provider API keys, in plain text
-  settings.json           settings in the interface: language, appearance, model bindings, plugin settings
+  settings.json           settings in the interface: language, appearance, AI roles, plugin settings
   plugins/                the plugins you installed
 
 ~/.covel/data/            data (the location can be changed)
   covel.db                save database
-  media/                  Stored images, audio and other media
+  media/                  stored images, audio and other media
   worlds/                 the worlds you installed and created
   logs/                   logs
     desktop.log           logs of the desktop program itself
@@ -25,7 +25,7 @@ The first time the desktop app starts, it creates `~/.covel/`. The small configu
 
 If you do not want to browse the folders, **Settings → Desktop** lists all the paths, and you can open them with one click.
 
-## Moving the Data to Another Disk
+## Moving the data to another disk
 
 In **Settings → Desktop**, switch the data folder, or edit `~/.covel/config.toml`:
 
@@ -65,9 +65,9 @@ If you only want to back up the interface settings, use "Export settings" under 
 > [!CAUTION]
 > Do not move or delete `covel.db-wal` and `covel.db-shm` on their own while Covel is running. Doing so can damage your saves.
 
-## Before an Upgrade
+## Before an upgrade
 
-Covel is still in early access. Versions may have incompatible changes, and **saves are not migrated automatically**. If you follow `main`, also read the [pending release entries](../../changelog.d/README.md): database schemas and session contracts can change before the application version changes. The current source removes the old generic state tables, so older SQLite / PostgreSQL databases must be recreated. See [storage](../internals/storage.md) for schema-version rules. Before each upgrade:
+Covel is still in early access. Versions may have incompatible changes, and **saves are not migrated automatically**. If you follow `main`, also read the [pending release entries](../../changelog.d/README.md): database schemas and session contracts can change before the application version changes (see [storage](../internals/storage.md) for schema-version rules). Before each upgrade:
 
 1. Read the [changelog](../../CHANGELOG.md) for that version, and find the "Upgrade notes" and "Breaking changes".
 2. Make a full backup using the method above.
@@ -76,7 +76,7 @@ Covel is still in early access. Versions may have incompatible changes, and **sa
 When Covel starts, it checks which version wrote the save database. When this version cannot open it, the startup screen shows "Data from another Covel version", and Covel leaves the database unchanged. Then:
 
 1. Quit Covel and back up the data directory.
-2. As in [Moving the Data to Another Disk](#moving-the-data-to-another-disk) above, set `data_root` in `config.toml` to a new, empty directory.
+2. As in [Moving the data to another disk](#moving-the-data-to-another-disk) above, set `data_root` in `config.toml` to a new, empty directory.
 3. Start Covel again; it starts from the empty directory. To keep playing the old saves, go back to the version that wrote them.
 
 When the desktop app starts, it checks whether a new stable version is available. If there is one, a notice appears, and you can choose "Open download page" or "Ignore this version". It does not download or install anything automatically.
@@ -90,11 +90,11 @@ When something goes wrong, first look at the two files under `~/.covel/data/logs
 
 When a log file reaches its size limit, logging continues in a new file. Each file is 10 MB by default, and 10 copies are kept. The details of model requests and tool calls in each turn are not written to these files. They are in the app's Debugger page.
 
-## Learn More
+## Learn more
 
 The [desktop configuration and data folder reference](../reference/desktop-config.md) has the full description of each file, including the proxy, the format of the key file, and how conflicts in the settings file are handled.
 
-## Next Steps
+## Next steps
 
 - [Create your first world](../worlds/first-world.md)
 - [Develop your first plugin](../plugins/first-plugin.md)

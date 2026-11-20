@@ -7,36 +7,37 @@ import {
 } from "react";
 
 /**
- * 无限向上滚动：顶部 sentinel 进入视口时加载更旧消息，并在合并到列表前部后按
- * scrollHeight 差值补偿 scrollTop，保持视图不跳动（无限上滚的标准做法）。
+ * Infinite scroll upward: loads older messages when the top sentinel enters the
+ * viewport, then compensates `scrollTop` by the `scrollHeight` delta after
+ * prepending to keep the visible scroll position steady.
  *
- * 仓库没有 React Query / 无限滚动库，这里用 useState/useEffect + IntersectionObserver
- * 手写。观察器以滚动视口为 root，只在 `hasOlder` 为真时挂载。
+ * Implemented directly with `useState`/`useEffect` and `IntersectionObserver`
+ * (using the scroll viewport as `root`) while `hasOlder` is true.
  */
 
 interface UseLoadOlderMessagesArgs {
-  /** 实际滚动的原生视口元素，null 时不启用。 */
+  /** Native scrollable viewport element; inactive when null. */
   readonly viewportEl: HTMLElement | null;
-  /** 是否还有更旧消息可加载（olderMessagesCursor 非 null）。 */
+  /** Whether older messages remain (`olderMessagesCursor !== null`). */
   readonly hasOlder: boolean;
-  /** 当前列表首条消息 id —— 变化即表示前部合并了更旧消息，触发滚动补偿。 */
+  /** First message id in the list — changes trigger scroll compensation after prepend. */
   readonly firstMessageId: string | undefined;
-  /** 拉取并 prepend 更旧一页（内部走 store action → dispatch PREPEND_MESSAGES）。 */
+  /** Fetches and prepends an older page (via store `PREPEND_MESSAGES`). */
   readonly onLoadOlder: () => Promise<void>;
 }
 
 interface UseLoadOlderMessagesResult {
-  /** 挂到消息列表顶部的哨兵元素。 */
+  /** Sentinel element attached to the top of the message list. */
   readonly topSentinelRef: React.RefObject<HTMLDivElement | null>;
-  /** 正在加载更旧消息 —— 用于展示加载指示。 */
+  /** True while fetching an older page, used to display the loading indicator. */
   readonly loadingOlder: boolean;
-  /** 上一次加载失败时为 true；重试成功或再次开始加载后清除。 */
+  /** True when the last fetch failed; cleared on retry or next load start. */
   readonly loadFailed: boolean;
-  /** 重新加载更旧一页（失败提示旁的重试按钮）。 */
+  /** Retries fetching the older page from the error banner button. */
   readonly retry: () => void;
 }
 
-/** 顶部提前量：滚动到距顶部该像素内就预取，减少可见空白。 */
+/** Top prefetch threshold in px before reaching the edge to avoid blank gaps. */
 const TOP_TRIGGER_MARGIN_PX = 200;
 
 export function useLoadOlderMessages({
@@ -48,9 +49,9 @@ export function useLoadOlderMessages({
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  // 加载前的滚动锚点（视口高度 + 位置）。加载后按新旧高度差补偿 scrollTop。
+  // Pre-fetch scroll anchor (height + offset) to preserve scroll position after prepend.
   const anchorRef = useRef<{ height: number; top: number } | null>(null);
-  // ref 版 loading，供 IntersectionObserver 回调同步判重（避免闭包陈旧 / 并发触发）。
+  // Ref-backed loading flag for synchronous IntersectionObserver deduplication.
   const loadingRef = useRef(false);
 
   const trigger = useCallback(async () => {
@@ -72,7 +73,7 @@ export function useLoadOlderMessages({
     }
   }, [hasOlder, viewportEl, onLoadOlder]);
 
-  // 顶部 sentinel 进入视口即触发加载。仅在有更旧消息且视口就绪时挂载观察器。
+  // Trigger loading when the top sentinel enters the viewport (only when older pages exist).
   useEffect(() => {
     const sentinel = topSentinelRef.current;
     if (!sentinel || !viewportEl || !hasOlder || loadFailed) return;
@@ -90,9 +91,8 @@ export function useLoadOlderMessages({
     return () => observer.disconnect();
   }, [viewportEl, hasOlder, loadFailed, trigger]);
 
-  // 更旧消息合并到前部后（首条 id 变化），按 scrollHeight 差值补偿 scrollTop。
-  // useLayoutEffect 在绘制前同步调整，避免可见跳动。anchor 为空时（普通追加 /
-  // 首次加载）直接跳过。
+  // Adjust scrollTop by the scrollHeight delta before paint once older messages
+  // are prepended (firstMessageId changes); skip on append or initial load.
   useLayoutEffect(() => {
     const vp = viewportEl;
     const anchor = anchorRef.current;

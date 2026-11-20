@@ -123,7 +123,7 @@ describe("provider failure scope", () => {
     expect(steps[0]?.failureTarget).toEqual(failureTarget);
     expect(screen.getByText(/DeepSeek rejected the API key/)).toBeTruthy();
     expect(
-      screen.getByText(/Story and Plugin tasks — 2 model uses/),
+      screen.getByText(/Story and Plugin tasks — 2 AI roles/),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Model settings" }));
     expect(onOpenSettings).toHaveBeenCalledWith("llm.providers");
@@ -194,7 +194,7 @@ describe("provider failure scope", () => {
     );
     act(() => vi.advanceTimersByTime(1500));
     expect(
-      screen.getByText(/Story and Plugin tasks — 2 model uses/),
+      screen.getByText(/Story and Plugin tasks — 2 AI roles/),
     ).toBeTruthy();
   });
 

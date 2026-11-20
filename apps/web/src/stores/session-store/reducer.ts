@@ -468,8 +468,8 @@ export function reducer(
       return messages === state.messages ? state : { ...state, messages };
     }
     case "PREPEND_MESSAGES": {
-      // 把更旧的一批消息合并到前部。已有消息（含本地追加）优先保留，
-      // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
+      // Prepend older history without overwriting existing/local-echoed messages;
+      // deduplicate by id.
       const existingIds = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !existingIds.has(m.id));
       const messages = mergeRecoveredMessages(
@@ -477,13 +477,14 @@ export function reducer(
         action.messages.filter((m) => existingIds.has(m.id)),
       );
       if (older.length === 0) {
-        // 没有新增历史，补齐同 ID 的已提交字段并推进游标。
+        // No new older messages: still reconcile matching IDs and advance the cursor.
         return { ...state, messages, olderMessagesCursor: action.cursor };
       }
-      // `older` 来自 listMessagesPage(before = 当前最旧一条的游标)，按契约**严格早于**
-      // 所有 existing、且自身已按 (createdAt,id) 正序，故直接拼到前部即可。不能再按
-      // timestamp 整体重排：本地回显用的是客户端墙钟时间戳，服务端权威 createdAt
-      // 与它混排会在客户端时钟偏移时把历史顺序打乱（desktop 无 NTP 保证）。
+      // `older` comes from `listMessagesPage(before = oldest cursor)`, already sorted
+      // ascending by `(createdAt, id)` and strictly older than existing messages, so
+      // prepend directly. Never re-sort by `timestamp`: local echoes use client wall
+      // clock while server rows use authoritative `createdAt`, which would scramble
+      // history order under clock skew (desktop has no NTP guarantee).
       return {
         ...state,
         messages: [...older, ...messages],

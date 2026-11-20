@@ -22,11 +22,13 @@ cp .env.llm.example .env.llm   # fill in API keys
 pnpm dev                       # start frontend + backend
 ```
 
-After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook. It preserves the existing pre-commit hook and refuses to overwrite an unrelated pre-push hook; resolve that conflict yourself before installing. The hook uses `mise exec` to select the Node 26.12.1, pnpm 12.14.0, and actionlint toolchain from `mise.toml`, so install mise and run `mise install` first. When the Node running the check differs from the version `mise.toml` pins (for example, nvm comes before mise on PATH), the check refuses with the reason instead of running the suites on another Node. Once the check passes, pre-push finds pnpm on the original PATH, then puts this Node's directory first on the child PATH, so pnpm, Turbo and every suite run on it.
+After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook (preserving any existing pre-commit hook and refusing to overwrite an unrelated pre-push hook; resolve conflicts first):
 
-The root `.pre-commit-config.yaml` defines commit checks. Install pre-commit and run `pre-commit install` to enable them, or run `pre-commit run --all-files` manually. Oxlint is pinned in the root `devDependencies` and `pnpm-lock.yaml`. Like Prettier, it uses the project toolchain through `mise exec` without creating a separate Node environment. `scripts/run-with-project-node.mjs` first checks the Node version like the pre-push hook and refuses when it differs from `mise.toml`, then prepends the selected Node directory to the child PATH so CLI shims and subsequent commands use the same version. Existing hooks read the updated configuration automatically; no global cache cleanup is needed. Oxlint rules live in the root `.oxlintrc.jsonc`, with one line of reason for each rule that is off. The hook checks the changed files and `pnpm check` checks the whole repository, both with `--deny-warnings`, so a warning fails the check. The commit hook runs no type check; `pnpm check`, the pre-push hook and CI do.
+- **Toolchain selection**: The pre-push hook uses `mise exec` to select Node 26.12.1, pnpm 12.14.0, and actionlint from `mise.toml`, so install mise and run `mise install` first. If the Node running a check differs from `mise.toml` (for example, nvm precedes mise on `PATH`), the check refuses with the reason. Once verified, pre-push finds pnpm on the original `PATH` and prepends the target Node directory to the child `PATH` for pnpm, Turbo, and all test suites.
+- **Pre-commit hooks**: Defined in the root `.pre-commit-config.yaml`; install pre-commit and run `pre-commit install` to enable, or run `pre-commit run --all-files` manually. Oxlint is pinned in root `devDependencies` and `pnpm-lock.yaml`, using the project toolchain via `mise exec` like Prettier without a separate Node environment. `scripts/run-with-project-node.mjs` validates the Node version against `mise.toml` and prepends it to the child `PATH`; existing hooks pick up config changes automatically without clearing global caches.
+- **Oxlint and check scope**: Rules live in the root `.oxlintrc.jsonc` with one line of rationale for each disabled rule. The commit hook checks changed files and `pnpm check` checks the full repository, both with `--deny-warnings` so warnings fail. Commit hooks omit type checking, which runs in `pnpm check`, pre-push, and CI.
 
-New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images; each needs a WebP of the same name beside it, and the installers and the Docker image carry only the WebP. World portraits and scenes are tracked as WebP only (see [World art direction](./worlds/art-direction.md)).
+New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images; each needs a WebP of the same name beside it, and the installers and the Docker image carry only the WebP. World portraits and scenes are tracked as WebP only (see [World art direction](./en/worlds/art-direction.md)).
 
 ### PostgreSQL 18 development environment
 
@@ -37,7 +39,7 @@ pnpm db:up
 pnpm dev:pg                    # PostgreSQL-backed API server
 ```
 
-On first initialization, wait for the database to become ready before running `dev:pg`; check for `healthy` with `docker compose -f docker/docker-compose.yml --env-file .env ps postgres`. For the frontend, run `pnpm dev:web` in another terminal. `dev:pg` loads the root `.env` before checking the host/port from `DATABASE_URL`; without a URL, it checks `127.0.0.1:POSTGRES_PORT`. Update the URL when changing the port. See the [environment loading rules](./reference/env-registry.md#加载路径与环境差异) for overrides.
+On first initialization, wait for the database to become ready before running `dev:pg`; check for `healthy` with `docker compose -f docker/docker-compose.yml --env-file .env ps postgres`. For the frontend, run `pnpm dev:web` in another terminal. `dev:pg` loads the root `.env` before checking the host/port from `DATABASE_URL`; without a URL, it checks `127.0.0.1:POSTGRES_PORT`. Update the URL when changing the port. See the [environment loading rules](./en/reference/env-registry.md#load-paths-and-differences-between-environments) for overrides.
 
 Compose uses PostgreSQL 18 with pgvector 0.8.7 and stores the database in `pgdata18`. The previous PG17 `pgdata` volume is not mounted, automatically migrated, or deleted.
 
@@ -52,11 +54,11 @@ There are two Compose stacks for self-hosting. Both are personal instances bound
 
 Both need the root `.env` and the root `llm.toml` (the model configuration is a read-only host mount), and `COVEL_MEDIA_TOKEN_SECRET` in `.env` (generate it with `openssl rand -hex 32`; without it a production app cannot issue media URLs; the SQLite stack refuses to start without it, and the PostgreSQL stack does not check it, so set it yourself). The PostgreSQL stack also needs the PostgreSQL block of `.env.example` uncommented and `POSTGRES_PASSWORD` set.
 
-In the SQLite stack the `appdata` volume is mounted at `/home/node/.covel`: the database file `data/covel.db`, the media files, and the installed or generated user worlds and plugins all live in it. In the PostgreSQL stack the database is in the `pgdata18` volume, and `appdata` holds only user worlds and plugins. See [Docker configuration](./reference/env-registry.md#docker-compose).
+In the SQLite stack the `appdata` volume is mounted at `/home/node/.covel`: the database file `data/covel.db`, the media files, and the installed or generated user worlds and plugins all live in it. In the PostgreSQL stack the database is in the `pgdata18` volume, and `appdata` holds only user worlds and plugins. See [Docker configuration](./en/reference/env-registry.md#docker-compose).
 
 `docker:down` and `docker:pg:down` stop containers and preserve data. **`docker:down-all` deletes the SQLite stack's `appdata` volume, including the database, user worlds, and plugins; `docker:pg:down-all` deletes the PostgreSQL stack's `pgdata18` and `appdata`**; use them only after backing up and choosing to reset the entire environment.
 
-`db:generate` / `db:studio` are PostgreSQL maintenance tools, not automatic database upgrades; see [database maintenance](./reference/env-registry.md#数据库维护命令).
+`db:generate` / `db:studio` are PostgreSQL maintenance tools, not automatic database upgrades; see [database maintenance](./en/reference/env-registry.md#database-maintenance-commands).
 
 ### Showcase site demo media
 
@@ -92,7 +94,7 @@ The README's still screenshots (`.assets/images/readme/`) come from real play; f
 - 400 and 800 lines per file are review guidelines, not hard limits; split a file only when its responsibilities or maintenance cost justify it
 - Immutable patterns; avoid bare `any`
 - Use Zod for external input validation
-- See domain-specific rules in [`reference/`](./reference/)
+- See domain-specific rules in [`reference/`](./en/reference/)
 
 ### Testing
 
@@ -194,10 +196,10 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 
 ## Release process
 
-Use the [desktop release checklist](./internals/desktop-packaging.md#release-checklist) as the single operational checklist:
+Use the [desktop release checklist](./en/internals/desktop-packaging.md#release-checklist) as the single operational checklist:
 
 1. Prepare versions, CHANGELOG and docs on a development branch. `pnpm release:prepare <version>` (`--dry-run` first) sets the version in the root, `apps/*` and `packages/*` manifests and in the README badges, and writes the version's section of `docs/CHANGELOG.md` from the fragments in `docs/changelog.d/`, deleting them; it needs a clean tree and makes no commit. Add the summary paragraph and the README upgrade sentence by hand. Root, `apps/*` and `packages/*` versions must match the target tag; plugin and world packages may version independently.
-2. Complete local `pnpm check`, `pnpm test`, `pnpm test:pg`, UI/E2E checks and `pnpm release:preflight` sequentially, then exercise the [real-model player flow](./internals/e2e-testing.md#发版前的玩家流程验收) with isolated data.
+2. Complete local `pnpm check`, `pnpm test`, `pnpm test:pg`, UI/E2E checks and `pnpm release:preflight` sequentially, then exercise the [real-model player flow](./en/internals/e2e-testing.md#player-flow-acceptance-before-a-release) with isolated data.
 3. Push the PR after local checks pass. Wait for CI / PostgreSQL integration and a `Build Desktop` dry run on the candidate branch (`publish_release=false`).
 4. Merge the PR, verify checks and the exact commit on `main`, then create and push an annotated `v*` tag on that commit.
 5. The [release workflow](../.github/workflows/release.yml) validates the immutable commit, framework versions and release notes, then builds and verifies macOS arm64 / Windows x64 artifacts before publishing. Download the assets to check versions, digests, startup and plugin lifecycle.
@@ -208,23 +210,30 @@ Desktop runtime or packaging changes must also verify the installer's own Electr
 
 ### Showcase site deployment
 
-Every non-release CI run calls [`site.yml`](../.github/workflows/site.yml); it no longer responds independently to pushes or pull requests. It builds the showcase site in `apps/site` and the documentation site in `apps/docs` (pages in `docs/`), placing documentation under the showcase site's `docs/` path. PRs only build: they neither upload a deployment artifact nor deploy. A `main` push deploys to GitHub Pages only when it changes the site, documentation, or related root build/install configuration; unrelated source changes only build. Deployment selection and test scope share one git diff. Unknown changes conservatively select deployment, still restricted to a `main` push. The inputs are listed in `scripts/ci-scope.mjs`. Manual Site runs from the Actions tab deploy by default; disable `deploy` to validate the build without publishing.
+Every non-release CI run calls [`site.yml`](../.github/workflows/site.yml); it no longer responds independently to pushes or pull requests. It builds the showcase site in `apps/site` and the documentation site in `apps/docs` (pages in `docs/`), placing documentation under the showcase site's `docs/` path.
 
-The repository's Settings > Pages must have "GitHub Actions" as its source. The site is served at `https://ackness.github.io/covel/`; PRs use `/covel/`, while other builds read the path from Pages settings and pass it to Vite as `SITE_BASE`, so a custom domain switches it to `/`. The documentation build reads the same variable and is served at `<SITE_BASE>docs/`. A dead documentation link fails the build. Reference files in `public/` through `asset()` (`apps/site/src/links.ts`) so their URLs include the prefix. Site runs the two independent targets in parallel with the command below, then copies `apps/docs/dist` into `apps/site/dist/docs`, first removing the old docs subtree. Turbo stores each output separately, excluding the assembled docs subtree from the showcase cache.
+- **Publish gating**: PRs only build and never upload a deployment artifact or deploy. A `main` push deploys to GitHub Pages only when it changes the site, documentation, or related root build/install configuration; unrelated source changes only build. Deployment selection and test scope share one git diff (unknown changes conservatively trigger deployment on a `main` push; inputs live in `scripts/ci-scope.mjs`). Manual Site runs from the Actions tab deploy by default; disable `deploy` to validate the build without publishing.
+- **Pages and base paths**: Repository **Settings → Pages** must use **GitHub Actions** as its source. The site is served at `https://ackness.github.io/covel/`; PRs use `/covel/`, while other builds read the path from Pages settings and pass it to Vite as `SITE_BASE` (so a custom domain switches it to `/`). The documentation build reads the same variable for `<SITE_BASE>docs/` and fails on dead links; reference `public/` files through `asset()` (`apps/site/src/links.ts`) so URLs include the prefix.
+
+Site runs the two independent targets in parallel with the command below, then copies `apps/docs/dist` into `apps/site/dist/docs` after removing the old docs subtree; Turbo stores each output separately, excluding the assembled docs subtree from the showcase cache:
 
 ```bash
 pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2
 ```
 
-Site has its own Turbo cache and reuses outputs by content: inputs cover each app's source and configuration, `docs/**`, `SITE_BASE`, `VITE_*`, build environment files, root installation configuration, lockfile, and toolchain. `docs/**` affects only the documentation target; unrelated framework source affects neither target. GitHub PR caches remain scoped to the PR ref and cannot be restored by deployments. Deployment consumes only the artifact built or restored for current inputs, assembled, and uploaded by that Site job; it does not download a deployment artifact from another workflow.
+Site has its own Turbo cache and reuses outputs by content: inputs cover each app's source and configuration, `docs/**`, `SITE_BASE`, `VITE_*`, build environment files, root installation configuration, lockfile, and toolchain (`docs/**` affects only the documentation target; unrelated framework source affects neither target). GitHub PR caches remain scoped to the PR ref and cannot be restored by deployments; deployment consumes only the artifact built or restored for current inputs, assembled, and uploaded by that Site job, never an artifact from another workflow.
 
 ### Model data snapshot
 
-The bundled LiteLLM model table (`packages/ai-provider/data/model-db.json`, pinned to a commit by `model-db-source.json`) supplies context windows, output limits, and prices for models whose limits are not set in `llm.toml` or Settings. Every Monday, [`update-model-db.yml`](../.github/workflows/update-model-db.yml) pins it to the newest LiteLLM commit that changed the model table, regenerates the snapshot and the record of which reasoning levels each model name is offered (`tests/__snapshots__/reasoning-characterization.snap.txt`), runs the `@covel/ai-provider` tests, and opens or refreshes a pull request from `chore/update-model-db`; it never pushes to `main`, and it can also be run from the Actions tab. Pull requests opened with the default `GITHUB_TOKEN` do not trigger other workflows: add a `MODEL_DB_PR_TOKEN` secret that may open pull requests to get CI automatically, or close and reopen the PR. The default token also needs "Allow GitHub Actions to create and approve pull requests" in the repository settings. To update by hand, run `pnpm --filter @covel/ai-provider update-model-db`. The table only says whether a model reasons, and the refresh does not touch level data. Levels come from the models.dev catalog snapshot and Covel's vendor rules: refresh the catalog by hand with `pnpm --filter @covel/ai-provider update-models-dev` and review the snapshot diff group by group before committing, see [reasoning level data](./reference/slots.md#档位数据).
+The bundled LiteLLM model table (`packages/ai-provider/data/model-db.json`, pinned to a commit by `model-db-source.json`) supplies context windows, output limits, and prices for models whose limits are not set in `llm.toml` or Settings.
+
+- **Weekly sync**: Every Monday, [`update-model-db.yml`](../.github/workflows/update-model-db.yml) pins it to the newest LiteLLM commit that changed the model table, regenerates the snapshot and the reasoning-level record per model (`tests/__snapshots__/reasoning-characterization.snap.txt`), runs `@covel/ai-provider` tests, and opens or refreshes a pull request from `chore/update-model-db` (never pushing to `main`; also runnable from the Actions tab).
+- **PR triggers and manual refresh**: Pull requests opened with the default `GITHUB_TOKEN` do not trigger other workflows; add a `MODEL_DB_PR_TOKEN` secret that may open pull requests to get CI automatically (or close and reopen the PR), and enable **Allow GitHub Actions to create and approve pull requests** in repository settings. To update by hand, run `pnpm --filter @covel/ai-provider update-model-db` (the table only states whether a model reasons and does not touch level data).
+- **Reasoning level data**: Levels come from the `models.dev` catalog snapshot and Covel's vendor rules. Refresh the catalog by hand with `pnpm --filter @covel/ai-provider update-models-dev` and review the snapshot diff group by group before committing; see [reasoning level data](./en/reference/slots.md#level-data).
 
 ### Code signing
 
-Official releases intentionally use unsigned artifacts and require no platform signing credentials. Release notes must disclose this and explain that macOS Gatekeeper or Windows SmartScreen may warn on first launch. Enabling signing later requires changing the electron-builder configuration and release workflow together; local signing setup is documented in [`guide/desktop-packaging.md`](./internals/desktop-packaging.md).
+Official releases intentionally use unsigned artifacts and require no platform signing credentials. Release notes must disclose this and explain that macOS Gatekeeper or Windows SmartScreen may warn on first launch. Enabling signing later requires changing the electron-builder configuration and release workflow together; local signing setup is documented in [`internals/desktop-packaging.md`](./en/internals/desktop-packaging.md).
 
 ## Reporting issues
 

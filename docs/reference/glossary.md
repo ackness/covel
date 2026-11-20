@@ -9,8 +9,6 @@
 一个英文术语只对应一个中文说法。中文文档、界面文字和中文提示词（`*.zh.md`）都用这张表里的说法。
 
 <!-- prettier-ignore -->
-| Developer mode | 开发者模式 | 设置里的开关（`ui.developerView`）。打开后才显示给作者和排错用的内容：顶栏“调试”、详情和原始视图、调试追踪、数据库页签和存储信息、原始编号、插件步骤数、“等你回答”对话框里的原始数据框。 |
-| Read / Stage | 阅读 / 舞台 | 会话界面里两种内置视图：“阅读”是一页页读的文字界面，“舞台”是带背景和立绘的画面。旧称“文本”“解析视图”“舞台视图”。 |
 | Term | 中文 | 说明 |
 | --- | --- | --- |
 | Action | 行动 | 玩家一次提交里的一项：从哪个座位、以哪个角色、做哪种事（`submit_actions`）。 |
@@ -27,6 +25,7 @@
 | Dataset key | 数据集键 | 数据集工具给记录用的键：`datasetKey()` 规范化（NFKC、去首尾空白、合并空白、小写）后的文本；见[键的规则与查找](./tools.md#键的规则与查找)。 |
 | Dataset tool | 数据集工具 | 框架按 `agent.tools.datasets` 为数据集生成的 `<数据集>-get`、`-list`、`-upsert`、`-update` 工具；见[数据集工具](./tools.md#数据集工具)。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
+| Developer mode | 开发者模式 | 设置里的开关（`ui.developerView`）。打开后才显示给作者和排错用的内容：顶栏“调试”、详情和原始视图、调试追踪、数据库页签和存储信息、原始编号、插件步骤数、“等你回答”对话框里的原始数据框。 |
 | Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Execution | 执行 | 一次调度及其提交计划；玩家回合、手动调用和后台作业都可以发起执行。 |
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
@@ -45,6 +44,7 @@
 | Preset | 预设 | 内部的模型连接方案，含提供商、端点、协议和模型 ID。 |
 | Proposal | 提案 | runtime 提交给内核校验的一次写入请求，校验通过后才保存。 |
 | Provider | 提供商 | 通过模型槽位路由选中的具体模型服务。 |
+| Read / Stage | 阅读 / 舞台 | 会话界面里两种内置视图：“阅读”是一页页读的文字界面，“舞台”是带背景和立绘的画面。旧称“文本”“解析视图”“舞台视图”。 |
 | Recursive call | 嵌套调用 | 包内 runtime 调用，写入随父执行一起提交；不同于只交回输出的子 agent。 |
 | Roleplay notes | 扮演说明 | 世界作者写在角色记录的 `blueprint` 字段里、告诉叙事怎样演这个角色的内容；由“角色资料”插件读取。不是角色本身。 |
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
@@ -116,7 +116,7 @@
 | tool | 工具 | runtime 可以调用的一个函数 | function, API |
 | call | 调用 | 使用一次工具 | invoke, run, trigger |
 | record | 记录 | 插件数据里存下的一项 | row, object |
-| entry | 条目 | 玩家读到的列表里的一项，例如图鉴条目 | item（item 指行囊里的物品） |
+| entry | 条目 | 玩家读到的列表里的一项，例如图鉴条目 | item（item 指背包里的物品） |
 | item | 物品 | 角色随身带的东西 |  |
 | dimension | 维度（界面里写作“世界状态”） | 由世界定义、随故事变化的一项世界状态 | attribute（attribute 是角色的） |
 | attribute | 属性 | 角色的一个数字或文字字段 | stat |
@@ -273,7 +273,7 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 
 一组起了名字的插件（`requested` 和 `recommended` 两个集合，加上标签），合起来构成一种玩法，例如 `traditional-story`、`dialogue-mode`。
 
-玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界用 `plugins` 指定默认的玩法包，用 `plugins` 加上自己要的插件。玩法包只有内置的那些（`packs/builtin.yaml`），世界不定义自己的玩法包。
+玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界通过 `plugins` 一次声明默认玩法包与所需的具体插件。玩法包只有内置的那些（`packs/builtin.yaml`），世界不定义自己的玩法包。
 
 它和 **Preset** 不同：Preset 打包的是模型的选择，不是插件。
 
@@ -384,7 +384,7 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 
 插件清单里只写槽位的名字；`llm.toml` 或保存下来的“服务商/模型”设置把它绑定到具体的模型。备用模型只在同一类输出之内选择：图像请求不会落到文本模型上。
 
-详见：[模型用途](./slots.md)、`llm.toml.example`。
+详见：[模型分工（Slot）](./slots.md)、`llm.toml.example`。
 
 ## Stop reason
 

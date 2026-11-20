@@ -59,7 +59,7 @@ export function packageProvides(
  * `ui:right-panel` / `ui:message-block` for declared panels and
  * `ui:manual-action` for something the player starts (a manual runtime that is
  * not sub-agent-only, an action or a command). A written tag comes first:
- * the session-prep screen shows the first tags on a plugin's row and groups a
+ * the getting-ready screen shows the first tags on a plugin's row and groups a
  * plugin with no `cost:*` tag under its first one. `plugin.entry` is the resolved entry, the
  * default included.
  */

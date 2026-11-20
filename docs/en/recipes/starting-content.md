@@ -75,7 +75,7 @@ Create `data/items.yaml`:
 
 - Players see the tags, so write them in the world's language. Mark money with a tag that says it is currency, here `货币`.
 - `equipped: true` means the protagonist is holding or wearing the item.
-- Keep the list short. Things gained during play are recorded in the inventory automatically.
+- Keep the list short. Things gained during play are recorded in the bag automatically.
 
 ## 4. Write the starting affinity
 
@@ -114,19 +114,19 @@ Restart Covel, start a new session in 潮灯镇, and then look at the right pane
 | Where to look | What you should see                                                          |
 | ------------- | ---------------------------------------------------------------------------- |
 | Quest Log     | "塔里的光" (The Light in the Tower), with two unfinished objectives below it |
-| Inventory     | 30 copper coins, and a storm lantern that is already equipped                |
+| Bag           | 30 copper coins, and a storm lantern that is already equipped                |
 | Affinity      | 何三娘 (He Sanniang), with a score of 10                                     |
 
 ## When it does not work as expected
 
-| Symptom                                             | Cause and fix                                                                                                        |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| The panel shows none of the preset content          | You are looking at an old save. Start a new session                                                                  |
-| Validation passes, but one kind does not appear     | Check preparation notices: the receiver may be excluded, need approval, or require a choice among several candidates |
-| Character names in the story do not match the panel | Several files write the same person's name differently. Use the same name as in `WORLD.md`                           |
+| Symptom                                             | Cause and fix                                                                                                              |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| The panel shows none of the preset content          | You are looking at an old save. Start a new session                                                                        |
+| Validation passes, but one kind does not appear     | Check the getting-ready notices: the receiver may be excluded, need approval, or require a choice among several candidates |
+| Character names in the story do not match the panel | Several files write the same person's name differently. Use the same name as in `WORLD.md`                                 |
 
 > [!NOTE]
-> When a requested plugin is missing, validation and preparation show a notice. Play can start, but the corresponding data is not imported. If the plugin is installed but the player turns it off, its content is also absent; independent requests do not override player exclusions.
+> When a requested plugin is missing, validation and the getting-ready screen show a notice. Play can start, but the corresponding data is not imported. If the plugin is installed but the player turns it off, its content is also absent; independent requests do not override player exclusions.
 
 ## What else you can preset
 

@@ -57,9 +57,9 @@ export const COMPACTION_NOTICE_EVERY = 3;
 
 const COMPACTION_NOTICE: I18nText = {
   "en-US":
-    "The story's memory could not be condensed for several turns, so the prompt keeps growing and may eventually fill the model's context. Check that the model for the fast slot works in Settings, or disable the plugin that condenses old turns in this session.",
+    "Story memory could not be condensed for several turns, so the prompt keeps growing and may eventually fill the model's context. Check that the model for Fast in Settings → Models → AI roles works, or turn off Story memory in this game.",
   "zh-CN":
-    "故事的记忆已连续多个回合无法压缩，提示词会越来越长，最终可能占满模型的上下文。请在设置里检查“快速”槽位的模型是否可用，或在本会话中停用负责压缩历史的插件。",
+    "故事记忆已连续多个回合无法压缩，提示词会越来越长，最终可能占满模型的上下文。请在「设置 → 模型 → AI 分工」中检查“快速”对应的模型是否可用，或在本局停用“故事记忆”插件。",
 };
 
 export function createBootstrapCompactorRunner(

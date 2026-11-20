@@ -113,12 +113,13 @@ export async function fetchTraceTurns(sessionId: string): Promise<{
 }
 
 /**
- * 游标分页拉取 turn 追踪：默认返回「最近一段事件窗口」按 turnId 分组的结果。
+ * Cursor-paginated turn trace fetch: returns the latest event window grouped
+ * by `turnId` by default.
  *
- * - `limit` 是**事件**数（非 turn 数），默认由后端决定（400，上限 500）。
- * - `cursor` 传入上一页的 `nextCursor` 向更早方向翻页；一个 turn 可能跨窗口
- *   边界被切开，调用方需按 turnId 合并（见 `mergeTurnPages`）。
- * - `nextCursor` 为 null 表示已到 trace 起点，没有更早事件。
+ * - `limit` counts events (not turns), defaulting on the server (400, max 500).
+ * - Pass the previous page's `nextCursor` as `cursor` to page earlier; one
+ *   turn can span window boundaries, so callers merge by `turnId` (see `mergeTurnPages`).
+ * - `nextCursor` is `null` once the start of the trace is reached.
  */
 export async function fetchTraceTurnsPage(
   sessionId: string,

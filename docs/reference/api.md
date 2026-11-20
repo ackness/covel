@@ -1122,7 +1122,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | GET    | `/api/plugins`                | 列出 registry 中的插件及其注册 / 错误状态                                  |
 | GET    | `/api/plugins/:id`            | 获取插件详情及完整的 manifest 开发契约                                     |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）                             |
-| GET    | `/api/plugin-flows`           | 开局前流程的预览数据（插件列表 + 分段步骤），供准备页展示                  |
+| GET    | `/api/plugin-flows`           | 开局前流程的预览数据（插件列表 + 分段步骤），供开局准备页展示              |
 
 `GET /api/plugin-flows` 的 `plugins` 和 `steps` 条目用 `kind`（`core` 或 `plugin`）表示插件类别，不返回 `pluginType`。
 
@@ -2147,9 +2147,9 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 
 预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带安全的 warning；这部分推迟到真正导入或同步时执行。
 
-世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。准备页据此提示玩家。
+世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。开局准备页据此提示玩家。
 
-这组插件里有不止一个提供 `world.dimensions@1` 的，返回 `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`，不管世界有没有声明维度。一局游戏只用一个负责维度的插件，服务端不替玩家挑：准备页列出 `candidates`，让玩家留下一个。`sync-data` 和 `sync-dimensions` 遇到同样的情况也返回这个 409。
+这组插件里有不止一个提供 `world.dimensions@1` 的，返回 `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`，不管世界有没有声明维度。一局游戏只用一个负责维度的插件，服务端不替玩家挑：开局准备页列出 `candidates`，让玩家留下一个。`sync-data` 和 `sync-dimensions` 遇到同样的情况也返回这个 409。
 
 **请求体:**
 
@@ -2486,7 +2486,7 @@ SSE。先发一个 `ready` 事件，之后每 15 秒发一行注释保持连接�
 - 它在创建会话的同一次操作里保存到会话的 metadata。
 - 之后的开始冒险、刷新和恢复都使用会话保存的这份背景。它不会重新读取按世界共享的编辑草稿，也不随世界后续的编辑改变。
 - 不传这个字段时，会话使用世界原文。已有的会话不会自动导入世界草稿。
-- Web 准备页把当前显示的背景文本随创建请求传入。浏览器私有模式先把它存进 BrowserVault 的会话 checkpoint，建立服务端镜像时也传入同一个值。后台草稿保存失败不影响本次会话的选择。
+- Web 开局准备页把当前显示的背景文本随创建请求传入。浏览器私有模式先把它存进 BrowserVault 的会话 checkpoint，建立服务端镜像时也传入同一个值。后台草稿保存失败不影响本次会话的选择。
 
 **模型选择:** 会话不保存独立的 `presetId`。模型路由使用槽位配置、请求级覆盖与 `runtimeModelOverrides`。
 
@@ -5207,7 +5207,7 @@ provider 运行期间，流只报告 runtime/step/tool 进度。每次执行提�
 
 各类型的补充说明：
 
-- **`start_session` 的 `loreOverride`**：服务端把它保存在会话里。setup、开场接力和之后回合的 `world.lore` 都优先用它。空字符串表示明确清空；省略则保留会话里已经保存的值。Web 的准备页在创建会话时就传入背景，“开始冒险”不再发送世界草稿。
+- **`start_session` 的 `loreOverride`**：服务端把它保存在会话里。setup、开场接力和之后回合的 `world.lore` 都优先用它。空字符串表示明确清空；省略则保留会话里已经保存的值。Web 的开局准备页在创建会话时就传入背景，“开始冒险”不再发送世界草稿。
 - **`retry_turn`**：开始一个新的主循环回合，使用当前已提交的上下文。提交成功后玩家回合数加一。它不会恢复或重新生成历史回合。
   - 带 `recoverFromTurnId` 重试一个回答过交互的玩家回合时，服务端从那个回合在 `turn.started` 里记下的行动（`playerInput`）重新运行，回答不会再次提交。
   - 其他情况下回合不带玩家输入。
@@ -5285,8 +5285,8 @@ provider 运行期间，流只报告 runtime/step/tool 进度。每次执行提�
 
 - 插件集合由创建会话时的 `plugins` 数组决定。`start_session` 只负责启用这份已保存的集合。
 - 空集合不会变成“启用全部已加载的插件”。那样会把玩家从没选过的社区插件和互相冲突的叙事引擎一起拉进会话，并一直留到会话结束。
-- Web 的准备页先读 `GET /api/worlds/:id/plugin-plan` 得到服务端算好的默认集合，再把玩家的最终选择传给创建接口。
-- `plugin-plan.defaultPluginIds` 是初始包展开与世界独立请求。准备页再经解析器处理依赖、授权、冲突与玩家排除，不会锁定已被替换的 core。
+- Web 的开局准备页先读 `GET /api/worlds/:id/plugin-plan` 得到服务端算好的默认集合，再把玩家的最终选择传给创建接口。
+- `plugin-plan.defaultPluginIds` 是初始包展开与世界独立请求。开局准备页再经解析器处理依赖、授权、冲突与玩家排除，不会锁定已被替换的 core。
 - 创建会话的接口不再读世界的插件策略。它处理 core 默认、插件依赖、服务端读取的世界契约与冲突。
 
 ##### `submit_actions`
@@ -5587,7 +5587,7 @@ interface SseEnvelope {
 | --------------- | ------ | ---- | -------------------------------------------------------------------------------- |
 | `concept`       | string | 是   | 世界概念描述（最多 4000 字符），使用 `concept` 键                                |
 | `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                                           |
-| `model`         | string | 否   | 模型用途或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
+| `model`         | string | 否   | 模型分工（slot）或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
 | `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                                       |
 | `brief`         | object | 否   | 结构化的创作简报。省略时只做基础生成                                             |
 | `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒）。整数，1000–1800000，默认 120000              |
@@ -5797,7 +5797,7 @@ Web 前端每次生成前先等 `/api/health` 成功，再根据 `storage.data.f
 | `worldId`       | string | 是   | 要修改的世界                                                                     |
 | `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                       |
 | `world`         | object | 否   | 由浏览器保存的世界，随请求带上它的 `WorldRecord`                                 |
-| `model`         | string | 否   | 模型用途或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
+| `model`         | string | 否   | 模型分工（slot）或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
 | `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同           |
 
 关于 `world`：

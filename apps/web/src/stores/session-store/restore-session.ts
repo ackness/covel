@@ -107,8 +107,8 @@ async function restoreServerSnapshot(
           // The server's record of what was answered is the truth; it goes in
           // after the browser's own cache and replaces its values.
           publishSubmittedInteractions(dispatch, snapshot);
-          // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
-          // null / undefined ⇒ 已到历史开头，禁用向上加载。
+          // snapshot.messages holds only the latest window; keep messagesCursor for
+          // loading older history (`null` / `undefined` disables upward loading).
           dispatch({
             type: "SET_OLDER_MESSAGES_CURSOR",
             cursor: snapshot.messagesCursor ?? null,
@@ -168,7 +168,7 @@ async function restoreLocalFallback(
       type: "MERGE_RECOVERED_MESSAGES",
       messages: toStreamMessages(messagesResult.value),
     });
-    // 本地回退走 ds.listMessages 全量恢复，没有更旧要加载 → 游标置空。
+    // Local fallback restores full history via ds.listMessages; no older page to load.
     dispatch({ type: "SET_OLDER_MESSAGES_CURSOR", cursor: null });
   }
 }

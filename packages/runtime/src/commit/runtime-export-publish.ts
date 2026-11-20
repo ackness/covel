@@ -1,17 +1,17 @@
 /**
- * Persistent `recordAs` export publishing (docs 02 §3.4).
+ * Persistent `recordAs` export publishing.
  *
  * A runtime that declares `output.recordAs` publishes each successful result as
  * a session-scoped, read-only, cross-plugin, versioned export. Publishing runs
  * INSIDE `finalizeExecution`'s transaction, so a rolled-back execution never
  * leaves an orphan export and a committed one lands its export atomically with
- * the domain writes (docs 02 §3.4.1 / §3.4.5).
+ * the domain writes.
  *
  * The export boundary is always enforced: the value must pass the declared
  * `output.schema` before it is published. A handler whose outcome stayed
  * "success" but whose value fails the schema keeps its success outcome — only
- * the export is withheld, with an `export-schema-invalid` diagnostic (docs 02
- * §4.3). No per-export failure (schema-invalid, revision race, store error) is
+ * the export is withheld, with an `export-schema-invalid` diagnostic. No
+ * per-export failure (schema-invalid, revision race, store error) is
  * allowed to roll back an otherwise-committed execution, so every branch of
  * the publisher swallows and continues. Only a declared export with no schema
  * to check it against fails the commit (`publishCommittedExports`), so a
@@ -70,7 +70,7 @@ export interface PublishExecutionExportsArgs {
   readonly committedAt: string;
   /**
    * Canonicalize + ownership-check the export value's MediaRefs before it is
-   * persisted (docs 02 §2.1 / §3.4): the transient `url` is stripped and each
+   * persisted: the transient `url` is stripped and each
    * ref is proven owned, so a consumer reads a canonical value with no second
    * pass. A rejection withholds the export (like `export-schema-invalid`) —
    * never rolls back the committed execution. Absent ⇒ no media processing.
@@ -150,7 +150,7 @@ export async function publishExecutionExports(
         );
         continue;
       }
-      // Canonicalize BEFORE schema validation (docs 02 §2): the stored value
+      // Canonicalize BEFORE schema validation: the stored value
       // has its transient url stripped and every MediaRef proven owned. A media
       // rejection withholds the export without touching the domain outcome.
       if (canonicalize) {
@@ -169,7 +169,7 @@ export async function publishExecutionExports(
       if (!validation.valid) {
         // export-schema-invalid: the value fails the producer's own schema (or
         // a consumer's expected shape). Domain outcome is untouched — only the
-        // public export face is withheld (docs 02 §4.3).
+        // public export face is withheld.
         console.warn(
           `[runtime-export] ${result.runtimeId}: export-schema-invalid for recordAs "${decl.recordAs}": ${(
             validation.errors ?? []

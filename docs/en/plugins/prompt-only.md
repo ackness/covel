@@ -47,7 +47,7 @@ The configuration sits between the two `---` lines. The prompt for the model com
 
 | This part                   | What it means                                                                                                                                    |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `description`               | One sentence on what the plugin does. The plugin list on the session-prep screen shows it                                                        |
+| `description`               | One sentence on what the plugin does. The plugin list on the getting-ready screen shows it                                                     |
 | `schedule.stage: post-turn` | Runs after the story of each turn                                                                                                                |
 | The body                    | The prompt for the model                                                                                                                         |
 | Fields left out             | Covel works them out: the ID is the folder name; there is no `function` block, so it is an agent driven by the model, and the body is its prompt |
@@ -189,7 +189,7 @@ The fake model does not write a real observation. To see how the model actually 
 
 ## 8. Run it in a game
 
-Start `pnpm dev`. Then do the same as the last step of [your first plugin](./first-plugin.md): on the session-prep screen, expand "Customize plugins and advanced settings", select `observation`, click "Start Game", and read the model-use notice. A declarative package needs no code or runtime approval.
+Start `pnpm dev`. Then do the same as the last step of [your first plugin](./first-plugin.md): on the getting-ready screen, expand "Customize plugins and advanced settings", select `observation`, click "Start Game", and read the model-use notice. A declarative package needs no code or runtime approval.
 
 Play one turn. On the debug page <http://localhost:5173/debug>, find the `observation` step. There you can see the prompt sent to the model and its reply.
 
@@ -408,7 +408,7 @@ window.covel.subscribe((snapshot) => {
 
 <!-- declarative-notebook-example-end -->
 
-Validate it, then enable it in prep or the session plugin list:
+Validate it, then enable it on the getting-ready screen or in the session plugin list:
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/declarative-notebook

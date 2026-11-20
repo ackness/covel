@@ -89,9 +89,8 @@ export function PortraitGalleryPanel({
       </p>
       <div className="grid grid-cols-3 gap-2">
         {entries.map((entry) => {
-          // Prefer the dedicated full-body 立绘 (sprite) when a world ships one,
-          // else fall back to the avatar — so the panel's "立绘" name is truthful
-          // and the sprite field a world may provide is actually rendered.
+          // Prefer the dedicated full-body sprite when a world ships one,
+          // else fall back to the avatar so any world-provided sprite still renders.
           const ref = resolveCharacterVisual(entry.value)?.ref ?? null;
           const busy = uploadingKey === entry.key;
           return (

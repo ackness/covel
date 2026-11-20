@@ -19,17 +19,17 @@ describe("website plugin examples", () => {
     const first = screen.getByRole("tab", { name: "Dice" });
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowLeft" });
-    expect(screen.getByRole("tab", { name: "Codex" })).toBe(
+    expect(screen.getByRole("tab", { name: "Almanac" })).toBe(
       document.activeElement,
     );
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(first).toBe(document.activeElement);
     fireEvent.keyDown(first, { key: "End" });
-    expect(screen.getByRole("tab", { name: "Codex" })).toBe(
+    expect(screen.getByRole("tab", { name: "Almanac" })).toBe(
       document.activeElement,
     );
     expect(screen.getByRole("tabpanel").id).toBe(
-      screen.getByRole("tab", { name: "Codex" }).getAttribute("aria-controls"),
+      screen.getByRole("tab", { name: "Almanac" }).getAttribute("aria-controls"),
     );
   });
   it("uses the actual die plus four and includes both outcomes", () => {
@@ -72,7 +72,7 @@ describe("website plugin examples", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Relationships" }));
     fireEvent.click(screen.getByRole("button", { name: /Brannoc Hale/ }));
     expect(screen.getByRole("meter").getAttribute("value")).toBe("5");
-    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Almanac" }));
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "lore" },
     });

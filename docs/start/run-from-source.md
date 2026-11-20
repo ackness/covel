@@ -29,13 +29,13 @@ pnpm dev
 
 ## 3. 连接模型
 
-最简单的做法和桌面版一样：在界面的 **设置 → 模型** 里添加服务商、填写密钥，见[连接模型](./models.md)。这些设置保存在当前浏览器里。
+最简单的做法和桌面版一样：在界面的 **设置 → 模型 → 服务商与密钥** 里添加服务商、填写密钥，见[连接模型](./models.md)。这些设置保存在当前浏览器里。
 
 想把模型配置放在文件里（例如团队共用一份）时，从示例复制三个文件：
 
 ```bash
 cp .env.example .env              # 后端和存储设置
-cp llm.toml.example llm.toml      # 模型用途和端点
+cp llm.toml.example llm.toml      # AI 分工（模型槽位）与端点
 cp .env.llm.example .env.llm      # 服务商 API 密钥
 ```
 
@@ -61,7 +61,7 @@ cp .env.llm.example .env.llm      # 服务商 API 密钥
 | `pnpm check`      | 静态检查，和 CI 的门禁相同 |
 | `pnpm test`       | 运行全部单元测试           |
 
-调试页面在 <http://localhost:5173/debug>，可以查看每个回合里每个插件的模型请求、工具调用和耗时。
+**调试**页面在 <http://localhost:5173/debug>，可以查看每个回合里每个插件的模型请求、工具调用和耗时。
 
 ## 遇到问题
 

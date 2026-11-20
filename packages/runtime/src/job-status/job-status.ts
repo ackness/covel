@@ -56,7 +56,7 @@ export interface ProgressReporterDeps {
   readonly contextData?: Readonly<Record<string, JsonValue>>;
   /**
    * MediaStore read surface: when present, `report` canonicalizes + ownership-
-   * checks any MediaRef in the job `data` (docs 02 §2.1). A rejection throws
+   * checks any MediaRef in the job `data`. A rejection throws
    * back to the handler. Absent (finalizer terminal writes, tests) ⇒ no media
    * processing — terminal job records carry no data anyway.
    */

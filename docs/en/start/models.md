@@ -1,6 +1,6 @@
 # Connect a model
 
-Covel does not come with a model. This page walks you through adding a provider, entering a key, testing the connection, and confirming that every role has a model available. When you finish, the world's session-prep screen no longer warns that a model is missing.
+Covel does not come with a model. This page walks you through adding a provider, entering a key, testing the connection, and confirming that every role has a model available. When you finish, the world's getting-ready screen no longer warns that a model is missing.
 
 ## Before you start
 
@@ -9,18 +9,18 @@ You need one of the following:
 - An API key from a model provider, such as DeepSeek, OpenAI, Anthropic, Google Gemini, or Alibaba Cloud Bailian (Qwen).
 - A local or self-hosted model service that is compatible with the OpenAI API.
 
-The model must support **tool calling** (function calling). Covel's plugins rely on tool calls to update states such as quests and the inventory. A model that does not support tool calls cannot move the game forward.
+The model must support **tool calling** (function calling). Covel's plugins rely on tool calls to update states such as quests and the bag. A model that does not support tool calls cannot move the game forward.
 
 > [!IMPORTANT]
 > The provider charges for model calls based on usage, and you pay that cost through your own account. Covel does not handle or pay these charges.
 
 ## Three terms to know first
 
-| Term         | Meaning                                                                                                     |
-| ------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Provider** | A model endpoint: one address, plus the key used to access it                                               |
-| **Model**    | A model ID under a provider                                                                                 |
-| **Role**     | A kind of work in Covel, for example writing the story text (`story`) or a plugin updating state (`plugin`) |
+| Term        | Meaning                                                                                                     |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| **Provider** | A model endpoint: one address, plus the key used to access it                                              |
+| **Model**    | A model ID under a provider                                                                                |
+| **AI role**  | Which model handles each task in Covel, such as writing the story (`story`) or updating plugin state (`plugin`) |
 
 First you add providers and models. Then you tell Covel which model each role uses. For a first try, it is enough for every role to share one text model.
 
@@ -55,14 +55,14 @@ When a test fails, first look at what kind of problem it reports:
 
 Open **Settings → Models → AI roles**. This lists the provider and model that each role uses now.
 
-- Make sure both the story-text role and the plugin role use the model you just tested successfully.
-- Later, to save money or get faster replies, you can switch the plugin role to a cheaper, faster model and keep a stronger model for the story role.
+- Make sure both the **Story** and **Plugin** roles use the model you just tested successfully.
+- Later, to save money or get faster replies, you can switch the **Plugin** role to a cheaper, faster model and keep a stronger model for **Story** generation.
 
 Changes take effect right away. You do not need to restart.
 
 ## Confirm it works
 
-Go back to the world selection page, and click "Enter" on any world card. The session-prep screen checks which roles this world's gameplay needs:
+Go back to the world selection page, and click "Enter" on any world card. The getting-ready screen checks which roles this world's gameplay needs:
 
 - No warning appears: the models are ready, and you can start your [first game](./first-session.md).
 - A warning says a role is not available: go back to "AI roles" and choose a model for it. Or, in "Customize the start" on the getting-ready screen, turn on developer mode and change that step to use a role that is already set up.

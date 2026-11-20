@@ -94,13 +94,13 @@ writeRuntimeBundleSelection(desktopRoot);
 
 // Step 3: Stage server resources via `pnpm deploy`.
 //
-// 背景：electron-builder 对 pnpm 的 isolated node_modules（软链 + .pnpm/）
-// 支持非常差——打 asar 时会 stat 断链的 symlink 报 ENOENT。hoisted 模式
-// 也不行，因为 apps/server/node_modules 下仍只有 @covel/* 的包内软链。
+// Background: electron-builder handles pnpm's isolated node_modules (symlinks
+// into .pnpm/) poorly and fails with ENOENT when packaging symlinks into ASAR;
+// hoisted workspace installs still leave @covel/* workspace symlinks.
 //
-// 方案：`pnpm deploy` 生成一个完全独立、扁平的可部署目录，把 workspace
-// 包和 npm 包一起拷贝进去（所有 @covel/* 变成真实文件夹而非软链），
-// electron-builder 打包时不再触碰 workspace 体系。
+// Approach: `pnpm deploy` produces a self-contained flat staging directory with
+// real directories for every @covel/* workspace package and npm dependency so
+// electron-builder never touches the monorepo workspace layout.
 console.log("\n[3/4] Staging server resources (pnpm deploy)...");
 const stagingDir = path.join(desktopRoot, "staging");
 const bundledModelDb = path.join(
@@ -227,19 +227,17 @@ if (!fs.existsSync(webDistSrc)) {
 fs.cpSync(webDistSrc, webDistStaging, { recursive: true });
 console.log("  ✓ web-dist copied");
 
-// `pnpm deploy` 创建 standalone 部署目录。
-// - --filter 锁定目标 workspace 包
-// - --prod 剔除 devDeps
-// - --config.inject-workspace-packages=true 选择 pnpm 12 的非 legacy deploy：
-//   它按共享 lockfile 安装并把 workspace 包（如 @covel/store）及其传递依赖
-//   （如 sqlite-vec）真实复制进来。pnpm 12 下 `--legacy` + hoisted 只打印
-//   安装列表、node_modules 却是空的，导致桌面打包缺这些依赖。
-// - --ignore-scripts 不在 deploy 时运行依赖的安装脚本；esbuild 的平台包
-//   由 ensureRuntimePackages + 完整性检查显式保证。
-// - --config.node-linker=hoisted 让 node_modules 里全是真实文件夹而非
-//   .pnpm/ 软链（默认 isolated 模式下 node_modules/tsx → .pnpm/tsx@X.Y/...
-//   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
-//   时会断链，导致打包后 resources/server/node_modules/tsx 不存在）。
+// `pnpm deploy` creates a standalone staging tree:
+// - --filter selects the target workspace package
+// - --prod omits devDependencies
+// - --config.inject-workspace-packages=true enables workspace package copying
+//   so workspace deps (e.g. @covel/store) and their transitive deps (e.g.
+//   sqlite-vec) are copied into staging instead of leaving empty node_modules.
+// - --ignore-scripts skips install scripts during deploy; esbuild platform
+//   packages are explicitly ensured below by ensureRuntimePackages.
+// - --config.node-linker=hoisted materializes real directories instead of
+//   .pnpm/ symlinks, which break when electron-builder copies extraResources
+//   on Windows (leaving resources/server/node_modules/tsx missing).
 // Linux packages both x64 and arm64 from one staging tree. Limit this optional
 // dependency expansion to deploy, leaving native macOS/Windows installs alone.
 const deployArchitectures =
@@ -280,10 +278,10 @@ fs.mkdirSync(path.dirname(stagedModelDb), { recursive: true });
 fs.copyFileSync(bundledModelDb, stagedModelDb);
 console.log("  ✓ bundled model database staged");
 
-// 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）。
-// 注意：plugins/*/node_modules 来自 pnpm workspace 安装，内部是层层嵌套的
-// 软链（含 typescript lib 等大量文件），electron-builder 扫描时会撑爆
-// macOS 的 fd 上限（EMFILE）。一律剔除以下噪声目录。
+// Copy repo-level resources needed by the server (not part of @covel/server's
+// dependency graph). Exclude nested workspace/test noise dirs such as
+// plugins/*/node_modules (deep pnpm symlinks can hit macOS EMFILE during
+// electron-builder scanning).
 const EXCLUDE_DIRS = new Set([
   "node_modules",
   ".turbo",

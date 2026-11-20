@@ -27,7 +27,7 @@ export const journeyEn = {
     },
     {
       title: "Carry it forward",
-      body: "The quest log marks an objective; the inventory keeps your adventuring kit close.",
+      body: "The quest log marks an objective; the bag keeps your adventuring kit close.",
     },
   ],
   story: [
@@ -37,7 +37,7 @@ export const journeyEn = {
     },
     {
       title: "Keep the clue",
-      body: "The codex gives the Guild Tower a permanent entry; story memory keeps the letter in reach.",
+      body: "The almanac gives the Guild Tower a permanent entry; story memory keeps the letter in reach.",
     },
     {
       title: "Connect the case",
@@ -73,7 +73,7 @@ export const journeyEn = {
     done: "The bronze doors are behind you",
   },
   storyState: {
-    label: "Codex · Location",
+    label: "Almanac · Location",
     entry: "Tidewatch Guild Tower",
     description: "The guild’s records may hold a trace of its missing master.",
     caseLabel: "Case Board",
@@ -124,7 +124,7 @@ export const journeyZh: typeof journeyEn = {
     },
     {
       title: "继续远征",
-      body: "任务日志记下完成的目标，行囊保管仍在身边的装备。",
+      body: "任务日志记下完成的目标，背包保管仍在身边的装备。",
     },
   ],
   story: [

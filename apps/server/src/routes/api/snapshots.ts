@@ -530,7 +530,7 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
               snapshot,
             );
 
-            // Fork media gate (docs 02 §2.1.5): recursively scan the snapshot's
+            // Fork media gate: recursively scan the snapshot's
             // visible state AND the copied export revisions for MediaRefs. The
             // parent must be allowed to read every asset that still exists; a
             // missing asset is counted and gets no reference, so the child

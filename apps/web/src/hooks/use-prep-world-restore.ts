@@ -32,8 +32,8 @@ function pageWasReloaded(): boolean {
 }
 
 /**
- * Keep the session-prep screen across a reload of the tab. The prep screen is
- * not in the URL, so the world being prepared is remembered for this tab and
+ * Keep the getting-ready screen across a reload of the tab. Because it is
+ * not in the URL, the world being prepared is remembered for this tab and
  * selected again once the app has booted. Opening the app anew starts on
  * the world list, and a session in the URL wins.
  */

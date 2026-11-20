@@ -418,8 +418,7 @@ export interface MergedChoices {
   readonly twoColumn: boolean;
 }
 
-// Spec's "6 条以上双列" is read exclusively: ≤6 items stay single-column (still
-// visually acceptable), 7+ go two-column. `items.length > 6` below.
+// Render a single column for <=6 items (keeps compact lists readable) and switch to two columns at 7+.
 const TWO_COLUMN_THRESHOLD = 6;
 
 /**

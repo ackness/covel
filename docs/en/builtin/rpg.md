@@ -84,7 +84,7 @@ Optional. No built-in gameplay pack includes it, so a world has to include it. A
 | `lantern-barrow` | World default selection |
 | `last-train`     | World default selection |
 
-For other worlds, you can tick it on the session-prep screen, or the world author can add it to `plugins`. See [Point buy and dice checks](../recipes/point-buy.md).
+For other worlds, you can tick it on the getting-ready screen, or the world author can add it to `plugins`. See [Point buy and dice checks](../recipes/point-buy.md).
 
 It has no settings you can change.
 
@@ -138,7 +138,7 @@ Optional. Matching seed data infers a receiver under the [receiver rules](../ref
 | ---------------- | ----------------------- |
 | `lantern-barrow` | World default selection |
 
-For other worlds, tick it on the session-prep screen.
+For other worlds, tick it on the getting-ready screen.
 
 > [!NOTE]
 > If you turn it on partway through a game, the existing player character is not rebuilt, and the point-buy form is not shown again. Only later checks become available. After turning it on, continue one turn so the plugin can finish setting up, then start a check.

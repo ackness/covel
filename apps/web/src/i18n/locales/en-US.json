@@ -503,8 +503,8 @@
       "forbidden": "{{provider}} denied access. Check account permissions.",
       "quota": "{{provider}} has no quota or balance left.",
       "rate_limited": "{{provider}} is rate-limiting requests. Check usage and quota.",
-      "sharedKey": "{{slots}} — {{count}} model uses in this game share {{provider}}. Fixing its key applies to all of them.",
-      "sharedAccount": "{{slots}} — {{count}} model uses in this game share {{provider}} and may also be affected. Check this provider’s account and limits.",
+      "sharedKey": "{{slots}} — {{count}} AI roles in this game share {{provider}}. Fixing its key applies to all of them.",
+      "sharedAccount": "{{slots}} — {{count}} AI roles in this game share {{provider}} and may also be affected. Check this provider’s account and limits.",
       "missing_key": "No API key for {{provider}}. Add a key in model settings."
     },
     "modelUse": {
@@ -515,7 +515,7 @@
       "memory": "Memory extraction"
     },
     "missingCredentials": {
-      "title": "Some model uses have no API key",
+      "title": "Some AI roles have no API key",
       "detail": "Add a key now, or start anyway and configure it later.",
       "provider": "No API key is configured for {{provider}}. {{slots}} may fail.",
       "configure": "Add API key",

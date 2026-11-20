@@ -9,9 +9,9 @@ import { vocabularyEntries } from "../tools/vocabulary.js";
  * data, never as evidence of a new event. Characters carry short word handles
  * in place of their ids (see `character-handles.js`).
  *
- * NOTE: This Hook is retained by design (08 §4.7). It prunes history/memory
- * to prevent re-extracting old facts, which is a legitimate context trimming
- * use case allowed by the extension architecture (02 §2 "裁剪已有上下文").
+ * NOTE: This Hook is retained by design (`docs/reference/hooks.md`). It prunes
+ * history and memory to prevent re-extracting old facts, keeping prompt
+ * context focused on the current turn.
  */
 export default async function extractionContext(ctx, payload) {
   if (ctx.runtimeId !== "world-ir") return { action: "continue" };

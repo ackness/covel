@@ -42,7 +42,7 @@ Stage mode needs no extra setup on its own, but how complete the picture is depe
 | Character portraits     | Characters stand in front of the scene                                                                | [Add portraits to characters](../worlds/portraits.md) |
 | Neither                 | The stage still works, but the background falls back to the world's cover, and there are no portraits | -                                                     |
 
-The scene picture and on-stage character data come from Stage Scene below. Enable it on the session-prep screen for scene backdrops and on-stage characters. You can still read the story in stage mode without it.
+The scene picture and on-stage character data come from Stage Scene below. Enable it on the getting-ready screen for scene backdrops and on-stage characters. You can still read the story in stage mode without it.
 
 ## Stage Scene (`scene-stage`)
 
@@ -97,7 +97,7 @@ There is no panel. A speaker button at the top of the game screen lets you "Mute
 
 ### When it is on
 
-Optional. No built-in gameplay pack selects it. You have to tick it yourself in the plugin list on the session-prep screen. None of the built-in worlds includes music yet, so it only makes sound if you install or make a world that has music.
+Optional. No built-in gameplay pack selects it. You have to tick it yourself in the plugin list on the getting-ready screen. None of the built-in worlds includes music yet, so it only makes sound if you install or make a world that has music.
 
 ### What you can change
 

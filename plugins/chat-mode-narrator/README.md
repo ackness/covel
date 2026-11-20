@@ -1,6 +1,6 @@
 # chat-mode-narrator
 
-对话叙事器，重点处理角色对白、当前说话人和人物互动。
+聊天式讲述者，重点处理角色对白、当前说话人和人物互动。
 
 ## 运行时结构
 
@@ -53,14 +53,17 @@
 
 共享演员简报只含当前言行与明确建立的场景旁白，不重放历史段落。策略仍读取上一条故事；运行器单独提供每位演员的亲历历史，避免把私下交谈或全知叙述自动告诉新来的人。
 
-故事 agent 保留剧情槽、模型覆盖、审查 Hook、检定、时间、事件、记忆和背包工具，根据计划调用 `character-actor@1`：parallel 使用一次 `delegate-batch`，requests 按计划顺序排列；sequential 仍逐个 `delegate`。结果按输入索引合成，失败项跳过，不补造台词。并行演员只得到自己的可观察简报、指示和亲历历史，不得到兄弟段落或 intent。并发共用原有名额，超限立即拒绝，不排队补位。并发派发不减少模型调用次数或 token 费用。失败演员不贡献台词，其余演员与旁白照常组成一个故事；全部失败、没有演员或策略不可用时交回玩家。私下 intent 不保存。演员不继承叙事器的工具、隐藏剧情或父对话。
+故事 agent 保留剧情槽、模型覆盖、审查 Hook、检定、时间、事件、记忆和背包工具，按以下规则委托 `character-actor@1`：
+
+- **派发与合成**：`parallel` 使用一次 `delegate-batch`（`requests` 按计划顺序排列），`sequential` 仍逐个 `delegate`。结果按输入索引合成，失败项跳过不补造台词；全部失败、没有可用演员或策略不可用时独自叙事并交回玩家。
+- **隔离与配额**：并行演员只获知自己的可观察简报、指示与亲历历史，不会看到兄弟段落或私下 `intent`（`intent` 亦不保存），也不继承讲述者的工具、隐藏剧情或父对话。并发共用原有名额，超限立即拒绝且不排队补位；并发派发不减少模型调用次数或 token 费用。
 
 list/random 可在主持人指示和推进后建议继续，由宿主按已提交故事执行有界自动推进。普通言行与 mention/manual 交回玩家。舞台名牌仍来自公开段落及 cues，不从 intent 推断。角色工具和可选背包写入保留原有提交边界。
 
 开发检查：`pnpm --filter @covel/plugin-chat-mode-narrator test`。
 
-## 开发存档
+## 开发期迁移说明
 
-runtime ID 变为 `chat-mode-narrator/plan` 与 `chat-mode-narrator/narrate`。重新选择指向原内联 runtime 的模型覆盖与准备绑定；丢弃针对原 runtime 的待恢复挂起项、重试任务及包含这些工作的 checkpoint，或重建受影响测试会话。旧故事仍可读，新的 latest-story 导出从下一次提交开始，不回填。普通叙事器会话和整个数据库无需重建；改变游玩身份要创建新会话。
+runtime ID 已拆分为 `chat-mode-narrator/plan` 与 `chat-mode-narrator/narrate`。升级开发期会话时，需重新选择原内联 runtime 的模型覆盖与准备绑定，并丢弃针对原 runtime 的待恢复挂起项、重试任务及包含这些工作的 checkpoint（或重建受影响测试会话）。旧故事仍可读，新的 `latest-story` 导出从下一次提交开始且不回填；普通讲述者会话与整个数据库无需重建，仅变更游玩身份需新建会话。
 
 叙事通过 `submit-output` 提交 `segments`、可选的 `cues` 和 `yield`；已接受的演员台词仍按原顺序组合。`ReviewAgentOutput` 审核最终段落，`plan` 仍是直接返回计划的函数。

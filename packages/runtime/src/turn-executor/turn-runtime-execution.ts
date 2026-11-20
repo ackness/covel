@@ -162,7 +162,7 @@ export interface RuntimeInvocation {
   /**
    * Execution-start instant (ISO), frozen once per turn. Pins `atOrBefore` on
    * every `recordAs` export read so a consumer sees the revision that was live
-   * when its execution began, never one published mid-plan (docs 02 §3.4.2).
+   * when its execution began, never one published mid-plan.
    */
   readonly executionStartedAt?: string;
   /**
@@ -224,12 +224,13 @@ function retriesFailedSource(
   input: TurnInput,
 ): boolean {
   const trigger = input.manualTrigger;
-  if (!trigger?.sourceTurnId || input.parentTurnId !== undefined)
-    return false;
+  if (!trigger?.sourceTurnId || input.parentTurnId !== undefined) return false;
   const selected =
     trigger.runtimeId === manifest.name ||
     trigger.runtimeIds?.includes(manifest.name) === true;
-  return selected && trigger.retryTargets?.[manifest.name]?.sourceFailed === true;
+  return (
+    selected && trigger.retryTargets?.[manifest.name]?.sourceFailed === true
+  );
 }
 
 export async function executeOneRuntime(
@@ -838,7 +839,7 @@ async function executeRuntime(
     let activation = deriveActivation(manifest, input, triggerEvent);
 
     // Boundary: canonicalize + ownership-check every MediaRef in the activation
-    // payload BEFORE input.schema and dispatch (docs 02 §3.3 order). A ref the
+    // payload BEFORE input.schema and dispatch. A ref the
     // session cannot prove it holds fails the activation with an explainable
     // reason; both function (`ctx.activation.payload`) and agent (activation
     // segment) then see the same canonical payload. Skipped without a
@@ -903,7 +904,7 @@ async function executeRuntime(
       // Same shared canonicalizer as the activation boundary: an injected
       // same-execution value carries the producer's raw MediaRefs (they have
       // not passed an output boundary), so ownership is checked here before
-      // `accepts` validates the canonical value (docs 02 §2.1.4 / §3.1).
+      // `accepts` validates the canonical value.
       ...(deps.mediaStore
         ? {
             canonicalizeValue: (value) =>

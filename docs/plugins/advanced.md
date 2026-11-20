@@ -315,7 +315,7 @@ covel.registerService({
 
 脱离回合的节点只能是函数，不能有仍在前台等它结果的下游；它不接受递归调用或挂起。手动、事件后台任务属于另一种独立执行。校验和运行时都会检查；未满足脱离条件的节点保留在前台并报告诊断。完整条件见[回合管线](../internals/flow.md)。
 
-在后台运行、并且自己调用模型的函数，要声明用的是哪个模型用途：
+在后台运行、并且自己调用模型的函数，要声明用的是哪个模型分工（slot）：
 
 ```yaml
 function:
@@ -324,7 +324,7 @@ function:
 
 代码里调用 `ctx.gateway` 时传同一个名字（`presetId: "memory"`）。Covel 用这个声明判断模型的密钥是否就绪，再决定要不要开始这个后台任务。这一行不会替你改代码里的参数，两边要自己写成一样。
 
-插件只能写用途名。用哪个模型、请求发到哪里，由玩家的模型设置决定。在插件目录里放一个 `llm.toml` 不起作用，`pnpm validate:plugin` 会提醒你删掉它。
+插件只能写分工名（slot）。用哪个模型、请求发到哪里，由玩家的模型设置决定。在插件目录里放一个 `llm.toml` 不起作用，`pnpm validate:plugin` 会提醒你删掉它。
 
 ### 时限
 
@@ -395,7 +395,7 @@ agent runtime 在 `agent.tools.builtin` 里声明 `delegate`，模型就能调�
 - 失败不会抛异常：结果是 `{ ok: false, error: { code, message } }`，由调用方决定怎么办。
 - 一次执行最多同时跑 8 个子 agent，子 agent 不能再调用子 agent。满了直接拒绝（`unavailable`），不排队。
 - 调用方被取消或超时，子 agent 跟着停下。
-- 它用自己声明的模型用途。玩家可以在会话里为这个 runtime 单独换模型。
+- 它用自己声明的模型分工（slot）。玩家可以在会话里为这个 runtime 单独换模型。
 
 完整的请求、结果和错误码见[插件参考 · 子 agent](../reference/plugins.md#子-agent)。
 

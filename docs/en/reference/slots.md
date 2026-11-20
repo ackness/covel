@@ -243,9 +243,9 @@ Extra rules:
 
 - The request's `modelOverride` applies only to story agents and takes precedence over their session `runtimeModelOverrides`. Other agents and functions do not read this request override.
 - A plugin only says which role it wants. It cannot choose a provider, model, address, or protocol. Which model is used, and where the request goes, is decided by the model settings of the player (or the operator), so the player's keys only go to addresses in those settings. An `llm.toml` in a plugin's directory is not read, and `pnpm validate:plugin` warns when it finds one.
-- If a text role such as `fast` or `memory` is not defined, it falls back to the first text role. That role also reads the UI binding, parameters, and capabilities of the current request. The prep screen and the session's plugin list show this as "`fast` is not set up; uses …". A role that is defined but cannot be used (for example, its key is missing) does not fall back and is still shown as unavailable.
+- If a text role such as `fast` or `memory` is not defined, it falls back to the first text role. That role also reads the UI binding, parameters, and capabilities of the current request. The getting-ready screen and the session's plugin list show this as "`fast` is not set up; uses …". A role that is defined but cannot be used (for example, its key is missing) does not fall back and is still shown as unavailable.
 - AI world creation and revision use the `story` role by default. The API `model` field can select another role or preset. Every part, retry, and repair uses that selection and reads the current request's UI binding. Undefined text roles follow the fallback above.
-- The task mapping on the session-prep screen must be saved successfully first. It must also be synced to the server's temporary copy before a runnable session is published. If saving fails, the choice is kept and the start is rolled back. The session does not start with defaults.
+- The task mapping on the getting-ready screen must be saved successfully first. It must also be synced to the server's temporary copy before a runnable session is published. If saving fails, the choice is kept and the start is rolled back. The session does not start with defaults.
 
 Price overrides and provider multipliers are used only to estimate cost while debugging. They are not sent with a model request, and they do not change what the provider actually charges. A manual price applies only when the actual provider and model in the trace match the current config uniquely. If they do not match, the estimate from the model data is used.
 
@@ -339,7 +339,7 @@ Model config has two layers, and the values mean different things:
 
 **Agent runtime**
 
-- The session-prep screen finds every agent runtime in the enabled plugins.
+- The getting-ready screen finds every agent runtime in the enabled plugins.
 - If you pick nothing, the runtime uses the `model` in `PLUGIN.md`. If you pick a role, it is written into `runtimeModelOverrides`.
 - When one plugin has several runtimes, the key must be the full ID (for example `char-creator/character-tracker`). Each one can be bound separately.
 - After the session starts, the plugin list on the left updates the same table through `PATCH /api/sessions/:id`. The next run reads the new value. Calls that are already running are not affected.
@@ -357,9 +357,9 @@ A function runtime does not read `runtimeModelOverrides`. Calls to `ctx.gateway.
 
 `ctx.gateway.resolveSlot({})` and `resolveSlot({ fallbackTag: "text" })` use the same default text slot and current request bindings. Other capability tags do not inherit the text default. `generateObject` converts the plugin's JSON Schema to a Zod schema for gateway generation and output validation by default; hosts need not configure a converter.
 
-The prep screen and session plugin list show the role declared by `function.model` and its resolved "provider · model" as read-only text, without a selector. They show the fallback target when the role is not configured, or an unavailable notice when it is configured but unusable. Functions without `function.model` show no model entry. A handler call that explicitly chooses another role still uses that choice.
+The getting-ready screen and session plugin list show the role declared by `function.model` and its resolved "provider · model" as read-only text, without a selector. They show the fallback target when the role is not configured, or an unavailable notice when it is configured but unusable. Functions without `function.model` show no model entry. A handler call that explicitly chooses another role still uses that choice.
 
-Image and speech function plugins usually choose a role for their capability through their own `userSettings.modelPresetId`. The session-prep screen shows it as a separate option and writes it to the device setting `plugin.<pluginId>.modelPresetId`. Do not mix the session override of an agent runtime with this setting of a function runtime.
+Image and speech function plugins usually choose a role for their capability through their own `userSettings.modelPresetId`. The getting-ready screen shows it as a separate option and writes it to the device setting `plugin.<pluginId>.modelPresetId`. Do not mix the session override of an agent runtime with this setting of a function runtime.
 
 **Connection tests and the settings page**
 

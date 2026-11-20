@@ -403,7 +403,7 @@ export function CostPanel({
   onLoadAll,
 }: {
   turns: readonly VisibleTurn[];
-  // 仍有更早未加载的事件：下方聚合只是「当前窗口」，不是整会话合计。
+  // Earlier unloaded events remain: displayed totals reflect the loaded window only.
   isPartial?: boolean;
   onLoadAll?: () => void;
 }) {
@@ -479,7 +479,7 @@ export function CostPanel({
 
   return (
     <div className="debug-pane space-y-6">
-      {/* 聚合合计：窗口化后标题明确「当前窗口」而非「会话合计」，避免静默失真 */}
+      {/* Windowed totals: label explicitly reflects the loaded window when partial */}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">
           {isPartial

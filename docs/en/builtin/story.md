@@ -193,9 +193,9 @@ The story interface also provides the host’s [advancement and Stop controls](.
 
 ## Ensemble dialogue and character actors
 
-Without an eligible sub-agent target, the narrator receives no delegation tools. If the tools omit the actor target required by a plan, it also narrates alone and yields to the player.
+Without an eligible sub-agent target, Storyteller receives no delegation tools. If the tools omit the actor target required by a plan, it also narrates alone and yields to the player.
 
-Chat Storyteller remains playable alone. With optional Character Voice (`character-agent`) and Who Speaks Next (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. Parallel plans use one bounded `delegate-batch`; sequential plans retain single `delegate` calls. Successful contributions stay in plan order. Concurrent dispatch does not reduce actor model calls or token costs; director adds another model call. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns narrator-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
+Chat Storyteller remains playable alone. With optional Character Voice (`character-agent`) and Who Speaks Next (`turn-policy`), a pre-turn function prepares the cast and the story agent delegates each character in plan order, combining accepted speech/actions and connective narration into one story. Parallel plans use one bounded `delegate-batch`; sequential plans retain single `delegate` calls. Successful contributions stay in plan order. Concurrent dispatch does not reduce actor model calls or token costs; director adds another model call. A failed actor loses its contribution. An empty, unavailable or entirely failed plan returns Storyteller-only play and user yield. Scripted tests establish transport and settlement, not real-model prose quality or semantic obedience.
 
 Who Speaks Next offers one service; choose the algorithm in its own Strategy setting. It resolves automatically when it is the only provider. With other providers, choose a service in [Orchestration](./features.md#session-orchestration-settings).
 
@@ -205,13 +205,13 @@ Who Speaks Next offers one service; choose the algorithm in its own Strategy set
 | list     | Configured newline-separated names/aliases first, skipping known absent characters, then remaining names in stable order; empty configuration preserves presence order.                                    |
 | random   | Samples present characters without replacement, excluding current action actors; previous segment speakers remain eligible.                                                                                |
 | manual   | In Choose actors, enter one exact name/alias per line in actors, at most 32 submitted names in total; deduplicates in submission order, with optional direction in action text.                            |
-| director | Borrows the planner's text slot, including browser request bindings, for one structured plan; without a gateway or usable slot, uses mention with a reason; a failed model call yields narrator-only play. |
+| director | Borrows the planner's text slot, including browser request bindings, for one structured plan; without a gateway or usable slot, uses mention with a reason; a failed model call yields Storyteller-only play. |
 
 List/random may continue after a host direction or host/spectator/system advance. Ordinary player speech/actions yield user. Manual never replays an earlier selection. Unknown, ambiguous, raw-ID or absent names invalidate the whole batch; narration asks for corrected names and yields. Spectators cannot choose actors. Limits are in [settings](./features.md#session-orchestration-settings).
 
-Actors receive only the selected public profile, bounded witnessed stories and deliberately supplied current observations. Missing history does not license invented conversations. Intent stays out of story, exports and cues. Silence or failure is not departure. The bundled actor has no inventory tool; replacement actors retain [staged-operation semantics](../reference/tools.md#delegate).
+Actors receive only the selected public profile, bounded witnessed stories and deliberately supplied current observations. Missing history does not license invented conversations. Intent stays out of story, exports and cues. Silence or failure is not departure. The bundled actor has no bag tool; replacement actors retain [staged-operation semantics](../reference/tools.md#delegate).
 
-The shared brief contains only current speech/actions and deliberately established scene narration. It does not replay a previous scene's private exchanges or omniscient narration. Policy selection keeps history; the runner supplies each actor's witnessed history separately. Stage presence informs both the planner's selection and the narrator's descriptions without being copied into actor briefs.
+The shared brief contains only current speech/actions and deliberately established scene narration. It does not replay a previous scene's private exchanges or omniscient narration. Policy selection keeps history; the runner supplies each actor's witnessed history separately. Stage presence informs both the planner's selection and the storyteller's descriptions without being copied into actor briefs.
 
 The existing Storyteller already supports the game-master perspective. In a world file:
 
@@ -229,7 +229,7 @@ Choose Game Master Panel from the header's Plugin pages menu to see scene cast, 
 
 Cast shows public scene actors only, with an empty state without a provider. It is not all known characters or actor eligibility. Pending interactions are already public unanswered, non-stale forms, choices and confirmations, without unrevealed plot or hidden event counts. Story omits tools, reasoning and execution detail.
 
-Select an action permitted for the current role: Game masters can use Direct, Narrate and Advance; spectators can only Advance; players retain ordinary modes. Advance takes no text. Changing views preserves drafts, modes, fields and queued choices; refusal does not clear them. Opening the page changes no role, narrator perspective or policy.
+Select an action permitted for the current role: Game masters can use Direct, Narrate and Advance; spectators can only Advance; players retain ordinary modes. Advance takes no text. Changing views preserves drafts, modes, fields and queued choices; refusal does not clear them. Opening the page changes no role, Storyteller perspective or policy.
 
 Game Master and Spectator include the console; Ensemble recommends it. Defaults remain Read and Stage respectively. Ordinary Game Master still uses Storyteller and does not delegate NPCs. To host an ensemble, choose Game master during preparation and select actor/policy providers as needed; a sole policy provider resolves automatically. This package has no runtime, hard dependency or model cost of its own. Actions still use the selected story/auxiliary providers' model calls. Existing sessions can enable it explicitly; pack changes do not retrofit old choices.
 

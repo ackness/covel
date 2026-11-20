@@ -9,8 +9,6 @@ Entries are in English alphabetical order. Each entry first says what the term i
 Each English term has only one Chinese term. The Chinese docs, the UI text, and the Chinese prompts (`*.zh.md`) all use the terms in this table.
 
 <!-- prettier-ignore -->
-| Developer mode | Developer mode | The Settings switch (`ui.developerView`). Only when it is on does the app show what authors and troubleshooting need: the Debugger entry, the detailed and raw views, debug traces, the Database tab and storage line, raw IDs, plugin step counts and the raw-data box in the Waiting for you dialog. |
-| Read / Stage | Read / Stage | The two built-in views of the session screen: Read is the page-by-page text view, Stage is the picture with background and portraits. Formerly Text, Parsed view and Stage view. |
 | Term | Chinese | Notes |
 | --- | --- | --- |
 | Action | 行动 | One item of a player's submission: from which seat, as which character, what kind of thing (`submit_actions`). |
@@ -27,6 +25,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Dataset key | 数据集键 | The key dataset tools give a record: text normalized by `datasetKey()` (NFKC, trimmed, whitespace collapsed, lower-cased); see [The key rule and lookup](./tools.md#the-key-rule-and-lookup). |
 | Dataset tool | 数据集工具 | A `<dataset>-get`, `-list`, `-upsert` or `-update` tool the framework generates for a dataset listed in `agent.tools.datasets`; see [Dataset tools](./tools.md#dataset-tools). |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
+| Developer mode | 开发者模式 | The Settings switch (`ui.developerView`). Only when it is on does the app show what authors and troubleshooting need: the Debugger entry, the detailed and raw views, debug traces, the Database tab and storage line, raw IDs, plugin step counts and the raw-data box in the Waiting for you dialog. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Execution | 执行 | One scheduled run and its commit plan; player turns, manual calls and background jobs can each start one. |
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
@@ -45,6 +44,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Preset | 预设 | An internal model connection plan containing the provider, endpoint, protocol and model ID. |
 | Proposal | 提案 | A runtime’s request to write data, persisted only after kernel validation. |
 | Provider | 提供商 | The model service selected through slot routing. |
+| Read / Stage | 阅读 / 舞台 | The two built-in views of the session screen: Read is the page-by-page text view, Stage is the picture with background and portraits. Formerly Text, Parsed view and Stage view. |
 | Recursive call | 嵌套调用 | A same-package runtime call whose writes commit with its parent; distinct from a read-only sub-agent. |
 | Roleplay notes | 扮演说明 | What the world author writes in the `blueprint` field of a character record to tell the narrative how to play the character; read by Character Profiles. Not the character itself. |
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
@@ -275,7 +275,7 @@ See: [Transactions · Operation-based writes](./transactions.md#operation-based-
 
 A named group of plugins (two sets, `requested` and `recommended`, plus tags) that together make up a way of playing, for example `traditional-story` or `dialogue-mode`.
 
-When a player picks a gameplay pack on the session-prep screen, it replaces the plugins brought in by the previous pack in one step. Plugins the world itself requires, and plugins the player picked by hand, stay the same. A world sets its default gameplay pack with `plugins` and adds the plugins it wants with `plugins`. The packs are the built-in ones only (`packs/builtin.yaml`); a world does not define packs of its own.
+When a player picks a gameplay pack on the getting-ready screen, it replaces the plugins brought in by the previous pack in one step. Plugins the world itself requires, and plugins the player picked by hand, stay the same. A world declares both its default gameplay pack and any extra plugins it needs in `plugins`. The packs are the built-in ones only (`packs/builtin.yaml`); a world does not define packs of its own.
 
 It is different from a **Preset**. A Preset packages a model choice, not plugins.
 

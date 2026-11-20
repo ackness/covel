@@ -102,7 +102,7 @@ function usePluginNoticeModel({
 }
 
 /**
- * The session prep screen's card: which plugins of the selection are off and
+ * The getting-ready screen's card: which plugins of the selection are off and
  * why, with a button for each installed plugin that would bring one back, and
  * what to do when no plugin tells the story.
  */

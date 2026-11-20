@@ -36,7 +36,7 @@ export interface ToolCallRecord {
   readonly runtimeId: string;
   readonly turnId: string;
   /**
-   * JSON wire value only (docs 02 §2). Callers pass tool arguments / results
+   * JSON wire value only. Callers pass tool arguments / results
    * through the serialization boundary (`toJsonValueOrDiagnostic`) before
    * constructing the record, so a non-serialisable value collapses to a bounded
    * diagnostic string rather than an arbitrary object.

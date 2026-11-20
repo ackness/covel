@@ -4,10 +4,6 @@ This page takes you through writing a world package by hand. It is called "潮�
 
 It takes about twenty minutes. You do not need to write code.
 
-Seed content automatically selects its unique eligible receiver under the [receiver rules](../reference/world-data.md#data-receivers). Additional `plugin:` references express gameplay without seed data or an intentional receiver choice.
-
-Write structured dimensions only in `data/dimensions.yaml`, without copying them into `world.yaml`. The editor changes the world record; explicit export writes the canonical file. See [dimension sources](../reference/world-data.md#dimension-sources).
-
 ## Before you start
 
 - You have finished [your first game](../start/first-session.md), so you know how a game plays.
@@ -115,7 +111,7 @@ When it passes, it prints one line:
 
 Start Covel (use `pnpm dev` when running from source; if it is already running, restart it once), and open the world selection page. You will see "潮灯镇" (Tidelamp) in the list. Click "Enter", then "Start Game".
 
-This world has not chosen any gameplay yet, so the game has only the core plugins every game has: the narrator tells the story, and you create the protagonist when the game starts. The first part of the story should begin at the inn on the harbor on the night of the great low tide.
+This world has not chosen any gameplay yet, so the game has only the core plugins every game has: the storyteller tells the story, and you create the protagonist when the game starts. The first part of the story should begin at the inn on the harbor on the night of the great low tide.
 
 ## 5. Choose gameplay and character attributes
 
@@ -143,7 +139,7 @@ characterSchema:
 
 | Field             | What it does                                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `plugins`         | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
+| `plugins`         | The gameplay pack used by default when a game starts. `traditional-story` is the built-in Classic Story pack      |
 | `characterSchema` | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
 
 `category` decides where an attribute is used: `abilities` are what checks and point buy use, `stats` are bars in the status bar (health, stress), `social` holds relationships (trust), `bio` identity, and `equipment` what the character carries. Nerve is rolled against, so it goes in `abilities`.
@@ -163,7 +159,7 @@ Lorebook entries are given to the model only when they are mentioned. Each entry
   content: 石路由整块的黑石铺成，平时沉在水下两丈。走完全程要一个时辰，潮水回来时没有地方可躲。
 ```
 
-Put the file at the standard path `data/lorebook.yaml`, and it is imported automatically. You do not need to register it anywhere else.
+Put the file at the standard path `data/lorebook.yaml`, and it is imported automatically. You do not need to register it anywhere else. Seed content automatically selects its unique eligible receiver under the [receiver rules](../reference/world-data.md#data-receivers); add explicit `plugin:` references only for gameplay without seed data or when making an intentional receiver choice.
 
 ## 7. Add a preset character
 
@@ -204,7 +200,7 @@ The validator checks the manifest fields, the main world text, the plugin IDs, a
 
 Fix what it points to, and run it again until it passes.
 
-Restart Covel and enter "潮灯镇" again. This time the session-prep screen has the "Classic Story" gameplay pack selected; click "Start Game". Try these things to confirm that each file is working:
+Restart Covel and enter "潮灯镇" again. This time the getting-ready screen has the "Classic Story" gameplay pack selected; click "Start Game". Try these things to confirm that each file is working:
 
 | What you do                                   | What you should see                                                              | Which file it comes from               |
 | --------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------- |
@@ -228,8 +224,9 @@ Restart Covel and enter "潮灯镇" again. This time the session-prep screen has
 You now have a world you can play. You can keep going in these directions:
 
 - **Try a different style of play.** Change the first reference to `pack:dialogue-mode`. Or add `plugin:dice-check`, `plugin:core-quest`, `plugin:inventory`, and `plugin:affinity` to `plugins`, so the world becomes an adventure with checks and quests.
+- **Add dynamic world dimensions.** Write structured dimensions only in `data/dimensions.yaml`, without copying them into `world.yaml` (the editor changes the world record; explicit export writes the canonical file — see [dimension sources](../reference/world-data.md#dimension-sources)).
 - **Add more preset content.** Run `pnpm describe:authoring` in the repository. It lists every kind of content you can preset in the current version, the path each file goes in, and a valid example.
-- **See a finished world.** The repository's `worlds/` folder has four complete worlds. `worlds/last-train` is a reference that uses checks, quests, inventory, and affinity.
+- **See a finished world.** The repository's `worlds/` folder has four complete worlds. `worlds/last-train` is a reference that uses checks, quests, bag, and affinity.
 - **Add pictures.** See [world portraits](./portraits.md) and [world scenes](./scenes.md).
 
 For all the content you can preset and the import rules, see the [world data reference](../reference/world-data.md).

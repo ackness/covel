@@ -1122,7 +1122,7 @@ Authentication is the same as for the other session endpoints (owner token). Res
 | GET    | `/api/plugins`                | List the plugins in the registry, with their registration and error status                                                                           |
 | GET    | `/api/plugins/:id`            | Get plugin details and the full manifest development contract                                                                                        |
 | DELETE | `/api/plugins/:id`            | Uninstall a third-party plugin (deletes `~/.covel/plugins/<id>`)                                                                                     |
-| GET    | `/api/plugin-flows`           | Preview data for the pre-game flow (plugin list plus staged steps), shown on the session-prep screen                                                 |
+| GET    | `/api/plugin-flows`           | Preview data for the pre-game flow (plugin list plus staged steps), shown on the getting-ready screen                                              |
 
 `GET /api/plugin-flows` entries in `plugins` and `steps` use `kind` (`core` or `plugin`) for the package category. They do not return `pluginType`.
 
@@ -1848,7 +1848,7 @@ On success the server returns `204`. If the request ID does not belong to this c
 
 #### `GET /api/worlds`
 
-Lists all loaded worlds. Each item is a **summary** (`WorldSummary` from `@covel/shared`). It carries only the fields that the world list, the cards, and the header of the session-prep screen show. It leaves out the large content.
+Lists all loaded worlds. Each item is a **summary** (`WorldSummary` from `@covel/shared`). It carries only the fields that the world list, the cards, and the header of the getting-ready screen show. It leaves out the large content.
 
 What the summary has and does not have:
 
@@ -1895,7 +1895,7 @@ The list for the four built-in worlds is about 3.9 KB.
 
 #### `GET /api/worlds/:id`
 
-Reads the **full record** of one world: `lore`, `dimensions`, and all of `metadata`. The list returns only summaries. So any place that needs the setting text or the dimensions (the session-prep screen, the world details, the world editor) reads this one. The response also carries optional `updateAvailable` under the same rules as the list.
+Reads the **full record** of one world: `lore`, `dimensions`, and all of `metadata`. The list returns only summaries. So any place that needs the setting text or the dimensions (the getting-ready screen, the world details, the world editor) reads this one. The response also carries optional `updateAvailable` under the same rules as the list.
 
 **Parameters:**
 
@@ -2147,9 +2147,9 @@ Dimensions and the character schema are read from the world record, as for a new
 
 Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a safe warning; this part is deferred until the real import or sync runs.
 
-When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The session-prep screen uses it to tell the player.
+When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The getting-ready screen uses it to tell the player.
 
-When more than one of these plugins provides `world.dimensions@1`, the response is `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`, whether or not the world declares dimensions. A game uses one plugin responsible for dimensions, and the server does not pick one for the player: the session-prep screen lists the `candidates` and asks the player to keep one. `sync-data` and `sync-dimensions` return the same 409 in the same case.
+When more than one of these plugins provides `world.dimensions@1`, the response is `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`, whether or not the world declares dimensions. A game uses one plugin responsible for dimensions, and the server does not pick one for the player: the getting-ready screen lists the `candidates` and asks the player to keep one. `sync-data` and `sync-dimensions` return the same 409 in the same case.
 
 **Request body:**
 
@@ -5209,7 +5209,7 @@ Validation rules:
 
 Extra notes for each type:
 
-- **`loreOverride` in `start_session`**: The server saves it in the session. The setup, the opening continuation, and later turns all use this `world.lore` first. An empty string means the background was deliberately cleared. If it is left out, the value already saved in the session is kept. The web session-prep screen passes the background when it creates the session, so "Begin Adventure" no longer sends the world draft.
+- **`loreOverride` in `start_session`**: The server saves it in the session. The setup, the opening continuation, and later turns all use this `world.lore` first. An empty string means the background was deliberately cleared. If it is left out, the value already saved in the session is kept. The web getting-ready screen passes the background when it creates the session, so "Begin Adventure" no longer sends the world draft.
 - **`retry_turn`**: Starts a new main-loop turn, using the context that is already committed. After the commit succeeds, the player's turn count goes up by one. It does not restore or regenerate past turns.
   - When it retries, with `recoverFromTurnId`, a player turn that answered an interaction, the server runs again from the actions that turn recorded in `turn.started` (`playerInput`); the answer is not submitted again.
   - Otherwise the turn has no player input.
@@ -5287,8 +5287,8 @@ The session must already have a non-empty `activePlugins`. Otherwise the server 
 
 - The set of plugins is decided by the `plugins` array when the session is created. `start_session` only enables that saved set.
 - An empty set does not turn into "enable every loaded plugin". That would pull community plugins the player never chose, and conflicting narrative engines, into the session, and keep them there until the session ends.
-- The web session-prep screen first reads `GET /api/worlds/:id/plugin-plan` to get the default set the server calculated. Then it sends the player's final choices to the create endpoint.
-- The `plugin-plan.defaultPluginIds` is calculated the same way as for the session: `requires`, `conflicts`, and the rule that replaces a core plugin with a trusted built-in core plugin. The session-prep screen shows this result, and it does not lock again a core plugin that has already been replaced.
+- The web getting-ready screen first reads `GET /api/worlds/:id/plugin-plan` to get the default set the server calculated. Then it sends the player's final choices to the create endpoint.
+- The `plugin-plan.defaultPluginIds` is calculated the same way as for the session: `requires`, `conflicts`, and the rule that replaces a core plugin with a trusted built-in core plugin. The getting-ready screen shows this result, and it does not lock again a core plugin that has already been replaced.
 - The endpoint that creates a session no longer reads the world's plugin policy. It only adds the built-in core plugins and the `requires` relationships, and it handles `conflicts`.
 
 ##### `submit_actions`

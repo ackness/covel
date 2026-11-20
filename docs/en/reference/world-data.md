@@ -123,7 +123,7 @@ The in-app translation and the AI edits both call a model, which takes some time
 
 ### Narrator-only lore (narrator-only)
 
-`WORLD.md` has two kinds of readers. The model reads the whole file. Players can also see it: in the "World" tab of the right panel, in the "World Document" on the session-prep screen, and on the world detail page.
+`WORLD.md` has two kinds of readers. The model reads the whole file. Players can also see it: in the "World" tab of the right panel, in the "World Document" on the getting-ready screen, and on the world detail page.
 
 Put content that only the narrator should know (hidden threads, answers to mysteries, and how to run the scene and control the pacing) between two marker lines:
 
@@ -154,7 +154,7 @@ Put content that only the narrator should know (hidden threads, answers to myste
   - A marker written wrong (for example `<!-- end narrator-only -->`) is treated as a start marker.
   - A marker line inside a code block still counts as a marker.
   - `pnpm validate:world` gives a `lore-narrator-only` warning for these cases and points to the line number.
-- When a player edits the "World Document" on the session-prep screen, the player sees and edits only the visible part. The content between the markers is kept as it is in the lore that this game uses.
+- When a player edits the "World Document" on the getting-ready screen, the player sees and edits only the visible part. The content between the markers is kept as it is in the lore that this game uses.
 - AI creation can write hidden regions. Translation and targeted repair split the source at its markers, send one fragment per request, and put each result back inside the original program-owned boundaries. Dropping markers from a hidden fragment's answer cannot make it visible. Targeted repair touches only fragments containing generation meta wording. Invalid source markers reject the transformation; a failed repair of protected lore never falls back to whole-document regeneration.
 - AI revision supports polishing public prose and editing stories inside hidden regions. When hidden regions exist, the package answer only selects public fragments to rewrite; its public draft is never published directly. Each changed public fragment gets an independent request containing only its original public source, the original public lore, and the author's original request with its source identified. It receives no hidden source, package answer, other fragment answers, or other package fields. Hidden edits go back inside hidden regions; unchanged fragments and `UNCHANGED` keep the original text. The program retains and reconstructs the markers. File, server-store, and return-only worlds use the same rule.
 - Adding or removing regions, or explicitly changing visibility, is outside this revision contract when hidden regions already exist. A marker structure/count mismatch, invalid fragment reply, or failed validation prevents publication of a partial result, without falling back to rewriting the whole package. Structure alone cannot identify marker movement with the same count, but text moved into public prose by the package answer is never adopted directly. Lore without hidden regions still uses ordinary whole-section revision.
@@ -1387,7 +1387,7 @@ sources:
 
 | Field         | How to write it                                                                                                                                           | Where it is used                                                                                            | When left out                                      |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `cover`       | The path of one picture: a `.png` / `.jpg` / `.webp` in a directory one level under `media/`, at most 20 MB, for example `media/gallery/world-cover.webp` | The world card, the world detail page, the session-prep screen and the session background                   | The interface uses its built-in default background |
+| `cover`       | The path of one picture: a `.png` / `.jpg` / `.webp` in a directory one level under `media/`, at most 20 MB, for example `media/gallery/world-cover.webp` | The world card, the world detail page, the getting-ready screen and the session background                | The interface uses its built-in default background |
 | `accentColor` | `#rrggbb` or `oklch(72% 0.12 75)`                                                                                                                         | The accent color of cards and titles                                                                        | A fixed hue is calculated from the world ID        |
 | `themeMusic`  | The path of one audio file: a `.mp3` / `.wav` in a directory one level under `media/`, for example `media/music/theme.mp3`                                | Plays on the world selection page and the world detail page while that world is shown. No plugin is needed. | Does not play                                      |
 

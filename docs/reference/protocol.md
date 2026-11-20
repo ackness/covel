@@ -1,16 +1,10 @@
 # SSE 协议
 
-准备计划的两类需求分开冻结在会话 metadata 中：`requiredContracts` 对应能力，`requiredDataContracts` 对应数据 `accepts`；缺失数据通过安全的 `dataNotices` / `worldDataNotices` 告知玩家。见[接收规则](./world-data.md#data-receivers)。
-
-世界准备通过公开计划的 `selection` 读取 `plugins` 引用。创建请求提交明确的插件 ID 与排除项；服务端独立冻结世界的 `contract:` 引用。缺少功能只产生提示，不阻止游玩。
-
 这一页讲客户端和 Covel 服务端之间怎样通讯：客户端发什么请求，服务端推什么事件，每个事件带什么数据，断线之后怎样恢复。
 
 它适合三类读者：写自己的客户端的人、把 Covel 运行时嵌进自己宿主的人，以及改内置网页端或服务端的人。只写插件一般用不到这一页；插件能发的事件见[工具参考](./tools.md)，HTTP 接口的完整说明见 [api.md](./api.md)。
 
 类型定义在 `packages/shared/src/types/protocol.ts`。
-
-模型能力查询可通过 `credentials=1` 和现有 `X-Slot-Config` 请求头，同时取得自定义连接的服务端凭据可用性。它仍是只读 JSON 查询，不发起模型调用，也不增加 SSE 事件。参数、校验和布尔响应字段见[模型数据库 API](./api.md#模型数据库model-db)。
 
 ## 声明式授权语义
 
@@ -958,6 +952,8 @@ data: {
 
 `SessionSnapshot` 顶层的 `dimensions` 是[当前值的公开快照](./world-model.md#动态维度快照)。可选的 `dimensionSettlements` 是回执摘要。provider 和 recovery 的元数据由宿主绑定并校验。
 
+准备计划的两类需求分开冻结在会话 metadata 中：`requiredContracts` 对应能力，`requiredDataContracts` 对应数据 `accepts`；世界准备通过公开计划的 `selection` 读取 `plugins` 引用。创建请求提交明确的插件 ID 与排除项，服务端独立冻结世界的 `contract:` 引用；缺少功能只通过安全的 `dataNotices` / `worldDataNotices` 告知玩家（见[接收规则](./world-data.md#data-receivers)），不阻止游玩。
+
 > [!WARNING]
 > 不兼容旧的 raw dimension 格式。受影响的开发期世界、会话和快照需要重建。
 
@@ -1214,6 +1210,8 @@ action 和插件 command 的 scoped store 只读：handler 只能查询、计算
 | 执行追踪 | `GET /api/traces/:sessionId` | `{ events[], nextCursor }`（最近 5000 条，游标读更早的） |
 | 追踪分页 | `GET /api/traces/:sessionId/turns/page` | `{ turns[], nextCursor }`（游标） |
 | 服务健康 | `GET /api/health` | `{ status, version, bootId, timestamp, storage, vector }` |
+
+模型能力查询可通过 `credentials=1` 和现有 `X-Slot-Config` 请求头，同时取得自定义连接的服务端凭据可用性。它仍是只读 JSON 查询，不发起模型调用，也不增加 SSE 事件；参数、校验和布尔响应字段见[模型数据库 API](./api.md#模型数据库model-db)。
 
 ## 四、SSE 信封格式
 

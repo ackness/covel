@@ -33,8 +33,6 @@ Write one short observation grounded in the latest narrative.
 
 Validate it:
 
-Players without a source checkout can click **Validate** in **Settings → Plugins → Install & manage**.
-
 ```bash
 pnpm validate:plugin ~/.covel/plugins/observer
 ```
@@ -43,6 +41,9 @@ pnpm validate:plugin ~/.covel/plugins/observer
 ✓ Static package validation: /Users/you/.covel/plugins/observer
   languages: text en; instructions en
 ```
+
+> [!TIP]
+> Players without a source checkout can click **Validate** in **Settings → Plugins → Install & manage**.
 
 This is already a complete plugin. Covel works out everything that is not written: the ID is the folder name, `observer`; there is no `function` block, so it is an agent driven by a model, and the body is its prompt; it runs after the story in each turn. It needs no `package.json`.
 
@@ -215,7 +216,7 @@ pnpm dev
 A plugin in the user directory is a **community plugin**. It is discovered, but its code runs only after you authorize it in a game.
 
 1. Open <http://localhost:5173>, choose a world, and click "Enter."
-2. On the session-prep screen, expand "Customize plugins and advanced settings." Find `tavern-rumors` in the plugin list and select it.
+2. On the getting-ready screen, expand "Customize plugins and advanced settings." Find `tavern-rumors` in the plugin list and select it.
 3. Click "Start Game." When "Authorize plugin action" appears, authorize `tavern-rumors`.
 4. Finish the opening, then write an action that makes someone speak, for example "Ask the innkeeper what strange things have happened in town lately."
 5. Wait for "Turn complete" to appear.
@@ -240,7 +241,7 @@ At this point, your plugin has read the story, called a tool, written data, and 
 | It is not in the plugin list                 | It is not in the user plugin directory, or its manifest has an error. Run the validation from step 4, then restart the backend once                                                              |
 | Selected, but it does not run                | It is not authorized. Handle the "Authorize plugin action" prompt in the game                                                                                                                    |
 | The panel stays empty                        | There was no rumor in this turn's story, or the model did not call the tool. Check the request and reply for the `tavern-rumors/analyst` step on the debug page at <http://localhost:5173/debug> |
-| The `plugin` role is reported as unavailable | Under **Settings → Models → AI roles**, choose a model for it, or change this task to use a different role on the session-prep screen                                                            |
+| The `plugin` role is reported as unavailable | Under **Settings → Models → AI roles**, choose a model for it, or change this task to use a different role on the getting-ready screen                                                           |
 | Offline run reports a failed case            | You changed the shape of the data but did not update the expectations in `tests/runtime-cases.json`                                                                                              |
 
 ## What you just used

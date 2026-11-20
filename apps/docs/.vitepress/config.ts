@@ -266,7 +266,7 @@ const referenceSidebar: DefaultTheme.SidebarItem[] = [
   {
     text: "模型与媒体",
     items: [
-      { text: "模型用途", link: "/reference/slots" },
+      { text: "模型分工", link: "/reference/slots" },
       { text: "评估模型", link: "/reference/evaluation" },
       { text: "图像生成", link: "/reference/image-generation" },
       { text: "媒体存储", link: "/reference/media-store" },
@@ -339,8 +339,8 @@ const EN: Record<string, string> = {
   "认识 Covel": "What is Covel",
   安装与首次启动: "Install and first launch",
   连接模型: "Connect a model",
-  第一局游戏: "Your first session",
-  安装插件与世界包: "Install plugins and worlds",
+  第一局游戏: "Your first game",
+  安装插件与世界包: "Install plugins and world packages",
   "数据、备份与升级": "Data, backup and upgrade",
   在公开体验站上玩: "Play on a public trial",
   从源码运行: "Run from source",
@@ -414,7 +414,7 @@ const EN: Record<string, string> = {
   主题包: "Theme packages",
   多语言: "Languages",
   模型与媒体: "Models and media",
-  模型用途: "Model roles",
+  模型分工: "Model roles",
   评估模型: "Evaluation models",
   图像生成: "Image generation",
   媒体存储: "Media store",

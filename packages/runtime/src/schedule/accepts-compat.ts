@@ -1,5 +1,5 @@
 /**
- * `accepts` static compatibility (docs 02 §3.1, build-time layer).
+ * `accepts` static compatibility (build-time layer).
  *
  * Given a producer's declared `output.schema` projected by the binding `select`
  * pointer, try to PROVE that every value the producer may emit is accepted by

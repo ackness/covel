@@ -1,16 +1,10 @@
 # SSE protocol
 
-Preparation freezes distinct capability `requiredContracts` and data `requiredDataContracts` in session metadata. Safe `dataNotices` / `worldDataNotices` report omissions. See [receiver rules](./world-data.md#data-receivers).
-
-World preparation reads `plugins` references through the public plan's `selection`. Creation submits explicit plugin IDs and exclusions; the server freezes world `contract:` references independently. Missing features produce notices and do not block play.
-
 This page explains how a client and the Covel server talk to each other: what requests the client sends, what events the server pushes, what data each event carries, and how a client recovers after a dropped connection.
 
 It is for three kinds of readers: people who write their own client, people who embed the Covel runtime in their own host, and people who change the bundled web app or the server. If you only write plugins, you rarely need this page. The events a plugin can emit are in the [tools reference](./tools.md). The full HTTP API is in [api.md](./api.md).
 
 The type definitions are in `packages/shared/src/types/protocol.ts`.
-
-Model capability lookup can use `credentials=1` and the existing `X-Slot-Config` header to request server credential availability for a custom connection. It remains a read-only JSON query, makes no model call and adds no SSE event. See the [model database API](./api.md#model-database-model-db) for parameters, validation and the boolean response field.
 
 ## Declarative approval semantics
 
@@ -957,6 +951,8 @@ A story message may also carry validated `operationFailures: { count }`, project
 
 The top-level `dimensions` of `SessionSnapshot` is the [public snapshot of current values](./world-model.md#dynamic-dimension-snapshot). The optional `dimensionSettlements` is a summary of receipts. The provider and recovery metadata is bound and validated by the host.
 
+Preparation freezes distinct capability `requiredContracts` and data `requiredDataContracts` in session metadata; world preparation reads `plugins` references through the public plan's `selection`. Creation submits explicit plugin IDs and exclusions, while the server freezes world `contract:` references independently; missing features report safe `dataNotices` / `worldDataNotices` (see [receiver rules](./world-data.md#data-receivers)) without blocking play.
+
 > [!WARNING]
 > The old raw dimension format is not compatible. Affected development-time worlds, sessions, and snapshots must be rebuilt.
 
@@ -1213,6 +1209,8 @@ Read-only data fetches, answered with normal REST GET responses:
 | Execution trace | `GET /api/traces/:sessionId` | `{ events[], nextCursor }` (the latest 5000 events. Use the cursor to read older ones) |
 | Trace pages | `GET /api/traces/:sessionId/turns/page` | `{ turns[], nextCursor }` (cursor-based) |
 | Service health | `GET /api/health` | `{ status, version, bootId, timestamp, storage, vector }` |
+
+Model capability lookup can use `credentials=1` and the existing `X-Slot-Config` header to request server credential availability for a custom connection. It remains a read-only JSON query, makes no model call, and adds no SSE event; see the [model database API](./api.md#model-database-model-db) for parameters, validation, and the boolean response field.
 
 ## 4. SSE envelope format
 

@@ -400,7 +400,7 @@ A plugin, world, or collection can state its author, license, and homepage. The 
 - **Plain text.** The note and the labels are rendered as text: no Markdown, no HTML, no images. So a package cannot make the client request remote resources when it shows the card.
 - **Only `https` links.** The manifest schema rejects other protocols (`http:`, `javascript:`, `file:`), and it also rejects addresses with a user name or password, because those can be used to hide the real host.
 - **The player opens a link, and sees a warning first.** On click, the full address and its host are shown, with a note that the link comes from the package's author and that Covel has not checked the site. The link opens in the system browser only after the player confirms. The host name is shown in ASCII, so a name faked with other characters appears as `xn--…`.
-- **Shown only before play.** Author information appears on world cards, world pages, the session-prep screen, and the installed package list. The play screen does not show it. The install preview shows only the author's name, not the links.
+- **Shown only before play.** Author information appears on world cards, world pages, the getting-ready screen, and the installed package list. The play screen does not show it. The install preview shows only the author's name, not the links.
 
 ## Page policy and external images
 

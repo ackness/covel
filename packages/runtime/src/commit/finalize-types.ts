@@ -43,7 +43,7 @@ import type { ExecutionEventDependencies } from "../event-dependencies.js";
 
 /**
  * Manifests resolve output kind, capabilities, scope, the persistent
- * `recordAs` export (docs 02 §3.4) and, for savepoint isolation, the hard
+ * `recordAs` export and, for savepoint isolation, the hard
  * dependencies between runtimes. Callers pass their active runtimes; the
  * export VALUE's schema is loaded lazily via `loadOutputSchema` (below) only
  * when a success result actually needs it.
@@ -203,7 +203,7 @@ export interface FinalizeExecutionArgs {
   ) => Promise<Readonly<Record<string, unknown>> | undefined>;
   /**
    * MediaStore read surface used to canonicalize + ownership-check MediaRefs in
-   * published `recordAs` export values (docs 02 §2.1 / §3.4). Absent (thin
+   * published `recordAs` export values. Absent (thin
    * callers / tests) ⇒ export values are published without media processing.
    */
   readonly mediaStore?: MediaOwnershipStore;

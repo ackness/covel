@@ -69,7 +69,7 @@ protocol = "typesafe-systemone-v1"
 - 密钥变量是 `TYPESAFE_API_KEY`、`OPENROUTER_API_KEY`、`VERCEL_API_KEY`，和其他服务商的命名方式一样。Vercel AI Gateway 的密钥填到本项目的 `vercel` 连接里。
 - 密钥的位置：开发环境放 `.env.llm`，桌面版放 `keys.env`，浏览器通过服务商设置保存。不要把密钥写进 TOML。
 
-用途字段的完整说明见[模型用途配置](./slots.md)。
+分工字段的完整说明见[模型分工配置](./slots.md)。
 
 ### 调用
 

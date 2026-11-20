@@ -351,7 +351,7 @@ async function preflightWithoutWorldData(
 export async function preflightWorldDataForSession(
   options: PreflightWorldDataForSessionOptions,
 ): Promise<PreflightWorldDataForSessionResult> {
-  // The same refusal as session creation, so the prep screen can ask first.
+  // The same refusal as session creation, so the getting-ready screen can ask first.
   if (options.worldId) activeDimensionProvider(options.preflight);
   if (!options.worldId || !options.worldsDirs?.length) {
     return preflightWithoutWorldData(options);

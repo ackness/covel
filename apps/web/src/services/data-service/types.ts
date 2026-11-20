@@ -78,8 +78,8 @@ export interface DataService {
    * Keyset page of messages, oldest-first. `before` omitted ⇒ the newest
    * window; `cursor` set ⇒ the page immediately older than that position
    * (scroll-up "load older"). `nextCursor` is the oldest returned row, or
-   * `null` once the start of history is reached. Remote透传后端端点；local 直连
-   * IDB 并按契约包成 `{ items, nextCursor }`。
+   * `null` once the start of history is reached. Remote delegates to the server
+   * endpoint; local queries IDB and wraps `{ items, nextCursor }` to match.
    */
   listMessagesPage(
     sessionId: string,

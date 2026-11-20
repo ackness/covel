@@ -146,7 +146,7 @@ export function createActionStream(options: ActionStreamOptions): ActionStream {
   // Subscribe to out-of-band eventBus events (e.g. plugin-data.changed from
   // store proxy writes) and forward them to the action SSE stream. Without
   // this, events emitted by tool calls during the turn never reach the
-  // frontend and UI state (character panel, codex, etc.) desyncs.
+  // frontend and UI state (character panel, almanac, etc.) desyncs.
   //
   // Note: EventBus strips `_subType` from the raw payload and puts it on
   // `event.type`. So we whitelist by `event.type`, not by payload fields.

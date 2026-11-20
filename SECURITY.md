@@ -11,8 +11,12 @@ Do not open a public issue for a vulnerability. Report it privately on GitHub:
 **Security → Report a vulnerability** on this repository, or
 <https://github.com/ackness/covel/security/advisories/new>.
 
-Include the version, how Covel was running (desktop app, self-hosted server, or
-a hosted tier), the steps to reproduce, and what an attacker gains.
+Please include:
+
+- the version
+- how Covel was running (desktop app, self-hosted server, or a hosted tier)
+- the steps to reproduce
+- what an attacker gains
 
 ## Scope
 
