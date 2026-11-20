@@ -120,7 +120,7 @@ export async function toggleSessionPlugin(
     const approved =
       isCurrent() &&
       (await confirmPluginApproval(firstResult.pending, {
-        t: (key, options) => i18n.t(key, options) as string,
+        t: i18n.t,
         confirm: requestConfirm,
       }));
     if (!approved || !isCurrent()) {

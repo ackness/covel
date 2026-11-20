@@ -1,11 +1,14 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
-  // File-based routes, Electron entry points, type assertions, and authoring CLIs.
+  // File-based routes, Electron entry points, and type assertions.
   "entry": [
     "apps/web/src/routes/**/*.{ts,tsx}",
     "apps/desktop/src/{main,preload}.ts",
-    "apps/desktop/scripts/verify-staging.mjs",
     "packages/plugin-test-utils/src/sdk-alignment.ts",
+  ],
+  // Authoring and verification scripts that run outside production.
+  "supportEntry": [
+    "apps/desktop/scripts/verify-staging.mjs",
     "scripts/{emit-presence,emit-scenes,generate-portraits,generate-scenes}.mjs",
     "scripts/validate-release-worlds.ts",
   ],
@@ -25,13 +28,12 @@
     "apps/desktop/staging/**",
     "apps/web/src/routeTree.gen.ts",
   ],
+  // Playwright tests run page.evaluate(() => import("/src/...")) against the Vite dev server.
+  "ignoreUnresolvedImports": ["/src/**"],
   // Desktop depends on Web to order and stage its build, without a source import.
   // The font packages are read through url() in apps/web/src/styles/fonts.css, which fallow does not follow.
-  // yaml is a root devDependency of the repo tooling, but the authoring CLI scripts/generate-scenes.mjs is an entry above,
-  // so fallow counts it as production code.
   "ignoreDependencies": [
     "@covel/web",
-    "yaml",
     "@fontsource-variable/fraunces",
     "@fontsource-variable/geist",
     "@fontsource-variable/geist-mono",

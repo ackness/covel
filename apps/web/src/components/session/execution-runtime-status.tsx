@@ -1,3 +1,4 @@
+import type { TranslateFn } from "@/i18n";
 import {
   Loader2,
   CheckCircle2,
@@ -118,7 +119,7 @@ const I18N_SENTINEL_SUFFIX = "__";
 
 export function resolveI18nSentinel(
   value: string | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: TranslateFn,
 ): string | undefined {
   if (!value) return value;
   if (!value.startsWith(I18N_SENTINEL_PREFIX)) return value;
@@ -152,7 +153,7 @@ const SKIP_REASON_KEYS: Readonly<Record<string, string>> = {
  */
 export function skipReasonText(
   reason: string | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: TranslateFn,
 ): string | undefined {
   if (!reason) return reason;
   const key = Object.hasOwn(SKIP_REASON_KEYS, reason)
