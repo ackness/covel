@@ -10,7 +10,10 @@
  */
 
 import type { GeneratedWorldSaveTarget } from "./api.js";
-import { LocalDataService } from "./data-service/local.js";
+import {
+  LocalDataService,
+  onBrowserGameDataReset,
+} from "./data-service/local.js";
 import { RemoteDataService } from "./data-service/remote.js";
 import type { DataService } from "./data-service/types.js";
 import {
@@ -57,6 +60,18 @@ export function setStorageMode(mode: StorageMode): void {
 let cachedService: DataService | null = null;
 let cachedMode: StorageMode | null = null;
 let cachedWorkspace: SessionWorkspace | null = null;
+
+export function invalidateLocalDataService(): void {
+  if (cachedMode !== "local") return;
+  if (cachedService instanceof LocalDataService) {
+    cachedService.close();
+  }
+  cachedService = null;
+  cachedMode = null;
+  cachedWorkspace = null;
+}
+
+onBrowserGameDataReset(invalidateLocalDataService);
 
 export function getDataService(): DataService {
   const mode = getStorageMode();

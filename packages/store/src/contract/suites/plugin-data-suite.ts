@@ -147,6 +147,71 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
       ).toEqual([]);
     });
 
+    it("queryPluginData valueFilter matches only top-level JSON strings and literal special-character keys", async () => {
+      const records: ReadonlyArray<readonly [string, unknown]> = [
+        ["str-42", { status: "42" }],
+        ["num-42", { status: 42 }],
+        ["bool-true", { status: true }],
+        ["bool-false", { status: false }],
+        ["null-field", { status: null }],
+        ["array-field", { status: ["42"] }],
+        ["object-field", { status: { a: "42" } }],
+        ["root-null", null],
+        ["root-num", 42],
+        ["root-str", "42"],
+        ["root-arr", ["42"]],
+        ["dollar-key", { $status: "ok" }],
+        ["dollar-path-key", { "$.nested": "ok" }],
+        ["nested-target", { nested: "ok" }],
+        ["dotted-key", { "a.b": "ok" }],
+        ["nested-ab", { a: { b: "ok" } }],
+        ["quoted-key", { 'a"b': "ok" }],
+        ["backslash-key", { "a\\b": "ok" }],
+        ["bracket-key", { "a[0]": "ok" }],
+        ["nested-arr", { a: ["ok"] }],
+        ["empty-key", { "": "ok" }],
+      ];
+      await store.setPluginDataBatch(
+        records.map(([key, value]) => ({
+          id: `vf-${key}`,
+          sessionId: "sess-vf",
+          pluginId: "provider",
+          namespace: "_vf_parity",
+          key,
+          value,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+        })),
+      );
+
+      // Non-string JSON values (numbers, booleans, null, arrays, objects, non-object roots) must never coerce to strings.
+      const statusHits = await store.queryPluginData({
+        namespace: "_vf_parity",
+        valueFilter: {
+          field: "status",
+          values: ["42", "true", "false", "1", "0", "null", '["42"]'],
+        },
+      });
+      expect(statusHits.map((r) => r.key)).toEqual(["str-42"]);
+
+      // Special-character top-level keys must be matched literally, never interpreted as JSONPath.
+      for (const [field, expectedKey] of [
+        ["$status", "dollar-key"],
+        ["$.nested", "dollar-path-key"],
+        ["a.b", "dotted-key"],
+        ['a"b', "quoted-key"],
+        ["a\\b", "backslash-key"],
+        ["a[0]", "bracket-key"],
+        ["", "empty-key"],
+      ] as const) {
+        const hits = await store.queryPluginData({
+          namespace: "_vf_parity",
+          valueFilter: { field, values: ["ok"] },
+        });
+        expect(hits.map((r) => r.key)).toEqual([expectedKey]);
+      }
+    });
+
     it("should set and get plugin data", async () => {
       const record = {
         id: "pd-1",

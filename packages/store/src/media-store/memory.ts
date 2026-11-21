@@ -48,16 +48,17 @@ export function createMemoryMediaStore(): MediaStore {
   function recordRef(id: string, sessionId: string, pluginId?: string): void {
     addRefInternal(sessionId, id);
     // First writer wins for plugin_id — keyed only on (sessionId, mediaId)
-    // to mirror the UNIQUE constraint enforced by SQLite/PG.
+    // to mirror the UNIQUE constraint enforced by SQLite/PG. Re-claiming
+    // refreshes createdAt so active holders do not expire while preserving
+    // the original pluginId.
     const key = `${sessionId}\u0000${id}`;
-    if (!refRows.has(key)) {
-      refRows.set(key, {
-        sessionId,
-        mediaId: id,
-        pluginId: pluginId ?? null,
-        createdAt: new Date().toISOString(),
-      });
-    }
+    const existing = refRows.get(key);
+    refRows.set(key, {
+      sessionId,
+      mediaId: id,
+      pluginId: existing ? existing.pluginId : (pluginId ?? null),
+      createdAt: new Date().toISOString(),
+    });
   }
 
   function toAssetRecord(asset: StoredMedia): MediaAssetRecord {

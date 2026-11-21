@@ -17,7 +17,10 @@ import {
 } from "@covel/plugin-loader";
 import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
-import { __resetUiSpecsCache } from "../../src/routes/misc-api/ui-specs.js";
+import {
+  __resetUiSpecsCache,
+  buildUiSpecsResponse,
+} from "../../src/routes/misc-api/ui-specs.js";
 import { registerTestPlugins } from "../helpers/register-test-plugins.js";
 import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 
@@ -258,5 +261,63 @@ describe("GET /api/ui-specs — registry snapshot", () => {
         },
       ],
     });
+  });
+
+  it("evicts a transiently rejected load so the next request recovers without plugin-registered", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const getAll = vi.spyOn(registry, "getAll").mockImplementationOnce(() => {
+      throw new Error("transient ui-spec load failure");
+    });
+
+    const failed = await app.request("/api/ui-specs");
+    expect(failed.status).toBe(500);
+
+    // Without firing plugin-registered or resetting the cache, the next
+    // request retries cleanly and caches the healthy result.
+    const recovered = await app.request("/api/ui-specs");
+    expect(recovered.status).toBe(200);
+    expect(JSON.stringify(await recovered.json())).toContain("v1");
+    expect(getAll).toHaveBeenCalledTimes(2);
+
+    const cached = await app.request("/api/ui-specs");
+    expect(cached.status).toBe(200);
+    expect(getAll).toHaveBeenCalledTimes(2);
+    errorSpy.mockRestore();
+  });
+
+  it("coalesces concurrent in-flight loads and avoids evicting a newer load on stale rejection", async () => {
+    const getAll = vi.spyOn(registry, "getAll");
+    const [first, second] = await Promise.all([
+      buildUiSpecsResponse({ registry, store }),
+      buildUiSpecsResponse({ registry, store }),
+    ]);
+    expect(first.right).toHaveLength(1);
+    expect(second.right).toHaveLength(1);
+    expect(getAll).toHaveBeenCalledTimes(1);
+
+    __resetUiSpecsCache();
+    getAll.mockClear();
+    getAll.mockImplementationOnce(() => {
+      throw new Error("stale load failure");
+    });
+
+    const stale = buildUiSpecsResponse({ registry, store });
+    // Trigger a registry update before microtasks settle, then start a fresh load.
+    registry.register(registry.get("panel-plugin")!);
+    const fresh = buildUiSpecsResponse({ registry, store });
+
+    await expect(stale).rejects.toThrow("stale load failure");
+    await expect(fresh).resolves.toMatchObject({
+      right: [expect.objectContaining({ pluginId: "panel-plugin" })],
+    });
+    expect(getAll).toHaveBeenCalledTimes(2);
+
+    // The stale rejection must not have evicted the fresh load's cache entry.
+    await expect(
+      buildUiSpecsResponse({ registry, store }),
+    ).resolves.toMatchObject({
+      right: [expect.objectContaining({ pluginId: "panel-plugin" })],
+    });
+    expect(getAll).toHaveBeenCalledTimes(2);
   });
 });

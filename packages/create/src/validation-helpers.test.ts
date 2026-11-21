@@ -1,8 +1,10 @@
-import { validateWorldManifest } from "@covel/shared";
+import { validateWorldManifest, worldManifestSchema } from "@covel/shared";
 import { describe, expect, it } from "vitest";
 import {
+  EXCLUDED_GENERATED_MANIFEST_KEYS,
   findLoreQualityErrors,
   normalizeGeneratedManifest,
+  WORLD_MANIFEST_ROOT_KEYS,
 } from "./validation-helpers.js";
 
 function loreWith(content: string): string {
@@ -63,5 +65,56 @@ describe("obsolete generated dimensions", () => {
         }),
       ]),
     );
+  });
+});
+
+describe("normalizeGeneratedManifest", () => {
+  it("preserves themeMusic and includes every non-excluded key in worldManifestSchema.shape", () => {
+    const manifest: Record<string, unknown> = {
+      id: "glass-city",
+      name: "The Glass City",
+      summary: "A city of fragile spires.",
+      defaultLocale: "en-US",
+      themeMusic: "media/music/theme.mp3",
+    };
+
+    expect(normalizeGeneratedManifest(manifest)).toEqual([]);
+    expect(manifest.themeMusic).toBe("media/music/theme.mp3");
+    expect(validateWorldManifest(manifest).valid).toBe(true);
+
+    const expectedKeys = Object.keys(worldManifestSchema.shape).filter(
+      (key) => !EXCLUDED_GENERATED_MANIFEST_KEYS.has(key),
+    );
+    expect([...WORLD_MANIFEST_ROOT_KEYS].sort()).toEqual(
+      [...expectedKeys].sort(),
+    );
+    expect(WORLD_MANIFEST_ROOT_KEYS.has("themeMusic")).toBe(true);
+
+    const allAllowed = Object.fromEntries(
+      expectedKeys.map((key) => [
+        key,
+        key === "version" ? "1.0.0" : "placeholder",
+      ]),
+    );
+    expect(normalizeGeneratedManifest(allAllowed)).toEqual([]);
+    for (const key of expectedKeys) {
+      expect(allAllowed).toHaveProperty(key);
+    }
+  });
+
+  it("still strips excluded generated keys and unknown root fields", () => {
+    const manifest: Record<string, unknown> = {
+      id: "glass-city",
+      cover: "media/gallery/cover.webp",
+      accentColor: "#c9a24b",
+      unknownField: true,
+    };
+
+    expect(normalizeGeneratedManifest(manifest)).toEqual([
+      'removed unknown root field "cover"',
+      'removed unknown root field "accentColor"',
+      'removed unknown root field "unknownField"',
+    ]);
+    expect(manifest).toEqual({ id: "glass-city" });
   });
 });

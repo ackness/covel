@@ -7,28 +7,21 @@
  * and enforces lore quality rules.
  */
 
-import { resolveI18nText } from "@covel/shared";
+import { resolveI18nText, worldManifestSchema } from "@covel/shared";
 
 // `cover` and `accentColor` are left out on purpose: a generated world ships
 // no picture, so a model-written path would name a file that does not exist.
 // The app shows its default background for a world without a cover.
-const WORLD_MANIFEST_ROOT_KEYS = new Set([
-  "id",
-  "name",
-  "version",
-  "summary",
-  "defaultLocale",
-  "tags",
-  "plugins",
-  "pluginPitch",
-  "pluginSettings",
-  "worldData",
-  "characterSchema",
-  "author",
-  "license",
-  "homepage",
-  "defaultViewMode",
+export const EXCLUDED_GENERATED_MANIFEST_KEYS: ReadonlySet<string> = new Set([
+  "cover",
+  "accentColor",
 ]);
+
+export const WORLD_MANIFEST_ROOT_KEYS: ReadonlySet<string> = new Set(
+  Object.keys(worldManifestSchema.shape).filter(
+    (key) => !EXCLUDED_GENERATED_MANIFEST_KEYS.has(key),
+  ),
+);
 
 // Keep these contextual: isolated vocabulary such as "model" or "API" can be valid lore.
 const EXPLICIT_META_CONTENT_PATTERNS = [

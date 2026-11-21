@@ -616,6 +616,100 @@ export function runMediaStoreContractTests(
       expect(await store.isReferencedBy(shared.id, "sess-A")).toBe(true);
     });
 
+    it("refreshes ref createdAt on re-put, re-addRef, and re-claimAssets while preserving first-writer pluginId", async () => {
+      const hour = 60 * 60 * 1000;
+      const t0 = Date.parse("2026-06-01T00:00:00.000Z");
+      const t1 = t0 + 25 * hour;
+      const holder = "world-data-import:attempt";
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      try {
+        const store = await createStore();
+        const forPut = await store.put(PNG, "image/png", undefined, {
+          sessionId: holder,
+          pluginId: "first-plugin",
+        });
+        const forAddRef = await store.put(OTHER, "image/png", undefined, {
+          sessionId: holder,
+          pluginId: "first-plugin",
+        });
+        // Hold temporary ownership while re-claiming via claimAssets so we can
+        // release ownership afterwards and verify the refreshed ref alone keeps
+        // the asset alive.
+        const forClaim = await store.put(
+          new Uint8Array([9, 8, 7, 6]),
+          "image/png",
+        );
+        await store.recordOwnership(forClaim.id, "sess-temp-owner");
+        await store.addRef(forClaim.id, holder, "first-plugin");
+        const abandoned = await store.put(
+          new Uint8Array([4, 3, 2, 1]),
+          "image/png",
+          undefined,
+          { sessionId: holder, pluginId: "first-plugin" },
+        );
+
+        vi.setSystemTime(t1);
+        await store.put(PNG, "image/png", undefined, {
+          sessionId: holder,
+          pluginId: "second-plugin",
+        });
+        await store.addRef(forAddRef.id, holder, "second-plugin");
+        await store.claimAssets([
+          { id: forClaim.id, sessionId: holder, pluginId: "second-plugin" },
+        ]);
+        await store.releaseSession("sess-temp-owner");
+
+        const refs = await store.listRefs();
+        const t1Iso = new Date(t1).toISOString();
+        const t0Iso = new Date(t0).toISOString();
+        for (const id of [forPut.id, forAddRef.id, forClaim.id]) {
+          expect(
+            refs.find((r) => r.mediaId === id && r.sessionId === holder),
+          ).toEqual({
+            mediaId: id,
+            sessionId: holder,
+            pluginId: "first-plugin",
+            createdAt: t1Iso,
+          });
+        }
+        expect(
+          refs.find(
+            (r) => r.mediaId === abandoned.id && r.sessionId === holder,
+          ),
+        ).toEqual({
+          mediaId: abandoned.id,
+          sessionId: holder,
+          pluginId: "first-plugin",
+          createdAt: t0Iso,
+        });
+
+        const result = await store.cleanup(new Set(), {
+          maxAgeMs: 0,
+          expireRefs: {
+            sessionIdPrefix: "world-data-import:",
+            maxAgeMs: 24 * hour,
+          },
+          now: new Date(t1 + 1000),
+        });
+
+        expect(result.expiredRefs).toEqual([
+          expect.objectContaining({
+            mediaId: abandoned.id,
+            sessionId: holder,
+            createdAt: t0Iso,
+          }),
+        ]);
+        expect(result.deletedIds).toEqual([abandoned.id]);
+        expect(await store.exists(abandoned.id)).toBe(false);
+        for (const id of [forPut.id, forAddRef.id, forClaim.id]) {
+          expect(await store.exists(id)).toBe(true);
+          expect(await store.isReferencedBy(id, holder)).toBe(true);
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("isReferencedBy returns true purely from ownership when no addRef ran", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");

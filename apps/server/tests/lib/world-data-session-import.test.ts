@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import {
@@ -23,6 +23,7 @@ import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import {
   dimensionRecordSchema,
   MAX_PLUGIN_DATA_VALUE_BYTES,
+  MEDIA_PIN_REF_PREFIX,
 } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
@@ -31,9 +32,11 @@ import {
   finalizeWorldDataMediaRefs,
   WorldDataSyncConflictError,
   prepareWorldDataImportForSession,
+  prepareWorldDataSyncForSession,
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import { buildImportPlan } from "../../src/world-data/session-import/planning.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
 import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
@@ -3411,5 +3414,264 @@ describe("plugin data in character records", () => {
       /\(id "npc-mara"\) field "blueprint" of source "characters", for plugin "character-blueprint" namespace "blueprints", failed schema validation/,
     );
     expect(await store.listCharacters("sess-1")).toEqual([]);
+  });
+});
+
+describe("syncWorldDataForSession dimensionOnly and deferMediaFinalize", () => {
+  it("ignores non-dimension writes when dimensionOnly is true with a full prepared plan", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    to: contract:world-notes.facts@1+lorebook
+    key: id
+    effects: [characters]
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+      files: {
+        "data/fact.json": JSON.stringify({
+          id: "hero",
+          name: "Original Hero",
+          content: "Original lore",
+        }),
+        "media/portraits/mio.png": "png-v1",
+      },
+    });
+    const dimRegistry = createPluginRegistry();
+    await registerDimensionProvider(dimRegistry);
+    const fullRegistry = registryEntries([
+      ...dimRegistry.getAll().values(),
+      ...registry({
+        "world-notes": ["facts"],
+        "character-presence": ["assets"],
+      })
+        .getAll()
+        .values(),
+    ]);
+    const activePlugins = ["world-init", "world-notes", "character-presence"];
+    const store = await makeStore(activePlugins);
+    const mediaStore = createMemoryMediaStore();
+    const staminaDef = (initialValue: number) => ({
+      name: "Stamina",
+      schema: { type: "integer", minimum: 0 },
+      initialValue,
+    });
+    try {
+      await store.upsertWorld({
+        id: worldId,
+        name: "Demo",
+        description: "",
+        metadata: { dimensions: { stamina: staminaDef(3) } },
+        createdAt: NOW,
+      });
+      const preflight = { activePlugins, registry: fullRegistry };
+      const baseOptions = {
+        store,
+        mediaStore,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight,
+      };
+      const initial = await importWorldDataForSession(baseOptions);
+      expect(initial.written).toBe(5);
+
+      // Edit live non-dimension session records (character, lorebook, plugin-data).
+      const existingChar = (await store.listCharacters("sess-1"))[0]!;
+      await store.upsertCharacter({ ...existingChar, name: "Edited Hero" });
+      const existingLore = (
+        await store.listSessionLorebookEntries("sess-1")
+      )[0]!;
+      await store.upsertLorebookEntries([
+        { ...existingLore, content: "Edited lore" },
+      ]);
+      await store.setPluginData({
+        id: "edited-note",
+        sessionId: "sess-1",
+        pluginId: "world-notes",
+        namespace: "facts",
+        key: "hero",
+        value: { id: "hero", name: "Edited Hero", content: "Edited note" },
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      const mediaBefore = await store.getPluginData(
+        "sess-1",
+        "character-presence",
+        "assets",
+        "mio.png",
+      );
+      const nonDimLedgersBefore = (
+        await store.listWorldDataImportLedger("sess-1")
+      ).filter((row) => row.namespace !== "_dimensions");
+
+      // Update world files AND dimension definition so a full prepared plan has
+      // writes across characters, lorebook, plugin-data, media-index, and dimensions.
+      await writeFile(
+        path.join(worldRoot, "data/fact.json"),
+        JSON.stringify({
+          id: "hero",
+          name: "World Hero v2",
+          content: "World lore v2",
+        }),
+      );
+      await writeFile(
+        path.join(worldRoot, "media/portraits/mio.png"),
+        "png-v2",
+      );
+      await store.upsertWorld({
+        id: worldId,
+        name: "Demo",
+        description: "",
+        metadata: { dimensions: { stamina: staminaDef(5) } },
+        createdAt: NOW,
+      });
+
+      const fullPrepared = await prepareWorldDataSyncForSession({
+        ...baseOptions,
+        dimensionOnly: false,
+      });
+      expect(new Set(fullPrepared.plan.writes.map((w) => w.kind))).toEqual(
+        new Set(["character", "lorebook", "plugin-data", "media-index"]),
+      );
+      expect(fullPrepared.plan.writes.length).toBe(5);
+
+      const drySync = await syncWorldDataForSession({
+        ...baseOptions,
+        prepared: fullPrepared,
+        dimensionOnly: true,
+        dryRun: true,
+      });
+      expect(drySync).toMatchObject({
+        planned: 1,
+        upserted: 1,
+        deleted: 0,
+        unchanged: 0,
+        conflicts: [],
+      });
+
+      const appliedSync = await syncWorldDataForSession({
+        ...baseOptions,
+        prepared: fullPrepared,
+        dimensionOnly: true,
+        dryRun: false,
+      });
+      expect(appliedSync).toMatchObject({
+        planned: 1,
+        upserted: 1,
+        deleted: 0,
+        unchanged: 0,
+        conflicts: [],
+      });
+
+      // Dimension updated to initialValue 5.
+      expect(
+        (
+          await store.getPluginData(
+            "sess-1",
+            "world-init",
+            "_dimensions",
+            "stamina",
+          )
+        )?.value,
+      ).toMatchObject({ value: 5, version: 2 });
+
+      // Non-dimension live session records and their ledgers were untouched.
+      expect((await store.listCharacters("sess-1"))[0]?.name).toBe(
+        "Edited Hero",
+      );
+      expect(
+        (await store.listSessionLorebookEntries("sess-1"))[0]?.content,
+      ).toBe("Edited lore");
+      expect(
+        (await store.getPluginData("sess-1", "world-notes", "facts", "hero"))
+          ?.value,
+      ).toEqual({ id: "hero", name: "Edited Hero", content: "Edited note" });
+      expect(
+        await store.getPluginData(
+          "sess-1",
+          "character-presence",
+          "assets",
+          "mio.png",
+        ),
+      ).toEqual(mediaBefore);
+      expect(
+        (await store.listWorldDataImportLedger("sess-1")).filter(
+          (row) => row.namespace !== "_dimensions",
+        ),
+      ).toEqual(nonDimLedgersBefore);
+    } finally {
+      await store.close();
+      await rm(worldsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("defers media finalization during syncWorldDataForSession when deferMediaFinalize is true", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "png-deferred",
+      },
+    });
+    const store = await makeStore(["character-presence"]);
+    const mediaStore = createMemoryMediaStore();
+    const claimSpy = vi.spyOn(mediaStore, "claimAssets");
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+    try {
+      const result = await syncWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        dryRun: false,
+        deferMediaFinalize: true,
+        preflight,
+      });
+
+      expect(result.upserted).toBe(1);
+      expect(result.mediaRefs).toHaveLength(1);
+      const ref = result.mediaRefs[0]!;
+      expect(ref.temporarySessionId.startsWith(MEDIA_PIN_REF_PREFIX)).toBe(
+        true,
+      );
+      expect(claimSpy).not.toHaveBeenCalled();
+      expect(await mediaStore.isReferencedBy(ref.id, "sess-1")).toBe(false);
+      expect(
+        await mediaStore.isReferencedBy(ref.id, ref.temporarySessionId),
+      ).toBe(true);
+      expect(
+        (await mediaStore.cleanup(new Set(), { maxAgeMs: 0 })).deleted,
+      ).toBe(0);
+
+      // Caller explicitly finalizes the deferred media refs afterwards.
+      await finalizeWorldDataMediaRefs({ mediaStore, refs: result.mediaRefs });
+      expect(claimSpy).toHaveBeenCalledTimes(1);
+      expect(await mediaStore.isReferencedBy(ref.id, "sess-1")).toBe(true);
+      expect(
+        await mediaStore.isReferencedBy(ref.id, ref.temporarySessionId),
+      ).toBe(false);
+    } finally {
+      await store.close();
+      await rm(worldsDir, { recursive: true, force: true });
+    }
   });
 });

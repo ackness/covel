@@ -380,3 +380,69 @@ it("translates the memory storage badge", async () => {
   expect(await screen.findByText("内存")).toBeTruthy();
   expect(screen.queryByText("Memory")).toBeNull();
 });
+
+it("places the rail divider between framework tabs and plugin tabs in both player and developer modes", async () => {
+  await initSettings();
+  mocks.specs = {
+    theme: [],
+    right: [
+      {
+        pluginId: "provider-a",
+        specs: [
+          {
+            id: "alpha",
+            group: "alpha",
+            groupLabel: "Alpha panel",
+            label: "Alpha",
+            icon: "book-open",
+            view: { component: "Text" },
+          },
+        ],
+      },
+      {
+        pluginId: "provider-b",
+        specs: [
+          {
+            id: "beta",
+            group: "beta",
+            groupLabel: "Beta panel",
+            label: "Beta",
+            icon: "book-open",
+            view: { component: "Text" },
+          },
+        ],
+      },
+    ],
+    message: [],
+  };
+  const hasLeadingDivider = (name: string) =>
+    screen.getByRole("tab", { name }).previousElementSibling !== null;
+
+  const previousAppearance = getSettings().get("ui.appearance");
+  try {
+    await act(async () => {
+      await getSettings().set("ui.appearance", "modern");
+      await getSettings().set("ui.developerView", false);
+    });
+    const view = render(<RightPanel sessionId="divider-test" world={null} />);
+    await screen.findByRole("tab", { name: "Alpha panel" });
+    expect(hasLeadingDivider("World")).toBe(false);
+    expect(hasLeadingDivider("Alpha panel")).toBe(true);
+    expect(hasLeadingDivider("Beta panel")).toBe(false);
+
+    await act(async () => {
+      await getSettings().set("ui.developerView", true);
+    });
+    await screen.findByRole("tab", { name: "Database" });
+    expect(hasLeadingDivider("World")).toBe(false);
+    expect(hasLeadingDivider("Database")).toBe(false);
+    expect(hasLeadingDivider("Alpha panel")).toBe(true);
+    expect(hasLeadingDivider("Beta panel")).toBe(false);
+    view.unmount();
+  } finally {
+    await act(async () => {
+      await getSettings().set("ui.developerView", false);
+      await getSettings().set("ui.appearance", previousAppearance);
+    });
+  }
+});

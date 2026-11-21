@@ -206,6 +206,138 @@ export function runVectorStoreContractTests(
       ).toEqual(["archive/kept", "other/removed"]);
     });
 
+    it("deleteVectors rejects mismatched expectedSessionCreatedAt even when no embedding model is locked", async () => {
+      const createdAt = "2026-06-01T00:00:00.000Z";
+      await store.createSession({
+        id: "unlocked-del",
+        status: "active",
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        locale: "en",
+        activePlugins: [],
+        createdAt,
+        updatedAt: createdAt,
+      });
+
+      await expect(
+        store.deleteVectors({
+          sessionId: "unlocked-del",
+          pluginId: "owner",
+          expectedSessionCreatedAt: "stale-incarnation",
+        }),
+      ).rejects.toThrow("incarnation changed");
+
+      await expect(
+        store.deleteVectors({
+          sessionId: "missing-del",
+          pluginId: "owner",
+          expectedSessionCreatedAt: createdAt,
+        }),
+      ).rejects.toThrow("incarnation changed");
+
+      // Matching incarnation or omitted guard on an unlocked/missing session is a no-op.
+      await expect(
+        store.deleteVectors({
+          sessionId: "unlocked-del",
+          pluginId: "owner",
+          expectedSessionCreatedAt: createdAt,
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        store.deleteVectors({
+          sessionId: "unlocked-del",
+          pluginId: "owner",
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        store.deleteVectors({
+          sessionId: "missing-del",
+          pluginId: "owner",
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it("breaks equal-distance ties deterministically by (pluginId, namespace, key) in byte order", async () => {
+      await setupSessionWithModel(store, "ties", 2);
+      const tied = new Float32Array([1, 0]);
+      // Insert in scrambled order including ASCII case, punctuation, and
+      // fullwidth vs non-BMP characters (UTF-8 / codepoint byte order).
+      const tuples: ReadonlyArray<readonly [string, string, string]> = [
+        ["p2", "ns1", "a"],
+        ["p1", "ns2", "a"],
+        ["p1", "ns1", "🐉"],
+        ["p1", "ns1", "a_b"],
+        ["p1", "ns1", "Ａ"],
+        ["p1", "ns1", "a-b"],
+        ["p1", "ns1", "a"],
+        ["p1", "ns1", "B"],
+      ];
+      for (const [pluginId, namespace, key] of tuples) {
+        await store.upsertVector({
+          sessionId: "ties",
+          pluginId,
+          namespace,
+          key,
+          embedding: tied,
+        });
+      }
+
+      const expected = [
+        "p1/ns1/B",
+        "p1/ns1/a",
+        "p1/ns1/a-b",
+        "p1/ns1/a_b",
+        "p1/ns1/Ａ",
+        "p1/ns1/🐉",
+        "p1/ns2/a",
+        "p2/ns1/a",
+      ];
+      const all = await store.searchVectors({
+        sessionId: "ties",
+        query: tied,
+        topK: 10,
+      });
+      expect(all.map((r) => `${r.pluginId}/${r.namespace}/${r.key}`)).toEqual(
+        expected,
+      );
+
+      // Cutoff inside the tied group must still pick the byte-order-first topK rows.
+      const top3 = await store.searchVectors({
+        sessionId: "ties",
+        query: tied,
+        topK: 3,
+      });
+      expect(top3.map((r) => `${r.pluginId}/${r.namespace}/${r.key}`)).toEqual(
+        expected.slice(0, 3),
+      );
+
+      // A strictly nearer vector still ranks before the tied group, with ties broken at the boundary.
+      await store.upsertVector({
+        sessionId: "ties",
+        pluginId: "p9",
+        namespace: "ns9",
+        key: "nearest",
+        embedding: new Float32Array([0.5, 0]),
+      });
+      const mixed = await store.searchVectors({
+        sessionId: "ties",
+        query: new Float32Array([0, 0]),
+        topK: 3,
+      });
+      expect(mixed.map((r) => `${r.pluginId}/${r.namespace}/${r.key}`)).toEqual(
+        ["p9/ns9/nearest", "p1/ns1/B", "p1/ns1/a"],
+      );
+    });
+
     it("reads stored payloads by key within one session namespace", async () => {
       await setupSessionWithModel(store, "s1", 2);
       await setupSessionWithModel(store, "s2", 2);

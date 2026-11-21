@@ -130,7 +130,13 @@ export function createLocalStorageBackend(
       await this.saveWithRevision!(entries, current.revision);
     },
     async loadWithRevision() {
-      archived = archiveUnusableBundle(storage) ?? archived;
+      const raw = storage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+      if (raw && unusableSettingsBundleLabel(raw) !== undefined) {
+        return withSettingsLock(async () => {
+          archived = archiveUnusableBundle(storage) ?? archived;
+          return readBundle(storage);
+        });
+      }
       return readBundle(storage);
     },
     async takeArchivedBundle() {

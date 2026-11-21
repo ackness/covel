@@ -136,4 +136,89 @@ describe("stored values the current schema refuses", () => {
       /refusing to write/,
     );
   });
+
+  it.each(["backupBundle", "saveWithRevision"] as const)(
+    "repairs a second invalid key registered while %s is in flight without bricking the store",
+    async (pauseAt) => {
+      const tone = {
+        key: "plugin.narrator.tone",
+        schema: z.enum(["calm", "tense"]),
+        default: "calm" as const,
+        group: "plugin" as const,
+        pluginId: "narrator",
+        label: "Reply tone",
+      };
+      const before = bundle({
+        [length.key]: "epic",
+        [tone.key]: "chaotic",
+        "ui.scheme": "dark",
+      });
+      storage.setItem("covel:settings", before);
+
+      const baseBackend = createLocalStorageBackend(storage);
+      const started = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let intercepted = false;
+      const adapter = {
+        ...baseBackend,
+        ...(pauseAt === "backupBundle"
+          ? {
+              async backupBundle(label?: string) {
+                started.resolve();
+                await release.promise;
+                return baseBackend.backupBundle!(label);
+              },
+            }
+          : {
+              async saveWithRevision(
+                entries: Record<string, unknown>,
+                expectedRevision: number,
+              ) {
+                if (!intercepted) {
+                  intercepted = true;
+                  started.resolve();
+                  await release.promise;
+                }
+                return baseBackend.saveWithRevision!(entries, expectedRevision);
+              },
+            }),
+      };
+
+      const store = new SettingsStore(adapter);
+      const repairs: SettingsRepair[] = [];
+      store.subscribeRepairs((repair) => repairs.push(repair));
+      const errors: Error[] = [];
+      store.subscribePersistenceErrors((error) => errors.push(error));
+      await store.init();
+
+      store.register(length);
+      await started.promise;
+
+      // A second plugin registers another invalid stored key while repair is in flight.
+      store.register(tone);
+      expect(store.get(length.key)).toBe("medium");
+      expect(store.get(tone.key)).toBe("calm");
+
+      release.resolve();
+      await store.set("ui.scheme", "light");
+
+      expect(errors).toEqual([]);
+      expect(store.isHydrated()).toBe(true);
+      expect(store.has(length.key)).toBe(false);
+      expect(store.has(tone.key)).toBe(false);
+      expect(storedEntries(storage)).toEqual({ "ui.scheme": "light" });
+      expect(repairs).toHaveLength(pauseAt === "backupBundle" ? 1 : 2);
+      expect(repairs.flatMap((r) => r.keys).sort()).toEqual(
+        [length.key, tone.key].sort(),
+      );
+      expect(storage.getItem("covel:settings.conflict.bak")).toBe(before);
+
+      await store.set(tone.key, "tense");
+      expect(store.get(tone.key)).toBe("tense");
+      expect(storedEntries(storage)).toEqual({
+        "ui.scheme": "light",
+        [tone.key]: "tense",
+      });
+    },
+  );
 });

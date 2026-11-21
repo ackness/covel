@@ -203,10 +203,40 @@ export function createSessionWorkspace(
   dataService: DataService,
   mode: "local" | "remote",
 ): SessionWorkspace {
-  const workspace =
-    mode === "local"
-      ? new LocalSessionWorkspace(dataService)
-      : new RemoteSessionWorkspace();
+  if (mode === "remote") {
+    const workspace = new RemoteSessionWorkspace();
+    const inFlight = new Map<string, Set<Promise<unknown>>>();
+    return {
+      hydrate: workspace.hydrate.bind(workspace),
+      checkpoint: workspace.checkpoint.bind(workspace),
+      settle: async (sessionId) => {
+        while (true) {
+          const pending = inFlight.get(sessionId);
+          if (!pending || pending.size === 0) return;
+          await Promise.allSettled([...pending]);
+        }
+      },
+      run: (sessionId, actionId, mutate, options) => {
+        const result = workspace.run(sessionId, actionId, mutate, options);
+        let pending = inFlight.get(sessionId);
+        if (!pending) {
+          pending = new Set();
+          inFlight.set(sessionId, pending);
+        }
+        pending.add(result);
+        const cleanup = () => {
+          pending.delete(result);
+          if (pending.size === 0 && inFlight.get(sessionId) === pending) {
+            inFlight.delete(sessionId);
+          }
+        };
+        void result.then(cleanup, cleanup);
+        return result;
+      },
+    };
+  }
+
+  const workspace = new LocalSessionWorkspace(dataService);
   const running = new Map<string, Promise<unknown>>();
   return {
     hydrate: workspace.hydrate.bind(workspace),

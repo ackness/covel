@@ -144,9 +144,7 @@ async function projectRegistryUiSpecs(
   return { pluginSpecs, diagnostics, assets };
 }
 
-async function loadValidatedSpecs(
-  registry: PluginRegistry,
-): Promise<ValidatedSpecs> {
+function loadValidatedSpecs(registry: PluginRegistry): Promise<ValidatedSpecs> {
   const cached = specCache.get(registry);
   if (cached) return cached;
   if (!subscribedRegistries.has(registry)) {
@@ -155,9 +153,14 @@ async function loadValidatedSpecs(
     });
     subscribedRegistries.add(registry);
   }
-  const value = projectRegistryUiSpecs(registry);
-  specCache.set(registry, value);
-  return value;
+  const pending: Promise<ValidatedSpecs> = projectRegistryUiSpecs(
+    registry,
+  ).catch((error: unknown) => {
+    if (specCache.get(registry) === pending) specCache.delete(registry);
+    throw error;
+  });
+  specCache.set(registry, pending);
+  return pending;
 }
 
 export async function buildUiSpecsResponse(params: {

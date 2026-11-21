@@ -72,4 +72,29 @@ describe("settings schema normalization", () => {
     expect(store.get(entry.key)).toEqual(normalized);
     expect(adapter.readEntries()[entry.key]).toEqual(partial);
   });
+
+  it("persists and notifies with schema-normalized values for secrets", async () => {
+    const adapter = createMemoryAdapter();
+    const store = new SettingsStore(adapter);
+    store.register({
+      key: "keys.openai",
+      schema: z
+        .string()
+        .trim()
+        .transform((value) => value.toLowerCase()),
+      default: "",
+      group: "llm",
+      label: "OpenAI",
+      backend: "keys",
+    });
+    await store.init();
+    const observe = vi.fn();
+    store.subscribe("keys.openai", observe);
+
+    await store.set("keys.openai", "  SK-TRIMMED  ");
+
+    expect(store.get("keys.openai")).toBe("sk-trimmed");
+    expect(adapter.readSecrets()).toEqual({ openai: "sk-trimmed" });
+    expect(observe).toHaveBeenLastCalledWith("sk-trimmed");
+  });
 });

@@ -72,6 +72,7 @@ interface RightPanelTabItem {
   shortLabel?: string;
   icon: LucideIcon;
   title?: string;
+  isFramework?: boolean;
 }
 
 function resolvePluginIcon(name: string): LucideIcon {
@@ -190,6 +191,7 @@ function SessionRightPanel({
         value: "world",
         label: t("session.worldTab"),
         icon: BookOpen,
+        isFramework: true,
       },
       ...(developerView
         ? [
@@ -198,6 +200,7 @@ function SessionRightPanel({
               value: "database",
               label: t("session.database"),
               icon: Database,
+              isFramework: true,
             },
           ]
         : []),
@@ -325,7 +328,10 @@ function SessionRightPanel({
             <TabsList className="flex h-auto min-h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground">
               {tabItems.map((item, idx) => {
                 const ItemIcon = item.icon;
-                const afterFrameworkTabs = idx === 2;
+                const afterFrameworkTabs =
+                  !item.isFramework &&
+                  idx > 0 &&
+                  tabItems[idx - 1]?.isFramework === true;
                 return (
                   <div
                     key={item.id}

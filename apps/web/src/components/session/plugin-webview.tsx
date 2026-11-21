@@ -24,6 +24,61 @@ import {
  */
 const FRAME_URL = `${import.meta.env.BASE_URL.replace(/\/$/, "")}${PLUGIN_FRAME_PATH}`;
 
+function areStateValuesEqual(
+  a: unknown,
+  b: unknown,
+  seen = new WeakMap<object, WeakSet<object>>(),
+): boolean {
+  if (Object.is(a, b)) return true;
+  if (
+    a === null ||
+    b === null ||
+    typeof a !== "object" ||
+    typeof b !== "object"
+  ) {
+    return false;
+  }
+  const aSeen = seen.get(a);
+  if (aSeen?.has(b)) return true;
+  if (aSeen) aSeen.add(b);
+  else seen.set(a, new WeakSet([b]));
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!areStateValuesEqual(a[i], b[i], seen)) return false;
+    }
+    return true;
+  }
+
+  if (a instanceof Date || b instanceof Date) {
+    return (
+      a instanceof Date &&
+      b instanceof Date &&
+      Object.is(a.getTime(), b.getTime())
+    );
+  }
+
+  const protoA = Object.getPrototypeOf(a);
+  const protoB = Object.getPrototypeOf(b);
+  if (protoA !== protoB || (protoA !== Object.prototype && protoA !== null)) {
+    return false;
+  }
+
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  const recordA = a as Record<string, unknown>;
+  const recordB = b as Record<string, unknown>;
+  for (const key of keysA) {
+    if (!Object.hasOwn(recordB, key)) return false;
+    if (!areStateValuesEqual(recordA[key], recordB[key], seen)) return false;
+  }
+  return true;
+}
+
 export function PluginWebview(props: {
   themeSessionId?: string;
   title: string;
@@ -74,6 +129,9 @@ export function PluginWebview(props: {
   const current = useRef({ ...props, state });
   current.current = { ...props, state };
   const connectedFrame = useRef<HTMLIFrameElement | null>(null);
+  const lastPushedState = useRef<Readonly<Record<string, unknown>> | null>(
+    null,
+  );
   const warned = useRef(false);
   const isCurrent = () =>
     owner.active && !owner.failed && (current.current.isCurrent?.() ?? true);
@@ -84,6 +142,7 @@ export function PluginWebview(props: {
     clearTimeout(heartbeatTimer.current);
     bridge.current?.close();
     bridge.current = null;
+    lastPushedState.current = null;
     setPageStatus("failed");
     current.current.onPageFailure?.();
   };
@@ -135,11 +194,20 @@ export function PluginWebview(props: {
   const pushFullState = () => {
     if (!bridge.current || !isCurrent()) return;
     const snapshot = fullState();
-    if (isCurrent()) bridge.current?.pushState(snapshot);
+    if (!isCurrent() || !bridge.current) return;
+    if (
+      lastPushedState.current !== null &&
+      areStateValuesEqual(lastPushedState.current, snapshot)
+    ) {
+      return;
+    }
+    lastPushedState.current = snapshot;
+    bridge.current.pushState(snapshot);
   };
   useEffect(() => {
     if (!isCurrent()) {
       bridge.current?.close();
+      lastPushedState.current = null;
       return;
     }
     pushFullState();
@@ -153,6 +221,7 @@ export function PluginWebview(props: {
       bridge.current?.close();
       bridge.current = null;
       connectedFrame.current = null;
+      lastPushedState.current = null;
     };
   }, [owner]);
 
@@ -221,6 +290,7 @@ export function PluginWebview(props: {
     }
     connectedFrame.current = element;
     bridge.current?.close();
+    lastPushedState.current = null;
     const initialState = fullState();
     if (!isCurrent()) return;
     bridge.current = connectPluginBridge(
@@ -253,6 +323,7 @@ export function PluginWebview(props: {
         },
       },
     );
+    lastPushedState.current = initialState;
   };
 
   const iframe = (

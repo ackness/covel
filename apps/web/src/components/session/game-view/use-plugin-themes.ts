@@ -18,8 +18,6 @@ import {
   pluginThemeRevision,
 } from "@/theme-system/plugin-themes.js";
 
-let requestSequence = 0;
-
 export function usePluginThemes(
   sessionId: string,
   plugins: readonly SessionPlugin[],
@@ -42,6 +40,14 @@ export function usePluginThemes(
     () => plugins.filter((plugin) => plugin.active),
     [activeKey],
   );
+  const activePluginKey = useMemo(
+    () =>
+      active
+        .map((plugin) => plugin.id)
+        .sort()
+        .join("\u001f"),
+    [active],
+  );
   const subscribe = useCallback(
     (listener: () => void) => subscribePluginThemes(store, listener),
     [store],
@@ -58,7 +64,7 @@ export function usePluginThemes(
     if (!source) return;
     source.replace([], "loading");
     let cancelled = false;
-    void fetchUiSpecs(sessionId, JSON.stringify([key, ++requestSequence]))
+    void fetchUiSpecs(sessionId, activePluginKey)
       .then((response) => {
         if (cancelled) return;
         if (!Array.isArray(response.theme)) {
@@ -100,7 +106,7 @@ export function usePluginThemes(
     // `active` follows `activeKey`, not the list's identity: a plugin list
     // reloaded with the same activations must not drop and refetch the theme
     // (every themed Markdown body would re-render twice).
-  }, [loaded, sessionId, key, active, language]);
+  }, [loaded, sessionId, key, active, activePluginKey, language]);
   return {
     source: loaded?.sessionId === sessionId ? loaded.source : undefined,
     reload: () => setRevision((value) => value + 1),
