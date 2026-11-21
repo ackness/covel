@@ -187,6 +187,148 @@ if (pgAvailable) {
     });
   });
 
+  describe("PgMediaStore cleanup serialization", () => {
+    it("holds the per-asset advisory lock across expired-ref release and asset deletion", async () => {
+      const { default: postgres } = await import("postgres");
+      const hour = 60 * 60 * 1000;
+      const store = await createPgMediaStore(isolated.url, {
+        freshSchema: true,
+      });
+      const blocker = postgres(isolated.url, { max: 1, onnotice: () => {} });
+      const observer = postgres(isolated.url, { max: 1, onnotice: () => {} });
+      let releaseOrphan!: () => void;
+      let releaseShared!: () => void;
+      let orphanBlockingTx: Promise<unknown> | undefined;
+      let sharedBlockingTx: Promise<unknown> | undefined;
+      try {
+        const holder = "world-data-import:abandoned";
+        const orphan = await store.put(
+          new Uint8Array([10, 20, 30]),
+          "image/png",
+          undefined,
+          { sessionId: holder, pluginId: "p1" },
+        );
+        const shared = await store.put(
+          new Uint8Array([40, 50, 60]),
+          "image/png",
+          undefined,
+          { sessionId: holder, pluginId: "p1" },
+        );
+        await store.addRef(shared.id, "sess-live", "p-live");
+
+        const cleanupTime = new Date(Date.now() + 25 * hour);
+        const refreshedAt = cleanupTime.toISOString();
+        const policy = {
+          maxAgeMs: 0,
+          expireRefs: {
+            sessionIdPrefix: "world-data-import:",
+            maxAgeMs: 24 * hour,
+          },
+          now: cleanupTime,
+        };
+
+        // 1. Block orphan's per-asset advisory lock, start cleanup, verify
+        // expired ref is NOT deleted outside the lock, then refresh created_at
+        // inside the lock (simulating a concurrent re-claim winning the lock).
+        let markOrphanLocked!: () => void;
+        const orphanLocked = new Promise<void>((resolve) => {
+          markOrphanLocked = resolve;
+        });
+        const holdOrphan = new Promise<void>((resolve) => {
+          releaseOrphan = resolve;
+        });
+        orphanBlockingTx = blocker.begin(async (tx) => {
+          await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${orphan.id}))`;
+          markOrphanLocked();
+          await holdOrphan;
+          await tx`
+            INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
+            VALUES (${holder}, ${orphan.id}, ${"p2"}, ${refreshedAt})
+            ON CONFLICT (session_id, media_id) DO UPDATE SET created_at = EXCLUDED.created_at
+          `;
+        });
+        await orphanLocked;
+
+        const firstCleanup = store.cleanup(new Set(), policy);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+
+        // While the advisory lock is held, cleanup must not have released the
+        // expired ref for orphan.
+        const refsDuringLock = await observer<{ created_at: string }[]>`
+          SELECT created_at FROM media_refs
+          WHERE media_id = ${orphan.id} AND session_id = ${holder}
+        `;
+        expect(refsDuringLock).toHaveLength(1);
+
+        releaseOrphan();
+        await orphanBlockingTx;
+        const firstResult = await firstCleanup;
+
+        // Because the re-claim refreshed created_at before cleanup acquired the
+        // lock, cleanup must keep both the refreshed ref and the orphan asset,
+        // while releasing shared's expired ref.
+        expect(firstResult.deletedIds).toEqual([]);
+        expect(firstResult.expiredRefs).toEqual([
+          expect.objectContaining({ mediaId: shared.id, sessionId: holder }),
+        ]);
+        expect(await store.exists(orphan.id)).toBe(true);
+        expect(await store.exists(shared.id)).toBe(true);
+        expect(
+          (await store.listRefs()).find(
+            (r) => r.mediaId === orphan.id && r.sessionId === holder,
+          ),
+        ).toMatchObject({ pluginId: "p1", createdAt: refreshedAt });
+
+        // 2. Also verify an expired-ref-only asset (not in idsToDelete) holds
+        // the per-asset advisory lock before deleting its expired ref.
+        await store.addRef(shared.id, holder, "p1");
+        const secondCleanupTime = new Date(cleanupTime.getTime() + 25 * hour);
+        let markSharedLocked!: () => void;
+        const sharedLocked = new Promise<void>((resolve) => {
+          markSharedLocked = resolve;
+        });
+        const holdShared = new Promise<void>((resolve) => {
+          releaseShared = resolve;
+        });
+        sharedBlockingTx = blocker.begin(async (tx) => {
+          await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${shared.id}))`;
+          markSharedLocked();
+          await holdShared;
+        });
+        await sharedLocked;
+
+        const secondCleanup = store.cleanup(new Set(), {
+          ...policy,
+          now: secondCleanupTime,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const sharedRefsDuringLock = await observer<{ session_id: string }[]>`
+          SELECT session_id FROM media_refs
+          WHERE media_id = ${shared.id} AND session_id = ${holder}
+        `;
+        expect(sharedRefsDuringLock).toHaveLength(1);
+
+        releaseShared();
+        await sharedBlockingTx;
+        const secondResult = await secondCleanup;
+        expect(secondResult.expiredRefs).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ mediaId: shared.id, sessionId: holder }),
+          ]),
+        );
+        expect(await store.exists(shared.id)).toBe(true);
+        expect(await store.isReferencedBy(shared.id, "sess-live")).toBe(true);
+        expect(await store.isReferencedBy(shared.id, holder)).toBe(false);
+      } finally {
+        releaseOrphan?.();
+        releaseShared?.();
+        await orphanBlockingTx?.catch(() => undefined);
+        await sharedBlockingTx?.catch(() => undefined);
+        await Promise.all([blocker.end(), observer.end(), store.close?.()]);
+      }
+    });
+  });
+
   describe("PgMediaStore lifecycle", () => {
     it("exposes an idempotent close for its owned client", async () => {
       const store = await createPgMediaStore(isolated.url);

@@ -2,7 +2,10 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
-import { fakeSessionServer } from "./support/fake-session-server.js";
+import {
+  fakeSessionServer,
+  serverInitialCheckpoint,
+} from "./support/fake-session-server.js";
 import { ApiError } from "../api/request.js";
 import type {
   BrowserCheckpoint,
@@ -1241,5 +1244,88 @@ describe("LocalDataService browser-authoritative sync", () => {
       actionId: "background-1",
       messages: [expect.objectContaining({ id: "message-1" })],
     });
+  });
+
+  it("does not bump checkpoint revision on hydrate when world JSON differs only by object key order", async () => {
+    const service = await serviceWithWorld("world-1", {
+      alpha: 1,
+      beta: { first: "a", second: "b" },
+    });
+    await createSave(service, "world-1", "sess-key-order", [], "en-US");
+    const before = await vault.getLatestCheckpoint("sess-key-order");
+    expect(before?.revision).toBe(1);
+
+    // Re-save the logically identical world with reversed property insertion order.
+    const existingWorld = await vault.getWorld("world-1");
+    expect(existingWorld).toBeTruthy();
+    await vault.upsertWorld({
+      createdAt: existingWorld!.createdAt,
+      description: existingWorld!.description,
+      metadata: {
+        beta: { second: "b", first: "a" },
+        alpha: 1,
+      },
+      name: existingWorld!.name,
+      id: existingWorld!.id,
+    });
+
+    await createSessionWorkspace(service, "local").hydrate("sess-key-order");
+    const after = await vault.getLatestCheckpoint("sess-key-order");
+    expect(after?.revision).toBe(1);
+  });
+
+  it("reads the existing session inside the workspace lock during updateSession", async () => {
+    const service = await serviceWithWorld();
+    let releaseLock!: () => void;
+    const holdLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    let enteredLock!: () => void;
+    const lockEntered = new Promise<void>((resolve) => {
+      enteredLock = resolve;
+    });
+
+    // Hold the session lock before the checkpoint exists, then commit the
+    // initial checkpoint before releasing the lock.
+    const holder = vault.withSessionLock("sess-locked-update", async () => {
+      enteredLock();
+      await holdLock;
+      const world = await vault.getWorld("world-1");
+      const now = new Date().toISOString();
+      const initialCheckpoint = JSON.parse(
+        JSON.stringify({
+          ...serverInitialCheckpoint(
+            {
+              sessionId: "sess-locked-update",
+              worldId: "world-1",
+              locale: "en-US",
+            },
+            now,
+          ),
+          revision: 1,
+          actionId: "local:create:sess-locked-update",
+          committedAt: now,
+          world,
+        }),
+      ) as BrowserCheckpoint;
+      await vault.applySessionCommit({
+        baseRevision: 0,
+        revision: 1,
+        actionId: "local:create:sess-locked-update",
+        checkpoint: initialCheckpoint,
+      });
+    });
+
+    await lockEntered;
+    const updating = service.updateSession("sess-locked-update", {
+      status: "paused",
+    });
+    // Yield so an unlocked pre-read would execute and fail immediately.
+    await Promise.resolve();
+    releaseLock();
+
+    await holder;
+    const updated = await updating;
+    expect(updated.status).toBe("paused");
   });
 });

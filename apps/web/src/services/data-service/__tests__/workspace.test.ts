@@ -288,4 +288,79 @@ describe("SessionWorkspace", () => {
 
     expect(order).toEqual(["mutate"]);
   });
+
+  it("does not retain a rejected remote run or break subsequent settle calls", async () => {
+    const order: string[] = [];
+    const { workspace } = makeWorkspace(order, "remote");
+
+    await expect(
+      workspace.run("sess-1", "failed-action", async () => {
+        throw new Error("aborted turn");
+      }),
+    ).rejects.toThrow("aborted turn");
+
+    await expect(workspace.settle?.("sess-1")).resolves.toBeUndefined();
+
+    await expect(
+      workspace.run("sess-1", "next-action", async () => "ok"),
+    ).resolves.toBe("ok");
+  });
+
+  it("awaits all overlapping in-flight remote runs in settle even when a newer run finishes first", async () => {
+    const order: string[] = [];
+    const { workspace } = makeWorkspace(order, "remote");
+    let releaseFirst!: () => void;
+    let releaseSecond!: () => void;
+
+    const first = workspace.run("sess-1", "first", async () => {
+      order.push("first:start");
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      order.push("first:end");
+    });
+    const second = workspace.run("sess-1", "second", async () => {
+      order.push("second:start");
+      await new Promise<void>((resolve) => {
+        releaseSecond = resolve;
+      });
+      order.push("second:end");
+    });
+
+    releaseSecond();
+    await second;
+
+    let settled = false;
+    const settling = workspace.settle!("sess-1").then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseFirst();
+    await Promise.all([first, settling]);
+    expect(settled).toBe(true);
+    expect(order).toEqual([
+      "first:start",
+      "second:start",
+      "second:end",
+      "first:end",
+    ]);
+  });
+
+  it("retains local mode rejection semantics in settle to guard stale checkpoints", async () => {
+    const order: string[] = [];
+    const { workspace, operations } = makeWorkspace(order, "local");
+    const cause = new Error("checkpoint failed");
+    operations.commit.mockRejectedValueOnce(cause);
+
+    await expect(
+      workspace.run("sess-1", "action-1", async () => {}),
+    ).rejects.toMatchObject({ stage: "checkpoint" });
+
+    await expect(workspace.settle?.("sess-1")).rejects.toMatchObject({
+      stage: "checkpoint",
+    });
+  });
 });

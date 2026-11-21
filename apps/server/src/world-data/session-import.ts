@@ -671,6 +671,14 @@ export async function syncWorldDataForSession(
         ),
       }
     : prepared.plan;
+  const dimensionOnly = options.dimensionOnly || prepared.dimensionOnly;
+  const selectedWrites = dimensionOnly
+    ? plan.writes.filter(
+        (write) =>
+          write.kind === "plugin-data" &&
+          write.namespace === DIMENSION_DATA_NAMESPACE,
+      )
+    : plan.writes;
   if (
     !prepared.imported ||
     !options.worldId ||
@@ -680,7 +688,7 @@ export async function syncWorldDataForSession(
       imported: prepared.imported,
       dryRun,
       diagnostics,
-      planned: plan.writes.length,
+      planned: selectedWrites.length,
       upserted: 0,
       deleted: 0,
       unchanged: 0,
@@ -691,14 +699,6 @@ export async function syncWorldDataForSession(
   // Capture the narrowed worldId so it stays `string` in transaction closures.
   const worldId = options.worldId;
 
-  const dimensionOnly = options.dimensionOnly || prepared.dimensionOnly;
-  const selectedWrites = dimensionOnly
-    ? plan.writes.filter(
-        (write) =>
-          write.kind === "plugin-data" &&
-          write.namespace === DIMENSION_DATA_NAMESPACE,
-      )
-    : plan.writes;
   const ledgers = (
     await options.store.listWorldDataImportLedger(options.sessionId)
   ).filter(
@@ -731,7 +731,7 @@ export async function syncWorldDataForSession(
   for (const ledger of ledgers)
     if (ledger.namespace === DIMENSION_DATA_NAMESPACE && ledger.pluginId)
       dimensionProviders.add(ledger.pluginId);
-  for (const write of plan.writes)
+  for (const write of selectedWrites)
     if (
       write.kind === "plugin-data" &&
       write.namespace === DIMENSION_DATA_NAMESPACE
@@ -817,7 +817,7 @@ export async function syncWorldDataForSession(
     deleted++;
   }
 
-  for (const write of plan.writes) {
+  for (const write of selectedWrites) {
     const key = writeKey(write);
     const ledger = ledgerByKey.get(key);
     if (!ledger) {
@@ -956,7 +956,7 @@ export async function syncWorldDataForSession(
     imported: true,
     dryRun,
     diagnostics: [...diagnostics, ...failures],
-    planned: plan.writes.length,
+    planned: selectedWrites.length,
     upserted: 0,
     deleted: 0,
     unchanged,
@@ -981,7 +981,7 @@ export async function syncWorldDataForSession(
       imported: true,
       dryRun,
       diagnostics,
-      planned: plan.writes.length,
+      planned: selectedWrites.length,
       upserted,
       deleted,
       unchanged,
@@ -1136,7 +1136,7 @@ export async function syncWorldDataForSession(
       });
     }
 
-    if (mediaRefs.length > 0) {
+    if (!options.deferMediaFinalize && mediaRefs.length > 0) {
       await finalizeWorldDataMediaRefs({
         mediaStore: options.mediaStore,
         refs: mediaRefs,
@@ -1147,7 +1147,7 @@ export async function syncWorldDataForSession(
       imported: true,
       dryRun,
       diagnostics,
-      planned: plan.writes.length,
+      planned: selectedWrites.length,
       upserted,
       deleted,
       unchanged,

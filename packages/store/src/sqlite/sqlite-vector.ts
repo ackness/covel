@@ -57,6 +57,7 @@ import type {
   ResetSessionVectorIndexInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
+import { compareByteOrder } from "../common/pagination.js";
 import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
 import {
   loadSqliteExtension,
@@ -446,6 +447,9 @@ export function createSqliteVectorCapability(
     );
   }
 
+  // sqlite-vec caps `k` in vec0 KNN MATCH queries at 4096.
+  const SQLITE_VEC_MAX_K = 4096;
+
   async function searchVectors(
     input: SearchVectorsInput,
   ): Promise<VectorSearchResult[]> {
@@ -469,47 +473,82 @@ export function createSqliteVectorCapability(
       }
 
       const tname = physicalTableName(target.modelRegistryId);
+      const queryVec = serializeVector(input.query);
 
-      // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
-      const conditions = ["embedding MATCH ?", "k = ?", "session_id = ?"];
-      const params: Array<string | number> = [
-        serializeVector(input.query),
-        topK,
-        input.sessionId,
-      ];
-
+      const scopeConditions = ["session_id = ?"];
+      const scopeParams: Array<string | number> = [input.sessionId];
       if (input.pluginId !== undefined) {
-        conditions.push("plugin_id = ?");
-        params.push(input.pluginId);
+        scopeConditions.push("plugin_id = ?");
+        scopeParams.push(input.pluginId);
       }
       if (input.namespace !== undefined) {
-        conditions.push("namespace = ?");
-        params.push(input.namespace);
+        scopeConditions.push("namespace = ?");
+        scopeParams.push(input.namespace);
       }
 
-      const sql = `
-        SELECT session_id, plugin_id, namespace, data_key, payload, distance
-          FROM ${tname}
-         WHERE ${conditions.join(" AND ")}
-         ORDER BY distance
-      `;
-      const rows = sqlite.prepare(sql).all(...params) as Array<{
+      type SearchRow = {
         session_id: string;
         plugin_id: string;
         namespace: string;
         data_key: string;
         payload: string | null;
         distance: number;
-      }>;
+      };
 
-      return rows.map((r) => ({
+      const toResult = (r: SearchRow): VectorSearchResult => ({
         sessionId: r.session_id,
         pluginId: r.plugin_id,
         namespace: r.namespace,
         key: r.data_key,
         distance: r.distance,
         payload: r.payload,
-      }));
+      });
+
+      // Fast path: vec0 KNN only allows `ORDER BY distance`, so request
+      // `topK + 1` rows. When the cutoff does not split an equal-distance tie
+      // group, sorting the topK rows in byte order matches SQLite BINARY and
+      // PG `COLLATE "C"` without a full distance scan.
+      if (topK < SQLITE_VEC_MAX_K) {
+        const knnSql = `
+          SELECT session_id, plugin_id, namespace, data_key, payload, distance
+            FROM ${tname}
+           WHERE embedding MATCH ? AND k = ? AND ${scopeConditions.join(" AND ")}
+           ORDER BY distance
+        `;
+        const knnRows = sqlite
+          .prepare(knnSql)
+          .all(queryVec, topK + 1, ...scopeParams) as SearchRow[];
+        const hasBoundaryTie =
+          knnRows.length > topK &&
+          knnRows[topK - 1]!.distance === knnRows[topK]!.distance;
+        if (!hasBoundaryTie) {
+          const picked = knnRows.slice(0, topK);
+          picked.sort(
+            (a, b) =>
+              a.distance - b.distance ||
+              compareByteOrder(a.plugin_id, b.plugin_id) ||
+              compareByteOrder(a.namespace, b.namespace) ||
+              compareByteOrder(a.data_key, b.data_key),
+          );
+          return picked.map(toResult);
+        }
+      }
+
+      // Exact tie-breaking across the topK boundary (or when topK exceeds
+      // vec0's k cap): compute L2 distance directly so SQLite breaks all ties
+      // by (plugin_id, namespace, data_key) in BINARY order before LIMIT.
+      const exactSql = `
+        SELECT session_id, plugin_id, namespace, data_key, payload,
+               vec_distance_l2(embedding, ?) AS distance
+          FROM ${tname}
+         WHERE ${scopeConditions.join(" AND ")}
+         ORDER BY distance, plugin_id COLLATE BINARY, namespace COLLATE BINARY, data_key COLLATE BINARY
+         LIMIT ?
+      `;
+      const exactRows = sqlite
+        .prepare(exactSql)
+        .all(queryVec, ...scopeParams, topK) as SearchRow[];
+      return exactRows.map(toResult);
     });
   }
 
@@ -625,24 +664,6 @@ export function createSqliteVectorCapability(
   }
 
   async function deleteVectors(input: DeleteVectorsInput): Promise<void> {
-    const target = await resolveSessionVectorTarget(input.sessionId);
-    if (!target) {
-      // No embedding model — nothing to delete.
-      return;
-    }
-
-    const tname = physicalTableName(target.modelRegistryId);
-
-    const conditions = ["session_id = ?", "plugin_id = ?"];
-    const values = [input.sessionId, input.pluginId];
-    if (input.namespace !== undefined) {
-      conditions.push("namespace = ?");
-      values.push(input.namespace);
-    }
-    if (input.key !== undefined) {
-      conditions.push("data_key = ?");
-      values.push(input.key);
-    }
     runSqliteTransaction(
       sqlite,
       () => {
@@ -653,12 +674,29 @@ export function createSqliteVectorCapability(
           .get(input.sessionId) as
           { created_at: string; embedding_model_id: number | null } | undefined;
         if (
-          !session ||
-          session.embedding_model_id !== target.modelRegistryId ||
-          (input.expectedSessionCreatedAt !== undefined &&
-            session.created_at !== input.expectedSessionCreatedAt)
+          input.expectedSessionCreatedAt !== undefined &&
+          (!session || session.created_at !== input.expectedSessionCreatedAt)
         ) {
           throw new Error("Vector delete: session incarnation changed");
+        }
+        if (!session || session.embedding_model_id == null) {
+          // No embedding model — nothing to delete.
+          return;
+        }
+        const target = resolveVectorTarget(input.sessionId);
+        if (!target) {
+          return;
+        }
+        const tname = physicalTableName(target.modelRegistryId);
+        const conditions = ["session_id = ?", "plugin_id = ?"];
+        const values = [input.sessionId, input.pluginId];
+        if (input.namespace !== undefined) {
+          conditions.push("namespace = ?");
+          values.push(input.namespace);
+        }
+        if (input.key !== undefined) {
+          conditions.push("data_key = ?");
+          values.push(input.key);
         }
         sqlite
           .prepare(`DELETE FROM ${tname} WHERE ${conditions.join(" AND ")}`)

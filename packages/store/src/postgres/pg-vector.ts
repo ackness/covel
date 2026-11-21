@@ -618,24 +618,6 @@ export function createPgVectorCapability(
   }
 
   async function deleteVectors(input: DeleteVectorsInput): Promise<void> {
-    const target = await resolveSessionVectorTarget(input.sessionId);
-    if (!target) {
-      // No embedding model — nothing to delete.
-      return;
-    }
-
-    const tname = physicalTableName(target.modelRegistryId);
-
-    const conditions = ["session_id = $1", "plugin_id = $2"];
-    const values = [input.sessionId, input.pluginId];
-    if (input.namespace !== undefined) {
-      values.push(input.namespace);
-      conditions.push(`namespace = $${values.length}`);
-    }
-    if (input.key !== undefined) {
-      values.push(input.key);
-      conditions.push(`key = $${values.length}`);
-    }
     await client.begin(async (tx) => {
       const sessions = await tx<
         Array<{ created_at: string; embedding_model_id: number | null }>
@@ -644,12 +626,56 @@ export function createPgVectorCapability(
       `;
       const session = sessions[0];
       if (
-        !session ||
-        session.embedding_model_id !== target.modelRegistryId ||
-        (input.expectedSessionCreatedAt !== undefined &&
-          session.created_at !== input.expectedSessionCreatedAt)
+        input.expectedSessionCreatedAt !== undefined &&
+        (!session || session.created_at !== input.expectedSessionCreatedAt)
       ) {
         throw new Error("Vector delete: session incarnation changed");
+      }
+      if (!session || session.embedding_model_id == null) {
+        // No embedding model — nothing to delete.
+        return;
+      }
+
+      const modelId = session.embedding_model_id;
+      let target = modelCache.get(modelId);
+      if (!target) {
+        const models = await tx<
+          Array<{
+            id: number;
+            model_id: string;
+            dim: number;
+            table_name: string;
+          }>
+        >`
+          SELECT id, model_id, dim, table_name
+            FROM vector_models
+           WHERE id = ${modelId}
+        `;
+        const model = models[0];
+        if (!model) {
+          throw new Error(
+            `pg-vector: session ${input.sessionId} references unknown vector_models.id ${modelId}`,
+          );
+        }
+        target = {
+          modelRegistryId: model.id,
+          modelId: model.model_id,
+          dim: model.dim,
+          tableName: requireCurrentTableName(model.id, model.table_name),
+        };
+        modelCache.set(model.id, target);
+      }
+
+      const tname = physicalTableName(target.modelRegistryId);
+      const conditions = ["session_id = $1", "plugin_id = $2"];
+      const values = [input.sessionId, input.pluginId];
+      if (input.namespace !== undefined) {
+        values.push(input.namespace);
+        conditions.push(`namespace = $${values.length}`);
+      }
+      if (input.key !== undefined) {
+        values.push(input.key);
+        conditions.push(`key = $${values.length}`);
       }
       await tx.unsafe(
         `DELETE FROM ${tname} WHERE ${conditions.join(" AND ")}`,

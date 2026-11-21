@@ -66,78 +66,127 @@ export function useUiSpecHydrationEffect(
     .sort()
     .join("\u001f");
   const generation = sessionGenerationRef.current;
+  const kvScopeRef = useRef<{
+    active: boolean;
+    hydrated: Set<string>;
+    inFlight: Set<string>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) {
+      kvScopeRef.current = null;
+      return;
+    }
+    const scope = {
+      active: true,
+      hydrated: new Set<string>(),
+      inFlight: new Set<string>(),
+    };
+    kvScopeRef.current = scope;
+    return () => {
+      scope.active = false;
+      if (kvScopeRef.current === scope) kvScopeRef.current = null;
+    };
+  }, [sessionId, dispatch, generation, activePluginKey]);
+
   useEffect(() => {
     if (!sessionId) {
       dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
       dispatch({ type: "LOAD_SEGMENT_UI_SPECS", specs: [] });
       return;
     }
+    const kvScope = kvScopeRef.current;
     let cancelled = false;
-    const isCurrent = () =>
+    const isSpecCurrent = () =>
       !cancelled && sessionGenerationRef.current === generation;
+    const isKvCurrent = () =>
+      Boolean(kvScope?.active) && sessionGenerationRef.current === generation;
     void refreshSessionResource(dispatch, ["ui-specs", sessionId, "provider"], {
-      isCurrent,
+      isCurrent: isSpecCurrent,
       read: () => api.fetchUiSpecs(sessionId, activePluginKey),
       apply: (res) => {
         const specs = res.message ?? [];
         dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs });
         dispatch({ type: "LOAD_SEGMENT_UI_SPECS", specs: res.segment ?? [] });
+        if (!kvScope || !isKvCurrent()) return;
+        const hydrateKv = <T>(
+          kvKey: string,
+          resource: readonly string[],
+          label: string,
+          read: () => Promise<T>,
+          apply: (items: T) => boolean,
+        ) => {
+          if (kvScope.hydrated.has(kvKey) || kvScope.inFlight.has(kvKey)) {
+            return;
+          }
+          kvScope.inFlight.add(kvKey);
+          void refreshSessionResource(dispatch, resource, {
+            isCurrent: isKvCurrent,
+            read,
+            apply: (items) => {
+              if (apply(items)) kvScope.hydrated.add(kvKey);
+            },
+          })
+            .catch(ignoreError(label))
+            .finally(() => {
+              kvScope.inFlight.delete(kvKey);
+            });
+        };
         const rightPluginIds = new Set(
           res.right.map((entry) => entry.pluginId),
         );
         for (const pluginId of rightPluginIds) {
-          void refreshSessionResource(
-            dispatch,
+          hydrateKv(
+            `all:${pluginId}`,
             ["plugin-data", sessionId, pluginId],
-            {
-              isCurrent,
-              read: () => api.listPluginData(sessionId, pluginId),
-              apply: (items) => {
-                const namespaces = pluginDataNamespaces(items);
-                if (
-                  replacePluginDataForSession(sessionId, pluginId, namespaces)
-                ) {
-                  dispatch({
-                    type: "REPLACE_PLUGIN_DATA_FOR_PLUGIN",
-                    pluginId,
-                    namespaces,
-                  });
-                }
-              },
+            "load plugin data for right panel",
+            () => api.listPluginData(sessionId, pluginId),
+            (items) => {
+              const namespaces = pluginDataNamespaces(items);
+              if (
+                !replacePluginDataForSession(sessionId, pluginId, namespaces)
+              ) {
+                return false;
+              }
+              dispatch({
+                type: "REPLACE_PLUGIN_DATA_FOR_PLUGIN",
+                pluginId,
+                namespaces,
+              });
+              return true;
             },
-          ).catch(ignoreError("load plugin data for right panel"));
+          );
         }
         const messagePluginIds = new Set(specs.map((entry) => entry.pluginId));
         for (const pluginId of messagePluginIds) {
           if (rightPluginIds.has(pluginId)) continue;
-          void refreshSessionResource(
-            dispatch,
+          hydrateKv(
+            `message:${pluginId}`,
             ["plugin-data", sessionId, pluginId, "message"],
-            {
-              isCurrent,
-              read: () => api.listPluginData(sessionId, pluginId, "message"),
-              apply: (items) => {
-                loadPluginDataForSession(
-                  sessionId,
-                  pluginId,
-                  "message",
-                  items.map((item) => ({ key: item.key, value: item.value })),
-                );
-                dispatch({
-                  type: "REPLACE_PLUGIN_DATA_NAMESPACE",
-                  pluginId,
-                  namespace: "message",
-                  data: Object.fromEntries(
-                    items.map((item) => [item.key, item.value]),
-                  ),
-                });
-              },
+            "load plugin data for message ui spec",
+            () => api.listPluginData(sessionId, pluginId, "message"),
+            (items) => {
+              loadPluginDataForSession(
+                sessionId,
+                pluginId,
+                "message",
+                items.map((item) => ({ key: item.key, value: item.value })),
+              );
+              dispatch({
+                type: "REPLACE_PLUGIN_DATA_NAMESPACE",
+                pluginId,
+                namespace: "message",
+                data: Object.fromEntries(
+                  items.map((item) => [item.key, item.value]),
+                ),
+              });
+              return true;
             },
-          ).catch(ignoreError("load plugin data for message ui spec"));
+          );
         }
       },
     }).catch(() => {
-      if (isCurrent()) {
+      if (isSpecCurrent()) {
         dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
         dispatch({ type: "LOAD_SEGMENT_UI_SPECS", specs: [] });
       }

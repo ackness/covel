@@ -306,4 +306,71 @@ describe("LocalStorageBackend", () => {
     expect(store.isHydrated()).toBe(false);
     expect(storage.getItem("covel:settings")).toBe(contents);
   });
+
+  it.each(["repaired", "removed"] as const)(
+    "acquires the settings lock before archiving an unusable bundle and skips archiving if another tab already %s it",
+    async (otherTabAction) => {
+      const damaged = "not-json";
+      storage.setItem("covel:settings", damaged);
+
+      const lockRequested = Promise.withResolvers<void>();
+      const releaseLock = Promise.withResolvers<void>();
+      const request = vi.fn(
+        async <T>(
+          _name: string,
+          _options: { mode: "exclusive" },
+          callback: () => Promise<T>,
+        ) => {
+          lockRequested.resolve();
+          await releaseLock.promise;
+          return callback();
+        },
+      );
+      vi.stubGlobal("navigator", { locks: { request } });
+
+      const backend = createLocalStorageBackend(storage);
+      const loading = backend.loadWithRevision!();
+      await Promise.race([lockRequested.promise, loading]);
+
+      // Before the lock is granted, nothing has been archived or removed yet.
+      expect(request).toHaveBeenCalledExactlyOnceWith(
+        "covel:settings-persistence",
+        { mode: "exclusive" },
+        expect.any(Function),
+      );
+      expect(storage.getItem("covel:settings")).toBe(damaged);
+      expect(await backend.listBackups!()).toEqual([]);
+
+      const repairedBundle = {
+        schemaVersion: 2 as const,
+        revision: 1,
+        savedAt: "2026-11-21T00:00:00.000Z",
+        entries: { "ui.locale": "en-US" },
+      };
+      if (otherTabAction === "repaired") {
+        storage.setItem("covel:settings", JSON.stringify(repairedBundle));
+      } else {
+        storage.removeItem("covel:settings");
+      }
+
+      releaseLock.resolve();
+      const loaded = await loading;
+
+      expect(await backend.takeArchivedBundle!()).toBeNull();
+      expect(await backend.listBackups!()).toEqual([]);
+      if (otherTabAction === "repaired") {
+        expect(loaded).toEqual(repairedBundle);
+        expect(storage.getItem("covel:settings")).toBe(
+          JSON.stringify(repairedBundle),
+        );
+      } else {
+        expect(loaded).toMatchObject({
+          schemaVersion: 2,
+          revision: 0,
+          entries: {},
+        });
+        expect(storage.getItem("covel:settings")).toBeNull();
+      }
+    },
+  );
 });

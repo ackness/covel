@@ -56,6 +56,19 @@ import type {
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
 const CATALOG_REQUEST_TIMEOUT_MS = 5000;
 
+const browserGameDataResetListeners = new Set<() => void>();
+
+export function onBrowserGameDataReset(listener: () => void): () => void {
+  browserGameDataResetListeners.add(listener);
+  return () => {
+    browserGameDataResetListeners.delete(listener);
+  };
+}
+
+function notifyBrowserGameDataReset(): void {
+  for (const listener of browserGameDataResetListeners) listener();
+}
+
 export async function resetBrowserGameData(
   onBlocked: () => void,
 ): Promise<void> {
@@ -65,7 +78,12 @@ export async function resetBrowserGameData(
   const credentials =
     sessionIds.size === 0 ? [] : await listSessionCredentials();
   await appKv.clearBrowserGameCache();
-  await vault.deleteDatabase(onBlocked);
+  notifyBrowserGameDataReset();
+  try {
+    await vault.deleteDatabase(onBlocked);
+  } finally {
+    notifyBrowserGameDataReset();
+  }
   await Promise.all(
     credentials
       .filter(({ sessionId }) => sessionIds.has(sessionId))
@@ -78,7 +96,9 @@ export async function resetBrowserGameData(
 }
 
 /** World records are JSON; object insertion order is not part of identity. */
-function worldSnapshotJson(world: WorldRecord): string {
+function worldSnapshotJson(
+  world: WorldRecord | StoreWorldRecord | null,
+): string {
   return JSON.stringify(world, (_key, value: unknown) =>
     value !== null && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(
@@ -147,6 +167,10 @@ export class LocalDataService implements DataService {
 
   constructor(vault?: BrowserVault) {
     this.vault = vault ?? new BrowserVault();
+  }
+
+  close(): void {
+    this.vault.close();
   }
 
   private async ready(): Promise<BrowserVault> {
@@ -256,19 +280,33 @@ export class LocalDataService implements DataService {
     creatingWorldId?: string,
   ): Promise<T> {
     const vault = await this.ready();
-    const worldId =
+    let worldId =
       creatingWorldId ?? (await vault.getSession(sessionId))?.session.worldId;
-    // Always acquire world before session. World deletion holds the exclusive
-    // world lock before draining session locks, so reversing this order deadlocks.
-    const run = () =>
-      vault.withSessionLock(sessionId, async () => {
-        const current = await vault.getSession(sessionId);
-        if (current && current.session.worldId !== worldId) {
-          throw new Error(`Session world changed while waiting: ${sessionId}`);
-        }
-        return operation();
-      });
-    return worldId ? vault.withWorldLock(worldId, "shared", run) : run();
+    while (true) {
+      let retryWorldId: string | undefined;
+      let hasResult = false;
+      let result!: T;
+      // Always acquire world before session. World deletion holds the exclusive
+      // world lock before draining session locks, so reversing this order deadlocks.
+      const run = () =>
+        vault.withSessionLock(sessionId, async () => {
+          const current = await vault.getSession(sessionId);
+          if (current && current.session.worldId !== worldId) {
+            if (worldId === undefined && current.session.worldId) {
+              retryWorldId = current.session.worldId;
+              return;
+            }
+            throw new Error(
+              `Session world changed while waiting: ${sessionId}`,
+            );
+          }
+          result = await operation();
+          hasResult = true;
+        });
+      await (worldId ? vault.withWorldLock(worldId, "shared", run) : run());
+      if (hasResult) return result;
+      worldId = retryWorldId;
+    }
   }
 
   private mutateCheckpoint(
@@ -530,12 +568,6 @@ export class LocalDataService implements DataService {
     sessionId: string,
     updates: SessionPatch,
   ): Promise<SessionRecord> {
-    const existing = (await (await this.ready()).getLatestCheckpoint(sessionId))
-      ?.session;
-    if (!existing) throw new Error("Session not found: " + sessionId);
-    const nextStatus = (updates.status ??
-      existing.status ??
-      "active") as SessionStatus;
     const updated = await this.mutateCheckpoint(
       sessionId,
       "session",
@@ -543,7 +575,9 @@ export class LocalDataService implements DataService {
         ...checkpoint,
         session: {
           ...checkpoint.session,
-          ...(updates.status !== undefined ? { status: nextStatus } : {}),
+          ...(updates.status !== undefined
+            ? { status: updates.status as SessionStatus }
+            : {}),
           ...(updates.autoAdvanceLimit !== undefined
             ? {
                 metadata: {
@@ -738,7 +772,7 @@ export class LocalDataService implements DataService {
       ? await vault.getWorld(checkpoint.session.worldId)
       : null;
     if (!world) throw new Error(`World not found for session: ${sessionId}`);
-    if (JSON.stringify(checkpoint.world) !== JSON.stringify(world)) {
+    if (worldSnapshotJson(checkpoint.world) !== worldSnapshotJson(world)) {
       checkpoint = await this.mutateCheckpointNow(
         sessionId,
         "world",

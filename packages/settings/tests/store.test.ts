@@ -198,4 +198,62 @@ describe("SettingsStore", () => {
     expect(store.list("general").map((e) => e.key)).toEqual(["ui.locale"]);
     expect(store.list("llm").map((e) => e.key)).toEqual(["llm.slotConfig"]);
   });
+
+  it("notifies key and global subscribers when import() adds or updates secrets", async () => {
+    const { store } = makeStore({}, { openai: "sk-old", anthropic: "sk-same" });
+    store.register({
+      key: "keys.openai",
+      schema: z.string(),
+      default: "",
+      group: "llm",
+      label: "OpenAI",
+      backend: "keys",
+    });
+    store.register({
+      key: "plugin.custom.token",
+      schema: z.string(),
+      default: "",
+      group: "plugin",
+      label: "Custom token",
+      backend: "keys",
+    });
+    await store.init();
+
+    const openaiEvents: string[] = [];
+    const anthropicEvents: string[] = [];
+    const customEvents: string[] = [];
+    const unregisteredEvents: string[] = [];
+    const allEvents: Array<[unknown, string]> = [];
+
+    store.subscribe<string>("keys.openai", (v) => openaiEvents.push(v));
+    store.subscribe<string>("keys.anthropic", (v) => anthropicEvents.push(v));
+    store.subscribe<string>("plugin.custom.token", (v) => customEvents.push(v));
+    store.subscribe<string>("keys.deepseek", (v) => unregisteredEvents.push(v));
+    store.subscribeAll((v, key) => allEvents.push([v, key]));
+
+    await store.import(
+      {
+        schemaVersion: 1,
+        exportedAt: "now",
+        entries: {},
+        keys: {
+          openai: "sk-updated",
+          anthropic: "sk-same",
+          deepseek: "sk-new",
+          "plugin.custom.token": "tok-1",
+        },
+      },
+      { keys: [], includeSecrets: true },
+    );
+
+    expect(openaiEvents).toEqual(["sk-updated"]);
+    expect(anthropicEvents).toEqual([]);
+    expect(unregisteredEvents).toEqual(["sk-new"]);
+    expect(customEvents).toEqual(["tok-1"]);
+    expect(allEvents).toEqual([
+      ["sk-updated", "keys.openai"],
+      ["sk-new", "keys.deepseek"],
+      ["tok-1", "plugin.custom.token"],
+    ]);
+  });
 });

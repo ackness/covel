@@ -124,7 +124,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
           await tx`
             INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
             VALUES (${initialRef.sessionId}, ${id}, ${initialRef.pluginId ?? null}, ${new Date().toISOString()})
-            ON CONFLICT (session_id, media_id) DO NOTHING
+            ON CONFLICT (session_id, media_id) DO UPDATE SET created_at = EXCLUDED.created_at
           `;
         };
         if (existing[0]) {
@@ -208,14 +208,15 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
 
     async addRef(id, sessionId, pluginId) {
       // UNIQUE key is (session_id, media_id) only — first writer wins for
-      // plugin_id. A subsequent addRef with a different pluginId is a no-op.
+      // plugin_id, while re-claiming refreshes created_at so an active holder
+      // is not expired.
       await sql.begin(async (tx) => {
         await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
         await tx`
           INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
           SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${new Date().toISOString()}
           WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
-          ON CONFLICT (session_id, media_id) DO NOTHING
+          ON CONFLICT (session_id, media_id) DO UPDATE SET created_at = EXCLUDED.created_at
         `;
       });
     },
@@ -246,7 +247,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
             INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
             SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${createdAt}
             WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
-            ON CONFLICT (session_id, media_id) DO NOTHING
+            ON CONFLICT (session_id, media_id) DO UPDATE SET created_at = EXCLUDED.created_at
           `;
         }
       });
@@ -345,36 +346,59 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
         policy,
       );
       if (!policy?.dryRun) {
-        const releasedRefs: MediaRefRecord[] = [];
+        const expiredByMediaId = new Map<string, MediaRefRecord[]>();
         for (const ref of expiredRefs) {
-          // Matches the creation time too: only the row the plan saw is
-          // released.
-          const rows = await sql<{ media_id: string }[]>`
-            DELETE FROM media_refs
-            WHERE media_id = ${ref.mediaId}
-              AND session_id = ${ref.sessionId}
-              AND created_at = ${ref.createdAt}
-            RETURNING media_id
-          `;
-          if (rows.length > 0) releasedRefs.push(ref);
+          const list = expiredByMediaId.get(ref.mediaId);
+          if (list) list.push(ref);
+          else expiredByMediaId.set(ref.mediaId, [ref]);
         }
-        const deletedIds: string[] = [];
-        for (const id of idsToDelete) {
-          const deleted = await sql.begin(async (tx) => {
+        const deleteSet = new Set(idsToDelete);
+        const affectedIds = new Set<string>([
+          ...expiredByMediaId.keys(),
+          ...idsToDelete,
+        ]);
+        const releasedSet = new Set<MediaRefRecord>();
+        const deletedSet = new Set<string>();
+
+        for (const id of affectedIds) {
+          const refsForAsset = expiredByMediaId.get(id) ?? [];
+          const shouldDeleteAsset = deleteSet.has(id);
+          const { released, deleted } = await sql.begin(async (tx) => {
             await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
-            const rows = await tx<{ id: string }[]>`
-              DELETE FROM media_assets AS asset
-              WHERE asset.id = ${id}
-                AND asset.owner_session_id IS NULL
-                AND NOT EXISTS (
-                  SELECT 1 FROM media_refs AS ref WHERE ref.media_id = asset.id
-                )
-              RETURNING asset.id
-            `;
-            return rows.length === 1;
+            const txReleased: MediaRefRecord[] = [];
+            for (const ref of refsForAsset) {
+              // Matches the creation time too: only the row the plan saw is
+              // released.
+              const rows = await tx<{ media_id: string }[]>`
+                DELETE FROM media_refs
+                WHERE media_id = ${ref.mediaId}
+                  AND session_id = ${ref.sessionId}
+                  AND created_at = ${ref.createdAt}
+                RETURNING media_id
+              `;
+              if (rows.length > 0) txReleased.push(ref);
+            }
+            let txDeleted = false;
+            if (shouldDeleteAsset) {
+              const rows = await tx<{ id: string }[]>`
+                DELETE FROM media_assets AS asset
+                WHERE asset.id = ${id}
+                  AND asset.owner_session_id IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM media_refs AS ref WHERE ref.media_id = asset.id
+                  )
+                RETURNING asset.id
+              `;
+              txDeleted = rows.length === 1;
+            }
+            return { released: txReleased, deleted: txDeleted };
           });
-          if (deleted) deletedIds.push(id);
+          for (const ref of released) releasedSet.add(ref);
+          if (deleted) deletedSet.add(id);
         }
+
+        const releasedRefs = expiredRefs.filter((ref) => releasedSet.has(ref));
+        const deletedIds = idsToDelete.filter((id) => deletedSet.has(id));
         return finalizeMediaCleanupResult(
           result,
           inventory,

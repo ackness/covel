@@ -113,6 +113,30 @@ function toRecordChange(row: RecordChangeRow): RecordChange {
   }
 }
 
+/**
+ * Strict top-level JSON string property filter shared by PostgreSQL (`jsonb`)
+ * and SQLite (`text`). Non-string values never coerce, and special-character
+ * keys (including `$`, `.`, quotes, brackets, and `""`) are matched literally.
+ */
+function buildPluginDataValueFilter(
+  valueColumn: Column,
+  filter: { readonly field: string; readonly values: readonly string[] },
+) {
+  if (valueColumn.getSQLType() === "jsonb") {
+    return and(
+      sql`jsonb_typeof(${valueColumn} -> CAST(${filter.field} AS text)) = 'string'`,
+      inArray(sql`${valueColumn} ->> CAST(${filter.field} AS text)`, [
+        ...filter.values,
+      ]),
+    );
+  }
+  const path = `$.${JSON.stringify(filter.field)}`;
+  return and(
+    sql`json_type(${valueColumn}, ${path}) = 'text'`,
+    inArray(sql`json_extract(${valueColumn}, ${path})`, [...filter.values]),
+  );
+}
+
 export interface SqlDataCrudTables {
   readonly pluginData: PluginDataTable;
   readonly worldDataImportLedger: WorldDataLedgerTable;
@@ -273,10 +297,7 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
             : eq(pluginData.pluginId, options.pluginId),
           options.valueFilter === undefined
             ? undefined
-            : inArray(
-                sql`${pluginData.value} ->> ${options.valueFilter.field}`,
-                [...options.valueFilter.values],
-              ),
+            : buildPluginDataValueFilter(pluginData.value, options.valueFilter),
         ),
         orderBy: [asc(byteOrder(pluginData.sessionId)), ...pluginDataOrder],
       });

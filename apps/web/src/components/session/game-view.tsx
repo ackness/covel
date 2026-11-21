@@ -369,9 +369,14 @@ export function GameView({
   // Immersive stage: collapse the side panel on enter, restore prior expansion on
   // exit. Only an explicit mode change drives mounted desktop panels; resize
   // transitions must not query the panel registry while rails re-register.
+  const isCompactViewportRef = useRef(isMobile || isTablet);
+  isCompactViewportRef.current = isMobile || isTablet;
   const priorRailState = useRef<{ right: boolean } | null>(null);
   useEffect(() => {
-    if (isMobile || isTablet) return;
+    if (isCompactViewportRef.current) {
+      if (!immersive) priorRailState.current = null;
+      return;
+    }
     const right = rightPanelRef.current;
     if (!right) return;
     if (immersive) {
@@ -991,14 +996,17 @@ export function GameView({
       </ResizablePanelGroup>
     </div>
   );
-  return (
-    <SessionModelUsesContext.Provider
-      value={sessionModelUses(
+  const modelUses = useMemo(
+    () =>
+      sessionModelUses(
         sessionPlugins,
         resolvedSlots,
         session.runtimeModelOverrides,
-      )}
-    >
+      ),
+    [sessionPlugins, resolvedSlots, session.runtimeModelOverrides],
+  );
+  return (
+    <SessionModelUsesContext.Provider value={modelUses}>
       <StoryRevealProvider sessionId={session.id} messages={messages}>
         {content}
       </StoryRevealProvider>

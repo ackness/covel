@@ -8,11 +8,13 @@ const api = vi.hoisted(() => ({
 }));
 const pluginStore = vi.hoisted(() => ({
   loadPluginDataForSession: vi.fn(),
+  replacePluginDataForSession: vi.fn(() => true),
 }));
 
 vi.mock("@/services/api", () => api);
 vi.mock("@/stores/plugin-data-store.js", () => pluginStore);
 
+const { default: i18n } = await import("@/i18n/index.js");
 const { useUiSpecHydrationEffect, usePersistExecutionStepsEffect } =
   await import("../effects.js");
 
@@ -29,9 +31,17 @@ const messageSpecs = {
   ],
 } as UISpecsResponse;
 
+const activePlugin = (id: string) =>
+  ({
+    id,
+    active: true,
+  }) as import("@/services/api").SessionPlugin;
+
 describe("useUiSpecHydrationEffect", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
+    pluginStore.replacePluginDataForSession.mockReturnValue(true);
+    await i18n.changeLanguage("en-US");
   });
 
   it("hydrates message rows into both plugin-data stores", async () => {
@@ -131,6 +141,103 @@ describe("useUiSpecHydrationEffect", () => {
     expect(dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "REPLACE_PLUGIN_DATA_NAMESPACE" }),
     );
+  });
+
+  it("refreshes localized UI specs on language switch without re-fetching already-hydrated plugin KV data", async () => {
+    const localizedSpecs = (label: string): UISpecsResponse => ({
+      theme: [],
+      right: [{ pluginId: "codex", specs: [{ label }] }],
+      message: [{ pluginId: "scene-prompts", specs: [{ label }] }],
+      segment: [],
+    });
+    api.fetchUiSpecs
+      .mockResolvedValueOnce(localizedSpecs("English"))
+      .mockResolvedValueOnce(localizedSpecs("中文"))
+      .mockResolvedValueOnce(localizedSpecs("中文"));
+    api.listPluginData.mockResolvedValue([]);
+    const dispatch = vi.fn();
+    const initialPlugins = [
+      activePlugin("codex"),
+      activePlugin("scene-prompts"),
+    ];
+
+    const { rerender } = renderHook(
+      ({ plugins }) =>
+        useUiSpecHydrationEffect("sess-a", dispatch, generationRef, plugins),
+      { initialProps: { plugins: initialPlugins } },
+    );
+
+    await waitFor(() => {
+      expect(api.listPluginData).toHaveBeenCalledTimes(2);
+    });
+    expect(api.listPluginData).toHaveBeenCalledWith("sess-a", "codex");
+    expect(api.listPluginData).toHaveBeenCalledWith(
+      "sess-a",
+      "scene-prompts",
+      "message",
+    );
+
+    // Switching UI language re-fetches localized specs only, not KV data.
+    await act(async () => {
+      await i18n.changeLanguage("zh-CN");
+    });
+    await waitFor(() => {
+      expect(api.fetchUiSpecs).toHaveBeenCalledTimes(2);
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_MESSAGE_UI_SPECS",
+      specs: [{ pluginId: "scene-prompts", specs: [{ label: "中文" }] }],
+    });
+    expect(api.listPluginData).toHaveBeenCalledTimes(2);
+
+    // Changing the active plugin set resets hydration and re-fetches KV data.
+    rerender({
+      plugins: [
+        activePlugin("codex"),
+        activePlugin("scene-prompts"),
+        activePlugin("extra"),
+      ],
+    });
+    await waitFor(() => {
+      expect(api.listPluginData).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  it("retries plugin KV hydration on language switch if the initial KV fetch failed", async () => {
+    api.fetchUiSpecs.mockResolvedValue(messageSpecs);
+    api.listPluginData
+      .mockRejectedValueOnce(new Error("transient network error"))
+      .mockResolvedValueOnce([
+        {
+          namespace: "message",
+          key: "prompts",
+          value: ["Recovered"],
+          updatedAt: "2026-08-27T00:00:00.000Z",
+        },
+      ]);
+    const dispatch = vi.fn();
+
+    renderHook(() =>
+      useUiSpecHydrationEffect("sess-a", dispatch, generationRef, []),
+    );
+
+    await waitFor(() => {
+      expect(api.listPluginData).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await i18n.changeLanguage("zh-CN");
+    });
+
+    await waitFor(() => {
+      expect(pluginStore.loadPluginDataForSession).toHaveBeenCalledWith(
+        "sess-a",
+        "scene-prompts",
+        "message",
+        [{ key: "prompts", value: ["Recovered"] }],
+      );
+    });
+    expect(api.listPluginData).toHaveBeenCalledTimes(2);
   });
 });
 

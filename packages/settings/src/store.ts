@@ -269,6 +269,13 @@ export class SettingsStore implements SettingsStoreApi {
           this.pendingRepairKeys.clear();
           this.assertHydrated();
           const backup = await this.adapter.backupBundle!();
+          // Keys registered while the backup was in flight are already captured
+          // in that backup; drop them in the same save rather than failing CAS
+          // validation on their still-stored invalid values.
+          for (const late of this.pendingRepairKeys) {
+            if (!keys.includes(late)) keys.push(late);
+          }
+          this.pendingRepairKeys.clear();
           await this.persist(
             "values",
             () => {
@@ -493,13 +500,16 @@ export class SettingsStore implements SettingsStoreApi {
       ...this.secrets.keys(),
     ])) {
       if (previous.get(provider) === this.secrets.get(provider)) continue;
-      const keys = [...this.registry.keys()].filter(
-        (key) =>
-          this.isSecretKey(key) && this.stripKeysPrefix(key) === provider,
-      );
-      for (const key of keys.length ? keys : [`keys.${provider}`])
-        this.notify(key, this.get(key));
+      this.notifySecretProvider(provider);
     }
+  }
+
+  private notifySecretProvider(provider: string): void {
+    const keys = [...this.registry.keys()].filter(
+      (key) => this.isSecretKey(key) && this.stripKeysPrefix(key) === provider,
+    );
+    for (const key of keys.length ? keys : [`keys.${provider}`])
+      this.notify(key, this.get(key));
   }
 
   private replaceVisibleValues(next: Record<SettingKey, unknown>): void {
@@ -519,7 +529,7 @@ export class SettingsStore implements SettingsStoreApi {
 
   private normalizeEntries(
     entries: Record<SettingKey, unknown>,
-    phase: string,
+    phase: "hydration" | "synchronization" | "restoration" | "replacement",
   ): Record<SettingKey, unknown> {
     return Object.fromEntries(
       Object.entries(entries).map(([key, value]) => {
@@ -528,6 +538,12 @@ export class SettingsStore implements SettingsStoreApi {
         if (!entry) return [key, value];
         const parsed = entry.schema.safeParse(value);
         if (!parsed.success) {
+          if (
+            (phase === "synchronization" || phase === "restoration") &&
+            this.invalidHydratedKeys.has(key)
+          ) {
+            return [key, value];
+          }
           throw new Error(`Settings ${phase} validation failed for ${key}`);
         }
         return [key, parsed.data];
@@ -639,7 +655,9 @@ export class SettingsStore implements SettingsStoreApi {
             () => {
               const provider = this.stripKeysPrefix(key);
               const str =
-                typeof value === "string" ? value : String(value ?? "");
+                typeof normalized === "string"
+                  ? normalized
+                  : String(normalized ?? "");
               if (str.trim().length === 0) this.secrets.delete(provider);
               else this.secrets.set(provider, str);
             },
@@ -889,7 +907,14 @@ export class SettingsStore implements SettingsStoreApi {
         nonSecretUpdates.map(([key]) => key),
       );
     }
+    let changedSecretProviders: string[] = [];
     if (secretUpdates.length > 0) {
+      const previousSecrets = new Map(
+        secretUpdates.map(([provider]) => [
+          provider,
+          this.secrets.get(provider),
+        ]),
+      );
       await this.persist(
         "secrets",
         () => {
@@ -899,9 +924,18 @@ export class SettingsStore implements SettingsStoreApi {
         },
         secretUpdates.map(([provider]) => provider),
       );
+      changedSecretProviders = secretUpdates
+        .map(([provider]) => provider)
+        .filter(
+          (provider) =>
+            previousSecrets.get(provider) !== this.secrets.get(provider),
+        );
     }
     for (const [key, value] of nonSecretUpdates) {
       this.notify(key, value);
+    }
+    for (const provider of changedSecretProviders) {
+      this.notifySecretProvider(provider);
     }
   }
 

@@ -165,9 +165,10 @@ function initializeSqliteMediaStore(
       AND (owner_session_id IS NULL OR owner_session_id = @sessionId)
   `);
   const insertRef = sqlite.prepare(`
-    INSERT OR IGNORE INTO media_refs (session_id, media_id, plugin_id, created_at)
+    INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
     SELECT @sessionId, @mediaId, @pluginId, @createdAt
     WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = @mediaId)
+    ON CONFLICT(session_id, media_id) DO UPDATE SET created_at = excluded.created_at
   `);
   const removeRef = sqlite.prepare(`
     DELETE FROM media_refs
@@ -381,8 +382,8 @@ function initializeSqliteMediaStore(
 
     async addRef(id, sessionId, pluginId) {
       // UNIQUE key is (session_id, media_id) only — first writer wins for
-      // plugin_id. A subsequent addRef with a different pluginId is a no-op
-      // (INSERT OR IGNORE swallows the unique-violation).
+      // plugin_id, while re-claiming refreshes created_at so an active holder
+      // is not expired.
       insertRef.run({
         sessionId,
         mediaId: id,

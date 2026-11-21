@@ -1,4 +1,5 @@
 import { vectorRowKey } from "../common/keys.js";
+import { compareByteOrder } from "../common/pagination.js";
 import type {
   DeleteVectorsInput,
   EmbeddingModelIdentity,
@@ -163,7 +164,13 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         }
         scored.push({ row, distance: l2Distance(input.query, row.embedding) });
       }
-      scored.sort((a, b) => a.distance - b.distance);
+      scored.sort(
+        (a, b) =>
+          a.distance - b.distance ||
+          compareByteOrder(a.row.pluginId, b.row.pluginId) ||
+          compareByteOrder(a.row.namespace, b.row.namespace) ||
+          compareByteOrder(a.row.key, b.row.key),
+      );
       return scored.slice(0, topK).map(({ row, distance }) => ({
         sessionId: row.sessionId,
         pluginId: row.pluginId,
