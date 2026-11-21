@@ -2,8 +2,10 @@ import {
   isJsonValue,
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
+  HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
+  isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import { checkpointDomainsSchema } from "./checkpoint-domains-schema.js";
 import type {
@@ -216,12 +218,20 @@ const RUNTIME_JOB_NAMESPACES = new Set([
   "_runtime_job_control",
 ]);
 
+/**
+ * Top-level framework bookkeeping rows exported by `exportSessionCheckpoint`
+ * (`listPluginDataSessionScope`) that are not durable jobs and never belong
+ * inside snapshots (mirroring `snapshots.ts`).
+ */
+const SESSION_BOOKKEEPING_NAMESPACES = new Set(["_logs"]);
+
 function validateCheckpointPluginData(
   rows: readonly PluginDataRecord[],
   context: {
     readonly activePlugins: readonly string[];
     readonly dimensionProvider: unknown;
     readonly allowRuntimeJobs: boolean;
+    readonly allowSessionBookkeeping: boolean;
   },
 ): void {
   for (const row of rows) {
@@ -248,6 +258,18 @@ function validateCheckpointPluginData(
           `Invalid protected dimension record: ${row.key}`,
         );
       }
+      continue;
+    }
+    if (
+      isHiddenPluginDataNamespace(row.namespace) &&
+      row.namespace.length > HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX.length
+    ) {
+      continue;
+    }
+    if (
+      SESSION_BOOKKEEPING_NAMESPACES.has(row.namespace) &&
+      context.allowSessionBookkeeping
+    ) {
       continue;
     }
     if (RUNTIME_JOB_NAMESPACES.has(row.namespace) && context.allowRuntimeJobs) {
@@ -315,12 +337,14 @@ export function validateBrowserCheckpoint(
     activePlugins: normalized.session.activePlugins,
     dimensionProvider: normalized.session.metadata?._dimensionProviderPluginId,
     allowRuntimeJobs: options?.allowRuntimeJobs ?? true,
+    allowSessionBookkeeping: true,
   });
   for (const snapshot of normalized.snapshots) {
     validateCheckpointPluginData(snapshot.payload.pluginData, {
       activePlugins: snapshot.payload.session.activePlugins,
       dimensionProvider: snapshot.payload.session.dimensionProviderPluginId,
       allowRuntimeJobs: false,
+      allowSessionBookkeeping: false,
     });
   }
   return normalized;

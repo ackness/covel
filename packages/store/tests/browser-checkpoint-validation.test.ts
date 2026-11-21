@@ -644,14 +644,56 @@ describe("checkpoint record validation", () => {
     ]);
   });
 
-  it.each([
-    "_hidden.events",
-    "_hidden.planned",
-    "_logs",
-    "_jobs",
-    "_unknown_kernel",
-  ])(
-    "rejects kernel-reserved plugin-data namespace %s in checkpoints and snapshots",
+  it.each(["_hidden.events", "_hidden.planned"])(
+    "preserves plugin hidden game-state namespace %s in checkpoints and snapshots",
+    (namespace) => {
+      const hiddenRow = { ...pluginData, namespace };
+      const snapshot = checkpoint.snapshots[0]!;
+      const validated = validateBrowserCheckpoint({
+        ...checkpoint,
+        pluginData: [hiddenRow],
+        snapshots: [
+          {
+            ...snapshot,
+            payload: {
+              ...snapshot.payload,
+              pluginData: [hiddenRow],
+            },
+          },
+        ],
+      });
+      expect(validated.pluginData).toEqual([hiddenRow]);
+      expect(validated.snapshots[0]?.payload.pluginData).toEqual([hiddenRow]);
+    },
+  );
+
+  it("allows top-level session bookkeeping _logs but rejects it inside snapshots", () => {
+    const row = { ...pluginData, namespace: "_logs" };
+    expect(
+      validateBrowserCheckpoint({
+        ...checkpoint,
+        pluginData: [row],
+      }).pluginData,
+    ).toEqual([row]);
+    const snapshot = checkpoint.snapshots[0]!;
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...checkpoint,
+        snapshots: [
+          {
+            ...snapshot,
+            payload: {
+              ...snapshot.payload,
+              pluginData: [row],
+            },
+          },
+        ],
+      }),
+    ).toThrow(BrowserSyncValidationError);
+  });
+
+  it.each(["_hidden.", "_jobs", "_presentation_budget", "_unknown_kernel"])(
+    "rejects reserved plugin-data namespace %s in checkpoints and snapshots",
     (namespace) => {
       expect(() =>
         validateBrowserCheckpoint({

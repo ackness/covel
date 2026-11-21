@@ -244,8 +244,8 @@ describe("browser checkpoint security", () => {
   it.each([
     "_runtime_jobs",
     "_runtime_job_control",
-    "_hidden.events",
-    "_logs",
+    "_jobs",
+    "_hidden.",
     "_unknown_reserved",
   ])(
     "rejects forged %s plugin-data rows on checkpoint upload without writing to the store",
@@ -272,6 +272,27 @@ describe("browser checkpoint security", () => {
       expect(await store.listPluginDataSessionScope(SESSION_ID)).toEqual([]);
     },
   );
+
+  it("allows legitimate plugin _hidden.<bucket> game state to round-trip on checkpoint upload", async () => {
+    const hiddenRow = {
+      id: "hidden-event-row",
+      sessionId: SESSION_ID,
+      pluginId: "story-events",
+      namespace: "_hidden.events",
+      key: "harbor-bell",
+      value: { id: "harbor-bell", fired: false },
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const response = await upload({
+      ...checkpoint,
+      pluginData: [hiddenRow],
+    });
+    expect(response.status).toBe(200);
+    expect(await store.listPluginDataSessionScope(SESSION_ID)).toEqual([
+      hiddenRow,
+    ]);
+  });
 });
 
 describe("browser workspace session lock", () => {
