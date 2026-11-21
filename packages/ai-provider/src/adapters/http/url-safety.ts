@@ -8,13 +8,22 @@ const BLOCKED_HOSTNAMES = ["metadata.google.internal", "metadata.internal"];
 // Google exposes its OpenAI API wire below /v1beta/openai.
 const TRAILING_VERSION_RE = /\/(v\d[a-z0-9]*)(?:\/openai)?$/i;
 
+function stripTrailingDots(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 46) end -= 1;
+  return end === value.length ? value : value.slice(0, end);
+}
+
 /**
- * Canonicalise `URL.hostname` for the IP blocklist: URL wraps IPv6 literals in
- * brackets (`[fc00::1]`), which defeated the anchored IPv6 patterns. Strip the
- * brackets and lower-case so the checks see the real address.
+ * Canonicalise `URL.hostname` for the IP and hostname blocklists: URL wraps
+ * IPv6 literals in brackets (`[fc00::1]`) and preserves trailing DNS root dots
+ * (`metadata.google.internal.`). Strip both and lower-case so the checks see
+ * the canonical host.
  */
 function normalizeHost(hostname: string): string {
-  return hostname.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
+  return stripTrailingDots(
+    hostname.replace(/^\[/, "").replace(/\]$/, "").toLowerCase(),
+  );
 }
 
 /**

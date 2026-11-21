@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { loadLlmConfig, parseLlmConfig } from "@covel/ai-provider";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
-import { LLM_TOML_STARTER } from "../../src/ai-setup.js";
+import {
+  LLM_TOML_STARTER,
+  createAiStack,
+  reloadAiStack,
+} from "../../src/ai-setup.js";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { loadKeysEnv } from "../../../desktop/src/env-files.js";
 
@@ -38,11 +42,19 @@ describe("config API env and file contracts", () => {
   const savedEnv: Partial<
     Record<(typeof ENV_KEYS)[number], string | undefined>
   > = {};
+  let savedApiKeyEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
     for (const key of ENV_KEYS) {
       savedEnv[key] = process.env[key];
       delete process.env[key];
+    }
+    savedApiKeyEnv = {};
+    for (const key of Object.keys(process.env)) {
+      if (key.endsWith("_API_KEY")) {
+        savedApiKeyEnv[key] = process.env[key];
+        delete process.env[key];
+      }
     }
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "covel-config-api-"));
     apiKeys = {};
@@ -56,6 +68,15 @@ describe("config API env and file contracts", () => {
       } else {
         process.env[key] = savedEnv[key];
       }
+    }
+    for (const key of Object.keys(process.env)) {
+      if (key.endsWith("_API_KEY") && !(key in savedApiKeyEnv)) {
+        delete process.env[key];
+      }
+    }
+    for (const [key, value] of Object.entries(savedApiKeyEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
@@ -324,6 +345,78 @@ describe("config API env and file contracts", () => {
     expect(
       fs.readFileSync(path.join(tmpHome, "keys.env"), "utf-8"),
     ).not.toContain("_API_KEY=");
+  });
+
+  it("synchronizes non-external provider env vars into process.env so reloadAiStack sees updated and removed keys", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
+    const llmToml = path.join(tmpHome, "llm.toml");
+    process.env.COVEL_LLM_TOML = llmToml;
+    fs.writeFileSync(
+      llmToml,
+      [
+        "[covel.story]",
+        'provider = "deepseek"',
+        'model = "deepseek-chat"',
+        'baseUrl = "https://api.deepseek.com/v1"',
+        'protocol = "openai-chat-v1"',
+        'providerRequestMetadata = { token = "${DEEPSEEK_API_KEY}" }',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    // Simulate a shell-provided external key that saved edits must not clobber.
+    process.env.OPENAI_API_KEY = "sk-external-shell";
+    const app = new Hono();
+    app.onError(makeErrorHandler("[config-test]", false));
+    app.route(
+      "/",
+      createConfigApiRoutes({
+        apiKeys,
+        externalApiKeys: { openai: "sk-external-shell" },
+      }),
+    );
+
+    const ai = createAiStack();
+    expect(ai.lastLoadError).toContain("DEEPSEEK_API_KEY");
+
+    const setRes = await app.request("/api/config/keys", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deepseek: "sk-live-updated",
+        "open-router": "sk-router-live",
+        openai: "sk-saved-should-not-override",
+      }),
+    });
+    expect(setRes.status).toBe(200);
+    expect(process.env.DEEPSEEK_API_KEY).toBe("sk-live-updated");
+    expect(process.env.OPEN_ROUTER_API_KEY).toBe("sk-router-live");
+    expect(process.env.OPENAI_API_KEY).toBe("sk-external-shell");
+
+    const reloaded = reloadAiStack(ai);
+    expect(reloaded.ok).toBe(true);
+    expect(ai.config.presets[0]?.providerRequestMetadata).toEqual({
+      token: "sk-live-updated",
+    });
+
+    const clearRes = await app.request("/api/config/keys", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deepseek: null,
+        "open-router": "",
+        openai: null,
+      }),
+    });
+    expect(clearRes.status).toBe(200);
+    expect(process.env.DEEPSEEK_API_KEY).toBeUndefined();
+    expect(process.env.OPEN_ROUTER_API_KEY).toBeUndefined();
+    expect(process.env.OPENAI_API_KEY).toBe("sk-external-shell");
+
+    const reloadedAfterClear = reloadAiStack(ai);
+    expect(reloadedAfterClear.ok).toBe(false);
+    expect(reloadedAfterClear.error).toContain("DEEPSEEK_API_KEY");
   });
 
   it("applies explicit desktop key patches, preserving omissions and clearing the last key", async () => {

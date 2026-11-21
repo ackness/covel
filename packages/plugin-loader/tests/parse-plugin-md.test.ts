@@ -49,6 +49,36 @@ describe("current authoring manifests", () => {
       parsePluginMd("---\nid: probe\nkind: plugin\n", "probe/PLUGIN.md"),
     ).toThrow("plain YAML frontmatter");
   });
+  it("rejects YAML alias bombs in plugin and runtime manifests", () => {
+    const bomb = [
+      "---",
+      "a: &a [x, x]",
+      "b: &b [*a, *a]",
+      "c: &c [*b, *b]",
+      "d: &d [*c, *c]",
+      "e: &e [*d, *d]",
+      "f: &f [*e, *e]",
+      "g: &g [*f, *f]",
+      "h: &h [*g, *g]",
+      "i: &i [*h, *h]",
+      "j: &j [*i, *i]",
+      "---",
+      "Prompt",
+    ].join("\n");
+    const plugin = parsePluginMd(md(root), "probe/PLUGIN.md").plugin;
+    expect(() => parsePluginMd(bomb, "probe/PLUGIN.md")).toThrow(/alias/i);
+    expect(() =>
+      parseRuntimeMd(bomb, "probe/runtimes/worker/RUNTIME.md", plugin),
+    ).toThrow(/alias/i);
+  });
+  it.each(["---\nhello\n---\nPrompt", "---\n- a\n- b\n---\nPrompt"])(
+    "rejects non-mapping YAML frontmatter %j",
+    (input) => {
+      expect(() => parsePluginMd(input, "probe/PLUGIN.md")).toThrow(
+        "YAML mapping",
+      );
+    },
+  );
   it("keeps contribution-only packages free of execution", () => {
     const parsed = parsePluginMd(
       md({ ...root, entry: "./server.js", contributes: { tools: ["probe"] } }),

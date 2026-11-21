@@ -98,3 +98,69 @@ export function createServerRecovery<Owner>(options: {
     },
   };
 }
+
+export interface HealthHeartbeatWindow {
+  isDestroyed(): boolean;
+  webContents: {
+    send(channel: string, payload: { state: "up" | "degraded" | "down" }): void;
+  };
+}
+
+/**
+ * Periodic sidecar health monitor. Resets `lastHealthOk` on each fresh start
+ * so a newly-ready server that crashes before its first passing poll still
+ * emits `"down"`, skips destroyed windows, and ignores stale in-flight polls.
+ */
+export function createHealthHeartbeat(options: {
+  checkHealth: (healthUrl: string) => Promise<{ ok: boolean }>;
+  getWindows: () => readonly HealthHeartbeatWindow[];
+  intervalMs?: number;
+}) {
+  const intervalMs = options.intervalMs ?? 10_000;
+  let timer: NodeJS.Timeout | null = null;
+  let lastHealthOk = true;
+  let generation = 0;
+
+  function broadcastStatus(state: "up" | "degraded" | "down"): void {
+    for (const win of options.getWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send("covel:server:status", { state });
+      }
+    }
+  }
+
+  function stop(): void {
+    generation++;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  function start(healthUrl: string): void {
+    stop();
+    lastHealthOk = true;
+    const activeGeneration = generation;
+    timer = setInterval(() => {
+      void (async () => {
+        try {
+          const res = await options.checkHealth(healthUrl);
+          if (generation !== activeGeneration) return;
+          const ok = res.ok;
+          if (ok !== lastHealthOk) {
+            lastHealthOk = ok;
+            broadcastStatus(ok ? "up" : "degraded");
+          }
+        } catch {
+          if (generation !== activeGeneration) return;
+          if (lastHealthOk) {
+            lastHealthOk = false;
+            broadcastStatus("down");
+          }
+        }
+      })();
+    }, intervalMs);
+  }
+
+  return { start, stop };
+}

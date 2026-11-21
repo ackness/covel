@@ -28,8 +28,10 @@ import {
   resolveSessionParam,
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
+import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
-import { allowsAccess } from "../../host-profile.js";
+import { allowsAccess, requireAccess } from "../../host-profile.js";
+import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
 import { earliestUnfinishedJobSourceStart } from "./plugin-rpc/runtime-job-worker.js";
 
 type Env = {
@@ -60,7 +62,11 @@ function newHead(
 }
 
 function hasDurableJobs(checkpoint: BrowserCheckpoint): boolean {
-  return checkpoint.pluginData.some((row) => row.namespace === "_runtime_jobs");
+  return checkpoint.pluginData.some(
+    (row) =>
+      row.namespace === "_runtime_jobs" ||
+      row.namespace === "_runtime_job_control",
+  );
 }
 
 /** Local authors may append inputs, edit their world, and change session settings. */
@@ -290,6 +296,43 @@ export function createBrowserWorkspaceRoutes(
                   ),
                   409,
                 );
+              }
+            }
+
+            if (
+              hasDurableJobs(checkpoint) &&
+              (!head || !hasDurableJobs(head.checkpoint))
+            ) {
+              try {
+                validateBrowserCheckpoint(checkpoint, {
+                  allowRuntimeJobs: false,
+                });
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Invalid browser checkpoint";
+                return c.json(
+                  errorBody(message, { code: "invalid_checkpoint" }),
+                  400,
+                );
+              }
+            }
+
+            const pluginRegistry = c.get("pluginRegistry");
+            if (pluginRegistry) {
+              for (const pluginId of checkpoint.session.activePlugins) {
+                const entry = pluginRegistry.get(pluginId);
+                if (!entry) continue;
+                const trust = getPluginTrustInfo(pluginId, entry.source);
+                if (!trust.requiresApproval) continue;
+                const declarative = await refreshDeclarativeEligibility(
+                  c.get("trustedSources"),
+                  pluginId,
+                );
+                if (declarative) continue;
+                const operatorDenied = requireAccess(c, "plugin.community");
+                if (operatorDenied) return operatorDenied;
               }
             }
 

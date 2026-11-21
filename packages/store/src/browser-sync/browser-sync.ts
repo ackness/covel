@@ -2,8 +2,10 @@ import {
   isJsonValue,
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
+  HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
+  isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import { checkpointDomainsSchema } from "./checkpoint-domains-schema.js";
 import type {
@@ -201,8 +203,89 @@ function requireProfile(value: unknown): PersistenceProfile {
   return value;
 }
 
+export interface ValidateBrowserCheckpointOptions {
+  /**
+   * Whether server-exported `_runtime_jobs` rows are allowed in top-level
+   * `checkpoint.pluginData`. Defaults to `true` so server exports and browser
+   * vault reconciliation keep working; untrusted checkpoint uploads without a
+   * matching server head must pass `false`.
+   */
+  readonly allowRuntimeJobs?: boolean;
+}
+
+const RUNTIME_JOB_NAMESPACES = new Set([
+  "_runtime_jobs",
+  "_runtime_job_control",
+]);
+
+/**
+ * Top-level framework bookkeeping rows exported by `exportSessionCheckpoint`
+ * (`listPluginDataSessionScope`) that are not durable jobs and never belong
+ * inside snapshots (mirroring `snapshots.ts`).
+ */
+const SESSION_BOOKKEEPING_NAMESPACES = new Set(["_logs"]);
+
+function validateCheckpointPluginData(
+  rows: readonly PluginDataRecord[],
+  context: {
+    readonly activePlugins: readonly string[];
+    readonly dimensionProvider: unknown;
+    readonly allowRuntimeJobs: boolean;
+    readonly allowSessionBookkeeping: boolean;
+  },
+): void {
+  for (const row of rows) {
+    if (!row.namespace.startsWith("_")) continue;
+    if (
+      row.namespace === DIMENSION_DATA_NAMESPACE ||
+      row.namespace === DIMENSION_SETTLEMENT_NAMESPACE
+    ) {
+      if (
+        typeof context.dimensionProvider !== "string" ||
+        row.pluginId !== context.dimensionProvider ||
+        !context.activePlugins.includes(context.dimensionProvider)
+      ) {
+        throw new BrowserSyncValidationError(
+          "Protected dimension rows require the bound active provider",
+        );
+      }
+      const parsed =
+        row.namespace === DIMENSION_DATA_NAMESPACE
+          ? dimensionRecordSchema.safeParse(row.value)
+          : dimensionSettlementReceiptSchema.safeParse(row.value);
+      if (!parsed.success) {
+        throw new BrowserSyncValidationError(
+          `Invalid protected dimension record: ${row.key}`,
+        );
+      }
+      continue;
+    }
+    if (
+      isHiddenPluginDataNamespace(row.namespace) &&
+      row.namespace.length > HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX.length
+    ) {
+      continue;
+    }
+    if (
+      SESSION_BOOKKEEPING_NAMESPACES.has(row.namespace) &&
+      context.allowSessionBookkeeping
+    ) {
+      continue;
+    }
+    if (RUNTIME_JOB_NAMESPACES.has(row.namespace) && context.allowRuntimeJobs) {
+      continue;
+    }
+    throw new BrowserSyncValidationError(
+      `Reserved plugin-data namespace "${row.namespace}" cannot be loaded from a browser checkpoint`,
+    );
+  }
+}
+
 /** Validate and narrow an unknown value received from storage or a wire. */
-export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
+export function validateBrowserCheckpoint(
+  value: unknown,
+  options?: ValidateBrowserCheckpointOptions,
+): BrowserCheckpoint {
   const checkpoint = requireRecord(value, "checkpoint");
   if (checkpoint.schemaVersion !== BROWSER_CHECKPOINT_SCHEMA_VERSION) {
     throw new BrowserSyncValidationError(
@@ -250,29 +333,19 @@ export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
       "checkpoint domains must contain JSON-serialisable values",
     );
   }
-  const provider = normalized.session.metadata?._dimensionProviderPluginId;
-  for (const row of normalized.pluginData) {
-    if (
-      row.namespace !== DIMENSION_DATA_NAMESPACE &&
-      row.namespace !== DIMENSION_SETTLEMENT_NAMESPACE
-    )
-      continue;
-    if (
-      typeof provider !== "string" ||
-      row.pluginId !== provider ||
-      !normalized.session.activePlugins.includes(provider)
-    )
-      throw new BrowserSyncValidationError(
-        "Protected dimension rows require the bound active provider",
-      );
-    const parsed =
-      row.namespace === DIMENSION_DATA_NAMESPACE
-        ? dimensionRecordSchema.safeParse(row.value)
-        : dimensionSettlementReceiptSchema.safeParse(row.value);
-    if (!parsed.success)
-      throw new BrowserSyncValidationError(
-        `Invalid protected dimension record: ${row.key}`,
-      );
+  validateCheckpointPluginData(normalized.pluginData, {
+    activePlugins: normalized.session.activePlugins,
+    dimensionProvider: normalized.session.metadata?._dimensionProviderPluginId,
+    allowRuntimeJobs: options?.allowRuntimeJobs ?? true,
+    allowSessionBookkeeping: true,
+  });
+  for (const snapshot of normalized.snapshots) {
+    validateCheckpointPluginData(snapshot.payload.pluginData, {
+      activePlugins: snapshot.payload.session.activePlugins,
+      dimensionProvider: snapshot.payload.session.dimensionProviderPluginId,
+      allowRuntimeJobs: false,
+      allowSessionBookkeeping: false,
+    });
   }
   return normalized;
 }

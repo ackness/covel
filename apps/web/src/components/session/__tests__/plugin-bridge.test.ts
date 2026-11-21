@@ -230,6 +230,154 @@ describe("connectPluginBridge", () => {
     ).toEqual(["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"]);
     connection.bridge.close();
   });
+
+  it("rejects raw internal RPC payloads, raw error strings, and unbounded outcomes on non-session webviews", async () => {
+    const circular: Record<string, unknown> = { ok: true };
+    circular.self = circular;
+    const deeplyNested = (depth: number): unknown =>
+      depth === 0 ? "leaf" : { child: deeplyNested(depth - 1) };
+
+    const connection = connect({
+      handlers: {
+        rawRpc: () => ({
+          status: "ok",
+          turnId: "internal-turn-uuid",
+          environment: { session: { id: "session-secret-id" } },
+          abortReason: "Bearer sk-secret-abort",
+          deferredJobs: [{ jobId: "job-1", runtimeId: "other-plugin/secret" }],
+          runtimeResults: [
+            {
+              runtimeId: "owner/run",
+              pluginId: "owner",
+              status: "failed",
+              durationMs: 1,
+              error: "401 Bearer sk-secret-error\n  at /srv/secret.ts:12",
+              output: { secret: "leaked-runtime-output" },
+            },
+          ],
+        }),
+        rawError: () => ({
+          ok: false,
+          status: "failed",
+          error: "401 Bearer sk-secret-value\n  at /srv/app.ts:42",
+        }),
+        oversizedData: () => ({
+          ok: true,
+          status: "ok",
+          data: { blob: "x".repeat(40_000) },
+        }),
+        oversizedString: () => "x".repeat(5_000),
+        tooDeep: () => ({
+          ok: true,
+          status: "ok",
+          data: deeplyNested(12),
+        }),
+        circular: () => ({
+          ok: true,
+          status: "ok",
+          data: circular,
+        }),
+        errorInstance: () => new Error("raw-error-instance-secret"),
+        nonFinite: () => Number.NaN,
+      },
+    });
+    await connection.next();
+
+    for (const action of [
+      "rawRpc",
+      "rawError",
+      "oversizedData",
+      "oversizedString",
+      "tooDeep",
+      "circular",
+      "errorInstance",
+      "nonFinite",
+    ]) {
+      connection.port.postMessage({
+        type: "action",
+        id: action,
+        action,
+        params: {},
+      });
+      const answer = await connection.next();
+      expect(answer).toEqual(failed(action));
+      const serialized = JSON.stringify(answer);
+      expect(serialized).not.toContain("sk-secret");
+      expect(serialized).not.toContain("internal-turn-uuid");
+      expect(serialized).not.toContain("session-secret-id");
+      expect(serialized).not.toContain("leaked-runtime-output");
+      expect(serialized).not.toContain("raw-error-instance-secret");
+    }
+    connection.bridge.close();
+  });
+
+  it("sanitizes hidden and internal keys from public non-session outcome data while preserving valid fields", async () => {
+    const connection = connect({
+      handlers: {
+        clean: () => ({
+          ok: true,
+          status: "ok",
+          data: {
+            value: "fixture output",
+            items: [{ label: "A", _private: "secret-a", stack: "at /app.ts" }],
+            _hidden: "secret-top",
+            turnId: "turn-uuid",
+            sessionId: "sess-uuid",
+            runtimeId: "owner/run",
+            error: "raw-error-sentinel",
+            apiKey: "sk-sentinel",
+            providerContinuation: "opaque-sentinel",
+          },
+        }),
+        fixedError: () => ({
+          ok: false,
+          status: "failed",
+          error: "Plugin UI action failed",
+        }),
+      },
+    });
+    await connection.next();
+
+    connection.port.postMessage({
+      type: "action",
+      id: "clean",
+      action: "clean",
+      params: {},
+    });
+    const cleanReply = await connection.next();
+    expect(cleanReply).toEqual({
+      type: "result",
+      id: "clean",
+      value: {
+        ok: true,
+        status: "ok",
+        data: {
+          value: "fixture output",
+          items: [{ label: "A" }],
+        },
+      },
+    });
+    expect(JSON.stringify(cleanReply)).not.toMatch(
+      /secret|turn-uuid|sess-uuid|sentinel|\/app\.ts/,
+    );
+
+    connection.port.postMessage({
+      type: "action",
+      id: "fixed",
+      action: "fixedError",
+      params: {},
+    });
+    expect(await connection.next()).toEqual({
+      type: "result",
+      id: "fixed",
+      value: {
+        ok: false,
+        status: "failed",
+        error: "Plugin UI action failed",
+      },
+    });
+    connection.bridge.close();
+  });
 });
 
 it("provides complete state delivery without a stream sender", async () => {

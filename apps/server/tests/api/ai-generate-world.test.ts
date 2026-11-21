@@ -482,15 +482,22 @@ protocol = "openai-chat-v1"
     },
   );
 
-  it.each(["generate", "revise", "translate"])(
-    "holds shared authoring admission throughout the %s SSE stream",
+  it.each(["revise", "translate"] as const)(
+    "holds target-scoped authoring admission for %s on the same world throughout the SSE stream without blocking other worlds or return-only generation",
     async (active) => {
-      await worldCreation.writeWorldPackage(worldsDir, minimalWorld);
-      await store.createWorld(
-        (await loadSingleWorld(path.join(worldsDir, minimalWorld.id), {
-          source: "generated-file",
-        }))!,
-      );
+      const otherWorld = {
+        ...minimalWorld,
+        id: "other-world",
+        manifest: { ...minimalWorld.manifest, id: "other-world", name: "Cove" },
+      };
+      for (const fixture of [minimalWorld, otherWorld]) {
+        await worldCreation.writeWorldPackage(worldsDir, fixture);
+        await store.createWorld(
+          (await loadSingleWorld(path.join(worldsDir, fixture.id), {
+            source: "generated-file",
+          }))!,
+        );
+      }
       let entered!: () => void;
       let release!: () => void;
       const started = new Promise<void>((resolve) => {
@@ -499,19 +506,28 @@ protocol = "openai-chat-v1"
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
+      let blockFirst = true;
       const llm = new FixedLlm();
       const original = llm.generate.bind(llm);
       vi.spyOn(llm, "generate").mockImplementation(async () => {
-        entered();
-        await gate;
+        if (blockFirst) {
+          blockFirst = false;
+          entered();
+          await gate;
+        }
         return original();
       });
       app = createTestApp(store, llm);
-      const requests = {
-        generate: [
-          "/api/ai/generate-world",
-          { concept: "Harbor", saveTarget: "return-only" },
-        ],
+      const post = async (url: string, body: Record<string, unknown>) =>
+        app.request(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      const sameWorld: Record<
+        "revise" | "translate",
+        readonly [string, Record<string, unknown>]
+      > = {
         revise: [
           "/api/ai/revise-world",
           { worldId: minimalWorld.id, instruction: "Revise" },
@@ -520,27 +536,37 @@ protocol = "openai-chat-v1"
           `/api/worlds/${minimalWorld.id}/translate`,
           { locale: "ja-JP" },
         ],
-      } as const;
-      const post = async (kind: keyof typeof requests) => {
-        const [url, body] = requests[kind];
-        return app.request(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
       };
-      const pending = post(active as keyof typeof requests).then(readSseJson);
+      const [activeUrl, activeBody] = sameWorld[active];
+      const pending = post(activeUrl, activeBody).then(readSseJson);
       await started;
       const responses: Response[] = [];
       try {
-        for (const kind of ["generate", "revise", "translate"] as const) {
-          const blocked = await post(kind);
+        // Same-world revise and translate share the world:<id> flight mark.
+        for (const kind of ["revise", "translate"] as const) {
+          const [url, body] = sameWorld[kind];
+          const blocked = await post(url, body);
           responses.push(blocked);
           expect(blocked.status).toBe(429);
           expect(await blocked.json()).toMatchObject({
             code: "operation_in_progress",
           });
         }
+        // A different world and a return-only generation are NOT blocked.
+        const otherRes = await post(`/api/worlds/${otherWorld.id}/translate`, {
+          locale: "ja-JP",
+        });
+        responses.push(otherRes);
+        expect(otherRes.status).toBe(200);
+        await readSseJson(otherRes);
+
+        const returnOnlyRes = await post("/api/ai/generate-world", {
+          concept: "Harbor",
+          saveTarget: "return-only",
+        });
+        responses.push(returnOnlyRes);
+        expect(returnOnlyRes.status).toBe(200);
+        await readSseJson(returnOnlyRes);
       } finally {
         release();
         await pending;
@@ -550,11 +576,90 @@ protocol = "openai-chat-v1"
             .map((response) => response.text()),
         );
       }
-      const retry = await post("generate");
+      // Once the stream completes, the same world's flight mark is released.
+      const [reviseUrl, reviseBody] = sameWorld.revise;
+      const retry = await post(reviseUrl, reviseBody);
       expect(retry.status).toBe(200);
       await readSseJson(retry);
     },
   );
+
+  it("allows concurrent return-only generate-world requests without a global lock, while serializing server-persisting generate-world", async () => {
+    let enteredFirst!: () => void;
+    let releaseFirst!: () => void;
+    const startedFirst = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    const gateFirst = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let calls = 0;
+    const llm = new FixedLlm();
+    const original = llm.generate.bind(llm);
+    vi.spyOn(llm, "generate").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        enteredFirst();
+        await gateFirst;
+      }
+      return original();
+    });
+    app = createTestApp(store, llm);
+    const postGenerate = async (saveTarget: "return-only" | "server-file") =>
+      app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept: "Harbor", saveTarget }),
+      });
+
+    // Two concurrent return-only generations must both run.
+    const firstReturnOnly = postGenerate("return-only").then(readSseJson);
+    await startedFirst;
+    try {
+      const secondReturnOnly = await postGenerate("return-only");
+      expect(secondReturnOnly.status).toBe(200);
+      await readSseJson(secondReturnOnly);
+    } finally {
+      releaseFirst();
+      await firstReturnOnly;
+    }
+
+    // Server-persisting generation serializes against another server-persisting generation,
+    // but still does not block return-only generation.
+    let enteredServer!: () => void;
+    let releaseServer!: () => void;
+    const startedServer = new Promise<void>((resolve) => {
+      enteredServer = resolve;
+    });
+    const gateServer = new Promise<void>((resolve) => {
+      releaseServer = resolve;
+    });
+    let blockServer = true;
+    vi.spyOn(llm, "generate").mockImplementation(async () => {
+      if (blockServer) {
+        blockServer = false;
+        enteredServer();
+        await gateServer;
+      }
+      return original();
+    });
+
+    const serverPending = postGenerate("server-file").then(readSseJson);
+    await startedServer;
+    try {
+      const blockedServer = await postGenerate("server-file");
+      expect(blockedServer.status).toBe(429);
+      expect(await blockedServer.json()).toMatchObject({
+        code: "operation_in_progress",
+      });
+      const concurrentReturnOnly = await postGenerate("return-only");
+      expect(concurrentReturnOnly.status).toBe(200);
+      await readSseJson(concurrentReturnOnly);
+    } finally {
+      releaseServer();
+      await serverPending;
+    }
+  });
 
   it.each(["generate-world", "revise-world"] as const)(
     "%s keeps unexpected exceptions out of production SSE and logs the original error",

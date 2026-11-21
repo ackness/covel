@@ -414,3 +414,454 @@ describe("localized contribution identities", () => {
     warn.mockRestore();
   });
 });
+
+describe("author-chosen map keys named like natural-language fields", () => {
+  const PROSE_LIKE_KEYS = [
+    "content",
+    "title",
+    "description",
+    "label",
+    "hint",
+    "placeholder",
+    "displayName",
+    "i18n",
+  ] as const;
+
+  it("prevents contributes.data namespaces named like prose fields from overwriting structure while preserving nested prose translation", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonical = {
+      id: "demo",
+      kind: "plugin",
+      description: "Demo",
+      contributes: {
+        data: {
+          content: {
+            schema: "./schemas/content.json",
+            version: 1,
+            accepts: ["content@1"],
+            description: "Story content records",
+            authoring: {
+              title: "Story Content",
+              hint: "Keep it brief",
+              source: {
+                path: "data/content.yaml",
+                visibility: "hidden",
+              },
+            },
+          },
+          // String-only namespace objects (no version/accepts) must not be
+          // mistaken for locale maps even under keys like `title` or `i18n`.
+          title: { schema: "./schemas/title.json" },
+          i18n: { schema: "./schemas/i18n.json" },
+        },
+      },
+    };
+    const localized = {
+      contributes: {
+        data: {
+          content: {
+            schema: "./schemas/evil.json",
+            version: 99,
+            accepts: ["hijacked@1"],
+            description: "故事内容记录",
+            authoring: {
+              title: "故事内容",
+              hint: "保持简短",
+              source: {
+                path: "data/evil.yaml",
+                visibility: "public",
+              },
+            },
+          },
+          title: { schema: "./schemas/evil-title.json" },
+          i18n: { schema: "./schemas/evil-i18n.json" },
+          // Attempting to inject new namespaces named like prose keys.
+          label: { schema: "./schemas/injected.json" },
+          description: "not-a-namespace",
+        },
+      },
+    };
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.zh.md",
+    );
+
+    expect(merged.contributes.data).toEqual({
+      content: {
+        schema: "./schemas/content.json",
+        version: 1,
+        accepts: ["content@1"],
+        description: "故事内容记录",
+        authoring: {
+          title: "故事内容",
+          hint: "保持简短",
+          source: {
+            path: "data/content.yaml",
+            visibility: "hidden",
+          },
+        },
+      },
+      title: { schema: "./schemas/title.json" },
+      i18n: { schema: "./schemas/i18n.json" },
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.data.content.schema"),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.data.title.schema"),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.data.i18n.schema"),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.data.label"),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.data.description"),
+    );
+    warn.mockRestore();
+  });
+
+  it("prevents contributes.worldProjections and nested outputs named like prose fields from being overwritten", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonical = {
+      id: "demo",
+      kind: "plugin",
+      description: "Demo",
+      contributes: {
+        worldProjections: {
+          content: {
+            from: "world.content@1",
+            handler: "./projections/content.js",
+            outputs: {
+              title: { namespace: "content", key: "id" },
+            },
+          },
+          description: {
+            from: "world.desc@1",
+            handler: "./projections/desc.js",
+            outputs: {
+              i18n: { namespace: "desc", key: "slug" },
+            },
+          },
+        },
+      },
+    };
+    const localized = {
+      contributes: {
+        worldProjections: {
+          content: {
+            from: "evil@1",
+            handler: "./evil.js",
+            outputs: {
+              title: { namespace: "pwned", key: "other" },
+            },
+          },
+          description: {
+            from: "evil@2",
+            handler: "./evil2.js",
+            outputs: {
+              i18n: { namespace: "pwned2", key: "other" },
+            },
+          },
+          label: {
+            from: "injected@1",
+            handler: "./injected.js",
+            outputs: {
+              main: { namespace: "injected", key: "id" },
+            },
+          },
+        },
+      },
+    };
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.zh.md",
+    );
+
+    expect(merged.contributes.worldProjections).toEqual(
+      canonical.contributes.worldProjections,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.worldProjections"),
+    );
+    warn.mockRestore();
+  });
+
+  it("prevents io.inputs and runtime.io.inputs bindings named like prose fields from being overwritten", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonicalInputs = Object.fromEntries(
+      PROSE_LIKE_KEYS.map((key) => [
+        key,
+        { from: { contract: `safe.${key}@1` }, required: true },
+      ]),
+    );
+    const localizedInputs = Object.fromEntries(
+      PROSE_LIKE_KEYS.map((key) => [
+        key,
+        { from: { contract: `evil.${key}@1` }, required: false },
+      ]),
+    );
+
+    // RUNTIME.md layout (`io.inputs`)
+    const runtimeCanonical = {
+      description: "Worker",
+      schedule: { stage: "post-turn" },
+      io: { inputs: canonicalInputs },
+    };
+    const runtimeLocalized = {
+      description: "工作器",
+      io: { inputs: localizedInputs },
+    };
+    const mergedRuntime = reconcileLocalizedManifest(
+      runtimeCanonical,
+      runtimeLocalized,
+      "RUNTIME.zh.md",
+    );
+    expect(mergedRuntime.description).toBe("工作器");
+    expect(mergedRuntime.io.inputs).toEqual(canonicalInputs);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("io.inputs"));
+
+    warn.mockClear();
+
+    // Inline PLUGIN.md layout (`runtime.io.inputs`)
+    const pluginCanonical = {
+      id: "demo",
+      kind: "plugin",
+      description: "Demo",
+      runtime: {
+        schedule: { stage: "post-turn" },
+        io: { inputs: canonicalInputs },
+      },
+    };
+    const pluginLocalized = {
+      description: "演示",
+      runtime: {
+        io: { inputs: localizedInputs },
+      },
+    };
+    const mergedPlugin = reconcileLocalizedManifest(
+      pluginCanonical,
+      pluginLocalized,
+      "PLUGIN.zh.md",
+    );
+    expect(mergedPlugin.description).toBe("演示");
+    expect(mergedPlugin.runtime.io.inputs).toEqual(canonicalInputs);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("runtime.io.inputs"),
+    );
+    warn.mockRestore();
+  });
+
+  it("prevents contracts and settings default objects from being overwritten by prose-named keys", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonical = {
+      id: "demo",
+      kind: "plugin",
+      description: "Demo",
+      contracts: {
+        "notes@1": { schema: "./schemas/notes.json" },
+      },
+      contributes: {
+        settings: [
+          {
+            key: "preset",
+            type: "text",
+            label: "Preset",
+            default: { title: "canonical-title", content: "canonical-body" },
+          },
+        ],
+      },
+    };
+    const localized = {
+      contracts: {
+        "notes@1": { schema: "./schemas/evil.json" },
+        description: { schema: "./schemas/injected.json" },
+      },
+      contributes: {
+        settings: [
+          {
+            key: "preset",
+            label: "预设",
+            default: { title: "evil-title", content: "evil-body" },
+          },
+        ],
+      },
+    };
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.zh.md",
+    );
+
+    expect(merged.contracts).toEqual(canonical.contracts);
+    expect(merged.contributes.settings).toEqual([
+      {
+        key: "preset",
+        type: "text",
+        label: "预设",
+        default: { title: "canonical-title", content: "canonical-body" },
+      },
+    ]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("contracts"));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("contributes.settings[0].default"),
+    );
+    warn.mockRestore();
+  });
+
+  it.each(PROSE_LIKE_KEYS)(
+    "never overwrites a non-prose structural object (including string-only) under key %s even in an uncatalogued container",
+    (key) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const canonical = {
+        futureMap: {
+          [key]: { schema: "./safe.json", visibility: "hidden", version: 1 },
+        },
+        stringOnlyMap: {
+          [key]: { handler: "./safe.js" },
+        },
+      };
+      const localized = {
+        futureMap: {
+          [key]: { schema: "./evil.json", visibility: "public", version: 2 },
+        },
+        stringOnlyMap: {
+          [key]: { handler: "./evil.js" },
+        },
+      };
+
+      const merged = reconcileLocalizedManifest(
+        canonical,
+        localized,
+        "PLUGIN.zh.md",
+      );
+
+      expect(merged.futureMap[key]).toEqual(canonical.futureMap[key]);
+      expect(merged.stringOnlyMap[key]).toEqual(canonical.stringOnlyMap[key]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(`futureMap.${key}.schema`),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(`stringOnlyMap.${key}.handler`),
+      );
+      warn.mockRestore();
+    },
+  );
+
+  it("still translates prose fields whose canonical values are locale maps (including i18n)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonical = {
+      id: "demo",
+      displayName: { en: "Inventory", zh: "行囊" },
+      description: { en: "Keeps items.", zh: "保管物品。" },
+      i18n: { en: "Hello", zh: "你好" },
+    };
+    const localized = {
+      displayName: "背包",
+      description: { en: "Keeps items.", zh: "管理道具。" },
+      i18n: { en: "Hello", zh: "您好" },
+    };
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.zh.md",
+    );
+
+    expect(merged.displayName).toBe("背包");
+    expect(merged.description).toEqual({
+      en: "Keeps items.",
+      zh: "管理道具。",
+    });
+    expect(merged.i18n).toEqual({ en: "Hello", zh: "您好" });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("enforces structural protection end-to-end through parsePluginMd on PLUGIN.zh.md", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonicalMd = [
+      "---",
+      "id: demo",
+      "kind: plugin",
+      "description: English",
+      "contributes:",
+      "  data:",
+      "    content:",
+      "      schema: ./schemas/content.json",
+      "      version: 1",
+      "      description: English data",
+      "  worldProjections:",
+      "    title:",
+      "      from: world.title@1",
+      "      handler: ./projections/title.js",
+      "      outputs:",
+      "        content:",
+      "          namespace: content",
+      "          key: id",
+      "runtime:",
+      "  schedule: { stage: post-turn }",
+      "  io:",
+      "    inputs:",
+      "      content:",
+      "        from: { contract: safe@1 }",
+      "        required: true",
+      "---",
+      "English body.",
+    ].join("\n");
+    const zhMd = [
+      "---",
+      "description: 中文",
+      "contributes:",
+      "  data:",
+      "    content:",
+      "      schema: ./schemas/evil.json",
+      "      version: 2",
+      "      description: 中文数据",
+      "  worldProjections:",
+      "    title:",
+      "      from: evil@1",
+      "      handler: ./evil.js",
+      "      outputs:",
+      "        content:",
+      "          namespace: evil",
+      "          key: bad",
+      "runtime:",
+      "  io:",
+      "    inputs:",
+      "      content:",
+      "        from: { contract: evil@1 }",
+      "        required: false",
+      "---",
+      "中文正文。",
+    ].join("\n");
+
+    const canonical = parsePluginMd(canonicalMd, "demo/PLUGIN.md");
+    const localized = parsePluginMd(
+      zhMd,
+      "demo/PLUGIN.zh.md",
+      canonical.rawFrontmatter,
+    );
+
+    expect(localized.plugin.description).toBe("中文");
+    expect(localized.plugin.contributes?.data?.content).toEqual({
+      schema: "./schemas/content.json",
+      version: 1,
+      description: "中文数据",
+    });
+    expect(localized.plugin.contributes?.worldProjections).toEqual(
+      canonical.plugin.contributes?.worldProjections,
+    );
+    expect(localized.plugin.runtime?.io?.inputs).toEqual(
+      canonical.plugin.runtime?.io?.inputs,
+    );
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

@@ -325,7 +325,7 @@ contributes:
 UI spec 是**不可信的插件输入**。它的规则只有一份：`@covel/shared` 的 `pluginUiSpecIssues`（`packages/shared/src/schemas/ui-spec.ts`）。`pnpm validate:plugin`、ZIP 安装和 `/api/ui-specs` 加载面板时都用它，所以校验通过的 spec 在游戏里不会因为格式被去掉。
 
 - **版本。** `specVersion` 可以省略，按 v1 处理。写得比宿主支持的版本高（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。这样旧宿主遇到新插件包时会明确报错，而不是画出一个坏面板。
-- **`webview`。** 单文件 `entry` 指向包里的一份 `.html`，不超过 512 KiB；视图也可用[多文件页面](#多文件页面)；`height` 是 80 到 800 之间的整数。`surfaces` 只能是 `panel` 和 `stage`。
+- **`webview`。** 单文件 `entry` 指向包里的一份 `.html`，不超过 512 KiB；视图也可用[多文件页面](#多文件页面)；`height` 是 80 到 800 之间的整数。`surfaces` 只能是 `panel` 和 `stage`。未声明 `bridge: "session"` 的 `webview` 不能绑定 `dataSource.source`（`session.characters`、`session.characterSchema`），其桥接 RPC 返回也会被裁剪为有界的公开结果（剥离内部追踪字段与隐藏键）。
 - **数据归属。** `pluginId`、`sourcePlugin`、`sourcePluginId` 只能写本插件的 ID；`dataSource.bindings` 只能是写死的本插件 namespace，最多 8 个。
 - **`view` 或 `webview`，二选一。** 每份 spec 必须声明 `view`（对象）或 `webview`（HTML 文档）。两个都写或都不写，校验失败。
 - **`view` 递归校验。** 检查的内容有 `component` / `type`、`children`、命名的 `slots`、`repeat`，以及 `on` / `watch` 的 action 绑定结构。组件名必须在共享的 `PLUGIN_UI_COMPONENT_NAMES` 里；不认识的组件在服务端就产生带路径的诊断。`props` 和 directive 表达式不做限制，由组件和 json-render 在运行时解析，这样插件可以扩展数据的形状。

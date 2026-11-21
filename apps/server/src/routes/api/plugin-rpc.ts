@@ -67,6 +67,7 @@ import { readPluginUserSettings } from "./plugin-user-settings.js";
 import {
   loadExecutionUserSettings,
   syncLiveSessionRuntimes,
+  syncSessionRuntimes,
 } from "./execution-context.js";
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
@@ -75,6 +76,7 @@ import {
 } from "./plugin-rpc/runtime-job-enqueue.js";
 import { queueFollowUpsWith } from "./commit-envelope.js";
 import {
+  SessionApprovalScopeChangedError,
   createPluginRpcRuntimeTurnRunner,
   requireLiveScope,
   runtimeQueueErrorResponse,
@@ -348,6 +350,44 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // withdrawn if that commit does not land.
     const credentials = requestCredentialHandoff(c);
 
+    const assertLiveTargetAuthorized = async () => {
+      const live = await requireLiveScope(
+        store,
+        sessionId,
+        body.pluginId,
+        approvalScope,
+      );
+      const liveActiveRuntimes = syncSessionRuntimes(
+        pluginRegistry,
+        sessionId,
+        live.activePlugins,
+      );
+      const liveTarget = liveActiveRuntimes.find(
+        (rt) => rt.name === body.runtimeId,
+      );
+      if (
+        !liveTarget ||
+        liveTarget.pluginId !== body.pluginId ||
+        liveTarget.subagentOnly
+      ) {
+        throw new SessionApprovalScopeChangedError();
+      }
+      if (
+        trustInfo.source === "community" &&
+        !declarative &&
+        (!hasServerCodeGrant(gate, live, body.pluginId) ||
+          !gate.hasGrant(
+            sessionId,
+            body.pluginId,
+            `runtime:${body.runtimeId}`,
+            approvalScope,
+          ))
+      ) {
+        throw new SessionApprovalScopeChangedError();
+      }
+      return live;
+    };
+
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
       memorySystem: c.get("memorySystem"),
       resolveImageFlowRuntimeIds: async (settings) =>
@@ -361,7 +401,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           })
         )?.assetRuntimeIds,
       withSettledLock: (fn, waitBudget) =>
-        withSettledSessionLock(c, sessionId, fn, waitBudget),
+        withSettledSessionLock(
+          c,
+          sessionId,
+          async () => {
+            await assertLiveTargetAuthorized();
+            return fn();
+          },
+          waitBudget,
+        ),
       withSnapshot: (fn, beforeCapture) =>
         c.get("withPluginSnapshot")?.(sessionId, fn, beforeCapture) ??
         sessionLock.withLock(sessionId, async () => beforeCapture?.()).then(fn),
@@ -402,12 +450,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       let queued;
       try {
         queued = await sessionLock.withLock(sessionId, async () => {
-          const live = await requireLiveScope(
-            store,
-            sessionId,
-            body.pluginId,
-            approvalScope,
-          );
+          const live = await assertLiveTargetAuthorized();
           return store.withTransaction((tx) =>
             enqueueActivatedRuntimeJob(tx, {
               sessionId,
@@ -464,14 +507,52 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(retrySeedResults
           ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
           : {}),
-        followUps: queueFollowUpsWith({
-          sessionId,
-          activeRuntimes,
-          locale: session.locale,
-          ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
-          credentials,
-          sourceRuntimeId: body.runtimeId,
-        }),
+        followUps: async (tx, turnResult, isolation) => {
+          const live = await tx.getSession(sessionId);
+          const liveActiveRuntimes = live
+            ? syncSessionRuntimes(pluginRegistry, sessionId, live.activePlugins)
+            : [];
+          const admittedFollowers = live
+            ? isolation.deferredFollowers.filter((follower) => {
+                if (!live.activePlugins.includes(follower.pluginId)) {
+                  return false;
+                }
+                const followerEntry = pluginRegistry.get(follower.pluginId);
+                const followerTrust = getPluginTrustInfo(
+                  follower.pluginId,
+                  followerEntry?.source,
+                );
+                if (followerTrust.source !== "community") return true;
+                if (c.get("trustedSources")?.isDeclarative(follower.pluginId)) {
+                  return true;
+                }
+                const followerScope = sessionApprovalScope(
+                  live,
+                  follower.pluginId,
+                );
+                return (
+                  hasServerCodeGrant(gate, live, follower.pluginId) &&
+                  gate.hasGrant(
+                    sessionId,
+                    follower.pluginId,
+                    `runtime:${follower.runtimeId}`,
+                    followerScope,
+                  )
+                );
+              })
+            : [];
+          return queueFollowUpsWith({
+            sessionId,
+            activeRuntimes: liveActiveRuntimes,
+            locale: live?.locale ?? session.locale,
+            ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+            credentials,
+            sourceRuntimeId: body.runtimeId,
+          })(tx, turnResult, {
+            ...isolation,
+            deferredFollowers: admittedFollowers,
+          });
+        },
       });
     } catch (err) {
       credentials.discard();

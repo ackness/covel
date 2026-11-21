@@ -34,10 +34,16 @@ describe("validateBaseUrl", () => {
         sessionlessCommunityWires: false,
       });
       expect(validateBaseUrl("http://localhost:11434")).toBe(false);
+      expect(validateBaseUrl("http://localhost.:11434")).toBe(false);
       expect(validateBaseUrl("http://127.0.0.1:8080")).toBe(false);
       expect(validateBaseUrl("https://127.0.0.1:8080")).toBe(false);
+      expect(validateBaseUrl("https://127.0.0.1.:8080")).toBe(false);
       expect(validateBaseUrl("http://[::1]:8080")).toBe(false);
       expect(validateBaseUrl("https://api.openai.com")).toBe(true);
+    });
+
+    it("handles trailing root dots on loopback hosts on personal hosts", () => {
+      expect(validateBaseUrl("http://localhost.:11434")).toBe(true);
     });
 
     it("allows subdomains of known providers", () => {
@@ -47,11 +53,20 @@ describe("validateBaseUrl", () => {
   });
 
   describe("blocked URLs", () => {
-    it("blocks cloud metadata endpoints", () => {
+    it("blocks cloud metadata endpoints including trailing root dots", () => {
       expect(validateBaseUrl("http://169.254.169.254/latest/meta-data/")).toBe(
         false,
       );
+      expect(
+        validateBaseUrl("https://169.254.169.254./latest/meta-data/"),
+      ).toBe(false);
       expect(validateBaseUrl("http://metadata.google.internal")).toBe(false);
+      expect(validateBaseUrl("https://metadata.google.internal")).toBe(false);
+      expect(validateBaseUrl("https://metadata.google.internal.")).toBe(false);
+      expect(validateBaseUrl("https://metadata.google.internal..")).toBe(false);
+      expect(validateBaseUrl("https://METADATA.GOOGLE.INTERNAL.")).toBe(false);
+      expect(validateBaseUrl("https://metadata.internal")).toBe(false);
+      expect(validateBaseUrl("https://metadata.internal.")).toBe(false);
     });
 
     it("blocks private network ranges (RFC1918)", () => {

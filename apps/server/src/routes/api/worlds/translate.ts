@@ -1,5 +1,8 @@
 import { loadWorldForPublication } from "../../../world-data/publication.js";
-import { worldAuthoringFlight } from "../../../authoring/flight.js";
+import {
+  acquireWorldAuthoringFlight,
+  worldAuthoringFlightConflict,
+} from "../../../authoring/flight.js";
 /**
  * World translation route.
  *
@@ -128,7 +131,6 @@ worldTranslateRoutes.post(
     await next();
   },
   rateLimiter({ max: 10 }),
-  worldAuthoringFlight,
   async (c) => {
     const store = c.get("store");
     const worldId = c.req.param("id");
@@ -146,169 +148,186 @@ worldTranslateRoutes.post(
       return c.json(errorBody(idleTimeout.error), 400);
     }
 
-    const world = await store.getWorld(worldId);
-    if (!world) {
-      return c.json(
-        errorBody("World not found", { code: "world_not_found" }),
-        404,
-      );
-    }
-    if (isWorldDeleting(world)) {
-      return c.json(
-        errorBody("World deletion is in progress", { code: "world_deleting" }),
-        409,
-      );
-    }
-    // A translation is files beside the world's own. Only a package in the
-    // user's world directory is written to: a bundled world ships its
-    // editions, and a world in a store or a browser has no files.
-    // Compared by real path: a temporary or home directory is often a link.
-    const real = (target: string) => realpath(target).catch(() => target);
-    const userWorlds = await real(resolveUserResourceDirs().worlds);
-    const worldDir = await resolveWorldRoot(worldId, c.get("worldsDirs") ?? []);
-    if (!worldDir || !inside(userWorlds, await real(worldDir))) {
-      return c.json(
-        errorBody(
-          "Only a world package in the user world directory can be translated here",
-          { code: "world_not_translatable" },
-        ),
-        409,
-      );
-    }
-    const packagePath = await realpath(worldDir);
-    const packageIdentity = await stat(packagePath);
-    if ((await untranslatedWorldTexts(worldDir, locale)).units.length === 0) {
-      return c.json(
-        errorBody("The world already has this language", {
-          code: "world_already_translated",
-        }),
-        409,
-      );
-    }
-
-    const llm = c.get("llmAdapter") as LLMAdapter;
-    return streamOwnedSSE(c, async (stream) => {
-      const send = async (event: TranslateEvent) => {
-        await stream.writeSSE({ data: JSON.stringify(event) });
-      };
-      try {
-        const signal = requestAbortSignal(c);
-        // Progress is sent in order; a write that fails ends the stream.
-        const progress = orderedSend(send);
-        const result = await prepareWorldTranslation({
-          worldDir,
-          locale,
-          llm,
-          ...(typeof parsed.body.model === "string"
-            ? { model: parsed.body.model }
-            : {}),
-          signal,
-          idleTimeoutMs: idleTimeout.value,
-          onProgress: (step, done, total) =>
-            progress.push({ type: "progress", step, done, total }),
-        });
-        await progress.settled();
-        signal.throwIfAborted();
-        if (result.translated === 0) {
-          // Why a text was refused (a changed placeholder, a reply that is
-          // not JSON) is what the player needs to try again.
-          await send({
-            type: "error",
-            message:
-              result.failed[0]?.reason ?? "The model returned no translation",
-          });
-          return;
-        }
-
-        const record = await c
-          .get("sessionLock")
-          .withLock(worldOperationLockId(worldId), async () => {
-            // Models run without the lock. Only the original record and package
-            // may receive their result; an editor patch keeps the same identity.
-            const current = await store.getWorld(worldId);
-            if (
-              !current ||
-              isWorldDeleting(current) ||
-              current.createdAt !== world.createdAt
-            ) {
-              return undefined;
-            }
-            const currentRoot = await resolveWorldRoot(
-              worldId,
-              c.get("worldsDirs") ?? [],
-            );
-            const currentPath = currentRoot
-              ? await realpath(currentRoot).catch(() => undefined)
-              : undefined;
-            if (currentPath !== packagePath) return undefined;
-            const identity = await stat(currentPath).catch(() => undefined);
-            // createdAt can be supplied on creation. A replacement at the same
-            // path must still be rejected if it reused that timestamp.
-            if (!sameFileIdentity(identity, packageIdentity)) return undefined;
-            signal.throwIfAborted();
-            // A generated package that holds only the app's files stays
-            // one: the files written here join the list in its marker.
-            const pristine =
-              (await inspectGeneratedWorldPackage(packagePath)).state ===
-              "pristine";
-            const staging = await mkdtemp(
-              path.join(userWorlds, ".covel-translate-"),
-            );
-            try {
-              // Preserve media, receipts, markers and authored files in the copy.
-              await cp(packagePath, staging, {
-                recursive: true,
-                verbatimSymlinks: true,
-              });
-              const written = await writeWorldTranslations(
-                staging,
-                locale,
-                result.translations,
-              );
-              const edition = await ensureWorldEdition(staging, locale);
-              if (pristine)
-                await recordGeneratedWorldFiles(staging, [
-                  ...written,
-                  ...(edition ? [edition] : []),
-                ]);
-              const loaded = await loadWorldForPublication(staging);
-              const next = withNewEdition(loaded, current, locale);
-              signal.throwIfAborted();
-              await publishWorldPackage(staging, packagePath, {
-                replace: true,
-                afterPublish: () => store.upsertWorld(next),
-              });
-              return next;
-            } finally {
-              await rm(staging, { recursive: true, force: true });
-            }
-          });
-        if (!record) {
-          await send({
-            type: "error",
-            message:
-              "The world was deleted or replaced while it was translated",
-          });
-          return;
-        }
-        console.log(
-          `[worlds/translate] ${worldId} → ${locale}: ${result.translated}/${result.total} text(s), ${result.failed.length} failed`,
+    const flight = acquireWorldAuthoringFlight(`world:${worldId}`);
+    if (!flight) return worldAuthoringFlightConflict(c);
+    let handedOff = false;
+    try {
+      const world = await store.getWorld(worldId);
+      if (!world) {
+        return c.json(
+          errorBody("World not found", { code: "world_not_found" }),
+          404,
         );
-        await send({
-          type: "done",
-          world: record,
-          total: result.total,
-          translated: result.translated,
-          failed: result.failed.length,
-        });
-      } catch (err) {
-        logRequestError(c, "[worlds/translate] unexpected error", err);
-        const { body } = classifyApiError(
-          err,
-          readRuntimeEnv().nodeEnv !== "production",
-        );
-        await send({ type: "error", message: body.error });
       }
-    });
+      if (isWorldDeleting(world)) {
+        return c.json(
+          errorBody("World deletion is in progress", {
+            code: "world_deleting",
+          }),
+          409,
+        );
+      }
+      // A translation is files beside the world's own. Only a package in the
+      // user's world directory is written to: a bundled world ships its
+      // editions, and a world in a store or a browser has no files.
+      // Compared by real path: a temporary or home directory is often a link.
+      const real = (target: string) => realpath(target).catch(() => target);
+      const userWorlds = await real(resolveUserResourceDirs().worlds);
+      const worldDir = await resolveWorldRoot(
+        worldId,
+        c.get("worldsDirs") ?? [],
+      );
+      if (!worldDir || !inside(userWorlds, await real(worldDir))) {
+        return c.json(
+          errorBody(
+            "Only a world package in the user world directory can be translated here",
+            { code: "world_not_translatable" },
+          ),
+          409,
+        );
+      }
+      const packagePath = await realpath(worldDir);
+      const packageIdentity = await stat(packagePath);
+      if ((await untranslatedWorldTexts(worldDir, locale)).units.length === 0) {
+        return c.json(
+          errorBody("The world already has this language", {
+            code: "world_already_translated",
+          }),
+          409,
+        );
+      }
+
+      const llm = c.get("llmAdapter") as LLMAdapter;
+      const response = streamOwnedSSE(c, async (stream) => {
+        const send = async (event: TranslateEvent) => {
+          await stream.writeSSE({ data: JSON.stringify(event) });
+        };
+        try {
+          const signal = requestAbortSignal(c);
+          // Progress is sent in order; a write that fails ends the stream.
+          const progress = orderedSend(send);
+          const result = await prepareWorldTranslation({
+            worldDir,
+            locale,
+            llm,
+            ...(typeof parsed.body.model === "string"
+              ? { model: parsed.body.model }
+              : {}),
+            signal,
+            idleTimeoutMs: idleTimeout.value,
+            onProgress: (step, done, total) =>
+              progress.push({ type: "progress", step, done, total }),
+          });
+          await progress.settled();
+          signal.throwIfAborted();
+          if (result.translated === 0) {
+            // Why a text was refused (a changed placeholder, a reply that is
+            // not JSON) is what the player needs to try again.
+            await send({
+              type: "error",
+              message:
+                result.failed[0]?.reason ?? "The model returned no translation",
+            });
+            return;
+          }
+
+          const record = await c
+            .get("sessionLock")
+            .withLock(worldOperationLockId(worldId), async () => {
+              // Models run without the lock. Only the original record and package
+              // may receive their result; an editor patch keeps the same identity.
+              const current = await store.getWorld(worldId);
+              if (
+                !current ||
+                isWorldDeleting(current) ||
+                current.createdAt !== world.createdAt
+              ) {
+                return undefined;
+              }
+              const currentRoot = await resolveWorldRoot(
+                worldId,
+                c.get("worldsDirs") ?? [],
+              );
+              const currentPath = currentRoot
+                ? await realpath(currentRoot).catch(() => undefined)
+                : undefined;
+              if (currentPath !== packagePath) return undefined;
+              const identity = await stat(currentPath).catch(() => undefined);
+              // createdAt can be supplied on creation. A replacement at the same
+              // path must still be rejected if it reused that timestamp.
+              if (!sameFileIdentity(identity, packageIdentity))
+                return undefined;
+              signal.throwIfAborted();
+              // A generated package that holds only the app's files stays
+              // one: the files written here join the list in its marker.
+              const pristine =
+                (await inspectGeneratedWorldPackage(packagePath)).state ===
+                "pristine";
+              const staging = await mkdtemp(
+                path.join(userWorlds, ".covel-translate-"),
+              );
+              try {
+                // Preserve media, receipts, markers and authored files in the copy.
+                await cp(packagePath, staging, {
+                  recursive: true,
+                  verbatimSymlinks: true,
+                });
+                const written = await writeWorldTranslations(
+                  staging,
+                  locale,
+                  result.translations,
+                );
+                const edition = await ensureWorldEdition(staging, locale);
+                if (pristine)
+                  await recordGeneratedWorldFiles(staging, [
+                    ...written,
+                    ...(edition ? [edition] : []),
+                  ]);
+                const loaded = await loadWorldForPublication(staging);
+                const next = withNewEdition(loaded, current, locale);
+                signal.throwIfAborted();
+                await publishWorldPackage(staging, packagePath, {
+                  replace: true,
+                  afterPublish: () => store.upsertWorld(next),
+                });
+                return next;
+              } finally {
+                await rm(staging, { recursive: true, force: true });
+              }
+            });
+          if (!record) {
+            await send({
+              type: "error",
+              message:
+                "The world was deleted or replaced while it was translated",
+            });
+            return;
+          }
+          console.log(
+            `[worlds/translate] ${worldId} → ${locale}: ${result.translated}/${result.total} text(s), ${result.failed.length} failed`,
+          );
+          await send({
+            type: "done",
+            world: record,
+            total: result.total,
+            translated: result.translated,
+            failed: result.failed.length,
+          });
+        } catch (err) {
+          logRequestError(c, "[worlds/translate] unexpected error", err);
+          const { body } = classifyApiError(
+            err,
+            readRuntimeEnv().nodeEnv !== "production",
+          );
+          await send({ type: "error", message: body.error });
+        } finally {
+          flight.release();
+        }
+      });
+      handedOff = true;
+      return response;
+    } finally {
+      if (!handedOff) flight.release();
+    }
   },
 );
