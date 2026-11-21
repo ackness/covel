@@ -70,6 +70,24 @@ function stripInlineCode(line) {
   return line.replace(/(`+)([\s\S]*?)\1/g, (match) => " ".repeat(match.length));
 }
 
+/** Linearly strip `<...>` HTML tags from Markdown heading text for slugging. */
+function stripHtmlTags(text) {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === "<") {
+      const close = text.indexOf(">", i + 1);
+      if (close !== -1) {
+        i = close + 1;
+        continue;
+      }
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
+
 /** Reduce Markdown inline formatting in a heading to the rendered plain text. */
 function headingPlainText(raw) {
   const codeSpans = [];
@@ -78,10 +96,11 @@ function headingPlainText(raw) {
     codeSpans.push(code);
     return token;
   });
-  const stripped = withPlaceholders
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
+  const stripped = stripHtmlTags(
+    withPlaceholders
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"),
+  )
     .replace(/(\*\*|~~)(.*?)\1/g, "$2")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/\\([\\`*_{}[\]()#+\-.!~|<>])/g, "$1");
@@ -139,6 +158,58 @@ function extractAnchors(filePath) {
   return extractAnchorsFromText(readFileSync(filePath, "utf8"));
 }
 
+/** Linearly extract inline `[label](target)` hrefs on one line (skipping `![...]`). */
+function extractInlineHrefs(line) {
+  const hrefs = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (line[i] !== "[") {
+      i += 1;
+      continue;
+    }
+    const isImage = i > 0 && line[i - 1] === "!";
+    let depth = 1;
+    let j = i + 1;
+    while (j < line.length && depth > 0) {
+      if (line[j] === "\\") {
+        j += 2;
+        continue;
+      }
+      if (line[j] === "[") depth += 1;
+      else if (line[j] === "]") depth -= 1;
+      j += 1;
+    }
+    if (depth !== 0 || line[j] !== "(") {
+      i += 1;
+      continue;
+    }
+    let k = j + 1;
+    while (k < line.length && line[k] !== ")") {
+      if (line[k] === "\\") {
+        k += 2;
+        continue;
+      }
+      k += 1;
+    }
+    if (k >= line.length) {
+      i = j + 1;
+      continue;
+    }
+    if (!isImage) {
+      const inner = line.slice(j + 1, k).trim();
+      const firstToken = inner.split(/\s+/)[0] ?? "";
+      const href = firstToken.replace(/^<|>$/g, "");
+      if (href) hrefs.push(href);
+    }
+    i = k + 1;
+  }
+  return hrefs;
+}
+
 /** Extract `[label](target)` and `[ref]: target` links that carry a `#fragment`. */
 function extractFragmentLinksFromText(text) {
   const lines = stripFencedCodeLines(text);
@@ -148,11 +219,7 @@ function extractFragmentLinksFromText(text) {
     const clean = stripInlineCode(lines[index]);
     const lineNo = index + 1;
 
-    // Inline Markdown links (skip images `![...]`).
-    const inlinePattern =
-      /(?<!!)\[(?:[^\]\\]|\\.|\[[^\]]*\])*\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'))?\)/g;
-    for (const match of clean.matchAll(inlinePattern)) {
-      const href = match[1].replace(/^<|>$/g, "");
+    for (const href of extractInlineHrefs(clean)) {
       if (href.includes("#")) links.push({ lineNo, href });
     }
 

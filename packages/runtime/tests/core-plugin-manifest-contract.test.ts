@@ -175,6 +175,8 @@ describe("core plugin manifest contract", () => {
       "get-character",
       "memory-search",
       "emit-event",
+      "world-dimension-get",
+      "world-dimension-list",
       "delegate",
       "delegate-batch",
     ]);
