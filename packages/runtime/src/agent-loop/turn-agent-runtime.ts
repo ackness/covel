@@ -390,6 +390,7 @@ export async function executeAgentRuntime({
             deps,
             executionContext,
             ...(operations ? { operations } : {}),
+            pluginDataVisibility,
           }),
         }
       : toolExecutor

@@ -60,6 +60,61 @@ describe("runtime job request services", () => {
     credentials.clear();
     expect(credentials.size).toBe(0);
   });
+
+  it("caps credential handoff TTL to the maximum bound", () => {
+    vi.useFakeTimers();
+    const credentials = createRuntimeJobCredentials({
+      defaultTtlMs: 24 * 60 * 60_000,
+    });
+    credentials.register(key, services, 24 * 60 * 60_000);
+    const defaultKey = { ...key, jobId: "default-capped" };
+    credentials.register(defaultKey, services);
+
+    vi.advanceTimersByTime(30 * 60_000 - 1);
+    expect(credentials.peek(key)).toBe(services);
+    expect(credentials.peek(defaultKey)).toBe(services);
+
+    vi.advanceTimersByTime(1);
+    expect(credentials.peek(key)).toBeUndefined();
+    expect(credentials.peek(defaultKey)).toBeUndefined();
+    expect(credentials.size).toBe(0);
+  });
+
+  it("bounds the credential map by evicting expired entries first and then the oldest entry", () => {
+    vi.useFakeTimers();
+    const credentials = createRuntimeJobCredentials({
+      defaultTtlMs: 1_000,
+      maxEntries: 2,
+    });
+    const first = { ...key, jobId: "job-1" };
+    const second = { ...key, jobId: "job-2" };
+    const third = { ...key, jobId: "job-3" };
+    const fourth = { ...key, jobId: "job-4" };
+
+    credentials.register(first, services, 100);
+    credentials.register(second, services, 1_000);
+    // Re-registering an existing jobId does not evict entries.
+    credentials.register(first, { llm: {} as LLMAdapter }, 100);
+    expect(credentials.size).toBe(2);
+
+    // When first expires, inserting third prunes expired entries instead of
+    // evicting still-live second.
+    vi.advanceTimersByTime(100);
+    credentials.register(third, services, 1_000);
+    expect(credentials.size).toBe(2);
+    expect(credentials.peek(first)).toBeUndefined();
+    expect(credentials.peek(second)).toBe(services);
+    expect(credentials.peek(third)).toBe(services);
+
+    // When all entries are still live, inserting fourth evicts the oldest live
+    // entry (second) and keeps third and fourth.
+    credentials.register(fourth, services, 1_000);
+    expect(credentials.size).toBe(2);
+    expect(credentials.peek(second)).toBeUndefined();
+    expect(credentials.peek(third)).toBe(services);
+    expect(credentials.peek(fourth)).toBe(services);
+    credentials.clear();
+  });
 });
 
 describe("job credential hand-off", () => {

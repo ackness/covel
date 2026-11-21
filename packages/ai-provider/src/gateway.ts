@@ -412,6 +412,13 @@ export function createGateway(deps: GatewayDependencies) {
       signal: options?.signal,
     });
     let cleanup = () => {};
+    let finishedScope = false;
+    const finishScope = () => {
+      if (finishedScope) return;
+      finishedScope = true;
+      cleanup();
+      scope.dispose();
+    };
     try {
       cleanup = applySlotOverlay(deps, options?.slotOverrides);
       for await (const event of streamTextInner(input, {
@@ -427,11 +434,13 @@ export function createGateway(deps: GatewayDependencies) {
           (event.type === "reasoning-delta" && event.reasoningDelta.length > 0)
         )
           noteLlmRequestProgress(scope.budget);
+        // `done` is the terminal event after notifySuccess; release the request
+        // scope and slot overlay before handing it to the consumer.
+        if (event.type === "done") finishScope();
         yield event;
       }
     } finally {
-      cleanup();
-      scope.dispose();
+      finishScope();
     }
   }
 
@@ -576,6 +585,11 @@ export function createGateway(deps: GatewayDependencies) {
             retriable: true,
           });
         }
+
+        // Release the LLM concurrency slot as soon as the upstream stream ends
+        // so slow consumer processing or iterator abandonment after `done`
+        // never holds a process-wide slot.
+        slot.release();
 
         await notifySuccess(
           resolved.hooks,

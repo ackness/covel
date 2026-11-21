@@ -950,6 +950,12 @@ export const stageSchema = z.enum(STAGE_ORDER);
  */
 export const MAX_SETTLE_WAIT_MS = 120_000;
 
+/**
+ * Upper bound on how long a detached runtime job may wait in the queue.
+ * Bounds queue retention and in-memory credential handoffs.
+ */
+export const MAX_QUEUE_MS = 30 * 60_000;
+
 /** Agent prompt history window, counted in turns of visible history. */
 const runtimeHistoryPolicySchema = z.strictObject({
   includeSummaries: z
@@ -989,7 +995,10 @@ export const detachedOptionsSchema = z.strictObject({
     .number()
     .int()
     .positive()
-    .describe("Longest time in ms the job may wait in the queue.")
+    .max(MAX_QUEUE_MS)
+    .describe(
+      `Longest time in ms the job may wait in the queue, at most ${MAX_QUEUE_MS}.`,
+    )
     .optional(),
   maxExecutionMs: z
     .number()

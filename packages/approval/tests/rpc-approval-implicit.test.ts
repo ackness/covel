@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createRpcApprovalGate,
   COMMUNITY_SERVER_CODE_ACTION,
+  IMPLICIT_ERROR_WARN_INTERVAL_MS,
   type EvaluateInput,
 } from "../src/rpc-approval.js";
 const input = (action = COMMUNITY_SERVER_CODE_ACTION): EvaluateInput => ({
@@ -104,6 +105,47 @@ describe("trusted-source implicit grants", () => {
       ),
     ).toBe(false);
     expect(warn).toHaveBeenCalledOnce();
+  });
+  it("rate-limits implicitGrant exception warnings instead of suppressing them forever", () => {
+    vi.useFakeTimers({ now: new Date("2026-08-24T00:00:00.000Z") });
+    try {
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+      const gate = createRpcApprovalGate({
+        implicitGrant: () => {
+          throw new Error("broken");
+        },
+      });
+      expect(gate.evaluate(input()).status).toBe("pending");
+      expect(
+        gate.hasGrant(
+          "session",
+          "probe",
+          COMMUNITY_SERVER_CODE_ACTION,
+          "incarnation",
+        ),
+      ).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      // Once the rate-limit window elapses, recurring errors are logged again.
+      vi.setSystemTime(Date.now() + IMPLICIT_ERROR_WARN_INTERVAL_MS);
+      expect(
+        gate.hasGrant(
+          "session",
+          "probe",
+          COMMUNITY_SERVER_CODE_ACTION,
+          "incarnation",
+        ),
+      ).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenLastCalledWith(
+        expect.stringContaining("1 suppressed since last warning"),
+        expect.any(Error),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("keeps builtin short-circuit and cannot revoke source policy per session", () => {
     const predicate = vi.fn(() => true);

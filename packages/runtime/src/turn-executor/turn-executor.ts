@@ -1083,6 +1083,8 @@ async function executeTurnImpl(
           // throttle gates only work if the real history reaches them. The setup
           // mirror prevents a completed setup runtime from re-firing.
           setupRuntimes: setupTracker.mirror,
+          isAborted: executionAborted,
+          onHazardDiagnostics: emitHazardDiagnostics,
           onDroppedEvent: (topic, runtimeId) =>
             emitHazardDiagnostics([
               {

@@ -2,6 +2,7 @@ import { compareText } from "@covel/shared";
 import type {
   RuntimeManifest,
   RuntimeResult,
+  SchedulingDiagnostic,
   SetupRuntimeState,
   TurnResult,
 } from "@covel/shared";
@@ -9,6 +10,10 @@ import { isSetupDoneForVersion, isSetupRuntime } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
+import {
+  applyHazardPolicy,
+  resolveEffectsPolicy,
+} from "../schedule/effects.js";
 import { makeSkippedResult } from "../turn-executor/turn-executor-helpers.js";
 import { isRequiredUpstreamSatisfied } from "../turn-executor/turn-output-helpers.js";
 import { shouldTrigger } from "./trigger.js";
@@ -63,6 +68,12 @@ export interface RunEventChainParams {
    * observable instead of silent.
    */
   readonly onDroppedEvent?: (topic: string, runtimeId: string) => void;
+  /** Stops scheduling further fan-out depths or groups once the execution aborts. */
+  readonly isAborted?: () => boolean;
+  /** Observer for same-layer effects hazard diagnostics in synchronous fan-out groups. */
+  readonly onHazardDiagnostics?: (
+    diagnostics: readonly SchedulingDiagnostic[],
+  ) => void;
 }
 
 /**
@@ -172,6 +183,8 @@ export async function runEventChain({
   runtimeTurnsSinceLastTrigger,
   setupRuntimes,
   onDroppedEvent,
+  isAborted,
+  onHazardDiagnostics,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, SelectedEvent>();
   for (const [, result] of completedResults) {
@@ -186,6 +199,7 @@ export async function runEventChain({
   const deferredNames = new Set<string>();
   let chainDepth = 0;
   while (emittedEvents.size > 0 && chainDepth < maxDepth) {
+    if (isAborted?.()) break;
     chainDepth += 1;
     const pendingEventTopics = [...emittedEvents.keys()];
     const nextBatch = activeRuntimes.filter((rt) => {
@@ -279,7 +293,21 @@ export async function runEventChain({
         ),
       );
     }
-    for (const group of dag.groups) {
+    const { groups, diagnostics: hazardDiagnostics } = applyHazardPolicy(
+      dag.groups,
+      resolveEffectsPolicy(),
+    );
+    if (hazardDiagnostics.length > 0) {
+      if (onHazardDiagnostics) {
+        onHazardDiagnostics(hazardDiagnostics);
+      } else {
+        for (const d of hazardDiagnostics) {
+          console.warn(`[covel:warn] [event-chain] ${d.message}`);
+        }
+      }
+    }
+    for (const group of groups) {
+      if (isAborted?.()) break;
       const results = await executeParallel(
         group.runtimes,
         async (manifest, identity) => {

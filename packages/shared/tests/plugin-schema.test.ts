@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_QUEUE_MS,
   pluginCommandsSchema,
   pluginEntryPathSchema,
   runtimeManifestInputSchema,
   worldProjectionMapSchema,
 } from "../src/schemas/plugin.js";
 import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
+import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 import { validatePluginManifest } from "../src/schemas/validate.js";
 
 describe("plugin manifest dataSchemas", () => {
@@ -583,5 +585,50 @@ describe("hook declarations that hold story drafts", () => {
     expect(parsed.error?.issues[0]?.message).toContain(
       "holdsDrafts applies only to PostLLMResponse, PreToolUse, ReviewAgentOutput, PostRuntime",
     );
+  });
+});
+
+describe("detached maxQueueMs upper bound", () => {
+  it("accepts maxQueueMs up to the ceiling and rejects values above it in authored and compiled schemas", () => {
+    expect(MAX_QUEUE_MS).toBe(30 * 60_000);
+    expect(
+      runtimeAuthoringManifestSchema.safeParse({
+        schedule: {
+          stage: "post-turn",
+          detached: { maxQueueMs: MAX_QUEUE_MS },
+        },
+        function: { handler: "./handler.js" },
+      }).success,
+    ).toBe(true);
+    expect(
+      runtimeAuthoringManifestSchema.safeParse({
+        schedule: {
+          stage: "post-turn",
+          detached: { maxQueueMs: MAX_QUEUE_MS + 1 },
+        },
+        function: { handler: "./handler.js" },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      runtimeManifestInputSchema.safeParse({
+        name: "detached-queue-cap",
+        description: "Detached runtime",
+        stage: "post-turn",
+        runtimeType: "function",
+        handler: "./handler.js",
+        turnCompletion: { mode: "detached", maxQueueMs: MAX_QUEUE_MS },
+      }).success,
+    ).toBe(true);
+    expect(
+      runtimeManifestInputSchema.safeParse({
+        name: "detached-queue-cap",
+        description: "Detached runtime",
+        stage: "post-turn",
+        runtimeType: "function",
+        handler: "./handler.js",
+        turnCompletion: { mode: "detached", maxQueueMs: MAX_QUEUE_MS + 1 },
+      }).success,
+    ).toBe(false);
   });
 });

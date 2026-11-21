@@ -63,6 +63,7 @@ describe("API bootstrap resource ownership", () => {
     const close = vi.fn(async () => {});
     vi.mocked(createBootstrapPluginEntries).mockResolvedValueOnce({
       close,
+      clearSession: () => {},
       ensurePluginEntry: async () => {},
       hasPendingEntry: () => false,
       isEntryPublished: () => true,

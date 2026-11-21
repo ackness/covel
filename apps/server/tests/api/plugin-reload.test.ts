@@ -19,6 +19,7 @@ function fixture(development = true) {
   }));
   const entries: BootstrapPluginEntries = {
     reload,
+    clearSession: () => {},
     close: async () => {},
     watch: () => {},
     hasPendingEntry: () => false,

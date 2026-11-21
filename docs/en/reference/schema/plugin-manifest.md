@@ -376,7 +376,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | ----------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `settle`          | boolean | no       | `true` makes the next player action wait until this runtime's job has finished, for at most `maxSettleWaitMs`. Defaults to `false`. |
 | `maxSettleWaitMs` | integer | no       | Longest time in ms the next action waits for the job, at most 120000. Requires `settle: true`.                                      |
-| `maxQueueMs`      | integer | no       | Longest time in ms the job may wait in the queue.                                                                                   |
+| `maxQueueMs`      | integer | no       | Longest time in ms the job may wait in the queue, at most 1800000.                                                                  |
 | `maxExecutionMs`  | integer | no       | Longest time in ms the job may run.                                                                                                 |
 
 ## `runtime.io`

@@ -94,12 +94,17 @@ export interface RpcApprovalGate {
    * form matched ANY live grant by prefix, which collapsed the two-phase
    * community approval into "any grant unlocks everything" (2026-07-20
    * audit).
+   *
+   * When a `payload` argument is provided, one-time grants only match an
+   * unexpired grant for that exact payload (structural JSON equality);
+   * implicit and session-scoped grants remain action-level.
    */
   hasGrant(
     sessionId: string,
     pluginId: string,
     action: string,
     sessionScope: string,
+    ...payloadArg: [] | [payload: unknown]
   ): boolean;
   /**
    * Revoke cached session grants + fresh one-time grants for a session,
@@ -109,18 +114,17 @@ export interface RpcApprovalGate {
   revoke(sessionId: string, pluginId?: string): number;
 }
 
+interface OneTimeGrantEntry {
+  readonly grant: ScopedGrant;
+  readonly issuedAt: number;
+  /** Payload the player actually approved for this single dispatch. */
+  readonly payload: unknown;
+}
+
 interface InternalState {
   readonly pending: Map<string, ScopedPending>;
   readonly sessionCache: Map<string, ScopedGrant>;
-  readonly oneTimeGrants: Map<
-    string,
-    {
-      readonly grant: ScopedGrant;
-      readonly issuedAt: number;
-      /** Payload the player actually approved for this single dispatch. */
-      readonly payload: unknown;
-    }
-  >;
+  readonly oneTimeGrants: Map<string, OneTimeGrantEntry[]>;
 }
 
 interface ScopedGrant {
@@ -135,7 +139,9 @@ interface ScopedPending {
   readonly record: RpcApprovalPending;
 }
 
-const ONE_TIME_GRANT_TTL_MS = 60_000;
+export const ONE_TIME_GRANT_TTL_MS = 60_000;
+export const MAX_SESSION_CACHE = 4096;
+export const IMPLICIT_ERROR_WARN_INTERVAL_MS = 60_000;
 
 /**
  * Generic approval action used before importing community server code.
@@ -154,13 +160,15 @@ export const COMMUNITY_SERVER_CODE_ACTION = "covel:plugin-server-code";
  *     gate returns `rejected` so the route can map it to a 429 status.
  *   - `MAX_PENDING_GLOBAL`: process-wide ceiling as a safety net against
  *     many sessions hitting their per-session cap simultaneously.
- *   - `STALE_PENDING_TTL_MS`: pending entries older than this are sweepable
- *     when the gate notices them during a write — keeps a long-lived
- *     unanswered queue from pinning memory after a runaway plugin.
+ *   - `STALE_PENDING_TTL_MS`: pending entries older than this are swept when
+ *     reading or mutating pending state — keeps a long-lived unanswered queue
+ *     from pinning memory or letting expired prompts be approved later.
  */
 const MAX_PENDING_PER_SESSION = 64;
 const MAX_PENDING_GLOBAL = 1024;
-const STALE_PENDING_TTL_MS = 60 * 60 * 1000; // 1 hour
+export const STALE_PENDING_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_ONE_TIME_GRANTS_PER_KEY = MAX_PENDING_PER_SESSION;
+const MAX_ONE_TIME_GRANTS_GLOBAL = MAX_PENDING_GLOBAL;
 
 function tripleKey(
   sessionId: string,
@@ -216,11 +224,19 @@ export interface ImplicitGrantQuery {
 }
 export interface RpcApprovalGateOptions {
   readonly implicitGrant?: (query: ImplicitGrantQuery) => boolean;
+  /** Maximum number of session-scoped grants retained in LRU order. */
+  readonly maxSessionCache?: number;
 }
 export function createRpcApprovalGate(
   options: RpcApprovalGateOptions = {},
 ): RpcApprovalGate {
-  let loggedImplicitError = false;
+  const maxSessionCache = options.maxSessionCache ?? MAX_SESSION_CACHE;
+  if (!Number.isSafeInteger(maxSessionCache) || maxSessionCache < 1) {
+    throw new RangeError("maxSessionCache must be a positive integer");
+  }
+
+  let lastImplicitErrorWarnMs: number | undefined;
+  let suppressedImplicitErrors = 0;
   function implicitlyGranted(query: ImplicitGrantQuery): boolean {
     if (
       query.action !== COMMUNITY_SERVER_CODE_ACTION &&
@@ -230,9 +246,23 @@ export function createRpcApprovalGate(
     try {
       return options.implicitGrant?.(query) === true;
     } catch (error) {
-      if (!loggedImplicitError) {
-        loggedImplicitError = true;
-        console.warn("[rpc-approval] implicit grant failed:", error);
+      const now = Date.now();
+      if (
+        lastImplicitErrorWarnMs === undefined ||
+        now - lastImplicitErrorWarnMs >= IMPLICIT_ERROR_WARN_INTERVAL_MS
+      ) {
+        const suppressedNote =
+          suppressedImplicitErrors > 0
+            ? ` (${suppressedImplicitErrors} suppressed since last warning)`
+            : "";
+        console.warn(
+          `[rpc-approval] implicit grant failed${suppressedNote}:`,
+          error,
+        );
+        lastImplicitErrorWarnMs = now;
+        suppressedImplicitErrors = 0;
+      } else {
+        suppressedImplicitErrors += 1;
       }
       return false;
     }
@@ -247,6 +277,77 @@ export function createRpcApprovalGate(
     return level === "builtin";
   }
 
+  function hasSessionCacheGrant(key: string): boolean {
+    const grant = state.sessionCache.get(key);
+    if (!grant) return false;
+    // Refresh LRU position so active grants outlive abandoned sessions.
+    state.sessionCache.delete(key);
+    state.sessionCache.set(key, grant);
+    return true;
+  }
+
+  function cacheSessionGrant(key: string, grant: ScopedGrant): void {
+    state.sessionCache.delete(key);
+    state.sessionCache.set(key, grant);
+    while (state.sessionCache.size > maxSessionCache) {
+      const oldest = state.sessionCache.keys().next();
+      if (oldest.done) break;
+      state.sessionCache.delete(oldest.value);
+    }
+  }
+
+  function sweepExpiredOneTimeGrants(now = Date.now()): void {
+    for (const [key, entries] of state.oneTimeGrants) {
+      const live = entries.filter(
+        (entry) => now - entry.issuedAt <= ONE_TIME_GRANT_TTL_MS,
+      );
+      if (live.length === 0) {
+        state.oneTimeGrants.delete(key);
+      } else if (live.length !== entries.length) {
+        state.oneTimeGrants.set(key, live);
+      }
+    }
+  }
+
+  function recordOneTimeGrant(
+    key: string,
+    grant: ScopedGrant,
+    payload: unknown,
+    now: number,
+  ): void {
+    const existing = state.oneTimeGrants.get(key) ?? [];
+    const sameIndex = existing.findIndex((entry) =>
+      samePayload(entry.payload, payload),
+    );
+    if (sameIndex >= 0) {
+      existing.splice(sameIndex, 1);
+    }
+    existing.push({ grant, issuedAt: now, payload });
+    if (existing.length > MAX_ONE_TIME_GRANTS_PER_KEY) {
+      existing.splice(0, existing.length - MAX_ONE_TIME_GRANTS_PER_KEY);
+    }
+    state.oneTimeGrants.delete(key);
+    state.oneTimeGrants.set(key, existing);
+
+    let total = 0;
+    for (const entries of state.oneTimeGrants.values()) {
+      total += entries.length;
+    }
+    if (total > MAX_ONE_TIME_GRANTS_GLOBAL) {
+      let excess = total - MAX_ONE_TIME_GRANTS_GLOBAL;
+      for (const [bucketKey, entries] of state.oneTimeGrants) {
+        if (excess <= 0) break;
+        if (entries.length <= excess) {
+          excess -= entries.length;
+          state.oneTimeGrants.delete(bucketKey);
+        } else {
+          entries.splice(0, excess);
+          excess = 0;
+        }
+      }
+    }
+  }
+
   function consumeOneTimeIfFresh(
     sessionId: string,
     pluginId: string,
@@ -254,27 +355,30 @@ export function createRpcApprovalGate(
     sessionScope: string,
     payload: unknown,
   ): boolean {
+    sweepExpiredOneTimeGrants();
     const key = tripleKey(sessionId, sessionScope, pluginId, action);
-    const entry = state.oneTimeGrants.get(key);
-    if (entry === undefined) return false;
-    if (Date.now() - entry.issuedAt > ONE_TIME_GRANT_TTL_MS) {
-      state.oneTimeGrants.delete(key);
-      return false;
-    }
+    const entries = state.oneTimeGrants.get(key);
+    if (!entries || entries.length === 0) return false;
     // `once` authorizes the exact dispatch shown in the approval dialog, not
     // an arbitrary later invocation that happens to share the action name.
-    if (!samePayload(entry.payload, payload)) return false;
-    state.oneTimeGrants.delete(key);
+    const matchIndex = entries.findIndex((entry) =>
+      samePayload(entry.payload, payload),
+    );
+    if (matchIndex < 0) return false;
+    entries.splice(matchIndex, 1);
+    if (entries.length === 0) {
+      state.oneTimeGrants.delete(key);
+    }
     return true;
   }
 
   /**
    * Sweep stale pending entries (older than STALE_PENDING_TTL_MS). Called
-   * opportunistically before each new evaluation so the caller doing the
-   * work pays for its own cleanup, no background timer needed.
+   * opportunistically when reading or mutating pending state so the caller
+   * pays for cleanup with no background timer needed.
    */
-  function sweepStalePending(): void {
-    const cutoff = Date.now() - STALE_PENDING_TTL_MS;
+  function sweepStalePending(now = Date.now()): void {
+    const cutoff = now - STALE_PENDING_TTL_MS;
     for (const [id, entry] of state.pending) {
       const ts = Date.parse(entry.record.requestedAt);
       if (Number.isFinite(ts) && ts < cutoff) {
@@ -317,7 +421,7 @@ export function createRpcApprovalGate(
         input.pluginId,
         input.action,
       );
-      if (state.sessionCache.has(key)) {
+      if (hasSessionCacheGrant(key)) {
         return { status: "allow", reason: "session-cached" };
       }
 
@@ -391,6 +495,9 @@ export function createRpcApprovalGate(
     },
 
     decide(decision, expectedSessionScope) {
+      const now = Date.now();
+      sweepStalePending(now);
+      sweepExpiredOneTimeGrants(now);
       const scopedPending = state.pending.get(decision.approvalId);
       if (!scopedPending) {
         return {
@@ -433,16 +540,12 @@ export function createRpcApprovalGate(
         action: pending.action,
       };
       if (decision.scope === "session") {
-        state.sessionCache.set(key, grant);
+        cacheSessionGrant(key, grant);
       } else {
         // Default scope is `once` — the next dispatch can use the grant
         // exactly once, then it is consumed. The TTL guards against stale
         // grants from a player that approved 10 minutes ago.
-        state.oneTimeGrants.set(key, {
-          grant,
-          issuedAt: Date.now(),
-          payload: pending.payload,
-        });
+        recordOneTimeGrant(key, grant, pending.payload, now);
       }
 
       return { ok: true, pending };
@@ -450,6 +553,7 @@ export function createRpcApprovalGate(
 
     listPending(sessionId, expectedSessionScope) {
       const resolvedScope = resolveSessionScope(expectedSessionScope);
+      sweepStalePending();
       return [...state.pending.values()]
         .filter(
           (pending) =>
@@ -460,23 +564,24 @@ export function createRpcApprovalGate(
     },
 
     listAllPendingForSession(sessionId) {
+      sweepStalePending();
       return [...state.pending.values()]
         .filter((pending) => pending.record.sessionId === sessionId)
         .map((pending) => pending.record);
     },
 
     getPending(approvalId) {
+      sweepStalePending();
       return state.pending.get(approvalId)?.record;
     },
 
     pendingMatchesScope(approvalId, expectedSessionScope) {
-      return (
-        state.pending.get(approvalId)?.sessionScope ===
-        resolveSessionScope(expectedSessionScope)
-      );
+      const resolvedScope = resolveSessionScope(expectedSessionScope);
+      sweepStalePending();
+      return state.pending.get(approvalId)?.sessionScope === resolvedScope;
     },
 
-    hasGrant(sessionId, pluginId, action, expectedSessionScope) {
+    hasGrant(sessionId, pluginId, action, expectedSessionScope, ...payloadArg) {
       const exactKey = tripleKey(
         sessionId,
         resolveSessionScope(expectedSessionScope),
@@ -484,22 +589,21 @@ export function createRpcApprovalGate(
         action,
       );
       if (implicitlyGranted({ sessionId, pluginId, action })) return true;
-      if (state.sessionCache.has(exactKey)) {
+      if (hasSessionCacheGrant(exactKey)) {
         return true;
       }
 
-      const now = Date.now();
-      for (const [key, entry] of state.oneTimeGrants) {
-        if (now - entry.issuedAt > ONE_TIME_GRANT_TTL_MS) {
-          state.oneTimeGrants.delete(key);
-          continue;
-        }
-        if (key === exactKey) return true;
-      }
-      return false;
+      sweepExpiredOneTimeGrants();
+      const entries = state.oneTimeGrants.get(exactKey);
+      if (!entries || entries.length === 0) return false;
+      if (payloadArg.length === 0) return true;
+      return entries.some((entry) => samePayload(entry.payload, payloadArg[0]));
     },
 
     revoke(sessionId, pluginId) {
+      const now = Date.now();
+      sweepStalePending(now);
+      sweepExpiredOneTimeGrants(now);
       let cleared = 0;
       for (const [key, grant] of state.sessionCache) {
         if (
@@ -510,13 +614,15 @@ export function createRpcApprovalGate(
           cleared += 1;
         }
       }
-      for (const [key, entry] of state.oneTimeGrants) {
+      for (const [key, entries] of state.oneTimeGrants) {
+        const first = entries[0];
         if (
-          entry.grant.sessionId === sessionId &&
-          (!pluginId || entry.grant.pluginId === pluginId)
+          first &&
+          first.grant.sessionId === sessionId &&
+          (!pluginId || first.grant.pluginId === pluginId)
         ) {
           state.oneTimeGrants.delete(key);
-          cleared += 1;
+          cleared += entries.length;
         }
       }
       for (const [approvalId, pending] of state.pending) {
