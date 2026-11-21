@@ -711,6 +711,11 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         reverseScope,
       );
 
+      const beforeEvictedScope = sessionApprovalScope(
+        reverseConflictSession,
+        "default-engine",
+      );
+
       const res = await app.request(
         "/api/sessions/sess-reverse-conflict/plugins/alternate-engine",
         {
@@ -722,6 +727,14 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       const body = (await res.json()) as { activePluginIds: string[] };
       expect(body.activePluginIds).toContain("alternate-engine");
       expect(body.activePluginIds).not.toContain("default-engine");
+
+      const updated = (await store.getSession("sess-reverse-conflict"))!;
+      expect(sessionApprovalScope(updated, "default-engine")).not.toBe(
+        beforeEvictedScope,
+      );
+      expect(sessionApprovalScope(updated, "alternate-engine")).toBe(
+        reverseScope,
+      );
     });
 
     it("does not let community conflicts remove required core plugins", async () => {

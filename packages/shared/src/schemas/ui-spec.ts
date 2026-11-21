@@ -279,6 +279,18 @@ export const pluginUiSpecSchema = z
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
     if (
+      hasWebview &&
+      spec.bridge !== "session" &&
+      (spec.dataSource?.source === "session.characters" ||
+        spec.dataSource?.source === "session.characterSchema")
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["dataSource", "source"],
+        message:
+          'webviews reading session character data must use bridge: "session" with consent and capability grants; only json-render views may read session.characters or session.characterSchema via dataSource.source',
+      });
+    if (
       spec.capabilities !== undefined &&
       (!hasWebview || spec.bridge !== "session")
     )

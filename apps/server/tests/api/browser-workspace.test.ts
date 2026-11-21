@@ -168,9 +168,7 @@ describe("browser-private workspace exchange", () => {
   });
 
   async function queuedCheckpoint(): Promise<BrowserCheckpoint> {
-    const browser = createMemoryStore();
-    await seed(browser);
-    await browser.setPluginData({
+    await store.setPluginData({
       id: "durable-job",
       sessionId: SESSION_ID,
       pluginId: "media",
@@ -180,12 +178,9 @@ describe("browser-private workspace exchange", () => {
       createdAt: "2026-08-25T00:00:01.000Z",
       updatedAt: "2026-08-25T00:00:01.000Z",
     });
-    const checkpoint = await exportSessionCheckpoint(browser, SESSION_ID, {
-      revision: 1,
-      actionId: "queued-turn",
-    });
-    expect((await upload(checkpoint)).status).toBe(200);
-    return checkpoint;
+    const response = await commit(`local:create:${SESSION_ID}`, 0);
+    expect(response.status).toBe(200);
+    return ((await response.json()) as SessionCommit).checkpoint;
   }
 
   it.each(["running", "succeeded"])(

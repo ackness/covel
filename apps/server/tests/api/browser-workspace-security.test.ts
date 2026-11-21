@@ -6,6 +6,7 @@ import {
   type DataStore,
 } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
+import { createPluginRegistry } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createBrowserWorkspaceRoutes } from "../../src/routes/api/browser-workspace.js";
 import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guard.js";
@@ -239,6 +240,38 @@ describe("browser checkpoint security", () => {
     expect(await store.listMessages(SESSION_ID)).toEqual([originalMessage]);
     expect((await upload()).status).toBe(200);
   });
+
+  it.each([
+    "_runtime_jobs",
+    "_runtime_job_control",
+    "_hidden.events",
+    "_logs",
+    "_unknown_reserved",
+  ])(
+    "rejects forged %s plugin-data rows on checkpoint upload without writing to the store",
+    async (namespace) => {
+      const response = await upload({
+        ...checkpoint,
+        pluginData: [
+          {
+            id: "forged-row",
+            sessionId: SESSION_ID,
+            pluginId: "target-plugin",
+            namespace,
+            key: "forged-key",
+            value: { status: "failed", runtimeId: "target-plugin/run" },
+            createdAt: NOW,
+            updatedAt: NOW,
+          },
+        ],
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: "invalid_checkpoint",
+      });
+      expect(await store.listPluginDataSessionScope(SESSION_ID)).toEqual([]);
+    },
+  );
 });
 
 describe("browser workspace session lock", () => {
@@ -334,6 +367,118 @@ describe("browser workspace session lock", () => {
       const response = await (operation === "upload" ? upload() : commit());
       expect(response.status).toBe(409);
       expect(await response.json()).toMatchObject({ code: "session_deleting" });
+    },
+  );
+});
+
+describe("browser checkpoint community plugin authorization", () => {
+  it.each(["self", "demo", "commercial"] as const)(
+    "refuses community code plugin activation via checkpoint without operator token on %s",
+    async (tier) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DEPLOYMENT_TIER", tier);
+      vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", OPERATOR);
+      const registry = createPluginRegistry();
+      registry.register({
+        id: "community-code",
+        source: "community",
+        status: "registered",
+        manifests: [],
+        summary: {
+          id: "community-code",
+          name: "Community Code",
+          description: "Untrusted server code",
+          kind: "plugin",
+          runtimeCount: 1,
+        },
+      });
+      registry.register({
+        id: "builtin-story",
+        source: "builtin",
+        status: "registered",
+        manifests: [],
+        summary: {
+          id: "builtin-story",
+          name: "Builtin Story",
+          description: "Bundled",
+          kind: "core",
+          runtimeCount: 1,
+        },
+      });
+      const guardedApp = new Hono();
+      guardedApp.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("storeBackend", "memory");
+        c.set("sessionLock", lock);
+        c.set("pluginRegistry", registry);
+        await next();
+      });
+      guardedApp.route("/api/sessions", createBrowserWorkspaceRoutes());
+
+      const withCommunity = {
+        ...checkpoint,
+        session: {
+          ...checkpoint.session,
+          activePlugins: ["builtin-story", "community-code"],
+        },
+      };
+      const denied = await guardedApp.request(
+        `/api/sessions/${SESSION_ID}/browser-checkpoint`,
+        {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "x-session-token": OWNER,
+          },
+          body: JSON.stringify({ checkpoint: withCommunity }),
+        },
+      );
+      expect(denied.status).toBe(401);
+      expect(await denied.json()).toMatchObject({
+        code: "operator_token_required",
+      });
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([]);
+
+      // Builtin-only checkpoint remains allowed for the session owner.
+      const withBuiltin = {
+        ...checkpoint,
+        session: {
+          ...checkpoint.session,
+          activePlugins: ["builtin-story"],
+        },
+      };
+      const builtinRes = await guardedApp.request(
+        `/api/sessions/${SESSION_ID}/browser-checkpoint`,
+        {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "x-session-token": OWNER,
+          },
+          body: JSON.stringify({ checkpoint: withBuiltin }),
+        },
+      );
+      expect(builtinRes.status).toBe(200);
+
+      // Operator token is allowed to hydrate the community code plugin.
+      const opRes = await guardedApp.request(
+        `/api/sessions/${SESSION_ID}/browser-checkpoint`,
+        {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "x-session-token": OPERATOR,
+          },
+          body: JSON.stringify({
+            checkpoint: { ...withCommunity, revision: 2, actionId: "op-sync" },
+          }),
+        },
+      );
+      expect(opRes.status).toBe(200);
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
+        "builtin-story",
+        "community-code",
+      ]);
     },
   );
 });

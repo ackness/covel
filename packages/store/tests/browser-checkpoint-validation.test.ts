@@ -643,6 +643,70 @@ describe("checkpoint record validation", () => {
       otherData,
     ]);
   });
+
+  it.each([
+    "_hidden.events",
+    "_hidden.planned",
+    "_logs",
+    "_jobs",
+    "_unknown_kernel",
+  ])(
+    "rejects kernel-reserved plugin-data namespace %s in checkpoints and snapshots",
+    (namespace) => {
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          pluginData: [{ ...pluginData, namespace }],
+        }),
+      ).toThrow(BrowserSyncValidationError);
+      const snapshot = checkpoint.snapshots[0]!;
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          snapshots: [
+            {
+              ...snapshot,
+              payload: {
+                ...snapshot.payload,
+                pluginData: [{ ...pluginData, namespace }],
+              },
+            },
+          ],
+        }),
+      ).toThrow(BrowserSyncValidationError);
+    },
+  );
+
+  it.each(["_runtime_jobs", "_runtime_job_control"])(
+    "rejects %s in snapshots and in upload-scoped checkpoint validation",
+    (namespace) => {
+      const runtimeJobRow = { ...pluginData, namespace };
+      expect(() =>
+        validateBrowserCheckpoint(
+          {
+            ...checkpoint,
+            pluginData: [runtimeJobRow],
+          },
+          { allowRuntimeJobs: false },
+        ),
+      ).toThrow(BrowserSyncValidationError);
+      const snapshot = checkpoint.snapshots[0]!;
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          snapshots: [
+            {
+              ...snapshot,
+              payload: {
+                ...snapshot.payload,
+                pluginData: [runtimeJobRow],
+              },
+            },
+          ],
+        }),
+      ).toThrow(BrowserSyncValidationError);
+    },
+  );
 });
 
 describe("orchestration checkpoint boundaries", () => {

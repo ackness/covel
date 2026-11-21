@@ -12,10 +12,15 @@ import { errorBody } from "../../../api-error.js";
 import {
   loadExecutionUserSettings,
   syncLiveSessionRuntimes,
+  syncSessionRuntimes,
 } from "../execution-context.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { enqueueEventFollowers } from "./runtime-job-enqueue.js";
-import { requireLiveScope, runtimeQueueErrorResponse } from "./runtime-turn.js";
+import {
+  SessionApprovalScopeChangedError,
+  requireLiveScope,
+  runtimeQueueErrorResponse,
+} from "./runtime-turn.js";
 import { announceQueuedRuntimeJobs } from "./settled-request.js";
 import { requireAccess } from "../../../host-profile.js";
 
@@ -127,6 +132,11 @@ export async function dispatchPluginEvent(
     (runtime) =>
       runtime.trigger?.type === "event" && runtime.trigger.topic === body.topic,
   );
+  const checkedSubscriberApprovals = new Map<
+    string,
+    { readonly scope: string; readonly declarative: boolean }
+  >();
+  const checkedSubscriberRuntimes = new Set<string>();
   for (const runtime of subscribers) {
     const source = getPluginTrustInfo(
       runtime.pluginId,
@@ -138,8 +148,14 @@ export async function dispatchPluginEvent(
         c.get("trustedSources"),
         runtime.pluginId,
       )
-    )
+    ) {
+      checkedSubscriberApprovals.set(runtime.pluginId, {
+        scope: sessionApprovalScope(session, runtime.pluginId),
+        declarative: true,
+      });
+      checkedSubscriberRuntimes.add(runtime.name);
       continue;
+    }
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);
@@ -172,6 +188,11 @@ export async function dispatchPluginEvent(
       },
     );
     if (subscriberVerdictResponse) return subscriberVerdictResponse;
+    checkedSubscriberApprovals.set(runtime.pluginId, {
+      scope,
+      declarative: false,
+    });
+    checkedSubscriberRuntimes.add(runtime.name);
   }
   // The emission has no turn of its own; this id is what its jobs name as
   // their origin.
@@ -200,11 +221,65 @@ export async function dispatchPluginEvent(
         body.pluginId,
         approvalScope,
       );
+      if (!live.activePlugins.includes(body.pluginId)) {
+        throw new SessionApprovalScopeChangedError();
+      }
+      if (
+        trustInfo.source === "community" &&
+        !declarative &&
+        (!hasServerCodeGrant(gate, live, body.pluginId) ||
+          !gate.hasGrant(
+            sessionId,
+            body.pluginId,
+            `event:${body.topic}`,
+            approvalScope,
+          ))
+      ) {
+        throw new SessionApprovalScopeChangedError();
+      }
+      // Re-resolve active runtimes and subscribers from the live locked session
+      // so concurrently disabled or revoked plugins never receive new jobs.
+      const liveActiveRuntimes = syncSessionRuntimes(
+        pluginRegistry,
+        sessionId,
+        live.activePlugins,
+      );
+      const liveSubscribers = liveActiveRuntimes.filter(
+        (runtime) =>
+          runtime.trigger?.type === "event" &&
+          runtime.trigger.topic === body.topic,
+      );
+      for (const runtime of liveSubscribers) {
+        const source = getPluginTrustInfo(
+          runtime.pluginId,
+          pluginRegistry.get(runtime.pluginId)?.source,
+        ).source;
+        if (source !== "community") continue;
+        const verified = checkedSubscriberApprovals.get(runtime.pluginId);
+        if (!verified || !checkedSubscriberRuntimes.has(runtime.name)) {
+          throw new SessionApprovalScopeChangedError();
+        }
+        if (verified.declarative) continue;
+        const liveScope = sessionApprovalScope(live, runtime.pluginId);
+        if (
+          liveScope !== verified.scope ||
+          !hasServerCodeGrant(gate, live, runtime.pluginId) ||
+          !gate.hasGrant(
+            sessionId,
+            runtime.pluginId,
+            `runtime:${runtime.name}`,
+            liveScope,
+          )
+        ) {
+          throw new SessionApprovalScopeChangedError();
+        }
+      }
+      if (liveSubscribers.length === 0) return [];
       return store.withTransaction((tx) =>
         enqueueEventFollowers(tx, {
           sessionId,
-          activeRuntimes,
-          followers: subscribers.map((runtime) => ({
+          activeRuntimes: liveActiveRuntimes,
+          followers: liveSubscribers.map((runtime) => ({
             runtimeId: runtime.name,
             pluginId: runtime.pluginId,
             triggerEvent: { topic: body.topic, data },

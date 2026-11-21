@@ -305,11 +305,11 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。Electron 45 的沙箱 preload 不提供 Node 模块 shim 或 `Buffer`；桥接代码只使用 Electron 提供的沙箱 API。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
 
-敏感 IPC（包括明文密钥、REST token 和设置读写）要求发送方是其 `webContents.mainFrame`，且 URL 与主窗口已提交的回环 HTTP 源相同。同源子 frame 也被拒绝。恢复通道（重试启动、打开日志、配置或数据目录）同样要求主 frame，但也接受主进程生成的当前启动页。启动页不能读取密钥或 REST token。
+敏感 IPC（包括明文密钥、REST token 和设置读写）要求发送方是其 `webContents.mainFrame`，`frame.origin` 非不透明（拒绝 `"null"`）且与主窗口已提交的回环 HTTP 源一致，同时排除 `/plugin-assets/` 与 `/plugin-frame.html` 等插件托管路径。同源子 frame 也被拒绝。恢复通道（重试启动、打开日志、配置或数据目录）同样要求主 frame，但也接受主进程生成的当前启动页。启动页不能读取密钥或 REST token。
 
-`windows.ts` 阻止主 frame 导航或重定向到其他源；主进程主动加载启动页或应用地址不受此事件守卫限制。`window.open` 不创建新窗口：HTTPS 和回环 HTTP 链接交给系统浏览器，其他 HTTP 链接先确认，其他协议拒绝。这些限制不能防住受信任主页面内的恶意脚本，也不能隔离已批准的插件服务端代码。
+`windows.ts` 阻止主 frame 导航或重定向到其他源，以及同回环源上的 `/plugin-assets/` 和 `/plugin-frame.html`；主进程主动加载启动页或应用地址不受此事件守卫限制。`session.defaultSession` 默认拒绝浏览器权限请求与检查，仅对受信任主应用文档放行 `clipboard-sanitized-write`。`window.open` 不创建新窗口：HTTPS 和回环 HTTP 链接交给系统浏览器（同样排除插件托管路径），其他 HTTP 链接先确认，其他协议拒绝。这些限制不能防住受信任主页面内的恶意脚本，也不能隔离已批准的插件服务端代码。
 
-发送方校验和启动错误投递的回归测试在 `apps/desktop/scripts/restart-server.test.mjs`；源和启动页 URL 匹配测试在 `apps/desktop/src/trusted-origin.selfcheck.ts`。
+发送方校验和启动错误投递的回归测试在 `apps/desktop/scripts/restart-server.test.mjs`；源、插件路径、权限与启动页 URL 匹配测试在 `apps/desktop/src/trusted-origin.selfcheck.ts`。
 
 ## Community plugin code
 
@@ -319,7 +319,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 - 写服务（`access: write`）让提供者的代码在别的插件的回合里改它自己的数据。能力快照把它记成 `<契约> (write)`，可信来源的包新增写服务或把服务改成写服务都会重新提示（见[能力快照](../reference/plugin-installation.md#能力快照)）。写入以提供者的身份经过 PreStateCommit、数据集规则和提交，写服务拿不到模型和 HTTP 能力。提供者的原始暂存值只留在内核的提交计划里；`ctx.recursiveCall` 返回的每个结果（包括展平的后代结果）都去掉 `operationWrites`，调用方只能通过服务声明的输出获知这些值。
 - v1 接受的边界是：插件目录必须由可信的本地文件系统写入者控制。能写入该目录的人可以替换包文件，并伪造 `.covel-install.json` 中的来源、摘要和能力快照。完整性验证不能防御本地文件系统写入。
-- 清单读取共用纯 YAML 解析入口，加载、安装、校验和本地化工具都在解析前拒绝 `---js` 等引擎指令。
+- 清单读取共用纯 YAML 解析入口（基于 `yaml` v2 `core` schema），加载、安装、校验和本地化工具在解析前拒绝 `---js` 等引擎指令，并限制别名展开次数、多文档流与未解析自定义标签；本地化清单合并仅接受受允许的自然语言文本覆盖，不覆写结构化子树。
 - 批准之前，`community` 包只是数据。安装、预览、列表和校验只解析它的文件，一个都不 import。两阶段批准（先 `covel:plugin-server-code`，再授予具体操作，见 [Hosted auth](#hosted-auth)）把守着第一次 import。
 - 批准之后，这些代码能做服务端进程能做的一切：读写服务端系统用户的文件（`keys.env`、`llm.toml`、SQLite 文件），读 `process.env`，打开套接字，启动进程。
 - `permissions.http` 是插件 API 上的白名单，每个包（内置或社区）的每条框架请求通道都按它检查（`packages/runtime/src/function-runtime/http-permissions.ts`）：

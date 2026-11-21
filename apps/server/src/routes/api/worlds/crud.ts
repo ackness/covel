@@ -3,7 +3,7 @@
  */
 
 import { worldOperationLockId } from "../../../world-lifecycle.js";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   summarizeWorld,
   worldCreateRequestSchema,
@@ -18,10 +18,37 @@ import {
   editedWorldMetadata,
   resolveWorldMetadata,
 } from "./shared.js";
-import { requireAccess } from "../../../host-profile.js";
+import { allowsAccess, requireAccess } from "../../../host-profile.js";
 import { withWorldPackageUpdate } from "./package-update.js";
 
 export const worldCrudRoutes = new Hono<WorldEnv>();
+
+function redactWorldForResponse(
+  c: Context<WorldEnv>,
+  world: WorldRecord,
+): WorldRecord {
+  if (allowsAccess(c, "server.diagnostics")) return world;
+  const storage = world.metadata?.storage;
+  if (
+    !storage ||
+    typeof storage !== "object" ||
+    Array.isArray(storage) ||
+    !("path" in storage)
+  ) {
+    return world;
+  }
+  const { path: _omitted, ...publicStorage } = storage as Record<
+    string,
+    unknown
+  >;
+  return {
+    ...world,
+    metadata: {
+      ...world.metadata,
+      storage: publicStorage,
+    },
+  };
+}
 
 // GET /worlds — summaries; GET /worlds/:id returns the full record. The store
 // reads whole rows (lore and metadata share them with the list fields), so the
@@ -33,7 +60,10 @@ worldCrudRoutes.get("/", async (c) => {
   for (const world of worlds) {
     items.push(
       summarizeWorld(
-        await withWorldPackageUpdate(world, c.get("worldsDirs") ?? []),
+        redactWorldForResponse(
+          c,
+          await withWorldPackageUpdate(world, c.get("worldsDirs") ?? []),
+        ),
       ),
     );
   }
@@ -48,7 +78,12 @@ worldCrudRoutes.get("/:id", async (c) => {
   if (!world) {
     return c.json(errorBody("World not found"), 404);
   }
-  return c.json(await withWorldPackageUpdate(world, c.get("worldsDirs") ?? []));
+  return c.json(
+    redactWorldForResponse(
+      c,
+      await withWorldPackageUpdate(world, c.get("worldsDirs") ?? []),
+    ),
+  );
 });
 
 // POST /worlds
@@ -97,7 +132,7 @@ worldCrudRoutes.post("/", async (c) => {
       409,
     );
   }
-  return c.json(record, 201);
+  return c.json(redactWorldForResponse(c, record), 201);
 });
 
 // PATCH /worlds/:id — partial update (overlay lore, tags, etc.)
@@ -140,7 +175,10 @@ worldCrudRoutes.patch("/:id", async (c) => {
 
     await store.upsertWorld(updated);
     return c.json(
-      await withWorldPackageUpdate(updated, c.get("worldsDirs") ?? []),
+      redactWorldForResponse(
+        c,
+        await withWorldPackageUpdate(updated, c.get("worldsDirs") ?? []),
+      ),
     );
   });
 });

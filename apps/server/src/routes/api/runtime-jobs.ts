@@ -1,7 +1,11 @@
 import { requestJobServices } from "./plugin-rpc/settled-request.js";
 import { Hono } from "hono";
+import { getPluginTrustInfo } from "@covel/plugin-loader";
 
 import { errorBody, listBody } from "../../api-error.js";
+import { requireAccess } from "../../host-profile.js";
+import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
+import { hasServerCodeGrant } from "./approval-verdict.js";
 import {
   createRuntimeJob,
   RuntimeJobSupersededError,
@@ -159,10 +163,72 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
       ) {
         return undefined;
       }
+      if (!live.activePlugins.includes(source.pluginId)) {
+        return c.json(
+          errorBody(
+            `Plugin "${source.pluginId}" is no longer active in this session`,
+            { code: "plugin_not_active" },
+          ),
+          409,
+        );
+      }
+      const liveApprovalScope = sessionApprovalScope(live, source.pluginId);
+      const parsedPrior =
+        parseStagedRuntimeJobPayload(source.payload) ??
+        parseActivatedRuntimeJobPayload(source.payload);
+      if (!parsedPrior) return undefined;
+
+      const pluginRegistry = c.get("pluginRegistry");
+      if (pluginRegistry) {
+        const entry = pluginRegistry.get(source.pluginId);
+        if (!entry) return undefined;
+        const trust = getPluginTrustInfo(source.pluginId, entry.source);
+        if (trust.requiresApproval) {
+          const declarative = await refreshDeclarativeEligibility(
+            c.get("trustedSources"),
+            source.pluginId,
+          );
+          if (!declarative) {
+            const operatorDenied = requireAccess(c, "plugin.community");
+            if (operatorDenied) return operatorDenied;
+            const gate = c.get("rpcApprovalGate");
+            if (
+              !gate ||
+              !hasServerCodeGrant(gate, live, source.pluginId) ||
+              !gate.hasGrant(
+                sessionId,
+                source.pluginId,
+                `runtime:${source.runtimeId}`,
+                liveApprovalScope,
+              )
+            ) {
+              return c.json(
+                errorBody(
+                  `Runtime "${source.runtimeId}" requires current approval before retry`,
+                  { code: "approval_required" },
+                ),
+                409,
+              );
+            }
+          }
+        }
+      } else if (
+        source.status === "stale" &&
+        parsedPrior.expectedApprovalScope !== liveApprovalScope
+      ) {
+        return c.json(
+          errorBody(
+            "Runtime job approval scope changed; re-authorize before retry",
+            { code: "approval_scope_changed" },
+          ),
+          409,
+        );
+      }
+
       const jobId = crypto.randomUUID();
       const payload = retryPayload(source.payload, jobId, {
         expectedSessionIncarnation: sessionIncarnationIdentity(live),
-        expectedApprovalScope: sessionApprovalScope(live, source.pluginId),
+        expectedApprovalScope: liveApprovalScope,
         locale: live.locale,
         ...(live.runtimeModelOverrides
           ? { runtimeModelOverrides: live.runtimeModelOverrides }

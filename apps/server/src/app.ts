@@ -194,12 +194,16 @@ const defaultAllowedOrigins = [
   "http://127.0.0.1:5173",
 ];
 // Sidecar's own port. Electron renderer loads from `http://127.0.0.1:<port>/`
-// in production, so we must always allow same-origin requests there even
-// when the user pinned `CORS_ORIGIN` to a single domain.
-const sidecarOrigins = [
-  `http://localhost:${env.serverPort}`,
-  `http://127.0.0.1:${env.serverPort}`,
-];
+// in production, so we must always allow same-origin requests there on self
+// deployments even when the user pinned `CORS_ORIGIN` to a single domain.
+// Never expose loopback sidecar origins on hosted tiers (`demo` / `commercial`).
+const sidecarOrigins =
+  hostProfile.tier === "self"
+    ? [
+        `http://localhost:${env.serverPort}`,
+        `http://127.0.0.1:${env.serverPort}`,
+      ]
+    : [];
 const isAllowedOrigin = (origin: string): boolean => {
   const configured =
     env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;

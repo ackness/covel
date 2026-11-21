@@ -16,12 +16,15 @@ import {
 import {
   buildAppMenu,
   getMainWindow,
-  isTrustedFrameUrl,
-  isTrustedStartupFrameUrl,
+  getMainWindowUrl,
   navigateToApp,
   setTitleBarColors,
   type TitleBarColors,
 } from "./windows.js";
+import {
+  isTrustedIpcFrame,
+  isTrustedRecoveryIpcFrame,
+} from "./trusted-origin.js";
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
 import {
   isSettingsEntries,
@@ -34,22 +37,33 @@ import {
 import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 
 /**
- * Defense-in-depth: secret/config IPC requires the sender's main frame and
- * the trusted app origin (the local sidecar / dev server). Same-origin child
- * frames are not trusted, even if a future preload exposes IPC to them.
+ * Defense-in-depth: secret/config IPC requires the sender's main frame, a
+ * non-opaque `frame.origin` matching the committed loopback app origin, and a
+ * non-plugin-hosted app pathname. Same-origin child frames and sandboxed
+ * plugin documents are rejected even if a future preload exposes IPC to them.
  */
 function isTrustedSender(
   event: Electron.IpcMainInvokeEvent,
   channel: string,
 ): boolean {
   const frame = event.senderFrame;
-  if (frame && frame === event.sender.mainFrame && isTrustedFrameUrl(frame.url))
+  if (
+    isTrustedIpcFrame(
+      {
+        isMainFrame: frame !== null && frame === event.sender.mainFrame,
+        url: frame?.url,
+        origin: frame?.origin,
+      },
+      getMainWindowUrl(),
+    )
+  ) {
     return true;
+  }
   writeLog(
     "warn",
     `[ipc] blocked '${channel}' from untrusted frame: ${
-      event.senderFrame?.url ?? "unknown"
-    }`,
+      frame?.url ?? "unknown"
+    } (origin=${frame?.origin ?? "unknown"})`,
   );
   return false;
 }
@@ -59,16 +73,23 @@ function isTrustedRecoverySender(
   channel: string,
 ): boolean {
   const frame = event.senderFrame;
-  const isMainFrame = frame !== null && frame === event.sender.mainFrame;
   if (
-    isMainFrame &&
-    (isTrustedFrameUrl(frame.url) || isTrustedStartupFrameUrl(frame.url))
+    isTrustedRecoveryIpcFrame(
+      {
+        isMainFrame: frame !== null && frame === event.sender.mainFrame,
+        url: frame?.url,
+        origin: frame?.origin,
+      },
+      getMainWindowUrl(),
+    )
   ) {
     return true;
   }
   writeLog(
     "warn",
-    `[ipc] blocked '${channel}' from untrusted recovery frame: ${frame?.url ?? "unknown"}`,
+    `[ipc] blocked '${channel}' from untrusted recovery frame: ${
+      frame?.url ?? "unknown"
+    } (origin=${frame?.origin ?? "unknown"})`,
   );
   return false;
 }

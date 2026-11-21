@@ -141,6 +141,72 @@ describe("plugin UI spec rules", () => {
     ).toEqual([]);
     expect(paths({ navTarget: "unknown", view })).toEqual(["navTarget"]);
   });
+
+  it.each(["session.characters", "session.characterSchema"] as const)(
+    "forbids non-session-bridge webviews from declaring dataSource.source %s",
+    (source) => {
+      const spec = {
+        id: "roster",
+        label: "Roster",
+        dataSource: { source },
+        webview: { entry: "./roster.html" },
+      };
+      expect(pluginUiSpecSchema.safeParse(spec).success).toBe(false);
+      for (const slot of [undefined, "right", "message", "view"] as const) {
+        const issues = pluginUiSpecIssues(spec, "owner", slot);
+        expect(issues).toContainEqual({
+          path: "dataSource.source",
+          message: expect.stringMatching(/bridge.*session/i),
+        });
+        expect(
+          issues.find((issue) => issue.path === "dataSource.source")?.message,
+        ).toMatch(/consent|capability/i);
+      }
+    },
+  );
+
+  it.each(["session.characters", "session.characterSchema"] as const)(
+    "allows json-render views and session-bridge webviews when %s is declared",
+    (source) => {
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "roster",
+            label: "Roster",
+            dataSource: { source },
+            view: { component: "Text" },
+          },
+          "owner",
+          "right",
+        ),
+      ).toEqual([]);
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "roster",
+            label: "Roster",
+            bridge: "session",
+            dataSource: { source },
+            webview: { entry: "./roster.html" },
+          },
+          "owner",
+          "view",
+        ),
+      ).toEqual([]);
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "map",
+            label: "Map",
+            dataSource: { namespace: "map" },
+            webview: { entry: "./map.html" },
+          },
+          "owner",
+          "right",
+        ),
+      ).toEqual([]);
+    },
+  );
 });
 
 describe("row template and value-label contracts", () => {

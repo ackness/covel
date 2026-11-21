@@ -215,6 +215,76 @@ describe("browser-private shared world authorization", () => {
     expect(await exported.json()).toEqual({});
   });
 
+  it("redacts metadata.storage.path from world list and detail responses unless caller has server.diagnostics", async () => {
+    const { app, store } = await createApp();
+    await store.upsertWorld({
+      ...WORLD,
+      metadata: {
+        ...WORLD.metadata,
+        source: "generated-file",
+        storage: {
+          scope: "server",
+          backend: "file",
+          path: "/secret/host/covel/worlds",
+          durable: true,
+        },
+      },
+    });
+
+    for (const token of [undefined, OWNER_TOKEN]) {
+      const listRes = await app.request("/api/worlds", {
+        headers: authHeaders(token),
+      });
+      expect(listRes.status).toBe(200);
+      const listBody = (await listRes.json()) as {
+        items: Array<{ metadata?: { storage?: Record<string, unknown> } }>;
+      };
+      expect(listBody.items[0]?.metadata?.storage).toEqual({
+        scope: "server",
+        backend: "file",
+        durable: true,
+      });
+
+      const detailRes = await app.request(`/api/worlds/${WORLD_ID}`, {
+        headers: authHeaders(token),
+      });
+      expect(detailRes.status).toBe(200);
+      const detailBody = (await detailRes.json()) as {
+        metadata?: { storage?: Record<string, unknown> };
+      };
+      expect(detailBody.metadata?.storage).toEqual({
+        scope: "server",
+        backend: "file",
+        durable: true,
+      });
+    }
+
+    // Store still retains the path for server-side file operations.
+    expect((await store.getWorld(WORLD_ID))?.metadata?.storage).toMatchObject({
+      path: "/secret/host/covel/worlds",
+    });
+
+    // Operators (server.diagnostics) still see metadata.storage.path.
+    const opList = (await (
+      await app.request("/api/worlds", {
+        headers: authHeaders(OPERATOR_TOKEN),
+      })
+    ).json()) as {
+      items: Array<{ metadata?: { storage?: Record<string, unknown> } }>;
+    };
+    expect(opList.items[0]?.metadata?.storage).toMatchObject({
+      path: "/secret/host/covel/worlds",
+    });
+    const opDetail = (await (
+      await app.request(`/api/worlds/${WORLD_ID}`, {
+        headers: authHeaders(OPERATOR_TOKEN),
+      })
+    ).json()) as { metadata?: { storage?: Record<string, unknown> } };
+    expect(opDetail.metadata?.storage).toMatchObject({
+      path: "/secret/host/covel/worlds",
+    });
+  });
+
   it.each([
     ["development", "memory", "memory"],
     ["production", "sqlite", "sqlite"],

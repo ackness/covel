@@ -1,4 +1,8 @@
-import { worldAuthoringFlight } from "../../authoring/flight.js";
+import {
+  acquireWorldAuthoringFlight,
+  worldAuthoringFlightConflict,
+  type WorldAuthoringFlightHold,
+} from "../../authoring/flight.js";
 import { worldGenerationDataContracts } from "../../world-data/portable-contract-data.js";
 /**
  * API AI routes — LLM-driven generation endpoints.
@@ -170,25 +174,35 @@ function streamWorldAuthoring(
     usage: ReturnType<typeof authoringUsage>;
     signal: AbortSignal;
   }) => Promise<void>,
+  flight?: WorldAuthoringFlightHold,
 ) {
   const signal = requestAbortSignal(c);
-  return streamOwnedSSE(c, async (stream) => {
-    const send = async (event: GenerateEvent) => {
-      await stream.writeSSE({ data: JSON.stringify(event) });
-    };
-    const progress = partProgress(send);
-    const usage = authoringUsage();
-    try {
-      signal.throwIfAborted();
-      await send({ type: "progress", phase: "generating" });
-      await run({ send, progress, usage, signal });
-    } catch (err) {
-      if (signal.aborted) throw err;
-      logAuthoringError(label, err);
-      await progress.drained();
-      await send({ type: "error", message: authoringErrorMessage(err) });
-    }
-  });
+  let handedOff = false;
+  try {
+    const response = streamOwnedSSE(c, async (stream) => {
+      const send = async (event: GenerateEvent) => {
+        await stream.writeSSE({ data: JSON.stringify(event) });
+      };
+      const progress = partProgress(send);
+      const usage = authoringUsage();
+      try {
+        signal.throwIfAborted();
+        await send({ type: "progress", phase: "generating" });
+        await run({ send, progress, usage, signal });
+      } catch (err) {
+        if (signal.aborted) throw err;
+        logAuthoringError(label, err);
+        await progress.drained();
+        await send({ type: "error", message: authoringErrorMessage(err) });
+      } finally {
+        flight?.release();
+      }
+    });
+    handedOff = true;
+    return response;
+  } finally {
+    if (!handedOff) flight?.release();
+  }
 }
 
 const requireWorldGeneration: MiddlewareHandler<Env> = async (c, next) => {
@@ -364,7 +378,6 @@ aiRoutes.post(
   "/generate-world",
   requireWorldGeneration,
   rateLimiter({ max: 10 }),
-  worldAuthoringFlight,
   async (c) => {
     const llm = c.get("llmAdapter");
     const store = c.get("store");
@@ -408,6 +421,14 @@ aiRoutes.post(
     const idleTimeout = parseIdleTimeoutMs(body.idleTimeoutMs);
     if (idleTimeout.error) {
       return c.json(errorBody(idleTimeout.error), 400);
+    }
+
+    const flight =
+      saveTarget === "return-only"
+        ? undefined
+        : acquireWorldAuthoringFlight("world-generate:server");
+    if (saveTarget !== "return-only" && !flight) {
+      return worldAuthoringFlightConflict(c);
     }
 
     const env = readRuntimeEnv();
@@ -547,6 +568,7 @@ aiRoutes.post(
           ...usage.field(),
         });
       },
+      flight,
     );
   },
 );
@@ -597,7 +619,6 @@ aiRoutes.post(
   "/revise-world",
   requireWorldGeneration,
   rateLimiter({ max: 10 }),
-  worldAuthoringFlight,
   async (c) => {
     const llm = c.get("llmAdapter");
     const store = c.get("store");
@@ -669,46 +690,63 @@ aiRoutes.post(
       saveTarget = target;
     }
 
+    const flight =
+      saveTarget === "return-only"
+        ? undefined
+        : acquireWorldAuthoringFlight(`world:${existing.id}`);
+    if (saveTarget !== "return-only" && !flight) {
+      return worldAuthoringFlightConflict(c);
+    }
+
     const env = readRuntimeEnv();
     const worldsDir = resolveUserResourceDirs(env).worlds;
     const worldDir = path.join(worldsDir, existing.id);
-    if (saveTarget === "server-file") {
-      // Refused before the model runs. The writer checks again at the swap.
-      const state = await inspectGeneratedWorldPackage(worldDir);
-      if (state.state === "unmarked") {
-        return c.json(
-          errorBody(
-            "Only a world created in the app can be revised; edit the files of a world package instead",
-            { code: "world_not_revisable" },
-          ),
-          409,
-        );
-      }
-      if (state.state === "modified") {
-        return c.json(
-          errorBody(
-            new WorldPackageModifiedError(state.added, state.changed).message,
-            {
-              code: "world_package_modified",
-              details: { added: state.added, changed: state.changed },
-            },
-          ),
-          409,
-        );
-      }
-    }
-    const packageIdentity =
-      saveTarget === "server-file" ? await stat(worldDir) : undefined;
-    const current = await worldSectionsOf(
-      existing,
-      saveTarget === "server-file" ? worldDir : undefined,
-    );
+    let packageIdentity: Awaited<ReturnType<typeof stat>> | undefined;
+    let current: Awaited<ReturnType<typeof worldSectionsOf>>;
     const contractWarnings: string[] = [];
-    const dataContracts = await worldGenerationDataContracts(
-      c.get("pluginRegistry"),
-      (message) => contractWarnings.push(message),
-      current,
-    );
+    let dataContracts: Awaited<ReturnType<typeof worldGenerationDataContracts>>;
+    let ready = false;
+    try {
+      if (saveTarget === "server-file") {
+        // Refused before the model runs. The writer checks again at the swap.
+        const state = await inspectGeneratedWorldPackage(worldDir);
+        if (state.state === "unmarked") {
+          return c.json(
+            errorBody(
+              "Only a world created in the app can be revised; edit the files of a world package instead",
+              { code: "world_not_revisable" },
+            ),
+            409,
+          );
+        }
+        if (state.state === "modified") {
+          return c.json(
+            errorBody(
+              new WorldPackageModifiedError(state.added, state.changed).message,
+              {
+                code: "world_package_modified",
+                details: { added: state.added, changed: state.changed },
+              },
+            ),
+            409,
+          );
+        }
+      }
+      packageIdentity =
+        saveTarget === "server-file" ? await stat(worldDir) : undefined;
+      current = await worldSectionsOf(
+        existing,
+        saveTarget === "server-file" ? worldDir : undefined,
+      );
+      dataContracts = await worldGenerationDataContracts(
+        c.get("pluginRegistry"),
+        (message) => contractWarnings.push(message),
+        current,
+      );
+      ready = true;
+    } finally {
+      if (!ready) flight?.release();
+    }
     return streamWorldAuthoring(
       c,
       "revise-world",
@@ -839,6 +877,7 @@ aiRoutes.post(
           ...usage.field(),
         });
       },
+      flight,
     );
   },
 );

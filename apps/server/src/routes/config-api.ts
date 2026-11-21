@@ -39,6 +39,7 @@ import {
 import {
   parseProviderKeysEnv,
   providerApiKeysFromEnv,
+  providerIdToApiKeyEnvName,
   providerKeyToId,
   readRuntimeEnv,
   toApiKeyEnvMap,
@@ -239,11 +240,23 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     writeKeysEnv(file, entries);
     // Publish only after the atomic file replacement succeeds. Leave keys
     // supplied by the external environment in precedence over saved copies.
+    // Mirror non-external updates into process.env using the same env-name
+    // mapping as startup (`loadKeysEnvInto`) so `reloadAiStack` (`llm.toml`
+    // `${ENV}` interpolation) sees updated/removed keys without a restart.
     for (const [providerId, value] of updates) {
       const externalKey = externalApiKeys[providerId];
-      if (externalKey !== undefined) deps.apiKeys[providerId] = externalKey;
-      else if (value === null) delete deps.apiKeys[providerId];
-      else deps.apiKeys[providerId] = value;
+      if (externalKey !== undefined) {
+        deps.apiKeys[providerId] = externalKey;
+        continue;
+      }
+      const envName = providerIdToApiKeyEnvName(providerId);
+      if (value === null) {
+        delete deps.apiKeys[providerId];
+        if (envName) delete process.env[envName];
+      } else {
+        deps.apiKeys[providerId] = value;
+        if (envName) process.env[envName] = value;
+      }
     }
     return c.json({ ok: true });
   });

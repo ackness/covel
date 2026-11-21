@@ -15,9 +15,12 @@ import {
   validateBaseUrl as validateBaseUrlInternal,
   isRetriableStatus,
   computeBackoffMs,
-  parseRetryAfterMs,
   sleepWithAbort,
 } from "./adapters/http.js";
+import {
+  MAX_RETRY_AFTER_MS,
+  parseRetryDelayMs,
+} from "./adapters/http/retry.js";
 import { createPinnedDispatcher } from "./adapters/http/dns-safety.js";
 import { fetchWithDispatcher } from "./outbound-network.js";
 import type { ImageWire } from "./image/types.js";
@@ -81,12 +84,19 @@ export interface FetchWithRetryOptions {
   readonly maxRetries?: number;
   /** Abort signal — propagates into both fetch and the inter-attempt sleep. */
   readonly signal?: AbortSignal;
+  /**
+   * Optional overall request timeout in milliseconds. Bounds both in-flight
+   * attempts and inter-attempt retry sleeps; a Retry-After or backoff wait that
+   * would outlast this deadline fails fast and returns the response immediately.
+   */
+  readonly timeoutMs?: number;
 }
 
 /**
- * fetch with exponential-backoff retry on 429 / 5xx. Honors `Retry-After`
- * when the server sends it. Does NOT retry on thrown fetch errors
- * (DNS / connection refused / network) — those bubble up to the caller.
+ * fetch with exponential-backoff retry on 429 / 5xx. Honors `Retry-After` /
+ * `Retry-After-Ms` up to `MAX_RETRY_AFTER_MS` (and never past `timeoutMs`).
+ * Does NOT retry on thrown fetch errors (DNS / connection refused / network) —
+ * those bubble up to the caller.
  *
  * Plugins should call this for their own wire requests instead of bare
  * `fetch` so retry policy stays consistent across the framework.
@@ -106,7 +116,7 @@ export async function fetchWithRetry(
   input: string | URL,
   init: RequestInit & FetchWithRetryOptions = {},
 ): Promise<Response> {
-  const { maxRetries = 3, signal, redirect, ...rest } = init;
+  const { maxRetries = 3, signal, timeoutMs, redirect, ...rest } = init;
   // Only an explicit `manual` hands 3xx responses back to the caller.
   const returnRedirects = redirect === "manual";
 
@@ -116,6 +126,26 @@ export async function fetchWithRetry(
     throw new Error(
       verdict.reason ?? `baseUrl rejected by SSRF policy: ${url}`,
     );
+  }
+
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  let deadline: number | undefined;
+  let effectiveSignal = signal;
+  if (timeoutMs !== undefined && Number.isFinite(timeoutMs)) {
+    const boundedTimeoutMs = Math.max(0, timeoutMs);
+    deadline = Date.now() + boundedTimeoutMs;
+    const timeoutController = new AbortController();
+    timeoutTimer = setTimeout(() => {
+      timeoutController.abort(
+        new DOMException(
+          "The operation was aborted due to timeout",
+          "TimeoutError",
+        ),
+      );
+    }, boundedTimeoutMs);
+    effectiveSignal = signal
+      ? AbortSignal.any([signal, timeoutController.signal])
+      : timeoutController.signal;
   }
 
   const doFetch = async (): Promise<Response> => {
@@ -133,7 +163,7 @@ export async function fetchWithRetry(
         {
           ...rest,
           redirect: "manual",
-          ...(signal ? { signal } : {}),
+          ...(effectiveSignal ? { signal: effectiveSignal } : {}),
         },
         dispatcher,
       );
@@ -151,14 +181,32 @@ export async function fetchWithRetry(
     }
   };
 
-  let response = await doFetch();
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    if (!isRetriableStatus(response.status)) return response;
-    await response.body?.cancel().catch(() => {});
-    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
-    const delay = retryAfterMs ?? computeBackoffMs(attempt);
-    await sleepWithAbort(delay, signal);
-    response = await doFetch();
+  try {
+    let response = await doFetch();
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      if (!isRetriableStatus(response.status)) return response;
+      const retryAfterMs = parseRetryDelayMs(response.headers);
+      // Mirror core provider retry semantics (`adapters/http/request.ts`): a
+      // remote endpoint cannot pin a worker indefinitely with a huge
+      // Retry-After header, nor outlast the caller's timeout deadline. Return
+      // the response intact so the caller can read the failure reason.
+      if (
+        retryAfterMs !== null &&
+        (retryAfterMs > MAX_RETRY_AFTER_MS ||
+          (deadline !== undefined && Date.now() + retryAfterMs > deadline))
+      ) {
+        return response;
+      }
+      const delay = retryAfterMs ?? computeBackoffMs(attempt);
+      if (deadline !== undefined && Date.now() + delay > deadline) {
+        return response;
+      }
+      await response.body?.cancel().catch(() => {});
+      await sleepWithAbort(delay, effectiveSignal);
+      response = await doFetch();
+    }
+    return response;
+  } finally {
+    if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
   }
-  return response;
 }

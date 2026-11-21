@@ -49,7 +49,6 @@ const declarationPackages = new Set([
   "fast-deep-equal",
   "fast-uri",
   "fsevents",
-  "gray-matter",
   "hono",
   "json-schema-traverse",
   "postgres",

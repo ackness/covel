@@ -22,9 +22,15 @@ import type { RuntimeManifest } from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
-import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
+import {
+  rotateSessionApprovalScope,
+  sessionApprovalScope,
+} from "../../src/routes/api/session/session-guard.js";
 
 const SESSION = "sess-event-1";
 const roots: string[] = [];
@@ -96,10 +102,17 @@ function register(
   } as unknown as PluginRegistryEntry);
 }
 
-async function setup(source: PluginSource = "builtin"): Promise<{
+async function setup(
+  source: PluginSource = "builtin",
+  options: {
+    readonly subscriberSource?: PluginSource;
+    readonly sessionLock?: SessionLock;
+  } = {},
+): Promise<{
   app: Hono;
   store: DataStore;
   gate: RpcApprovalGate;
+  sessionLock: SessionLock;
 }> {
   const store = createMemoryStore();
   const pluginRegistry = createPluginRegistry();
@@ -132,6 +145,7 @@ async function setup(source: PluginSource = "builtin"): Promise<{
     ],
   });
   register(pluginRegistry, "encounters", {
+    source: options.subscriberSource ?? "builtin",
     runtimes: [
       runtime("encounters", "encounters/arrive", {
         type: "event",
@@ -166,7 +180,7 @@ async function setup(source: PluginSource = "builtin"): Promise<{
     resolvePluginDir: (pluginId) => (pluginId === "map" ? root : undefined),
   });
   const gate = createRpcApprovalGate();
-  const sessionLock = createInProcessSessionLock();
+  const sessionLock = options.sessionLock ?? createInProcessSessionLock();
   const eventBus = createEventBus(store);
   const app = new Hono();
   app.use("*", async (c, next) => {
@@ -181,7 +195,7 @@ async function setup(source: PluginSource = "builtin"): Promise<{
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
-  return { app, store, gate };
+  return { app, store, gate, sessionLock };
 }
 
 function emit(app: Hono, body: Record<string, unknown>) {
@@ -325,5 +339,136 @@ describe("plugin-rpc kind event", () => {
     expect(await listRuntimeJobs(store, { sessionId: SESSION })).toHaveLength(
       2,
     );
+  });
+
+  it("refuses event dispatch when a community subscriber's approval is revoked before acquiring sessionLock", async () => {
+    const inner = createInProcessSessionLock();
+    let lockCalls = 0;
+    let onEnqueueLock: (() => Promise<void>) | undefined;
+    const raceLock: SessionLock = {
+      async withLock(key, fn) {
+        lockCalls += 1;
+        // First lock call is pre-lock syncLiveSessionRuntimes; second is enqueue.
+        if (lockCalls === 2 && onEnqueueLock) await onEnqueueLock();
+        return inner.withLock(key, fn);
+      },
+      withLocks: (keys, fn) => inner.withLocks(keys, fn),
+    };
+
+    const ctx = await setup("builtin", {
+      subscriberSource: "community",
+      sessionLock: raceLock,
+    });
+    const session = (await ctx.store.getSession(SESSION))!;
+    const subscriberScope = sessionApprovalScope(session, "encounters");
+    // Pre-approve the community subscriber for server code + runtime.
+    for (const action of [
+      "covel:plugin-server-code",
+      "runtime:encounters/arrive",
+    ]) {
+      const evaluated = ctx.gate.evaluate({
+        sessionId: SESSION,
+        sessionScope: subscriberScope,
+        pluginId: "encounters",
+        action,
+        payload: {},
+        trustLevel: "community",
+        description: action,
+      });
+      if (evaluated.status === "pending") {
+        ctx.gate.decide(
+          {
+            approvalId: evaluated.approvalId,
+            decision: "allow",
+            scope: "session",
+            decidedAt: new Date().toISOString(),
+          },
+          subscriberScope,
+        );
+      }
+    }
+
+    // Simulate a concurrent revocation of the community subscriber right before
+    // dispatchPluginEvent acquires the enqueue lock.
+    onEnqueueLock = async () => {
+      const live = (await ctx.store.getSession(SESSION))!;
+      await ctx.store.updateSession(SESSION, {
+        metadata: rotateSessionApprovalScope(live, "encounters"),
+      });
+      ctx.gate.revoke(SESSION, "encounters");
+    };
+
+    const res = await emit(ctx.app, {
+      pluginId: "map",
+      topic: "map.location-selected",
+      payload: { locationId: "docks" },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "approval_scope_changed" });
+    expect(
+      await listRuntimeJobs(ctx.store, { sessionId: SESSION }),
+    ).toHaveLength(0);
+  });
+
+  it("drops a subscriber disabled before sessionLock when re-resolving active runtimes", async () => {
+    const inner = createInProcessSessionLock();
+    let lockCalls = 0;
+    let onEnqueueLock: (() => Promise<void>) | undefined;
+    const raceLock: SessionLock = {
+      async withLock(key, fn) {
+        lockCalls += 1;
+        if (lockCalls === 2 && onEnqueueLock) await onEnqueueLock();
+        return inner.withLock(key, fn);
+      },
+      withLocks: (keys, fn) => inner.withLocks(keys, fn),
+    };
+
+    const ctx = await setup("builtin", { sessionLock: raceLock });
+    onEnqueueLock = async () => {
+      await ctx.store.updateSession(SESSION, { activePlugins: ["map"] });
+    };
+
+    const res = await emit(ctx.app, {
+      pluginId: "map",
+      topic: "map.location-selected",
+      payload: { locationId: "docks" },
+    });
+    expect(res.status).toBe(200);
+    const jobs = await listRuntimeJobs(ctx.store, { sessionId: SESSION });
+    expect(jobs.map((job) => job.runtimeId)).toEqual(["map/travel"]);
+  });
+
+  it("refuses background manual runtime enqueue when the plugin is disabled before sessionLock", async () => {
+    const inner = createInProcessSessionLock();
+    let lockCalls = 0;
+    let onEnqueueLock: (() => Promise<void>) | undefined;
+    const raceLock: SessionLock = {
+      async withLock(key, fn) {
+        lockCalls += 1;
+        if (lockCalls === 2 && onEnqueueLock) await onEnqueueLock();
+        return inner.withLock(key, fn);
+      },
+      withLocks: (keys, fn) => inner.withLocks(keys, fn),
+    };
+
+    const ctx = await setup("builtin", { sessionLock: raceLock });
+    onEnqueueLock = async () => {
+      await ctx.store.updateSession(SESSION, { activePlugins: ["map"] });
+    };
+
+    const res = await ctx.app.request(`/api/sessions/${SESSION}/plugin-rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "runtime",
+        pluginId: "encounters",
+        runtimeId: "encounters/manual",
+      }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "approval_scope_changed" });
+    expect(
+      await listRuntimeJobs(ctx.store, { sessionId: SESSION }),
+    ).toHaveLength(0);
   });
 });

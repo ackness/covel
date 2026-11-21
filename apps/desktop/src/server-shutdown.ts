@@ -6,11 +6,15 @@ type ShutdownLog = (level: "info" | "warn", ...values: unknown[]) => void;
 const GRACE_MS = 12_000;
 const KILL_WAIT_MS = 1_000;
 
+const inFlightStops = new WeakMap<ChildProcess, Promise<void>>();
+
 /** Await confirmed exit (or a failed spawn); failed termination blocks restart. */
 export function stopServerProcess(
   child: ChildProcess,
   log: ShutdownLog,
 ): Promise<void> {
+  const existing = inFlightStops.get(child);
+  if (existing) return existing;
   if (
     child.pid === undefined ||
     child.exitCode !== null ||
@@ -18,9 +22,9 @@ export function stopServerProcess(
   ) {
     return Promise.resolve();
   }
-  return new Promise<void>((resolve, reject) => {
+  let settled = false;
+  const stopPromise = new Promise<void>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let settled = false;
     const finish = (error?: Error): void => {
       if (settled) return;
       settled = true;
@@ -72,7 +76,13 @@ export function stopServerProcess(
     } else {
       signalStop();
     }
+  }).finally(() => {
+    if (inFlightStops.get(child) === stopPromise) {
+      inFlightStops.delete(child);
+    }
   });
+  if (!settled) inFlightStops.set(child, stopPromise);
+  return stopPromise;
 }
 
 /** Keep Electron alive for one shared drain, then allow the re-entrant quit. */

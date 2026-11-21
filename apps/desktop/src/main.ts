@@ -71,6 +71,7 @@ import {
   buildAppMenu,
   createMainWindow,
   getMainWindow,
+  installSessionPermissionHandlers,
   loadSplashInto,
   navigateToApp,
   showStartupError,
@@ -80,7 +81,11 @@ import { resolveSystemProxyRequest } from "./system-proxy.js";
 import { showAppUpdateNotification } from "./app-update-notification.js";
 import { createQuitHandler, stopServerProcess } from "./server-shutdown.js";
 import { waitForServerProcess } from "./server-readiness.js";
-import { createServerRecovery, findStartablePort } from "./server-recovery.js";
+import {
+  createHealthHeartbeat,
+  createServerRecovery,
+  findStartablePort,
+} from "./server-recovery.js";
 import { claimSingleInstance } from "./single-instance.js";
 import { staleLoopbackOrigins } from "./stale-origins.js";
 import {
@@ -490,7 +495,7 @@ async function startServer(
     if (serverProcess === child) {
       serverProcess = null;
       serverPort = 0;
-      stopHealthHeartbeat();
+      healthHeartbeat.stop();
     }
 
     // Only auto-restart on unexpected exit after a successful boot.
@@ -531,8 +536,10 @@ async function startServer(
   } catch (error) {
     if (serverProcess === child) {
       await stopServerProcess(child, writeLog);
-      serverProcess = null;
-      serverPort = 0;
+      if (serverProcess === child) {
+        serverProcess = null;
+        serverPort = 0;
+      }
     }
     throw error;
   }
@@ -540,47 +547,17 @@ async function startServer(
   broadcastProgress(t("startup.status.ready"));
   writeLog("info", `Server ready on port ${port}`);
   serverRecovery.ready(child);
-  startHealthHeartbeat(healthUrl);
+  healthHeartbeat.start(healthUrl);
 
   return port;
 }
 
 // ── Health heartbeat ────────────────────────────────────────────
 
-let heartbeatTimer: NodeJS.Timeout | null = null;
-let lastHealthOk = true;
-
-function startHealthHeartbeat(healthUrl: string): void {
-  stopHealthHeartbeat();
-  heartbeatTimer = setInterval(async () => {
-    try {
-      const res = await fetchWithTimeout(healthUrl, 5_000);
-      const ok = res.ok;
-      if (ok !== lastHealthOk) {
-        lastHealthOk = ok;
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send("covel:server:status", {
-            state: ok ? "up" : "degraded",
-          });
-        }
-      }
-    } catch {
-      if (lastHealthOk) {
-        lastHealthOk = false;
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send("covel:server:status", { state: "down" });
-        }
-      }
-    }
-  }, 10_000);
-}
-
-function stopHealthHeartbeat(): void {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-}
+const healthHeartbeat = createHealthHeartbeat({
+  checkHealth: (healthUrl) => fetchWithTimeout(healthUrl, 5_000),
+  getWindows: () => BrowserWindow.getAllWindows(),
+});
 
 /**
  * Graceful shutdown.
@@ -595,7 +572,7 @@ function stopServer(): Promise<void> {
   if (pendingStop) return pendingStop;
 
   manualStop = true;
-  stopHealthHeartbeat();
+  healthHeartbeat.stop();
   pendingStop = serverRecovery
     .cancel()
     .then(async () => {
@@ -718,6 +695,7 @@ if (!ownsInstance) app.quit();
 
 app.whenReady().then(async () => {
   if (quitting || !ownsInstance) return;
+  installSessionPermissionHandlers(session.defaultSession);
   // First of all: this decides which data root the rest of the start uses.
   let dataRootCopy: DataRootCopyOutcome;
   try {

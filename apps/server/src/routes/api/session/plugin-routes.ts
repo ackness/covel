@@ -376,9 +376,20 @@ export function registerSessionPluginRoutes(
         session,
         confirmedPluginIds(plan, requested, pluginRegistry),
       );
+      const evictedPluginIds = session.activePlugins.filter(
+        (previousPluginId) => !confirmed.includes(previousPluginId),
+      );
+      let nextMetadata: Record<string, unknown> = { ...session.metadata };
+      for (const previousPluginId of evictedPluginIds) {
+        nextMetadata = rotateSessionApprovalScope(
+          { ...session, metadata: nextMetadata },
+          previousPluginId,
+        );
+      }
       // Single mutation point: persist the authoritative activePlugins set
-      // first; the registry mirror only reconciles after the store write
-      // succeeds (a rejected write leaves memory untouched).
+      // and evicted approval scope rotations first; the registry mirror only
+      // reconciles after the store write succeeds (a rejected write leaves
+      // memory untouched).
       await pluginRegistry.applyPersistedActivations(
         id,
         confirmed,
@@ -386,7 +397,7 @@ export function registerSessionPluginRoutes(
           await store.updateSession(id, {
             activePlugins: confirmed,
             metadata: {
-              ...session.metadata,
+              ...nextMetadata,
               pluginSelection: storedPluginSelection({
                 requested,
                 excluded,
@@ -399,10 +410,8 @@ export function registerSessionPluginRoutes(
         },
         publicSessionIncarnation(session),
       );
-      for (const previousPluginId of session.activePlugins) {
-        if (!confirmed.includes(previousPluginId)) {
-          c.get("rpcApprovalGate").revoke(id, previousPluginId);
-        }
+      for (const previousPluginId of evictedPluginIds) {
+        c.get("rpcApprovalGate").revoke(id, previousPluginId);
       }
       c.get("uiSlots")?.invalidateSession(id);
       // Creation skipped the world data of plugins that were not active then,

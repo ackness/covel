@@ -1,5 +1,10 @@
+import { z } from "zod";
 import type { SessionProjection } from "./session-bridge.js";
-import type { PluginBridgeHandler } from "./plugin-bridge.js";
+import {
+  sanitizePanelBridgeData,
+  type PanelBridgeOutcome,
+  type PluginBridgeHandler,
+} from "./plugin-bridge.js";
 /**
  * PluginPanel — renders a single plugin panel from a json-render spec.
  *
@@ -25,7 +30,7 @@ import {
   usePluginNamespace,
 } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
-import type { PluginRpcRequest } from "@/services/api.js";
+import type { PluginRpcRequest, PluginRpcResponse } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
   emitPluginRpcRuntimeResponse,
@@ -88,6 +93,106 @@ export interface PluginPanelProps {
 
 function resolveEmptyMessage(value: unknown, locale: string): string {
   return resolveDisplayText(value, locale).trim();
+}
+
+const webviewDraftMessageSchema = z.strictObject({
+  text: z.string().trim().min(1).max(4000),
+  selectionGroup: z.string().trim().min(1).max(128).optional(),
+});
+
+const webviewStageDraftSchema = z.strictObject({
+  text: z.string().trim().min(1).max(4000),
+});
+
+/**
+ * Defense-in-depth: even if an unvalidated spec reaches the client, never
+ * inject raw session character data into a non-session-bridge webview.
+ */
+function isDisallowedWebviewSessionSource(
+  spec: Readonly<Record<string, unknown>>,
+): boolean {
+  if (!spec.webview || spec.bridge === "session") return false;
+  const source = (spec.dataSource as { source?: unknown } | undefined)?.source;
+  return (
+    source === "session.characters" || source === "session.characterSchema"
+  );
+}
+
+function safePanelOutcomeData(value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  try {
+    return sanitizePanelBridgeData(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function panelRpcStatusOutcome(
+  response: PluginRpcResponse | null | undefined,
+): PanelBridgeOutcome | null {
+  if (!response) return { ok: false, status: "unavailable" };
+  if (response.status === "accepted") return { ok: true, status: "accepted" };
+  if (response.status !== "ok") return { ok: false, status: "rejected" };
+  return null;
+}
+
+function hasRpcFailure(
+  response: Extract<PluginRpcResponse, { status: "ok" }>,
+): boolean {
+  return Boolean(
+    response.abortReason ||
+    response.runtimeResults?.some((item) => item.status === "failed"),
+  );
+}
+
+function toPanelRuntimeRpcOutcome(
+  response: PluginRpcResponse | null | undefined,
+  pluginId: string,
+  runtimeId: string,
+): PanelBridgeOutcome {
+  const nonOk = panelRpcStatusOutcome(response);
+  if (nonOk) return nonOk;
+  const okResponse = response as Extract<PluginRpcResponse, { status: "ok" }>;
+  const target = okResponse.runtimeResults?.find(
+    (item) => item.pluginId === pluginId && item.runtimeId === runtimeId,
+  );
+  if (
+    hasRpcFailure(okResponse) ||
+    target?.status === "failed" ||
+    (typeof target?.error === "string" && target.error.length > 0)
+  ) {
+    return { ok: false, status: "failed" };
+  }
+  if (target?.status === "skipped") {
+    return { ok: false, status: "skipped" };
+  }
+  const data = safePanelOutcomeData(target?.output);
+  return {
+    ok: true,
+    status: "ok",
+    ...(data !== undefined ? { data } : {}),
+  };
+}
+
+function toPanelActionRpcOutcome(
+  response: PluginRpcResponse | null | undefined,
+): PanelBridgeOutcome {
+  const nonOk = panelRpcStatusOutcome(response);
+  if (nonOk) return nonOk;
+  const okResponse = response as Extract<PluginRpcResponse, { status: "ok" }>;
+  if (hasRpcFailure(okResponse)) return { ok: false, status: "failed" };
+  const data = safePanelOutcomeData(okResponse.result);
+  return {
+    ok: true,
+    status: "ok",
+    ...(data !== undefined ? { data } : {}),
+  };
+}
+
+function toPanelEventRpcOutcome(
+  response: PluginRpcResponse | null | undefined,
+): PanelBridgeOutcome {
+  return panelRpcStatusOutcome(response) ?? { ok: true, status: "ok" };
 }
 
 const EMPTY_SOURCES: Record<string, Record<string, unknown>> = {};
@@ -190,8 +295,9 @@ function LivePluginPanel(props: PluginPanelProps) {
     schema && typeof schema === "object" && !Array.isArray(schema)
       ? (schema as Record<string, unknown>)
       : {};
-  const frameworkData =
-    sourceKind === "session.characters"
+  const frameworkData = isDisallowedWebviewSessionSource(spec)
+    ? {}
+    : sourceKind === "session.characters"
       ? sessionCharacters
       : sourceKind === "session.characterSchema"
         ? sessionCharacterSchema
@@ -220,6 +326,7 @@ function PluginPanelView({
   spec,
   stateCache,
   handlers: explicitHandlers,
+  stateOverride,
   interactionLocked = false,
   surfaceContext,
   enableDevtools = false,
@@ -360,12 +467,12 @@ function PluginPanelView({
       (params: Record<string, unknown>) => Promise<unknown> | unknown
     > = {
       invokeRuntime: async (params: Record<string, unknown>) => {
-        if (!sessionId) return;
+        if (!sessionId) return { ok: false, status: "unavailable" };
         const runtimeId =
           typeof params.runtimeId === "string" ? params.runtimeId : undefined;
         if (!runtimeId) {
           console.warn("[PluginPanel] invokeRuntime requires params.runtimeId");
-          return;
+          return { ok: false, status: "unavailable" };
         }
         const req: PluginRpcRequest = {
           kind: "runtime",
@@ -395,7 +502,7 @@ function PluginPanelView({
                 params.expectsBackgroundFollower === true,
             });
           }
-          return res;
+          return toPanelRuntimeRpcOutcome(res, pluginId, runtimeId);
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
           if (spec.webview) throw err;
@@ -404,14 +511,14 @@ function PluginPanelView({
         }
       },
       invokePluginAction: async (params: Record<string, unknown>) => {
-        if (!sessionId) return;
+        if (!sessionId) return { ok: false, status: "unavailable" };
         const action =
           typeof params.action === "string" ? params.action : undefined;
         if (!action) {
           console.warn(
             "[PluginPanel] invokePluginAction requires params.action",
           );
-          return;
+          return { ok: false, status: "unavailable" };
         }
         const req: PluginRpcRequest = {
           kind: "action",
@@ -436,7 +543,7 @@ function PluginPanelView({
               runtimeId: action,
             });
           }
-          return res;
+          return toPanelActionRpcOutcome(res);
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
           if (spec.webview) throw err;
@@ -445,12 +552,12 @@ function PluginPanelView({
         }
       },
       invokeCommand: async (params: Record<string, unknown>) => {
-        if (!sessionId) return;
+        if (!sessionId) return { ok: false, status: "unavailable" };
         const built = buildPluginCommandRequest(pluginId, params);
         if (!built.ok) {
           console.warn(`[PluginPanel] ${built.error}`);
           emitToast("error", built.error);
-          return;
+          return { ok: false, status: "unavailable" };
         }
         markInvoking(`command:${built.command}`, true);
         try {
@@ -462,12 +569,21 @@ function PluginPanelView({
             confirm: requestConfirm,
             t,
           });
-          if (!response) return;
-          if (response.status !== "ok") return;
+          const nonOk = panelRpcStatusOutcome(response);
+          if (nonOk) return nonOk;
+          const okResponse = response as Extract<
+            PluginRpcResponse,
+            { status: "ok" }
+          >;
+          if (hasRpcFailure(okResponse)) {
+            return { ok: false, status: "failed" };
+          }
 
           const result =
-            response.result && typeof response.result === "object"
-              ? (response.result as Record<string, unknown>)
+            okResponse.result &&
+            typeof okResponse.result === "object" &&
+            !Array.isArray(okResponse.result)
+              ? (okResponse.result as Record<string, unknown>)
               : undefined;
           const message = resolveDisplayText(
             result?.message ?? result?.reason,
@@ -479,7 +595,7 @@ function PluginPanelView({
               message ||
                 t("session.commandFailed", { defaultValue: "Command failed." }),
             );
-            return;
+            return { ok: false, status: "failed" };
           }
           if (message) emitToast("info", message);
 
@@ -501,7 +617,19 @@ function PluginPanelView({
               });
             }
           }
-          return response;
+          const publicResult = result
+            ? Object.fromEntries(
+                Object.entries(result).filter(
+                  ([key]) => key !== "clientAction",
+                ),
+              )
+            : okResponse.result;
+          const sanitizedData = safePanelOutcomeData(publicResult);
+          return {
+            ok: true,
+            status: "ok",
+            ...(sanitizedData !== undefined ? { data: sanitizedData } : {}),
+          };
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
           if (spec.webview) throw err;
@@ -511,11 +639,11 @@ function PluginPanelView({
       },
     };
     handlers.emitEvent = async (params: Record<string, unknown>) => {
-      if (!sessionId) return;
+      if (!sessionId) return { ok: false, status: "unavailable" };
       const topic = typeof params.topic === "string" ? params.topic : "";
       if (!topic) {
         console.warn("[PluginPanel] emitEvent requires params.topic");
-        return;
+        return { ok: false, status: "unavailable" };
       }
       const data =
         params.data &&
@@ -525,7 +653,7 @@ function PluginPanelView({
           : {};
       markInvoking(`event:${topic}`, true);
       try {
-        return await postPluginRpcWithApproval({
+        const res = await postPluginRpcWithApproval({
           sessionId,
           request: { kind: "event", pluginId, topic, payload: data },
           pluginId,
@@ -533,6 +661,7 @@ function PluginPanelView({
           confirm: requestConfirm,
           t,
         });
+        return toPanelEventRpcOutcome(res);
       } catch (err) {
         emitToast("error", err instanceof Error ? err.message : String(err));
         if (spec.webview) throw err;
@@ -566,18 +695,46 @@ function PluginPanelView({
       height?: number;
     };
     if (typeof webview.html === "string" || typeof webview.url === "string") {
-      const allowed = Object.fromEntries(
-        [
-          "invokeRuntime",
-          "invokePluginAction",
-          "invokeCommand",
-          "emitEvent",
-          ...Object.keys(explicitHandlers ?? {}),
-        ]
-          .filter((name) => typeof handlers[name] === "function")
-          .map((name) => [name, handlers[name]!]),
-      );
-      allowed.setUiState = updateUiState;
+      // Non-session webviews receive only framework RPC handlers, local UI
+      // state, and documented surface-scoped draft handlers — never arbitrary
+      // explicitHandlers or direct turn-sending message-block actions.
+      const allowed: Record<string, PluginBridgeHandler> = {
+        invokeRuntime: defaultHandlers.invokeRuntime!,
+        invokePluginAction: defaultHandlers.invokePluginAction!,
+        invokeCommand: defaultHandlers.invokeCommand!,
+        emitEvent: defaultHandlers.emitEvent!,
+        setUiState: updateUiState,
+      };
+      const isStageSurface = surfaceContext?.surface === "stage";
+      if (stateOverride === undefined) {
+        const draftHandler = !isStageSurface
+          ? explicitHandlers?.draftMessage
+          : undefined;
+        if (typeof draftHandler === "function") {
+          allowed.draftMessage = async (params: Record<string, unknown>) => {
+            const parsed = webviewDraftMessageSchema.safeParse(params);
+            if (!parsed.success) {
+              throw new Error("Invalid draftMessage params");
+            }
+            await draftHandler(parsed.data);
+            return { status: "ok" };
+          };
+        }
+        const stageDraftHandler = isStageSurface
+          ? explicitHandlers?.sendMessage
+          : undefined;
+        if (typeof stageDraftHandler === "function") {
+          allowed.sendMessage = async (params: Record<string, unknown>) => {
+            const parsed = webviewStageDraftSchema.safeParse(params);
+            if (!parsed.success) {
+              throw new Error("Invalid sendMessage params");
+            }
+            await stageDraftHandler(parsed.data);
+            return { status: "ok" };
+          };
+        }
+      }
+      const webviewData = isDisallowedWebviewSessionSource(spec) ? {} : data;
       return (
         <PluginWebview
           themeSessionId={sessionId}
@@ -592,7 +749,7 @@ function PluginPanelView({
           locked={interactionLocked}
           handlers={allowed}
           state={{
-            data,
+            data: webviewData,
             locale: activeLocale,
             locked: interactionLocked,
             context: surfaceContext ?? {},

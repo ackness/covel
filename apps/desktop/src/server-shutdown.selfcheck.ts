@@ -193,6 +193,57 @@ await test("an already exited child needs no new signal", async () => {
   await stopServerProcess(child, log);
 });
 
+await test("concurrent stopServerProcess calls share one IPC shutdown per child", async () => {
+  const messages: unknown[] = [];
+  const signals: Array<NodeJS.Signals | number | undefined> = [];
+  const child = Object.assign(
+    fakeChild((signal) => {
+      signals.push(signal);
+      return true;
+    }),
+    {
+      connected: true,
+      send: (message: unknown, callback?: (error: Error | null) => void) => {
+        messages.push(message);
+        callback?.(null);
+      },
+    },
+  );
+  const first = stopServerProcess(child, log);
+  const second = stopServerProcess(child, log);
+  assert.equal(first, second);
+  assert.deepEqual(messages, [{ type: "covel:shutdown" }]);
+  assert.deepEqual(signals, []);
+  assert.equal(child.listenerCount("exit"), 1);
+  assert.equal(child.listenerCount("error"), 1);
+  child.emit("exit", 0, null);
+  await Promise.all([first, second]);
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(child.listenerCount("error"), 0);
+});
+
+await test("concurrent stopServerProcess calls share one SIGTERM and allow retry after failure", async () => {
+  const signals: Array<NodeJS.Signals | number | undefined> = [];
+  const child = fakeChild((signal) => {
+    signals.push(signal);
+    return true;
+  });
+  const first = stopServerProcess(child, log);
+  const second = stopServerProcess(child, log);
+  assert.equal(first, second);
+  assert.deepEqual(signals, ["SIGTERM"]);
+  assert.equal(child.listenerCount("exit"), 1);
+  child.emit("error", new Error("transient signal failure"));
+  await assert.rejects(first, /transient signal failure/);
+  await assert.rejects(second, /transient signal failure/);
+  // After a failed stop settles, a retry starts a fresh stop attempt.
+  const retry = stopServerProcess(child, log);
+  assert.deepEqual(signals, ["SIGTERM", "SIGTERM"]);
+  child.emit("exit", 0, null);
+  await retry;
+  assert.equal(child.listenerCount("exit"), 0);
+});
+
 await test("a second launch starts nothing and brings the first window forward", () => {
   const calls: string[] = [];
   const window = {

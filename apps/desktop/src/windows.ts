@@ -21,8 +21,10 @@ import { writeLog } from "./logging.js";
 import { t } from "./main-i18n.js";
 import {
   appUrlOnPort,
+  isAllowedSessionPermission,
   isSameStartupSplashDocument,
   isSameTrustedOrigin,
+  isUntrustedAppUrl,
   loopbackHttpOrigin,
 } from "./trusted-origin.js";
 
@@ -32,24 +34,73 @@ export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
 }
 
+/** Committed URL of the live main window, or undefined when closed/destroyed. */
+export function getMainWindowUrl(): string | undefined {
+  return mainWindow && !mainWindow.isDestroyed()
+    ? mainWindow.webContents.getURL()
+    : undefined;
+}
+
 /**
  * True iff `candidateUrl` matches the main window's committed loopback
- * origin (the local sidecar / dev server). Shared with ipc-handlers.ts so a
- * sensitive IPC can reject any sender frame that isn't the trusted app origin.
+ * app origin (excluding plugin-hosted document paths).
  */
 export function isTrustedFrameUrl(
   candidateUrl: string | null | undefined,
 ): boolean {
-  return isSameTrustedOrigin(mainWindow?.webContents.getURL(), candidateUrl);
+  return isSameTrustedOrigin(getMainWindowUrl(), candidateUrl);
 }
 
 /** Recovery-only trust for the main-process-authored data: splash document. */
 export function isTrustedStartupFrameUrl(
   candidateUrl: string | null | undefined,
 ): boolean {
-  return isSameStartupSplashDocument(
-    mainWindow?.webContents.getURL(),
-    candidateUrl,
+  return isSameStartupSplashDocument(getMainWindowUrl(), candidateUrl);
+}
+
+/**
+ * Register fail-closed Electron session permission check and request handlers.
+ * Denies every browser permission by default; allows only
+ * `clipboard-sanitized-write` for the trusted main-frame app document.
+ */
+export function installSessionPermissionHandlers(
+  targetSession: Pick<
+    Electron.Session,
+    "setPermissionCheckHandler" | "setPermissionRequestHandler"
+  >,
+): void {
+  targetSession.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin, details) => {
+      if (!webContents || webContents !== mainWindow?.webContents) return false;
+      return isAllowedSessionPermission({
+        permission,
+        isMainFrame: details.isMainFrame,
+        requestingUrl: details.requestingUrl,
+        requestingOrigin,
+        trustedUrl: getMainWindowUrl(),
+      });
+    },
+  );
+
+  targetSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      const allowed =
+        webContents === mainWindow?.webContents &&
+        isAllowedSessionPermission({
+          permission,
+          isMainFrame: details.isMainFrame,
+          requestingUrl: details.requestingUrl,
+          requestingOrigin: webContents.mainFrame?.origin,
+          trustedUrl: getMainWindowUrl(),
+        });
+      if (!allowed) {
+        writeLog(
+          "warn",
+          `[permissions] denied '${permission}' for ${details.requestingUrl || "unknown"} (mainFrame=${details.isMainFrame})`,
+        );
+      }
+      callback(allowed);
+    },
   );
 }
 
@@ -231,6 +282,13 @@ function handleExternalLinkRequest(
   }
 
   if (protocol === "http:") {
+    if (isUntrustedAppUrl(linkUrl)) {
+      writeLog(
+        "warn",
+        `[external-link] blocked untrusted app path: ${linkUrl.slice(0, 120)}`,
+      );
+      return;
+    }
     if (loopbackHttpOrigin(linkUrl)) {
       writeLog("info", `[external-link] http loopback -> ${host}`);
       void shell.openExternal(linkUrl);
@@ -357,19 +415,27 @@ export function createMainWindow(titleSuffix?: string): BrowserWindow {
   // (same policy as window.open). Programmatic loads from main (splash data:
   // URL, navigateToApp) do NOT emit will-navigate, so this never fights them.
   const guardNavigation = (
-    event: Electron.Event,
-    targetUrl: string,
+    event: Electron.Event & { isMainFrame?: boolean; url?: string },
+    targetUrl?: string,
     _isInPlace?: boolean,
     isMainFrame?: boolean,
   ): void => {
-    if (isMainFrame === false) return; // subframe nav is left to CSP
-    if (isSameTrustedOrigin(win.webContents.getURL(), targetUrl)) return;
+    const isMain =
+      typeof isMainFrame === "boolean"
+        ? isMainFrame
+        : typeof event.isMainFrame === "boolean"
+          ? event.isMainFrame
+          : true;
+    if (!isMain) return; // subframe nav is left to CSP
+    const destination = targetUrl ?? event.url ?? "";
+    if (isSameTrustedOrigin(win.webContents.getURL(), destination)) return;
     event.preventDefault();
     writeLog(
       "warn",
-      `[navigation] blocked main-frame navigation → ${targetUrl.slice(0, 120)}`,
+      `[navigation] blocked main-frame navigation → ${destination.slice(0, 120)}`,
     );
-    handleExternalLinkRequest(win, targetUrl);
+    if (isUntrustedAppUrl(destination)) return;
+    handleExternalLinkRequest(win, destination);
   };
   win.webContents.on("will-navigate", guardNavigation);
   win.webContents.on("will-redirect", guardNavigation);
