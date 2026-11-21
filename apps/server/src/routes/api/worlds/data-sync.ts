@@ -30,6 +30,7 @@ import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import { z } from "zod";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import {
+  finalizeWorldDataMediaRefs,
   prepareWorldDataSyncForSession,
   WorldDataSyncConflictError,
   syncWorldDataForSession,
@@ -371,6 +372,13 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
       );
     }
     throw err;
+  }
+
+  if (result.mediaRefs.length > 0) {
+    await finalizeWorldDataMediaRefs({
+      mediaStore,
+      refs: result.mediaRefs,
+    });
   }
 
   return c.json(publicSyncResult(result));
