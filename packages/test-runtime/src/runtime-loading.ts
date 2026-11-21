@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { RuntimeManifest } from "@covel/shared";
+import {
+  FRAMEWORK_PLUGIN_ID,
+  rpcActionNameSchema,
+  type RuntimeManifest,
+} from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
@@ -10,6 +14,7 @@ import {
   createHookPipeline,
   draftHoldingHooks,
   draftHoldingKey,
+  enforceHttpPermissions,
   validatePluginHookRegistration,
   type HookPipeline,
   PluginExtensionHost,
@@ -339,6 +344,37 @@ export async function loadRuntimeBundle(args: {
   };
 }
 
+const rpcOptionsSchema = z
+  .object({
+    description: z.string().optional(),
+    trustLevel: z.enum(["builtin", "community"]).optional(),
+  })
+  .strict();
+
+function hasWireShape(value: unknown, method: string): value is { id: string } {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).id === "string" &&
+    (value as Record<string, unknown>).id !== "" &&
+    typeof (value as Record<string, unknown>)[method] === "function"
+  );
+}
+
+function withCallSignal(
+  http: PluginAPI["http"],
+  signal: AbortSignal,
+): PluginAPI["http"] {
+  return {
+    validateBaseUrl: (url) => http.validateBaseUrl(url),
+    fetchWithRetry: (input, init) =>
+      http.fetchWithRetry(input, {
+        ...init,
+        signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
+      }),
+  };
+}
+
 /**
  * Run the plugin's `entry` module and collect the tools it registers.
  *
@@ -363,6 +399,7 @@ export async function loadEntryTools(
     staticPromptSegments,
     staticPromptVariants,
     contributions,
+    httpPermissions,
   } = await loadPluginEntryDefinition(
     discovery,
     definition.packageManifest,
@@ -392,6 +429,9 @@ export async function loadEntryTools(
     }));
   let hookSeq = 0;
   const heldHooks = draftHoldingHooks(contributions);
+  const registeredRpcActions = new Set<string>();
+  const registeredFormValidators = new Set<string>();
+  const registeredWires = new Set<string>();
   const scope = new PluginEntryScope();
   const registration = createExtensionRegistration(
     extensions,
@@ -402,9 +442,33 @@ export async function loadEntryTools(
     staticPromptSegments,
     staticPromptVariants,
   );
+  const http = enforceHttpPermissions(
+    { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
+    { httpPermissions, runtimeId: discovery.id },
+  );
+  // A service or extension provider's code sends its own requests, so it
+  // reaches what its own package declares, whoever calls it.
+  const ownUtils = <C extends { utils?: unknown; signal: AbortSignal }>(
+    context: C,
+  ): C =>
+    context.utils
+      ? { ...context, utils: withCallSignal(http, context.signal) }
+      : context;
   const covel: PluginAPI = {
     pluginId: discovery.id,
-    provideExtension: registration.provideExtension,
+    provideExtension(point, id, definition) {
+      registration.provideExtension(
+        point,
+        id,
+        definition && typeof definition.handler === "function"
+          ? {
+              ...definition,
+              handler: (input, context) =>
+                definition.handler(input, ownUtils(context)),
+            }
+          : definition,
+      );
+    },
     signal: scope.signal,
     onDispose(callback) {
       scope.onDispose(callback);
@@ -418,7 +482,7 @@ export async function loadEntryTools(
       ToolError,
       withPendingProposals,
     },
-    http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
+    http,
     registerTool(toolModule: ToolModule) {
       scope.stage(() => {
         scope.track(
@@ -437,13 +501,17 @@ export async function loadEntryTools(
         // handler cannot be called with either context directly.
         const handler = definition.handler as (
           input: unknown,
-          context: unknown,
+          context: Parameters<typeof ownUtils>[0],
         ) => unknown;
         scope.track(
           services.register(discovery.id, {
             ...definition,
-            handler: (input, context) =>
-              scope.invoke(() => handler(input, context)),
+            ...(typeof handler === "function"
+              ? {
+                  handler: (input, context) =>
+                    scope.invoke(() => handler(input, ownUtils(context))),
+                }
+              : {}),
           } as typeof definition),
         );
       });
@@ -488,17 +556,71 @@ export async function loadEntryTools(
         );
       });
     },
-    registerRpc(name) {
+    registerRpc(action, handler, options) {
       scope.stage(() => {
+        const parsedOptions = rpcOptionsSchema.safeParse(
+          options === undefined ? {} : options,
+        );
+        if (!parsedOptions.success) {
+          throw new Error(
+            `registerRpc: ${parsedOptions.error.issues
+              .map(
+                (issue) =>
+                  `${issue.path.join(".") || "options"}: ${issue.message}`,
+              )
+              .join("; ")}`,
+          );
+        }
+        if (
+          typeof action !== "string" ||
+          !action.trim() ||
+          typeof handler !== "function"
+        ) {
+          throw new Error(
+            "registerRpc: expected a non-empty action name and a handler function",
+          );
+        }
+        const parsedName = rpcActionNameSchema.safeParse(action);
+        if (!parsedName.success) {
+          throw new Error(
+            `registerRpc: ${parsedName.error.issues
+              .map((issue) => issue.message)
+              .join("; ")}`,
+          );
+        }
+        if (discovery.id === FRAMEWORK_PLUGIN_ID) {
+          throw new Error(
+            `[plugin-rpc] "${FRAMEWORK_PLUGIN_ID}" is reserved for framework actions`,
+          );
+        }
+        if (registeredRpcActions.has(action)) {
+          throw new Error(
+            `registerRpc: action "${action}" is already registered in this plugin`,
+          );
+        }
+        registeredRpcActions.add(action);
         unsupportedCapabilities.push({
           pluginId: discovery.id,
           kind: "rpc",
-          name,
+          name: action,
         });
       });
     },
-    registerFormValidator(name) {
+    registerFormValidator(name, validator) {
       scope.stage(() => {
+        if (
+          typeof name !== "string" ||
+          !name.trim() ||
+          typeof validator !== "function"
+        ) {
+          throw new Error(
+            "registerFormValidator: expected a name and validator function",
+          );
+        }
+        if (registeredFormValidators.has(name)) {
+          throw new Error(`Duplicate form validator: ${discovery.id}::${name}`);
+        }
+        registeredFormValidators.add(name);
         unsupportedCapabilities.push({
           pluginId: discovery.id,
           kind: "form-validator",
@@ -506,8 +628,68 @@ export async function loadEntryTools(
         });
       });
     },
-    registerWires() {
+    registerWires(wires) {
       scope.stage(() => {
+        if (!wires || typeof wires !== "object" || Array.isArray(wires)) {
+          throw new Error(
+            "registerWires: expected { image?, speech?, transcription?, music?, text? }",
+          );
+        }
+        const claimWire = (kind: string, wireId: string) => {
+          const namespacedId = `${discovery.id}/${wireId}`;
+          const key = `${kind}:${namespacedId}`;
+          if (registeredWires.has(key)) {
+            throw new Error(
+              `registerWires: wire "${namespacedId}" is already registered`,
+            );
+          }
+          registeredWires.add(key);
+        };
+        if (wires.text !== undefined && !Array.isArray(wires.text)) {
+          throw new Error("registerWires: text wires must be an array");
+        }
+        for (const wire of wires.text ?? []) {
+          const candidate: unknown = wire;
+          if (
+            !hasWireShape(candidate, "generateText") ||
+            typeof Reflect.get(candidate, "streamText") !== "function"
+          ) {
+            throw new Error(
+              "registerWires: expected { id: string, generateText: function, streamText: function }",
+            );
+          }
+          claimWire("text", candidate.id);
+        }
+        const groups: ReadonlyArray<{
+          readonly kind: string;
+          readonly wires: unknown;
+          readonly method: string;
+        }> = [
+          { kind: "image", wires: wires.image, method: "generate" },
+          { kind: "speech", wires: wires.speech, method: "synthesize" },
+          {
+            kind: "transcription",
+            wires: wires.transcription,
+            method: "transcribe",
+          },
+          { kind: "music", wires: wires.music, method: "compose" },
+        ];
+        for (const group of groups) {
+          if (group.wires !== undefined && !Array.isArray(group.wires)) {
+            throw new Error(
+              `registerWires: ${group.method} wires must be an array`,
+            );
+          }
+          for (const wire of (group.wires as readonly unknown[] | undefined) ??
+            []) {
+            if (!hasWireShape(wire, group.method)) {
+              throw new Error(
+                `registerWires: expected { id: string, ${group.method}: function }`,
+              );
+            }
+            claimWire(group.kind, wire.id);
+          }
+        }
         unsupportedCapabilities.push({
           pluginId: discovery.id,
           kind: "media-wire",

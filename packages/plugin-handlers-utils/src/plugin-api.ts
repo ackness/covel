@@ -7,7 +7,9 @@ import type {
   PluginExtensionApi,
 } from "./extension-points.js";
 import type { FunctionStoreView } from "./function-runtime.js";
-import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
+import type { JsonValue, PluginDataReader } from "./types.js";
+import type { PluginMediaRef } from "./media.js";
+import type { StoryCues, StorySegment, StoryYield } from "./story-output.js";
 import type { ToolError } from "./tool-error.js";
 import type { withModelView, withPendingProposals } from "./tool-result.js";
 import type { PluginMessageContext, PluginMessages } from "./messages.js";
@@ -85,7 +87,13 @@ export interface PluginHookOptions {
 
 /** A domain write produced by a tool and committed by the kernel. */
 export interface PluginProposalPayloads {
-  "narrative.append": { readonly content: string; readonly kind: string };
+  "narrative.append": {
+    readonly content: string;
+    readonly kind: string;
+    readonly segments?: readonly StorySegment[];
+    readonly cues?: StoryCues;
+    readonly yield?: StoryYield;
+  };
   "event.emit": {
     readonly topic: string;
     readonly data: Readonly<Record<string, unknown>>;
@@ -96,6 +104,7 @@ export interface PluginProposalPayloads {
     readonly title?: string;
     readonly data: Readonly<Record<string, unknown>>;
     readonly narrativeTemplate?: string;
+    readonly actionKind?: string;
   };
   "ui.render": {
     readonly parts: readonly {
@@ -109,7 +118,7 @@ export interface PluginProposalPayloads {
     readonly status?: "pending" | "streaming" | "success" | "error" | "paused";
   };
   "asset.generate": {
-    readonly ref: MediaReference;
+    readonly ref: PluginMediaRef;
     readonly modality: string;
     readonly meta?: Readonly<Record<string, unknown>>;
   };
@@ -714,8 +723,8 @@ export interface PluginRpcContext {
   readonly emit?: (event: { type: string; data: unknown }) => void;
   /**
    * Aborts when the action passes its time limit (30 seconds). The action has
-   * then already failed and released the session; `store` refuses every
-   * further call, and writes made before the limit are kept.
+   * then already failed and released the session; its read-only `store`
+   * refuses every further call (RPC handlers cannot write).
    */
   readonly signal?: AbortSignal;
 }

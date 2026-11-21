@@ -199,11 +199,18 @@ describe(`${PLUGIN_ID} package`, () => {
         "worldTime",
       ].sort(),
     );
+    expect(manifest.input?.inject).toContainEqual({
+      kind: "kernel",
+      from: "story-context@1",
+      name: "context",
+    });
     expect(manifest.tools.builtin).toEqual([
       "list-characters",
       "get-character",
       "memory-search",
       "emit-event",
+      "world-dimension-get",
+      "world-dimension-list",
       "delegate",
       "delegate-batch",
     ]);

@@ -7,8 +7,9 @@ reader-facing documentation, built into the documentation site by `apps/docs`
 ## Structure
 
 - Chapters follow the order a reader meets the product: `start/` (play),
-  `worlds/`, `plugins/`, `ship/`, `recipes/`, `reference/`, `internals/`.
-  Read `README.md` here before adding a page; it lists every page and its state.
+  `builtin/`, `worlds/`, `plugins/`, `ship/`, `recipes/`, `reference/`,
+  `internals/`. Read `README.md` here before adding a page; it lists every page
+  and its state.
 - A new page is added to the `sidebar` in `apps/docs/.vitepress/config.ts` and
   to the page list in `README.md`. `README.md`, `AGENTS.md` and `CLAUDE.md` are
   excluded from the site.
@@ -80,8 +81,8 @@ path, served under `/docs/en/`. It is a translation, never a second source:
 - Sample data that is Chinese on purpose (the sample world of the tutorials,
   the bundled Chinese worlds) stays Chinese in code blocks.
 - `en/reference/schema/` is generated together with `reference/schema/` by
-  `pnpm schemas:generate`. `en/changelog.md`, like
-  `changelog.md`, only includes `docs/CHANGELOG.md`.
+  `pnpm schemas:generate`. `en/releases.md`, like
+  `releases.md`, only includes `docs/CHANGELOG.md`.
 - The navigation labels of the English edition are the `EN` table in
   `apps/docs/.vitepress/config.ts`; a sidebar label without an entry there
   fails the build.

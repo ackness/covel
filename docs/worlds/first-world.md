@@ -89,7 +89,7 @@ defaultLocale: zh-CN
 
 在 `WORLD.md` 里说明这个世界怎样讲故事。例如雾港偏哥特调查，遥风学园偏细腻对白，末班地铁用朴实、务实的语言写出安静的危险，提灯古冢则像一位节奏利落的主持人。默认文体跟着世界走，不需要把所有世界改成同一种口吻。
 
-部分内置世界还把这些要求放在 `data/dimensions.yaml` 的 `tone.initialValue.narrativeStyle` 中；末班地铁则写在 `WORLD.md` 和 `data/rules/world-rules.yaml` 中。`tone` 和 `narrativeStyle` 是作者选的名字，不是内核专有字段；维度定义和可翻译文字的标记见[世界状态](../reference/world-data.md#动态世界状态dimensions)。角色自己的说话方式则写在档案或 `blueprint` 里，让职业、关系和眼下的处境影响措辞。
+部分内置世界还把这些要求放在 `data/dimensions.yaml` 的 `tone.initialValue.narrativeStyle` 中；末班地铁则写在 `WORLD.md` 和 `data/rules/world-rules.yaml` 中。`tone` 和 `narrativeStyle` 是作者选的名字，不是内核专有字段；维度定义和可翻译文字的标记见[世界状态](../reference/world-data.md#动态世界维度dimensions)。角色自己的说话方式则写在档案或 `blueprint` 里，让职业、关系和眼下的处境影响措辞。
 
 自然度与文体要一起检查：一个人物不该无缘无故知道秘密，手里的物件不能下一回合又回到桌上，初始记录也不能说玩家已经付钱或答应了尚未选择的事。中英文都要核对同一组事实。校验通过只说明包的结构合法，不能替代连续游玩和阅读。
 

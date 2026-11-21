@@ -54,13 +54,12 @@ const TRUNCATED_RULES_SEGMENT = "dimension-rules-truncated";
  * settles one model call later, so they are offered only when the rules
  * block lists truncated dimensions.
  */
-function trackerTools(ctx, payload) {
-  if (ctx.runtimeId !== "world-init/dimension-tracker" || !payload.tools)
+function trackerTools(pluginId, ctx, payload) {
+  if (ctx.runtimeId !== `${pluginId}/dimension-tracker` || !payload.tools)
     return { action: "continue" };
   const complete = payload.promptSegments?.some(
     (segment) =>
-      segment.pluginId === "world-init" &&
-      segment.id === COMPLETE_RULES_SEGMENT,
+      segment.pluginId === pluginId && segment.id === COMPLETE_RULES_SEGMENT,
   );
   if (!complete) return { action: "continue" };
   return {
@@ -78,8 +77,8 @@ export default function (covel) {
       return {
         schema: ctx.world.characterSchema ?? {},
         dimensionRecovery: {
-          editorRuntimeId: "world-init/edit-dimensions",
-          trackerRuntimeId: "world-init/dimension-tracker",
+          editorRuntimeId: `${covel.pluginId}/edit-dimensions`,
+          trackerRuntimeId: `${covel.pluginId}/dimension-tracker`,
         },
         dimensions: dimensionSnapshotFromRecords(
           Object.fromEntries(
@@ -214,7 +213,9 @@ export default function (covel) {
       ];
     },
   });
-  covel.on("PreLLMCall", trackerTools);
+  covel.on("PreLLMCall", (ctx, payload) =>
+    trackerTools(covel.pluginId, ctx, payload),
+  );
   covel.registerTool(makeDimensionRuleGet(covel.toolkit));
   covel.registerTool(makeInitializeWorld(covel.toolkit));
   covel.registerTool(makeUpdateDimensions(covel.toolkit));

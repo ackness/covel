@@ -1,8 +1,3 @@
-import {
-  getToolContent,
-  getPendingProposals,
-  withPendingProposals,
-} from "@covel/plugin-handlers-utils";
 /**
  * {{pluginName}} plugin tests
  */
@@ -11,16 +6,22 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { tool, z } from "@covel/tools";
+import { z } from "zod";
+import {
+  getPendingProposals,
+  getToolContent,
+  shortId,
+  tool,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
+import { makeRandom } from "@covel/plugin-test-utils";
 import createRecordNote from "../tools/record-note.js";
 
 const toolInstance = createRecordNote({
   tool,
   z,
+  shortId,
   withPendingProposals,
-  shortId: (prefix, label) =>
-    `${prefix}-${label.toLowerCase().replace(/\s+/g, "-")}`,
 });
 
 const ctx = {
@@ -43,17 +44,24 @@ describe("scaffold workspace layout", () => {
 
 describe("record-note tool", () => {
   it("records a note and attaches a plugin-data proposal", async () => {
+    const expectedKey = shortId(
+      "note",
+      "Opened vault",
+      ctx.sessionId,
+      makeRandom(1),
+    );
     const result = await toolInstance.execute(
       {
         title: "Opened vault",
         text: "The player opened the sealed vault and found a silver key.",
         tags: ["quest"],
       },
-      ctx,
+      { ...ctx, random: makeRandom(1) },
     );
 
     expect(getToolContent(result).recorded).toBe(true);
-    expect(getToolContent(result).key).toBe("note-opened-vault");
+    expect(getToolContent(result).key).toBe(expectedKey);
+    expect(expectedKey).toMatch(/^note-opened-vault-[0-9a-f]{8}$/);
 
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);
@@ -63,7 +71,7 @@ describe("record-note tool", () => {
       turnId: ctx.turnId,
       payload: {
         namespace: "notes",
-        key: "note-opened-vault",
+        key: expectedKey,
       },
     });
   });

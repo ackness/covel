@@ -11,17 +11,25 @@ type Hook = (
   replace?: { tools?: Array<{ name: string }> };
 };
 
-function trackerHook(): Hook {
+type ExtensionHandler = (input: unknown, ctx: unknown) => Promise<unknown>;
+
+function registerWorldInit(pluginId = "world-init") {
   const hooks: Record<string, Hook> = {};
+  const extensions = new Map<string, ExtensionHandler>();
   register({
-    provideExtension: () => {},
+    pluginId,
+    provideExtension: (
+      _point: string,
+      id: string,
+      { handler }: { handler: ExtensionHandler },
+    ) => extensions.set(id, handler),
     registerTool: () => {},
     toolkit,
     on: (event: string, handler: Hook) => {
       hooks[event] = handler;
     },
   });
-  return hooks.PreLLMCall!;
+  return { hooks, extensions };
 }
 
 const tools = [
@@ -41,7 +49,7 @@ const call = (...segmentIds: string[]) => ({
 });
 
 describe("dimension tracker tools", () => {
-  const hook = trackerHook();
+  const hook = registerWorldInit().hooks.PreLLMCall!;
 
   it("withholds the read tools when every rule is in the prompt", () => {
     const result = hook(tracker, call("dimension-rules", "dimension-values"));
@@ -80,22 +88,46 @@ describe("dimension tracker tools", () => {
       action: "continue",
     });
   });
+
+  it("derives runtime and plugin ids from covel.pluginId instead of hardcoding world-init", async () => {
+    const customPluginId = "custom-world-init";
+    const { hooks, extensions } = registerWorldInit(customPluginId);
+
+    const filtered = hooks.PreLLMCall!(
+      { runtimeId: `${customPluginId}/dimension-tracker` },
+      {
+        messages: [{ role: "system", content: "any text" }],
+        tools,
+        promptSegments: [{ pluginId: customPluginId, id: "dimension-rules" }],
+      },
+    );
+    expect(filtered.replace?.tools?.map((tool) => tool.name)).toEqual([
+      "update-dimensions",
+      "runtime-done",
+    ]);
+    expect(hooks.PreLLMCall!(tracker, call("dimension-rules"))).toEqual({
+      action: "continue",
+    });
+
+    const worldContext = (await extensions.get("world-context")!(
+      {},
+      { pluginData: { list: async () => [] }, world: {} },
+    )) as {
+      dimensionRecovery: { editorRuntimeId: string; trackerRuntimeId: string };
+    };
+    expect(worldContext.dimensionRecovery).toEqual({
+      editorRuntimeId: `${customPluginId}/edit-dimensions`,
+      trackerRuntimeId: `${customPluginId}/dimension-tracker`,
+    });
+  });
 });
 
 describe("dimension prompt segments", () => {
   type Segment = { content: string };
-  type Handler = (input: unknown, ctx: unknown) => Promise<Segment[]>;
-  const handlers = new Map<string, Handler>();
-  register({
-    provideExtension: (
-      _point: string,
-      id: string,
-      { handler }: { handler: Handler },
-    ) => handlers.set(id, handler),
-    registerTool: () => {},
-    toolkit,
-    on: () => {},
-  });
+  const handlers = registerWorldInit().extensions as Map<
+    string,
+    (input: unknown, ctx: unknown) => Promise<Segment[]>
+  >;
   const definition = {
     name: "Reputation",
     schema: { type: "integer", minimum: 0, maximum: 100 },

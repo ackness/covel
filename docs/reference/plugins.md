@@ -1172,7 +1172,7 @@ homepage: https://example.com/tidefall
 完整状态和接口见 [World Model](./world-model.md#回合时序与结算回执)和 [API](./api.md#维度编辑与待结算恢复)。
 
 > [!IMPORTANT]
-> **BREAKING CHANGE**：旧的九类 raw dimension 格式和旧副本读取已经移除。世界作者使用[统一 definition](./world-data.md#动态世界状态dimensions)；开发期的世界、会话和快照需要重建。维度不提供隐藏剧情的触发层，也不改变角色、背包、好感或时间由谁负责。
+> **BREAKING CHANGE**：旧的九类 raw dimension 格式和旧副本读取已经移除。世界作者使用[统一 definition](./world-data.md#动态世界维度dimensions)；开发期的世界、会话和快照需要重建。维度不提供隐藏剧情的触发层，也不改变角色、背包、好感或时间由谁负责。
 
 ### 世界数据导入
 

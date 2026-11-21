@@ -648,17 +648,15 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话管理
 
-| 方法   | 路径                                     | 描述                                                  |
-| ------ | ---------------------------------------- | ----------------------------------------------------- |
-| GET    | `/api/sessions`                          | 列出所有会话（可选 `?worldId=` 过滤）                 |
-| POST   | `/api/sessions`                          | 创建新会话                                            |
-| GET    | `/api/sessions/:id`                      | 获取会话信息                                          |
-| PATCH  | `/api/sessions/:id`                      | 更新会话字段（`status` / `runtimeModelOverrides`）    |
-| DELETE | `/api/sessions/:id`                      | 删除会话                                              |
-| GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型    |
-| POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                      |
-| PATCH  | `/api/sessions/:id/seats/:seatId`        | 切换座位当前扮演的角色，见[会话座位](#会话座位)       |
-| GET    | `/api/sessions/:id/action-kinds`         | 这局能提交的行动类型，见[行动类型目录](#行动类型目录) |
+| 方法   | 路径                                     | 描述                                               |
+| ------ | ---------------------------------------- | -------------------------------------------------- |
+| GET    | `/api/sessions`                          | 列出所有会话（可选 `?worldId=` 过滤）              |
+| POST   | `/api/sessions`                          | 创建新会话                                         |
+| GET    | `/api/sessions/:id`                      | 获取会话信息                                       |
+| PATCH  | `/api/sessions/:id`                      | 更新会话字段（`status` / `runtimeModelOverrides`） |
+| DELETE | `/api/sessions/:id`                      | 删除会话                                           |
+| GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型 |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                   |
 
 #### 会话身份 `incarnation`
 
@@ -1119,10 +1117,12 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | ------ | ----------------------------- | -------------------------------------------------------------------------- |
 | GET    | `/api/framework/capabilities` | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI              |
 | GET    | `/api/framework/authoring`    | 世界创作面：世界包文件、内置数据目标、各数据契约的创作说明与示例、插件目录 |
-| GET    | `/api/plugins`                | 列出 registry 中的插件及其注册 / 错误状态                                  |
+| GET    | `/api/plugins`                | 列出 registry 中的插件及其注册 / 错误状态（`PluginSummary`）               |
 | GET    | `/api/plugins/:id`            | 获取插件详情及完整的 manifest 开发契约                                     |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）                             |
 | GET    | `/api/plugin-flows`           | 开局前流程的预览数据（插件列表 + 分段步骤），供开局准备页展示              |
+
+`GET /api/plugins` 的数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
 
 `GET /api/plugin-flows` 的 `plugins` 和 `steps` 条目用 `kind`（`core` 或 `plugin`）表示插件类别，不返回 `pluginType`。
 
@@ -1574,7 +1574,6 @@ fork 和社区插件的授权：
 | 方法 | 路径 | 描述 |
 | --- | --- | --- |
 | GET | `/api/presets` | 列出配置的模型预设（`{ items }`） |
-| GET | `/api/plugins` | 列出插件（`PluginSummary`） |
 | GET | `/api/worlds/:id/plugin-plan` | 返回某个世界的插件方案 `WorldPluginPlan` |
 | GET | `/api/ui-specs?sessionId=<id>` | 列出插件的 UI 声明，按 slot 分组 |
 | GET | `/plugin-assets/:pluginId/:digest/*` | 公开、无需凭据的插件页面文件 |
@@ -1599,7 +1598,6 @@ fork 和社区插件的授权：
 
 各端点的补充说明：
 
-- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
 - `GET /api/worlds/:id/plugin-plan`：返回 `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`、按世界偏好排序的全部 `packs`、可选 `selectedPackId`、`defaultPluginIds` 和最多 256 条 `diagnostics`。
   - 只有第一个玩法包引用决定初始包。未知首包报告 `unknown-pack`，不自动选别的包；备选包不展开为默认请求。
   - 独立插件请求与选中包的请求构成 `defaultPluginIds`。提交的 ID 都已安装；`missing-plugin` 诊断带 `pluginId`、`path` 和可选 `packId`。其他诊断码为 `invalid-reference`、`redundant-reference`、`unknown-pack`，可带 `reference`。
@@ -5583,14 +5581,14 @@ interface SseEnvelope {
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                                                                             |
-| --------------- | ------ | ---- | -------------------------------------------------------------------------------- |
-| `concept`       | string | 是   | 世界概念描述（最多 4000 字符），使用 `concept` 键                                |
-| `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                                           |
+| 字段            | 类型   | 必填 | 说明                                                                                     |
+| --------------- | ------ | ---- | ---------------------------------------------------------------------------------------- |
+| `concept`       | string | 是   | 世界概念描述（最多 4000 字符），使用 `concept` 键                                        |
+| `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                                                   |
 | `model`         | string | 否   | 模型分工（slot）或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
-| `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                                       |
-| `brief`         | object | 否   | 结构化的创作简报。省略时只做基础生成                                             |
-| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒）。整数，1000–1800000，默认 120000              |
+| `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                                               |
+| `brief`         | object | 否   | 结构化的创作简报。省略时只做基础生成                                                     |
+| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒）。整数，1000–1800000，默认 120000                      |
 
 `idleTimeoutMs` 超出范围返回 `400`。应用自己的设置项从 15 秒起；接口允许低到 1 秒，方便测试超时路径。
 
@@ -5792,13 +5790,13 @@ Web 前端每次生成前先等 `/api/health` 成功，再根据 `storage.data.f
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                                                                             |
-| --------------- | ------ | ---- | -------------------------------------------------------------------------------- |
-| `worldId`       | string | 是   | 要修改的世界                                                                     |
-| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                       |
-| `world`         | object | 否   | 由浏览器保存的世界，随请求带上它的 `WorldRecord`                                 |
+| 字段            | 类型   | 必填 | 说明                                                                                     |
+| --------------- | ------ | ---- | ---------------------------------------------------------------------------------------- |
+| `worldId`       | string | 是   | 要修改的世界                                                                             |
+| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                               |
+| `world`         | object | 否   | 由浏览器保存的世界，随请求带上它的 `WorldRecord`                                         |
 | `model`         | string | 否   | 模型分工（slot）或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
-| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同           |
+| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同                   |
 
 关于 `world`：
 
@@ -6358,7 +6356,8 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 | `plugin.fault.latched` / `plugin.fault.cleared`                        | 宿主故障熔断                      |          是           | 插件暂停或清零时的固定玩家提示                                                                                            |
 | `plugin.fault.counted`                                                 | 宿主故障熔断                      |          否           | 插件自身故障计数，只进 trace                                                                                              |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（调试时间线用）                                                                                            |
-| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                                                                            |
+| `llm.calling` / `llm.responded`                                        | TurnEmitter                       |          是           | LLM 调用 trace                                                                                                            |
+| `message.completed`                                                    | TurnEmitter                       |          否           | 提交前已接受的计算结果 trace；只进订阅通道与 `trace_events`，不转发到 action stream                                       |
 | `block.emitted`                                                        | TurnEmitter                       |          是           | 块发出的 trace                                                                                                            |
 | `hook.fired` / `hook.aborted`                                          | TurnEmitter                       |          是           | Hook 行为 trace                                                                                                           |
 | `hook.rewrote`                                                         | TurnEmitter                       |          否           | Hook 内容改写的 trace；不转发到 action stream                                                                             |
@@ -6436,16 +6435,18 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 ### 官方网页版（还不支持）
 
 > [!NOTE]
-> 官方网页版现在还不支持。下面写的是它的设计，以及代码里已有的部分。`render.yaml` 只部署受运维令牌保护的演示服务，不提供公开登录或匿名创建会话的流程；不要把运维令牌发给访客来绕过限制。
+> 官方网页版现在还不支持。下面写的是它的设计，以及代码里已有的部分。仓库根目录的 `render.yaml` 部署的是公开的浏览器私有体验站（`DEPLOYMENT_TIER=self`、`NODE_ENV=production`、`STORE_BACKEND=memory`）：任何访客都可以创建会话、生成世界并测试自己的模型密钥，共享世界、社区插件服务端代码、诊断和服务端设置需要运维令牌（见[在 Render 上部署体验站](../start/deploy-render.md)）；切勿把运维令牌发给访客。与之相对，`DEPLOYMENT_TIER=demo` 是受运维令牌保护的托管演示档位，全局与管理端点（含创建会话与模型探测）都需要运维令牌，会话端点需要 owner token。
 
-- **服务器存储**: `DEPLOYMENT_TIER=demo`、`STORE_BACKEND=memory`（见仓库里的 `render.yaml`）。
+- **部署配置**:
+  - 公开浏览器私有体验站（`render.yaml`）：`DEPLOYMENT_TIER=self`、`NODE_ENV=production`、`STORE_BACKEND=memory`。
+  - 托管演示档位：`DEPLOYMENT_TIER=demo`，搭配 `STORE_BACKEND=memory` 可避免存档写入服务端数据库。
 - **存档**: 以玩家浏览器 IndexedDB 里的为准。服务器把会话放在内存里执行回合，不写进数据库；会话删除或服务器重启后，内存里的这份就没有了。
 - **API 密钥**: 存在浏览器里，每次请求通过 `X-Provider-Keys` 带来。服务器不把它写进存储；后台作业要用时，它在内存里等作业开始，默认最多等 5 分钟；声明了排队期限（`maxQueueMs`）的作业按那个期限等，作业运行期间也一直持有。
 - **认证**: **必需**。
-  - 启动时必须设置运维 token（`COVEL_DESKTOP_REST_TOKEN`）和媒体密钥（`COVEL_MEDIA_TOKEN_SECRET`），缺了服务器拒绝启动。
-  - 会话作用域的端点强制 session owner token；全局端点和管理端点强制运维 token。
-  - 详见上方[鉴权章节](#鉴权session-owner-token)。
-- **注意**: 存档不写进服务器的数据库，靠的是部署配置：`render.yaml` 把 `STORE_BACKEND` 设为 `memory`。`demo` 档位本身也接受 `sqlite` 和 `pg`。
+  - `DEPLOYMENT_TIER=demo` 启动时必须设置运维 token（`COVEL_DESKTOP_REST_TOKEN`）和媒体密钥（`COVEL_MEDIA_TOKEN_SECRET`），缺了服务器拒绝启动；会话作用域的端点强制 session owner token，全局端点和管理端点强制运维 token。
+  - `render.yaml` 的浏览器私有形态下，访问会话强制 session owner token，共享世界、社区插件服务端代码、诊断、服务端设置与文件等操作强制运维 token（`render.yaml` 自动生成运维 token 与媒体密钥）。
+  - 详见上方[鉴权章节](#鉴权session-owner-token)和[宿主配置](../internals/security.md#host-profile)。
+- **注意**: 存档不写进服务器的数据库，靠的是存储配置 `STORE_BACKEND=memory`（`render.yaml` 采用此设置）。`demo` 档位本身也接受 `sqlite` 和 `pg`。
 
 ### 商业版（未实现）
 

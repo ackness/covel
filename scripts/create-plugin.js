@@ -23,6 +23,7 @@
  *   node scripts/create-plugin.js my-plugin -t ~/.covel/plugins -r api-bridge:function
  */
 
+import { createHash } from "node:crypto";
 import {
   readFileSync,
   writeFileSync,
@@ -135,11 +136,18 @@ const hostVersion = JSON.parse(
   readFileSync(resolve(ROOT, "package.json"), "utf-8"),
 ).version;
 
+const pluginDescription = `${pluginName} plugin - replace with a short plugin description.`;
+const pluginDescriptionHash = createHash("sha256")
+  .update(pluginDescription.replace(/\s+/g, " ").trim())
+  .digest("hex")
+  .slice(0, 16);
+
 const placeholders = {
   "{{pluginName}}": pluginName,
   "{{hostRange}}": `>=${hostVersion}`,
   // Manifests are English; the Chinese text goes to locales/zh.yaml and README.
-  "{{pluginDescription}}": `${pluginName} plugin - replace with a short plugin description.`,
+  "{{pluginDescription}}": pluginDescription,
+  "{{pluginDescriptionHash}}": pluginDescriptionHash,
   "{{pluginDescriptionZh}}": `${pluginName} 插件 - 请在此填写插件描述。`,
 };
 
@@ -208,15 +216,18 @@ if (mode === "with-tools") {
   console.log(
     `  2. 编辑 ${relative(process.cwd(), targetDir)}/PLUGIN.md，填写 runtime 元信息和提示词`,
   );
-  console.log(`  3. 修改 tools/record-note.js，实现工具逻辑`);
+  console.log("  3. 修改 tools/record-note.js，实现工具逻辑");
   console.log(
-    "  4. 提示词定稿后新增 PLUGIN.zh.md（内置插件必须有简体中文提示词），再运行 pnpm prompts:lock",
+    "  4. 提示词定稿后新增 PLUGIN.zh.md（内置插件必须有简体中文提示词），再运行 pnpm prompts:lock；若修改了清单文案或译文，运行 pnpm i18n lock",
   );
   console.log(
-    `  5. 在 Covel 仓库根目录运行 pnpm --filter @covel/plugin-${pluginName} test`,
+    "  5. 在 Covel 仓库根目录运行 pnpm install，将新插件链接到根 workspace",
   );
   console.log(
-    `  6. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
+    `  6. 在 Covel 仓库根目录运行 pnpm --filter @covel/plugin-${pluginName} lint && pnpm --filter @covel/plugin-${pluginName} test`,
+  );
+  console.log(
+    `  7. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
   );
 } else {
   console.log(
@@ -418,23 +429,23 @@ function renderFunctionStubHandler(runtimeName) {
  * Replace the notes record below with your real plugin state.
  */
 
-const NOTES_NAMESPACE = 'notes';
+const NOTES_NAMESPACE = "notes";
 
 /** @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler} */
 export default async function ${camelize(runtimeName)}Handler(ctx) {
   const { pluginData, logger, manualPayload, turnId, random } = ctx;
 
-  if (!pluginData || typeof pluginData.set !== 'function') {
+  if (!pluginData || typeof pluginData.set !== "function") {
     return {
-      outcome: 'failed',
-      error: 'This handler requires plugin data writes.',
+      outcome: "failed",
+      error: "This handler requires plugin data writes.",
     };
   }
 
   const title =
-    typeof manualPayload?.title === 'string' && manualPayload.title.trim()
+    typeof manualPayload?.title === "string" && manualPayload.title.trim()
       ? manualPayload.title.trim()
-      : '${runtimeName} checkpoint';
+      : "${runtimeName} checkpoint";
   const now = new Date().toISOString();
   let key;
   do {
@@ -442,17 +453,17 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
   } while (await pluginData.get(NOTES_NAMESPACE, key));
   const note = {
     id: key,
-    kind: 'function',
+    kind: "function",
     title,
-    text: 'Replace this with deterministic plugin logic.',
+    text: "Replace this with deterministic plugin logic.",
     turnId,
     createdAt: now,
   };
 
   await pluginData.set(NOTES_NAMESPACE, key, note);
-  await logger?.info?.('${runtimeName}.recorded', { key, title });
+  await logger?.info?.("${runtimeName}.recorded", { key, title });
 
-  return { outcome: 'success', value: { note } };
+  return { outcome: "success", value: { note } };
 }
 `;
 }
@@ -527,7 +538,7 @@ function renderCustomReadme(runtimes) {
 
 ${placeholders["{{pluginDescriptionZh}}"]}
 
-版本只在根清单中从 0.1.0 开始；package.json 不写版本。用例文件带编辑器用的 $schema；name 和 runtimeId 必填，未知字段会在执行前报错。
+版本只在根清单 PLUGIN.md 中从 0.1.0 开始；这个独立插件无需 package.json。用例文件带编辑器用的 $schema；name 和 runtimeId 必填，未知字段会在执行前报错。
 
 ## Runtime
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { selectTests } from "../lib/push-scope.mjs";
+import { matcher, selectTests } from "../lib/push-scope.mjs";
 import { isDocsOnly } from "../lib/change-scope.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -157,4 +157,130 @@ test("browser controls need local static and collection checks, and full source 
     );
     assert.equal(isDocsOnly([file]), false, file);
   }
+});
+
+test("matcher handles unclosed braces literally without hanging and expands wildcards inside braces", () => {
+  const unclosed = matcher(["src/{foo", "src/{a,{b}"]);
+  assert.equal(unclosed("src/{foo"), true);
+  assert.equal(unclosed("src/foo"), false);
+  assert.equal(unclosed("src/{a,b"), true);
+
+  const wildcardsInBraces = matcher([
+    "plugins/*/{*.json,runtimes/*/ui/*.json}",
+    "docs/{*.md,en/**/*.md}",
+    "nested/{a,{b,c}}.ts",
+  ]);
+  assert.equal(wildcardsInBraces("plugins/demo/panel.json"), true);
+  assert.equal(
+    wildcardsInBraces("plugins/demo/runtimes/r1/ui/panel.json"),
+    true,
+  );
+  assert.equal(wildcardsInBraces("plugins/demo/sub/panel.json"), false);
+  assert.equal(wildcardsInBraces("docs/README.md"), true);
+  assert.equal(wildcardsInBraces("docs/en/guide.md"), true);
+  assert.equal(wildcardsInBraces("docs/en/sub/guide.md"), true);
+  assert.equal(wildcardsInBraces("docs/zh/guide.md"), false);
+  assert.equal(wildcardsInBraces("nested/a.ts"), true);
+  assert.equal(wildcardsInBraces("nested/b.ts"), true);
+  assert.equal(wildcardsInBraces("nested/c.ts"), true);
+  assert.equal(wildcardsInBraces("nested/d.ts"), false);
+});
+
+test("negated $TURBO_ROOT$ inputs exclude matching files without negating workspace files", () => {
+  const customPackages = [
+    { dir: "packages/reader", name: "@covel/reader" },
+    { dir: "packages/other", name: "@covel/other" },
+  ];
+  const customTurbo = {
+    globalDependencies: ["tsconfig.json"],
+    tasks: {
+      test: {
+        inputs: [
+          "$TURBO_DEFAULT$",
+          "$TURBO_ROOT$/shared/**",
+          "!$TURBO_ROOT$/shared/ignored.txt",
+          "!$TURBO_ROOT$/package.json",
+        ],
+      },
+      "@covel/reader#test": {
+        inputs: [
+          "$TURBO_DEFAULT$",
+          "$TURBO_ROOT$/assets/**",
+          "!$TURBO_ROOT$/assets/drafts/**",
+        ],
+      },
+      "@covel/other#test": {
+        inputs: ["$TURBO_DEFAULT$", "!$TURBO_ROOT$/assets/**"],
+      },
+    },
+  };
+
+  assert.deepEqual(
+    selectTests({
+      files: ["assets/live/data.json"],
+      packages: customPackages,
+      turbo: customTurbo,
+    }),
+    { full: false, filters: ["@covel/reader"], docs: false },
+  );
+
+  // Negated by @covel/reader#test: no package claims assets/drafts/wip.json,
+  // so selectTests falls back to full rather than falsely selecting @covel/reader.
+  const excludedAsset = selectTests({
+    files: ["assets/drafts/wip.json"],
+    packages: customPackages,
+    turbo: customTurbo,
+  });
+  assert.equal(excludedAsset.full, true);
+  assert.match(excludedAsset.reason, /outside every package/);
+
+  // Negated inside a covered-without-tests path (scripts/**) selects no suite.
+  const excludedInCovered = selectTests({
+    files: ["scripts/ignored.mjs"],
+    packages: customPackages,
+    turbo: {
+      tasks: {
+        test: { inputs: ["$TURBO_DEFAULT$"] },
+        "@covel/reader#test": {
+          inputs: [
+            "$TURBO_DEFAULT$",
+            "$TURBO_ROOT$/scripts/**",
+            "!$TURBO_ROOT$/scripts/ignored.mjs",
+          ],
+        },
+      },
+    },
+  });
+  assert.deepEqual(excludedInCovered, {
+    full: false,
+    filters: [],
+    docs: false,
+  });
+
+  // Base test task root inputs respect their own exclusions, while WORKSPACE_FILES
+  // cannot be negated by a task input.
+  assert.equal(
+    selectTests({
+      files: ["shared/active.txt"],
+      packages: customPackages,
+      turbo: customTurbo,
+    }).reason,
+    "shared/active.txt configures every package",
+  );
+  assert.match(
+    selectTests({
+      files: ["shared/ignored.txt"],
+      packages: customPackages,
+      turbo: customTurbo,
+    }).reason,
+    /outside every package/,
+  );
+  assert.equal(
+    selectTests({
+      files: ["package.json"],
+      packages: customPackages,
+      turbo: customTurbo,
+    }).reason,
+    "package.json configures every package",
+  );
 });

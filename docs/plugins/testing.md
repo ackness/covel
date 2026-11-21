@@ -106,9 +106,10 @@ import { expect, it } from "vitest";
 import {
   getPendingProposals,
   getToolContent,
+  tool,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { tool, z } from "@covel/tools";
+import { z } from "zod";
 import makeSaveNote from "../tools/save-note.js";
 
 const saveNote = makeSaveNote({ tool, z, withPendingProposals });

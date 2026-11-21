@@ -15,6 +15,8 @@ import type {
   PluginExtensionContext,
   PluginExtensionDefinition,
   Proposal,
+  ProposalPayloadMap,
+  ProposalType,
   RecursiveCallDelta,
   RuntimeActivation,
   RuntimeStatus,
@@ -42,6 +44,7 @@ import type {
   PluginEntryFactory as PublicPluginEntryFactory,
   HookEventName as PublicHookEventName,
   PluginProposal,
+  PluginProposalPayloads,
 } from "@covel/plugin-handlers-utils/plugin-api";
 import type { HookEventName } from "@covel/shared";
 import type {
@@ -83,6 +86,7 @@ import type {
 import type { HandlerResult } from "@covel/shared";
 
 type Assert<T extends true> = T;
+type AssertAllTrue<T extends Record<string, true>> = T;
 // Tuple-wrapped operands keep unions intact instead of distributing.
 type MutuallyAssignable<A, B> = [A] extends [B]
   ? [B] extends [A]
@@ -239,6 +243,21 @@ type _SameHookEvents = Assert<
   MutuallyAssignable<HookEventName, PublicHookEventName>
 >;
 type _SameProposals = Assert<MutuallyAssignable<Proposal, PluginProposal>>;
+type _SameProposalTypes = Assert<
+  SameKeys<ProposalPayloadMap, PluginProposalPayloads>
+>;
+type _SameProposalPayloadKeys = AssertAllTrue<{
+  [K in ProposalType]: SameKeys<
+    ProposalPayloadMap[K],
+    PluginProposalPayloads[K]
+  >;
+}>;
+type _SameAssetGenerateRefKeys = Assert<
+  SameKeys<
+    ProposalPayloadMap["asset.generate"]["ref"],
+    PluginProposalPayloads["asset.generate"]["ref"]
+  >
+>;
 type _SameStore = Assert<
   MutuallyAssignable<FunctionStoreView, PublicFunctionStoreView>
 >;

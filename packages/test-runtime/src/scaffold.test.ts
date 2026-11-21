@@ -11,7 +11,10 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { validatePluginLabels } from "@covel/plugin-loader";
+import {
+  pluginTranslationStatus,
+  validatePluginLabels,
+} from "@covel/plugin-loader";
 import { MockLLM } from "@covel/plugin-test-utils";
 import { createMemoryStore } from "@covel/store/memory";
 import { createToolExecutor, executeTurn } from "@covel/runtime";
@@ -283,18 +286,85 @@ describe("plugin scaffolding", () => {
           await expect(
             readFile(path.join(pluginRoot, "package.json"), "utf8"),
           ).rejects.toThrow();
+          if (mode === "custom") {
+            expect(
+              await readFile(path.join(pluginRoot, "README.md"), "utf8"),
+            ).not.toContain("package.json 不写版本");
+            const stubHandler = await readFile(
+              path.join(pluginRoot, "runtimes/recorder/handler.js"),
+              "utf8",
+            );
+            expect(stubHandler).not.toContain("'notes'");
+            expect(stubHandler).toContain('"notes"');
+          }
         } else {
-          // A workspace member: package.json names no version of its own.
+          // A workspace member: package.json names no version of its own and
+          // relies only on the public author SDK and test utils.
           const manifest = JSON.parse(
             await readFile(path.join(pluginRoot, "package.json"), "utf8"),
-          );
+          ) as {
+            version?: string;
+            devDependencies?: Record<string, string>;
+          };
           expect(manifest.version).toBeUndefined();
+          expect(manifest.devDependencies?.["@covel/tools"]).toBeUndefined();
+          expect(manifest.devDependencies?.["@covel/plugin-test-utils"]).toBe(
+            "workspace:*",
+          );
+          expect(created.stdout).toContain("pnpm install");
+
+          // Bundled-plugin i18n lock must pass right after scaffolding.
+          const i18nStatus = await pluginTranslationStatus(pluginRoot, "zh");
+          expect(i18nStatus.labels.missing).toEqual([]);
+          expect(i18nStatus.labels.stale).toEqual([]);
+          expect(i18nStatus.labels.unlocked).toEqual([]);
+          expect(i18nStatus.messages.missing).toEqual([]);
+
+          // Inherit shared Vitest defaults rather than exporting an empty config.
+          const vitestConfig = await readFile(
+            path.join(pluginRoot, "vitest.config.ts"),
+            "utf8",
+          );
+          expect(vitestConfig).not.toMatch(/export\s+default\s*\{\s*\}\s*;/);
+
+          await cp(
+            path.join(repoRoot, "pnpm-workspace.yaml"),
+            path.join(root, "pnpm-workspace.yaml"),
+          );
+          await symlink(
+            path.join(repoRoot, "vitest.base.ts"),
+            path.join(root, "vitest.base.ts"),
+            "file",
+          );
+          await symlink(
+            path.join(repoRoot, "packages"),
+            path.join(root, "packages"),
+            "dir",
+          );
           await mkdir(path.join(pluginRoot, "node_modules/@covel"), {
             recursive: true,
           });
           await symlink(
             path.join(repoRoot, "packages/plugin-handlers-utils"),
             path.join(pluginRoot, "node_modules/@covel/plugin-handlers-utils"),
+            "dir",
+          );
+          await symlink(
+            path.join(repoRoot, "packages/plugin-test-utils"),
+            path.join(pluginRoot, "node_modules/@covel/plugin-test-utils"),
+            "dir",
+          );
+          await symlink(
+            path.join(repoRoot, "packages/test-runtime/node_modules/vitest"),
+            path.join(pluginRoot, "node_modules/vitest"),
+            "dir",
+          );
+          await symlink(
+            path.join(
+              repoRoot,
+              "packages/plugin-handlers-utils/node_modules/zod",
+            ),
+            path.join(pluginRoot, "node_modules/zod"),
             "dir",
           );
           const compiler = path.join(
@@ -317,6 +387,24 @@ describe("plugin scaffolding", () => {
           expect(rejected.status).not.toBe(0);
           expect(rejected.stdout).toContain("missingTitle");
           await writeFile(handlerPath, handlerSource, "utf8");
+
+          // The generated unit test must actually execute and pass under Vitest.
+          const vitestBin = path.join(
+            repoRoot,
+            "packages/test-runtime/node_modules/vitest/vitest.mjs",
+          );
+          const reportPath = path.join(root, "vitest-report.json");
+          const unitTest = await runNode(
+            [vitestBin, "run", "--reporter=json", `--outputFile=${reportPath}`],
+            { signal, cwd: pluginRoot },
+          );
+          expect(unitTest.status, unitTest.stdout + unitTest.stderr).toBe(0);
+          const reportJson = JSON.parse(await readFile(reportPath, "utf8")) as {
+            numPassedTests: number;
+            numFailedTests: number;
+          };
+          expect(reportJson.numFailedTests).toBe(0);
+          expect(reportJson.numPassedTests).toBeGreaterThanOrEqual(2);
         }
         const report = await runRuntimeCases({
           pluginId,
