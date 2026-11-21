@@ -401,6 +401,18 @@ export function createEventBus(
     return state;
   }
 
+  function refreshSessionLru(
+    sessionId: string,
+    state: SessionState,
+    now = Date.now(),
+  ): void {
+    state.lastTouchedMs = now;
+    if (sessions.get(sessionId) === state) {
+      sessions.delete(sessionId);
+      sessions.set(sessionId, state);
+    }
+  }
+
   function broadcast(event: SubscriptionEvent): void {
     for (const cb of emitCallbacks) {
       try {
@@ -418,12 +430,23 @@ export function createEventBus(
     reason: EventBusReset["reason"] = "transport-gap",
     announce = true,
   ): void {
-    const state = touchSession(sessionId);
-    state.seq = 0;
-    state.transportSeq = 0;
-    state.epoch = nextEpoch();
-    state.buffer = new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX);
-    state.replayFloor = 0;
+    const state = sessions.get(sessionId);
+    if (state) {
+      const now = Date.now();
+      if (
+        state.pinCount === 0 &&
+        now - state.lastTouchedMs > SESSION_IDLE_TTL_MS
+      ) {
+        sessions.delete(sessionId);
+      } else {
+        state.seq = 0;
+        state.transportSeq = 0;
+        state.epoch = nextEpoch();
+        state.buffer = new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX);
+        state.replayFloor = 0;
+        refreshSessionLru(sessionId, state, now);
+      }
+    }
     if (announce) broadcastReset({ sessionId, reason });
   }
 
@@ -894,9 +917,7 @@ export function createEventBus(
         };
       }
       // Refresh LRU position: a replaying session is an active one.
-      state.lastTouchedMs = Date.now();
-      sessions.delete(sessionId);
-      sessions.set(sessionId, state);
+      refreshSessionLru(sessionId, state);
       const retained = state.buffer.toArray();
       const latestSeq = state.seq;
       const eventSeq = (event: SubscriptionEvent) =>
@@ -921,8 +942,9 @@ export function createEventBus(
           if (released) return;
           released = true;
           state.pinCount -= 1;
-          // Restart the idle clock so an unpinned session isn't swept instantly.
-          state.lastTouchedMs = Date.now();
+          // Restart the idle clock and move to the LRU tail so Map order stays
+          // monotonic by lastTouchedMs and the lazy TTL sweep does not stall.
+          refreshSessionLru(sessionId, state);
         },
       };
     },

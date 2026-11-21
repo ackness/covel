@@ -30,16 +30,33 @@ interface CredentialEntry {
   readonly timer: ReturnType<typeof setTimeout>;
 }
 
+/** Upper bound on in-memory credential retention for queued jobs. */
+export const MAX_CREDENTIAL_TTL_MS = 30 * 60_000;
+/** Default ceiling on concurrently retained in-memory credential handoffs. */
+export const DEFAULT_MAX_CREDENTIAL_ENTRIES = 1_024;
+
 /** A bounded in-process handoff; no session-wide credentials or storage writes. */
 export function createRuntimeJobCredentials(
   options: {
     readonly defaultTtlMs?: number;
+    readonly maxTtlMs?: number;
+    readonly maxEntries?: number;
     readonly now?: () => number;
   } = {},
 ) {
-  const defaultTtlMs = options.defaultTtlMs ?? 300_000;
-  if (!Number.isFinite(defaultTtlMs) || defaultTtlMs <= 0) {
+  const rawMaxTtlMs = options.maxTtlMs ?? MAX_CREDENTIAL_TTL_MS;
+  if (!Number.isFinite(rawMaxTtlMs) || rawMaxTtlMs <= 0) {
+    throw new RangeError("credential maxTtlMs must be positive");
+  }
+  const maxTtlMs = Math.min(rawMaxTtlMs, MAX_CREDENTIAL_TTL_MS);
+  const rawDefaultTtlMs = options.defaultTtlMs ?? 300_000;
+  if (!Number.isFinite(rawDefaultTtlMs) || rawDefaultTtlMs <= 0) {
     throw new RangeError("credential defaultTtlMs must be positive");
+  }
+  const defaultTtlMs = Math.min(rawDefaultTtlMs, maxTtlMs);
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_CREDENTIAL_ENTRIES;
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
+    throw new RangeError("credential maxEntries must be a positive integer");
   }
   const now = options.now ?? Date.now;
   const entries = new Map<string, CredentialEntry>();
@@ -67,16 +84,22 @@ export function createRuntimeJobCredentials(
       if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
         throw new RangeError("credential ttlMs must be positive");
       }
+      const effectiveTtlMs = Math.min(ttlMs, maxTtlMs);
       prune();
       const existing = entries.get(key.jobId);
       // Neither another request nor a replaced session may overwrite a handoff.
       if (existing) return;
-      const timer = setTimeout(() => remove(key.jobId), ttlMs);
+      while (entries.size >= maxEntries) {
+        const oldestId = entries.keys().next().value;
+        if (oldestId === undefined) break;
+        remove(oldestId);
+      }
+      const timer = setTimeout(() => remove(key.jobId), effectiveTtlMs);
       timer.unref?.();
       entries.set(key.jobId, {
         key: { ...key },
         services,
-        expiresAt: now() + ttlMs,
+        expiresAt: now() + effectiveTtlMs,
         timer,
       });
     },

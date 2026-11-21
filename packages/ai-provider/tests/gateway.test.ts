@@ -724,4 +724,83 @@ describe("gateway slot tag fallback", () => {
 
     warn.mockRestore();
   });
+
+  it("releases the LLM concurrency slot, slot overlay, and request scope before yielding done", async () => {
+    const { setLLMSlotCapForTests } = await import("@covel/shared");
+    setLLMSlotCapForTests(1);
+    try {
+      const stubAdapter = createStubAdapter();
+      const providerRegistry = createProviderRegistry({
+        providers: {
+          test: {
+            adapter: stubAdapter,
+            defaults: { baseUrl: "https://test.api" },
+          },
+        },
+      });
+      const presetRegistry = createPresetRegistry({ profiles, presets });
+      const removePreset = vi.spyOn(presetRegistry, "removePreset");
+      const gateway = createGateway({ providerRegistry, presetRegistry });
+
+      const iterator = gateway
+        .streamText(
+          { messages: [{ role: "user", content: "first" }] },
+          {
+            slotOverrides: {
+              customPresets: [
+                {
+                  id: "ephemeral-custom",
+                  name: "Ephemeral",
+                  provider: "test",
+                  model: "test-model",
+                },
+              ],
+            },
+          },
+        )
+        [Symbol.asyncIterator]();
+
+      // Advance until `done` is yielded, then intentionally pause WITHOUT
+      // calling iterator.next() again or iterator.return().
+      let doneEvent: StreamEvent | undefined;
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done) break;
+        if (next.value.type === "done") {
+          doneEvent = next.value;
+          break;
+        }
+      }
+      expect(doneEvent?.type).toBe("done");
+
+      // Slot overlay must already have been cleaned up before consumer handles `done`.
+      expect(removePreset).toHaveBeenCalledOnce();
+
+      // With cap=1, a second concurrent LLM call MUST acquire the slot
+      // immediately while the first streamText iterator is still paused on `done`.
+      const second = await Promise.race([
+        gateway.generateText({
+          messages: [{ role: "user", content: "second" }],
+        }),
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "LLM concurrency slot was still held after streamText yielded done",
+                ),
+              ),
+            200,
+          ),
+        ),
+      ]);
+      expect(second.text).toBe("stub response");
+
+      // Closing the abandoned iterator afterward stays idempotent.
+      await iterator.return?.();
+      expect(removePreset).toHaveBeenCalledOnce();
+    } finally {
+      setLLMSlotCapForTests(undefined);
+    }
+  });
 });

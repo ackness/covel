@@ -245,16 +245,16 @@ export function scheduleTriggeredRuntimes(args: {
   const { manualTarget, triggered, isPreGamePending } = args;
 
   if (args.manualTargets) {
-    // Recovery keeps stage barriers and each stage's dependency DAG. An
-    // unstaged manual runtime remains runnable after the staged targets.
-    return scheduleMainLoopByStage(args.manualTargets, [
-      ...STAGE_ORDER,
-      undefined,
-    ]);
+    // Recovery keeps stage barriers and each stage's dependency DAG while
+    // respecting PreSchedule filtering applied to `triggered`. An unstaged
+    // manual runtime remains runnable after the staged targets.
+    return scheduleMainLoopByStage(triggered, [...STAGE_ORDER, undefined]);
   }
 
   if (manualTarget) {
-    return { groups: [{ runtimes: [manualTarget] }], cyclic: [] };
+    return triggered.some((rt) => rt.name === manualTarget.name)
+      ? { groups: [{ runtimes: [manualTarget] }], cyclic: [] }
+      : { groups: [], cyclic: [] };
   }
 
   // Setup band (`phase: setup`): the `stage === "setup"` runtimes, ordered

@@ -54,6 +54,7 @@ import type { DataStore } from "@covel/store";
 import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
+import { SESSION_DELETION_PENDING_KEY } from "../session/session-guard.js";
 
 // `PluginAPI` / `PluginToolkit` (and the related option types) are the
 // Public Plugin API — they live in @covel/runtime so plugin authors can
@@ -101,6 +102,23 @@ export interface BootstrapPluginEntriesParams {
 
 const DEFAULT_ENTRY_ACTIVATION_TIMEOUT_MS = 15_000;
 const DEFAULT_ENTRY_RETRY_DELAY_MS = 30_000;
+const MAX_SNAPSHOT_CAPTURE_ATTEMPTS = 8;
+const MAX_IN_FLIGHT_REVOCATION_RETRIES = 4;
+
+class PluginEntryApprovalRevokedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PluginEntryApprovalRevokedError";
+  }
+}
+
+function isApprovalRevokedError(error: unknown): boolean {
+  return (
+    error instanceof PluginEntryApprovalRevokedError ||
+    (error instanceof Error &&
+      error.cause instanceof PluginEntryApprovalRevokedError)
+  );
+}
 
 export interface BootstrapPluginEntries {
   withSnapshot<T>(
@@ -112,6 +130,8 @@ export interface BootstrapPluginEntries {
     pluginId: string,
     sessionId?: string,
   ): Promise<{ pluginId: string; generation: string }>;
+  /** Remove a deleted or ended session from tracked approval references. */
+  clearSession(sessionId: string): void;
   watch(): void;
   /** Stop activation, await in-flight factories/approval checks, then unregister owned capabilities. */
   close(): Promise<void>;
@@ -262,19 +282,48 @@ export async function createBootstrapPluginEntries(
     }
   }
 
-  const canActivate = async (
+  const isServerCodeApprovedAny = async (
+    pluginId: string,
+    sessions: Iterable<string | undefined>,
+  ): Promise<boolean> => {
+    if (
+      getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source).autoLoad
+    ) {
+      return true;
+    }
+    for (const sid of sessions) {
+      if (await isCommunityServerCodeApproved?.(sid, pluginId)) return true;
+    }
+    return false;
+  };
+
+  const canActivateAny = async (
+    pluginId: string,
+    sessions: Iterable<string | undefined>,
+  ): Promise<boolean> => {
+    if (
+      getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source)
+        .autoLoad ||
+      (await params.isDeclarativePackage?.(pluginId))
+    ) {
+      return true;
+    }
+    for (const sid of sessions) {
+      if (await isCommunityServerCodeApproved?.(sid, pluginId)) return true;
+    }
+    return false;
+  };
+
+  const canActivate = (
     pluginId: string,
     sessionId?: string,
-  ): Promise<boolean> =>
-    getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source).autoLoad ||
-    Boolean(await params.isDeclarativePackage?.(pluginId)) ||
-    Boolean(await isCommunityServerCodeApproved?.(sessionId, pluginId));
+  ): Promise<boolean> => canActivateAny(pluginId, [sessionId]);
 
   const prepareEntry = async (
     pluginId: string,
     definition: PluginEntryDefinition,
     generation?: string,
-    sessionId?: string,
+    sessions: Iterable<string | undefined> = [undefined],
   ): Promise<PluginEntryScope> => {
     const batch = new PluginEntryScope();
     scopes.add(batch);
@@ -317,12 +366,8 @@ export async function createBootstrapPluginEntries(
           if (!fsSync.existsSync(fullPath)) {
             throw new Error(`entry file not found: ${entryPath}`);
           }
-          if (
-            !getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source)
-              .autoLoad &&
-            !(await isCommunityServerCodeApproved?.(sessionId, pluginId))
-          )
-            throw new Error(
+          if (!(await isServerCodeApprovedAny(pluginId, sessions)))
+            throw new PluginEntryApprovalRevokedError(
               "Plugin module import requires server-code authorization",
             );
           batch.signal.throwIfAborted();
@@ -388,20 +433,22 @@ export async function createBootstrapPluginEntries(
 
   const invokeEntryForPlugin = async (
     pluginId: string,
-    sessionId?: string,
+    sessions: Iterable<string | undefined> = [undefined],
   ): Promise<void> => {
     try {
-      await publishEntryForPlugin(pluginId, sessionId);
+      await publishEntryForPlugin(pluginId, sessions);
       failedAt.delete(pluginId);
     } catch (error) {
-      failedAt.set(pluginId, Date.now());
+      if (!isApprovalRevokedError(error)) {
+        failedAt.set(pluginId, Date.now());
+      }
       throw error;
     }
   };
 
   const publishEntryForPlugin = async (
     pluginId: string,
-    sessionId?: string,
+    sessions: Iterable<string | undefined> = [undefined],
   ): Promise<void> => {
     const definition = entryDefinitions.get(pluginId);
     if (!definition) return;
@@ -411,18 +458,21 @@ export async function createBootstrapPluginEntries(
       pluginId,
       definition,
       generation,
-      sessionId,
+      sessions,
     );
     try {
       await serialize(async () => {
         if (closed) throw new Error("plugin entries are closed");
-        if (
-          entryDefinitions.get(pluginId) !== definition ||
-          !(await canActivate(pluginId, sessionId))
-        )
+        if (entryDefinitions.get(pluginId) !== definition) {
           throw new Error(
             "Plugin entry approval was revoked before publication",
           );
+        }
+        if (!(await canActivateAny(pluginId, sessions))) {
+          throw new PluginEntryApprovalRevokedError(
+            "Plugin entry approval was revoked before publication",
+          );
+        }
         if (closed) throw new Error("plugin entries are closed");
         try {
           batch.commit();
@@ -456,7 +506,13 @@ export async function createBootstrapPluginEntries(
   };
 
   const invokedPluginIds = new Set<string>();
-  const inFlight = new Map<string, Promise<void>>();
+  const inFlight = new Map<
+    string,
+    {
+      readonly waiters: Set<string | undefined>;
+      readonly promise: Promise<void>;
+    }
+  >();
 
   // Builtin entries run at bootstrap so their capabilities are
   // available from the first turn.
@@ -479,39 +535,90 @@ export async function createBootstrapPluginEntries(
   ): Promise<void> => {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return;
-    if (!(await canActivate(pluginId, sessionId))) {
-      throw new Error(
-        `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
-      );
-    }
-    if (closed) throw new Error("plugin entries are closed");
-    if (sessionId) {
-      const sessions = approvalSessions.get(pluginId) ?? new Set<string>();
-      sessions.add(sessionId);
-      approvalSessions.set(pluginId, sessions);
-    }
-    if (invokedPluginIds.has(pluginId)) return;
-    const pending = inFlight.get(pluginId);
-    if (pending) return pending;
-    const result = serializePlugin(pluginId, async () => {
-      try {
-        if (closed) throw new Error("plugin entries are closed");
-        if (!(await canActivate(pluginId, sessionId)))
-          throw new Error(
-            "Plugin entry approval was revoked before activation",
-          );
-        if (closed) throw new Error("plugin entries are closed");
-        // A reload can publish while this first activation is queued.
-        if (!invokedPluginIds.has(pluginId)) {
-          await invokeEntryForPlugin(pluginId, sessionId);
-          invokedPluginIds.add(pluginId);
-        }
-      } finally {
-        inFlight.delete(pluginId);
+    for (
+      let attempt = 0;
+      attempt < MAX_IN_FLIGHT_REVOCATION_RETRIES;
+      attempt++
+    ) {
+      if (!(await canActivate(pluginId, sessionId))) {
+        throw new Error(
+          `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
+        );
       }
-    });
-    inFlight.set(pluginId, result);
-    return result;
+      if (closed) throw new Error("plugin entries are closed");
+      if (sessionId) {
+        const sessions = approvalSessions.get(pluginId) ?? new Set<string>();
+        sessions.add(sessionId);
+        approvalSessions.set(pluginId, sessions);
+      }
+      if (invokedPluginIds.has(pluginId)) return;
+
+      let active = inFlight.get(pluginId);
+      const joinedExisting = active !== undefined;
+      if (active) {
+        active.waiters.add(sessionId);
+      } else {
+        const waiters = new Set<string | undefined>([sessionId]);
+        const promise = serializePlugin(pluginId, async () => {
+          try {
+            if (closed) throw new Error("plugin entries are closed");
+            if (!(await canActivateAny(pluginId, waiters))) {
+              throw new PluginEntryApprovalRevokedError(
+                "Plugin entry approval was revoked before activation",
+              );
+            }
+            if (closed) throw new Error("plugin entries are closed");
+            // A reload can publish while this first activation is queued.
+            if (!invokedPluginIds.has(pluginId)) {
+              await invokeEntryForPlugin(pluginId, waiters);
+              invokedPluginIds.add(pluginId);
+            }
+          } finally {
+            if (inFlight.get(pluginId)?.promise === promise) {
+              inFlight.delete(pluginId);
+            }
+          }
+        });
+        active = { waiters, promise };
+        inFlight.set(pluginId, active);
+      }
+
+      const dropSessionApproval = () => {
+        if (!sessionId) return;
+        const sessions = approvalSessions.get(pluginId);
+        sessions?.delete(sessionId);
+        if (sessions?.size === 0) approvalSessions.delete(pluginId);
+      };
+
+      try {
+        await active.promise;
+      } catch (error) {
+        // Another session's revocation while we joined an already-winding-down
+        // load must not fail this still-approved session; start a fresh load.
+        if (
+          joinedExisting &&
+          !closed &&
+          isApprovalRevokedError(error) &&
+          attempt + 1 < MAX_IN_FLIGHT_REVOCATION_RETRIES &&
+          (await canActivate(pluginId, sessionId))
+        ) {
+          continue;
+        }
+        if (isApprovalRevokedError(error)) dropSessionApproval();
+        throw error;
+      }
+
+      if (closed) throw new Error("plugin entries are closed");
+      // Re-verify this caller's own session so a revoked session never silently
+      // succeeds by riding on another session's publication.
+      if (!(await canActivate(pluginId, sessionId))) {
+        dropSessionApproval();
+        throw new Error(
+          `[plugin-entry] ${pluginId}: community server code approval was revoked for session ${sessionId ?? "<missing>"}`,
+        );
+      }
+      return;
+    }
   };
 
   const ensurePluginEntry = (
@@ -549,6 +656,22 @@ export async function createBootstrapPluginEntries(
       if (!discovery) throw new Error("Plugin not found");
       if (getPluginTrustInfo(pluginId, discovery.source).autoLoad)
         throw new Error("Bundled plugins cannot be hot reloaded");
+      // Prune deleted or non-active sessions so approvalSessions stays bounded
+      // and reload checks/generation prep never carry stale session IDs.
+      const trackedSessions = approvalSessions.get(pluginId);
+      if (trackedSessions) {
+        for (const sid of [...trackedSessions]) {
+          const session = await params.store.getSession(sid);
+          if (
+            !session ||
+            session.status !== "active" ||
+            session.metadata?.[SESSION_DELETION_PENDING_KEY]
+          ) {
+            trackedSessions.delete(sid);
+          }
+        }
+        if (trackedSessions.size === 0) approvalSessions.delete(pluginId);
+      }
       const candidates = requestedSessionId
         ? [requestedSessionId]
         : [...(approvalSessions.get(pluginId) ?? [])];
@@ -627,7 +750,7 @@ export async function createBootstrapPluginEntries(
             next.definition.executionAssessment,
           )
         ) {
-          await invokeEntryForPlugin(pluginId, requestedSessionId);
+          await invokeEntryForPlugin(pluginId, [requestedSessionId]);
           invokedPluginIds.add(pluginId);
         }
         try {
@@ -647,7 +770,7 @@ export async function createBootstrapPluginEntries(
         pluginId,
         next.entryDefinition,
         generation,
-        approvedSession,
+        [approvedSession],
       );
       const previousEntry = params.pluginRegistry?.get(pluginId);
       const previousScope = activeScopes.get(pluginId);
@@ -658,8 +781,10 @@ export async function createBootstrapPluginEntries(
             definition: next.definition,
             generation,
             sessionIds: [
-              approvedSession,
-              ...(approvalSessions.get(pluginId) ?? []),
+              ...new Set([
+                approvedSession,
+                ...(approvalSessions.get(pluginId) ?? []),
+              ]),
             ],
           });
         await serialize(async () => {
@@ -738,6 +863,12 @@ export async function createBootstrapPluginEntries(
 
   return {
     reload,
+    clearSession(sessionId) {
+      for (const [pluginId, sessions] of approvalSessions) {
+        sessions.delete(sessionId);
+        if (sessions.size === 0) approvalSessions.delete(pluginId);
+      }
+    },
     async withSnapshot(sessionId, fn, beforeCapture) {
       if (snapshotSessions.getStore() === sessionId) {
         if (beforeCapture) {
@@ -749,7 +880,12 @@ export async function createBootstrapPluginEntries(
       }
       const capture = async () => {
         await beforeCapture?.();
-        for (;;) {
+        let lastCaptureError: unknown;
+        for (
+          let attempt = 0;
+          attempt < MAX_SNAPSHOT_CAPTURE_ATTEMPTS;
+          attempt++
+        ) {
           const revision = await serialize(async () => {
             if (closed) throw new Error("plugin entries are closed");
             // The session's plugin set needs no repair here: the registry
@@ -765,7 +901,10 @@ export async function createBootstrapPluginEntries(
             runtime = await params.runtimeLoader?.capture(sessionId);
           } catch (error) {
             // A concurrent publication can invalidate a manifest mid-load.
-            if (!closed && revision !== artifactRevision) continue;
+            if (!closed && revision !== artifactRevision) {
+              lastCaptureError = error;
+              continue;
+            }
             throw error;
           }
           const captured = await serialize(async () => {
@@ -810,6 +949,12 @@ export async function createBootstrapPluginEntries(
           });
           if (captured) return captured;
         }
+        throw new Error(
+          `[plugin-entry] snapshot capture for session ${sessionId} did not stabilize after ${MAX_SNAPSHOT_CAPTURE_ATTEMPTS} attempts`,
+          lastCaptureError !== undefined
+            ? { cause: lastCaptureError }
+            : undefined,
+        );
       };
       const captured = params.sessionLock
         ? await params.sessionLock.withLock(sessionId, capture)
@@ -886,6 +1031,7 @@ export async function createBootstrapPluginEntries(
         await Promise.allSettled(pluginOperations.values());
         await operationTail;
         await Promise.allSettled(draining);
+        approvalSessions.clear();
         const errors: unknown[] = [];
         for (const batch of [...scopes].reverse()) {
           try {

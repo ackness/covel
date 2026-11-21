@@ -1384,4 +1384,158 @@ describe.each([
     });
     await worker.close();
   });
+
+  it("holds per-runtime and concurrency slots after timeout until an uncooperative execution settles", async () => {
+    await createRuntimeJob(
+      store,
+      job("session-a", "first-timeout", { maxExecutionMs: 10 }),
+    );
+    await createRuntimeJob(store, job("session-a", "second-same-runtime"));
+
+    const firstEntered = Promise.withResolvers<void>();
+    const releaseFirst = Promise.withResolvers<void>();
+    let overlapCount = 0;
+    let runningNow = 0;
+    const started: string[] = [];
+    const eventBus = createEventBus(store);
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      concurrency: 2,
+      execute: async (runtimeJob, control) => {
+        runningNow++;
+        if (runningNow > 1) overlapCount++;
+        started.push(runtimeJob.jobId);
+        try {
+          if (runtimeJob.jobId === "first-timeout") {
+            firstEntered.resolve();
+            // Intentionally ignore control.signal until released.
+            await releaseFirst.promise;
+            return;
+          }
+          await control.beforeCommit({
+            backgroundTurnId: "second-turn",
+            backgroundExecutionId: "second-execution",
+          });
+          await store.withTransaction((tx) => control.completeInTx(tx));
+        } finally {
+          runningNow--;
+        }
+      },
+    });
+
+    try {
+      worker.wake();
+      await firstEntered.promise;
+
+      // DB row must terminalize promptly so callers observe timeout immediately.
+      await vi.waitFor(async () => {
+        await expect(
+          getRuntimeJob(store, job("session-a", "first-timeout")),
+        ).resolves.toMatchObject({
+          status: "timed_out",
+          reason: "execution-deadline-exceeded",
+        });
+      });
+
+      // Even after explicitly waking the worker, the second job for the same
+      // (sessionId, pluginId, runtimeId) must NOT start while the first
+      // execution is still unwinding, and activeCount stays 1.
+      worker.wake("session-a");
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(started).toEqual(["first-timeout"]);
+      expect(overlapCount).toBe(0);
+      expect(worker.activeCount).toBe(1);
+
+      // Once the uncooperative execution finally settles, the slot releases
+      // and the worker wakes to run the second job.
+      releaseFirst.resolve();
+      await vi.waitFor(async () => {
+        await expect(
+          getRuntimeJob(store, job("session-a", "second-same-runtime")),
+        ).resolves.toMatchObject({ status: "succeeded" });
+      });
+      expect(started).toEqual(["first-timeout", "second-same-runtime"]);
+      expect(overlapCount).toBe(0);
+      await vi.waitFor(() => expect(worker.activeCount).toBe(0));
+    } finally {
+      releaseFirst.resolve();
+      await worker.close();
+      await eventBus.close();
+    }
+  });
+
+  it("holds global concurrency slot on lease-lapse until uncooperative execution settles and shuts down cleanly", async () => {
+    await createRuntimeJob(store, job("session-a", "lease-lapse-job"));
+    await createRuntimeJob(
+      store,
+      job("session-a", "other-runtime-job", {
+        runtimeId: "mimo-tts/other-runtime",
+      }),
+    );
+
+    const firstEntered = Promise.withResolvers<void>();
+    const releaseFirst = Promise.withResolvers<void>();
+    const started: string[] = [];
+    const eventBus = createEventBus(store);
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      concurrency: 1,
+      leaseMs: 15,
+      execute: async (runtimeJob, control) => {
+        started.push(runtimeJob.jobId);
+        if (runtimeJob.jobId === "lease-lapse-job") {
+          firstEntered.resolve();
+          await releaseFirst.promise;
+          return;
+        }
+        await control.beforeCommit({
+          backgroundTurnId: "other-turn",
+          backgroundExecutionId: "other-execution",
+        });
+        await store.withTransaction((tx) => control.completeInTx(tx));
+      },
+    });
+
+    try {
+      worker.wake();
+      await firstEntered.promise;
+
+      // Supersede the running job externally so renewal returns null and aborts
+      // with RuntimeJobNoLongerCurrentError while execution is still blocked.
+      await transitionRuntimeJob(store, {
+        ...job("session-a", "lease-lapse-job"),
+        from: ["running"],
+        to: "cancelled",
+        reason: "superseded",
+      });
+
+      await vi.waitFor(async () => {
+        await expect(
+          getRuntimeJob(store, job("session-a", "lease-lapse-job")),
+        ).resolves.toMatchObject({ status: "cancelled" });
+      });
+
+      // Wait past multiple lease renewal cycles; concurrency=1 slot must remain
+      // held until the superseded execution actually settles.
+      worker.wake("session-a");
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(started).toEqual(["lease-lapse-job"]);
+      expect(worker.activeCount).toBe(1);
+
+      // Closing the worker while the uncooperative execution is still unwinding
+      // waits for it to settle and exits cleanly with activeCount === 0.
+      const closing = worker.close();
+      releaseFirst.resolve();
+      await closing;
+      expect(worker.activeCount).toBe(0);
+    } finally {
+      releaseFirst.resolve();
+      await worker.close();
+      await eventBus.close();
+    }
+  });
 });

@@ -214,8 +214,8 @@
                 "maxQueueMs": {
                   "type": "integer",
                   "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991,
-                  "description": "Longest time in ms the job may wait in the queue."
+                  "maximum": 1800000,
+                  "description": "Longest time in ms the job may wait in the queue, at most 1800000."
                 },
                 "maxExecutionMs": {
                   "type": "integer",

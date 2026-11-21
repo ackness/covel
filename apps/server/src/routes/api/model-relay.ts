@@ -129,30 +129,43 @@ export function createModelRelayRoutes(registry: ModelRelayRegistry): Hono<{
         );
       }
       return streamOwnedSSE(c, async (stream) => {
-        // Writes stay in order: a request is never overtaken by its cancel.
+        // Every frame (ready, request, cancel, heartbeat) shares one serialized
+        // write chain so concurrent writes never interleave mid-frame.
         let writing = Promise.resolve();
-        const sink = (event: ModelRelayEvent) => {
-          writing = writing
-            .then(() =>
-              stream.writeSSE({
-                event: event.type,
-                data: JSON.stringify(event),
-              }),
-            )
+        const enqueueWrite = (write: () => Promise<unknown>): Promise<void> => {
+          const next = writing
+            .then(async () => {
+              if (stream.aborted || stream.closed) return;
+              await write();
+            })
             .catch(() => {});
+          writing = next;
+          return next;
+        };
+        const sink = (event: ModelRelayEvent) => {
+          void enqueueWrite(() =>
+            stream.writeSSE({
+              event: event.type,
+              data: JSON.stringify(event),
+            }),
+          );
         };
         // A newer stream for the same channel ends this one.
         const detach = registry.attach(channel, sink, () => stream.abort());
         if (!detach) return; // the channel limit was reached meanwhile
         stream.onAbort(detach);
         try {
-          await stream.writeSSE({ event: "ready", data: "{}" });
+          await enqueueWrite(() =>
+            stream.writeSSE({ event: "ready", data: "{}" }),
+          );
           while (!stream.aborted && !stream.closed) {
             await stream.sleep(HEARTBEAT_MS);
-            await stream.write(": ping\n\n");
+            if (stream.aborted || stream.closed) break;
+            await enqueueWrite(() => stream.write(": ping\n\n"));
           }
         } finally {
           detach();
+          await writing;
         }
       });
     },

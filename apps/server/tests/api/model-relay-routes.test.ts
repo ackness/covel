@@ -170,4 +170,111 @@ describe("model relay routes", () => {
       code: "model_relay_unavailable",
     });
   });
+
+  it("serializes ready, request, and heartbeat writes so frames never interleave", async () => {
+    const { SSEStreamingApi } = await import("hono/streaming");
+    const { vi } = await import("vitest");
+    vi.useFakeTimers();
+
+    const originalWrite = SSEStreamingApi.prototype.write;
+    let inFlight = 0;
+    let maxConcurrent = 0;
+    const gates: Array<{
+      chunk: string;
+      release: PromiseWithResolvers<void>;
+    }> = [];
+
+    const writeSpy = vi
+      .spyOn(SSEStreamingApi.prototype, "write")
+      .mockImplementation(async function (
+        this: InstanceType<typeof SSEStreamingApi>,
+        input,
+      ) {
+        const text =
+          typeof input === "string" ? input : new TextDecoder().decode(input);
+        inFlight += 1;
+        maxConcurrent = Math.max(maxConcurrent, inFlight);
+        const gate = {
+          chunk: text,
+          release: Promise.withResolvers<void>(),
+        };
+        gates.push(gate);
+        try {
+          await gate.release.promise;
+          return await originalWrite.call(this, input);
+        } finally {
+          inFlight -= 1;
+        }
+      });
+
+    try {
+      const { app, registry } = appFor({ NODE_ENV: "production" }, "memory");
+      // Queue a fetch BEFORE attaching the stream so attach() wakes it
+      // immediately while the initial `ready` frame is still writing.
+      const pendingFetch = registry.relayFor(CHANNEL).fetch({
+        url: "http://127.0.0.1:3425/v1/models",
+        method: "GET",
+        headers: {},
+      });
+      void pendingFetch.catch(() => {});
+
+      const stream = await app.request("/api/model-relay/stream", {
+        headers: { "X-Model-Relay": CHANNEL },
+      });
+      const reader = stream.body!.getReader();
+      const decoder = new TextDecoder();
+      const received: string[] = [];
+      const pump = (async () => {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          received.push(decoder.decode(value, { stream: true }));
+        }
+      })();
+
+      // Wait for the initial `ready` write to start, and flush microtasks so
+      // the woken relay request tries to write while `ready` is still in flight.
+      await vi.waitFor(() => expect(gates.length).toBeGreaterThanOrEqual(1));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(maxConcurrent).toBe(1);
+      expect(gates).toHaveLength(1);
+      expect(gates[0]!.chunk).toContain("event: ready");
+
+      // Release `ready`; now the queued `request` frame writes next.
+      gates[0]!.release.resolve();
+      await vi.waitFor(() => expect(gates.length).toBeGreaterThanOrEqual(2));
+      expect(gates[1]!.chunk).toContain("event: request");
+      expect(maxConcurrent).toBe(1);
+
+      // While `request` write is held mid-flight, trigger the heartbeat timer!
+      // Heartbeat `: ping\n\n` must queue behind `request`, never interleave.
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(maxConcurrent).toBe(1);
+      expect(gates).toHaveLength(2);
+
+      // Release `request`; heartbeat `: ping\n\n` starts only afterward.
+      gates[1]!.release.resolve();
+      await vi.waitFor(() => expect(gates.length).toBeGreaterThanOrEqual(3));
+      expect(gates[2]!.chunk).toBe(": ping\n\n");
+      expect(maxConcurrent).toBe(1);
+
+      gates[2]!.release.resolve();
+      await vi.waitFor(() => expect(received.join("")).toContain(": ping\n\n"));
+      const fullText = received.join("");
+      expect(fullText.indexOf("event: ready")).toBeLessThan(
+        fullText.indexOf("event: request"),
+      );
+      expect(fullText.indexOf("event: request")).toBeLessThan(
+        fullText.indexOf(": ping\n\n"),
+      );
+
+      await reader.cancel();
+      await pump;
+    } finally {
+      for (const gate of gates) gate.release.resolve();
+      writeSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });

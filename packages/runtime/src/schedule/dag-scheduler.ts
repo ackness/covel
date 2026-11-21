@@ -70,13 +70,17 @@ function refToNames(
 function collectDependencies(
   manifest: RuntimeManifest,
   capabilityProviders: ReadonlyMap<string, readonly string[]>,
-): { readonly all: ReadonlySet<string>; readonly hard: ReadonlySet<string> } {
+): {
+  readonly all: ReadonlySet<string>;
+  readonly hard: ReadonlySet<string>;
+  readonly pureOrHard: ReadonlySet<string>;
+} {
   const deps = new Set<string>();
   const hard = new Set<string>();
-  const addHard = (name: string): void => {
-    deps.add(name);
-    hard.add(name);
-  };
+  // Edges that must not be broken by pure `needs(cardinality: one)` OR-cycle
+  // relaxation when the consumer itself sits in a mutual ordering cycle with a
+  // provider (e.g. explicit `after` or `inputs` binding alongside `needs`).
+  const pureOrHard = new Set<string>();
   const spec = getRuntimeSpec(manifest);
 
   for (const need of spec.deps.needs) {
@@ -88,41 +92,59 @@ function collectDependencies(
         need.cardinality === "all"
       ) {
         hard.add(name);
+        pureOrHard.add(name);
       }
     }
   }
   for (const after of spec.deps.after) {
     for (const name of refToNames(after, "after", capabilityProviders)) {
-      addHard(name);
+      deps.add(name);
+      pureOrHard.add(name);
     }
   }
   // Typed `inputs` bindings imply the same ordering edge: `required: true` →
-  // needs(turn), `false` → after — both need the producer scheduled first.
+  // needs(turn), `false` → after — both need the producer scheduled first,
+  // while only required runtime or `cardinality: "all"` capability bindings are
+  // hard blockers if an upstream sits in an independent dead cycle.
   for (const binding of Object.values(spec.bindings)) {
+    const required = binding.required !== false;
     if ("runtime" in binding.from) {
-      if (binding.from.runtime.length > 0) addHard(binding.from.runtime);
+      if (binding.from.runtime.length > 0) {
+        deps.add(binding.from.runtime);
+        pureOrHard.add(binding.from.runtime);
+        if (required) hard.add(binding.from.runtime);
+      }
     } else {
+      const hardBinding = required && binding.from.cardinality === "all";
       for (const name of capabilityProviders.get(binding.from.capability) ??
         []) {
-        addHard(name);
+        deps.add(name);
+        pureOrHard.add(name);
+        if (hardBinding) hard.add(name);
       }
     }
   }
-  return { all: deps, hard };
+  return { all: deps, hard, pureOrHard };
 }
 
 /**
- * Turn-scoped capability needs with `cardinality: one` are OR dependencies.
- * We normally wait for every provider so the runtime gate can observe all
- * outcomes, but a provider trapped in a separate cycle must not drag the
- * consumer into that cycle once another provider has completed.
+ * Turn-scoped capability needs and required capability input bindings with
+ * `cardinality: one` (default) are OR dependencies for cycle isolation.
+ * We normally wait for every provider so gates can observe all outcomes, but a
+ * provider trapped in a separate cycle must not drag the consumer into that
+ * cycle once another provider has completed.
  */
 function collectOneProviderGroups(
   manifest: RuntimeManifest,
   capabilityProviders: ReadonlyMap<string, readonly string[]>,
-): readonly (readonly string[])[] {
-  const groups: string[][] = [];
-  for (const need of getRuntimeSpec(manifest).deps.needs) {
+): {
+  readonly pureNeeds: readonly (readonly string[])[];
+  readonly all: readonly (readonly string[])[];
+} {
+  const spec = getRuntimeSpec(manifest);
+  const pureNeeds: string[][] = [];
+  const all: string[][] = [];
+  for (const need of spec.deps.needs) {
     if (
       typeof need === "string" ||
       "runtime" in need ||
@@ -132,9 +154,78 @@ function collectOneProviderGroups(
       continue;
     }
     const providers = capabilityProviders.get(need.capability) ?? [];
-    if (providers.length > 0) groups.push([...providers]);
+    if (providers.length > 0) {
+      pureNeeds.push([...providers]);
+      all.push([...providers]);
+    }
   }
-  return groups;
+  for (const binding of Object.values(spec.bindings)) {
+    if (
+      binding.required === false ||
+      "runtime" in binding.from ||
+      binding.from.cardinality === "all"
+    ) {
+      continue;
+    }
+    const providers = capabilityProviders.get(binding.from.capability) ?? [];
+    if (providers.length > 0) all.push([...providers]);
+  }
+  return { pureNeeds, all };
+}
+
+/**
+ * Return every node in `nodes` that lies on a directed cycle (a strongly
+ * connected component of size > 1, or a self-loop) within the induced subgraph.
+ */
+function findCycleNodes(
+  nodes: ReadonlySet<string>,
+  directDependencies: ReadonlyMap<string, ReadonlySet<string>>,
+): Set<string> {
+  const indexOf = new Map<string, number>();
+  const lowlink = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const inCycle = new Set<string>();
+  let nextIndex = 0;
+
+  const visit = (v: string): void => {
+    const vIndex = nextIndex++;
+    indexOf.set(v, vIndex);
+    lowlink.set(v, vIndex);
+    stack.push(v);
+    onStack.add(v);
+
+    for (const w of directDependencies.get(v) ?? []) {
+      if (!nodes.has(w)) continue;
+      if (!indexOf.has(w)) {
+        visit(w);
+        lowlink.set(v, Math.min(lowlink.get(v)!, lowlink.get(w)!));
+      } else if (onStack.has(w)) {
+        lowlink.set(v, Math.min(lowlink.get(v)!, indexOf.get(w)!));
+      }
+    }
+
+    if (lowlink.get(v) === vIndex) {
+      const component: string[] = [];
+      while (stack.length > 0) {
+        const w = stack.pop()!;
+        onStack.delete(w);
+        component.push(w);
+        if (w === v) break;
+      }
+      if (
+        component.length > 1 ||
+        (component.length === 1 && directDependencies.get(v)?.has(v))
+      ) {
+        for (const member of component) inCycle.add(member);
+      }
+    }
+  };
+
+  for (const node of nodes) {
+    if (!indexOf.has(node)) visit(node);
+  }
+  return inCycle;
 }
 
 function buildCapabilityProviders(
@@ -163,6 +254,11 @@ export function scheduleByDag(
   const dependents = new Map<string, string[]>();
   const directDependencies = new Map<string, Set<string>>();
   const hardDependencies = new Map<string, ReadonlySet<string>>();
+  const pureOrHardDependencies = new Map<string, ReadonlySet<string>>();
+  const pureNeedProviderGroups = new Map<
+    string,
+    readonly (readonly string[])[]
+  >();
   const oneProviderGroups = new Map<string, readonly (readonly string[])[]>();
   const byName = new Map<string, RuntimeManifest>();
   // Only external outcomes can satisfy an OR edge before this batch runs.
@@ -185,11 +281,11 @@ export function scheduleByDag(
       [...deps.all].filter((dep) => inScope.has(dep)),
     );
     hardDependencies.set(rt.name, deps.hard);
+    pureOrHardDependencies.set(rt.name, deps.pureOrHard);
     directDependencies.set(rt.name, inScopeDeps);
-    oneProviderGroups.set(
-      rt.name,
-      collectOneProviderGroups(rt, capabilityProviders),
-    );
+    const groups = collectOneProviderGroups(rt, capabilityProviders);
+    pureNeedProviderGroups.set(rt.name, groups.pureNeeds);
+    oneProviderGroups.set(rt.name, groups.all);
     for (const dep of inScopeDeps) {
       // A self-edge is left in place: it makes the node unreachable in the Kahn
       // sort, so it (a plugin authoring mistake) surfaces as a cycle.
@@ -215,36 +311,84 @@ export function scheduleByDag(
     return ready;
   };
 
+  const hasUnsatisfiedOneGroup = (
+    groups: readonly (readonly string[])[],
+  ): boolean =>
+    groups.some(
+      (group) =>
+        group.some((provider) => inDegree.has(provider)) &&
+        !group.some((provider) => completed.has(provider)),
+    );
+
   while (inDegree.size > 0) {
     let ready = pickReady();
     if (ready.length === 0) {
-      // `needs({ capability, cardinality: "one" })` is an OR edge. Keep the
-      // conservative all-provider barrier during normal scheduling, then relax
-      // only blockers belonging to an OR group that already has a completed
-      // provider. This prevents a cyclic alternative provider from classifying
-      // an otherwise runnable consumer as cycle/downstream.
+      // Phase 1: `needs({ capability, cardinality: "one" })` is an OR edge.
+      // Keep the conservative all-provider barrier during normal scheduling,
+      // then relax only pure OR blockers whose group already has a completed
+      // provider, while preserving any independent ordering constraints.
       for (const [name, deps] of directDependencies) {
         if (!inDegree.has(name)) continue;
         const remaining = [...deps].filter((dep) => inDegree.has(dep));
         if (remaining.length === 0) continue;
-        const groups = oneProviderGroups.get(name) ?? [];
+        const groups = pureNeedProviderGroups.get(name) ?? [];
         const satisfiedGroups = groups.filter((group) =>
           group.some((provider) => completed.has(provider)),
         );
         if (satisfiedGroups.length === 0) continue;
         const relaxable = new Set(satisfiedGroups.flat());
-        const hasUnsatisfiedGroup = groups.some(
-          (group) =>
-            group.some((provider) => inDegree.has(provider)) &&
-            !group.some((provider) => completed.has(provider)),
-        );
         if (
-          !hasUnsatisfiedGroup &&
+          !hasUnsatisfiedOneGroup(groups) &&
           remaining.every(
             (dep) =>
-              relaxable.has(dep) && !hardDependencies.get(name)?.has(dep),
+              relaxable.has(dep) && !pureOrHardDependencies.get(name)?.has(dep),
           )
         ) {
+          inDegree.set(name, 0);
+        }
+      }
+      ready = pickReady();
+    }
+    if (ready.length === 0) {
+      // Phase 2: isolate permanently cyclic nodes (nontrivial SCCs and their
+      // hard/unsatisfied dependents) so acyclic consumers with only optional
+      // (`required: false`) bindings, `after` edges, or already-satisfied
+      // `cardinality: "one"` bindings pointing into dead cycles still run.
+      const stuckNodes = new Set(inDegree.keys());
+      const dead = findCycleNodes(stuckNodes, directDependencies);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const name of stuckNodes) {
+          if (dead.has(name)) continue;
+          const deps = directDependencies.get(name)!;
+          const hard = hardDependencies.get(name)!;
+          const blockedByHardDead = [...deps].some(
+            (dep) => dead.has(dep) && hard.has(dep),
+          );
+          const groups = oneProviderGroups.get(name) ?? [];
+          const blockedByDoomedGroup = groups.some(
+            (group) =>
+              !group.some((provider) => completed.has(provider)) &&
+              !group.some(
+                (provider) => inDegree.has(provider) && !dead.has(provider),
+              ),
+          );
+          if (blockedByHardDead || blockedByDoomedGroup) {
+            dead.add(name);
+            changed = true;
+          }
+        }
+      }
+      for (const name of stuckNodes) {
+        if (dead.has(name)) continue;
+        const remaining = [...directDependencies.get(name)!].filter((dep) =>
+          inDegree.has(dep),
+        );
+        if (remaining.length === 0) continue;
+        // Wait for any alive upstream first; only drop blockers known to be dead.
+        if (!remaining.every((dep) => dead.has(dep))) continue;
+        if (!hasUnsatisfiedOneGroup(oneProviderGroups.get(name) ?? [])) {
           inDegree.set(name, 0);
         }
       }

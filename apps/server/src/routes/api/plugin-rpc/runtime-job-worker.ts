@@ -553,6 +553,16 @@ export function createRuntimeJobWorker(args: {
     let deadlineTask: Promise<void> | undefined;
     let onAbort: (() => void) | undefined;
     let execution: Promise<void> | undefined;
+    let executionSettled = false;
+    let deferSlotRelease = false;
+    let slotReleased = false;
+    const releaseSlot = (): void => {
+      if (slotReleased) return;
+      slotReleased = true;
+      activeRuntimeKeys.delete(runtimeKey(claimed));
+      activeCount--;
+      wake(claimed.sessionId);
+    };
     const stop = (): void => {
       // A job that crossed the commit barrier must finish settling its durable
       // outcome. Work stopped before that barrier committed nothing; a normal
@@ -728,12 +738,14 @@ export function createRuntimeJobWorker(args: {
           if (!failed) throw new RuntimeJobNoLongerCurrentError();
         },
       });
-      executions.add(execution);
       const started = execution;
-      void started.then(
-        () => executions.delete(started),
-        () => executions.delete(started),
-      );
+      const onExecutionSettled = (): void => {
+        executionSettled = true;
+        if (deferSlotRelease) releaseSlot();
+        executions.delete(tracked);
+      };
+      const tracked = started.then(onExecutionSettled, onExecutionSettled);
+      executions.add(tracked);
       await Promise.race([started, aborted]);
       if (timeoutTimer) clearTimeout(timeoutTimer);
       const settled = await getRuntimeJob(args.store, current);
@@ -819,9 +831,13 @@ export function createRuntimeJobWorker(args: {
       await Promise.allSettled([renewalTask, deadlineTask]);
       stopExecutions.delete(stop);
       touchedSessions.add(claimed.sessionId);
-      activeRuntimeKeys.delete(runtimeKey(claimed));
-      activeCount--;
-      wake(claimed.sessionId);
+      // Keep the per-runtime key and concurrency slot held while an aborted
+      // non-cooperative execution is still unwinding in the background.
+      if (execution && !executionSettled) {
+        deferSlotRelease = true;
+      } else {
+        releaseSlot();
+      }
     }
   };
 

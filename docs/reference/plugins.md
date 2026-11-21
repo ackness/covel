@@ -379,7 +379,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 - `schedule.subagentOnly: true` 让 agent runtime 只作为[子 agent](#子-agent) 运行：调度器从不选中它，手动 RPC、批量重跑和 `ctx.recursiveCall` 都不能运行它。它隐含 `trigger: manual`，`type` 不用写，写别的类型会被拒绝。它不能是函数 runtime，不能是 `io.visibility: story`，也不能写 `stage`、`needs`、`after`、`background`、`io.output.recordAs` 和 `guard`：这些只对被调度的 runtime 有意义。
 - `schedule.background: true` 让手动或事件 runtime 在后台执行：调用方立刻拿到一个任务编号，不等它完成。这样的 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.detached: true` 让回合先结束，这个 runtime 之后作为持久的后台作业运行。只能用在 `post-turn` 和 `audit` 阶段，`io.visibility: story` 的 runtime 不能用。
-- `schedule.detached` 写成对象时设置作业的选项，同时表示 detached：`settle: true` 让玩家的下一次行动先等它完成，最多等 `maxSettleWaitMs`（不超过 120000）；`maxQueueMs` 和 `maxExecutionMs` 限制作业排队和运行的时间。
+- `schedule.detached` 写成对象时设置作业的选项，同时表示 detached：`settle: true` 让玩家的下一次行动先等它完成，最多等 `maxSettleWaitMs`（不超过 120000）；`maxQueueMs`（不超过 1800000）和 `maxExecutionMs` 限制作业排队和运行的时间。
 - 具体限制由清单校验和运行时准入检查执行。
 
 ### 历史窗口（`agent.history`）

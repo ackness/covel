@@ -212,6 +212,181 @@ describe("session pinning", () => {
     expect(replay.events[0]!.id).toBe(`${pin.epoch}:1`);
     pin.release();
   });
+
+  it("releasing an early-pinned session still allows older expired sessions to be evicted on TTL sweep", () => {
+    vi.useFakeTimers({ now: new Date("2026-07-15T00:00:00Z") });
+    const bus = createEventBus();
+
+    const pin = bus.pin("sess-pinned");
+    vi.setSystemTime(Date.now() + 1_000);
+    bus.emit(makeMessage({ sessionId: "sess-old" }));
+
+    // Advance past the idle TTL for sess-old, then release the earlier pin.
+    // Refreshing sess-pinned's idle clock must also move it to the LRU tail
+    // so the lazy TTL sweep does not stop before reaching expired sess-old.
+    vi.setSystemTime(Date.now() + SESSION_IDLE_TTL_MS + 1);
+    pin.release();
+    bus.emit(makeMessage({ sessionId: "sess-fresh" }));
+
+    const oldReplay = bus.getEventsAfter("sess-old", 0);
+    expect(oldReplay.gap).toBe(true);
+    expect(oldReplay.epoch).toBeUndefined();
+
+    const releasedReplay = bus.getEventsAfter("sess-pinned", 0);
+    expect(releasedReplay.gap).toBe(false);
+    expect(releasedReplay.epoch).toBe(pin.epoch);
+  });
+
+  it("releasing a pin after close() does not resurrect session tracking state", async () => {
+    const bus = createEventBus();
+    const pin = bus.pin("sess-closed");
+    await bus.close();
+    pin.release();
+
+    const replay = bus.getEventsAfter("sess-closed", 0);
+    expect(replay.gap).toBe(true);
+    expect(replay.epoch).toBeUndefined();
+  });
+});
+
+describe("invalidateReplay tracking bounds", () => {
+  it("does not allocate tracking state or evict tracked sessions for an untracked session", async () => {
+    const bus = createEventBus();
+    const resets: Array<{ sessionId?: string; reason: string }> = [];
+    bus.onReset?.((reset) => resets.push(reset));
+
+    for (let i = 0; i < MAX_TRACKED_SESSIONS; i += 1) {
+      bus.emit(makeMessage({ sessionId: `sess-${i}` }));
+    }
+
+    bus.invalidateReplay?.("untracked-sess", "publish-failed");
+
+    expect(resets).toEqual([
+      { sessionId: "untracked-sess", reason: "publish-failed" },
+    ]);
+    const untracked = bus.getEventsAfter("untracked-sess", 0);
+    expect(untracked.gap).toBe(true);
+    expect(untracked.epoch).toBeUndefined();
+
+    // Oldest tracked session must remain intact (not evicted by untracked invalidation).
+    const oldest = bus.getEventsAfter("sess-0", 0);
+    expect(oldest.gap).toBe(false);
+    expect(oldest.events).toHaveLength(1);
+    await bus.close();
+  });
+
+  it("does not allocate tracking state when rejecting untagged cross-pod frames for untracked sessions", async () => {
+    let receive!: (payload: string) => void;
+    const bus = createEventBus(undefined, {
+      requireSessionIncarnation: true,
+      transport: {
+        publish() {},
+        subscribe(handler) {
+          receive = handler;
+        },
+      },
+    });
+    const resets: Array<{ sessionId?: string; reason: string }> = [];
+    bus.onReset?.((reset) => resets.push(reset));
+
+    for (let i = 0; i < MAX_TRACKED_SESSIONS; i += 1) {
+      bus.emit(
+        makeMessage({
+          sessionId: `sess-${i}`,
+          sessionIncarnation: `inc-${i}`,
+        }),
+      );
+    }
+
+    receive(
+      JSON.stringify({
+        origin: "remote-pod",
+        stream: "gen-1",
+        seq: 1,
+        event: {
+          id: "remote:1",
+          sessionId: "untracked-remote",
+          topic: "state",
+          type: "changed",
+          timestamp: new Date().toISOString(),
+          payload: {},
+        },
+      }),
+    );
+
+    expect(resets).toEqual([
+      { sessionId: "untracked-remote", reason: "transport-gap" },
+    ]);
+    expect(bus.getEventsAfter("untracked-remote", 0).epoch).toBeUndefined();
+    expect(bus.getEventsAfter("sess-0", 0).gap).toBe(false);
+    expect(bus.getEventsAfter("sess-0", 0).events).toHaveLength(1);
+    await bus.close();
+  });
+
+  it("does not allocate tracking state when a cross-pod ref fails for an untracked session", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let receive!: (payload: string) => void;
+    const bus = createEventBus(
+      {
+        saveEvent: async () => {},
+        getEventById: async () => null,
+      },
+      {
+        transport: {
+          publish() {},
+          subscribe(handler) {
+            receive = handler;
+          },
+        },
+      },
+    );
+    const resets: Array<{ sessionId?: string; reason: string }> = [];
+    bus.onReset?.((reset) => resets.push(reset));
+
+    for (let i = 0; i < MAX_TRACKED_SESSIONS; i += 1) {
+      bus.emit(makeMessage({ sessionId: `sess-${i}` }));
+    }
+
+    receive(
+      JSON.stringify({
+        origin: "remote-pod",
+        stream: "gen-1",
+        seq: 1,
+        ref: { sessionId: "untracked-ref", eventId: "missing-event" },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(resets).toEqual([
+        { sessionId: "untracked-ref", reason: "transport-gap" },
+      ]),
+    );
+    expect(bus.getEventsAfter("untracked-ref", 0).epoch).toBeUndefined();
+    expect(bus.getEventsAfter("sess-0", 0).gap).toBe(false);
+    expect(bus.getEventsAfter("sess-0", 0).events).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalled();
+    await bus.close();
+  });
+
+  it("evicts an already-expired unpinned session instead of resurrecting it on invalidateReplay", async () => {
+    vi.useFakeTimers({ now: new Date("2026-07-15T00:00:00Z") });
+    const bus = createEventBus();
+    const resets: Array<{ sessionId?: string; reason: string }> = [];
+    bus.onReset?.((reset) => resets.push(reset));
+
+    bus.emit(makeMessage({ sessionId: "sess-expired" }));
+    vi.setSystemTime(Date.now() + SESSION_IDLE_TTL_MS + 1);
+
+    bus.invalidateReplay?.("sess-expired", "transport-gap");
+
+    expect(resets).toEqual([
+      { sessionId: "sess-expired", reason: "transport-gap" },
+    ]);
+    const replay = bus.getEventsAfter("sess-expired", 0);
+    expect(replay.gap).toBe(true);
+    expect(replay.epoch).toBeUndefined();
+    await bus.close();
+  });
 });
 
 describe("bounded persist queue (audit R-03)", () => {

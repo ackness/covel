@@ -1,15 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createRpcApprovalGate as createStrictRpcApprovalGate,
+  MAX_SESSION_CACHE,
+  ONE_TIME_GRANT_TTL_MS,
+  STALE_PENDING_TTL_MS,
   type EvaluateInput,
+  type RpcApprovalGateOptions,
 } from "../src/rpc-approval.js";
 
 const TEST_SCOPE = "test-session-incarnation";
 type TestEvaluateInput = Omit<EvaluateInput, "sessionScope"> &
   Partial<Pick<EvaluateInput, "sessionScope">>;
 
-function createRpcApprovalGate() {
-  const gate = createStrictRpcApprovalGate();
+function createRpcApprovalGate(options?: RpcApprovalGateOptions) {
+  const gate = createStrictRpcApprovalGate(options);
   return {
     ...gate,
     evaluate: (input: TestEvaluateInput) =>
@@ -23,7 +27,8 @@ function createRpcApprovalGate() {
       pluginId: string,
       action: string,
       scope = TEST_SCOPE,
-    ) => gate.hasGrant(sessionId, pluginId, action, scope),
+      ...payloadArg: [] | [payload: unknown]
+    ) => gate.hasGrant(sessionId, pluginId, action, scope, ...payloadArg),
   };
 }
 
@@ -514,5 +519,317 @@ describe("createRpcApprovalGate", () => {
       trustLevel: "community",
     });
     expect(next.status).toBe("pending");
+  });
+
+  it("sweeps stale pending approvals in listPending, listAllPendingForSession, getPending, pendingMatchesScope, and decide", () => {
+    const now = Date.parse("2026-08-24T00:00:00.000Z");
+    vi.useFakeTimers();
+    try {
+      const setupExpired = () => {
+        vi.setSystemTime(now);
+        const gate = createRpcApprovalGate();
+        const pending = gate.evaluate({
+          sessionId: "sess-1",
+          pluginId: "third-party",
+          action: "do-stuff",
+          payload: { version: 1 },
+          trustLevel: "community",
+        });
+        if (pending.status !== "pending") throw new Error("unreachable");
+        vi.setSystemTime(now + STALE_PENDING_TTL_MS + 1);
+        return { gate, approvalId: pending.approvalId };
+      };
+
+      {
+        const { gate } = setupExpired();
+        expect(gate.listPending("sess-1")).toEqual([]);
+      }
+      {
+        const { gate } = setupExpired();
+        expect(gate.listAllPendingForSession("sess-1")).toEqual([]);
+      }
+      {
+        const { gate, approvalId } = setupExpired();
+        expect(gate.getPending(approvalId)).toBeUndefined();
+      }
+      {
+        const { gate, approvalId } = setupExpired();
+        expect(gate.pendingMatchesScope(approvalId, TEST_SCOPE)).toBe(false);
+      }
+      {
+        const { gate, approvalId } = setupExpired();
+        const decision = gate.decide({
+          approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        });
+        expect(decision).toEqual({
+          ok: false,
+          error: `unknown approvalId: ${approvalId}`,
+          reason: "unknown-approval",
+        });
+        expect(gate.hasGrant("sess-1", "third-party", "do-stuff")).toBe(false);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("isolates multiple once approvals with different payloads for the same action without overwriting", () => {
+    const gate = createRpcApprovalGate();
+    const first = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      payload: { amount: 1, target: "merchant" },
+      trustLevel: "community",
+    });
+    const second = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      payload: { amount: 2, target: "smith" },
+      trustLevel: "community",
+    });
+    if (first.status !== "pending" || second.status !== "pending") {
+      throw new Error("unreachable");
+    }
+
+    expect(
+      gate.decide({
+        approvalId: first.approvalId,
+        decision: "allow",
+        scope: "once",
+        decidedAt: new Date().toISOString(),
+      }).ok,
+    ).toBe(true);
+    expect(
+      gate.decide({
+        approvalId: second.approvalId,
+        decision: "allow",
+        scope: "once",
+        decidedAt: new Date().toISOString(),
+      }).ok,
+    ).toBe(true);
+
+    // 4-arg hasGrant remains backward-compatible; 5-arg hasGrant matches by payload without consuming.
+    expect(gate.hasGrant("sess-1", "p", "transfer")).toBe(true);
+    expect(
+      gate.hasGrant("sess-1", "p", "transfer", TEST_SCOPE, {
+        target: "merchant",
+        amount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      gate.hasGrant("sess-1", "p", "transfer", TEST_SCOPE, {
+        amount: 2,
+        target: "smith",
+      }),
+    ).toBe(true);
+    expect(
+      gate.hasGrant("sess-1", "p", "transfer", TEST_SCOPE, {
+        amount: 999,
+        target: "other",
+      }),
+    ).toBe(false);
+    expect(
+      gate.hasGrant("sess-1", "p", "transfer", TEST_SCOPE, undefined),
+    ).toBe(false);
+
+    // Approving payload B must not clobber the unused once grant for payload A.
+    expect(
+      gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "transfer",
+        payload: { target: "merchant", amount: 1 },
+        trustLevel: "community",
+      }),
+    ).toEqual({ status: "allow", reason: "one-time-grant" });
+
+    // Payload A was consumed once; retrying it must prompt again.
+    expect(
+      gate.hasGrant("sess-1", "p", "transfer", TEST_SCOPE, {
+        amount: 1,
+        target: "merchant",
+      }),
+    ).toBe(false);
+    expect(
+      gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "transfer",
+        payload: { amount: 1, target: "merchant" },
+        trustLevel: "community",
+      }).status,
+    ).toBe("pending");
+
+    // Payload B's grant must still be intact and consumable once.
+    expect(
+      gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "transfer",
+        payload: { target: "smith", amount: 2 },
+        trustLevel: "community",
+      }),
+    ).toEqual({ status: "allow", reason: "one-time-grant" });
+
+    expect(
+      gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "transfer",
+        payload: { amount: 2, target: "smith" },
+        trustLevel: "community",
+      }).status,
+    ).toBe("pending");
+  });
+
+  it("sweeps expired one-time grants on write in decide() and counts multi-payload grants on revoke()", () => {
+    const now = Date.parse("2026-08-24T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      const gate = createRpcApprovalGate();
+      const first = gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "a1",
+        payload: { step: 1 },
+        trustLevel: "community",
+      });
+      if (first.status !== "pending") throw new Error("unreachable");
+      gate.decide({
+        approvalId: first.approvalId,
+        decision: "allow",
+        scope: "once",
+        decidedAt: new Date().toISOString(),
+      });
+
+      // Advance past the one-time grant TTL, then write two fresh once grants for the same action.
+      vi.setSystemTime(now + ONE_TIME_GRANT_TTL_MS + 1);
+      const second = gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "a2",
+        payload: { step: 2 },
+        trustLevel: "community",
+      });
+      const third = gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "a2",
+        payload: { step: 3 },
+        trustLevel: "community",
+      });
+      if (second.status !== "pending" || third.status !== "pending") {
+        throw new Error("unreachable");
+      }
+      gate.decide({
+        approvalId: second.approvalId,
+        decision: "allow",
+        scope: "once",
+        decidedAt: new Date().toISOString(),
+      });
+      gate.decide({
+        approvalId: third.approvalId,
+        decision: "allow",
+        scope: "once",
+        decidedAt: new Date().toISOString(),
+      });
+
+      // Only the two fresh grants remain to be revoked (the expired a1 grant was swept).
+      expect(gate.revoke("sess-1", "p")).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  const grantSessionAction = (
+    gate: ReturnType<typeof createRpcApprovalGate>,
+    sessionId: string,
+  ) => {
+    const pending = gate.evaluate({
+      sessionId,
+      pluginId: "p",
+      action: "a",
+      payload: null,
+      trustLevel: "community",
+    });
+    if (pending.status !== "pending") throw new Error("unreachable");
+    gate.decide({
+      approvalId: pending.approvalId,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    });
+  };
+
+  it("evicts least-recently-used sessionCache entries past the cap", () => {
+    const gate = createRpcApprovalGate();
+    for (let i = 0; i < MAX_SESSION_CACHE; i += 1) {
+      grantSessionAction(gate, `sess-${i}`);
+    }
+
+    // Touch sess-0 so sess-1 becomes the least-recently-used entry.
+    expect(
+      gate.evaluate({
+        sessionId: "sess-0",
+        pluginId: "p",
+        action: "a",
+        payload: null,
+        trustLevel: "community",
+      }),
+    ).toEqual({ status: "allow", reason: "session-cached" });
+
+    // Adding one more entry past the cap evicts sess-1 while keeping sess-0.
+    grantSessionAction(gate, "sess-overflow");
+
+    expect(
+      gate.evaluate({
+        sessionId: "sess-0",
+        pluginId: "p",
+        action: "a",
+        payload: null,
+        trustLevel: "community",
+      }),
+    ).toEqual({ status: "allow", reason: "session-cached" });
+    expect(
+      gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "a",
+        payload: null,
+        trustLevel: "community",
+      }).status,
+    ).toBe("pending");
+    expect(
+      gate.evaluate({
+        sessionId: "sess-overflow",
+        pluginId: "p",
+        action: "a",
+        payload: null,
+        trustLevel: "community",
+      }),
+    ).toEqual({ status: "allow", reason: "session-cached" });
+  });
+
+  it("supports configuring maxSessionCache and refreshes LRU on hasGrant", () => {
+    expect(() => createRpcApprovalGate({ maxSessionCache: 0 })).toThrow(
+      RangeError,
+    );
+    const gate = createRpcApprovalGate({ maxSessionCache: 2 });
+
+    grantSessionAction(gate, "s1");
+    grantSessionAction(gate, "s2");
+    // Refresh s1 via hasGrant so s2 becomes the LRU victim.
+    expect(gate.hasGrant("s1", "p", "a")).toBe(true);
+    grantSessionAction(gate, "s3");
+
+    expect(gate.hasGrant("s1", "p", "a")).toBe(true);
+    expect(gate.hasGrant("s2", "p", "a")).toBe(false);
+    expect(gate.hasGrant("s3", "p", "a")).toBe(true);
   });
 });

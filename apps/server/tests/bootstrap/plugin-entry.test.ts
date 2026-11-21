@@ -1575,3 +1575,258 @@ it("reports malformed services as registration errors and rolls back earlier cap
     await entries.close();
   }
 });
+
+describe("cross-session inFlight isolation, bounded withSnapshot, and approvalSessions cleanup", () => {
+  it("does not fail Session B when Session A is revoked during an in-flight entry load", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+      calls: 0,
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelCrossSessionInFlight = state;
+    const pluginId = "entry-cross-session-inflight";
+    const plugin = writePlugin(
+      pluginId,
+      `
+      export default async function(api) {
+        const state = globalThis.__covelCrossSessionInFlight;
+        state.calls += 1;
+        api.registerRpc("ready", async () => true);
+        state.started.resolve();
+        await state.release.promise;
+      }
+    `,
+      { source: "community" },
+    );
+    const approved = new Set(["session-a", "session-b"]);
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      isCommunityServerCodeApproved: (sessionId) =>
+        Boolean(sessionId && approved.has(sessionId)),
+    });
+    try {
+      const activationA = entries.ensurePluginEntry(pluginId, "session-a");
+      await state.started.promise;
+      const activationB = entries.ensurePluginEntry(pluginId, "session-b");
+
+      // Revoke Session A while the factory is still running; Session B remains approved.
+      approved.delete("session-a");
+      state.release.resolve();
+
+      await expect(activationB).resolves.toBeUndefined();
+      await expect(activationA).rejects.toThrow(/revoked/i);
+      expect(state.calls).toBe(1);
+      expect(entries.isEntryPublished(pluginId)).toBe(true);
+      expect(params.rpcRegistry.list()).toHaveLength(1);
+    } finally {
+      state.release.resolve();
+      await entries.close();
+      delete globals.__covelCrossSessionInFlight;
+    }
+  });
+
+  it("retries cleanly for Session B when joining an in-flight load already disposing after Session A revocation", async () => {
+    const state = {
+      disposeStarted: Promise.withResolvers<void>(),
+      disposeRelease: Promise.withResolvers<void>(),
+      factoryStarted: Promise.withResolvers<void>(),
+      factoryRelease: Promise.withResolvers<void>(),
+      calls: 0,
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelLateJoinInFlight = state;
+    const pluginId = "entry-late-join-inflight";
+    const plugin = writePlugin(
+      pluginId,
+      `
+      export default async function(api) {
+        const state = globalThis.__covelLateJoinInFlight;
+        state.calls += 1;
+        const call = state.calls;
+        api.registerRpc("ready", async () => call);
+        api.onDispose(async () => {
+          if (call === 1) {
+            state.disposeStarted.resolve();
+            await state.disposeRelease.promise;
+          }
+        });
+        if (call === 1) {
+          state.factoryStarted.resolve();
+          await state.factoryRelease.promise;
+        }
+      }
+    `,
+      { source: "community" },
+    );
+    const approved = new Set(["session-a", "session-b"]);
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      isCommunityServerCodeApproved: (sessionId) =>
+        Boolean(sessionId && approved.has(sessionId)),
+    });
+    try {
+      const activationA = entries.ensurePluginEntry(pluginId, "session-a");
+      await state.factoryStarted.promise;
+      approved.delete("session-a");
+      state.factoryRelease.resolve();
+
+      // Wait until Session A's publication failed and entered async disposal.
+      await state.disposeStarted.promise;
+      const activationB = entries.ensurePluginEntry(pluginId, "session-b");
+      state.disposeRelease.resolve();
+
+      await expect(activationA).rejects.toThrow();
+      await expect(activationB).resolves.toBeUndefined();
+      expect(state.calls).toBe(2);
+      expect(entries.isEntryPublished(pluginId)).toBe(true);
+    } finally {
+      state.factoryRelease.resolve();
+      state.disposeRelease.resolve();
+      await entries.close();
+      delete globals.__covelLateJoinInFlight;
+    }
+  });
+
+  it("bounds withSnapshot retries when artifactRevision advances continuously and releases sessionLock", async () => {
+    const { createInProcessSessionLock } =
+      await import("../../src/lib/session-lock.js");
+    const pluginId = "entry-snapshot-churn";
+    const plugin = writePlugin(
+      pluginId,
+      `export default function(api) { api.registerRpc("ping", async () => true); }`,
+      { source: "community" },
+    );
+    fs.writeFileSync(
+      path.join(plugin.discovery.rootPath, "PLUGIN.md"),
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: churn\nentry: ./server/index.mjs\ncontributes:\n  actions: [ping]\n---\n`,
+    );
+    const params = makeParams([plugin]);
+    const sessionLock = createInProcessSessionLock();
+    let captureCalls = 0;
+    let entries!: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+    const runtimeLoader = {
+      capture: async () => {
+        captureCalls += 1;
+        if (captureCalls > 15) {
+          throw new Error("unbounded retry loop detected");
+        }
+        await entries.reload(pluginId, "session-churn");
+        return { run: <T>(fn: () => T) => fn() };
+      },
+      prepareGeneration: async () => () => {},
+    } as unknown as import("../../src/routes/api/bootstrap/runtime-loader.js").RuntimeLoader;
+
+    entries = await createBootstrapPluginEntries({
+      ...params,
+      development: true,
+      sessionLock,
+      runtimeLoader,
+    });
+    try {
+      await expect(
+        entries.withSnapshot("session-churn", async () => "ok"),
+      ).rejects.toThrow(/did not stabilize/i);
+      expect(captureCalls).toBeLessThanOrEqual(8);
+
+      // Verify sessionLock was released cleanly after the bounded failure.
+      let acquired = false;
+      const gotLock = await sessionLock.tryWithLock!(
+        "session-churn",
+        async () => {
+          acquired = true;
+        },
+      );
+      expect(gotLock.acquired).toBe(true);
+      expect(acquired).toBe(true);
+    } finally {
+      await entries.close();
+    }
+  });
+
+  it("prunes deleted and non-active sessions from approvalSessions on reload and supports clearSession", async () => {
+    const pluginId = "entry-approval-cleanup";
+    const plugin = writePlugin(
+      pluginId,
+      `export default function(api) { api.registerRpc("ping", async () => true); }`,
+      { source: "community" },
+    );
+    fs.writeFileSync(
+      path.join(plugin.discovery.rootPath, "PLUGIN.md"),
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: cleanup\nentry: ./server/index.mjs\ncontributes:\n  actions: [ping]\n---\n`,
+    );
+    const params = makeParams([plugin]);
+    const now = new Date().toISOString();
+    const makeSession = (
+      id: string,
+      status: "active" | "ended" | "paused",
+    ) => ({
+      id,
+      locale: "en",
+      status,
+      phase: "playing" as const,
+      activePlugins: [pluginId],
+      metadata: {},
+      setupRuntimes: {},
+      seats: [
+        {
+          id: "main",
+          controller: "human" as const,
+          role: "player" as const,
+          characters: "auto" as const,
+        },
+      ],
+      completedPlayerTurns: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await params.store.createSession(makeSession("s-deleted", "active"));
+    await params.store.createSession(makeSession("s-ended", "active"));
+    await params.store.createSession(makeSession("s-cleared", "active"));
+    await params.store.createSession(makeSession("s-live", "active"));
+
+    const seenInPrepare: string[][] = [];
+    const runtimeLoader = {
+      capture: async () => ({ run: <T>(fn: () => T) => fn() }),
+      prepareGeneration: async (args: { sessionIds: readonly string[] }) => {
+        seenInPrepare.push([...args.sessionIds]);
+        return () => {};
+      },
+    } as unknown as import("../../src/routes/api/bootstrap/runtime-loader.js").RuntimeLoader;
+
+    const checkedDuringReload: string[] = [];
+    let recordingChecks = false;
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      development: true,
+      runtimeLoader,
+      isCommunityServerCodeApproved: (sessionId) => {
+        if (recordingChecks && sessionId) checkedDuringReload.push(sessionId);
+        return Boolean(sessionId);
+      },
+    });
+    try {
+      await entries.ensurePluginEntry(pluginId, "s-deleted");
+      await entries.ensurePluginEntry(pluginId, "s-ended");
+      await entries.ensurePluginEntry(pluginId, "s-cleared");
+      await entries.ensurePluginEntry(pluginId, "s-live");
+
+      // Delete s-deleted, end s-ended, and clear s-cleared via clearSession().
+      await params.store.deleteSession("s-deleted");
+      await params.store.updateSession("s-ended", { status: "ended" });
+      entries.clearSession("s-cleared");
+
+      recordingChecks = true;
+      await entries.reload(pluginId);
+
+      // Only s-live should remain in approvalSessions and be checked/passed.
+      expect([...new Set(checkedDuringReload)]).toEqual(["s-live"]);
+      expect(seenInPrepare.at(-1)).toEqual(["s-live"]);
+    } finally {
+      await entries.close();
+      await params.store.close();
+    }
+  });
+});

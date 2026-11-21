@@ -397,7 +397,7 @@ export async function executeTurn(
         }),
         turnIds: [turn.turnId],
         activePluginIds: hookScope.activePluginIds,
-        ...(input.origin === "player"
+        ...(input.origin === "player" || Boolean(turn.setupCompletion)
           ? {
               sessionClock: {
                 now: new Date().toISOString(),
@@ -485,13 +485,14 @@ export async function resumeSuspendedRuntime(
       suspension.pendingContinuation.executionContext.logicalTurnId ??
       suspension.turnId,
     activePluginIds: new Set(
-      [...(deps.hookScope?.activePluginIds ?? [manifest.pluginId])].filter(
-        (pluginId) => !paused.has(pluginId),
-      ),
+      [
+        ...(deps.hookScope?.activePluginIds ??
+          activeRuntimes.map((runtime) => runtime.pluginId)),
+      ].filter((pluginId) => !paused.has(pluginId)),
     ),
     settings: deps.hookScope
       ? snapshotUserSettings(deps.hookScope.settings)
-      : buildHookSettings([manifest], userSettings),
+      : buildHookSettings(activeRuntimes, userSettings),
     locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
   const initialDelegation = delegation.snapshot();
@@ -597,7 +598,7 @@ export async function resumeSuspendedRuntime(
     store: deps.store,
     suspension,
     manifest,
-    activeRuntimes: options?.activeRuntimes ?? [manifest],
+    activeRuntimes,
     result,
   });
   return {

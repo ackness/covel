@@ -269,10 +269,17 @@ export async function callLLMWithRetry(
       });
       assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
       try {
         let queueWaitMs = 0;
         const timeoutAborter = new AbortController();
         const timeoutSignal = timeoutAborter.signal;
+        const isSettled = () =>
+          settled || requestScope.signal.aborted || timeoutSignal.aborted;
+        const disarm = () => {
+          settled = true;
+          clearTimeout(timeoutHandle);
+        };
         let attemptDeadline =
           Date.now() +
           computeAttemptBudget(
@@ -280,6 +287,8 @@ export async function callLLMWithRetry(
             Math.min(effectiveDeadline, requestScope.budget.deadline),
           );
         const armTimeout = () => {
+          if (isSettled()) return;
+          clearTimeout(timeoutHandle);
           timeoutHandle = setTimeout(
             () =>
               timeoutAborter.abort(
@@ -297,8 +306,10 @@ export async function callLLMWithRetry(
         };
         armTimeout();
         const onQueueStart = () => {
+          if (isSettled()) return () => {};
           clearTimeout(timeoutHandle);
           return (waitedMs: number) => {
+            if (isSettled()) return;
             queueWaitMs += waitedMs;
             effectiveDeadline += waitedMs;
             attemptDeadline += waitedMs;
@@ -351,6 +362,7 @@ export async function callLLMWithRetry(
             }),
             signal,
           );
+          disarm();
           responseUsage = response.usage;
           throwIfTurnAborted(params.abortSignal);
           requireCompleteOutput(
@@ -366,6 +378,7 @@ export async function callLLMWithRetry(
           });
           return response;
         } catch (err) {
+          disarm();
           await trace.ensureCalling();
           await emitLlmRespondedError(params.emitter, {
             runtimeId: params.runtimeId,
@@ -406,6 +419,7 @@ export async function callLLMWithRetry(
           onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
         }
       } finally {
+        settled = true;
         clearTimeout(timeoutHandle);
       }
     }
@@ -539,15 +553,33 @@ export async function streamLLMWithRetry(
       requestScope.signal.addEventListener("abort", onExternalAbort, {
         once: true,
       });
-      const armCallGuard = () =>
-        setTimeout(() => {
+      let settled = false;
+      const isSettled = (): boolean =>
+        settled || callAborter.signal.aborted || requestScope.signal.aborted;
+      let callTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let ttfbHandle: ReturnType<typeof setTimeout> | undefined;
+      let idleHandle: ReturnType<typeof setTimeout> | undefined;
+      const disarmAttempt = (): void => {
+        settled = true;
+        clearTimeout(callTimeoutHandle);
+        clearTimeout(ttfbHandle);
+        clearTimeout(idleHandle);
+        requestScope.signal.removeEventListener("abort", onExternalAbort);
+      };
+      const armCallGuard = (): void => {
+        if (isSettled()) return;
+        clearTimeout(callTimeoutHandle);
+        callTimeoutHandle = setTimeout(() => {
           callAborter.abort(
             new StreamAttemptTimeoutError("call", "call timeout"),
           );
         }, remainingMs());
-      let callTimeoutHandle = armCallGuard();
-      const armFirstTokenGuard = () =>
-        setTimeout(
+      };
+      armCallGuard();
+      const armFirstTokenGuard = (): void => {
+        if (isSettled()) return;
+        clearTimeout(ttfbHandle);
+        ttfbHandle = setTimeout(
           () => {
             if (!firstTokenSeen) {
               callAborter.abort(
@@ -560,7 +592,8 @@ export async function streamLLMWithRetry(
           },
           firstTokenWaitMs(policy, attemptsLeft, remainingMs()),
         );
-      let ttfbHandle = armFirstTokenGuard();
+      };
+      armFirstTokenGuard();
       // A rate-limited or failed transport attempt is followed by a backoff
       // the provider asked for (`retry-after`); the model has not been asked
       // yet, so the guard pauses and restarts when a later attempt is
@@ -569,20 +602,24 @@ export async function streamLLMWithRetry(
       const restartFirstTokenGuard = (): void => {
         clearTimeout(ttfbHandle);
         firstTokenGuardPaused = false;
-        ttfbHandle = armFirstTokenGuard();
+        if (isSettled()) return;
+        armFirstTokenGuard();
       };
       const onQueueStart = () => {
+        if (isSettled()) return () => {};
         clearTimeout(callTimeoutHandle);
         clearTimeout(ttfbHandle);
         return (waitedMs: number) => {
+          if (isSettled()) return;
           queueWaitMs += waitedMs;
           effectiveDeadline += waitedMs;
           if (waitedMs > 0) params.onQueueWait?.(waitedMs);
-          callTimeoutHandle = armCallGuard();
+          armCallGuard();
           restartFirstTokenGuard();
         };
       };
       const onProviderRequest = (request: LLMProviderRequest): void => {
+        if (isSettled()) return;
         trace.onProviderRequest(request);
         if (firstTokenSeen) return;
         if (request.failed || (request.statusCode ?? 200) >= 400) {
@@ -598,8 +635,8 @@ export async function streamLLMWithRetry(
       // silence guards. None is delivered outside this attempt.
       let firstOutputAt: number | undefined;
       let lastOutputAt: number | undefined;
-      let idleHandle: ReturnType<typeof setTimeout> | undefined;
       const noteOutput = (): void => {
+        if (isSettled()) return;
         if (!firstTokenSeen) {
           firstTokenSeen = true;
           firstOutputAt = Date.now();
@@ -714,10 +751,7 @@ export async function streamLLMWithRetry(
             "PROVIDER_ERROR: model stream ended without a terminal event",
           );
         }
-        clearTimeout(callTimeoutHandle);
-        clearTimeout(ttfbHandle);
-        clearTimeout(idleHandle);
-        requestScope.signal.removeEventListener("abort", onExternalAbort);
+        disarmAttempt();
         if (firstOutputAt !== undefined) {
           const streamedMs = Date.now() - firstOutputAt;
           effectiveDeadline += streamedMs;
@@ -752,10 +786,7 @@ export async function streamLLMWithRetry(
           attempt,
         };
       } catch (err) {
-        clearTimeout(callTimeoutHandle);
-        clearTimeout(ttfbHandle);
-        clearTimeout(idleHandle);
-        requestScope.signal.removeEventListener("abort", onExternalAbort);
+        disarmAttempt();
         lastError = err;
         const truncated = isOutputTruncated(err);
         if (truncated) truncations++;
@@ -816,6 +847,8 @@ export async function streamLLMWithRetry(
           requireAttempt: true,
         });
         onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
+      } finally {
+        disarmAttempt();
       }
     }
 

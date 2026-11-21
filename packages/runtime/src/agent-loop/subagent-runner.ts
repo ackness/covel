@@ -53,6 +53,12 @@ import {
   createWorldModelView,
   forkWorldModelView,
 } from "../function-runtime/world-model-view.js";
+import type {
+  PluginDataReadProbe,
+  PluginDataVisibility,
+} from "../function-runtime/upstream-plugin-data.js";
+import { createReadRecorder } from "../read-dependencies.js";
+import { baselinesFor, createReadBaselineRecorder } from "../read-baselines.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import { DEFAULT_RUNTIME_TIMEOUT_MS } from "../turn-executor/runtime-scaffold.js";
 import { unwrapRetryCause } from "../turn-executor/runtime-finalization.js";
@@ -117,6 +123,12 @@ export interface SubagentRunArgs {
    * succeeds. Without it the sub-agent cannot call write services.
    */
   readonly operations?: OperationStage;
+  /**
+   * The caller's plugin-data visibility. Each sub-agent forks a speculative
+   * child visibility for its provider plugin and merges recorded read
+   * dependencies and baselines back into the caller only upon success.
+   */
+  readonly pluginDataVisibility?: PluginDataVisibility;
 }
 
 /** How one sub-agent run ended, for the fault latch. */
@@ -256,22 +268,50 @@ export function createSubagentRunner(
     },
     run: (args) => run(args),
     runBatch(args) {
-      let previous = Promise.resolve();
-      let start!: () => void;
-      const admitted = new Promise<void>((resolve) => {
-        start = resolve;
+      const total = args.length;
+      let remaining = total;
+      const entries: Array<{
+        readonly claim: () => BatchClaimDecision;
+        readonly resolve: (decision: BatchClaimDecision) => void;
+      } | null> = Array.from({ length: total }, () => null);
+
+      const finishSlot = () => {
+        remaining--;
+        if (remaining > 0) return;
+        // Every child has finished async preflight (world/budget loading).
+        // Decide every claim/refusal synchronously in input order before any
+        // provider can start, finish, or observe a pre-start abort after claiming.
+        for (const entry of entries) {
+          if (!entry) continue;
+          entry.resolve(entry.claim());
+        }
+      };
+
+      const results = args.map((arg, index) => {
+        let done = false;
+        const slot: BatchSlot = {
+          enterClaim(claim) {
+            if (done) {
+              return Promise.resolve({
+                admitted: false,
+                code: "internal",
+                message: MESSAGES.internal,
+              });
+            }
+            done = true;
+            return new Promise<BatchClaimDecision>((resolve) => {
+              entries[index] = { claim, resolve };
+              finishSlot();
+            });
+          },
+          skip() {
+            if (done) return;
+            done = true;
+            finishSlot();
+          },
+        };
+        return run(arg, slot);
       });
-      const results = args.map((arg) => {
-        const ready = previous;
-        let release!: () => void;
-        previous = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        return run(arg, { ready, release, start: admitted });
-      });
-      // Every claim/refusal is decided before any provider can finish and
-      // refill the batch. This is an admission barrier, never a worker queue.
-      void previous.then(start);
       return Promise.allSettled(results).then((outcomes) =>
         outcomes.map((outcome): SubagentResult => {
           if (outcome.status === "fulfilled") return outcome.value;
@@ -286,11 +326,7 @@ export function createSubagentRunner(
   };
   async function run(
     args: SubagentRunArgs,
-    admission?: {
-      ready: Promise<void>;
-      release(): void;
-      start: Promise<void>;
-    },
+    batchSlot?: BatchSlot,
   ): Promise<SubagentResult> {
     const subagentCallId = crypto.randomUUID();
     const startTime = Date.now();
@@ -307,7 +343,7 @@ export function createSubagentRunner(
       message: string,
       provider?: RuntimeManifest,
     ): Promise<SubagentResult> => {
-      admission?.release();
+      batchSlot?.skip();
       await emitSafely(args.deps.emitter, "subagent.failed", {
         ...trace,
         ...(provider
@@ -322,6 +358,12 @@ export function createSubagentRunner(
 
     // Admission is synchronous: provider/budget loading must not move the
     // snapshot boundary or let a child observe later caller writes.
+    const isAborted = () =>
+      Boolean(
+        args.parentSignal?.aborted ||
+        args.deps.turnControl?.executionSignal?.aborted ||
+        args.deps.turnControl?.signal?.aborted,
+      );
     const assertLive = () => {
       args.parentSignal?.throwIfAborted();
       args.deps.turnControl?.executionSignal?.throwIfAborted();
@@ -339,12 +381,7 @@ export function createSubagentRunner(
         ? forkWorldModelView(args.world, assertLive)
         : undefined;
     } catch {
-      if (
-        args.parentSignal?.aborted ||
-        args.deps.turnControl?.executionSignal?.aborted ||
-        args.deps.turnControl?.signal?.aborted
-      )
-        return refuse("cancelled", MESSAGES.cancelled);
+      if (isAborted()) return refuse("cancelled", MESSAGES.cancelled);
       if (
         args.parentDeadline !== undefined &&
         Date.now() >= args.parentDeadline
@@ -353,7 +390,6 @@ export function createSubagentRunner(
       return refuse("internal", MESSAGES.internal);
     }
     try {
-      if (admission) await admission.ready;
       if (args.refusal) return refuse(args.refusal.code, args.refusal.message);
       const parsed = parseRequest(args.request);
       if (typeof parsed === "string") return refuse("invalid-input", parsed);
@@ -414,38 +450,62 @@ export function createSubagentRunner(
           "not-found",
           "The character is not in the current world view",
         );
-      budget ??= await (loadingBudget ??= createDelegationBudget(
-        args.input.sessionId,
-        args.deps.store,
-      ));
+      if (!budget) {
+        const pending = (loadingBudget ??= createDelegationBudget(
+          args.input.sessionId,
+          args.deps.store,
+        ));
+        try {
+          budget = await pending;
+        } finally {
+          if (loadingBudget === pending) loadingBudget = undefined;
+        }
+      }
       const delegation = budget;
-      // No await between the last cancellation/pool check and admission.
-      if (
-        args.parentSignal?.aborted ||
-        args.deps.turnControl?.executionSignal?.aborted ||
-        args.deps.turnControl?.signal?.aborted
-      )
-        return refuse("cancelled", MESSAGES.cancelled);
-      if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
-        return refuse("unavailable", MESSAGES.depth);
-      if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
-        return refuse("unavailable", MESSAGES.pool);
-      if (budget.claim(actor ? parsed.characterId : undefined))
-        return refuse(
-          "unavailable",
-          "The execution's delegation allowance is exhausted; finish without further children",
-        );
-      inFlight++;
-      admission?.release();
-      try {
-        if (admission) await admission.start;
+      // No await between the last cancellation/pool check, budget claim and admission.
+      const tryClaim = (): BatchClaimDecision => {
+        if (isAborted())
+          return {
+            admitted: false,
+            code: "cancelled",
+            message: MESSAGES.cancelled,
+          };
         if (
-          admission &&
-          (args.parentSignal?.aborted ||
-            args.deps.turnControl?.executionSignal?.aborted ||
-            args.deps.turnControl?.signal?.aborted)
+          args.parentDeadline !== undefined &&
+          Date.now() >= args.parentDeadline
         )
-          return refuse("cancelled", MESSAGES.cancelled);
+          return {
+            admitted: false,
+            code: "timeout",
+            message: MESSAGES.timeout,
+          };
+        if (args.caller.depth + 1 > SUBAGENT_MAX_DEPTH)
+          return {
+            admitted: false,
+            code: "unavailable",
+            message: MESSAGES.depth,
+          };
+        if (inFlight >= SUBAGENT_POOL_PER_EXECUTION)
+          return {
+            admitted: false,
+            code: "unavailable",
+            message: MESSAGES.pool,
+          };
+        if (delegation.claim(actor ? parsed.characterId : undefined))
+          return {
+            admitted: false,
+            code: "unavailable",
+            message:
+              "The execution's delegation allowance is exhausted; finish without further children",
+          };
+        inFlight++;
+        return { admitted: true };
+      };
+      const decision = batchSlot
+        ? await batchSlot.enterClaim(tryClaim)
+        : tryClaim();
+      if (!decision.admitted) return refuse(decision.code, decision.message);
+      try {
         const serviceOutcomes = withServiceOrigin(args);
         const { fault, ...result } = await runProvider({
           args: {
@@ -487,15 +547,87 @@ export function createSubagentRunner(
     } catch (error) {
       console.warn("[subagent] admission failed", error);
       return refuse(
-        args.parentSignal?.aborted ? "cancelled" : "internal",
-        args.parentSignal?.aborted ? MESSAGES.cancelled : MESSAGES.internal,
+        isAborted() ? "cancelled" : "internal",
+        isAborted() ? MESSAGES.cancelled : MESSAGES.internal,
       );
     } finally {
-      admission?.release();
+      batchSlot?.skip();
       worldFork?.discard();
     }
   }
   return runner;
+}
+
+type BatchClaimDecision =
+  | { readonly admitted: true }
+  | {
+      readonly admitted: false;
+      readonly code: SubagentErrorCode;
+      readonly message: string;
+    };
+
+interface BatchSlot {
+  enterClaim(claim: () => BatchClaimDecision): Promise<BatchClaimDecision>;
+  skip(): void;
+}
+
+/**
+ * Host-only speculative fork of plugin-data visibility for a sub-agent or
+ * delegation boundary. Reads observe the provider's uncommitted same-turn
+ * upstream writes (and `upstreamOf` for services), while recorded producer
+ * dependencies and baselines merge into `parent` only when `accept()` runs.
+ */
+export function forkPluginDataVisibility(
+  parent: PluginDataVisibility,
+  options: {
+    readonly pluginId?: string;
+    readonly runtimeId?: string;
+    readonly runId?: string;
+    readonly assertLive?: () => void;
+    readonly probe?: PluginDataReadProbe;
+  } = {},
+): {
+  readonly visibility: PluginDataVisibility;
+  accept(): void;
+  discard(): void;
+} {
+  const pluginId = options.pluginId ?? parent.pluginId;
+  const runtimeId = options.runtimeId ?? parent.runtimeId;
+  const runId = options.runId ?? parent.runId;
+  const recorder = createReadRecorder();
+  const baselines = createReadBaselineRecorder();
+  let closed = false;
+  const writes =
+    pluginId === parent.pluginId
+      ? parent.writes.length > 0
+        ? parent.writes
+        : (parent.upstreamOf?.(pluginId) ?? parent.writes)
+      : (parent.upstreamOf?.(pluginId) ?? []);
+  const probe = options.probe ?? parent.probe;
+  const visibility: PluginDataVisibility = {
+    pluginId,
+    runtimeId,
+    runId,
+    writes,
+    ...(parent.upstreamOf ? { upstreamOf: parent.upstreamOf } : {}),
+    recorder,
+    baselines,
+    ...(probe ? { probe } : {}),
+  };
+  return {
+    visibility,
+    accept() {
+      if (closed) return;
+      options.assertLive?.();
+      const targetBaselines = parent.baselines ?? baselinesFor(parent.recorder);
+      for (const read of baselines.snapshot()) targetBaselines.observe(read);
+      for (const producer of recorder) parent.recorder.add(producer);
+      closed = true;
+    },
+    discard() {
+      closed = true;
+    },
+  };
 }
 
 /**
@@ -712,6 +844,15 @@ async function runProvider({
     pluginId: provider.pluginId,
     runtimeId: provider.name,
   });
+  const visibilityFork = args.pluginDataVisibility
+    ? forkPluginDataVisibility(args.pluginDataVisibility, {
+        pluginId: provider.pluginId,
+        runtimeId: provider.name,
+        runId: subagentCallId,
+        assertLive,
+        probe: deps.pluginDataReadProbe,
+      })
+    : undefined;
   const fail = async (
     code: SubagentErrorCode,
     message: string,
@@ -719,6 +860,7 @@ async function runProvider({
     cause?: unknown,
   ): Promise<SubagentResult & { readonly fault?: "runtime" | "timeout" }> => {
     operations?.discard();
+    visibilityFork?.discard();
     let fault: "runtime" | "timeout" | undefined;
     if (
       !args.parentSignal?.aborted &&
@@ -908,6 +1050,9 @@ async function runProvider({
               deps: { ...deps, toolExecutor: innerExecutor },
               executionContext: args.executionContext,
               ...(operations ? { operations } : {}),
+              ...(visibilityFork
+                ? { pluginDataVisibility: visibilityFork.visibility }
+                : {}),
             })
           : surfaceExecutor,
     };
@@ -975,6 +1120,9 @@ async function runProvider({
     const remainingMs = Math.max(1, preparationDeadline - Date.now());
     const toolLoop = await runAgentToolLoop({
       worldBase,
+      ...(visibilityFork
+        ? { pluginDataVisibility: visibilityFork.visibility }
+        : {}),
       manifest,
       input,
       loaded,
@@ -1066,6 +1214,7 @@ async function runProvider({
     // No await between the final lifetime check and accepting reads/writes.
     assertLive();
     worldFork?.accept();
+    visibilityFork?.accept();
     operations?.commit();
     return {
       ok: true,
@@ -1106,6 +1255,7 @@ async function runProvider({
     const code = codeForStop(stop);
     return fail(code, messageFor(code), stop, error);
   } finally {
+    visibilityFork?.discard();
     clearTimeout(preparationTimer);
     preparation.abort(new Error("Sub-agent preparation has ended"));
   }

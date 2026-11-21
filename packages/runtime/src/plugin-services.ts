@@ -893,9 +893,12 @@ export class PluginServiceRegistry {
           name: "<unavailable>",
           contract: "<unavailable>",
         };
-        // A write call holds its provider's lock until the call ends, and
-        // stages its operation only once the call has returned in time.
+        // A write call holds its provider's lock until entry.invoke actually
+        // settles (even after a timeout/abort), and stages its operation only
+        // once the call has returned in time.
         let release: (() => void) | undefined;
+        let invokeSettled: Promise<void> | undefined;
+        let invokeDone = false;
         let staged:
           Omit<StagedOperation, "id" | "seq" | "invokedBy"> | undefined;
         try {
@@ -1194,7 +1197,19 @@ export class PluginServiceRegistry {
                     state,
                   ),
                 };
-                const result = await entry.invoke(input, context);
+                const invocation = entry.invoke(input, context);
+                // Attach a non-rejecting settlement observer before awaiting so
+                // an early timeout/abort keeps the provider's mutex held until
+                // the handler finishes without risking an unhandled rejection.
+                invokeSettled = invocation.then(
+                  () => {
+                    invokeDone = true;
+                  },
+                  () => {
+                    invokeDone = true;
+                  },
+                );
+                const result = await invocation;
                 if (!signal.aborted && buffer.length > 0)
                   staged = {
                     contract: entry.contract,
@@ -1303,7 +1318,15 @@ export class PluginServiceRegistry {
             errorCode,
           });
         } finally {
-          release?.();
+          if (release) {
+            const unlock = release;
+            release = undefined;
+            if (invokeSettled && !invokeDone) {
+              void invokeSettled.then(() => unlock());
+            } else {
+              unlock();
+            }
+          }
           try {
             caller.onSettled?.({
               providerPluginId: target.providerPluginId,

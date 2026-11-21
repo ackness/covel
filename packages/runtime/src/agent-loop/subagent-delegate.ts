@@ -29,7 +29,12 @@ import {
   parseJsonText,
 } from "@covel/tools";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import type { SubagentCaller, SubagentRunner } from "./subagent-runner.js";
+import {
+  forkPluginDataVisibility,
+  type SubagentCaller,
+  type SubagentRunner,
+} from "./subagent-runner.js";
+import type { PluginDataVisibility } from "../function-runtime/upstream-plugin-data.js";
 import type { OperationStage } from "../operations/operation-stage.js";
 import type { PrivateDelegationProjection } from "../orchestration/private-projections.js";
 import type {
@@ -51,6 +56,11 @@ export interface SubagentDelegateScope {
    * operations in a child of it, kept when the sub-agent succeeds.
    */
   readonly operations?: OperationStage;
+  /**
+   * The caller's plugin-data visibility, used when the tool call context does
+   * not supply one directly.
+   */
+  readonly pluginDataVisibility?: PluginDataVisibility;
 }
 
 const APPROVAL: ApprovalStatus = "auto-allowed";
@@ -116,9 +126,55 @@ export function withSubagentDelegate(
       // provenance first so its persistence cannot expose private arguments.
       if (context.authorizedToolNames?.has(call.name) !== true)
         return inner.execute(call, context);
-      return call.name === DELEGATE_BATCH_TOOL_NAME
-        ? runDelegateBatch(call, context, runner, scope)
-        : runDelegate(call, context, runner, scope);
+      if (call.name === DELEGATE_BATCH_TOOL_NAME) {
+        const parentVisibility =
+          context.pluginDataVisibility ?? scope.pluginDataVisibility;
+        if (!parentVisibility)
+          return runDelegateBatch(call, context, runner, scope);
+        const batchVisibility = forkPluginDataVisibility(parentVisibility, {
+          assertLive: () => {
+            context.signal?.throwIfAborted();
+            scope.deps.turnControl?.signal?.throwIfAborted();
+            scope.deps.turnControl?.executionSignal?.throwIfAborted();
+          },
+        });
+        const scopedRunner: SubagentRunner = {
+          availableTargets: (caller, sittingOut) =>
+            runner.availableTargets(caller, sittingOut),
+          privateTargetKind: (req, caller) =>
+            runner.privateTargetKind(req, caller),
+          get inFlight() {
+            return runner.inFlight;
+          },
+          run: (args) =>
+            runner.run({
+              ...args,
+              pluginDataVisibility:
+                args.pluginDataVisibility ?? batchVisibility.visibility,
+            }),
+          runBatch: (requests) =>
+            runner.runBatch(
+              requests.map((args) => ({
+                ...args,
+                pluginDataVisibility:
+                  args.pluginDataVisibility ?? batchVisibility.visibility,
+              })),
+            ),
+        };
+        try {
+          const result = await runDelegateBatch(
+            call,
+            context,
+            scopedRunner,
+            scope,
+          );
+          if (result.success) batchVisibility.accept();
+          return result;
+        } finally {
+          batchVisibility.discard();
+        }
+      }
+      return runDelegate(call, context, runner, scope);
     },
   };
 }
@@ -211,6 +267,13 @@ async function runDelegate(
   const worldFork = context.world
     ? forkWorldModelView(context.world, () => context.signal?.throwIfAborted())
     : undefined;
+  const parentVisibility =
+    context.pluginDataVisibility ?? scope.pluginDataVisibility;
+  const visibilityFork = parentVisibility
+    ? forkPluginDataVisibility(parentVisibility, {
+        assertLive: () => context.signal?.throwIfAborted(),
+      })
+    : undefined;
   const operations = scope.operations?.child();
   let accepted = false;
   try {
@@ -236,6 +299,9 @@ async function runDelegate(
         },
         input: scope.input,
         world: worldFork?.world,
+        ...(visibilityFork
+          ? { pluginDataVisibility: visibilityFork.visibility }
+          : {}),
         deps: scope.deps,
         executionContext: scope.executionContext,
         ...(operations ? { operations } : {}),
@@ -244,10 +310,12 @@ async function runDelegate(
       });
     } catch (error) {
       operations?.discard();
+      visibilityFork?.discard();
       throw error;
     }
     if (!result.ok) {
       operations?.discard();
+      visibilityFork?.discard();
       return failed(call, context, startTime, result);
     }
     const staged = operations?.held() ?? [];
@@ -273,6 +341,7 @@ async function runDelegate(
     });
     context.signal?.throwIfAborted();
     worldFork?.accept();
+    visibilityFork?.accept();
     operations?.commit();
     accepted = true;
     return {
@@ -284,7 +353,10 @@ async function runDelegate(
       approvalStatus: APPROVAL,
     };
   } finally {
-    if (!accepted) operations?.discard();
+    if (!accepted) {
+      operations?.discard();
+      visibilityFork?.discard();
+    }
     worldFork?.discard();
   }
 }

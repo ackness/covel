@@ -55,11 +55,7 @@ const hookResultSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("continue"),
     replace: z
-      .custom<Record<string, unknown>>((value) => {
-        if (value === null || typeof value !== "object") return false;
-        const prototype = Object.getPrototypeOf(value);
-        return prototype === Object.prototype || prototype === null;
-      })
+      .custom<Record<string, unknown>>((value) => isPlainRecord(value))
       .optional(),
   }),
   z.object({ action: z.literal("abort"), reason: z.string() }),
@@ -365,18 +361,28 @@ export class HookPipeline {
       }
 
       if ("replace" in result && result.replace !== undefined) {
-        // Reviewers can request correction, never replace another reviewer's
-        // candidate, call identity or public tool evidence.
-        const replacement =
-          event === "ReviewAgentOutput"
-            ? {
-                correction:
-                  (accumulated as { correction?: string }).correction ||
-                  (result.replace as { correction?: string }).correction
-                    ?.trim()
-                    .slice(0, 2000),
-              }
-            : result.replace;
+        let replacement: Partial<P> = result.replace;
+        if (event === "ReviewAgentOutput") {
+          // Reviewers can request correction, never replace another reviewer's
+          // candidate, call identity or public tool evidence.
+          replacement = {
+            correction:
+              (accumulated as { correction?: string }).correction ||
+              (result.replace as { correction?: string }).correction
+                ?.trim()
+                .slice(0, 2000),
+          } as unknown as Partial<P>;
+        } else if (event === "PostLLMResponse") {
+          replacement = mergePostLLMResponseReplace(
+            accumulated as Record<string, unknown>,
+            result.replace as Record<string, unknown>,
+          ) as Partial<P>;
+        } else if (event === "PreStateCommit") {
+          replacement = pinPreStateCommitReplace(
+            payload as Record<string, unknown>,
+            result.replace as Record<string, unknown>,
+          ) as Partial<P>;
+        }
         Object.assign(accumulated, replacement);
         hasReplace = true;
         currentPayload = { ...currentPayload, ...replacement };
@@ -590,6 +596,77 @@ export function createHookPipeline(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * Keep an earlier PostLLMResponse reviewer's non-empty `correction` so a later
+ * handler returning `{ correction: "" }` or `{ correction: undefined }` cannot
+ * silently clear the rejection, while still allowing `response` rewrites.
+ */
+function mergePostLLMResponseReplace(
+  accumulated: Record<string, unknown>,
+  nextReplace: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...nextReplace };
+  const existing =
+    typeof accumulated.correction === "string"
+      ? accumulated.correction.trim()
+      : "";
+  const incoming =
+    typeof nextReplace.correction === "string"
+      ? nextReplace.correction.trim()
+      : "";
+  if (existing) {
+    merged.correction = existing;
+  } else if (incoming) {
+    merged.correction = incoming;
+  } else {
+    delete merged.correction;
+  }
+  return merged;
+}
+
+const IMMUTABLE_PROPOSAL_FIELDS = [
+  "id",
+  "type",
+  "source",
+  "sessionId",
+  "turnId",
+  "timestamp",
+] as const;
+
+/**
+ * Pin immutable proposal envelope fields between chained PreStateCommit
+ * handlers so an earlier handler cannot spoof `proposal.type` or `source` to
+ * bypass a later guard or its `match` filter.
+ */
+function pinPreStateCommitReplace(
+  originalPayload: Record<string, unknown>,
+  nextReplace: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Object.hasOwn(nextReplace, "proposal")) return nextReplace;
+  const originalProposal = originalPayload.proposal;
+  if (!isPlainRecord(originalProposal)) return nextReplace;
+  const replacedProposal = nextReplace.proposal;
+  if (!isPlainRecord(replacedProposal)) {
+    const { proposal: _dropped, ...rest } = nextReplace;
+    return rest;
+  }
+  const pinned: Record<string, unknown> = { ...replacedProposal };
+  for (const field of IMMUTABLE_PROPOSAL_FIELDS) {
+    if (Object.hasOwn(originalProposal, field)) {
+      pinned[field] = cloneHookData(originalProposal[field]);
+    } else {
+      delete pinned[field];
+    }
+  }
+  return { ...nextReplace, proposal: pinned };
+}
 
 /**
  * The plugin a failed guard handler is confined to, when the chain goes on

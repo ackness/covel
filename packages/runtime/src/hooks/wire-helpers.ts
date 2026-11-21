@@ -27,6 +27,7 @@ import type {
   ReviewAgentOutputPayload,
   RuntimeManifest,
   RuntimeResult,
+  RuntimeStatus,
   TurnAction,
   TurnInput,
 } from "@covel/shared";
@@ -240,25 +241,45 @@ export interface PreSchedulePayload {
  * change" — the original `triggered` set runs. To schedule no runtimes,
  * return `replace: { triggered: [] }`, not `abort`.
  */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+const VALID_RUNTIME_STATUSES: ReadonlySet<string> = new Set([
+  "pending",
+  "running",
+  "success",
+  "failed",
+  "skipped",
+  "suspended",
+]);
+
 export async function runPreScheduleHook(
   opts: BaseOpts,
   payload: PreSchedulePayload,
 ): Promise<readonly RuntimeManifest[]> {
   const result = await runHook(opts, "PreSchedule", payload);
-  // `?? payload.triggered` covers both the no-pipeline path and the
-  // `abort`/continue-without-replace paths. An explicit `replace: { triggered:
-  // [] }` correctly returns the empty array (nullish, not falsy, coalescing).
+  // `Array.isArray` covers the no-pipeline path, `abort`/continue-without-replace
+  // paths, and malformed non-array replacements. An explicit `replace: { triggered:
+  // [] }` still returns the empty array.
   const replaced = hookReplace(result)?.triggered;
-  if (!replaced) return payload.triggered;
+  if (!Array.isArray(replaced)) return payload.triggered;
 
   const originalByName = new Map(payload.triggered.map((m) => [m.name, m]));
   const filtered: RuntimeManifest[] = [];
   const seen = new Set<string>();
   for (const candidate of replaced) {
-    const original = originalByName.get(candidate?.name);
+    const name =
+      candidate && typeof candidate === "object"
+        ? (candidate as { name?: unknown }).name
+        : undefined;
+    const original =
+      typeof name === "string" ? originalByName.get(name) : undefined;
     if (!original) {
       console.warn(
-        `[hooks] PreSchedule replacement injected runtime "${candidate?.name}" not in the triggered set — dropped (filter-only contract)`,
+        `[hooks] PreSchedule replacement injected runtime "${String(name)}" not in the triggered set — dropped (filter-only contract)`,
       );
       continue;
     }
@@ -305,7 +326,7 @@ export async function runPostRuntimeHook(
     { pluginId: opts.pluginId, runtimeId: opts.runtimeId },
   );
   const replacedResult = hookReplace(hookResult)?.result;
-  if (!replacedResult) return result;
+  if (!isPlainObject(replacedResult)) return result;
   // Hooks guard, rewrite or audit; they carry no writes. The write commands
   // (`pendingProposals`, `effects`) and `completion` always come from the
   // runtime itself — a hook that adds one would commit it under the rewritten
@@ -319,14 +340,15 @@ export async function runPostRuntimeHook(
     operations: _hookOperations,
     operationWrites: _hookOperationWrites,
     ...replaced
-  } = replacedResult;
+  } = replacedResult as RuntimeResult;
   // A hook may rewrite output/status, never execution identity: the proposal
   // rebinder downstream keys writes on these fields, so an approved hook could
   // otherwise redirect another plugin's writes under a forged identity.
   // An output-only rewrite cannot silently publish the handler's old business
   // value. Hooks may explicitly replace canonicalValue; finalization validates it.
+  const output = "output" in replaced ? replaced.output : result.output;
   const canonicalValue = result.canonicalValue
-    ? !isDeepStrictEqual(replaced.output, result.output) &&
+    ? !isDeepStrictEqual(output, result.output) &&
       isDeepStrictEqual(replaced.canonicalValue, result.canonicalValue)
       ? {}
       : (replaced.canonicalValue ?? {})
@@ -337,7 +359,11 @@ export async function runPostRuntimeHook(
   // recovery, and a skip a hook forced commits nothing. Owned copies, like the
   // rest of the accepted result: a producer that still holds the originals
   // cannot change what commits.
-  const status = replaced.status;
+  const status: RuntimeStatus =
+    typeof replaced.status === "string" &&
+    VALID_RUNTIME_STATUSES.has(replaced.status)
+      ? (replaced.status as RuntimeStatus)
+      : result.status;
   const writes =
     status === result.status
       ? cloneHookData({
@@ -358,6 +384,20 @@ export async function runPostRuntimeHook(
     ...rewritten,
     ...writes,
     ...stop,
+    status,
+    output,
+    toolCalls: Array.isArray(rewritten.toolCalls)
+      ? rewritten.toolCalls
+      : result.toolCalls,
+    durationMs:
+      typeof rewritten.durationMs === "number" &&
+      Number.isFinite(rewritten.durationMs)
+        ? rewritten.durationMs
+        : result.durationMs,
+    timestamp:
+      typeof rewritten.timestamp === "string"
+        ? rewritten.timestamp
+        : result.timestamp,
     canonicalValue,
     pluginId: result.pluginId,
     runtimeId: result.runtimeId,
@@ -461,11 +501,15 @@ export async function runPostContextAssemblyHook(
   if (replace) {
     return {
       systemPrompt: withFrameworkHead(
-        replace.systemPrompt ?? assembled.systemPrompt,
+        typeof replace.systemPrompt === "string"
+          ? replace.systemPrompt
+          : assembled.systemPrompt,
         assembled.frameworkHead,
       ),
       frameworkHead: assembled.frameworkHead,
-      messages: replace.messages ?? assembled.messages,
+      messages: Array.isArray(replace.messages)
+        ? replace.messages
+        : assembled.messages,
       outputKind: assembled.outputKind,
       promptTemplate: assembled.promptTemplate,
       inputSlots: assembled.inputSlots,
@@ -635,9 +679,11 @@ export async function runPreLLMCallHook(
   const replace = hookReplace(hookResult);
   if (replace) {
     return {
-      messages: replace.messages ?? request.messages,
-      model: replace.model ?? request.model,
-      tools: replace.tools ?? request.tools,
+      messages: Array.isArray(replace.messages)
+        ? replace.messages
+        : request.messages,
+      model: typeof replace.model === "string" ? replace.model : request.model,
+      tools: Array.isArray(replace.tools) ? replace.tools : request.tools,
       stream: replace.stream === false ? false : request.stream,
       promptSegments: request.promptSegments,
     };
@@ -667,8 +713,13 @@ export async function runPostLLMResponseHook(
   });
   const replacement = hookReplace(hookResult);
   return {
-    response: replacement?.response ?? response,
-    correction: replacement?.correction?.trim() || undefined,
+    response: isPlainObject(replacement?.response)
+      ? (replacement.response as LLMResponse)
+      : response,
+    correction:
+      typeof replacement?.correction === "string"
+        ? replacement.correction.trim() || undefined
+        : undefined,
   };
 }
 
@@ -734,10 +785,18 @@ export async function runPreToolUseHook(
 
   // Accumulate any toolCall replacement from the hook result.
   const replace = hookReplace(hookResult);
-  const effectiveToolCall = replace?.toolCall
+  const replacedToolCall = isPlainObject(replace?.toolCall)
+    ? replace.toolCall
+    : undefined;
+  const effectiveToolCall = replacedToolCall
     ? {
         ...toolCall,
-        ...(replace.toolCall as Partial<typeof toolCall>),
+        ...(typeof replacedToolCall.name === "string"
+          ? { name: replacedToolCall.name }
+          : {}),
+        ...(typeof replacedToolCall.arguments === "string"
+          ? { arguments: replacedToolCall.arguments }
+          : {}),
         // The assistant transcript already contains the provider-issued id.
         // Hooks may rewrite the dispatched name/arguments, but changing the id
         // would make the following tool-role message reference no call.
