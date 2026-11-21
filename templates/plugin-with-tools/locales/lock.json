@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#description": "{{pluginDescriptionHash}}"
+    }
+  }
+}

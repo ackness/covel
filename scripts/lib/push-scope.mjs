@@ -49,9 +49,37 @@ const DOCS_NO_TEST_READS = ["docs/CHANGELOG.md", "docs/changelog.d/**"];
 
 const ROOT = "$TURBO_ROOT$/";
 
+function findClosingBrace(glob, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < glob.length; i += 1) {
+    if (glob[i] === "{") depth += 1;
+    else if (glob[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function splitTopLevelCommas(text) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === "{") depth += 1;
+    else if (text[i] === "}") depth = Math.max(0, depth - 1);
+    else if (text[i] === "," && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
 // A Turbo input glob: `**` crosses directories, `*` does not, `{a,b}` is a
-// choice.
-function toRegExp(glob) {
+// choice (which may contain wildcards or nested choices).
+function globToSource(glob) {
   let source = "";
   for (let index = 0; index < glob.length;) {
     const char = glob[index];
@@ -65,16 +93,25 @@ function toRegExp(glob) {
       source += "[^/]*";
       index += 1;
     } else if (char === "{") {
-      const end = glob.indexOf("}", index);
-      const choices = glob.slice(index + 1, end).split(",");
-      source += `(?:${choices.map(escape).join("|")})`;
-      index = end + 1;
+      const end = findClosingBrace(glob, index);
+      if (end === -1) {
+        source += escape(char);
+        index += 1;
+      } else {
+        const choices = splitTopLevelCommas(glob.slice(index + 1, end));
+        source += `(?:${choices.map(globToSource).join("|")})`;
+        index = end + 1;
+      }
     } else {
       source += escape(char);
       index += 1;
     }
   }
-  return new RegExp(`^${source}$`);
+  return source;
+}
+
+function toRegExp(glob) {
+  return new RegExp(`^${globToSource(glob)}$`);
 }
 
 function escape(text) {
@@ -82,14 +119,24 @@ function escape(text) {
 }
 
 export function matcher(globs) {
-  const patterns = globs.map(toRegExp);
-  return (file) => patterns.some((pattern) => pattern.test(file));
+  const include = [];
+  const exclude = [];
+  for (const glob of globs) {
+    if (glob.startsWith("!")) exclude.push(toRegExp(glob.slice(1)));
+    else include.push(toRegExp(glob));
+  }
+  return (file) =>
+    include.some((pattern) => pattern.test(file)) &&
+    !exclude.some((pattern) => pattern.test(file));
 }
 
 function rootInputs(task) {
-  return (task?.inputs ?? [])
-    .filter((input) => input.startsWith(ROOT))
-    .map((input) => input.slice(ROOT.length));
+  return (task?.inputs ?? []).flatMap((input) => {
+    if (input.startsWith(ROOT)) return [input.slice(ROOT.length)];
+    if (input.startsWith(`!${ROOT}`))
+      return [`!${input.slice(ROOT.length + 1)}`];
+    return [];
+  });
 }
 
 /**
@@ -109,20 +156,24 @@ export function selectTests({ files, packages, turbo }) {
     return { full: true, reason: "the workspace could not be read" };
   }
 
-  const everySuiteReads = matcher([
-    ...WORKSPACE_FILES,
-    ...(turbo.globalDependencies ?? []),
-    ...rootInputs(tasks.test),
-  ]);
+  const workspaceFiles = matcher(WORKSPACE_FILES);
+  const globalDependencies = matcher(turbo.globalDependencies ?? []);
+  const baseTestInputs = matcher(rootInputs(tasks.test));
+  const everySuiteReads = (file) =>
+    workspaceFiles(file) || globalDependencies(file) || baseTestInputs(file);
   const coveredWithoutTests = matcher(COVERED_WITHOUT_TESTS);
   const noTestReads = matcher(DOCS_NO_TEST_READS);
   // The suites that read files outside their package.
   const readers = packages
-    .map(({ name }) => ({
-      name,
-      reads: matcher(rootInputs(tasks[`${name}#test`])),
-    }))
-    .filter(({ name }) => rootInputs(tasks[`${name}#test`]).length > 0);
+    .map(({ name }) => {
+      const inputs = rootInputs(tasks[`${name}#test`]);
+      return {
+        name,
+        hasPositive: inputs.some((input) => !input.startsWith("!")),
+        reads: matcher(inputs),
+      };
+    })
+    .filter(({ hasPositive }) => hasPositive);
   // The longest directory wins, so a nested package owns its files.
   const byDepth = [...packages].sort((a, b) => b.dir.length - a.dir.length);
 

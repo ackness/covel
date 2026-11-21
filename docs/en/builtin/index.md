@@ -6,27 +6,27 @@ The built-in plugins and worlds are only demos, and you do not have to use them;
 
 ## What is in this chapter
 
-| Page                                   | What it covers                                                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [Narrative and Memory](./story.md)     | Who writes the story, action suggestions, other versions of a reply, and how the story is remembered  |
-| [RPG Mechanics](./rpg.md)              | Dice checks, point buy at the start, quests, bag, affinity, hidden story events                       |
+| Page                                   | What it covers                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [Narrative and Memory](./story.md)     | Who writes the story, action suggestions, other versions of a reply, and how the story is remembered    |
+| [RPG Mechanics](./rpg.md)              | Dice checks, point buy at the start, quests, bag, affinity, hidden story events                         |
 | [Characters and World](./world.md)     | Setup at the start, creating a character, character profiles, world state, time, almanac, relationships |
-| [Stage and Sound](./stage.md)          | Stage mode, scenes and characters on stage, background music                                          |
-| [Built-in App Features](./features.md) | Features that belong to no plugin: views, appearance, AI world creation, debugging, and more          |
+| [Stage and Sound](./stage.md)          | Stage mode, scenes and characters on stage, background music                                            |
+| [Built-in App Features](./features.md) | Features that belong to no plugin: views, appearance, AI world creation, debugging, and more            |
 
 ## Gameplay packs: pick a set of plugins at once
 
 When you start a game, you do not need to choose plugins one by one. A **gameplay pack** is a ready-made set of plugins. Pick one on the getting-ready screen. There are seven built in:
 
-| Gameplay pack                     | Good for                                   | Plugins it includes                                                                                                |
-| --------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Classic Story `traditional-story` | Long exploration, reading a story          | Storyteller, Action Suggestions, Almanac, Relationships, World Rules                                               |
-| Dialogue `dialogue-mode`          | Character dialogue, visual novel           | Chat Storyteller, Stage Scene, Action Suggestions, Character Profiles, World Rules, Alternative Replies            |
-| Budget `low-cost`                 | Keeping model costs down                   | Storyteller, World Rules                                                                                           |
-| Story Only `narrative-only`       | Just reading the story, at the lowest cost | Storyteller                                                                                                        |
-| Game Master `dm-mode`             | Game-master narration                      | Get Ready, World State, Storyteller, Game Master Panel; no character creation                                      |
-| Ensemble `ensemble-dialogue`      | A cast performs together                   | Get Ready, World State, Character Creator, Chat Storyteller, Character Voice, Who Speaks Next, Stage Scene         |
-| Spectator `spectator`             | Observe advancing NPCs                     | The ensemble composition with Game Master Panel, without player character creation                                 |
+| Gameplay pack                     | Good for                                   | Plugins it includes                                                                                        |
+| --------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Classic Story `traditional-story` | Long exploration, reading a story          | Storyteller, Action Suggestions, Almanac, Relationships, World Rules                                       |
+| Dialogue `dialogue-mode`          | Character dialogue, visual novel           | Chat Storyteller, Stage Scene, Action Suggestions, Character Profiles, World Rules, Alternative Replies    |
+| Budget `low-cost`                 | Keeping model costs down                   | Storyteller, World Rules                                                                                   |
+| Story Only `narrative-only`       | Just reading the story, at the lowest cost | Storyteller                                                                                                |
+| Game Master `dm-mode`             | Game-master narration                      | Get Ready, World State, Storyteller, Game Master Panel; no character creation                              |
+| Ensemble `ensemble-dialogue`      | A cast performs together                   | Get Ready, World State, Character Creator, Chat Storyteller, Character Voice, Who Speaks Next, Stage Scene |
+| Spectator `spectator`             | Observe advancing NPCs                     | The ensemble composition with Game Master Panel, without player character creation                         |
 
 The first three packs also include Get Ready, World State, and Character Creator, and they recommend turning on Story Memory. Story Only turns off the other plugins that are on by default: there is no opening form, character creation, or world dimensions, and no world time, Story Memory, or Long-Story Memory; the world's declared dimensions are not imported, and the game starts as usual.
 
@@ -42,23 +42,23 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 
 ### Narrative and memory
 
-| Plugin                                                             | What it does                                                                | On by default |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------- |
-| [Storyteller](./story.md) `narrator`                               | Writes the story text for each turn                                         | Yes           |
-| [Chat Storyteller](./story.md) `chat-mode-narrator`                | Tells the story as character dialogue; works alone, Stage Scene is optional |               |
-| [Character Voice](./story.md) `character-agent`                    | Plays the selected character's public speech/actions                        |               |
-| [Who Speaks Next](./story.md) `turn-policy`                        | One service with five strategy settings                                     |               |
-| [Game Master Panel](./story.md#dm-console-dm-console) `dm-console` | Public cast, interactions, story and current-role input                     |               |
-| [Action Suggestions](./story.md) `guide`                           | Gives a few actions you can tap below the story text                        |               |
-| [Alternative Replies](./story.md) `branch-reply`                   | Writes another version of the same turn                                     |               |
-| [Story Memory](./story.md) `memory`                                | Remembers plot and character state; worlds can add memory blocks            | Yes           |
-| [Long-Story Memory](./story.md) `history-compaction`               | When the conversation gets long, summarizes the older part                  | Yes           |
+| Plugin                                                                    | What it does                                                                | On by default |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------- |
+| [Storyteller](./story.md) `narrator`                                      | Writes the story text for each turn                                         | Yes           |
+| [Chat Storyteller](./story.md) `chat-mode-narrator`                       | Tells the story as character dialogue; works alone, Stage Scene is optional |               |
+| [Character Voice](./story.md) `character-agent`                           | Plays the selected character's public speech/actions                        |               |
+| [Who Speaks Next](./story.md) `turn-policy`                               | One service with five strategy settings                                     |               |
+| [Game Master Panel](./story.md#game-master-panel-dm-console) `dm-console` | Public cast, interactions, story and current-role input                     |               |
+| [Action Suggestions](./story.md) `guide`                                  | Gives a few actions you can tap below the story text                        |               |
+| [Alternative Replies](./story.md) `branch-reply`                          | Writes another version of the same turn                                     |               |
+| [Story Memory](./story.md) `memory`                                       | Remembers plot and character state; worlds can add memory blocks            | Yes           |
+| [Long-Story Memory](./story.md) `history-compaction`                      | When the conversation gets long, summarizes the older part                  | Yes           |
 
 A session may have several player characters. The two narrator plugins follow the character you are currently playing (see [Storyteller · The character you play](./story.md#the-character-you-play) and [Seats](../reference/world-model.md#seats)). Story Memory, Bag, Dice Check, Ability Checks, Character Creator and Character Profiles follow the action’s actor, falling back to the primary seat’s current character. Stage Scene still uses the first player character.
 
 ### RPG mechanics
 
-[Bag](./rpg.md#inventory-inventory) checks changes already handled by tools and items already paid for a dice check, to avoid duplicate bookkeeping.
+[Bag](./rpg.md#bag-inventory) checks changes already handled by tools and items already paid for a dice check, to avoid duplicate bookkeeping.
 
 | Plugin                                        | What it does                                                                                                                          | On by default |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
@@ -98,12 +98,12 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 Mistport, Harukaze Academy, and Lantern Barrow each show one play style: Mistport shows Read mode without dice checks, Harukaze Academy shows Stage mode, and Lantern Barrow shows full tabletop rules. Last Train Out is a survival sandbox: the floodline counts down with world time, the lights, doors, and radio share one battery, and Control's orders and the photos passengers pass around have to be checked one by one. It is written in English and also shows how a world can offer editions in several languages.
 
-| World                                                       | Gameplay                                          | What is worth a look                                                                                                            |
-| ----------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in Read mode         | Four investigations with tide deadlines, Case Board with sources & contradictions, evidence preservation, eight hidden events   |
-| Harukaze Academy (遥风学园・春日薄荷) `haruka-academy`      | A campus ensemble in Stage mode                   | Campus timetable, dialogue narration, day/night scenes, transparent portraits, and festival quests                              |
-| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English         | Floodline countdown, a shared battery, message checking, ensemble cast threads, character-card customization; Chinese edition   |
-| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration              | Point buy at the start, failure clocks & item costs, gear check modifiers, dungeon map & Barrow Alarm panel                     |
+| World                                                       | Gameplay                                  | What is worth a look                                                                                                          |
+| ----------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in Read mode | Four investigations with tide deadlines, Case Board with sources & contradictions, evidence preservation, eight hidden events |
+| Harukaze Academy (遥风学园・春日薄荷) `haruka-academy`      | A campus ensemble in Stage mode           | Campus timetable, dialogue narration, day/night scenes, transparent portraits, and festival quests                            |
+| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English | Floodline countdown, a shared battery, message checking, ensemble cast threads, character-card customization; Chinese edition |
+| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration      | Point buy at the start, failure clocks & item costs, gear check modifiers, dungeon map & Barrow Alarm panel                   |
 
 To build your own world based on these, the files are in the repository's [`worlds/`](../../../worlds) directory.
 

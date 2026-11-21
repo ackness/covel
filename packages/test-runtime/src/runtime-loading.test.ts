@@ -4,7 +4,11 @@ import fs from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import { loadPluginDefinition } from "@covel/plugin-loader";
-import { PluginServiceRegistry, PluginExtensionHost } from "@covel/runtime";
+import {
+  PluginServiceRegistry,
+  PluginExtensionHost,
+  kernelExtensionPoints,
+} from "@covel/runtime";
 import { createMemoryStore } from "@covel/store/memory";
 import { z } from "@covel/tools";
 
@@ -565,4 +569,249 @@ schedule: {trigger: {type: manual}}
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("enforces permissions.http on covel.http and service/extension context.utils", async () => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "covel-harness-http-perms-"),
+    );
+    const services = new PluginServiceRegistry({
+      list: async () => ["probe"],
+      ensure: async () => {},
+    });
+    const extensions = new PluginExtensionHost(services);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("ok", { status: 200 }));
+    try {
+      await fs.writeFile(
+        path.join(root, "PLUGIN.md"),
+        `---
+id: probe
+kind: plugin
+description: Probe HTTP permissions
+entry: ./entry.js
+permissions:
+  http:
+    - origin: https://93.184.216.34
+      methods: [GET]
+contributes:
+  services: [probe.fetch@1]
+  extensions:
+    - point: prompt.segment@1
+      id: http-check
+---
+`,
+        "utf8",
+      );
+      await fs.writeFile(
+        path.join(root, "entry.js"),
+        `export default async (covel) => {
+          let blockedEntry = false;
+          try {
+            await covel.http.fetchWithRetry("https://blocked.example.test/secret");
+          } catch (err) {
+            blockedEntry = /http permission denied/.test(String(err));
+          }
+          let blockedMethod = false;
+          try {
+            await covel.http.fetchWithRetry("https://93.184.216.34/post", { method: "POST" });
+          } catch (err) {
+            blockedMethod = /http permission denied/.test(String(err));
+          }
+          const allowedRes = await covel.http.fetchWithRetry("https://93.184.216.34/ok");
+          if (!blockedEntry || !blockedMethod || allowedRes.status !== 200) {
+            throw new Error(\`unexpected entry http results: \${blockedEntry},\${blockedMethod},\${allowedRes.status}\`);
+          }
+          covel.registerService({
+            name: "fetch",
+            contract: "probe.fetch@1",
+            input: covel.toolkit.z.object({ url: covel.toolkit.z.string() }),
+            output: covel.toolkit.z.object({ status: covel.toolkit.z.number() }),
+            handler: async ({ url }, ctx) => {
+              const res = await ctx.utils.fetchWithRetry(url);
+              return { status: res.status };
+            },
+          });
+          covel.provideExtension("prompt.segment@1", "http-check", {
+            handler: async (_input, ctx) => {
+              if (ctx.utils) {
+                await ctx.utils.fetchWithRetry("https://blocked.example.test/ext");
+              }
+              return [];
+            },
+          });
+        };`,
+        "utf8",
+      );
+      const discovery = {
+        id: "probe",
+        rootPath: root,
+        isMultiRuntime: false,
+        pluginMdPaths: [path.join(root, "PLUGIN.md")],
+      };
+      const entry = await loadEntryTools(
+        discovery,
+        await loadPluginDefinition(discovery),
+        services,
+        extensions,
+      );
+      try {
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const client = services.createClient({
+          sessionId: "s",
+          pluginId: "probe",
+          signal: new AbortController().signal,
+          utils: {
+            fetchWithRetry: async () =>
+              new Response("raw-bypass", { status: 200 }),
+            validateBaseUrl: () => ({ ok: true }),
+          },
+        });
+        await expect(
+          client.call({
+            pluginId: "probe",
+            name: "fetch",
+            contract: "probe.fetch@1",
+            input: { url: "https://blocked.example.test/service" },
+          }),
+        ).rejects.toThrow(/http permission denied/);
+        await expect(
+          client.call({
+            pluginId: "probe",
+            name: "fetch",
+            contract: "probe.fetch@1",
+            input: { url: "https://93.184.216.34/service" },
+          }),
+        ).resolves.toEqual({ status: 200 });
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        const extErrors: string[] = [];
+        const promptSegmentPoint = kernelExtensionPoints.find(
+          (point) => point.id === "prompt.segment@1",
+        )!;
+        const extExecution = extensions.createExecution({
+          sessionId: "s",
+          locale: "en",
+          turnId: "turn-1",
+          signal: new AbortController().signal,
+          settings: {},
+          readPluginData: async () => [],
+          utils: {
+            fetchWithRetry: async () =>
+              new Response("raw-bypass", { status: 200 }),
+            validateBaseUrl: () => ({ ok: true }),
+          },
+          onProviderError: ({ error }) => {
+            extErrors.push(
+              error instanceof Error ? error.message : String(error),
+            );
+          },
+        });
+        await extExecution.run(promptSegmentPoint, {
+          turnId: "turn-1",
+          playerMessage: "hello",
+        });
+        expect(extErrors).toEqual([
+          expect.stringMatching(/http permission denied/),
+        ]);
+      } finally {
+        await entry.close();
+      }
+    } finally {
+      fetchSpy.mockRestore();
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    {
+      label: "reserved covel: rpc prefix (swallowed by factory)",
+      contributes: "",
+      body: 'try { covel.registerRpc("covel:admin", async () => ({})); } catch {}',
+      pattern: /reserved/,
+    },
+    {
+      label: "reserved runtime: rpc prefix (swallowed by factory)",
+      contributes: "",
+      body: 'try { covel.registerRpc("runtime:run", async () => ({})); } catch {}',
+      pattern: /reserved/,
+    },
+    {
+      label: "duplicate rpc action (swallowed by factory)",
+      contributes: "contributes: {actions: [ping]}",
+      body: 'covel.registerRpc("ping", async () => ({})); try { covel.registerRpc("ping", async () => ({})); } catch {}',
+      pattern: /already registered/,
+    },
+    {
+      label: "invalid rpc options key",
+      contributes: "contributes: {actions: [ping]}",
+      body: 'covel.registerRpc("ping", async () => ({}), { extra: true });',
+      pattern: /Unrecognized key|extra/i,
+    },
+    {
+      label: "invalid rpc handler",
+      contributes: "contributes: {actions: [ping]}",
+      body: 'covel.registerRpc("ping", "not-a-fn");',
+      pattern: /handler function/,
+    },
+    {
+      label: "invalid form validator",
+      contributes: "contributes: {forms: [check]}",
+      body: 'covel.registerFormValidator("check", "not-a-fn");',
+      pattern: /validator function/,
+    },
+    {
+      label: "duplicate form validator (swallowed by factory)",
+      contributes: "contributes: {forms: [check]}",
+      body: 'covel.registerFormValidator("check", async () => undefined); try { covel.registerFormValidator("check", async () => undefined); } catch {}',
+      pattern: /Duplicate form validator/,
+    },
+    {
+      label: "invalid wire shape (missing generate)",
+      contributes: "contributes: {wires: [img]}",
+      body: 'covel.registerWires({ image: [{ id: "img" }] });',
+      pattern: /generate: function/,
+    },
+    {
+      label: "invalid text wire shape (missing streamText)",
+      contributes: "contributes: {wires: [txt]}",
+      body: 'covel.registerWires({ text: [{ id: "txt", generateText: async () => ({}) }] });',
+      pattern: /streamText: function/,
+    },
+    {
+      label: "duplicate wire id (swallowed by factory)",
+      contributes: "contributes: {wires: [img]}",
+      body: 'const w = { id: "img", generate: async () => ({}) }; covel.registerWires({ image: [w] }); try { covel.registerWires({ image: [w] }); } catch {}',
+      pattern: /already registered/,
+    },
+  ])(
+    "validates entry registrations: rejects $label",
+    async ({ contributes, body, pattern }) => {
+      const root = await fs.mkdtemp(
+        path.join(os.tmpdir(), "covel-harness-entry-validation-"),
+      );
+      try {
+        await fs.writeFile(
+          path.join(root, "PLUGIN.md"),
+          `---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\n${contributes}\n---\n`,
+          "utf8",
+        );
+        await fs.writeFile(
+          path.join(root, "entry.js"),
+          `export default (covel) => { ${body} };`,
+          "utf8",
+        );
+        const discovery = {
+          id: "probe",
+          rootPath: root,
+          isMultiRuntime: false,
+          pluginMdPaths: [path.join(root, "PLUGIN.md")],
+        };
+        await expect(
+          loadEntryTools(discovery, await loadPluginDefinition(discovery)),
+        ).rejects.toThrow(pattern);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });

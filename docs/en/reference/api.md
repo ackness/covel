@@ -648,17 +648,15 @@ Cascade delete is not one database transaction that covers all sessions:
 
 ### Session management
 
-| Method | Path                                     | Description                                                                               |
-| ------ | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                                           |
-| POST   | `/api/sessions`                          | Create a new session                                                                      |
-| GET    | `/api/sessions/:id`                      | Get session information                                                                   |
-| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides` / `autoAdvanceLimit`)           |
-| DELETE | `/api/sessions/:id`                      | Delete a session                                                                          |
-| GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured                  |
-| POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                                 |
-| PATCH  | `/api/sessions/:id/seats/:seatId`        | Switch the character a seat plays; see [session seats](#session-seats)                    |
-| GET    | `/api/sessions/:id/action-kinds`         | The action kinds the session accepts; see [action kind catalogue](#action-kind-catalogue) |
+| Method | Path                                     | Description                                                                     |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------- |
+| GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                                 |
+| POST   | `/api/sessions`                          | Create a new session                                                            |
+| GET    | `/api/sessions/:id`                      | Get session information                                                         |
+| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides` / `autoAdvanceLimit`) |
+| DELETE | `/api/sessions/:id`                      | Delete a session                                                                |
+| GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured        |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                       |
 
 #### Session identity `incarnation`
 
@@ -1119,10 +1117,12 @@ Authentication is the same as for the other session endpoints (owner token). Res
 | ------ | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/api/framework/capabilities` | Framework-level capability index: manifest enumeration, tools, proposals, world-data URIs                                                            |
 | GET    | `/api/framework/authoring`    | The world authoring surface: world package files, built-in data targets, authoring notes and examples for each data contract, and the plugin catalog |
-| GET    | `/api/plugins`                | List the plugins in the registry, with their registration and error status                                                                           |
+| GET    | `/api/plugins`                | List the plugins in the registry, with their registration and error status (`PluginSummary`)                                                         |
 | GET    | `/api/plugins/:id`            | Get plugin details and the full manifest development contract                                                                                        |
 | DELETE | `/api/plugins/:id`            | Uninstall a third-party plugin (deletes `~/.covel/plugins/<id>`)                                                                                     |
-| GET    | `/api/plugin-flows`           | Preview data for the pre-game flow (plugin list plus staged steps), shown on the getting-ready screen                                              |
+| GET    | `/api/plugin-flows`           | Preview data for the pre-game flow (plugin list plus staged steps), shown on the getting-ready screen                                                |
+
+`GET /api/plugins` returns data from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
 
 `GET /api/plugin-flows` entries in `plugins` and `steps` use `kind` (`core` or `plugin`) for the package category. They do not return `pluginType`.
 
@@ -1574,7 +1574,6 @@ The debugger's header reads its turn count from `session.completedPlayerTurns` i
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/presets` | List the configured model presets (`{ items }`) |
-| GET | `/api/plugins` | List plugins (`PluginSummary`) |
 | GET | `/api/worlds/:id/plugin-plan` | Return the plugin plan `WorldPluginPlan` for a world |
 | GET | `/api/ui-specs?sessionId=<id>` | List plugins' UI declarations, grouped by slot |
 | GET | `/plugin-assets/:pluginId/:digest/*` | Public, credential-free plugin page files |
@@ -1599,7 +1598,6 @@ The debugger's header reads its turn count from `session.completedPlayerTurns` i
 
 Notes on each endpoint:
 
-- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
 - `GET /api/worlds/:id/plugin-plan`: returns `selection: { requestedPluginIds, requiredContracts, requiredDataContracts }`, all `packs` in world preference order, optional `selectedPackId`, `defaultPluginIds` and up to 256 `diagnostics`.
   - Only the first pack reference selects the initial pack. An unknown first pack reports `unknown-pack` and selects none. Alternatives do not expand into the defaults.
   - Independent plugin requests and the selected pack's requests form `defaultPluginIds`. Every submitted ID is installed; `diagnostics` reports `missing-plugin` with `pluginId`, `path` and optional `packId`. Other codes are `invalid-reference`, `redundant-reference` and `unknown-pack`, with optional `reference`.
@@ -6360,7 +6358,8 @@ These events are also full members of `CovelEvent`. `COVEL_EVENT_META` says for 
 | `plugin.fault.latched` / `plugin.fault.cleared`                        | Host fault latch                 |             Yes             | Fixed player notices when a plugin pauses or its count clears                                                                                                          |
 | `plugin.fault.counted`                                                 | Host fault latch                 |             No              | Trace-only count of a plugin’s self-caused faults                                                                                                                      |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                                                                              |
-| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
+| `llm.calling` / `llm.responded`                                        | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
+| `message.completed`                                                    | TurnEmitter                      |             No              | Trace of accepted computation before commit; goes only to the subscription channel and `trace_events`, not forwarded to the action stream                              |
 | `block.emitted`                                                        | TurnEmitter                      |             Yes             | Traces for a block being emitted                                                                                                                                       |
 | `hook.fired` / `hook.aborted`                                          | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
 | `hook.rewrote`                                                         | TurnEmitter                      |             No              | Hook content rewrite trace; not forwarded to the action stream                                                                                                         |
@@ -6438,16 +6437,18 @@ STORE_BACKEND=memory pnpm dev:server  # Temporary Memory backend (data is lost o
 ### Official web app (not supported yet)
 
 > [!NOTE]
-> The official web app is not supported yet. This section describes its design and the parts that already exist in the code. `render.yaml` deploys only an operator-controlled demo server; it provides no public sign-in or anonymous session-creation flow. Do not share the operator token with visitors to bypass that restriction.
+> The official web app is not supported yet. This section describes its design and the parts that already exist in the code. The repository's `render.yaml` deploys a public browser-private trial (`DEPLOYMENT_TIER=self`, `NODE_ENV=production`, `STORE_BACKEND=memory`): visitors may create sessions, generate worlds, and test their own model keys, while shared worlds, community plugin server code, diagnostics, and server settings require the operator token (see [Deploy a trial on Render](../start/deploy-render.md)); never share the operator token with visitors. By contrast, `DEPLOYMENT_TIER=demo` is the operator-protected hosted demo posture, requiring the operator token for global and admin endpoints (including session creation and model probes) and the owner token for session endpoints.
 
-- **Server storage**: `DEPLOYMENT_TIER=demo`, `STORE_BACKEND=memory` (see `render.yaml` in the repository).
+- **Deployment settings**:
+  - Public browser-private trial (`render.yaml`): `DEPLOYMENT_TIER=self`, `NODE_ENV=production`, `STORE_BACKEND=memory`.
+  - Hosted demo tier: `DEPLOYMENT_TIER=demo`, paired with `STORE_BACKEND=memory` when keeping saves out of a server database.
 - **Saves**: the copy in the player's browser IndexedDB is the save. The server keeps the session in memory to run turns and writes nothing to a database. The in-memory copy is gone when the session is deleted or the server restarts.
 - **API keys**: they are stored in the browser and travel with each request in the `X-Provider-Keys` header. The server never writes them to storage; when a background job needs one, it waits in memory for the job to start: 5 minutes by default, or the job's queue deadline (`maxQueueMs`) when it declares one, and the running job holds it until it ends.
 - **Authentication**: **required**.
-  - At startup you must set the operator token (`COVEL_DESKTOP_REST_TOKEN`) and the media secret (`COVEL_MEDIA_TOKEN_SECRET`). Without them the server refuses to start.
-  - Session-scoped endpoints enforce the session owner token. Global endpoints and admin endpoints enforce the operator token.
-  - See the [authentication section](#authentication-session-owner-token) above for details.
-- **Note**: saves stay out of the server's database because of the deployment settings: `render.yaml` sets `STORE_BACKEND` to `memory`. The `demo` tier itself also accepts `sqlite` and `pg`.
+  - On `DEPLOYMENT_TIER=demo`, you must set the operator token (`COVEL_DESKTOP_REST_TOKEN`) and the media secret (`COVEL_MEDIA_TOKEN_SECRET`) at startup or the server refuses to start; session-scoped endpoints enforce the session owner token, while global and admin endpoints enforce the operator token.
+  - On `render.yaml`'s browser-private posture, session endpoints enforce the session owner token, while shared worlds, community plugin server code, diagnostics, server settings, and files enforce the operator token (`render.yaml` generates both the operator token and media secret).
+  - See the [authentication section](#authentication-session-owner-token) above and [Host profile](../internals/security.md#host-profile) for details.
+- **Note**: saves stay out of the server's database because of the `STORE_BACKEND=memory` storage setting (which `render.yaml` uses). The `demo` tier itself also accepts `sqlite` and `pg`.
 
 ### Commercial edition (not built)
 

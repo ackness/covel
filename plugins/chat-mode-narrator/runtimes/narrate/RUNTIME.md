@@ -37,6 +37,9 @@ io:
         contract: action-check@1
       select: /checkContext
       required: false
+    context:
+      from:
+        kernel: story-context@1
   output:
     recordAs: latest-story
   visibility: story
@@ -52,6 +55,8 @@ agent:
       - get-character
       - memory-search
       - emit-event
+      - world-dimension-get
+      - world-dimension-list
       - delegate
       - delegate-batch
   advertiseEvents: true

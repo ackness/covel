@@ -171,8 +171,6 @@ The images are saved in `worlds/tidelamp/media/portraits/`.
 - **To redraw one image you are not happy with,** change that character's `subject`, then run `--only he-sanniang --force`.
 - **To change the style for the whole set,** change `style`, then add `--force` to redraw everything.
 
-<a id="生成方式框架统一-image-wire"></a>
-
 #### Where the script reads the model configuration and the key
 
 | What is read        | Where it is read from                                                                                                                                                                                                 |
@@ -300,8 +298,6 @@ When you check the images themselves, look at these things: the detail at the or
 
 - Portraits are part of the world content, and they are sent to others together with the world package. The repository accepts only WebP. PNG files under `media/portraits/` are ignored by Git. They are only working files on your machine.
 - Do not compress a WebP that has already been compressed once. The quality keeps getting worse. When you need to change an image, convert it again from the original, uncompressed image.
-
-<a id="三套风格方向"></a>
 
 ## How the built-in worlds are made
 

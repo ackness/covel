@@ -3,9 +3,12 @@ import {
   abortSignalWithTimeout,
   appendSummaryEntries,
   assertEntityEnvelope,
+  makeProposal,
   pickLocaleText,
   readManualEntity,
   splitList,
+  type PluginProposalFor,
+  type PluginProposalPayloads,
 } from "../src/index.js";
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
@@ -172,5 +175,97 @@ describe("appendSummaryEntries", () => {
   it("stays within the contract's cap", () => {
     const many = Array.from({ length: 20 }, (_, index) => entry(`e${index}`));
     expect(appendSummaryEntries(null, many).entries).toHaveLength(16);
+  });
+});
+
+describe("makeProposal", () => {
+  const ctx = {
+    pluginId: "author-plugin",
+    runtimeId: "author-plugin/narrate",
+    turnId: "turn-1",
+    sessionId: "sess-1",
+  };
+  const now = "2026-11-21T00:00:00.000Z";
+
+  it("accepts optional interaction.request actionKind and narrative.append story fields", () => {
+    const interactionPayload: PluginProposalPayloads["interaction.request"] = {
+      interactionId: "form-1",
+      type: "form",
+      title: "Choose a stance",
+      data: { fields: [] },
+      narrativeTemplate: "Takes {{stance}}.",
+      actionKind: "author-plugin/pick-stance",
+    };
+    const interaction: PluginProposalFor<"interaction.request"> = makeProposal(
+      ctx,
+      now,
+      "interaction.request",
+      interactionPayload,
+    );
+    expect(interaction).toMatchObject({
+      type: "interaction.request",
+      source: { pluginId: "author-plugin", runtimeId: "author-plugin/narrate" },
+      turnId: "turn-1",
+      sessionId: "sess-1",
+      timestamp: now,
+      payload: {
+        interactionId: "form-1",
+        type: "form",
+        actionKind: "author-plugin/pick-stance",
+      },
+    });
+    expect(interaction.payload.actionKind).toBe("author-plugin/pick-stance");
+
+    const narrativePayload: PluginProposalPayloads["narrative.append"] = {
+      content: "The lantern swings.",
+      kind: "story",
+      segments: [
+        { kind: "narration", text: "The lantern swings." },
+        { kind: "dialogue", speaker: "Keeper", text: '"Step inside."' },
+      ],
+      cues: { scene: "Harbor Gate", present: ["Keeper"], mood: "tense" },
+      yield: "user",
+    };
+    const narrative: PluginProposalFor<"narrative.append"> = makeProposal(
+      ctx,
+      now,
+      "narrative.append",
+      narrativePayload,
+    );
+    expect(narrative).toMatchObject({
+      type: "narrative.append",
+      payload: {
+        content: "The lantern swings.",
+        kind: "story",
+        segments: [
+          { kind: "narration", text: "The lantern swings." },
+          { kind: "dialogue", speaker: "Keeper", text: '"Step inside."' },
+        ],
+        cues: { scene: "Harbor Gate", present: ["Keeper"], mood: "tense" },
+        yield: "user",
+      },
+    });
+    expect(narrative.payload.segments).toHaveLength(2);
+    expect(narrative.payload.cues?.scene).toBe("Harbor Gate");
+    expect(narrative.payload.yield).toBe("user");
+
+    const assetPayload: PluginProposalPayloads["asset.generate"] = {
+      ref: {
+        id: "a".repeat(64),
+        mime: "image/png",
+        size: 1024,
+        url: "https://example.com/scene.png",
+        meta: { width: 1024, height: 1024 },
+      },
+      modality: "image",
+      meta: { sceneId: "harbor" },
+    };
+    const asset: PluginProposalFor<"asset.generate"> = makeProposal(
+      ctx,
+      now,
+      "asset.generate",
+      assetPayload,
+    );
+    expect(asset.payload.ref.url).toBe("https://example.com/scene.png");
   });
 });

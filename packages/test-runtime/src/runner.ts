@@ -12,13 +12,12 @@ import {
   buildHookSettings,
   executeTurn,
   snapshotUserSettings,
+  type LoadPluginDatasets,
   type TurnExecutorDeps,
 } from "@covel/runtime";
-import {
-  createDefaultToolRegistry,
-  type EventDirectoryLike,
-} from "@covel/tools";
+import { createDefaultToolRegistry } from "@covel/tools";
 import { createDefaultToolApprovalPipeline } from "@covel/approval";
+import { createTestEventDirectory } from "./event-directory.js";
 import {
   evaluateExpectations,
   hasUnexpectedRunFailure,
@@ -117,16 +116,6 @@ export interface RunRuntimeCasesResult {
   }[];
 }
 
-/** The isolated runner cannot validate session event contracts without the host. */
-const isolatedEventDirectory: EventDirectoryLike = {
-  async listTopics() {
-    return [];
-  },
-  async validate() {
-    return { ok: false, reason: "session event directory is unavailable" };
-  },
-};
-
 export async function runRuntimeDebug(
   options: RunRuntimeDebugOptions,
 ): Promise<RunRuntimeDebugResult> {
@@ -152,6 +141,7 @@ export async function runRuntimeDebug(
       services,
       extensions,
       pluginIds,
+      discoveries,
       registry,
       hookPipeline,
       hookSettings,
@@ -181,9 +171,28 @@ export async function runRuntimeDebug(
     });
     registry.syncSessionActivations(sessionId, pluginIds);
 
+    const eventDirectory = createTestEventDirectory({
+      registry,
+      resolvePluginDir: (id) => discoveries.get(id)?.rootPath,
+    });
+    const loadPluginDatasets: LoadPluginDatasets = async (id) => {
+      const entry = registry.get(id);
+      if (!entry) return undefined;
+      return {
+        datasets: Object.fromEntries(
+          Object.entries(entry.datasets ?? {}).map(([name, dataset]) => [
+            name,
+            { namespace: dataset.namespace, ops: dataset.ops },
+          ]),
+        ),
+        // Shared, not copied: the commit's Ajv cache keys on schema identity.
+        schemas: entry.packageManifest?.datasetSchemas ?? {},
+      };
+    };
+
     const tools = createDefaultToolRegistry({
       store,
-      eventDirectory: isolatedEventDirectory,
+      eventDirectory,
     });
     for (const { pluginId: ownerId, tool } of entryTools) {
       tools.registerPlugin(ownerId, tool);
@@ -201,6 +210,8 @@ export async function runRuntimeDebug(
         settings: buildHookSettings(hookSettings, userSettings),
       },
       loadRuntime: async (manifest) => loadedCache.get(manifest.name),
+      loadPluginDatasets,
+      eventDirectory,
       llm: liveAdapters?.llm ?? llm,
       services,
       extensions,
