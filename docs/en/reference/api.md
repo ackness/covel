@@ -329,7 +329,7 @@ Under the "one operator" model this is acceptable. Approving community code mean
 CORS can only stop a web page from reading a response. So there is a separate check on where writes come from:
 
 - Applies to: `POST` / `PUT` / `PATCH` / `DELETE` requests that carry an `Origin` header.
-- Rule: if the `Origin` is not in the allow list, and is not the host the request is for (`Host` or `X-Forwarded-Host`), it returns `403 { "code": "origin_not_allowed" }` before any route runs.
+- Rule: if the `Origin` is not in the allow list and its full scheme and host do not match the request's expected origin (resolved from forwarded headers for `TRUSTED_PROXY_IPS`, or upgraded from `http:` to `https:` on the same `Host` when `X-Forwarded-Proto: https` or `Forwarded: proto=https` is present), it returns `403 { "code": "origin_not_allowed" }` before any route runs.
 - Non-browser clients that send no `Origin` header are not affected.
 
 Before CORS, a second guard applies to `/api` and `/api/*` on every method: a trimmed, case-insensitive `Origin: null`, or `Sec-Fetch-Dest: iframe`, `frame`, `embed` or `object`, returns `403 { "code": "foreign_request_refused" }` with no CORS allow headers. This includes GET and OPTIONS. It does not inspect `Sec-Fetch-Site`; ordinary fetch, media and top-level document requests remain valid. `/plugin-assets/*`, `/plugin-frame.html` and the app shell are outside this guard.
