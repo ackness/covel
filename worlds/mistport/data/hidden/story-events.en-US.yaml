@@ -25,3 +25,28 @@
 - id: bone-arch-standoff
   title: Standoff at the Bone Arch
   payload: Beyond the ninetieth Drawdown Step at the Bone Arch, three sets of lights meet in the cold mist. Grey Falcon's private unit holds the stair mouth, Iron Meg and her Salt Fangs watch from behind the side pillars, and Frost refuses to step back from the half-submerged stone threshold, where fresh tide-sigils in the shallow water show a gloved elder passed through not long ago. Each side wants the Key or first step through the arch while the returning tide already echoes along the gallery behind you. Build this standoff strictly from the fragment holders and faction standing already established, leaving the player free to pick a side, yield a fragment, step through, or pull back—without declaring Qi alive or dead.
+- id: su-yao-sealed-marginalia
+  title: The Marginalia in the Tide Register
+  when:
+    all:
+      - {}
+      - judge: While reviewing the half-letter or archive clues with the player, Su Yao hesitates over the guild's sealed records or hints that Qi kept a private duplicate tide register
+        watch:
+          characters: [Su Yao]
+  options:
+    - id: ask-su-yao-for-marginalia
+      label: Hidden Action
+      text: Lower your voice about the three-day archive gap and ask Su Yao if Qi left his duplicate tide register in her keeping
+      hint: Su Yao just hesitated—press her privately before anyone else arrives
+      payload: Su Yao's knuckles pause on the appraisal counter. After checking the door, she slides half a salt-stained copybook from a hidden drawer. She lets you memorize two lines matching dates against tide marks, refuses to let the book leave the room, and will not name who altered the Sealed Archive. Show her restraint and caution, and leave it to the player how to use those two lines.
+      rewards:
+        - id: tide-register-lore
+          kind: lorebook
+          title: The Date Gap in Qi's Duplicate Register
+          keys: [duplicate register, Sealed Archive, black tide-salt, Qi]
+          content: Qi's private duplicate tide register records that three days before Report 74 was sealed, the deep-ebb level was manually entered two inches low—proving the Sealed Archive was opened from inside before its official lock.
+        - id: su-yao-trust-promise
+          kind: narrative
+          title: Su Yao's Unlogged Lantern
+          text: Su Yao promises to leave an unlogged tide-lantern for you before the flood and let you take the guild's back stair to Mid-Harbor.
+

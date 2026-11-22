@@ -181,7 +181,10 @@ export async function prepareWorldDataImportForSession(
     )
   ) {
     const sources = [
-      ...portableContractSources(record.contractData),
+      ...portableContractSources(
+        record.contractData,
+        conventionsFor(options.preflight),
+      ),
       ...portableCharacterSources(record.characters),
     ];
     if (

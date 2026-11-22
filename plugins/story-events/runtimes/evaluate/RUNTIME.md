@@ -16,8 +16,10 @@ io:
       required: false
   output:
     contract: story-event-cue@1
+  storyContext:
+    select: /storyContext
   concealed: true
 function: {}
 ---
 
-Deterministic and model-free. Hidden event payloads are read from the plugin's hidden bucket and only leave it as this turn's cue.
+Model-free on ordinary turns. Matches selected unlocked hidden options, delivers armed semantic events and deterministic events as `story-event-cue@1`, settles immediate hidden rewards, and invokes the concealed `story-events/judge` sub-agent only for entries explicitly marked `timing: pre-turn` whose deterministic gates pass.

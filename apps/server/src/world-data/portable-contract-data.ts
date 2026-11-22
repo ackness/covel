@@ -13,6 +13,7 @@ function source(
   index: number,
   value?: unknown,
   lorebook = false,
+  visibility?: "hidden",
 ): OrderedWorldDataSource {
   return {
     id: `contract${index}`,
@@ -22,6 +23,7 @@ function source(
       schema: `contract:${contract}`,
       to: `contract:${contract}${lorebook ? "+lorebook" : ""}`,
       key: "id",
+      ...(visibility === "hidden" ? { visibility: "hidden" } : {}),
     },
     order: index,
     resolvedOrder: index,
@@ -65,10 +67,17 @@ export function portableCharacterSources(
 /** Portable records use the same schema, receiver and write planning as files. */
 export function portableContractSources(
   value: unknown,
+  conventions?: readonly import("./conventions.js").ConventionalSource[],
 ): readonly OrderedWorldDataSource[] {
   if (value === undefined) return [];
   if (!Array.isArray(value))
     throw new Error("world contractData must be an array");
+  const hiddenContracts = new Set<string>();
+  for (const convention of conventions ?? []) {
+    if (convention.entry.visibility !== "hidden") continue;
+    const parsed = parseWorldDataTarget(convention.entry.to);
+    if (parsed?.kind === "contract-data") hiddenContracts.add(parsed.contract);
+  }
   const identities = new Set<string>();
   return value.map((record, index) => {
     if (
@@ -84,9 +93,22 @@ export function portableContractSources(
       typeof record.value !== "object" ||
       Array.isArray(record.value) ||
       record.value.id !== record.key ||
-      (record.lorebook !== undefined && record.lorebook !== true)
+      (record.lorebook !== undefined && record.lorebook !== true) ||
+      (record.visibility !== undefined &&
+        record.visibility !== "public" &&
+        record.visibility !== "hidden")
     ) {
       throw new Error(`Invalid world contractData record at index ${index}`);
+    }
+    const visibility =
+      record.visibility === "hidden" ||
+      (record.visibility === undefined && hiddenContracts.has(record.contract))
+        ? "hidden"
+        : undefined;
+    if (visibility === "hidden" && record.lorebook === true) {
+      throw new Error(
+        `Invalid world contractData record at index ${index}: hidden data cannot project to lorebook`,
+      );
     }
     const identity = `${record.contract}/${record.key}`;
     if (identities.has(identity))
@@ -97,6 +119,7 @@ export function portableContractSources(
       index,
       record.value,
       record.lorebook === true,
+      visibility,
     );
   });
 }
@@ -182,7 +205,12 @@ export async function worldGenerationDataContracts(
         "core"
           ? {}
           : { pluginId: item.pluginId }),
-        lorebook: declared?.to.endsWith("+lorebook") === true,
+        lorebook:
+          declared?.visibility !== "hidden" &&
+          declared?.to.endsWith("+lorebook") === true,
+        ...(declared?.visibility === "hidden"
+          ? { visibility: "hidden" as const }
+          : {}),
         ...(item.characterField ? { characterField: item.characterField } : {}),
         ...(declared &&
         conventional &&

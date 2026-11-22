@@ -317,7 +317,10 @@ async function buildWorldDataInventory(
     sources =
       !manifest.worldData && descriptor.sources.length === 0
         ? [
-            ...portableContractSources(metadata?.contractData),
+            ...portableContractSources(
+              metadata?.contractData,
+              conventionsOfPlugins(catalogue),
+            ),
             ...portableCharacterSources(metadata?.embeddedCharacters),
           ]
         : descriptor.sources;
@@ -343,7 +346,10 @@ async function buildWorldDataInventory(
     diagnostics.push(...(await unclaimedStructuredData(worldRoot, claimed)));
   } else {
     sources = [
-      ...portableContractSources(metadata?.contractData),
+      ...portableContractSources(
+        metadata?.contractData,
+        conventionsOfPlugins(catalogue),
+      ),
       ...portableCharacterSources(metadata?.embeddedCharacters),
     ];
   }

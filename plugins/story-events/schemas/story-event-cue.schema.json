@@ -12,6 +12,9 @@
         "eventId": {
           "type": "string"
         },
+        "optionId": {
+          "type": "string"
+        },
         "title": {
           "type": "string"
         },
@@ -27,6 +30,26 @@
     },
     "cueContext": {
       "type": "string"
+    },
+    "storyContext": {
+      "description": "Optional note delivered to the story through `story-context@1` for unlocked narrative or degraded rewards.",
+      "type": ["object", "null"],
+      "required": ["content"],
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "selectedOption": {
+      "description": "Public metadata for an unlocked hidden option matched from this turn's player input.",
+      "type": "object",
+      "required": ["eventId", "optionId"],
+      "properties": {
+        "eventId": { "type": "string" },
+        "optionId": { "type": "string" }
+      },
+      "additionalProperties": false
     },
     "diagnostics": {
       "type": "array",

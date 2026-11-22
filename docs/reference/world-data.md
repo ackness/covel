@@ -384,8 +384,8 @@ Descriptor 可以修改或关闭这个规范来源，不能在别的路径再定
 
 | 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                                                                                                                                                                                          | 适合参考的文件                                                                                                                                               |
 | ----------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包；4 条任务由 `quests@1` 推导接收者；案情板记录来源、矛盾与证据固定；四方立场、深退潮、钥匙碎片随叙事维护；8 条隐藏事件；8 项静态设定移到 lorebook，维度仅保留 4 项演化数据与开局；中英角色、规则与立绘                                                                                                                                                                                                  | `data/dimensions.yaml`、`data/quests.yaml`、`data/lorebook.yaml`、`data/hidden/story-events.yaml`、`data/rules/`、`characters/`、`media/`                    |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                                                                                                                                                                      | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json`                           |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包；4 条任务由 `quests@1` 推导接收者；案情板记录来源、矛盾与证据固定；四方立场、深退潮、钥匙碎片随叙事维护；9 条隐藏事件（含确定性门控 + 语义判断的隐藏选项与设定集奖励示例）；8 项静态设定移到 lorebook，维度仅保留 4 项演化数据与开局；中英角色、规则与立绘                                                                                                                                             | `data/dimensions.yaml`、`data/quests.yaml`、`data/lorebook.yaml`、`data/hidden/story-events.yaml`、`data/rules/`、`characters/`、`media/`                    |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件、隐藏选项与奖励及其后续；透明立绘与日 / 夜场景注册表                                                                                                                                                                                      | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json`                           |
 | `worlds/last-train`     | 现代都市求生，示范多语言（英文为主，另有中文版） | `traditional-story` 玩法包与 `dice-check`；数据契约自动选入任务、物品、好感等接收插件；3 个任务（其中三处带期限）、6 种物品与 5 位角色的好感种子；7 项失败代价与「车厢恐慌 / 又冷又湿」两个失败时钟；「Floodline / Train Battery / Messages / Theo's Group」四个实时维度，水位倒计时从 `clock.elapsedSinceStart` 用 `x-derive` 推导，电池追踪储备与供电状态；隐藏事件及事件链；`claims`、`promises` 记忆块；封面与 5 张人物卡立绘 | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`data/check-consequences.yaml`、`data/check-clocks.yaml`、`characters/` |
 | `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `traditional-story` 玩法包加跑团规则、判定、任务、物品、好感、角色蓝图与 `story-events`；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体）                                                                                                         | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`                                      |
 
@@ -394,7 +394,7 @@ Descriptor 可以修改或关闭这个规范来源，不能在别的路径再定
 - 四个世界都启用 `story-events`。雾港、末班地铁与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：在作者预设的隐藏事件之外，它会根据游玩中留下的线索，追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。
 - 做新世界时，先复制玩法最接近的那个世界的结构，再按后文各节增减角色、规则或媒体。
 
-遥风学园的学园祭剩余天数由 `festival.daysRemaining` 从 `clock.elapsedSinceStart` 用 `x-derive` 推导：整数字段，开局为 21，每过一个午夜减 1，学园祭当天归 0。`start` 取 21.1527，略低于 20.5 加上从开局 08:20 到午夜的 940/1440 天。这样 23:59 四舍五入仍为 21，00:00 变成 20。筹备进度和节点结果仍按叙事维护。八条隐藏事件覆盖五条个人路线，凛与悠真各有一条前置事件和一条后续事件；条件读取路线、筹备进度、时钟或已揭示事件，不读取角色资料里的信任副本。
+遥风学园的学园祭剩余天数由 `festival.daysRemaining` 从 `clock.elapsedSinceStart` 用 `x-derive` 推导：整数字段，开局为 21，每过一个午夜减 1，学园祭当天归 0。`start` 取 21.1527，略低于 20.5 加上从开局 08:20 到午夜的 940/1440 天。这样 23:59 四舍五入仍为 21，00:00 变成 20。筹备进度和节点结果仍按叙事维护。隐藏事件覆盖五条个人路线，凛与悠真各有一条前置事件和一条后续事件，澪路线还带有一条结合确定性门控与语义判断的隐藏选项与设定集奖励；条件读取路线、好感、筹备进度、时钟、语义判断或已揭示事件，不读取角色资料里的信任副本。
 
 遥风学园按主体保留单一关系账户：八人的好感只在 `affinity`；五位路线角色的阶段、信任与压力只在 `routes`（信任、压力 0–5）；三名支持角色的信任、压力与非恋爱关系状态留在角色资料（信任、压力 0–100），不作换算。八人的 `publicCloseness` 也保留在角色资料。关系记忆只记事件、承诺与细节，不存第二份当前值。角色 schema 删除 `affection`，支持角色的 `trust/pressure` 没有默认值；这防止默认值重新填回五人或玩家的数值副本，但通用建卡并未按 NPC 作用域硬排除文字字段。禁用好感插件只移除其分数维护和叙事投影，不重建角色副本。
 
@@ -734,10 +734,11 @@ sources:
 
 ### 隐藏数据（`visibility: hidden`）
 
-source 默认是公开的。写了 `visibility: hidden` 的 source 用来放“条件满足前不能被知道”的内容，例如隐藏剧情。
+source 默认是公开的。写了 `visibility: hidden` 的 source 用来放“条件满足前不能被知道”的内容，例如隐藏剧情、隐藏选项与隐藏奖励。
 
 - 它只能交给插件（`to: contract:<contractId>`）。
 - 导入后放在接收插件一块专门的隐藏区域 `_hidden.<namespace>` 里。例如 `story-events` 的 `events` 对应 `_hidden.events`。
+- 通过便携式世界（`metadata.contractData`）导入时，同样支持显式声明 `visibility: "hidden"`，并在省略时继承插件契约约定的隐藏可见性；隐藏来源同样不允许开启 `lorebook: true`。
 
 ```yaml
 sources:
@@ -761,12 +762,13 @@ sources:
 | 其他目标        | `characters`、`lorebook`、`world:metadata.*`、media 与 `indexTo` 都会被拒绝                                                                                     |
 | 写入            | REST 与数据集工具不能写；只有所属插件自己的代码（function runtime、插件本地工具）能写自己的 `_hidden.*`                                                         |
 
-只有接收插件自己的代码能读隐藏数据。插件决定揭示时：
+只有接收插件自己的代码能读隐藏数据。插件决定揭示或解锁时：
 
-- 在这一回合把内容交给需要它的一方（通常是叙事）；
-- 在公开的数据里留下一条不含原文的揭示记录。
+- 需要语义判断时，只在隐蔽 runtime（`io.concealed: true`）中把条件问句交给只读子 Agent，不传入任何隐藏剧情、隐藏选项或隐藏奖励原文；
+- 隐藏剧情满足条件后，在这一回合把内容交给需要它的一方（通常是叙事），并在公开数据里留下一条不含原文的揭示记录；
+- 隐藏选项解锁后，只把公开选项文本投影到公开命名空间与界面槽位，隐藏 `payload` 与奖励直到玩家选中时才交给叙事或原子结算。
 
-内置的 [`story-events`](./plugins.md) 就是这样做的。揭示之后，内容会作为叙事这一回合的输入，出现在叙事的执行详情里。
+内置的 [`story-events`](../builtin/rpg.md#隐藏剧情story-events) 就是这样做的：`evaluate`（`pre-turn`）与 `assess`（`audit`）配合只读隐蔽子 Agent `judge` 实现确定性短路与语义判断。揭示之后，内容会作为叙事这一回合的输入，出现在叙事的执行详情里。
 
 > [!WARNING]
 > 隐藏的意义是“不剧透”，不是加密。世界包文件就在玩家本地；浏览器本地模式为了能运行，保存的进度里也包含这些数据。不要把真正需要保密的信息写进世界包。
@@ -788,7 +790,7 @@ sources:
 
    通过的事件写入 `_hidden.planned`，只触发一次。
 
-3. `story-events/evaluate` 每回合同时评估 `_hidden.events` 与 `_hidden.planned`，条件满足时照常交给叙事。
+3. `story-events/evaluate`（`pre-turn`）与 `story-events/assess`（`audit`）每回合同时评估 `_hidden.events` 与 `_hidden.planned`：确定性事件与上一回合上膛的语义事件在 `pre-turn` 交给叙事，自然语言条件在 `audit` 经确定性短路后合并送审隐蔽 `judge` 子 Agent，解锁的隐藏选项和隐藏奖励则只在满足或选中后公开与结算。
 
 计划事件和作者事件放在不同的隐藏区域，所以同步世界数据不会覆盖计划事件。
 

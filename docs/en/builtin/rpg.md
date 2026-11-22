@@ -317,13 +317,18 @@ Affinity provides the read service `affinity.tier@1`: it returns NPCs' scores an
 
 Event planning retains the validated tool result. Retrying final confirmation does not plan successful events again.
 
-World authors can set up plots that happen only when certain conditions are met. Until the conditions are met, neither the model nor the player can see the content. In the turn when the conditions are met, the narrative works the event into the story naturally.
+World authors can set up hidden plots, unlockable options, and hidden rewards that stay invisible until their conditions are met. Until then, neither the model nor the player can see their content. Conditions can be deterministic rules, natural-language descriptions judged by a concealed sub-agent, or a mix of both. Once met, the narrative works plot cues into the story naturally, unlocked hidden options appear among your choices, and hidden rewards are settled as declared.
 
 ### What you will see
 
-There is no dedicated panel. You only meet these events in the story, as if they were turns the story took on its own.
+There is no permanent side panel. Ordinary hidden plot events appear only in the story, as if they were turns the story took on its own. If the narrative leaves an event out, a reminder is sent on the next turn (each event gets only one reminder).
 
-If the narrative leaves an event out, a reminder is sent on the next turn. Each event gets only one reminder.
+On turns when a hidden option unlocks or an announced hidden reward is granted, a lightweight block appears below the story text:
+
+- In Read and Chat modes, tapping an option under "Unlocked hidden actions" fills the input box so you can send or adjust it.
+- In Stage mode, unlocked hidden options merge directly into the stage choice bar so clicking sends them right away.
+- Even if you reword an unlocked hidden option, background judging recognizes your intent and settles its plot cue and rewards.
+- Hidden rewards can add items to your bag, add entries to the session lorebook, or surface as narrative gains; silent rewards settle without a banner.
 
 ### When it is on
 
@@ -340,21 +345,27 @@ If a world has no hidden event data, turning this on does nothing.
 
 ### What you can change
 
-| Setting                   | What it does                                                                                                   | Default |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------- | ------- |
-| Story planner (`planner`) | Every 3 turns, calls the model to set up hidden events behind the scenes that happen later, based on the story | Off     |
+| Setting                                           | What it does                                                                                                                                             | Default |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Plan hidden events (`planner`)                    | Every 3 turns, calls the model to set up hidden events behind the scenes that happen later, based on the story                                           | Off     |
+| Judge natural-language triggers (`semanticJudge`) | Lets a concealed sub-agent judge natural-language hidden conditions and rewritten hidden options; worlds without semantic conditions make no extra calls | On      |
+| Max semantic checks per turn (`maxJudgedPerTurn`) | Upper bound on how many shortlisted natural-language hidden conditions are batched into one judge call each turn (1 to 16)                               | 8       |
 
-Turning it on adds model calls. The worlds `lantern-barrow`, `last-train` and `mistport` have already turned it on for you.
+Turning on `planner` adds model calls; `lantern-barrow`, `last-train` and `mistport` have already turned it on for you. `semanticJudge` only makes a concealed post-turn call (with no first-token delay, unless an entry explicitly requests pre-turn timing) when a world uses natural-language conditions whose deterministic gates pass, or when active hidden options need intent matching.
 
 ### What world authors can preset
 
-| Data                | File                            | Notes                                                                                   |
-| ------------------- | ------------------------------- | --------------------------------------------------------------------------------------- |
-| Hidden story events | `data/hidden/story-events.yaml` | Each event has a trigger condition `when` and a short hint for the narrative, `payload` |
+| Data                | File                            | Notes                                                                                                                             |
+| ------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Hidden story events | `data/hidden/story-events.yaml` | Each entry has a trigger condition `when` and at least one of `payload` (narrative cue), `options` (hidden choices), or `rewards` |
 
-This data must be imported as hidden data, or players could see it. A condition can check dimensions, world time, whether another event has happened, or the turn number. You can combine them with `all`, `any` and `not`. Write `payload` as a short hint for the narrative, not as finished text. Do not reveal later events in it. For how to import data, see [World data](../reference/world-data.md).
+This data must be imported as hidden data (the conventional path `data/hidden/story-events.yaml` imports as hidden automatically), or players could see it.
 
-A misspelled dimension ID, an invalid path inside a dimension, or a candidate in `equals` / `notEquals` / `in` that does not satisfy the dimension schema produces a `dimension-reference` error. Both `pnpm validate:world` and session import check these fields; see [world data](../reference/world-data.md).
+- **Conditions (`when`)**: Can check dimensions, world time, NPC affinity (`affinity`), carried items (`item`), character attributes (`attribute`), whether another event happened (`revealed`), whether a hidden option was chosen (`selected`), or the turn number (`turnGte` / `turnLte`). You can also write a plain natural-language string or a `{ judge, id?, scope?, sticky?, watch? }` leaf, and combine leaves with `all`, `any` and `not`. Putting a `judge` leaf inside `all` alongside deterministic gates short-circuits when the deterministic gates fail, skipping model calls.
+- **Payloads, options and rewards**: Write `payload` as a short hint for the narrative, not finished prose, and do not reveal later events in it. Entries in `options` stay hidden until unlocked, then expose only their public text until chosen, releasing their hidden `payload` and rewards only on selection. `rewards` support `item` (settled through Bag's write service, falling back to narrative context when Bag is off), `lorebook` (upserted into the session lorebook), and `narrative` (context cues), with optional `requireOutcome: true` to confirm the story achieved the outcome first or `announce: false` for silent settlement. For how to import data, see [World data](../reference/world-data.md).
+- **AI world creation and revision**: In-app AI World Creation lists "Hidden plot events" as an optional plugin supplement that generates hidden events, options, and rewards with natural-language or hybrid conditions while keeping them hidden. You can also ask AI World Revision to add or edit hidden events and options in natural language.
+
+A misspelled dimension ID, an invalid path inside a dimension, a candidate in `equals` / `notEquals` / `in` that does not satisfy the dimension schema, or an unknown character attribute ID produces a reference error. Both `pnpm validate:world` and session import check these fields; see [world data](../reference/world-data.md).
 
 ## Overview of when they are on
 

@@ -319,13 +319,16 @@ export function normalizeGeneratedPackage(
         key: record.key,
         value: record.value,
       });
-    else
+    else {
+      const hidden = declaration.visibility === "hidden";
       contractData.push({
         contract: record.contract,
         key: record.key,
         value: record.value,
-        ...(declaration.lorebook ? { lorebook: true as const } : {}),
+        ...(declaration.lorebook && !hidden ? { lorebook: true as const } : {}),
+        ...(hidden ? { visibility: "hidden" as const } : {}),
       });
+    }
   }
   for (const declaration of selected) {
     if (

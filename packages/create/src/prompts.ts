@@ -133,6 +133,11 @@ function formatContractBrief(
               `  ${revision ? "For each character record you change" : "One record for each character"}: its \`key\` is the character's \`id\`, and its \`value\` has no \`id\`. The record is stored in the character's record as \`${item.characterField}\`.`,
             ]
           : []),
+        ...(item.visibility === "hidden"
+          ? [
+              "  Stored hidden from the player until its trigger conditions are met.",
+            ]
+          : []),
         `  Record schema: ${JSON.stringify(item.schema)}`,
         ...(item.example !== undefined
           ? [`  Example value: ${JSON.stringify(item.example)}`]

@@ -56,6 +56,22 @@ class RecordingLLM implements LLMAdapter {
       if (output) return submittedOutput({});
     }
     const usage = { inputTokens: 10, outputTokens: 10 };
+    if (/concealed narrative condition judge/.test(text)) {
+      const match = /"key":\s*"([^"]+)"/.exec(text);
+      return submittedOutput({
+        verdicts: match
+          ? [
+              {
+                key: match[1],
+                met: true,
+                confidence: "high",
+                evidence: "Confirmed from turn evidence.",
+              },
+            ]
+          : [],
+        matchedOptionId: null,
+      });
+    }
     if (/memory manager|记忆管理器/.test(text))
       return { content: "{}", toolCalls: [], finishReason: "stop", usage };
     if (tools.includes("advance-world-time"))
@@ -485,10 +501,185 @@ describe("hidden world data and story events", () => {
     );
     expect(withSecret).toHaveLength(1);
     expect(withSecret[0]!.tools).not.toContain("advance-world-time");
+    expect(withSecret[0]!.tools).not.toContain("sync-characters");
     expect(
       (await boot.store.listPluginData(id, "story-events", "revealed")).map(
         (row) => row.key,
       ),
     ).toEqual(["keeper-returns"]);
+  }, 60_000);
+
+  it("judges semantic conditions concealed, unlocks hidden options in stage.choices@1, and settles hidden item & lorebook rewards only on selection", async () => {
+    const id = "hidden-demo-semantic";
+    const OPTION_SECRET = "OPTION-SECRET-PAYLOAD-9a1";
+    const LORE_SECRET = "LORE-SECRET-CONTENT-4e2";
+    const ITEM_SECRET = "Keeper Brass Key";
+    const CONDITION_TEXT =
+      "The player presses the harbor watchman about the missing brass key.";
+    const OPTION_TEXT =
+      "Slide the salt-stained receipt across the lantern table.";
+
+    expect(
+      await createPlayingSession(id, ["narrator", "story-events", "inventory"]),
+    ).toEqual(expect.arrayContaining(["story-events", "inventory"]));
+
+    // Seed a hybrid semantic hidden option + hidden rewards directly into _hidden.events.
+    const now = new Date().toISOString();
+    await boot.store.setPluginData({
+      id: crypto.randomUUID(),
+      sessionId: id,
+      pluginId: "story-events",
+      namespace: "_hidden.events",
+      key: "watchman-backroom",
+      value: {
+        id: "watchman-backroom",
+        title: "The Watchman's Drawer",
+        when: {
+          all: [
+            { dimension: "location", equals: "lighthouse" },
+            {
+              judge: CONDITION_TEXT,
+              id: "presses-watchman",
+            },
+          ],
+        },
+        options: [
+          {
+            id: "slide-receipt",
+            label: "Hidden Action",
+            text: OPTION_TEXT,
+            hint: "He lowered his guard.",
+            payload: `${OPTION_SECRET} The watchman unlocks the iron box.`,
+            rewards: [
+              {
+                id: "brass-key",
+                kind: "item",
+                title: ITEM_SECRET,
+                item: ITEM_SECRET,
+                quantity: 1,
+                description: "Opens the lighthouse cistern.",
+                tags: ["clue"],
+              },
+              {
+                id: "cistern-lore",
+                kind: "lorebook",
+                title: "Cistern Ledger Note",
+                entryId: "hidden-cistern-note",
+                strategy: "selective",
+                keys: ["cistern", "receipt"],
+                content: `${LORE_SECRET} The receipt predates the seal by three days.`,
+              },
+            ],
+          },
+        ],
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Turn 1: still at harbor -> deterministic gate short-circuits, judge NOT called, nothing leaked.
+    const callsBeforeT1 = llm.calls.length;
+    await sendTurn(id, "I watch the gulls from the pier.");
+    const t1Calls = llm.calls.slice(callsBeforeT1);
+    expect(
+      t1Calls.some((call) =>
+        call.text.includes("concealed narrative condition judge"),
+      ),
+    ).toBe(false);
+    expect(await publicSurfaces(id)).not.toContain(OPTION_SECRET);
+    expect(await publicSurfaces(id)).not.toContain(LORE_SECRET);
+    expect(await publicSurfaces(id)).not.toContain(OPTION_TEXT);
+    expect(await publicSurfaces(id)).not.toContain(ITEM_SECRET);
+
+    // Move to lighthouse -> Turn 2: deterministic gate passes -> concealed judge runs in audit.
+    await moveToLighthouse(id);
+    const callsBeforeT2 = llm.calls.length;
+    await sendTurn(id, "I press the watchman about the missing brass key.");
+    const t2Calls = llm.calls.slice(callsBeforeT2);
+    const judgeCalls = t2Calls.filter((call) =>
+      call.text.includes("concealed narrative condition judge"),
+    );
+    expect(judgeCalls).toHaveLength(1);
+    // Judge sees ONLY the condition question, NEVER hidden payload/options/rewards.
+    expect(judgeCalls[0]!.text).toContain(CONDITION_TEXT);
+    expect(judgeCalls[0]!.text).not.toContain(OPTION_SECRET);
+    expect(judgeCalls[0]!.text).not.toContain(LORE_SECRET);
+    expect(judgeCalls[0]!.text).not.toContain(OPTION_TEXT);
+    expect(judgeCalls[0]!.text).not.toContain(ITEM_SECRET);
+
+    // Concealed judge prompt/condition stays out of traces, turns, view, and plugin-data API.
+    const surfacesAfterT2 = await publicSurfaces(id, [
+      `/api/sessions/${id}/plugin-data/story-events`,
+      `/api/sessions/${id}/state`,
+      `/api/sessions/${id}/view`,
+      `/api/sessions/${id}/turns`,
+      `/api/traces/${id}`,
+    ]);
+    expect(surfacesAfterT2).not.toContain(CONDITION_TEXT);
+    expect(surfacesAfterT2).not.toContain(OPTION_SECRET);
+    expect(surfacesAfterT2).not.toContain(LORE_SECRET);
+    expect(surfacesAfterT2).not.toContain(ITEM_SECRET);
+
+    // The unlocked option's PUBLIC text IS now projected into active_options and stage.choices@1.
+    const activeOptions = await boot.store.listPluginData(
+      id,
+      "story-events",
+      "active_options",
+    );
+    expect(activeOptions.map((row) => row.key)).toEqual(["slide-receipt"]);
+    const slotRes = await boot.app.request(
+      `/api/sessions/${id}/ui-slots?slot=stage.choices@1`,
+    );
+    expect(slotRes.status).toBe(200);
+    const slotJson = (await slotRes.json()) as {
+      items: Array<{
+        slot: string;
+        value: { choices: Array<{ id: string; text: string }> };
+      }>;
+    };
+    const choicesSlot = slotJson.items.find(
+      (entry) => entry.slot === "stage.choices@1",
+    );
+    expect(choicesSlot?.value.choices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "hidden:slide-receipt",
+          text: OPTION_TEXT,
+        }),
+      ]),
+    );
+
+    // Turn 3: player chooses the unlocked hidden option -> narrator receives hidden payload
+    // and both hidden rewards (inventory item + lorebook entry) commit atomically.
+    const callsBeforeT3 = llm.calls.length;
+    await sendTurn(id, OPTION_TEXT);
+    const t3Calls = llm.calls.slice(callsBeforeT3);
+    expect(t3Calls.some((call) => call.text.includes(OPTION_SECRET))).toBe(
+      true,
+    );
+
+    // Option consumed; item added to inventory; secret lorebook entry upserted.
+    expect(
+      await boot.store.listPluginData(id, "story-events", "active_options"),
+    ).toEqual([]);
+    expect(
+      (
+        await boot.store.listPluginData(id, "story-events", "selected_options")
+      ).map((row) => row.key),
+    ).toEqual(["slide-receipt"]);
+    const bagItems = await boot.store.listPluginData(id, "inventory", "items");
+    expect(
+      bagItems.some(
+        (row) => (row.value as { name?: string })?.name === ITEM_SECRET,
+      ),
+    ).toBe(true);
+    const loreEntries = await boot.store.listSessionLorebookEntries(id);
+    expect(
+      loreEntries.some(
+        (entry) =>
+          entry.id === "hidden-cistern-note" &&
+          entry.content.includes(LORE_SECRET),
+      ),
+    ).toBe(true);
   }, 60_000);
 });

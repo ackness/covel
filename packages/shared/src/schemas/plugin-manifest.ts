@@ -240,7 +240,7 @@ const dataAuthoringSchema = z
     generate: z
       .enum(["offer", "default"])
       .describe(
-        "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a `characterField` or a public, non-media `source` keyed by `id`.",
+        "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a `characterField` or a non-media `source` keyed by `id` (hidden sources stay hidden in generated worlds).",
       )
       .optional(),
   })
@@ -260,12 +260,11 @@ const dataAuthoringSchema = z
         (authoring.characterField !== undefined ||
           (authoring.source !== undefined &&
             authoringSourceKind(authoring.source.path) !== "media" &&
-            (authoring.source.key ?? "id") === "id" &&
-            authoring.source.visibility !== "hidden"))),
+            (authoring.source.key ?? "id") === "id"))),
     {
       path: ["generate"],
       message:
-        "generate needs an example, and a `characterField` or a public, non-media source keyed by `id`",
+        "generate needs an example, and a `characterField` or a non-media source keyed by `id`",
     },
   )
   .describe(

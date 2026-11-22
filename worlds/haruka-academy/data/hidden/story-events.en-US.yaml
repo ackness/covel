@@ -47,3 +47,29 @@
   payload: >-
     On an evening in the last week before the festival, you meet Akane under the awning outside Umineko Books holding a wrapped bundle of duplicate old issues and handmade lantern paper. Most years at the Evening Breeze Lanterns, she admits, she watches for a little while and heads back to the library early—because almost no one waits all the way to the last lantern.
     After a pause, she asks quietly whether you can avoid hurrying off once your own tasks finish on closing night. Let her restraint, the pause after her words, and the harbor breeze stay in the scene; leave the promise to the player and stop short of an outright confession.
+- id: mio-mint-draft-margin
+  title: The Tucked Draft in Spring Mint
+  when:
+    all:
+      - {}
+      - affinity: Kamishiro Mio
+      - judge: Mio hints at wanting to entrust the Literature Club's preservation materials or old issues to the player to work on together, or the player explicitly commits to helping her protect the old clubroom
+        watch:
+          characters: [Kamishiro Mio, Mio]
+  options:
+    - id: read-mio-tucked-draft
+      label: Hidden Action
+      text: Gently pull out the folded draft tucked inside the back cover of Spring Mint and ask Mio if it is the clubroom preservation petition she never turned in
+      hint: Mio has opened up to you—this is the right moment to ask about the draft
+      payload: Mio freezes for half a beat, her ears tinting pink, yet she does not press the paper back down. Quietly she admits she spent two late nights drafting a preservation petition for the Student Council, then hid it inside the back cover out of fear it sounded too much like leaning on the other members. She offers you her pencil and asks you to mark the two arguments that hold up best. Show her earnestness and rare openness, and leave edits and submission timing to the player.
+      rewards:
+        - id: mio-petition-lore
+          kind: lorebook
+          title: Literature Club Petition Notes
+          keys: [Spring Mint, petition, clubroom, merger review]
+          content: Core points from Mio's draft petition—seven years of festival interviews and special-issue layouts were produced in the third-floor clubroom, backed by the library's archived index of the original clubhouse preservation pledge.
+        - id: mio-shared-key-note
+          kind: narrative
+          title: After-School Sorting Promise
+          text: Mio promises not to lock up alone while sorting the preservation documents after school and to wait so you can check the final club records together.
+
