@@ -68,6 +68,7 @@ describe("app.ts CORS sidecarOrigins scoping", () => {
     fakes.mountApiRoutes.mockImplementation((app: Hono) => {
       app.get("/api/ping", (c) => c.json({ ok: true }));
       app.post("/api/ping", (c) => c.json({ ok: true }, 201));
+      app.patch("/api/worlds/mistport", (c) => c.json({ ok: true }));
     });
   });
 
@@ -151,5 +152,69 @@ describe("app.ts CORS sidecarOrigins scoping", () => {
         sidecarOrigin,
       );
     }
+  }, 60_000);
+
+  it("allows same-host HTTPS writes on browser-private Render topology without CORS_ORIGIN or TRUSTED_PROXY_IPS", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOYMENT_TIER", "self");
+    vi.stubEnv("STORE_BACKEND", "memory");
+    vi.stubEnv("CORS_ORIGIN", "");
+    vi.stubEnv("TRUSTED_PROXY_IPS", "");
+    vi.stubEnv("COVEL_MEDIA_TOKEN_SECRET", "a-real-secret");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "operator-secret");
+
+    const mod = await import("../../src/app.js");
+    drain = mod.drainServerResources;
+
+    const okRes = await mod.app.request(
+      "http://demo.covel.cc/api/worlds/mistport",
+      {
+        method: "PATCH",
+        headers: {
+          Origin: "https://demo.covel.cc",
+          "X-Forwarded-Proto": "https",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      },
+      { incoming: { socket: { remoteAddress: "10.20.30.40" } } },
+    );
+    expect(okRes.status).toBe(200);
+
+    const downgradeRes = await mod.app.request(
+      "http://demo.covel.cc/api/worlds/mistport",
+      {
+        method: "PATCH",
+        headers: {
+          Origin: "http://demo.covel.cc",
+          "X-Forwarded-Proto": "https",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      },
+      { incoming: { socket: { remoteAddress: "10.20.30.40" } } },
+    );
+    expect(downgradeRes.status).toBe(403);
+    expect(await downgradeRes.json()).toMatchObject({
+      code: "origin_not_allowed",
+    });
+
+    const crossSiteRes = await mod.app.request(
+      "http://demo.covel.cc/api/worlds/mistport",
+      {
+        method: "PATCH",
+        headers: {
+          Origin: "https://untrusted.example",
+          "X-Forwarded-Proto": "https",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      },
+      { incoming: { socket: { remoteAddress: "10.20.30.40" } } },
+    );
+    expect(crossSiteRes.status).toBe(403);
+    expect(await crossSiteRes.json()).toMatchObject({
+      code: "origin_not_allowed",
+    });
   }, 60_000);
 });

@@ -21,6 +21,10 @@ function app() {
     writes.push(await c.req.text());
     return c.json({ ok: true }, 201);
   });
+  hono.patch("/api/worlds/mistport", async (c) => {
+    writes.push(await c.req.text());
+    return c.json({ ok: true }, 200);
+  });
   hono.get("/api/sessions", (c) => c.json({ items: [] }));
   return { hono, writes };
 }
@@ -34,11 +38,12 @@ const post = (
   headers: Record<string, string>,
   url = `${SERVER}/api/sessions`,
   remoteAddress?: string,
+  method: "POST" | "PATCH" = "POST",
 ) =>
   hono.request(
     url,
     {
-      method: "POST",
+      method,
       // A "simple" request: no preflight, so the handler is the only gate.
       headers: { "Content-Type": "text/plain", ...headers },
       body: JSON.stringify({ id: "s" }),
@@ -55,7 +60,7 @@ describe("origin guard", () => {
     ["another site", "https://untrusted.example", undefined],
     ["an opaque origin", "null", undefined],
     [
-      "an https origin targeting an http server on the same host",
+      "an https origin targeting an http server on the same host without proxy proto",
       "https://play.example:3001",
       "http://play.example:3001/api/sessions",
     ],
@@ -91,7 +96,135 @@ describe("origin guard", () => {
     expect(writes).toHaveLength(1);
   });
 
-  it("ignores spoofed X-Forwarded-Host / X-Forwarded-Proto when peer IP is not in TRUSTED_PROXY_IPS", async () => {
+  it.each([
+    [
+      "X-Forwarded-Proto: https on PATCH /api/worlds/mistport (Render custom domain)",
+      {
+        Origin: "https://demo.covel.cc",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc/api/worlds/mistport",
+      "PATCH" as const,
+      200,
+    ],
+    [
+      "multi-hop X-Forwarded-Proto: https, http",
+      {
+        Origin: "https://demo.covel.cc",
+        "X-Forwarded-Proto": "https, http",
+      },
+      "http://demo.covel.cc/api/sessions",
+      "POST" as const,
+      201,
+    ],
+    [
+      "RFC 7239 Forwarded proto=https",
+      {
+        Origin: "https://demo.covel.cc",
+        Forwarded: 'for=198.51.100.7;proto="https";host=demo.covel.cc',
+      },
+      "http://demo.covel.cc/api/sessions",
+      "POST" as const,
+      201,
+    ],
+    [
+      "same host with explicit default :443 port normalized",
+      {
+        Origin: "https://demo.covel.cc",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc:443/api/sessions",
+      "POST" as const,
+      201,
+    ],
+    [
+      "same host with custom TLS port",
+      {
+        Origin: "https://demo.covel.cc:8443",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc:8443/api/sessions",
+      "POST" as const,
+      201,
+    ],
+  ])(
+    "allows same-host https origin behind a TLS-terminating proxy without TRUSTED_PROXY_IPS (%s)",
+    async (_, headers, url, method, expectedStatus) => {
+      const { hono, writes } = app();
+      const response = await post(hono, headers, url, "10.20.30.40", method);
+      expect(response.status).toBe(expectedStatus);
+      expect(writes).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    [
+      "scheme downgrade (http Origin when X-Forwarded-Proto is https)",
+      {
+        Origin: "http://demo.covel.cc",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc/api/sessions",
+    ],
+    [
+      "scheme downgrade (http Origin when Forwarded proto=https)",
+      {
+        Origin: "http://demo.covel.cc",
+        Forwarded: "for=198.51.100.7;proto=https",
+      },
+      "http://demo.covel.cc/api/sessions",
+    ],
+    [
+      "cross-site Origin behind TLS proxy",
+      {
+        Origin: "https://untrusted.example",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc/api/sessions",
+    ],
+    [
+      "opaque Origin behind TLS proxy",
+      {
+        Origin: "null",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc/api/sessions",
+    ],
+    [
+      "direct https request cannot be downgraded via X-Forwarded-Proto: http",
+      {
+        Origin: "http://demo.covel.cc",
+        "X-Forwarded-Proto": "http",
+      },
+      "https://demo.covel.cc/api/sessions",
+    ],
+    [
+      "malformed X-Forwarded-Proto does not upgrade scheme",
+      {
+        Origin: "https://demo.covel.cc",
+        "X-Forwarded-Proto": "javascript",
+      },
+      "http://demo.covel.cc/api/sessions",
+    ],
+    [
+      "port mismatch behind TLS proxy",
+      {
+        Origin: "https://demo.covel.cc:8443",
+        "X-Forwarded-Proto": "https",
+      },
+      "http://demo.covel.cc/api/sessions",
+    ],
+  ])("refuses %s when TRUSTED_PROXY_IPS is unset", async (_, headers, url) => {
+    const { hono, writes } = app();
+    const response = await post(hono, headers, url, "10.20.30.40");
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "origin_not_allowed",
+    });
+    expect(writes).toEqual([]);
+  });
+
+  it("ignores spoofed X-Forwarded-Host when peer IP is not in TRUSTED_PROXY_IPS", async () => {
     const { hono, writes } = app();
     // Without TRUSTED_PROXY_IPS set:
     const noConfig = await post(

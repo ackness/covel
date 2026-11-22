@@ -329,7 +329,7 @@ community 插件的 ESM 代码会在服务器进程里注册全局能力，所�
 CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 - 对象：带 `Origin` 头的 `POST` / `PUT` / `PATCH` / `DELETE` 请求。
-- 规则：`Origin` 不在允许列表里，也不是请求访问的主机（`Host` 或 `X-Forwarded-Host`）时，在进入任何路由之前返回 `403 { "code": "origin_not_allowed" }`。
+- 规则：`Origin` 不在允许列表里，且完整协议加主机也不匹配请求自身来源（来自 `TRUSTED_PROXY_IPS` 时按转发头解析；在明文 `http:` 服务端收到 `X-Forwarded-Proto: https` 或 `Forwarded: proto=https` 时，仅将同一 `Host` 的预期协议提升为 `https:`）时，在进入任何路由之前返回 `403 { "code": "origin_not_allowed" }`。
 - 不带 `Origin` 的非浏览器客户端不受影响。
 
 在 CORS 之前还有第二道检查，适用于所有方法的 `/api` 和 `/api/*`：`Origin` 去空格、不区分大小写后为 `null`，或者 `Sec-Fetch-Dest` 为 `iframe`、`frame`、`embed`、`object` 时，返回 `403 { "code": "foreign_request_refused" }`，不带 CORS 允许头。GET 和 OPTIONS 同样拒绝。不检查 `Sec-Fetch-Site`；普通 fetch、媒体和顶层文档请求照常工作。`/plugin-assets/*`、`/plugin-frame.html` 和应用主页面不受这道检查影响。
