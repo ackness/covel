@@ -4,6 +4,7 @@ import {
   KERNEL_SOURCES,
   setWorldDataConventions,
 } from "../../src/world-data/conventions.js";
+import { describeAuthoringSurface } from "../../src/authoring/describe.js";
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import {
   createPluginRegistry,
@@ -1258,6 +1259,173 @@ protocol = "openai-chat-v1"
           )?.value,
         ).toEqual(clock);
       }
+    },
+  );
+
+  it.each(["server-file", "server-store", "return-only"] as const)(
+    "%s generates hidden story-events with natural-language triggers and imports them into _hidden.events",
+    async (saveTarget) => {
+      const discoveries = await discoverPlugins(
+        path.resolve(import.meta.dirname, "../../../../plugins"),
+      );
+      const discovery = discoveries.find((item) => item.id === "story-events")!;
+      const definition = await loadPluginDefinition(discovery);
+      const registry = createPluginRegistry();
+      registry.register({
+        id: "story-events",
+        summary: {
+          id: "story-events",
+          name: "story-events",
+          description: "",
+          kind: "plugin",
+          runtimeCount: 0,
+        },
+        rootPath: discovery.rootPath,
+        manifests: [],
+        packageManifest: definition.packageManifest,
+        status: "registered",
+      });
+      await registerDimensionProvider(registry);
+
+      const hiddenEvent = {
+        id: "secret-harbor-ledger",
+        title: "Hidden Harbor Ledger",
+        when: "The player asks the harbormaster about the missing tide register.",
+        options: [
+          {
+            id: "confront-harbormaster",
+            label: "Hidden action",
+            text: "Show the harbormaster the torn ledger margin.",
+            payload:
+              "SECRET-GEN-PAYLOAD: He unlocks the cellar hatch without a word.",
+            rewards: [
+              {
+                id: "cellar-lore",
+                kind: "lorebook",
+                title: "Cellar Ledger Note",
+                entryId: "hidden-cellar-ledger",
+                strategy: "selective",
+                keys: ["cellar", "ledger"],
+                content:
+                  "SECRET-GEN-LORE: The ledger was altered three days before the flood.",
+              },
+            ],
+          },
+        ],
+      };
+      const llm = new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${JSON.stringify({ contractData: [{ contract: "story.events@1", key: hiddenEvent.id, value: hiddenEvent }] })}\n===END===`,
+      );
+      const generate = vi.spyOn(llm, "generate");
+      app = createTestApp(store, llm, registry);
+
+      // Authoring surface offers story.events@1 with localized summary for UI toggles.
+      const authoring = await describeAuthoringSurface(registry, {
+        locale: "zh-CN",
+      });
+      expect(
+        authoring.contracts.find((item) => item.contract === "story.events@1"),
+      ).toMatchObject({
+        contract: "story.events@1",
+        generate: "offer",
+        title: "隐藏剧情",
+        summary: expect.stringContaining("隐藏"),
+      });
+
+      const response = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: "A harbor town with buried records",
+          saveTarget,
+          brief: { contracts: ["story.events@1"] },
+        }),
+      });
+      const events = await readSseJson(response);
+      const done = doneEvent(events);
+      expect(events.filter((event) => event.type === "error")).toEqual([]);
+      expect(done.world.metadata?.contractData).toEqual([
+        {
+          contract: "story.events@1",
+          key: hiddenEvent.id,
+          value: hiddenEvent,
+          visibility: "hidden",
+        },
+      ]);
+      expect(JSON.stringify(generate.mock.calls)).toContain("story.events@1");
+      expect(JSON.stringify(generate.mock.calls)).toContain(
+        "Stored hidden from the player",
+      );
+
+      if (saveTarget === "server-file") {
+        const writtenFile = await readFile(
+          path.join(worldsDir, "generated-world/data/hidden/story-events.yaml"),
+          "utf8",
+        );
+        expect(writtenFile).toContain("secret-harbor-ledger");
+      } else if (saveTarget === "return-only") {
+        const created = await app.request("/api/worlds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: done.world.id,
+            name: "Harbor Town",
+            metadata: done.world.metadata,
+          }),
+        });
+        expect(created.status).toBe(201);
+      }
+
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: "hidden-gen-session",
+        worldId: "generated-world",
+        status: "active",
+        phase: "playing",
+        setupRuntimes: {},
+        seats: [
+          {
+            id: "main",
+            controller: "human",
+            role: "player",
+            characters: "auto",
+          },
+        ],
+        locale: "en-US",
+        activePlugins: ["world-init", "story-events"],
+        completedPlayerTurns: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const imported = await importWorldDataForSession({
+        store,
+        sessionId: "hidden-gen-session",
+        worldId: "generated-world",
+        worldsDirs: [worldsDir],
+        now,
+        preflight: { registry, activePlugins: ["world-init", "story-events"] },
+      });
+      expect(
+        imported.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+      expect(
+        (
+          await store.getPluginData(
+            "hidden-gen-session",
+            "story-events",
+            "_hidden.events",
+            hiddenEvent.id,
+          )
+        )?.value,
+      ).toEqual(hiddenEvent);
+      expect(
+        await store.getPluginData(
+          "hidden-gen-session",
+          "story-events",
+          "events",
+          hiddenEvent.id,
+        ),
+      ).toBeNull();
     },
   );
 

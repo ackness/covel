@@ -37,7 +37,10 @@ import { currentAffinity } from "../server/current-affinity.js";
 import initializeWorld from "../../world-init/guard.js";
 import editDimensions from "../../world-init/runtimes/edit-dimensions/handler.js";
 import initializePlayer from "../../char-creator/runtimes/player-init/guard.js";
-import { evaluateCondition } from "../../story-events/lib/conditions.js";
+import {
+  evaluateCondition,
+  inspectCondition,
+} from "../../story-events/lib/conditions.js";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 const now = "2026-10-29T00:00:00Z";
@@ -502,7 +505,7 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
       "story-events",
       "_hidden.events",
     );
-    expect(events).toHaveLength(9);
+    expect(events).toHaveLength(10);
     const byId = Object.fromEntries(events.map((r) => [r.key, r.value]));
     const dims = await dimensions();
     dims.routes.value.mio = { stage: "heartbeat", trust: 2, pressure: 3 };
@@ -577,6 +580,37 @@ describe.each(["zh-CN", "en-US"])("real Harukaze package in %s", (locale) => {
         turn: 9,
       }).met,
     ).toBe(false);
+
+    // Hybrid semantic hidden option entry short-circuits before gates pass,
+    // then surfaces its single semantic leaf once revealed + affinity hold.
+    const mioName = locale === "en-US" ? "kamishiro mio" : "神代澪";
+    expect(
+      inspectCondition(
+        byId["mio-mint-draft-margin"].when,
+        {
+          ...state,
+          locale,
+          revealed: {},
+          affinity: new Map([[mioName, { score: 30, tier: "friendly" }]]),
+        },
+        { scopeId: "mio-mint-draft-margin" },
+      ),
+    ).toMatchObject({ status: "false", pending: [] });
+    const mioPending = inspectCondition(
+      byId["mio-mint-draft-margin"].when,
+      {
+        ...state,
+        locale,
+        revealed: { "mio-the-club-room": { lastTurn: 4 } },
+        affinity: new Map([[mioName, { score: 30, tier: "friendly" }]]),
+      },
+      { scopeId: "mio-mint-draft-margin" },
+    );
+    expect(mioPending.status).toBe("pending");
+    expect(mioPending.pending).toHaveLength(1);
+    expect(mioPending.pending[0].key).toBe(
+      "mio-mint-draft-margin#mio-shares-resolve",
+    );
   });
 });
 

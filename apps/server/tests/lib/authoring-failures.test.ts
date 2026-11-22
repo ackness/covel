@@ -111,6 +111,54 @@ describe("authoring failure isolation", () => {
     expect(schema).toMatchObject({ kind: "local" });
   });
 
+  it("preserves hidden visibility on portable contract sources from explicit flags or plugin conventions", () => {
+    const explicit = portableContractSources([
+      {
+        contract: "story.events@1",
+        key: "secret-event",
+        value: { id: "secret-event" },
+        visibility: "hidden",
+      },
+    ]);
+    expect(explicit[0]?.descriptor.visibility).toBe("hidden");
+
+    const inherited = portableContractSources(
+      [
+        {
+          contract: "story.events@1",
+          key: "secret-event",
+          value: { id: "secret-event" },
+        },
+      ],
+      [
+        {
+          id: "events",
+          entry: {
+            kind: "yaml",
+            path: "data/hidden/story-events.yaml",
+            schema: "contract:story.events@1",
+            to: "contract:story.events@1",
+            key: "id",
+            visibility: "hidden",
+          },
+        },
+      ],
+    );
+    expect(inherited[0]?.descriptor.visibility).toBe("hidden");
+
+    expect(() =>
+      portableContractSources([
+        {
+          contract: "story.events@1",
+          key: "secret-event",
+          value: { id: "secret-event" },
+          visibility: "hidden",
+          lorebook: true,
+        },
+      ]),
+    ).toThrow(/hidden data cannot project to lorebook/);
+  });
+
   it.each(["missing", "invalid", "conflicting"])(
     "skips only a contract with a %s schema",
     async (failure) => {

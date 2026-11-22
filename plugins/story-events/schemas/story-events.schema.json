@@ -2,9 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contract:story.events@1",
   "title": "Covel hidden story event v1",
-  "description": "One hidden story event. Import it from a worldData source declared with `visibility: hidden` so its payload stays out of prompts and player views until it fires.",
+  "description": "One hidden story event, unlockable option group, or hidden reward trigger. Import it from a worldData source declared with `visibility: hidden` so its conditions, payload, options, and rewards stay out of prompts and player views until met.",
   "type": "object",
-  "required": ["id", "when", "payload"],
+  "required": ["id", "when"],
+  "anyOf": [
+    { "required": ["payload"] },
+    { "required": ["options"] },
+    { "required": ["rewards"] }
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -20,6 +25,33 @@
     "payload": {
       "description": "What happens when the event fires: a brief for the narrator, not finished prose.",
       "$ref": "#/$defs/text"
+    },
+    "timing": {
+      "description": "When semantic `judge` conditions are evaluated. Defaults to `post-turn` (evaluated in audit with zero TTFT impact); set `pre-turn` only when the narrator must react to the player's message on the same turn.",
+      "enum": ["post-turn", "pre-turn"]
+    },
+    "exclusive": {
+      "description": "When true, selecting one option in `options` closes the other options of this event.",
+      "type": "boolean",
+      "default": false
+    },
+    "options": {
+      "description": "Hidden player options that stay invisible until `when` (and each option's optional `when`) holds.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/option"
+      }
+    },
+    "rewards": {
+      "description": "Hidden rewards granted once this event fires. Invisible before achievement.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/reward"
+      }
     },
     "once": {
       "type": "boolean",
@@ -54,8 +86,216 @@
         }
       ]
     },
+    "option": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "label": {
+          "description": "Short tag shown beside the unlocked option.",
+          "$ref": "#/$defs/text"
+        },
+        "text": {
+          "description": "Action text shown to the player and sent when chosen.",
+          "$ref": "#/$defs/text"
+        },
+        "hint": {
+          "description": "Optional short note shown under the unlocked option.",
+          "$ref": "#/$defs/text"
+        },
+        "when": {
+          "description": "Optional extra condition required in addition to the parent event's `when`.",
+          "$ref": "#/$defs/condition"
+        },
+        "persist": {
+          "description": "When false (default), the option hides again if its condition stops holding. When true, it stays unlocked until chosen or expired.",
+          "type": "boolean",
+          "default": false
+        },
+        "once": {
+          "description": "When true (default), choosing this option consumes it.",
+          "type": "boolean",
+          "default": true
+        },
+        "expiresAfterTurns": {
+          "description": "Optional turn budget after unlocking before the option expires.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload": {
+          "description": "Hidden brief delivered to the narrator once the player chooses this option.",
+          "$ref": "#/$defs/text"
+        },
+        "rewards": {
+          "description": "Hidden rewards granted once the player chooses this option.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/reward"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "reward": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "kind": {
+          "enum": ["item", "lorebook", "narrative"]
+        },
+        "title": {
+          "description": "Optional display name in the unlock announcement.",
+          "$ref": "#/$defs/text"
+        },
+        "announce": {
+          "description": "When true (default), show a compact unlock notice when granted. Set false to grant silently.",
+          "type": "boolean",
+          "default": true
+        },
+        "requireOutcome": {
+          "description": "When true, verify with the semantic judge after narration that the character actually obtained the reward before granting.",
+          "type": "boolean",
+          "default": false
+        },
+        "outcome": {
+          "description": "Optional natural-language criterion used when `requireOutcome` is true.",
+          "$ref": "#/$defs/text"
+        },
+        "item": {
+          "description": "Item name for `kind: item`.",
+          "$ref": "#/$defs/text"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "description": {
+          "$ref": "#/$defs/text"
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "entryId": {
+          "description": "Stable lorebook entry ID for `kind: lorebook`.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "strategy": {
+          "enum": ["constant", "selective"],
+          "default": "selective"
+        },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "position": {
+          "type": "string",
+          "minLength": 1
+        },
+        "insertionOrder": {
+          "type": "integer"
+        },
+        "content": {
+          "description": "Lorebook entry text for `kind: lorebook`.",
+          "$ref": "#/$defs/text"
+        },
+        "text": {
+          "description": "Narrative reward note for `kind: narrative`.",
+          "$ref": "#/$defs/text"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": { "kind": { "const": "item" } },
+          "required": ["item"],
+          "not": {
+            "anyOf": [
+              { "required": ["entryId"] },
+              { "required": ["content"] },
+              { "required": ["text"] }
+            ]
+          }
+        },
+        {
+          "properties": { "kind": { "const": "lorebook" } },
+          "required": ["entryId", "content"],
+          "not": {
+            "anyOf": [
+              { "required": ["item"] },
+              { "required": ["quantity"] },
+              { "required": ["text"] }
+            ]
+          }
+        },
+        {
+          "properties": { "kind": { "const": "narrative" } },
+          "required": ["text"],
+          "not": {
+            "anyOf": [
+              { "required": ["item"] },
+              { "required": ["entryId"] },
+              { "required": ["content"] }
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "watch": {
+      "type": "object",
+      "description": "Optional cheap wake-up hints for a semantic `judge` leaf. Only decides whether to call the judge; never reveals hidden content.",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "keywords": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "every": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    },
     "condition": {
       "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
         {
           "type": "object",
           "required": ["all"],
@@ -123,6 +363,21 @@
           "type": "string",
           "minLength": 1
         },
+        "affinity": {
+          "type": "string",
+          "minLength": 1,
+          "description": "NPC name or alias read from the `affinity.tier@1` service (`score` / `tier`)."
+        },
+        "item": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Carried item name read from the `inventory.bag@2` service (`quantity` / `equipped` / `exists`)."
+        },
+        "attribute": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Player character attribute ID read from the player's sheet."
+        },
         "equals": {},
         "notEquals": {},
         "in": {
@@ -148,6 +403,11 @@
           "pattern": "^[a-z][a-z0-9-]{0,63}$",
           "description": "Holds once this event has fired."
         },
+        "selected": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+          "description": "Holds once the player has chosen this hidden option."
+        },
         "turnsSinceGte": {
           "type": "integer",
           "minimum": 0
@@ -165,6 +425,27 @@
           "type": "integer",
           "minimum": 0,
           "description": "Holds up to this session turn."
+        },
+        "judge": {
+          "description": "Natural-language condition evaluated by the concealed semantic judge sub-agent.",
+          "$ref": "#/$defs/text"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+          "description": "Optional stable ID for a `judge` leaf (used for caching and locale overlays)."
+        },
+        "scope": {
+          "enum": ["narrative", "player-input", "both"],
+          "default": "narrative"
+        },
+        "sticky": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true (default), once judged true this leaf stays true without re-calling the model. Set false for transient scene states."
+        },
+        "watch": {
+          "$ref": "#/$defs/watch"
         }
       },
       "oneOf": [
@@ -172,18 +453,15 @@
           "required": ["dimension"],
           "not": {
             "anyOf": [
-              {
-                "required": ["time"]
-              },
-              {
-                "required": ["revealed"]
-              },
-              {
-                "required": ["turnGte"]
-              },
-              {
-                "required": ["turnLte"]
-              }
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
             ]
           }
         },
@@ -191,18 +469,15 @@
           "required": ["time"],
           "not": {
             "anyOf": [
-              {
-                "required": ["dimension"]
-              },
-              {
-                "required": ["revealed"]
-              },
-              {
-                "required": ["turnGte"]
-              },
-              {
-                "required": ["turnLte"]
-              }
+              { "required": ["dimension"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
             ]
           }
         },
@@ -210,41 +485,110 @@
           "required": ["revealed"],
           "not": {
             "anyOf": [
-              {
-                "required": ["dimension"]
-              },
-              {
-                "required": ["time"]
-              },
-              {
-                "required": ["turnGte"]
-              },
-              {
-                "required": ["turnLte"]
-              }
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
             ]
           }
         },
         {
-          "anyOf": [
-            {
-              "required": ["turnGte"]
-            },
-            {
-              "required": ["turnLte"]
-            }
-          ],
+          "required": ["selected"],
           "not": {
             "anyOf": [
-              {
-                "required": ["dimension"]
-              },
-              {
-                "required": ["time"]
-              },
-              {
-                "required": ["revealed"]
-              }
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
+            ]
+          }
+        },
+        {
+          "anyOf": [{ "required": ["turnGte"] }, { "required": ["turnLte"] }],
+          "not": {
+            "anyOf": [
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
+            ]
+          }
+        },
+        {
+          "required": ["affinity"],
+          "not": {
+            "anyOf": [
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
+            ]
+          }
+        },
+        {
+          "required": ["item"],
+          "not": {
+            "anyOf": [
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["attribute"] },
+              { "required": ["judge"] }
+            ]
+          }
+        },
+        {
+          "required": ["attribute"],
+          "not": {
+            "anyOf": [
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["judge"] }
+            ]
+          }
+        },
+        {
+          "required": ["judge"],
+          "not": {
+            "anyOf": [
+              { "required": ["dimension"] },
+              { "required": ["time"] },
+              { "required": ["revealed"] },
+              { "required": ["selected"] },
+              { "required": ["turnGte"] },
+              { "required": ["turnLte"] },
+              { "required": ["affinity"] },
+              { "required": ["item"] },
+              { "required": ["attribute"] }
             ]
           }
         }

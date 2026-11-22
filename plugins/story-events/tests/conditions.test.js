@@ -176,3 +176,146 @@ describe("turn leaves", () => {
     });
   });
 });
+
+describe("cross-plugin deterministic leaves", () => {
+  const richState = {
+    ...state,
+    turn: 8,
+    affinity: new Map([["iron meg", { score: 45, tier: "friendly" }]]),
+    items: new Map([
+      [
+        "qi's note",
+        { name: "Qi's Note", quantity: 1, equipped: false, tags: ["clue"] },
+      ],
+      ["silver", { name: "Silver", quantity: 12, equipped: false, tags: [] }],
+    ]),
+    playerFields: { fogRot: 32, origin: "undertow" },
+    optionIds: new Set(["show-note", "stay-silent"]),
+    selectedOptions: { "show-note": { firstTurn: 5, lastTurn: 5 } },
+  };
+
+  it("evaluates affinity, item, attribute, and selected leaves deterministically", () => {
+    expect(
+      evaluateCondition(
+        {
+          all: [
+            { affinity: "Iron Meg", path: "tier", in: ["friendly", "close"] },
+            { affinity: "Iron Meg", gte: 40 },
+            { item: "Qi's Note", exists: true },
+            { item: "Silver", path: "quantity", gte: 10 },
+            { item: "Missing Key", exists: false },
+            { attribute: "fogRot", gte: 25 },
+            { attribute: "origin", equals: "undertow" },
+            { selected: "show-note", turnsSinceGte: 3 },
+            { not: { selected: "stay-silent" } },
+          ],
+        },
+        richState,
+      ),
+    ).toEqual({ met: true, issues: [] });
+  });
+
+  it("treats missing cross-plugin services as undecided without flipping under not", () => {
+    const bare = { dimensions: {}, time: null };
+    expect(
+      evaluateCondition(
+        { not: { affinity: "Iron Meg", equals: "hostile" } },
+        bare,
+      ),
+    ).toEqual({ met: false, issues: ["affinity is unavailable"] });
+    expect(
+      evaluateCondition({ not: { item: "Qi's Note", exists: true } }, bare),
+    ).toEqual({ met: false, issues: ["inventory is unavailable"] });
+    expect(
+      evaluateCondition({ not: { attribute: "fogRot", gte: 50 } }, bare),
+    ).toEqual({ met: false, issues: ["player character is unavailable"] });
+  });
+});
+
+describe("four-valued semantic short-circuiting", () => {
+  it("short-circuits judge leaves when deterministic branches already decide the tree", async () => {
+    const { hasJudgeLeaf, inspectCondition } =
+      await import("../lib/conditions.js");
+    const judgeLeaf = {
+      judge: "The protagonist suspects the broker is lying",
+      id: "suspect-broker",
+    };
+    expect(hasJudgeLeaf(judgeLeaf)).toBe(true);
+    expect(hasJudgeLeaf("The broker drops their guard")).toBe(true);
+    expect(hasJudgeLeaf({ dimension: "location", equals: "lighthouse" })).toBe(
+      false,
+    );
+
+    // `all` with a false deterministic branch prunes the judge leaf.
+    expect(
+      inspectCondition(
+        {
+          all: [{ dimension: "location", equals: "harbor" }, judgeLeaf],
+        },
+        state,
+        { scopeId: "evt" },
+      ),
+    ).toEqual({ status: "false", pending: [], issues: [] });
+
+    // `all` with an undecided branch also prunes the judge leaf.
+    expect(
+      inspectCondition(
+        {
+          all: [{ dimension: "missing", equals: 1 }, judgeLeaf],
+        },
+        state,
+        { scopeId: "evt" },
+      ),
+    ).toEqual({
+      status: "undecided",
+      pending: [],
+      issues: ["unknown dimension: missing"],
+    });
+
+    // `any` with a true deterministic branch prunes the judge leaf.
+    expect(
+      inspectCondition(
+        {
+          any: [{ dimension: "location", equals: "lighthouse" }, judgeLeaf],
+        },
+        state,
+        { scopeId: "evt" },
+      ),
+    ).toEqual({ status: "true", pending: [], issues: [] });
+
+    // Only when deterministic gates hold does the semantic leaf stay pending.
+    const pending = inspectCondition(
+      {
+        all: [{ dimension: "location", equals: "lighthouse" }, judgeLeaf],
+      },
+      state,
+      { scopeId: "evt" },
+    );
+    expect(pending.status).toBe("pending");
+    expect(pending.pending).toHaveLength(1);
+    expect(pending.pending[0].key).toBe("evt#suspect-broker");
+
+    // Sticky cached verdict resolves to true immediately without re-judging.
+    const cached = inspectCondition(
+      {
+        all: [{ dimension: "location", equals: "lighthouse" }, judgeLeaf],
+      },
+      {
+        ...state,
+        judgments: {
+          "evt#suspect-broker": { met: true, sticky: true },
+        },
+      },
+      { scopeId: "evt" },
+    );
+    expect(cached).toEqual({ status: "true", pending: [], issues: [] });
+
+    // String shorthand works and respects `semanticEnabled: false`.
+    expect(
+      inspectCondition("The broker drops their guard", state, {
+        scopeId: "short",
+        semanticEnabled: false,
+      }),
+    ).toEqual({ status: "undecided", pending: [], issues: [] });
+  });
+});

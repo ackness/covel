@@ -247,7 +247,10 @@ const RESERVED_PATHS = [
 ];
 
 /** What the writer needs to know about a contract: where its records go. */
-type ContractFile = Pick<WorldGenerationDataContract, "contract" | "source">;
+type ContractFile = Pick<
+  WorldGenerationDataContract,
+  "contract" | "source" | "visibility"
+>;
 
 /**
  * The place of a package file on disk. A path that a plugin names is not
@@ -511,9 +514,10 @@ export async function writeWorldDataFiles(
     return true;
   };
   for (const [index, [contract, records]] of [...byContract].entries()) {
-    const declared = dataContracts.find(
+    const contractMeta = dataContracts.find(
       (item) => item.contract === contract,
-    )?.source;
+    );
+    const declared = contractMeta?.source;
     const named = declared && claim(declared.path) ? declared : undefined;
     let file = named?.path;
     for (let n = index; file === undefined; n++) {
@@ -535,12 +539,16 @@ export async function writeWorldDataFiles(
           fileKey(item.source.path) === fileKey(named.path),
       );
     if (named && !shared) continue;
+    const hidden =
+      records[0]?.visibility === "hidden" ||
+      contractMeta?.visibility === "hidden";
     sources[`contract${index}`] = {
       kind,
       path: file,
       schema: `contract:${contract}`,
-      to: `contract:${contract}${records[0]?.lorebook ? "+lorebook" : ""}`,
+      to: `contract:${contract}${!hidden && records[0]?.lorebook ? "+lorebook" : ""}`,
       key: "id",
+      ...(hidden ? { visibility: "hidden" } : {}),
       ...(declared?.localeArrayKeys
         ? { localeArrayKeys: [...declared.localeArrayKeys] }
         : {}),

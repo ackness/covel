@@ -128,6 +128,12 @@ const IDENTIFIER_KEYS: ReadonlySet<string> = new Set([
   "version",
   "budgetClass",
   "owner",
+  "dimension",
+  "attribute",
+  "revealed",
+  "selected",
+  "timing",
+  "scope",
 ]);
 
 function isText(key: string, text: string, baseLocale: string): boolean {
@@ -202,10 +208,15 @@ function textUnits(
       if (
         value.every((item) => typeof item === "string") &&
         (key === "keys" ||
+          key === "keywords" ||
           value.some((item) => isText(key, item as string, baseLocale)))
       ) {
         value.forEach((item, index) => {
-          if (key === "keys" ? item.trim() : /\p{L}/u.test(item as string))
+          if (
+            key === "keys" || key === "keywords"
+              ? item.trim()
+              : /\p{L}/u.test(item as string)
+          )
             add([...steps, { index }], item as string);
         });
         return;

@@ -18,5 +18,48 @@
       "turnsSinceGte": 2
     },
     "payload": "Two turns after the ledger returns, the hero notices the same hooded figure for the second time. The figure leaves when seen. Do not reveal who it is."
+  },
+  {
+    "id": "smuggler-backroom-choice",
+    "title": "The Backroom Proof",
+    "when": {
+      "all": [
+        { "revealed": "ledger-resurfaces" },
+        {
+          "judge": "The hero and the dock broker are speaking privately and the broker lets slip doubt about the harbor council.",
+          "id": "broker-doubt",
+          "watch": { "characters": ["Dock Broker"] }
+        }
+      ]
+    },
+    "options": [
+      {
+        "id": "present-sealed-receipt",
+        "label": "Hidden Action",
+        "text": "Produce the torn seal receipt and confront the broker about the missing page.",
+        "hint": "Only appears once the broker drops their guard.",
+        "payload": "The broker goes still at the sight of the torn seal and quietly slides a brass locker key across the crate. Leave the choice of what to do with the locker to the player.",
+        "rewards": [
+          {
+            "id": "brass-locker-key",
+            "kind": "item",
+            "title": "Brass Locker Key",
+            "item": "Brass Locker Key",
+            "quantity": 1,
+            "description": "Stamped with the harbor archive seal.",
+            "tags": ["clue"]
+          },
+          {
+            "id": "seal-mismatch-lore",
+            "kind": "lorebook",
+            "title": "Archive Seal Mismatch",
+            "entryId": "hidden-archive-seal-mismatch",
+            "strategy": "selective",
+            "keys": ["archive", "seal", "ledger"],
+            "content": "The torn receipt predates the official archive closure by three days, proving the ledger was altered from inside."
+          }
+        ]
+      }
+    ]
   }
 ]

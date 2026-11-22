@@ -266,3 +266,80 @@ it("reports an opening kit with too few numeric resources as a warning", () => {
     ],
   });
 });
+
+it("preserves visibility: hidden on generated records and fallback descriptors without lorebook projection", async () => {
+  const hiddenContract = {
+    ...contract,
+    contract: "secret.events@1",
+    lorebook: true,
+    visibility: "hidden" as const,
+  };
+  const hiddenRecord = {
+    contract: hiddenContract.contract,
+    key: "secret-door",
+    value: { id: "secret-door", description: "Hidden twist" },
+  };
+  const normalized = normalizeGeneratedPackage(
+    { contractData: [hiddenRecord] },
+    { contracts: [hiddenContract.contract] },
+    [hiddenContract],
+  );
+  expect(normalized.errors).toEqual([]);
+  expect(normalized.content.contractData).toEqual([
+    { ...hiddenRecord, visibility: "hidden" },
+  ]);
+
+  const root = await mkdtemp(path.join(tmpdir(), "covel-hidden-contract-"));
+  try {
+    // Fallback descriptor when no conventional source path is supplied.
+    const manifest: Record<string, unknown> = {};
+    await writeWorldDataFiles(root, manifest, normalized.content, [
+      { contract: hiddenContract.contract, visibility: "hidden" },
+    ]);
+    const descriptor = parse(
+      await readFile(path.join(root, String(manifest.worldData)), "utf8"),
+    );
+    expect(descriptor.sources.contract0).toEqual({
+      kind: "json",
+      path: "data/contract-0.json",
+      schema: "contract:secret.events@1",
+      to: "contract:secret.events@1",
+      key: "id",
+      visibility: "hidden",
+    });
+
+    // Conventional path writes the file directly with no descriptor.
+    const conventionalDir = await mkdtemp(
+      path.join(tmpdir(), "covel-hidden-conventional-"),
+    );
+    try {
+      const conventionalManifest: Record<string, unknown> = {};
+      const written = await writeWorldDataFiles(
+        conventionalDir,
+        conventionalManifest,
+        normalized.content,
+        [
+          {
+            contract: hiddenContract.contract,
+            visibility: "hidden",
+            source: { kind: "yaml", path: "data/hidden/events.yaml" },
+          },
+        ],
+      );
+      expect(written).toEqual(["data/hidden/events.yaml"]);
+      expect(conventionalManifest.worldData).toBeUndefined();
+      expect(
+        parse(
+          await readFile(
+            path.join(conventionalDir, "data/hidden/events.yaml"),
+            "utf8",
+          ),
+        ),
+      ).toEqual(hiddenRecord.value);
+    } finally {
+      await rm(conventionalDir, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

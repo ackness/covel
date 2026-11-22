@@ -67,7 +67,7 @@ A session may have several player characters. The two narrator plugins follow th
 | [Quest Log](./rpg.md) `core-quest`            | Records quests and objectives; a quest or objective past its deadline fails on its own                                                |               |
 | [Bag](./rpg.md) `inventory`                   | Looks up carried items, settles trades, and records item changes; an item can help one kind of check                                  |               |
 | [Affinity](./rpg.md) `affinity`               | Tracks numeric player–NPC affinity and supplies it to narration; NPCs who have gone cold will not cooperate with checks               |               |
-| [Hidden Plot Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                                                                           |               |
+| [Hidden Plot Events](./rpg.md) `story-events` | Hidden plot events, options, and rewards unlocked by deterministic or semantic conditions                                             |               |
 
 Bag and affinity world-seeded records pass dataset validation; sync can remove seeded records deleted from their authoritative source.
 
@@ -98,12 +98,12 @@ Character, fact, and dimension tracking retain each narrative segment’s speake
 
 Mistport, Harukaze Academy, and Lantern Barrow each show one play style: Mistport shows Read mode without dice checks, Harukaze Academy shows Stage mode, and Lantern Barrow shows full tabletop rules. Last Train Out is a survival sandbox: the floodline counts down with world time, the lights, doors, and radio share one battery, and Control's orders and the photos passengers pass around have to be checked one by one. It is written in English and also shows how a world can offer editions in several languages.
 
-| World                                                       | Gameplay                                  | What is worth a look                                                                                                          |
-| ----------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in Read mode | Four investigations with tide deadlines, Case Board with sources & contradictions, evidence preservation, eight hidden events |
-| Harukaze Academy (遥风学园・春日薄荷) `haruka-academy`      | A campus ensemble in Stage mode           | Campus timetable, dialogue narration, day/night scenes, transparent portraits, and festival quests                            |
-| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English | Floodline countdown, a shared battery, message checking, ensemble cast threads, character-card customization; Chinese edition |
-| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration      | Point buy at the start, failure clocks & item costs, gear check modifiers, dungeon map & Barrow Alarm panel                   |
+| World                                                       | Gameplay                                  | What is worth a look                                                                                                                          |
+| ----------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mistport (雾港・裂潮纪) `mistport`                          | A dark-fantasy investigation in Read mode | Four investigations with tide deadlines, Case Board with sources & contradictions, evidence preservation, nine hidden events & hidden options |
+| Harukaze Academy (遥风学园・春日薄荷) `haruka-academy`      | A campus ensemble in Stage mode           | Campus timetable, dialogue narration, day/night scenes, transparent portraits, and festival quests                                            |
+| Last Train Out (末班地铁) `last-train`                      | Modern urban survival, written in English | Floodline countdown, a shared battery, message checking, ensemble cast threads, character-card customization; Chinese edition                 |
+| Lantern Barrow: The First Delve (提灯古冢) `lantern-barrow` | Classic tabletop dungeon exploration      | Point buy at the start, failure clocks & item costs, gear check modifiers, dungeon map & Barrow Alarm panel                                   |
 
 To build your own world based on these, the files are in the repository's [`worlds/`](../../../worlds) directory.
 

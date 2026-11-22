@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contract:story-event.judge@1",
+  "title": "Covel hidden story event semantic verdict v1",
+  "description": "Structured verdicts returned by a concealed sub-agent evaluating natural-language hidden trigger conditions and optional player-intent matching against already-unlocked options.",
+  "type": "object",
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": ["key", "met", "confidence"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "met": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "enum": ["high", "medium", "low"]
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 240
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "matchedOptionId": {
+      "description": "ID of an already-unlocked public option that the player's action clearly carried out, or null.",
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": false
+}

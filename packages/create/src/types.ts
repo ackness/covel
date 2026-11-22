@@ -151,6 +151,8 @@ export interface GeneratedContractData {
   readonly value: Readonly<Record<string, unknown>>;
   /** Also project the record into the lorebook, as its receiver declares. */
   readonly lorebook?: true;
+  /** Keep the record in the receiver's hidden namespace until revealed. */
+  readonly visibility?: "hidden";
 }
 
 export interface WorldGenerationDataContract {
@@ -169,6 +171,8 @@ export interface WorldGenerationDataContract {
   readonly pluginId?: string;
   /** The receiver also wants each record projected into the lorebook. */
   readonly lorebook?: boolean;
+  /** The receiver keeps this contract's source hidden from prompts and player APIs. */
+  readonly visibility?: "hidden";
   /**
    * The field of a character record that holds one record of this
    * contract (`authoring.characterField`). Its records are keyed by the id

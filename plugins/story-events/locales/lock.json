@@ -2,23 +2,37 @@
   "version": 1,
   "labels": {
     "ru": {
+      "PLUGIN.md#contributes.data.events.authoring.summary": "138234cb95c17ced",
       "PLUGIN.md#contributes.data.events.authoring.title": "bd1afa281f1a0a1c",
+      "PLUGIN.md#contributes.settings[key=maxJudgedPerTurn].description": "507211e3946e22ca",
+      "PLUGIN.md#contributes.settings[key=maxJudgedPerTurn].label": "3089851ede24fe83",
       "PLUGIN.md#contributes.settings[key=planner].description": "cf32a6252953f6fd",
       "PLUGIN.md#contributes.settings[key=planner].label": "90568f536078c80f",
-      "PLUGIN.md#description": "57ec8ee368e1d239",
+      "PLUGIN.md#contributes.settings[key=semanticJudge].description": "70ee38cc5cedbe63",
+      "PLUGIN.md#contributes.settings[key=semanticJudge].label": "380ea4310c25f26d",
+      "PLUGIN.md#description": "fafd21750dfe5458",
       "PLUGIN.md#displayName": "e5674dfaba85407a",
+      "runtimes/assess/RUNTIME.md#description": "e3c8a20f1edba669",
       "runtimes/evaluate/RUNTIME.md#description": "b6c3b7de1e23bdf6",
       "runtimes/intake/RUNTIME.md#description": "4aad8b1e147fda42",
+      "runtimes/judge/RUNTIME.md#description": "6e73165d89da6c7d",
       "runtimes/plot/RUNTIME.md#description": "94b58f25ab8578bf"
     },
     "zh": {
+      "PLUGIN.md#contributes.data.events.authoring.summary": "138234cb95c17ced",
       "PLUGIN.md#contributes.data.events.authoring.title": "bd1afa281f1a0a1c",
+      "PLUGIN.md#contributes.settings[key=maxJudgedPerTurn].description": "507211e3946e22ca",
+      "PLUGIN.md#contributes.settings[key=maxJudgedPerTurn].label": "3089851ede24fe83",
       "PLUGIN.md#contributes.settings[key=planner].description": "cf32a6252953f6fd",
       "PLUGIN.md#contributes.settings[key=planner].label": "90568f536078c80f",
-      "PLUGIN.md#description": "57ec8ee368e1d239",
+      "PLUGIN.md#contributes.settings[key=semanticJudge].description": "70ee38cc5cedbe63",
+      "PLUGIN.md#contributes.settings[key=semanticJudge].label": "380ea4310c25f26d",
+      "PLUGIN.md#description": "fafd21750dfe5458",
       "PLUGIN.md#displayName": "e5674dfaba85407a",
+      "runtimes/assess/RUNTIME.md#description": "e3c8a20f1edba669",
       "runtimes/evaluate/RUNTIME.md#description": "b6c3b7de1e23bdf6",
       "runtimes/intake/RUNTIME.md#description": "4aad8b1e147fda42",
+      "runtimes/judge/RUNTIME.md#description": "6e73165d89da6c7d",
       "runtimes/plot/RUNTIME.md#description": "94b58f25ab8578bf"
     }
   }

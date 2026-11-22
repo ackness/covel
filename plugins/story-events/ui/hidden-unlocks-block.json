@@ -1,0 +1,176 @@
+{
+  "id": "story-events-unlocks",
+  "dataSource": {
+    "namespace": "message"
+  },
+  "view": {
+    "component": "Stack",
+    "props": {
+      "gap": "sm"
+    },
+    "children": [
+      {
+        "component": "Card",
+        "props": {
+          "variant": "subtle"
+        },
+        "visible": {
+          "$state": "/hasOptions"
+        },
+        "children": [
+          {
+            "component": "Row",
+            "props": {
+              "gap": "sm",
+              "align": "center"
+            },
+            "children": [
+              {
+                "component": "Icon",
+                "props": {
+                  "name": "sparkles",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": "Unlocked hidden actions",
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              }
+            ]
+          },
+          {
+            "component": "ChoiceList",
+            "repeat": {
+              "statePath": "/options",
+              "key": "id"
+            },
+            "children": [
+              {
+                "component": "Choice",
+                "props": {
+                  "title": {
+                    "$item": "text"
+                  },
+                  "description": {
+                    "$item": "hint"
+                  },
+                  "tag": {
+                    "$item": "label"
+                  },
+                  "tone": "warning"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": {
+                        "$item": "text"
+                      },
+                      "selectionGroup": {
+                        "$item": "selectionGroup"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "component": "Card",
+        "props": {
+          "variant": "subtle"
+        },
+        "visible": {
+          "$state": "/hasRewards"
+        },
+        "children": [
+          {
+            "component": "Row",
+            "props": {
+              "gap": "sm",
+              "align": "center"
+            },
+            "children": [
+              {
+                "component": "Icon",
+                "props": {
+                  "name": "gem",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": "Hidden rewards unlocked",
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              }
+            ]
+          },
+          {
+            "component": "Stack",
+            "props": {
+              "gap": "xs"
+            },
+            "repeat": {
+              "statePath": "/rewards",
+              "key": "id"
+            },
+            "children": [
+              {
+                "component": "Row",
+                "props": {
+                  "gap": "sm",
+                  "align": "center"
+                },
+                "children": [
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": {
+                        "$item": "badge"
+                      },
+                      "color": {
+                        "$item": "color"
+                      }
+                    }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": {
+                        "$item": "title"
+                      },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Text",
+                    "visible": {
+                      "$item": "detail"
+                    },
+                    "props": {
+                      "content": {
+                        "$item": "detail"
+                      },
+                      "size": "xs",
+                      "variant": "muted"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

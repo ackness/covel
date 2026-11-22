@@ -147,3 +147,35 @@
     学园祭前最后一周的傍晚，你在海猫书房外檐下碰见东条茜。她怀里抱着店主替她包好的一捆旧刊复本和手工灯笼纸，说以前每年「夕风点灯」她都是看一会儿就回图书馆，因为很少有人真会等到最后一盏灯。
     她停了一拍，轻声问今年闭幕那天，你忙完手边的事之后能不能别走太快。让她的克制、话后的停顿和街角海风留在场景里；由玩家决定答不答应，也别在这一场写破告白。
   priority: 9
+- id: mio-mint-draft-margin
+  title: 《春日薄荷》的夹页草稿
+  when:
+    all:
+      - revealed: mio-the-club-room
+      - affinity: 神代澪
+        path: tier
+        in: [friendly, close, devoted]
+      - judge: 神代澪在交谈中流露出想把文艺部旧刊或保留材料托付给主角一起整理的念头，或主角明确表示会陪她一起守住旧活动室
+        id: mio-shares-resolve
+        watch:
+          characters: [神代澪, 澪]
+  options:
+    - id: read-mio-tucked-draft
+      label: 隐藏行动
+      text: 轻轻抽出压在《春日薄荷》封底的那张折叠草稿，问澪这是不是她一直没敢交出去的保留陈情稿
+      hint: 澪已经向你敞开了口风，趁活动室安静可以提起那张草稿
+      payload: 澪愣了半秒，耳尖微微泛红，却没有伸手把稿纸按回去。她小声承认这是自己熬了两个晚上写给学生会的活动室保留陈情初稿，只是一直怕写得太像在向部员撒娇才夹在旧刊封底。她把铅笔递给你，想让你先圈出最站得住脚的两条理由。写出她的认真与难得的松动，把怎么修改和何时递交留给玩家。
+      rewards:
+        - id: mio-petition-lore
+          kind: lorebook
+          title: 文艺部保留陈情稿要点
+          entryId: haruka-mio-club-petition
+          strategy: selective
+          keys: [春日薄荷, 陈情稿, 活动室, 保留审查]
+          content: 神代澪起草的文艺部旧活动室保留陈情稿核心论据：过去七年每届学园祭的校史采访与特刊排印都在三层旧活动室完成，且社团楼原保留协议仍存有图书馆旧刊索引可作佐证。
+        - id: mio-shared-key-note
+          kind: narrative
+          title: 放学后的整理约定
+          text: 澪答应放学后整理保留材料时不再独自锁门，会等你一起核对最后一份社团记录。
+  priority: 10
+

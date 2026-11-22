@@ -459,4 +459,110 @@ describe("world translation tooling: what counts as text", () => {
       }),
     );
   });
+
+  it("translates natural-language hidden triggers, watch.keywords, options, and rewards without touching condition identifiers", async () => {
+    for (const bundled of ["mistport", "haruka-academy"]) {
+      const status = await worldTranslationStatus(
+        path.join(repoRoot, "worlds", bundled),
+        "en-US",
+      );
+      const hidden = status.files.find(
+        (file) => file.file === "data/hidden/story-events.yaml",
+      )!;
+      expect(hidden.missing).toEqual([]);
+    }
+
+    const tempRoot = await mkdtemp(
+      path.join(tmpdir(), "covel-hidden-translate-"),
+    );
+    try {
+      const hiddenDir = path.join(tempRoot, "data/hidden");
+      await cp(
+        path.join(repoRoot, "worlds/lantern-barrow/data"),
+        path.join(tempRoot, "data"),
+        {
+          recursive: true,
+        },
+      );
+      await writeFile(
+        path.join(tempRoot, "world.yaml"),
+        stringifyYaml({
+          id: "hidden-translate-demo",
+          name: "Hidden Translate Demo",
+          version: "0.1.0",
+          summary: "Demo world for hidden story-events translation.",
+          defaultLocale: "en-US",
+        }),
+        "utf8",
+      );
+      await writeFile(
+        path.join(hiddenDir, "story-events.yaml"),
+        stringifyYaml([
+          {
+            id: "watchman-note",
+            title: "Watchman's Note",
+            timing: "post-turn",
+            when: {
+              all: [
+                {
+                  dimension: "CaseBoard",
+                  path: "clue.status",
+                  equals: "Found",
+                },
+                { attribute: "Perception", gte: 12 },
+                { revealed: "IntroEvent" },
+                { selected: "OldOption" },
+                {
+                  judge: "The player asks the watchman about the missing key.",
+                  scope: "turn",
+                  watch: {
+                    keywords: ["key", "watchman"],
+                    characters: ["Watchman"],
+                  },
+                },
+              ],
+            },
+            options: [
+              {
+                id: "show-receipt",
+                label: "Hidden action",
+                text: "Slide the receipt across the table.",
+                payload: "He unlocks the backroom drawer.",
+              },
+            ],
+          },
+        ]),
+        "utf8",
+      );
+      const status = await worldTranslationStatus(tempRoot, "zh-CN");
+      const hidden = status.files.find(
+        (file) => file.file === "data/hidden/story-events.yaml",
+      )!;
+      const pointers = hidden.missing.map((unit) => unit.pointer);
+      expect(pointers).toEqual(
+        expect.arrayContaining([
+          "[id=watchman-note].title",
+          "[id=watchman-note].when.all[4].judge",
+          "[id=watchman-note].when.all[4].watch.keywords[0]",
+          "[id=watchman-note].when.all[4].watch.keywords[1]",
+          "[id=watchman-note].when.all[4].watch.characters[0]",
+          "[id=watchman-note].options[id=show-receipt].label",
+          "[id=watchman-note].options[id=show-receipt].text",
+          "[id=watchman-note].options[id=show-receipt].payload",
+        ]),
+      );
+      expect(pointers).not.toContain("[id=watchman-note].timing");
+      expect(pointers).not.toContain(
+        "[id=watchman-note].when.all[0].dimension",
+      );
+      expect(pointers).not.toContain(
+        "[id=watchman-note].when.all[1].attribute",
+      );
+      expect(pointers).not.toContain("[id=watchman-note].when.all[2].revealed");
+      expect(pointers).not.toContain("[id=watchman-note].when.all[3].selected");
+      expect(pointers).not.toContain("[id=watchman-note].when.all[4].scope");
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
 });
